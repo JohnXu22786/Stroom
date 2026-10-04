@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +12,11 @@ class _FakeCookiePlatform implements CookiePlatform {
   bool throwOnGetAll = false;
   bool throwOtherErrorOnGetAll = false;
   List<Cookie> allCookies = [];
+  Completer<void>? getAllCookiesStarted;
+  Completer<void>? allowGetAllCookies;
+  String? blockedDeleteCookieName;
+  Completer<void>? deleteCookieStarted;
+  Completer<void>? allowDeleteCookie;
   final Map<String, List<Cookie>> perUrlCookies = {};
   int getCookiesCalls = 0;
   final List<String> getCookiesUrls = [];
@@ -26,7 +33,11 @@ class _FakeCookiePlatform implements CookiePlatform {
     if (throwOtherErrorOnGetAll) {
       throw StateError('platform exploded');
     }
-    return allCookies;
+    final snapshot = List<Cookie>.from(allCookies);
+    final started = getAllCookiesStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    await allowGetAllCookies?.future;
+    return snapshot;
   }
 
   @override
@@ -76,6 +87,11 @@ class _FakeCookiePlatform implements CookiePlatform {
       'path': path,
       'domain': domain,
     });
+    if (name == blockedDeleteCookieName) {
+      final started = deleteCookieStarted;
+      if (started != null && !started.isCompleted) started.complete();
+      await allowDeleteCookie?.future;
+    }
     return true;
   }
 
@@ -659,6 +675,41 @@ void main() {
   // ====================================================================
 
   group('persistCookiesToFile fallback merge', () {
+    test('a stale snapshot cannot restore a cookie deleted while blocked',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(name: 'session', value: 'stale', domain: 'example.com'),
+          Cookie(name: 'keep', value: 'current', domain: 'example.com'),
+        ]
+        ..getAllCookiesStarted = Completer<void>()
+        ..allowGetAllCookies = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {
+          'domain': 'example.com',
+          'name': 'session',
+          'value': 'stale',
+          'path': '/',
+        },
+      ]);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStarted!.future;
+      final deletion =
+          BrowserCookieService.deleteCookie('example.com', 'session');
+
+      // Let an unqueued delete finish removing the file entry before the
+      // blocked snapshot is released. A serialized delete remains queued.
+      await Future<void>.delayed(Duration.zero);
+      fake.allowGetAllCookies!.complete();
+      await Future.wait([persistence, deletion]);
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.map((cookie) => cookie['name']), ['keep']);
+    });
+
     test(
         'persists cookies scoped to visited paths and deduplicates path results',
         () async {
@@ -919,6 +970,63 @@ void main() {
   // ====================================================================
 
   group('platform delete forwarding', () {
+    test('overlapping deletes serialize native deletion and file updates',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..blockedDeleteCookieName = 'first'
+        ..deleteCookieStarted = Completer<void>()
+        ..allowDeleteCookie = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'first', 'value': '1', 'path': '/'},
+        {'domain': 'example.com', 'name': 'second', 'value': '2', 'path': '/'},
+        {'domain': 'example.com', 'name': 'keep', 'value': '3', 'path': '/'},
+      ]);
+
+      final firstDelete =
+          BrowserCookieService.deleteCookie('example.com', 'first');
+      await fake.deleteCookieStarted!.future;
+      final secondDelete =
+          BrowserCookieService.deleteCookie('example.com', 'second');
+      await Future<void>.delayed(Duration.zero);
+
+      try {
+        expect(
+          fake.deleteCookieCalls.map((call) => call['name']),
+          everyElement('first'),
+          reason: 'the second delete must wait for the first native delete',
+        );
+      } finally {
+        fake.allowDeleteCookie!.complete();
+      }
+      expect(await firstDelete, isTrue);
+      expect(await secondDelete, isTrue);
+      expect(
+        fake.deleteCookieCalls.map((call) => call['name']).toList(),
+        ['first', 'first', 'second', 'second'],
+      );
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.map((cookie) => cookie['name']), ['keep']);
+    });
+
+    test('browser close persists without re-entering the retention queue',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(name: 'session', value: 'current', domain: 'example.com'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      await BrowserCookieService.handleBrowserClose()
+          .timeout(const Duration(seconds: 5));
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.single['name'], 'session');
+    });
+
     test('deleteCookie forwards path and leading-dot domain', () async {
       final fake = _FakeCookiePlatform();
       BrowserCookieService.cookiePlatform = fake;
