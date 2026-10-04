@@ -35,13 +35,13 @@ import 'block_executors/block_executors.dart';
 import 'task_flow_scheduler.dart';
 import 'task_flow_validator.dart';
 
-final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>(
-  (ref) {
-    final service = TaskFlowExecutionService._(ref);
-    ref.onDispose(service.dispose);
-    return service;
-  },
-);
+final taskFlowExecutionServiceProvider = Provider<TaskFlowExecutionService>((
+  ref,
+) {
+  final service = TaskFlowExecutionService._(ref);
+  ref.onDispose(service.dispose);
+  return service;
+});
 
 /// Resource-aware scheduler shared by all concurrent flow executions.
 final taskFlowSchedulerProvider = Provider<TaskFlowScheduler>(
@@ -77,7 +77,9 @@ String subTaskTypeFor(BlockType? typeKey) {
 ///   loudly).
 @visibleForTesting
 Assistant? resolveChatAssistant(
-    String assistantId, List<Assistant> assistants) {
+  String assistantId,
+  List<Assistant> assistants,
+) {
   if (assistantId.isEmpty) {
     return null;
   }
@@ -87,8 +89,12 @@ Assistant? resolveChatAssistant(
   return assistants.where((a) => a.id == assistantId).firstOrNull;
 }
 
-typedef FlowBlockRunner = Future<FlowPayload> Function(TaskFlowBlock block,
-    FlowPayload input, String executionId, FlowSubTask step);
+typedef FlowBlockRunner = Future<FlowPayload> Function(
+  TaskFlowBlock block,
+  FlowPayload input,
+  String executionId,
+  FlowSubTask step,
+);
 @visibleForTesting
 final taskFlowBlockRunnerProvider = Provider<FlowBlockRunner?>((ref) => null);
 
@@ -195,22 +201,26 @@ class TaskFlowExecutionService {
     }
     final awaitingSelection = task.selectedMedia == null &&
         task.detectedMedia.length > 1 &&
-        task.steps.any((step) =>
-            step.type == catcatch.StepType.userSelecting &&
-            step.running &&
-            !step.completed &&
-            !step.skipped);
+        task.steps.any(
+          (step) =>
+              step.type == catcatch.StepType.userSelecting &&
+              step.running &&
+              !step.completed &&
+              !step.skipped,
+        );
     final awaitingConfirmation =
         task.metadata['pendingConfirm'] == 'special_format';
     if (selecting ? !awaitingSelection : !awaitingConfirmation) return null;
     return _notifier.executions.where((execution) {
       return execution.status == FlowExecutionStatus.running &&
           _activeBlockTypes[execution.id] == BlockType.catcatch &&
-          execution.subTasks.any((step) =>
-              step.subTaskType == 'catcatch' &&
-              step.subTaskId == taskId &&
-              (step.outcome == FlowStepOutcome.running ||
-                  step.outcome == FlowStepOutcome.paused));
+          execution.subTasks.any(
+            (step) =>
+                step.subTaskType == 'catcatch' &&
+                step.subTaskId == taskId &&
+                (step.outcome == FlowStepOutcome.running ||
+                    step.outcome == FlowStepOutcome.paused),
+          );
     }).firstOrNull;
   }
 
@@ -225,8 +235,11 @@ class TaskFlowExecutionService {
 
   /// Called by flow-managed CatCatch cards before an action starts engine work.
   /// Only one tap per task may wait in the scheduler queue at a time.
-  Future<bool> performManualCatCatchAction(String taskId, bool selecting,
-      void Function(CatCatchNotifier) action) async {
+  Future<bool> performManualCatCatchAction(
+    String taskId,
+    bool selecting,
+    void Function(CatCatchNotifier) action,
+  ) async {
     final execution = _manualCatCatchExecution(taskId, selecting);
     if (execution == null || !_manualCatCatchActions.add(taskId)) return false;
     final id = execution.id;
@@ -236,7 +249,9 @@ class TaskFlowExecutionService {
         if (_manualCatCatchWaits[taskId] != id) return false;
         try {
           await _scheduler.acquire(
-              id, TaskFlowScheduler.weightFor(BlockType.catcatch));
+            id,
+            TaskFlowScheduler.weightFor(BlockType.catcatch),
+          );
         } on FlowSchedulerCancelledException {
           return false;
         } on FlowSchedulerPausedException {
@@ -265,10 +280,14 @@ class TaskFlowExecutionService {
     if (token != null && !token.isCancelled) token.cancel();
   }
 
-  Future<bool> startFlow(String flowId, String inputText,
-      {int durationSec = 0}) async {
-    await startFlowMany(
-        flowId, [FlowRunInput(text: inputText, durationSec: durationSec)]);
+  Future<bool> startFlow(
+    String flowId,
+    String inputText, {
+    int durationSec = 0,
+  }) async {
+    await startFlowMany(flowId, [
+      FlowRunInput(text: inputText, durationSec: durationSec),
+    ]);
     return true;
   }
 
@@ -280,17 +299,32 @@ class TaskFlowExecutionService {
   /// Validate, persist the complete submission, then start workers from saved
   /// records. A process exit can never discard an input waiting in a batch.
   Future<List<String>> launchFlowMany(
-      String flowId, List<FlowRunInput> inputs) async {
+    String flowId,
+    List<FlowRunInput> inputs,
+  ) async {
+    return _notifier.withInputStoragePathsLock(
+      inputs.map((input) => input.ownedStoragePath),
+      () => _launchFlowMany(flowId, inputs),
+    );
+  }
+
+  Future<List<String>> _launchFlowMany(
+    String flowId,
+    List<FlowRunInput> inputs,
+  ) async {
     final flow = await _prepareFlow(flowId);
     final snapshot = FlowLaunchSnapshot.capture(
-        flow, _ref.read(providerEntriesProvider), _ref.read(assistantProvider),
-        selectedChatModel: _ref
-            .read(chatStreamManagerProvider)
-            .adapter
-            .selectedProviderModelReference,
-        synthesisDefaults: flow.blocks.any((b) => b.typeKey == BlockType.tts)
-            ? _ref.read(synthesisConfigProvider).toMap()
-            : const {});
+      flow,
+      _ref.read(providerEntriesProvider),
+      _ref.read(assistantProvider),
+      selectedChatModel: _ref
+          .read(chatStreamManagerProvider)
+          .adapter
+          .selectedProviderModelReference,
+      synthesisDefaults: flow.blocks.any((b) => b.typeKey == BlockType.tts)
+          ? _ref.read(synthesisConfigProvider).toMap()
+          : const {},
+    );
     // The capture can turn an unbound assistant into the selected model.
     // Validate that exact frozen selection before any run record is saved.
     await _validateSnapshot(snapshot, inputs);
@@ -318,15 +352,18 @@ class TaskFlowExecutionService {
         final block = entry.value;
         final def = block.getDefinition();
         return FlowSubTask(
-            blockTypeKey: block.typeKey.name,
-            blockLabel: def?.label ?? block.typeKey.name,
-            subTaskId: 'pending_${block.typeKey.name}_${entry.key}',
-            subTaskType: subTaskTypeFor(def?.typeKey),
-            status: TaskStatus.waiting);
+          blockTypeKey: block.typeKey.name,
+          blockLabel: def?.label ?? block.typeKey.name,
+          subTaskId: 'pending_${block.typeKey.name}_${entry.key}',
+          subTaskType: subTaskTypeFor(def?.typeKey),
+          status: TaskStatus.waiting,
+        );
       }).toList();
 
   Future<List<String>> _submit(
-      FlowLaunchSnapshot snapshot, List<FlowRunInput> inputs) async {
+    FlowLaunchSnapshot snapshot,
+    List<FlowRunInput> inputs,
+  ) async {
     if (_disposed) {
       throw StateError('任务流服务已关闭');
     }
@@ -335,7 +372,8 @@ class TaskFlowExecutionService {
     final records = inputs
         .asMap()
         .entries
-        .map((entry) => TaskFlowExecution(
+        .map(
+          (entry) => TaskFlowExecution(
             flowId: flow.id,
             flowName: flow.name,
             status: FlowExecutionStatus.waiting,
@@ -345,7 +383,14 @@ class TaskFlowExecutionService {
             subTasks: _steps(flow),
             inputText: entry.value.text,
             inputDurationSec: entry.value.durationSec,
-            inputMimeType: entry.value.mimeType))
+            inputMimeType: entry.value.mimeType,
+            inputType: flow.inputType,
+            inputFileName: entry.value.fileName,
+            inputStoragePath: FlowPayload.isFileType(flow.inputType)
+                ? entry.value.ownedStoragePath
+                : null,
+          ),
+        )
         .toList();
     if (!await _notifier.addExecutions(records)) {
       for (final record in records) {
@@ -408,8 +453,21 @@ class TaskFlowExecutionService {
 
   /// A retry creates a new record. Legacy histories require the explicit
   /// latest-config option because their original configuration is unknown.
-  Future<List<String>> retryExecution(String id,
-      {bool useLatestConfiguration = false}) async {
+  Future<List<String>> retryExecution(
+    String id, {
+    bool useLatestConfiguration = false,
+  }) async {
+    final path = _execution(id)?.inputStoragePath;
+    return _notifier.withInputStoragePathLock(
+      path,
+      () => _retryExecution(id, useLatestConfiguration: useLatestConfiguration),
+    );
+  }
+
+  Future<List<String>> _retryExecution(
+    String id, {
+    required bool useLatestConfiguration,
+  }) async {
     final e = _execution(id);
     if (e == null) {
       throw StateError('执行记录已删除');
@@ -419,32 +477,55 @@ class TaskFlowExecutionService {
     }
     final inputs = [
       FlowRunInput(
-          text: e.inputText,
-          durationSec: e.inputDurationSec,
-          mimeType: e.inputMimeType)
+        text: e.inputText,
+        durationSec: e.inputDurationSec,
+        mimeType: e.inputMimeType,
+        fileName: e.inputFileName,
+        ownedStoragePath: e.inputStoragePath,
+      ),
     ];
     if (useLatestConfiguration) {
-      return launchFlowMany(e.flowId, inputs);
+      final latest = _ref
+          .read(taskFlowListProvider)
+          .where((f) => f.id == e.flowId)
+          .firstOrNull;
+      final originalType = e.inputType ?? e.snapshot?.flow.inputType;
+      if (latest != null &&
+          originalType != null &&
+          latest.inputType != originalType) {
+        throw TaskFlowValidationException(
+          '初始输入类型已修改，请重新选择运行输入',
+          flowId: e.flowId,
+          isInputError: true,
+        );
+      }
+      return _launchFlowMany(e.flowId, inputs);
     }
     final snapshot = e.snapshot;
     if (snapshot == null) {
-      throw TaskFlowValidationException('旧记录没有运行快照，请选择使用最新配置重试',
-          flowId: e.flowId);
+      throw TaskFlowValidationException(
+        '旧记录没有运行快照，请选择使用最新配置重试',
+        flowId: e.flowId,
+      );
     }
     await _validateSnapshot(snapshot, inputs);
     return _submit(snapshot, inputs);
   }
 
   Future<void> _validateSnapshot(
-      FlowLaunchSnapshot snapshot, List<FlowRunInput> inputs) async {
+    FlowLaunchSnapshot snapshot,
+    List<FlowRunInput> inputs,
+  ) async {
     await _ref.read(providerEntriesProvider.notifier).ready;
     await _ref.read(assistantProvider.notifier).ready;
-    await validateTaskFlow(snapshot.flow, inputs,
-        providers:
-            snapshot.resolveProviders(_ref.read(providerEntriesProvider)),
-        assistants: snapshot.resolveAssistants(_ref.read(assistantProvider)),
-        fallbackChatEndpointType:
-            _ref.read(chatStreamManagerProvider).adapter.endpointType);
+    await validateTaskFlow(
+      snapshot.flow,
+      inputs,
+      providers: snapshot.resolveProviders(_ref.read(providerEntriesProvider)),
+      assistants: snapshot.resolveAssistants(_ref.read(assistantProvider)),
+      fallbackChatEndpointType:
+          _ref.read(chatStreamManagerProvider).adapter.endpointType,
+    );
     // The test-only block runner bypasses ChatAdapter; production chat blocks
     // need a captured endpoint. The adapter has no implicit first-model
     // fallback when an assistant has no binding or usable legacy name.
@@ -456,8 +537,12 @@ class TaskFlowExecutionService {
         final block = blocks[index];
         if (block.typeKey == BlockType.chat &&
             !selected.any((item) => item['blockId'] == block.id)) {
-          throw TaskFlowValidationException('助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型',
-              flowId: snapshot.flow.id, blockId: block.id, blockIndex: index);
+          throw TaskFlowValidationException(
+            '助手模型未选择或不可用，请先在对话页选择模型或给助手设置默认模型',
+            flowId: snapshot.flow.id,
+            blockId: block.id,
+            blockIndex: index,
+          );
         }
       }
     }
@@ -484,8 +569,10 @@ class TaskFlowExecutionService {
         }
       }
     } catch (_) {
-      throw TaskFlowValidationException('已保存的步骤文件不存在、为空或无法读取，请重新运行',
-          flowId: flowId);
+      throw TaskFlowValidationException(
+        '已保存的步骤文件不存在、为空或无法读取，请重新运行',
+        flowId: flowId,
+      );
     }
   }
 
@@ -513,9 +600,11 @@ class TaskFlowExecutionService {
         current.status == FlowExecutionStatus.paused) {
       // A batch future can still be waiting behind another input. Pending
       // steps must remain durable waiting records, ready for cold restoration.
-      final hasActiveStep = current.subTasks.any((step) =>
-          step.outcome == FlowStepOutcome.running ||
-          step.outcome == FlowStepOutcome.paused);
+      final hasActiveStep = current.subTasks.any(
+        (step) =>
+            step.outcome == FlowStepOutcome.running ||
+            step.outcome == FlowStepOutcome.paused,
+      );
       _synthesisResumeModels(current); // Fail before opening the pause gate.
       _resumePending[id] = revision;
       try {
@@ -527,7 +616,9 @@ class TaskFlowExecutionService {
             !_scheduler.holds(id)) {
           try {
             await _scheduler.acquire(
-                id, TaskFlowScheduler.weightFor(activeType!));
+              id,
+              TaskFlowScheduler.weightFor(activeType!),
+            );
           } on FlowSchedulerCancelledException {
             if (_currentControl(id, revision) == null) return;
             rethrow;
@@ -543,16 +634,20 @@ class TaskFlowExecutionService {
           return;
         }
         _notifier.setExecutionStatus(
-            id,
-            hasActiveStep
-                ? FlowExecutionStatus.running
-                : FlowExecutionStatus.waiting);
+          id,
+          hasActiveStep
+              ? FlowExecutionStatus.running
+              : FlowExecutionStatus.waiting,
+        );
         final saved = await _notifier.persist();
         current = _currentControl(id, revision);
         if (current == null) return;
         if (!saved) {
-          _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
-              error: '继续状态无法保存');
+          _notifier.setExecutionStatus(
+            id,
+            FlowExecutionStatus.paused,
+            error: '继续状态无法保存',
+          );
           if (activeType == BlockType.catcatch || activeType == BlockType.tts) {
             _scheduler.release(id);
           }
@@ -561,8 +656,11 @@ class TaskFlowExecutionService {
         try {
           _resumeUnderlying(current);
         } catch (error) {
-          _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
-              error: error.toString());
+          _notifier.setExecutionStatus(
+            id,
+            FlowExecutionStatus.paused,
+            error: error.toString(),
+          );
           if (activeType == BlockType.catcatch || activeType == BlockType.tts) {
             _scheduler.release(id);
           }
@@ -593,8 +691,12 @@ class TaskFlowExecutionService {
     }
     final flow = snapshot.flow;
     final data = prefix == 0
-        ? FlowPayload.fromValue(current.inputText, flow.inputType,
-            mimeType: current.inputMimeType)
+        ? FlowPayload.fromValue(
+            current.inputText,
+            flow.inputType,
+            mimeType: current.inputMimeType,
+            fileName: current.inputFileName,
+          )
         : current.subTasks[prefix - 1].result!;
     await _readable(data, current.flowId);
     current = _currentControl(id, revision);
@@ -602,20 +704,26 @@ class TaskFlowExecutionService {
     final remaining = flow.blocks.skip(prefix).toList();
     if (remaining.isNotEmpty) {
       await validateTaskFlow(
-          flow.copyWith(inputType: data.type, blocks: remaining),
-          [
-            FlowRunInput(
-                text: data.value,
-                durationSec: current.inputDurationSec,
-                mimeType: data.mimeType)
-          ],
-          providers: snapshot.resolveProviders(
-              _ref.read(providerEntriesProvider),
-              blocks: remaining),
-          assistants: snapshot.resolveAssistants(_ref.read(assistantProvider),
-              blocks: remaining),
-          fallbackChatEndpointType:
-              _ref.read(chatStreamManagerProvider).adapter.endpointType);
+        flow.copyWith(inputType: data.type, blocks: remaining),
+        [
+          FlowRunInput(
+            text: data.value,
+            durationSec: current.inputDurationSec,
+            mimeType: data.mimeType,
+            fileName: data.fileName,
+          ),
+        ],
+        providers: snapshot.resolveProviders(
+          _ref.read(providerEntriesProvider),
+          blocks: remaining,
+        ),
+        assistants: snapshot.resolveAssistants(
+          _ref.read(assistantProvider),
+          blocks: remaining,
+        ),
+        fallbackChatEndpointType:
+            _ref.read(chatStreamManagerProvider).adapter.endpointType,
+      );
       current = _currentControl(id, revision);
       if (current == null) return;
     }
@@ -643,8 +751,9 @@ class TaskFlowExecutionService {
     }
     _notifier.setExecutionStatus(id, FlowExecutionStatus.paused);
     _scheduler.pause(id);
-    for (final step
-        in e.subTasks.where((s) => s.outcome == FlowStepOutcome.running)) {
+    for (final step in e.subTasks.where(
+      (s) => s.outcome == FlowStepOutcome.running,
+    )) {
       switch (step.subTaskType) {
         case 'catcatch':
           _ref.read(catcatchTasksProvider.notifier).pauseTask(step.subTaskId);
@@ -662,8 +771,11 @@ class TaskFlowExecutionService {
     }
     if (!await _notifier.persist()) {
       if (_currentControl(id, revision) != null) {
-        _notifier.setExecutionStatus(id, FlowExecutionStatus.paused,
-            error: '暂停状态无法保存，重新启动后请检查此执行');
+        _notifier.setExecutionStatus(
+          id,
+          FlowExecutionStatus.paused,
+          error: '暂停状态无法保存，重新启动后请检查此执行',
+        );
       }
       throw const TaskFlowPersistenceException('已暂停，但无法保存暂停状态');
     }
@@ -683,10 +795,14 @@ class TaskFlowExecutionService {
       }
       final block = blocks[i];
       final providers = snapshot.resolveProviders(
-          _ref.read(providerEntriesProvider),
-          blocks: [block]);
-      final model =
-          resolveProviderModel(providers, 'tts', block.params['modelRef']);
+        _ref.read(providerEntriesProvider),
+        blocks: [block],
+      );
+      final model = resolveProviderModel(
+        providers,
+        'tts',
+        block.params['modelRef'],
+      );
       if (model == null) throw StateError('合成模型已删除或不可用，请使用最新配置重试');
       selected[step.id] = model;
     }
@@ -695,17 +811,22 @@ class TaskFlowExecutionService {
 
   void _resumeUnderlying(TaskFlowExecution e) {
     final synthesis = _synthesisResumeModels(e);
-    for (final step in e.subTasks.where((s) =>
-        !s.subTaskId.startsWith('pending_') &&
-        (s.outcome == FlowStepOutcome.paused ||
-            s.outcome == FlowStepOutcome.running))) {
+    for (final step in e.subTasks.where(
+      (s) =>
+          !s.subTaskId.startsWith('pending_') &&
+          (s.outcome == FlowStepOutcome.paused ||
+              s.outcome == FlowStepOutcome.running),
+    )) {
       switch (step.subTaskType) {
         case 'catcatch':
           _ref.read(catcatchTasksProvider.notifier).resumeTask(step.subTaskId);
         case 'synthesis':
           final model = synthesis[step.id]!;
-          _ref.read(taskListProvider.notifier).resumeTask(step.subTaskId,
-              providerConfig: model.config, modelConfig: model.model);
+          _ref.read(taskListProvider.notifier).resumeTask(
+                step.subTaskId,
+                providerConfig: model.config,
+                modelConfig: model.model,
+              );
         default:
           break;
       }
@@ -720,8 +841,11 @@ class TaskFlowExecutionService {
     _notifier.cancelExecution(id);
     _stopUnderlying(e, remove: true);
     if (!await _notifier.persist()) {
-      _notifier.setExecutionStatus(id, FlowExecutionStatus.cancelled,
-          error: '取消状态无法保存，重新启动后请再次取消');
+      _notifier.setExecutionStatus(
+        id,
+        FlowExecutionStatus.cancelled,
+        error: '取消状态无法保存，重新启动后请再次取消',
+      );
       throw const TaskFlowPersistenceException('已取消，但无法保存取消状态，重新启动后请检查此执行');
     }
   }
@@ -736,15 +860,21 @@ class TaskFlowExecutionService {
     }
     if (!await _notifier.persist()) {
       for (final e in records) {
-        _notifier.setExecutionStatus(e.id, FlowExecutionStatus.cancelled,
-            error: '批次取消状态无法保存，重新启动后请再次取消');
+        _notifier.setExecutionStatus(
+          e.id,
+          FlowExecutionStatus.cancelled,
+          error: '批次取消状态无法保存，重新启动后请再次取消',
+        );
       }
       throw const TaskFlowPersistenceException('批次已取消，但无法保存取消状态，重新启动后请检查队列');
     }
   }
 
-  void _stopUnderlying(TaskFlowExecution e,
-      {required bool remove, bool invalidateControl = true}) {
+  void _stopUnderlying(
+    TaskFlowExecution e, {
+    required bool remove,
+    bool invalidateControl = true,
+  }) {
     if (invalidateControl) _invalidateControl(e.id);
     cancelActiveRequest(e.id);
     _scheduler.cancel(e.id);
@@ -765,7 +895,10 @@ class TaskFlowExecutionService {
   }
 
   Future<bool> _ensureBlockSlot(
-      String id, TaskFlowScheduler scheduler, int weight) async {
+    String id,
+    TaskFlowScheduler scheduler,
+    int weight,
+  ) async {
     while (_live(id)) {
       await _waitUnpaused(id);
       if (!_live(id)) return false;
@@ -803,8 +936,12 @@ class TaskFlowExecutionService {
       await _notifier.persist();
       return;
     }
-    var current = FlowPayload.fromValue(original.inputText, flow.inputType,
-        mimeType: original.inputMimeType);
+    var current = FlowPayload.fromValue(
+      original.inputText,
+      flow.inputType,
+      mimeType: original.inputMimeType,
+      fileName: original.inputFileName,
+    );
     final scheduler = _ref.read(taskFlowSchedulerProvider);
     String? activeStepId;
     try {
@@ -845,22 +982,30 @@ class TaskFlowExecutionService {
         try {
           result = runner != null
               ? await runner(block, current, id, step)
-              : await _executeBlock(def, block, current, id, _notifier,
+              : await _executeBlock(
+                  def,
+                  block,
+                  current,
+                  id,
+                  _notifier,
                   flowSubTask: step,
                   catcatchNotifier: _ref.read(catcatchTasksProvider.notifier),
                   bgNotifier: _ref.read(backgroundTasksProvider.notifier),
                   taskListNotifier: _ref.read(taskListProvider.notifier),
                   providerEntries: snapshot.resolveProviders(
-                      _ref.read(providerEntriesProvider),
-                      blocks: [block]),
+                    _ref.read(providerEntriesProvider),
+                    blocks: [block],
+                  ),
                   inputDurationSec: original.inputDurationSec,
                   nextInputType: i + 1 < flow.blocks.length
                       ? flow.blocks[i + 1].getDefinition()?.inputType
-                      : null);
+                      : null,
+                );
         } finally {
           _activeBlockTypes.remove(id);
-          _manualCatCatchWaits
-              .removeWhere((_, executionId) => executionId == id);
+          _manualCatCatchWaits.removeWhere(
+            (_, executionId) => executionId == id,
+          );
           scheduler.release(id);
         }
         if (!_live(id)) {
@@ -877,8 +1022,11 @@ class TaskFlowExecutionService {
       }
       _notifier.completeExecution(id);
       if (!await _notifier.persist() && !_disposed && _execution(id) != null) {
-        _notifier.setExecutionStatus(id, FlowExecutionStatus.interrupted,
-            error: '步骤已完成，但无法保存完成状态，请检查存储后继续');
+        _notifier.setExecutionStatus(
+          id,
+          FlowExecutionStatus.interrupted,
+          error: '步骤已完成，但无法保存完成状态，请检查存储后继续',
+        );
       }
     } on FlowSchedulerCancelledException {
       return;
@@ -1016,7 +1164,10 @@ class TaskFlowExecutionService {
   }) async {
     if (!def.acceptsInput(input.type)) {
       execNotifier.updateSubTaskStatus(
-          execId, flowSubTask.id, TaskStatus.failed);
+        execId,
+        flowSubTask.id,
+        TaskStatus.failed,
+      );
       throw BlockExecutionException(
         '上一步实际输出为${input.type.label}，「${def.label}」需要${def.inputType.label}，请修改资源选择或输出类型',
         blockType: def.typeKey.name,
@@ -1048,57 +1199,61 @@ class TaskFlowExecutionService {
         return outputPayload ?? FlowPayload.fromValue(result, actualType);
       case BlockType.audioSeparation:
         return FlowPayload.fromValue(
-            await executeAudioSeparationBlock(
-              def: def,
-              block: block,
-              input: input.value,
-              execId: execId,
-              execNotifier: execNotifier,
-              flowSubTask: flowSubTask,
-              bgNotifier: bgNotifier,
-            ),
-            def.outputType);
+          await executeAudioSeparationBlock(
+            def: def,
+            block: block,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+          ),
+          def.outputType,
+        );
       case BlockType.asr:
         return FlowPayload.fromValue(
-            await executeAsrBlock(
-              block: block,
-              def: def,
-              input: input.value,
-              execId: execId,
-              execNotifier: execNotifier,
-              flowSubTask: flowSubTask,
-              bgNotifier: bgNotifier,
-              providerEntries: providerEntries,
-              cancelToken: _activeRequestCancelTokens[execId],
-            ),
-            def.outputType);
+          await executeAsrBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries,
+            cancelToken: _activeRequestCancelTokens[execId],
+          ),
+          def.outputType,
+        );
       case BlockType.ocr:
         return FlowPayload.fromValue(
-            await executeOcrBlock(
-              block: block,
-              def: def,
-              input: input.value,
-              execId: execId,
-              execNotifier: execNotifier,
-              flowSubTask: flowSubTask,
-              bgNotifier: bgNotifier,
-              providerEntries: providerEntries,
-              cancelToken: _activeRequestCancelTokens[execId],
-            ),
-            def.outputType);
+          await executeOcrBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            providerEntries: providerEntries,
+            cancelToken: _activeRequestCancelTokens[execId],
+          ),
+          def.outputType,
+        );
       case BlockType.tts:
         return FlowPayload.fromValue(
-            await executeTtsBlock(
-              block: block,
-              def: def,
-              input: input.value,
-              execId: execId,
-              execNotifier: execNotifier,
-              flowSubTask: flowSubTask,
-              taskListNotifier: taskListNotifier,
-              providerEntries: providerEntries,
-            ),
-            def.outputType);
+          await executeTtsBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            taskListNotifier: taskListNotifier,
+            providerEntries: providerEntries,
+          ),
+          def.outputType,
+        );
       case BlockType.chat:
         // Resolve the block's assistantId (empty = use the captured model).
         // Only user-defined assistants are allowed
@@ -1108,8 +1263,10 @@ class TaskFlowExecutionService {
         final snapshot = _execution(execId)?.snapshot;
         final chatAssistant = resolveChatAssistant(
           assistantId,
-          snapshot?.resolveAssistants(_ref.read(assistantProvider),
-                  blocks: [block]) ??
+          snapshot?.resolveAssistants(
+                _ref.read(assistantProvider),
+                blocks: [block],
+              ) ??
               _ref.read(assistantProvider),
         );
         // A configured assistant that no longer exists must fail loudly
@@ -1132,28 +1289,30 @@ class TaskFlowExecutionService {
             ? snapshot?.chatModelReference(block.id)
             : null;
         return FlowPayload.fromValue(
-            await executeChatBlock(
-              block: block,
-              def: def,
-              input: input.value,
-              payload: input,
-              execId: execId,
-              execNotifier: execNotifier,
-              flowSubTask: flowSubTask,
-              bgNotifier: bgNotifier,
-              chatManager: _ref.read(chatStreamManagerProvider),
-              conversationsNotifier: _ref.read(conversationsProvider.notifier),
-              assistant: chatAssistant,
-              providerEntries: providerEntries,
+          await executeChatBlock(
+            block: block,
+            def: def,
+            input: input.value,
+            payload: input,
+            execId: execId,
+            execNotifier: execNotifier,
+            flowSubTask: flowSubTask,
+            bgNotifier: bgNotifier,
+            chatManager: _ref.read(chatStreamManagerProvider),
+            conversationsNotifier: _ref.read(conversationsProvider.notifier),
+            assistant: chatAssistant,
+            providerEntries: providerEntries,
+            modelReference: modelReference,
+            endpointType: flowChatEndpointType(
+              chatAssistant,
+              providerEntries,
               modelReference: modelReference,
-              endpointType: flowChatEndpointType(chatAssistant, providerEntries,
-                  modelReference: modelReference,
-                  fallback: _ref
-                      .read(chatStreamManagerProvider)
-                      .adapter
-                      .endpointType),
+              fallback:
+                  _ref.read(chatStreamManagerProvider).adapter.endpointType,
             ),
-            def.outputType);
+          ),
+          def.outputType,
+        );
       case BlockType.custom:
         execNotifier.updateSubTaskStatus(
           execId,

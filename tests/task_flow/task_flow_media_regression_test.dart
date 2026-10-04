@@ -153,6 +153,7 @@ void main() {
   tearDown(() async {
     if (executions.mounted) executions.dispose();
     background.dispose();
+    await background.pendingPersistence;
     container.dispose();
     manager.dispose();
     PathProviderPlatform.instance = previous;

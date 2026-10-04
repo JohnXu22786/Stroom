@@ -54,93 +54,160 @@ void main() {
     (
       name: 'audio_only.mpg',
       type: IOType.audio,
-      mime: 'audio/x-mpeg-program-stream'
+      mime: 'audio/x-mpeg-program-stream',
     ),
   ]) {
+    final unsupportedAudio = const {
+      'audio/x-flv',
+      'audio/quicktime',
+      'audio/x-msvideo',
+      'audio/x-matroska',
+      'audio/x-mpeg-program-stream',
+    }.contains(sample.mime);
     test(
-        '${sample.name} retains verified track MIME through chat attachment storage',
-        () async {
-      final file =
-          await File(p.join('tests', 'fixtures', 'catcatch', sample.name))
-              .copy(p.join(directory.path, sample.name));
-      final output = await catCatchOutputPayload(file.path);
-      expect(output.type, sample.type);
-      expect(output.mimeType, sample.mime);
-      final restored = FlowPayload.fromMap(output.toMap());
-      final message = await prepareFlowChatMessage(restored, 'conversation',
-          endpointType: 'gemini');
-      final attachment = message.attachments.single;
-      expect(attachment.fileType, sample.type.name);
-      expect(attachment.mimeType, sample.mime);
-      expect(attachment.conversationId, 'conversation');
-      expect(await AttachmentStorage.readFile(attachment.storagePath),
-          await file.readAsBytes());
-    });
+      '${sample.name} retains verified track MIME ${unsupportedAudio ? 'and rejects unsupported chat audio' : 'through chat attachment storage'}',
+      () async {
+        final file = await File(
+          p.join('tests', 'fixtures', 'catcatch', sample.name),
+        ).copy(p.join(directory.path, sample.name));
+        final output = await catCatchOutputPayload(file.path);
+        expect(output.type, sample.type);
+        expect(output.mimeType, sample.mime);
+        final restored = FlowPayload.fromMap(output.toMap());
+        expect(restored.type, sample.type);
+        expect(restored.mimeType, sample.mime);
+        if (unsupportedAudio) {
+          await expectLater(
+            prepareFlowChatMessage(
+              restored,
+              'conversation',
+              endpointType: 'gemini',
+            ),
+            throwsA(
+              isA<FormatException>().having(
+                (error) => error.message,
+                'unsupported audio encoding',
+                contains('不支持 ${sample.mime} 音频附件'),
+              ),
+            ),
+          );
+          expect(
+            await Directory(p.join(directory.path, 'attachments')).exists(),
+            isFalse,
+          );
+          return;
+        }
+        final message = await prepareFlowChatMessage(
+          restored,
+          'conversation',
+          endpointType: 'gemini',
+        );
+        final attachment = message.attachments.single;
+        expect(attachment.fileType, sample.type.name);
+        expect(attachment.mimeType, sample.mime);
+        expect(attachment.conversationId, 'conversation');
+        expect(
+          await AttachmentStorage.readFile(attachment.storagePath),
+          await file.readAsBytes(),
+        );
+      },
+    );
   }
 
   for (final strongMagic in ['png', 'mp3', 'wav']) {
-    test('$strongMagic bytes cannot be spoofed by a shared-container MIME',
-        () async {
-      final file = File(p.join(directory.path, 'spoofed.webm'));
-      if (strongMagic == 'png') {
-        await file
-            .writeAsBytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      } else {
-        await File(p.join(
-                'tests', 'fixtures', 'catcatch', 'audio_only.$strongMagic'))
-            .copy(file.path);
-      }
-      await expectLater(
+    test(
+      '$strongMagic bytes cannot be spoofed by a shared-container MIME',
+      () async {
+        final file = File(p.join(directory.path, 'spoofed.webm'));
+        if (strongMagic == 'png') {
+          await file.writeAsBytes([
+            0x89,
+            0x50,
+            0x4e,
+            0x47,
+            0x0d,
+            0x0a,
+            0x1a,
+            0x0a,
+          ]);
+        } else {
+          await File(
+            p.join('tests', 'fixtures', 'catcatch', 'audio_only.$strongMagic'),
+          ).copy(file.path);
+        }
+        await expectLater(
           prepareFlowChatMessage(
-              FlowPayload.file(
-                  fileReference: file.path,
-                  type: IOType.video,
-                  mimeType: 'video/webm'),
-              'conversation',
-              endpointType: 'gemini'),
-          throwsA(isA<FormatException>()));
-      expect(await Directory(p.join(directory.path, 'attachments')).exists(),
-          isFalse);
-    });
+            FlowPayload.file(
+              fileReference: file.path,
+              type: IOType.video,
+              mimeType: 'video/webm',
+            ),
+            'conversation',
+            endpointType: 'gemini',
+          ),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          await Directory(p.join(directory.path, 'attachments')).exists(),
+          isFalse,
+        );
+      },
+    );
   }
 
-  test('metadata for another container family cannot override MP4 bytes',
-      () async {
-    final file = await File('tests/fixtures/catcatch/video_only.mp4')
-        .copy(p.join(directory.path, 'spoofed.webm'));
-    await expectLater(
+  test(
+    'metadata for another container family cannot override MP4 bytes',
+    () async {
+      final file = await File('tests/fixtures/catcatch/video_only.mp4')
+          .copy(p.join(directory.path, 'spoofed.webm'));
+      await expectLater(
         prepareFlowChatMessage(
-            FlowPayload.file(
-                fileReference: file.path,
-                type: IOType.audio,
-                mimeType: 'audio/webm'),
-            'conversation',
-            endpointType: 'gemini'),
-        throwsA(isA<FormatException>()));
-    expect(await Directory(p.join(directory.path, 'attachments')).exists(),
-        isFalse);
-  });
+          FlowPayload.file(
+            fileReference: file.path,
+            type: IOType.audio,
+            mimeType: 'audio/webm',
+          ),
+          'conversation',
+          endpointType: 'gemini',
+        ),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        await Directory(p.join(directory.path, 'attachments')).exists(),
+        isFalse,
+      );
+    },
+  );
 
   test('FLV MIME metadata does not override strong MP3 bytes', () async {
     final file = await File('tests/fixtures/catcatch/audio_only.mp3')
         .copy(p.join(directory.path, 'spoofed.flv'));
     await expectLater(
-        prepareFlowChatMessage(
-            FlowPayload.file(
-                fileReference: file.path,
-                type: IOType.video,
-                mimeType: 'video/x-flv'),
-            'conversation',
-            endpointType: 'gemini'),
-        throwsA(isA<FormatException>()));
-    expect(await Directory(p.join(directory.path, 'attachments')).exists(),
-        isFalse);
+      prepareFlowChatMessage(
+        FlowPayload.file(
+          fileReference: file.path,
+          type: IOType.video,
+          mimeType: 'video/x-flv',
+        ),
+        'conversation',
+        endpointType: 'gemini',
+      ),
+      throwsA(isA<FormatException>()),
+    );
+    expect(
+      await Directory(p.join(directory.path, 'attachments')).exists(),
+      isFalse,
+    );
   });
 
   test('ordinary file MIME fallback remains available', () {
     expect(
-        flowFileMimeType('notes.txt',
-            headerBytes: [1, 2, 3], mimeType: 'video/webm'),
-        'text/plain');
+      flowFileMimeType(
+        'notes.txt',
+        headerBytes: [1, 2, 3],
+        mimeType: 'video/webm',
+      ),
+      'text/plain',
+    );
   });
 }
