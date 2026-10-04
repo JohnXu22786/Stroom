@@ -119,7 +119,44 @@ void main() {
     expect(container.read(taskListProvider).single.status, TaskStatus.paused);
   });
 
-  test('removing a task after gallery insertion rolls back its files',
+  for (final persisted in [false, true]) {
+    test(
+        persisted
+            ? 'persisted removal during gallery save rolls back its files'
+            : 'removing a task after gallery insertion rolls back its files',
+        () async {
+      final enteredSave = Completer<void>();
+      final releaseSave = Completer<void>();
+      notifier.debugAfterSaveCommit = () async {
+        enteredSave.complete();
+        await releaseSave.future;
+      };
+
+      final id = notifier.addTask(
+        title: 'Canceled after insert',
+        text: 'Canceled source',
+        providerConfig: providerConfig,
+        modelConfig: modelConfig,
+      );
+      await enteredSave.future.timeout(const Duration(seconds: 5));
+      expect(await FileManifest.loadRecords(), hasLength(1));
+
+      if (persisted) {
+        expect(await notifier.removeTasksPersisted([id]), isTrue);
+      } else {
+        notifier.removeTask(id);
+      }
+      releaseSave.complete();
+      await waitUntil(() async =>
+          (await FileManifest.loadRecords()).isEmpty &&
+          await FileManifest.readFile('$hash.wav') == null &&
+          await FileManifest.readFile('$hash.txt') == null);
+
+      expect(container.read(taskListProvider), isEmpty);
+    });
+  }
+
+  test('failed persisted removal keeps an ongoing gallery save intact',
       () async {
     final enteredSave = Completer<void>();
     final releaseSave = Completer<void>();
@@ -127,24 +164,29 @@ void main() {
       enteredSave.complete();
       await releaseSave.future;
     };
-
     final id = notifier.addTask(
-      title: 'Canceled after insert',
-      text: 'Canceled source',
-      providerConfig: providerConfig,
-      modelConfig: modelConfig,
-    );
+        title: 'Kept speech',
+        text: 'Kept source',
+        providerConfig: providerConfig,
+        modelConfig: modelConfig);
     await enteredSave.future.timeout(const Duration(seconds: 5));
-    expect(await FileManifest.loadRecords(), hasLength(1));
-
-    notifier.removeTask(id);
+    expect(await notifier.removeTasksPersisted(['absent']), isTrue);
+    final file = File('${directory.path}/synthesis/tasks.json');
+    final backup = File('${file.path}.bak');
+    await file.rename(backup.path);
+    await Directory(file.path).create();
+    expect(await notifier.removeTasksPersisted([id]), isFalse);
+    expect(container.read(taskListProvider).single.id, id);
+    expect((jsonDecode(await backup.readAsString()) as List).single['id'], id);
+    await Directory(file.path).delete();
+    await backup.rename(file.path);
     releaseSave.complete();
-    await waitUntil(() async =>
-        (await FileManifest.loadRecords()).isEmpty &&
-        await FileManifest.readFile('$hash.wav') == null &&
-        await FileManifest.readFile('$hash.txt') == null);
-
-    expect(container.read(taskListProvider), isEmpty);
+    final task = await waitForStatus(id, TaskStatus.completed);
+    expect(task.downloadedFilePath, isNotNull);
+    expect(await FileManifest.readFile('$hash.wav'), audio);
+    expect(await FileManifest.readFile('$hash.txt'), isNotNull);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(await notifier.removeTasksPersisted(['absent']), isTrue);
   });
 
   test('canceled duplicate save preserves an existing record and source',
