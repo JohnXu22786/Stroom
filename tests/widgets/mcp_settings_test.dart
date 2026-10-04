@@ -141,8 +141,11 @@ void main() {
       expect(apiKeyField.obscureText, isTrue);
       await tester.tap(find.byTooltip('显示密钥'));
       await tester.pump();
-      expect(tester.widget<TextField>(_apiKeyFieldFinder()).obscureText, isFalse,
-          reason: 'the API key must be viewable via the visibility toggle');
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+        isFalse,
+        reason: 'the API key must be viewable via the visibility toggle',
+      );
     });
 
     testWidgets(
@@ -211,11 +214,17 @@ void main() {
 
       await tester.tap(find.byTooltip('显示密钥'));
       await tester.pump();
-      expect(tester.widget<TextField>(_apiKeyFieldFinder()).obscureText, isFalse);
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+        isFalse,
+      );
 
       await tester.tap(find.byTooltip('隐藏密钥'));
       await tester.pump();
-      expect(tester.widget<TextField>(_apiKeyFieldFinder()).obscureText, isTrue);
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+        isTrue,
+      );
     });
   });
 }
