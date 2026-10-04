@@ -1110,10 +1110,8 @@ void main() {
         ),
       );
 
-      var names = adapter
-          .getAllToolDefinitions()
-          .map((tool) => tool.name)
-          .toSet();
+      var names =
+          adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
       expect(
         names.intersection(searchToolNames),
         isEmpty,
@@ -1138,10 +1136,7 @@ void main() {
         ),
       );
 
-      names = adapter
-          .getAllToolDefinitions()
-          .map((tool) => tool.name)
-          .toSet();
+      names = adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
       expect(
         names,
         containsAll(searchToolNames),

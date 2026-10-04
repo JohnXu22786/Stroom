@@ -34,7 +34,8 @@ class _McpServerConfigDialog extends ConsumerStatefulWidget {
       _McpServerConfigDialogState();
 }
 
-class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> {
+class _McpServerConfigDialogState
+    extends ConsumerState<_McpServerConfigDialog> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _commandController = TextEditingController();
@@ -518,7 +519,9 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
                     prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                        _obscureApiKey
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         size: 20,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -564,8 +567,8 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
                             _transportType == McpTransportType.stdio
                                 ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
                                 : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
-                            style:
-                                TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                            style: TextStyle(
+                                fontSize: 12, color: cs.onSurfaceVariant),
                           ),
                         ),
                       ],

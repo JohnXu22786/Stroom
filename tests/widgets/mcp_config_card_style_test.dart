@@ -235,8 +235,7 @@ void main() {
     expect(mcpEntry.enabled, isFalse);
   });
 
-  testWidgets(
-      'catalog separates integrations and opens the HTTP search editor',
+  testWidgets('catalog separates integrations and opens the HTTP search editor',
       (tester) async {
     await pumpPage(tester, Brightness.light);
 
