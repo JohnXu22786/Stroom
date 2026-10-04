@@ -178,7 +178,7 @@ class BrowserCookieService {
           await clearPersistedCookies();
           return true;
         }
-        return clearAllCookies();
+        return _clearAllCookies();
       }
     });
   }
@@ -192,7 +192,7 @@ class BrowserCookieService {
       if (await getRetentionMode()) {
         await _persistCookiesToFile();
       } else {
-        await clearAllCookies();
+        await _clearAllCookies();
       }
     });
   }
@@ -469,7 +469,11 @@ class BrowserCookieService {
 
   /// Clears all cookies from both the platform CookieManager and the
   /// persisted local file.
-  static Future<bool> clearAllCookies() async {
+  static Future<bool> clearAllCookies() {
+    return _serializeRetentionOperation(_clearAllCookies);
+  }
+
+  static Future<bool> _clearAllCookies() async {
     try {
       await clearPersistedCookies();
       return await cookiePlatform.deleteAllCookies();
@@ -488,7 +492,11 @@ class BrowserCookieService {
   /// only expires cookies at the given path.
   /// Returns false when the platform cannot provide a complete cookie
   /// snapshot, since URL-filtered queries cannot prove every path was cleared.
-  static Future<bool> clearCookiesForDomain(String domain) async {
+  static Future<bool> clearCookiesForDomain(String domain) {
+    return _serializeRetentionOperation(() => _clearCookiesForDomain(domain));
+  }
+
+  static Future<bool> _clearCookiesForDomain(String domain) async {
     try {
       final cleanDomain = domain.startsWith('.') ? domain.substring(1) : domain;
       if (cleanDomain.isEmpty) return false;
