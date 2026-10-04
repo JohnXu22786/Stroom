@@ -31,26 +31,11 @@ class JsHookScript {
   function sendMediaUrl(url, opts) {
     if (!url || typeof url !== 'string') return;
 
-    // Handle blob: URLs — report them but skip extension check
-    if (url.startsWith('blob:')) {
-      if (seenUrls[url]) return;
-      seenUrls[url] = true;
-      var method = (opts && opts.method) || 'GET';
-      var initiator = (opts && opts.initiator) || PAGE_URL;
-      var msg = JSON.stringify({
-        url: url,
-        method: method,
-        initiator: initiator,
-        mimeType: (opts && opts.mimeType) || '',
-        requestHeaders: (opts && opts.headers) || {}
-      });
-      sendToFlutter(msg);
-      return;
-    }
-
-    // Normalize: ensure absolute URL
+    // Normalize before filtering so every Blob URL form is rejected.
     try {
-      url = new URL(url, PAGE_URL).href;
+      var parsedUrl = new URL(url, PAGE_URL);
+      if (parsedUrl.protocol === 'blob:') return;
+      url = parsedUrl.href;
     } catch(e) {
       return; // Invalid URL, skip
     }

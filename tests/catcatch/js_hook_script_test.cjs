@@ -262,6 +262,25 @@ test('reports lazy media and source URLs initially and after watched attribute c
   );
 });
 
+test('does not offer opaque Blob URLs while keeping HTTP media candidates', () => {
+  const video = new FakeMedia('VIDEO', {
+    src: 'blob:https://page.example/video.mp4',
+    sources: [
+      new FakeSource('https://cdn.example/video.m3u8'),
+      new FakeSource('http://cdn.example/audio.mp3'),
+    ],
+  });
+  const {messages} = installHook([video]);
+
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    [
+      'https://cdn.example/video.m3u8',
+      'http://cdn.example/audio.mp3',
+    ],
+  );
+});
+
 test('keeps redirect capture when the page assigns onreadystatechange after send', () => {
   const {messages, XMLHttpRequest} = installHook([]);
   const xhr = new XMLHttpRequest();
