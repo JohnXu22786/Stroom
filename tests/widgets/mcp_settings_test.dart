@@ -28,12 +28,13 @@ Widget _buildTestApp() {
   );
 }
 
-Finder _apiKeyFieldFinder() => find.byWidgetPredicate((w) =>
-    w is TextField && w.decoration?.hintText == '输入 API Key（可选）');
+Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
+  (w) => w is TextField && w.decoration?.hintText == '输入 API Key（可选）',
+);
 
 Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
-      (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
-    );
+  (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
+);
 
 void main() {
   group('SettingsPage - MCP section', () {
@@ -41,8 +42,7 @@ void main() {
       registerBuiltinProviderTypes();
     });
 
-    testWidgets(
-        'built-in MCP details keep the "Bearer " placeholder unset and expose '
+    testWidgets('built-in MCP details keep the "Bearer " placeholder unset and expose '
         'an empty key field only after entering edit mode', (tester) async {
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -124,7 +124,8 @@ void main() {
           matching: find.text('（未设置）'),
         ),
         findsOneWidget,
-        reason: 'the "Bearer " placeholder must remain unset, not become a '
+        reason:
+            'the "Bearer " placeholder must remain unset, not become a '
             'fake API key',
       );
 
@@ -133,9 +134,13 @@ void main() {
 
       // The placeholder must not be auto-filled as a key in edit mode either.
       final apiKeyField = tester.widget<TextField>(_apiKeyFieldFinder());
-      expect(apiKeyField.controller!.text, isEmpty,
-          reason: 'the "Bearer " header placeholder must not be auto-filled '
-              'as the API key');
+      expect(
+        apiKeyField.controller!.text,
+        isEmpty,
+        reason:
+            'the "Bearer " header placeholder must not be auto-filled '
+            'as the API key',
+      );
 
       // The key must be viewable: the eye toggle reveals it.
       expect(apiKeyField.obscureText, isTrue);
@@ -149,82 +154,91 @@ void main() {
     });
 
     testWidgets(
-        'built-in MCP details mask a real key until edit mode and preserve '
-        'visibility behavior', (tester) async {
-      tester.view.physicalSize = const Size(1080, 4000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      'built-in MCP details mask a real key until edit mode and preserve '
+      'visibility behavior',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      // Jina AI config with a REAL key in the Authorization header.
-      SharedPreferences.setMockInitialValues({
-        'provider_entries': jsonEncode([
-          {
-            'id': 'builtin_mcp',
-            'type': 'mcp',
-            'name': 'MCP供应商',
-            'configs': [
-              {
-                'providerName': 'Jina AI',
-                'host': 'https://mcp.jina.ai/sse',
-                'key': '',
-                'models': [
-                  {
-                    'name': 'Jina AI',
-                    'modelId': 'sse',
-                    'typeConfig': {
-                      'transport': 'sse',
-                      'url': 'https://mcp.jina.ai/sse',
-                      'isVendor': true,
-                      'headers': {'Authorization': 'Bearer sk-123'},
+        // Jina AI config with a REAL key in the Authorization header.
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': jsonEncode([
+            {
+              'id': 'builtin_mcp',
+              'type': 'mcp',
+              'name': 'MCP供应商',
+              'configs': [
+                {
+                  'providerName': 'Jina AI',
+                  'host': 'https://mcp.jina.ai/sse',
+                  'key': '',
+                  'models': [
+                    {
+                      'name': 'Jina AI',
+                      'modelId': 'sse',
+                      'typeConfig': {
+                        'transport': 'sse',
+                        'url': 'https://mcp.jina.ai/sse',
+                        'isVendor': true,
+                        'headers': {'Authorization': 'Bearer sk-123'},
+                      },
                     },
-                  },
-                ],
-              },
-            ],
-          },
-        ]),
-      });
+                  ],
+                },
+              ],
+            },
+          ]),
+        });
 
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('MCP供应商'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Jina AI'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('MCP供应商'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Jina AI'));
+        await tester.pumpAndSettle();
 
-      // A real key remains hidden in the default details view.
-      expect(_apiKeyFieldFinder(), findsNothing);
-      expect(_readOnlyApiKeyFinder(), findsOneWidget);
-      expect(find.text('••••••••'), findsOneWidget);
-      expect(find.text('sk-123'), findsNothing);
+        // A real key remains hidden in the default details view.
+        expect(_apiKeyFieldFinder(), findsNothing);
+        expect(_readOnlyApiKeyFinder(), findsOneWidget);
+        expect(find.text('••••••••'), findsOneWidget);
+        expect(find.text('sk-123'), findsNothing);
 
-      await tester.tap(find.text('编辑'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
 
-      final apiKeyField = tester.widget<TextField>(_apiKeyFieldFinder());
-      expect(apiKeyField.controller!.text, 'sk-123',
-          reason: 'edit mode must expose the actual key from the '
-              'Authorization header');
-      expect(apiKeyField.obscureText, isTrue,
-          reason: 'the actual API key must start masked while editing');
+        final apiKeyField = tester.widget<TextField>(_apiKeyFieldFinder());
+        expect(
+          apiKeyField.controller!.text,
+          'sk-123',
+          reason:
+              'edit mode must expose the actual key from the '
+              'Authorization header',
+        );
+        expect(
+          apiKeyField.obscureText,
+          isTrue,
+          reason: 'the actual API key must start masked while editing',
+        );
 
-      await tester.tap(find.byTooltip('显示密钥'));
-      await tester.pump();
-      expect(
-        tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
-        isFalse,
-      );
+        await tester.tap(find.byTooltip('显示密钥'));
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+          isFalse,
+        );
 
-      await tester.tap(find.byTooltip('隐藏密钥'));
-      await tester.pump();
-      expect(
-        tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
-        isTrue,
-      );
-    });
+        await tester.tap(find.byTooltip('隐藏密钥'));
+        await tester.pump();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+          isTrue,
+        );
+      },
+    );
   });
 }
