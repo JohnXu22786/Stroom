@@ -2384,10 +2384,15 @@ class ConstructionState {
       if (samples.isNotEmpty) curveStarts.add(samples.length);
       for (var i = 0; i <= 96; i++) {
         final t = -2.4 + 4.8 * i / 96;
+        final positiveExponential = dart_math.exp(t);
+        final negativeExponential = dart_math.exp(-t);
+        final hyperbolicCosine =
+            (positiveExponential + negativeExponential) / 2;
+        final hyperbolicSine = (positiveExponential - negativeExponential) / 2;
         samples.add(
           center +
-              realUnit * (sign * a * dart_math.cosh(t)) +
-              transverseUnit * (b * dart_math.sinh(t)),
+              realUnit * (sign * a * hyperbolicCosine) +
+              transverseUnit * (b * hyperbolicSine),
         );
       }
     }

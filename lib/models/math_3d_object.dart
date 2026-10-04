@@ -27,11 +27,8 @@ class Point3D {
   }
 
   /// Midpoint between this and another point.
-  Point3D midpoint(Point3D other) => Point3D(
-        (x + other.x) / 2,
-        (y + other.y) / 2,
-        (z + other.z) / 2,
-      );
+  Point3D midpoint(Point3D other) =>
+      Point3D((x + other.x) / 2, (y + other.y) / 2, (z + other.z) / 2);
 
   /// Convert to a position vector (from origin).
   Vector3D toVector() => Vector3D(x, y, z);
@@ -83,10 +80,10 @@ class Vector3D {
 
   /// Cross product with another vector.
   Vector3D cross(Vector3D other) => Vector3D(
-        y * other.z - z * other.y,
-        z * other.x - x * other.z,
-        x * other.y - y * other.x,
-      );
+    y * other.z - z * other.y,
+    z * other.x - x * other.z,
+    x * other.y - y * other.x,
+  );
 
   Vector3D operator +(Vector3D other) =>
       Vector3D(x + other.x, y + other.y, z + other.z);
@@ -208,6 +205,7 @@ class Object3D {
   final String? label;
   final bool transformOrigin;
   final bool visible;
+
   /// Render this point's text independently from geometric point labels.
   final bool isTextAnnotation;
 
@@ -235,19 +233,19 @@ class Object3D {
     this.transformOrigin = false,
     this.visible = true,
     this.isTextAnnotation = false,
-  })  : _point = point,
-        _pointA = pointA,
-        _pointB = pointB,
-        _planeA = planeA,
-        _planeB = planeB,
-        _planeC = planeC,
-        _planeD = planeD,
-        _vertices = vertices,
-        _indices = indices,
-        _normals = normals,
-        _sphereCenter = sphereCenter,
-        _sphereRadius = sphereRadius,
-        _vector = vector;
+  }) : _point = point,
+       _pointA = pointA,
+       _pointB = pointB,
+       _planeA = planeA,
+       _planeB = planeB,
+       _planeC = planeC,
+       _planeD = planeD,
+       _vertices = vertices,
+       _indices = indices,
+       _normals = normals,
+       _sphereCenter = sphereCenter,
+       _sphereRadius = sphereRadius,
+       _vector = vector;
 
   /// Preserve geometry and appearance when naming or moving an object.
   Object3D copyWith({
@@ -256,32 +254,31 @@ class Object3D {
     int? color,
     double? opacity,
     bool? visible,
-  }) =>
-      Object3D._(
-        type: type,
-        lineKind: lineKind,
-        point: point ?? _point,
-        pointA: _pointA,
-        pointB: _pointB,
-        planeA: _planeA,
-        planeB: _planeB,
-        planeC: _planeC,
-        planeD: _planeD,
-        vertices: _vertices,
-        indices: _indices,
-        normals: _normals,
-        curveStarts: curveStarts,
-        conic: conic,
-        sphereCenter: _sphereCenter,
-        sphereRadius: _sphereRadius,
-        vector: _vector,
-        color: color ?? this.color,
-        opacity: opacity ?? this.opacity,
-        label: label ?? this.label,
-        transformOrigin: transformOrigin,
-        visible: visible ?? this.visible,
-        isTextAnnotation: isTextAnnotation,
-      );
+  }) => Object3D._(
+    type: type,
+    lineKind: lineKind,
+    point: point ?? _point,
+    pointA: _pointA,
+    pointB: _pointB,
+    planeA: _planeA,
+    planeB: _planeB,
+    planeC: _planeC,
+    planeD: _planeD,
+    vertices: _vertices,
+    indices: _indices,
+    normals: _normals,
+    curveStarts: curveStarts,
+    conic: conic,
+    sphereCenter: _sphereCenter,
+    sphereRadius: _sphereRadius,
+    vector: _vector,
+    color: color ?? this.color,
+    opacity: opacity ?? this.opacity,
+    label: label ?? this.label,
+    transformOrigin: transformOrigin,
+    visible: visible ?? this.visible,
+    isTextAnnotation: isTextAnnotation,
+  );
 
   // ==================================================================
   // Factory constructors
@@ -355,7 +352,7 @@ class Object3D {
 
   const factory Object3D.curve({
     required List<Point3D> points,
-    List<int> curveStarts = const [],
+    List<int> curveStarts,
     Conic3D? conic,
     int color,
     double opacity,
@@ -371,12 +368,12 @@ class _Object3DPoint extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.point,
-          point: point,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.point,
+         point: point,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DText extends Object3D {
@@ -386,13 +383,13 @@ class _Object3DText extends Object3D {
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
   }) : super._(
-          type: Object3DType.point,
-          point: point,
-          color: color,
-          opacity: opacity,
-          label: text,
-          isTextAnnotation: true,
-        );
+         type: Object3DType.point,
+         point: point,
+         color: color,
+         opacity: opacity,
+         label: text,
+         isTextAnnotation: true,
+       );
 }
 
 class _Object3DLine extends Object3D {
@@ -404,14 +401,14 @@ class _Object3DLine extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.line,
-          lineKind: lineKind,
-          pointA: a,
-          pointB: b,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.line,
+         lineKind: lineKind,
+         pointA: a,
+         pointB: b,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DPlane extends Object3D {
@@ -424,15 +421,15 @@ class _Object3DPlane extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.plane,
-          planeA: a,
-          planeB: b,
-          planeC: c,
-          planeD: d,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.plane,
+         planeA: a,
+         planeB: b,
+         planeC: c,
+         planeD: d,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DSurface extends Object3D {
@@ -444,14 +441,14 @@ class _Object3DSurface extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.surface,
-          vertices: vertices,
-          indices: indices,
-          normals: normals,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.surface,
+         vertices: vertices,
+         indices: indices,
+         normals: normals,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DSphere extends Object3D {
@@ -462,13 +459,13 @@ class _Object3DSphere extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.sphere,
-          sphereCenter: center,
-          sphereRadius: radius,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.sphere,
+         sphereCenter: center,
+         sphereRadius: radius,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DPolyhedron extends Object3D {
@@ -479,13 +476,13 @@ class _Object3DPolyhedron extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.polyhedron,
-          vertices: vertices,
-          indices: indices,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.polyhedron,
+         vertices: vertices,
+         indices: indices,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DVector extends Object3D {
@@ -496,13 +493,13 @@ class _Object3DVector extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.vector,
-          point: origin ?? Point3D.origin,
-          vector: vector,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.vector,
+         point: origin ?? Point3D.origin,
+         vector: vector,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 class _Object3DCurve extends Object3D {
@@ -514,14 +511,14 @@ class _Object3DCurve extends Object3D {
     double opacity = 1.0,
     String? label,
   }) : super._(
-          type: Object3DType.curve,
-          vertices: points,
-          curveStarts: curveStarts,
-          conic: conic,
-          color: color,
-          opacity: opacity,
-          label: label,
-        );
+         type: Object3DType.curve,
+         vertices: points,
+         curveStarts: curveStarts,
+         conic: conic,
+         color: color,
+         opacity: opacity,
+         label: label,
+       );
 }
 
 // ======================================================================

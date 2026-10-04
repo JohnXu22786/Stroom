@@ -1175,10 +1175,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     if (object.type == Object3DType.plane) {
       final equation = _normalizedPlaneEquation(object);
       if (equation != null) {
-        return point -
-            equation.normal *
-                ((point - equation.origin).dot(equation.normal) /
-                    equation.normalSquared);
+        final signedOffset =
+            (point - equation.origin).dot(equation.normal) /
+            equation.normalSquared;
+        return point + equation.normal * -signedOffset;
       }
     }
     if (object.type == Object3DType.line ||
@@ -1778,11 +1778,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final direction = end - start;
       final segmentLength = start.distanceTo(end);
       if (!segmentLength.isFinite || segmentLength == 0) continue;
+      final unitDirection = direction * (1 / segmentLength);
       final along = (point - start)
-          .dot(direction / segmentLength)
+          .dot(unitDirection)
           .clamp(0.0, segmentLength)
           .toDouble();
-      final closest = start + direction / segmentLength * along;
+      final closest = start + unitDirection * along;
       final coordinateScale =
           <double>[
             point.x.abs(),
@@ -2293,7 +2294,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         return [
           for (final point in [
             base + perpendicular * height,
-            base - perpendicular * height,
+            base + perpendicular * -height,
           ])
             if (liesOnBoth(point)) point,
         ];
@@ -2332,7 +2333,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           ? [closestToCenter]
           : [
               closestToCenter + lineDirection * height,
-              closestToCenter - lineDirection * height,
+              closestToCenter + lineDirection * -height,
             ];
       return [
         for (final point in candidates)
