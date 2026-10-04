@@ -19,6 +19,7 @@ import 'manifest_database.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
+import '../utils/atomic_file.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
@@ -111,7 +112,7 @@ class BackupSelection {
   /// 文本文件（texts/）
   final bool texts;
 
-  /// 任务文件（synthesis/ + catcatch/）
+  /// 任务、流程配置、流程附件、CatCatch 已完成文件和任务列表状态。
   final bool tasks;
 
   /// Anki 闪卡原始数据库（collection.anki2）
@@ -183,8 +184,8 @@ class BackupSelection {
 // ====================================================================
 //
 // 将应用数据导出为 zip 文件，或从 zip 文件恢复。
-// 支持 Web 和 Native 双平台，全程在内存中构建/解析归档，
-// 避免在 Web 上使用不受支持的 dart:io File/Directory。
+// 原生平台流式读写归档；Web 平台在内存中构建/解析，避免使用
+// 不受支持的 dart:io File/Directory。
 // ====================================================================
 
 class BackupService {
@@ -417,6 +418,11 @@ class BackupService {
     if (selection.tasks) {
       debugPrint('[BackupService] streaming: adding task files');
       final appDir = await AppStorage.directory;
+      final taskFlowAttachmentPaths = selection.includeMediaFiles &&
+              !kIsWeb &&
+              !WebFileStore.isTestMode
+          ? await _taskFlowAttachmentPathsForBackup(appDir)
+          : <String>{};
       await _addTaskPlanFile(
         jsonFiles,
         memoryFiles,
@@ -424,6 +430,7 @@ class BackupService {
         'synthesis/tasks.json',
         p.join(appDir, 'synthesis', 'tasks.json'),
         useStreaming,
+        appDir: appDir,
       );
       await _addTaskPlanFile(
         jsonFiles,
@@ -432,6 +439,7 @@ class BackupService {
         'catcatch/tasks.json',
         p.join(appDir, 'catcatch', 'tasks.json'),
         useStreaming,
+        appDir: appDir,
       );
       await _addTaskPlanFile(
         jsonFiles,
@@ -440,6 +448,7 @@ class BackupService {
         'background/tasks.json',
         p.join(appDir, 'background', 'tasks.json'),
         useStreaming,
+        appDir: appDir,
       );
       await _addTaskPlanFile(
         jsonFiles,
@@ -448,6 +457,7 @@ class BackupService {
         'task_flows/flows.json',
         p.join(appDir, 'task_flows', 'flows.json'),
         useStreaming,
+        appDir: appDir,
       );
       await _addTaskPlanFile(
         jsonFiles,
@@ -456,6 +466,44 @@ class BackupService {
         'task_flows/executions.json',
         p.join(appDir, 'task_flows', 'executions.json'),
         useStreaming,
+        appDir: appDir,
+      );
+
+      // CatCatch completed outputs are stored separately from their gallery
+      // copies. Keep the task list's open-file action working after transfer.
+      if (selection.includeMediaFiles) {
+        for (final relativePath in taskFlowAttachmentPaths) {
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'task_flow_attachments/$relativePath',
+            p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+            useStreaming,
+          );
+        }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'catcatch/completed',
+          sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          useStreaming: useStreaming,
+        );
+      }
+      await _addTaskStatePlanFile(
+        diskFiles,
+        memoryFiles,
+        appDir: appDir,
+        archiveName: 'task_state/task_list_last_read.json',
+        sourceName: 'task_list_last_read.json',
+        useStreaming: useStreaming,
+      );
+      await _addTaskStatePlanFile(
+        diskFiles,
+        memoryFiles,
+        appDir: appDir,
+        archiveName: 'task_state/app_launches.json',
+        sourceName: 'app_launches.json',
+        useStreaming: useStreaming,
       );
     }
     if (ankiDbPath != null) {
@@ -466,6 +514,15 @@ class BackupService {
         ankiDbPath,
         useStreaming,
       );
+      if (selection.includeMediaFiles) {
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'anki/collection.media',
+          sourcePath: p.join(await AppStorage.directory, 'collection.media'),
+          useStreaming: useStreaming,
+        );
+      }
     }
     onProgress?.call(0.25);
     await _yieldToEventLoop();
@@ -516,6 +573,13 @@ class BackupService {
             checkCancelled();
           }
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'pictures',
+          sourcePath: p.join(appDir, 'pictures'),
+          useStreaming: useStreaming,
+        );
       }
     }
     onProgress?.call(0.45);
@@ -555,6 +619,13 @@ class BackupService {
             checkCancelled();
           }
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'tts_audio',
+          sourcePath: p.join(appDir, 'tts_audio'),
+          useStreaming: useStreaming,
+        );
       }
     }
     onProgress?.call(0.6);
@@ -586,6 +657,13 @@ class BackupService {
             checkCancelled();
           }
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'videos',
+          sourcePath: p.join(appDir, 'videos'),
+          useStreaming: useStreaming,
+        );
       }
     }
     onProgress?.call(0.75);
@@ -616,6 +694,13 @@ class BackupService {
             checkCancelled();
           }
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'texts',
+          sourcePath: p.join(appDir, 'texts'),
+          useStreaming: useStreaming,
+        );
       }
     }
     onProgress?.call(0.85);
@@ -638,6 +723,15 @@ class BackupService {
           useStreaming,
         );
       }
+    }
+    if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
+      await _addDirectoryPlanFiles(
+        diskFiles,
+        memoryFiles,
+        archivePrefix: 'attachments',
+        sourcePath: p.join(appDir, 'attachments'),
+        useStreaming: useStreaming,
+      );
     }
     onProgress?.call(0.93);
     await _yieldToEventLoop();
@@ -713,23 +807,222 @@ class BackupService {
     List<List<String>> diskFiles,
     String archiveName,
     String filePath,
-    bool useStreaming,
-  ) async {
+    bool useStreaming, {
+    required String appDir,
+  }) async {
+    final data = useStreaming
+        ? (await File(filePath).exists()
+            ? await File(filePath).readAsBytes()
+            : null)
+        : await readBackupFile(
+            p.posix.dirname(archiveName),
+            p.posix.basename(archiveName),
+          );
+    if (data == null) {
+      jsonFiles[archiveName] = '[]';
+    } else {
+      try {
+        final decoded = jsonDecode(utf8.decode(data));
+        final portable = _mapPortableTaskPaths(
+          decoded,
+          appDir: appDir,
+          restoring: false,
+        );
+        jsonFiles[archiveName] = jsonEncode(portable);
+      } catch (_) {
+        // Keep corrupt/legacy bytes intact so restore validation can report
+        // the original file instead of silently changing the payload.
+        memoryFiles[archiveName] = data;
+      }
+    }
+  }
+
+  static Future<void> _addTaskStatePlanFile(
+    List<List<String>> diskFiles,
+    Map<String, Uint8List> memoryFiles, {
+    required String appDir,
+    required String archiveName,
+    required String sourceName,
+    required bool useStreaming,
+  }) async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+    final sourcePath = p.join(appDir, sourceName);
+    final file = File(sourcePath);
+    if (!await file.exists()) return;
     if (useStreaming) {
-      if (await File(filePath).exists()) {
-        diskFiles.add([archiveName, filePath]);
-      } else {
-        jsonFiles[archiveName] = '[]';
+      diskFiles.add([archiveName, sourcePath]);
+    } else {
+      memoryFiles[archiveName] = await file.readAsBytes();
+    }
+  }
+
+  /// Adds every app-managed file below a storage directory to the backup.
+  /// Manifest-listed files are added first and remain required; this pass also
+  /// preserves unreferenced files which have not yet been cleaned up.
+  static Future<void> _addDirectoryPlanFiles(
+    List<List<String>> diskFiles,
+    Map<String, Uint8List> memoryFiles, {
+    required String archivePrefix,
+    required String sourcePath,
+    required bool useStreaming,
+  }) async {
+    final archived = <String>{
+      ...memoryFiles.keys,
+      ...diskFiles.map((entry) => entry.first),
+    };
+    if (kIsWeb || WebFileStore.isTestMode) {
+      final prefix = '$archivePrefix/';
+      for (final key in await WebFileStore.keysWithPrefix(prefix)) {
+        if (archived.contains(key) ||
+            !_isSafeRelativeArchivePath(key.substring(prefix.length))) {
+          continue;
+        }
+        await _addPlanFile(
+          diskFiles,
+          memoryFiles,
+          key,
+          sourcePath,
+          false,
+          required: false,
+        );
+        archived.add(key);
+      }
+      if (archivePrefix == 'attachments') {
+        for (final key in await WebFileStore.keysWithPrefix('temp_edited/')) {
+          final archiveName = 'attachments/${p.posix.basename(key)}';
+          if (archived.contains(archiveName)) continue;
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            archiveName,
+            key,
+            false,
+            required: false,
+          );
+          archived.add(archiveName);
+        }
       }
       return;
     }
 
-    final parts = archiveName.split('/');
-    final data = await readBackupFile(parts.first, parts.skip(1).join('/'));
-    if (data == null) {
-      jsonFiles[archiveName] = '[]';
-    } else {
-      memoryFiles[archiveName] = data;
+    final directory = Directory(sourcePath);
+    if (!await directory.exists()) return;
+    var count = 0;
+    await for (final entity in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      final relativePath = p.relative(entity.path, from: directory.path);
+      final archiveRelativePath =
+          relativePath.split(p.separator).join('/');
+      if (!_isSafeRelativeArchivePath(archiveRelativePath)) continue;
+      final archiveName = '$archivePrefix/$archiveRelativePath';
+      if (archived.contains(archiveName)) continue;
+      await _addPlanFile(
+        diskFiles,
+        memoryFiles,
+        archiveName,
+        entity.path,
+        useStreaming,
+        required: false,
+      );
+      archived.add(archiveName);
+      if (++count % 25 == 0) await _yieldToEventLoop();
+    }
+  }
+
+  static Future<void> _addPortableTaskFileToArchive(
+    Archive archive,
+    String archiveName,
+    String sourcePath, {
+    required String appDir,
+  }) async {
+    final file = File(sourcePath);
+    if (!await file.exists()) {
+      addStringToArchive(archive, archiveName, '[]');
+      return;
+    }
+    final data = await file.readAsBytes();
+    try {
+      final decoded = jsonDecode(utf8.decode(data));
+      final portable = _mapPortableTaskPaths(
+        decoded,
+        appDir: appDir,
+        restoring: false,
+      );
+      addStringToArchive(archive, archiveName, jsonEncode(portable));
+    } catch (_) {
+      archive.addFile(ArchiveFile(archiveName, data.length, data));
+    }
+  }
+
+  static Future<void> _addTaskStateFileToArchive(
+    Archive archive, {
+    required String appDir,
+    required String archiveName,
+    required String sourceName,
+  }) async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+    final file = File(p.join(appDir, sourceName));
+    if (!await file.exists()) return;
+    final data = await file.readAsBytes();
+    archive.addFile(ArchiveFile(archiveName, data.length, data));
+  }
+
+  /// Adds every file in a native directory or WebFileStore prefix. This keeps
+  /// orphaned app-managed files available in manual backups and also captures
+  /// media files that the manifest database does not currently reference.
+  static Future<void> _addDirectoryToArchive(
+    Archive archive, {
+    required String archivePrefix,
+    required String sourcePath,
+  }) async {
+    final archived = archive.files.map((file) => file.name).toSet();
+
+    Future<void> addStoredFile(String archiveName, String key) async {
+      if (archived.contains(archiveName)) return;
+      final data = await WebFileStore.read(key);
+      if (data == null) return;
+      archive.addFile(ArchiveFile(archiveName, data.length, data));
+      archived.add(archiveName);
+    }
+
+    if (kIsWeb || WebFileStore.isTestMode) {
+      final prefix = '$archivePrefix/';
+      for (final key in await WebFileStore.keysWithPrefix(prefix)) {
+        final relativePath = key.substring(prefix.length);
+        if (!_isSafeRelativeArchivePath(relativePath)) continue;
+        await addStoredFile(key, key);
+      }
+      if (archivePrefix == 'attachments') {
+        for (final key in await WebFileStore.keysWithPrefix('temp_edited/')) {
+          await addStoredFile(
+            'attachments/${p.posix.basename(key)}',
+            key,
+          );
+        }
+      }
+      return;
+    }
+
+    final directory = Directory(sourcePath);
+    if (!await directory.exists()) return;
+    var count = 0;
+    await for (final entity in directory.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      final relativePath = p.relative(entity.path, from: directory.path);
+      final safeRelativePath = relativePath.split(p.separator).join('/');
+      if (!_isSafeRelativeArchivePath(safeRelativePath)) continue;
+      final archiveName = '$archivePrefix/$safeRelativePath';
+      if (archived.contains(archiveName)) continue;
+      final data = await entity.readAsBytes();
+      archive.addFile(ArchiveFile(archiveName, data.length, data));
+      archived.add(archiveName);
+      if (++count % 25 == 0) await _yieldToEventLoop();
     }
   }
 
@@ -754,6 +1047,95 @@ class BackupService {
   }
 
   static const _browserCookieRetentionKey = 'browser_cookie_retention';
+
+  static const _portableAppDataPathPrefix = 'stroom-app-data:/';
+
+  /// Makes task file references portable by storing paths relative to the
+  /// Stroom data directory inside the archive. Paths outside that directory
+  /// are left untouched because the app cannot safely relocate them.
+  static Object? _mapPortableTaskPaths(
+    Object? value, {
+    required String appDir,
+    required bool restoring,
+  }) {
+    if (value is String) {
+      if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
+        final relative = value.substring(_portableAppDataPathPrefix.length);
+        if (!_isSafeRelativeArchivePath(relative)) return value;
+        return p.joinAll([appDir, ...relative.split('/')]);
+      }
+      if (!restoring) {
+        if (value.startsWith('attachments/')) {
+          return '$_portableAppDataPathPrefix$value';
+        }
+        if (value.startsWith('temp_edited/')) {
+          return '$_portableAppDataPathPrefix'
+              'attachments/${p.posix.basename(value)}';
+        }
+        final normalizedAppDir = p.normalize(appDir);
+        final normalizedPath = p.normalize(value);
+        if (p.isAbsolute(normalizedPath) &&
+            p.isWithin(normalizedAppDir, normalizedPath)) {
+          final relative = p.relative(normalizedPath, from: normalizedAppDir);
+          return '$_portableAppDataPathPrefix'
+              '${relative.split(p.separator).join('/')}';
+        }
+      }
+      return value;
+    }
+    if (value is List) {
+      return value
+          .map((child) => _mapPortableTaskPaths(
+                child,
+                appDir: appDir,
+                restoring: restoring,
+              ))
+          .toList();
+    }
+    if (value is Map) {
+      return value.map(
+        (key, child) => MapEntry(
+          key,
+          _mapPortableTaskPaths(
+            child,
+            appDir: appDir,
+            restoring: restoring,
+          ),
+        ),
+      );
+    }
+    return value;
+  }
+
+  static Future<void> _restorePortableTaskPaths(
+    BackupSelection selection,
+  ) async {
+    if (!selection.tasks || kIsWeb || WebFileStore.isTestMode) return;
+    final appDir = await AppStorage.directory;
+    for (final relativePath in const [
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    ]) {
+      final file = File(
+        p.joinAll([appDir, ...relativePath.split('/')]),
+      );
+      if (!await file.exists()) continue;
+      try {
+        final decoded = jsonDecode(await file.readAsString());
+        final restored = _mapPortableTaskPaths(
+          decoded,
+          appDir: appDir,
+          restoring: true,
+        );
+        await AtomicFile.writeString(file, jsonEncode(restored));
+      } catch (e) {
+        throw Exception('恢复任务文件路径失败：$relativePath ($e)');
+      }
+    }
+  }
 
   /// Device-specific filesystem permissions cannot be transferred safely.
   static bool _isDeviceLocalPreferenceKey(String key) =>
@@ -995,30 +1377,69 @@ class BackupService {
       debugPrint('[BackupService] _buildBackupBytes: adding task files');
       if (!kIsWeb && !WebFileStore.isTestMode) {
         final appDir = await AppStorage.directory;
-        await addTaskFileToArchive(
+        final taskFlowAttachmentPaths = selection.includeMediaFiles
+            ? await _taskFlowAttachmentPathsForBackup(appDir)
+            : <String>{};
+        await _addPortableTaskFileToArchive(
           archive,
           'synthesis/tasks.json',
           p.join(appDir, 'synthesis', 'tasks.json'),
+          appDir: appDir,
         );
-        await addTaskFileToArchive(
+        await _addPortableTaskFileToArchive(
           archive,
           'catcatch/tasks.json',
           p.join(appDir, 'catcatch', 'tasks.json'),
+          appDir: appDir,
         );
-        await addTaskFileToArchive(
+        await _addPortableTaskFileToArchive(
           archive,
           'background/tasks.json',
           p.join(appDir, 'background', 'tasks.json'),
+          appDir: appDir,
         );
-        await addTaskFileToArchive(
+        await _addPortableTaskFileToArchive(
           archive,
           'task_flows/flows.json',
           p.join(appDir, 'task_flows', 'flows.json'),
+          appDir: appDir,
         );
-        await addTaskFileToArchive(
+        await _addPortableTaskFileToArchive(
           archive,
           'task_flows/executions.json',
           p.join(appDir, 'task_flows', 'executions.json'),
+          appDir: appDir,
+        );
+        if (selection.includeMediaFiles) {
+          for (final relativePath in taskFlowAttachmentPaths) {
+            final data = await File(
+              p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+            ).readAsBytes();
+            archive.addFile(
+              ArchiveFile(
+                'task_flow_attachments/$relativePath',
+                data.length,
+                data,
+              ),
+            );
+          }
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'catcatch/completed',
+            sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          );
+        }
+        await _addTaskStateFileToArchive(
+          archive,
+          appDir: appDir,
+          archiveName: 'task_state/task_list_last_read.json',
+          sourceName: 'task_list_last_read.json',
+        );
+        await _addTaskStateFileToArchive(
+          archive,
+          appDir: appDir,
+          archiveName: 'task_state/app_launches.json',
+          sourceName: 'app_launches.json',
         );
       } else {
         addStringToArchive(archive, 'synthesis/tasks.json', '[]');
@@ -1035,6 +1456,13 @@ class BackupService {
     // 4b. Anki 闪卡数据库（原始格式）
     if (ankiDbPath != null) {
       await addTaskFileToArchive(archive, 'anki/collection.anki2', ankiDbPath);
+      if (selection.includeMediaFiles) {
+        await _addDirectoryToArchive(
+          archive,
+          archivePrefix: 'anki/collection.media',
+          sourcePath: p.join(await AppStorage.directory, 'collection.media'),
+        );
+      }
     }
 
     // 4c. 浏览器Cookies持久化数据
@@ -1073,6 +1501,11 @@ class BackupService {
           checkCancelled();
         }
       }
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'pictures',
+        sourcePath: p.join(await AppStorage.directory, 'pictures'),
+      );
     }
     onProgress?.call(0.5);
     await _yieldToEventLoop();
@@ -1102,6 +1535,11 @@ class BackupService {
           checkCancelled();
         }
       }
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'tts_audio',
+        sourcePath: p.join(await AppStorage.directory, 'tts_audio'),
+      );
     }
     onProgress?.call(0.65);
     await _yieldToEventLoop();
@@ -1124,6 +1562,11 @@ class BackupService {
           checkCancelled();
         }
       }
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'videos',
+        sourcePath: p.join(await AppStorage.directory, 'videos'),
+      );
     }
     onProgress?.call(0.75);
     await _yieldToEventLoop();
@@ -1145,6 +1588,11 @@ class BackupService {
           checkCancelled();
         }
       }
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'texts',
+        sourcePath: p.join(await AppStorage.directory, 'texts'),
+      );
     }
     onProgress?.call(0.8);
     await _yieldToEventLoop();
@@ -1165,6 +1613,13 @@ class BackupService {
           checkCancelled();
         }
       }
+    }
+    if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
+      await _addDirectoryToArchive(
+        archive,
+        archivePrefix: 'attachments',
+        sourcePath: p.join(await AppStorage.directory, 'attachments'),
+      );
     }
     onProgress?.call(0.85);
     await _yieldToEventLoop();
@@ -1293,6 +1748,7 @@ class BackupService {
         if (restoreIndex % 20 == 0) await _yieldToEventLoop();
       }
     }
+    await _restorePortableTaskPaths(restoreSelection);
 
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
@@ -1422,6 +1878,7 @@ class BackupService {
           if (restoreIndex % 20 == 0) await _yieldToEventLoop();
         }
       }
+      await _restorePortableTaskPaths(restoreSelection);
 
       // 数据迁移：确保恢复后的数据格式是最新的
       // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
@@ -1745,6 +2202,9 @@ class BackupService {
             requireMediaFiles: selection.includeMediaFiles,
             requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
+            readFile: readFile,
+            requireTaskAttachments:
+                selection.tasks && selection.includeMediaFiles,
           )
         : _getAvailableSelection(
             archiveEntries: archiveEntries,
@@ -1761,6 +2221,9 @@ class BackupService {
             requireMediaFiles: selection.includeMediaFiles,
             requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
+            readFile: readFile,
+            requireTaskAttachments:
+                selection.tasks && selection.includeMediaFiles,
           );
     final skippedLabels = skipMissingCategories
         ? selection.selectedLabels
@@ -1777,10 +2240,14 @@ class BackupService {
     // files it contains so a partial legacy archive cannot merge stale local
     // task types into the restored category.
     final taskFilesToReplace = restoreSelection.tasks
-        ? _taskPayloadFiles
-            .map(_canonicalTaskPayloadName)
-            .whereType<String>()
-            .toSet()
+        ? <String>{
+            ..._taskPayloadFiles
+                .map(_canonicalTaskPayloadName)
+                .whereType<String>(),
+            ..._taskStateArchiveFiles
+                .where(archiveEntries.contains)
+                .map((name) => name),
+          }
         : <String>{};
 
     if (restoreSelection.tasks) {
@@ -2047,6 +2514,8 @@ class BackupService {
     required Map<String, dynamic>? chatPrefs,
     required bool requireMediaFiles,
     required bool requireAttachmentFiles,
+    required Uint8List? Function(String name) readFile,
+    required bool requireTaskAttachments,
   }) {
     final entries = archiveEntries
         .where((entry) => !entry.endsWith('/') && !entry.endsWith(r'\'))
@@ -2115,7 +2584,12 @@ class BackupService {
             'background/tasks.json',
             'task_flows/flows.json',
             'task_flows/executions.json',
-          ].every(entries.contains),
+          ].every(entries.contains) &&
+          (!requireTaskAttachments ||
+              _hasAllPortableTaskFlowAttachments(
+                readFile: readFile,
+                archiveEntries: entries,
+              )),
       ankiData: !kIsWeb &&
           declared.ankiData &&
           (entries.contains('anki/collection.anki2') ||
@@ -2198,6 +2672,63 @@ class BackupService {
     return allPresent;
   }
 
+  static bool _hasAllPortableTaskFlowAttachments({
+    required Uint8List? Function(String name) readFile,
+    required Set<String> archiveEntries,
+  }) {
+    final entries = archiveEntries
+        .map((entry) => entry.startsWith('files/')
+            ? entry.substring('files/'.length)
+            : entry)
+        .toSet();
+    var allPresent = true;
+
+    void inspect(Object? value) {
+      if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
+        final relative = value.substring(_portableAppDataPathPrefix.length);
+        final isTaskAttachment = relative.startsWith('attachments/');
+        final isCatCatchOutput = relative.startsWith('catcatch/completed/');
+        if (!isTaskAttachment && !isCatCatchOutput) return;
+        final packagedPath = isTaskAttachment
+            ? 'task_flow_attachments/'
+                '${relative.substring('attachments/'.length)}'
+            : relative;
+        if (!_isSafeRelativeArchivePath(relative) ||
+            !entries.contains(packagedPath)) {
+          allPresent = false;
+        }
+      } else if (value is Map) {
+        for (final child in value.values) {
+          inspect(child);
+        }
+      } else if (value is Iterable) {
+        for (final child in value) {
+          inspect(child);
+        }
+      }
+    }
+
+    for (final name in const [
+      'task_flows/flows.json',
+      'files/task_flows/flows.json',
+      'task_flows/executions.json',
+      'files/task_flows/executions.json',
+    ]) {
+      if (!archiveEntries.contains(name)) continue;
+      final raw = readFile(name);
+      if (raw == null) {
+        allPresent = false;
+        continue;
+      }
+      try {
+        inspect(jsonDecode(utf8.decode(raw)));
+      } catch (_) {
+        allPresent = false;
+      }
+    }
+    return allPresent;
+  }
+
   static Set<String> _restoredPartIds(
     _RestoreMetadata metadata,
     BackupSelection selection,
@@ -2220,6 +2751,8 @@ class BackupService {
     required bool hasTaskData,
     required bool requireMediaFiles,
     required bool requireAttachmentFiles,
+    required Uint8List? Function(String name) readFile,
+    required bool requireTaskAttachments,
   }) {
     final normalizedEntries = archiveEntries
         .where((entry) => !entry.endsWith('/') && !entry.endsWith(r'\'))
@@ -2320,7 +2853,13 @@ class BackupService {
         'texts',
         'txt',
       ),
-      tasks: !kIsWeb && hasTaskData,
+      tasks: !kIsWeb &&
+          hasTaskData &&
+          (!requireTaskAttachments ||
+              _hasAllPortableTaskFlowAttachments(
+                readFile: readFile,
+                archiveEntries: normalizedEntries,
+              )),
       ankiData: !kIsWeb &&
           (normalizedEntries.contains('anki/collection.anki2') ||
               normalizedEntries.contains('collection.anki2')),
@@ -2328,6 +2867,11 @@ class BackupService {
           !kIsWeb && normalizedEntries.contains('browser_cookies.json'),
     );
   }
+
+  static const _taskStateArchiveFiles = [
+    'task_state/task_list_last_read.json',
+    'task_state/app_launches.json',
+  ];
 
   static const _taskPayloadFiles = [
     'synthesis/tasks.json',
@@ -2829,7 +3373,20 @@ class BackupService {
     if (matchedDir == 'synthesis' || matchedDir == 'catcatch') {
       if (relativePath == 'tasks.json') {
         await writeEntry(matchedDir, 'tasks.json');
+      } else if (matchedDir == 'catcatch' &&
+          relativePath.startsWith('completed/')) {
+        await writeEntry(matchedDir, relativePath);
       }
+      return true;
+    }
+
+    if (matchedDir == 'task_state') {
+      await writeEntry('', relativePath);
+      return true;
+    }
+
+    if (matchedDir == 'task_flow_attachments') {
+      await writeEntry('attachments', relativePath);
       return true;
     }
 
@@ -2882,6 +3439,19 @@ class BackupService {
       return true;
     } catch (e) {
       debugPrint('[BackupService] 删除目录 $subDir 失败: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _deleteStoredDirectory(String subDir) async {
+    if (!kIsWeb && !WebFileStore.isTestMode) {
+      return _deleteDirectory(subDir);
+    }
+    try {
+      await WebFileStore.deleteByPrefix('$subDir/');
+      return true;
+    } catch (e) {
+      debugPrint('[BackupService] 删除存储前缀 $subDir/ 失败: $e');
       return false;
     }
   }
@@ -3278,8 +3848,8 @@ class BackupService {
   /// - 设置：删除所有设置相关 Preferences 键
   /// - 图片/音频/视频/文本：删除对应数据库记录、文件夹表、逐文件删除
   ///   （Web/测试模式同样生效），并在原生模式删除整个目录
-  /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
-  /// - Anki数据：先关闭可能打开的数据库连接，再删除 collection.anki2
+  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 成品和任务状态
+  /// - Anki数据：关闭数据库连接后删除 collection.anki2 与本地媒体目录
   /// - 浏览器Cookies：清除内置浏览器Cookies并删除 browser_cookies.json
   ///
   /// 与选择性恢复的语义一致：选中的类别被清空，未选中的保持原样。
@@ -3450,6 +4020,53 @@ class BackupService {
     }
   }
 
+  /// Returns task-flow attachment keys for the orphan cleanup pass.
+  /// A null result means the task-flow files could not be read safely, so the
+  /// caller must retain all attachments rather than risk deleting live data.
+  static Future<Set<String>?> collectTaskFlowAttachmentKeysForSafety() =>
+      _collectTaskFlowAttachmentKeys(const {
+        'task_flows/flows.json',
+        'task_flows/executions.json',
+      });
+
+  static Future<Set<String>> _taskFlowAttachmentPathsForBackup(
+    String appDir,
+  ) async {
+    final taskFlowFiles = await _collectTaskFlowAttachmentKeys(const {
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    });
+    if (taskFlowFiles == null) {
+      throw const DataManagementPreflightException(
+        '无法读取任务流附件引用，已取消备份以避免遗漏任务文件。',
+      );
+    }
+    final relativePaths = <String>{};
+    for (final key in taskFlowFiles) {
+      late final String relativePath;
+      if (key.startsWith('attachments/')) {
+        relativePath = key.substring('attachments/'.length);
+      } else if (key.startsWith('temp_edited/')) {
+        relativePath = p.posix.basename(key);
+      } else {
+        continue;
+      }
+      if (!_isSafeRelativeArchivePath(relativePath)) {
+        throw const DataManagementPreflightException(
+          '任务流包含无效附件路径，已取消备份。',
+        );
+      }
+      final file = File(
+        p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
+      );
+      if (!await file.exists()) {
+        throw FileSystemException('任务流引用的附件不存在', file.path);
+      }
+      relativePaths.add(relativePath);
+    }
+    return relativePaths;
+  }
+
   static Future<bool> _deleteAttachmentsExceptTaskFiles(
     Set<String> preservedKeys,
   ) async {
@@ -3482,6 +4099,104 @@ class BackupService {
     }
   }
 
+  static Future<Set<String>?> _collectChatAttachmentKeysStrict() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('conversations');
+      if (raw == null) return <String>{};
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
+      final appDir = kIsWeb || WebFileStore.isTestMode
+          ? null
+          : await AppStorage.directory;
+      final keys = <String>{};
+
+      String? canonicalKey(Object? value) {
+        if (value is! String || value.isEmpty) return null;
+        final slashPath = value.replaceAll('\\', '/');
+        final normalized = p.posix.normalize(slashPath);
+        if (normalized.startsWith('temp_edited/')) {
+          return 'attachments/${p.posix.basename(normalized)}';
+        }
+        if (p.posix.isWithin('attachments', normalized)) return normalized;
+        if (appDir != null && p.isAbsolute(value)) {
+          final attachmentRoot = p.normalize(p.join(appDir, 'attachments'));
+          final normalizedPath = p.normalize(value);
+          if (p.isWithin(attachmentRoot, normalizedPath)) {
+            final relative = p.relative(normalizedPath, from: attachmentRoot);
+            final slashRelative = relative.split(p.separator).join('/');
+            if (_isSafeRelativeArchivePath(slashRelative)) {
+              return 'attachments/$slashRelative';
+            }
+          }
+        }
+        return null;
+      }
+
+      void collectAttachments(Object? value) {
+        if (value == null) return;
+        if (value is! List) {
+          throw const FormatException('attachments is not a list');
+        }
+        for (final attachment in value) {
+          if (attachment is! Map) {
+            throw const FormatException('attachment is not an object');
+          }
+          for (final field in const ['storagePath', 'thumbnailPath']) {
+            final rawPath = attachment[field];
+            if (rawPath == null) continue;
+            if (rawPath is! String) {
+              throw const FormatException('attachment path is not a string');
+            }
+            final key = canonicalKey(rawPath);
+            if (key != null) keys.add(key);
+          }
+        }
+      }
+
+      for (final conversation in decoded) {
+        if (conversation is! Map) return null;
+        final messages = conversation['messages'];
+        if (messages != null) {
+          if (messages is! List) return null;
+          for (final message in messages) {
+            if (message is! Map) return null;
+            collectAttachments(message['attachments']);
+          }
+        }
+        collectAttachments(conversation['draftAttachments']);
+      }
+      return keys;
+    } catch (e) {
+      debugPrint('无法安全收集聊天附件引用，保留任务附件: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> _deleteAttachmentKeys(Set<String> keys) async {
+    try {
+      for (final key in keys) {
+        if (!key.startsWith('attachments/')) continue;
+        final relative = key.substring('attachments/'.length);
+        if (!_isSafeRelativeArchivePath(relative)) continue;
+        if (kIsWeb || WebFileStore.isTestMode) {
+          await WebFileStore.delete(key);
+          await WebFileStore.delete('temp_edited/${p.posix.basename(key)}');
+        } else {
+          final appDir = await AppStorage.directory;
+          final file = File(
+            p.joinAll([appDir, 'attachments', ...relative.split('/')]),
+          );
+          if (await file.exists()) await file.delete();
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('删除任务流附件失败: $e');
+      return false;
+    }
+  }
+
   /// 删除 [selection] 中选中类别的现有文件。
   ///
   /// 恢复"勾选即清空"与清除功能共用此方法。
@@ -3489,9 +4204,8 @@ class BackupService {
   /// - 聊天附件：清理附件目录中未被未选中任务流引用的文件
   /// - 图片/音频/视频/文本：按当前数据库记录逐文件删除（Web/测试模式），
   ///   原生模式再整目录删除（清理无记录的孤儿文件）
-  /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
-  /// - Anki：先关闭可能打开的数据库连接，再删除 collection.anki2
-  ///   （应用数据目录根路径 + 历史恢复写入的 anki/ 残留）
+  /// - 任务：删除任务记录、流程文件、任务流专属附件、CatCatch 成品和任务状态
+  /// - Anki：关闭数据库连接后删除 collection.anki2、历史 anki/ 残留和本地媒体目录
   /// - 浏览器Cookies：默认删除 browser_cookies.json；恢复时可暂时保留
   static Future<bool> _deleteSelectedFiles(
     BackupSelection selection, {
@@ -3545,7 +4259,7 @@ class BackupService {
           await _deleteFile('pictures', '${hash}_thumb.png');
         }
       }
-      if (!await _deleteDirectory('pictures')) deleteFailed = true;
+      if (!await _deleteStoredDirectory('pictures')) deleteFailed = true;
     }
     if (selection.audio && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllAudioRecords();
@@ -3560,7 +4274,7 @@ class BackupService {
           deleteFailed = true;
         }
       }
-      if (!await _deleteDirectory('tts_audio')) deleteFailed = true;
+      if (!await _deleteStoredDirectory('tts_audio')) deleteFailed = true;
     }
     if (selection.videos && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllVideoRecords();
@@ -3572,7 +4286,7 @@ class BackupService {
           deleteFailed = true;
         }
       }
-      if (!await _deleteDirectory('videos')) deleteFailed = true;
+      if (!await _deleteStoredDirectory('videos')) deleteFailed = true;
     }
     if (selection.texts && selection.includeMediaFiles) {
       final records = await ManifestDatabase.getAllTextRecords();
@@ -3583,7 +4297,7 @@ class BackupService {
           deleteFailed = true;
         }
       }
-      if (!await _deleteDirectory('texts')) deleteFailed = true;
+      if (!await _deleteStoredDirectory('texts')) deleteFailed = true;
     }
 
     // 任务文件
@@ -3595,7 +4309,29 @@ class BackupService {
             'background/tasks.json',
             'task_flows/flows.json',
             'task_flows/executions.json',
+            'task_state/task_list_last_read.json',
+            'task_state/app_launches.json',
           };
+      if (!selection.chatRecordsAndAttachments &&
+          selection.includeMediaFiles) {
+        final replacedTaskFlows = taskFiles
+            .intersection(const {
+              'task_flows/flows.json',
+              'task_flows/executions.json',
+            });
+        final oldTaskAttachments = await _collectTaskFlowAttachmentKeys(
+          replacedTaskFlows,
+        );
+        final chatAttachments = await _collectChatAttachmentKeysStrict();
+        if (oldTaskAttachments != null && chatAttachments != null) {
+          final taskOnlyAttachments = oldTaskAttachments.difference(
+            chatAttachments,
+          );
+          if (!await _deleteAttachmentKeys(taskOnlyAttachments)) {
+            deleteFailed = true;
+          }
+        }
+      }
       if (taskFiles.contains('synthesis/tasks.json') &&
           !await _deleteFile('synthesis', 'tasks.json')) {
         deleteFailed = true;
@@ -3616,6 +4352,18 @@ class BackupService {
           !await _deleteFile('task_flows', 'executions.json')) {
         deleteFailed = true;
       }
+      if (taskFiles.contains('task_state/task_list_last_read.json') &&
+          !await _deleteFile('', 'task_list_last_read.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('task_state/app_launches.json') &&
+          !await _deleteFile('', 'app_launches.json')) {
+        deleteFailed = true;
+      }
+      if (selection.includeMediaFiles &&
+          !await _deleteDirectory('catcatch/completed')) {
+        deleteFailed = true;
+      }
     }
 
     // Anki 闪卡数据库
@@ -3626,6 +4374,10 @@ class BackupService {
       await AnkiDatabase.closeOpenedInstance();
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
+      if (selection.includeMediaFiles &&
+          !await _deleteDirectory('collection.media')) {
+        deleteFailed = true;
+      }
     }
 
     // 浏览器Cookies持久化数据
@@ -3962,6 +4714,8 @@ const List<String> _restoreKnownDirs = [
   'background',
   'task_flows',
   'anki',
+  'task_state',
+  'task_flow_attachments',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -3984,6 +4738,10 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'background':
     case 'task_flows':
       return selection.tasks;
+    case 'task_state':
+      return selection.tasks;
+    case 'task_flow_attachments':
+      return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;
     case 'anki':

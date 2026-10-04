@@ -195,6 +195,31 @@ class WebFileStore {
     return count > 0;
   }
 
+  /// Lists stored file keys under [prefix].
+  ///
+  /// Manual backup uses this to include app-managed files that are not
+  /// currently referenced by a manifest record. Website storage owned by the
+  /// embedded browser is separate from this store and is not exposed here.
+  static Future<List<String>> keysWithPrefix(String prefix) async {
+    if (_testMode) {
+      return _inMemoryStore.keys
+          .where((key) => key.startsWith(prefix))
+          .toList(growable: false);
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadOnly);
+    final keys = <String>[];
+    await for (final cwv in txn.objectStore('files').openCursor(
+      autoAdvance: true,
+    )) {
+      final key = cwv.key;
+      if (key is String && key.startsWith(prefix)) keys.add(key);
+    }
+    await txn.completed;
+    return keys;
+  }
+
   /// 删除所有以 [prefix] 开头的文件（如 `'attachments/'`）。
   ///
   /// 用于清除/恢复场景中按目录前缀清理文件（Web 端没有目录结构，
