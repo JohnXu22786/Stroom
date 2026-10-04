@@ -580,9 +580,6 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Wait for queued task writes before releasing their storage directory.
   Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
-  /// Wait for queued task writes before releasing their storage directory.
-  Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
-
   Future<void> _persistTasks() {
     final barrier = _removalBarrier;
     if (barrier != null) return barrier.future.then((_) => _persistTasks());
