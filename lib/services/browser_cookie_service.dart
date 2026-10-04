@@ -219,6 +219,15 @@ class BrowserCookieService {
     return completer.future;
   }
 
+  /// Runs a group of cookie operations atomically relative to browser close,
+  /// retention changes, and cookie persistence. The callback must use the
+  /// lower-level cookie methods and must not enqueue another retention action.
+  static Future<T> runExclusiveRetentionOperation<T>(
+    Future<T> Function() operation,
+  ) {
+    return _serializeRetentionOperation(operation);
+  }
+
   static void _runNextRetentionOperation() {
     if (_retentionOperations.isEmpty) {
       _isRunningRetentionOperation = false;
@@ -353,35 +362,39 @@ class BrowserCookieService {
   /// Captures the current cookies for an explicitly requested backup without
   /// changing the user's retention preference or persisted cookie file.
   /// Returns null when the current platform cannot provide a usable snapshot.
-  static Future<List<Map<String, dynamic>>?> snapshotCookiesForBackup() async {
-    final retentionEnabled = await getRetentionMode();
-    try {
-      final result = await _collectPlatformCookies();
-      if (result.cookies == null) {
+  static Future<List<Map<String, dynamic>>?> snapshotCookiesForBackup() {
+    return _serializeRetentionOperation(() async {
+      final retentionEnabled = await getRetentionMode();
+      try {
+        final result = await _collectPlatformCookies();
+        if (result.cookies == null) {
+          if (!retentionEnabled) return null;
+          final persistedCookies = await _readCookiesFile();
+          return persistedCookies.isEmpty ? null : persistedCookies;
+        }
+
+        final currentCookies = result.cookies!.map(_cookieToMap).toList();
+        if (result.complete) return currentCookies;
         if (!retentionEnabled) return null;
+
         final persistedCookies = await _readCookiesFile();
-        return persistedCookies.isEmpty ? null : persistedCookies;
+        persistedCookies.removeWhere(
+          (cookie) =>
+              _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts),
+        );
+        return _mergeCookies(persistedCookies, currentCookies);
+      } catch (e) {
+        debugPrint('BrowserCookieService.snapshotCookiesForBackup error: $e');
+        return null;
       }
-
-      final currentCookies = result.cookies!.map(_cookieToMap).toList();
-      if (result.complete) return currentCookies;
-      if (!retentionEnabled) return null;
-
-      final persistedCookies = await _readCookiesFile();
-      persistedCookies.removeWhere(
-        (cookie) =>
-            _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts),
-      );
-      return _mergeCookies(persistedCookies, currentCookies);
-    } catch (e) {
-      debugPrint('BrowserCookieService.snapshotCookiesForBackup error: $e');
-      return null;
-    }
+    });
   }
 
   /// Captures a complete platform cookie snapshot for rolling back a failed
   /// restore. Returns null when the platform can only enumerate visited
   /// domains, since that partial view cannot safely replace the full store.
+  /// Callers requiring a consistent state must hold the retention-operation
+  /// queue while capturing this snapshot.
   static Future<List<Map<String, dynamic>>?>
       snapshotCookiesForRestoreRollback() async {
     try {

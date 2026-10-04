@@ -2247,8 +2247,9 @@ class BackupService {
       return null;
     }
 
-    final snapshot =
-        await BrowserCookieService.snapshotCookiesForRestoreRollback();
+    final snapshot = await BrowserCookieService.runExclusiveRetentionOperation(
+      () => BrowserCookieService.snapshotCookiesForRestoreRollback(),
+    );
     if (snapshot == null) {
       throw const DataManagementPreflightException(
         '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
@@ -2328,26 +2329,36 @@ class BackupService {
   }) async {
     if (!selection.browserCookies || cookieData == null) return;
 
-    final previousFileData = await readBackupFile('', 'browser_cookies.json');
-    final previousRestorePending =
-        await BrowserCookieService.hasBackupRestorePending();
-    try {
-      await _clearLiveCookiesForRestore(selection);
-      await writeBackupFile('', 'browser_cookies.json', cookieData);
-      if (!await BrowserCookieService.restoreCookiesFromFileChecked(
-        force: true,
-      )) {
-        throw Exception('部分内置浏览器Cookies未能恢复');
+    await BrowserCookieService.runExclusiveRetentionOperation(() async {
+      // Retention may have persisted or cleared cookies while the other
+      // selected categories were being restored. Capture the latest rollback
+      // state after joining the queue, before replacing the cookie snapshot.
+      final rollbackCookies = previousCookies == null
+          ? null
+          : (await BrowserCookieService.snapshotCookiesForRestoreRollback() ??
+              previousCookies);
+      final previousFileData =
+          await readBackupFile('', 'browser_cookies.json');
+      final previousRestorePending =
+          await BrowserCookieService.hasBackupRestorePending();
+      try {
+        await _clearLiveCookiesForRestore(selection);
+        await writeBackupFile('', 'browser_cookies.json', cookieData);
+        if (!await BrowserCookieService.restoreCookiesFromFileChecked(
+          force: true,
+        )) {
+          throw Exception('部分内置浏览器Cookies未能恢复');
+        }
+        await BrowserCookieService.markBackupRestorePending();
+      } catch (e) {
+        await _rollbackCookiesAfterFailedRestore(
+          previousCookies: rollbackCookies,
+          previousFileData: previousFileData,
+          previousRestorePending: previousRestorePending,
+        );
+        rethrow;
       }
-      await BrowserCookieService.markBackupRestorePending();
-    } catch (e) {
-      await _rollbackCookiesAfterFailedRestore(
-        previousCookies: previousCookies,
-        previousFileData: previousFileData,
-        previousRestorePending: previousRestorePending,
-      );
-      rethrow;
-    }
+    });
   }
 
   static Future<void> _rollbackCookiesAfterFailedRestore({
