@@ -76,7 +76,7 @@ Future<void> registerFlowCatCatchOutput(
     return;
   }
 
-  final kind = catCatchMediaKind(task, filePath);
+  final kind = await catCatchMediaKindFromFile(task, filePath);
   if ((kind == CatCatchMediaKind.video && !_videoExts.contains(ext)) ||
       (kind == CatCatchMediaKind.audio && !_audioExts.contains(ext)) ||
       kind == CatCatchMediaKind.other) {

@@ -53,6 +53,16 @@ void main() {
       expect(getMimeType('WAV'), equals('audio/wav'));
       expect(getMimeType('M4A'), equals('audio/mp4'));
     });
+
+    test('WebA and Matroska audio use their container MIME types', () {
+      expect(getMimeType('weba'), 'audio/webm');
+      expect(getMimeType('mka'), 'audio/x-matroska');
+    });
+  });
+
+  test('WebA uses WebM for ASR uploads', () {
+    expect(normalizeAsrUploadFormat('WEBA'), 'webm');
+    expect(normalizeAsrUploadFormat('m4a'), 'm4a');
   });
 
   group('formatDisplayName', () {

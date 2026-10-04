@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
-import '../../../catcatch/models/catcatch_task.dart' as catcatch;
-import '../../../catcatch/models/media_kind.dart';
 import '../../../catcatch/models/media_resource.dart';
+import '../../../catcatch/models/media_kind.dart';
+
+import '../../../catcatch/models/catcatch_task.dart' as catcatch;
 import '../../../catcatch/providers/catcatch_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../models/block_type_definition.dart';
@@ -15,6 +16,7 @@ import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'catcatch_output_registrator.dart';
 import 'shared_helpers.dart';
+import '../task_flow_execution_service.dart' show catCatchOutputPayload;
 
 Future<String> executeCatCatchBlock({
   required BlockTypeDefinition def,
@@ -45,12 +47,14 @@ Future<String> executeCatCatchBlock({
   final durationSec = durationSecOverride > 0
       ? durationSecOverride
       : asIntParam(block.params, 'durationSec', 0);
+  final automatic = block.params['automaticResourceSelection'] == true;
   catcatchNotifier.addTask(
     input,
     durationSec,
     taskId: taskId,
     videoFolder: videoFolder,
     audioFolder: audioFolder,
+    deferSingleResourceSelection: automatic,
   );
 
   // Stall detection instead of a wall-clock deadline: a large download or
@@ -61,7 +65,6 @@ Future<String> executeCatCatchBlock({
     catcatchNotifier.state.where((t) => t.id == taskId).firstOrNull,
   );
   var lastProgressAt = DateTime.now();
-  final automatic = block.params['automaticResourceSelection'] == true;
   bool autoSelected = false;
   bool autoConfirmed = false;
 
@@ -150,7 +153,16 @@ Future<String> executeCatCatchBlock({
           blockTitle: def.label,
         );
       }
-      final actualType = catCatchOutputType(task);
+      final actualType = await catCatchOutputType(task);
+      if (actualType == IOType.file) {
+        execNotifier.updateSubTaskStatus(
+            execId, flowSubTask.id, TaskStatus.failed);
+        throw BlockExecutionException(
+          '无法验证下载文件的音视频类型，请检查媒体文件',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
       if (actualType != def.outputType ||
           (nextInputType != null &&
               !actualType.isCompatibleWith(nextInputType))) {
@@ -163,19 +175,7 @@ Future<String> executeCatCatchBlock({
         );
       }
       onOutputType?.call(actualType);
-      final selectedMimeType =
-          task.selectedMedia?.mimeType?.split(';').first.trim().toLowerCase();
-      var mimeType = flowFileMimeType(path);
-      if (actualType == IOType.audio && mimeType == 'video/mp4') {
-        // Conversion changed the container, not the audio-only track kind.
-        mimeType = 'audio/mp4';
-      } else if (selectedMimeType != null &&
-          flowMimeType(mimeType) != actualType &&
-          flowMimeType(selectedMimeType) == actualType) {
-        mimeType = selectedMimeType;
-      }
-      onOutputPayload?.call(FlowPayload.file(
-          fileReference: path, type: actualType, mimeType: mimeType));
+      onOutputPayload?.call(await catCatchOutputPayload(path));
       // Registration remains best effort, matching the download engine.
       try {
         await registerFlowCatCatchOutput(path, task);
@@ -289,43 +289,60 @@ String _progressSignatureOf(catcatch.CatCatchTask? task) {
       '${task.selectedMedia?.url}|${task.metadata['pendingConfirm']}|$steps';
 }
 
-/// Discovery order can vary with network timing. Prefer a complete video,
-/// then a playlist, then audio; tie-break by URL and stable resource metadata.
-/// A split track requires manual selection because selecting it alone loses
-/// the companion audio/video stream.
-MediaResource? selectAutomaticCatCatchResource(List<MediaResource> resources,
-    {IOType? desiredType}) {
+/// Discovery order depends on network timing. Choose a complete video before
+/// a playlist, then audio. An untyped shared container can satisfy either
+/// declared output only after its downloaded tracks are checked. URL and
+/// metadata break ties.
+/// Split tracks need a separate audio/video merge decision and are never guessed.
+MediaResource? selectAutomaticCatCatchResource(
+  List<MediaResource> resources, {
+  IOType? desiredType,
+}) {
   int rank(MediaResource media) {
-    final type = flowMimeType(media.mimeType);
-    if (type == IOType.audio || media.isAudio) return 2;
+    final kind = catCatchResourceKindHint(media);
+    if (kind == CatCatchMediaKind.audio) return 2;
     if (media.isPlaylist) return 1;
-    if (type == IOType.video || media.isVideo) return 0;
-    return 3;
+    if (kind == CatCatchMediaKind.video) return 0;
+    if (catCatchIsSharedContainerExtension(media.ext)) return 3;
+    return 4;
   }
 
-  final candidates = resources.where((media) {
-    final priority = rank(media);
-    if (media.isLikelySplitTrack || priority == 3) return false;
-    if (desiredType == IOType.audio) return priority == 2;
-    if (desiredType == IOType.video) return priority < 2;
-    return true;
+  final available = resources.where((media) {
+    return !media.isLikelySplitTrack && rank(media) != 4;
   }).toList();
+  bool matchesDeclaredType(MediaResource media) {
+    final priority = rank(media);
+    if (desiredType == IOType.audio) return priority == 2 || priority == 3;
+    if (desiredType == IOType.video) return priority < 2 || priority == 3;
+    return true;
+  }
+
+  final preferred = available.where(matchesDeclaredType).toList();
+  // Discovery MIME and dimensions can be wrong for shared containers. Use an
+  // opposite hint only when no preferred candidate exists, then verify the
+  // downloaded tracks before the flow accepts the output.
+  final candidates = preferred.isNotEmpty || desiredType == null
+      ? preferred
+      : available
+          .where((media) => catCatchIsSharedContainerExtension(media.ext))
+          .toList();
   candidates.sort((a, b) {
     final priority = rank(a).compareTo(rank(b));
     if (priority != 0) return priority;
     final url = a.url.compareTo(b.url);
     if (url != 0) return url;
-    return '${a.name}|${a.ext}|${a.mimeType}|${a.groupId}'
-        .compareTo('${b.name}|${b.ext}|${b.mimeType}|${b.groupId}');
+    return '${a.name}|${a.ext}|${a.mimeType}|${a.groupId}'.compareTo(
+      '${b.name}|${b.ext}|${b.mimeType}|${b.groupId}',
+    );
   });
   return candidates.firstOrNull;
 }
 
-/// Preserve an audio source's media kind even when conversion stores it in an
-/// MP4 container. Otherwise use the completed file's MIME/extension, without
-/// assuming CatCatch's chain-building video default describes every download.
-IOType catCatchOutputType(catcatch.CatCatchTask task) {
-  return switch (catCatchMediaKind(task, task.downloadedFilePath ?? '')) {
+/// Keep the flow's declared output in sync with the engine's gallery routing.
+Future<IOType> catCatchOutputType(catcatch.CatCatchTask task) async {
+  final kind =
+      await catCatchMediaKindFromFile(task, task.downloadedFilePath ?? '');
+  return switch (kind) {
     CatCatchMediaKind.audio => IOType.audio,
     CatCatchMediaKind.video => IOType.video,
     CatCatchMediaKind.other => IOType.file,

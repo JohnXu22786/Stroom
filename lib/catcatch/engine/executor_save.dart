@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -12,6 +13,7 @@ import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_kind.dart';
 import '../models/media_resource.dart';
+import 'ev1_decoder.dart';
 import 'executor_utils.dart';
 
 /// Computes the file's MD5 off the UI isolate — hashing a multi-GB video
@@ -49,25 +51,59 @@ Future<String> executeSave({
   required void Function(CatCatchTask) onUpdate,
 }) async {
   if (sourcePath == null) throw Exception('源文件路径为空，无法保存');
+  // EV1 may be XOR-obfuscated FLV, including when a server labels it .flv.
+  // Its bytes need decoding before a media player can open them.
+  final signature = await File(sourcePath).openRead(0, 3).toList();
+  if (signature.isNotEmpty &&
+      Ev1Decoder.isEv1(Uint8List.fromList(signature.first))) {
+    throw StateError('EV1 原始文件无法直接播放，请选择转换为 MP4 后再保存');
+  }
+  final verified =
+      kIsWeb ? null : await catCatchVerifiedMediaFromPath(sourcePath);
+  if (!kIsWeb && verified == null) {
+    throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
+  }
   final appDirPath = await AppStorage.directory;
   final saveDir = p.join(appDirPath, 'catcatch', 'completed');
   final saveDirObj = Directory(saveDir);
   if (!await saveDirObj.exists()) await saveDirObj.create(recursive: true);
-  final fileName = p.basename(sourcePath);
+  var fileName = p.basename(sourcePath);
+  if (!kIsWeb) {
+    // Keep the equally valid MPG alias when it already matches the verified
+    // MPEG container. Every other suffix follows the inspected bytes.
+    final extension = p.extension(fileName).toLowerCase() == '.mpg' &&
+            verified!.extension == '.mpeg'
+        ? '.mpg'
+        : verified!.extension;
+    if (p.extension(fileName).toLowerCase() != extension) {
+      fileName = '${p.basenameWithoutExtension(fileName)}$extension';
+    }
+  }
   final finalPath = await uniqueExecutorPath(p.join(saveDir, fileName));
   await File(sourcePath).copy(finalPath);
 
-  if (!kIsWeb) {
-    final kind = catCatchMediaKind(task, finalPath);
-    try {
-      if (kind == CatCatchMediaKind.video) {
-        await registerCompletedVideo(finalPath, task);
-      } else if (kind == CatCatchMediaKind.audio) {
-        await registerCompletedAudio(finalPath, task);
+  try {
+    if (!kIsWeb) {
+      // A successful save always has one gallery record for verified media.
+      final kind = await catCatchMediaKindFromFile(task, finalPath);
+      switch (kind) {
+        case CatCatchMediaKind.video:
+          await registerCompletedVideo(finalPath, task, verifiedKind: kind);
+        case CatCatchMediaKind.audio:
+          await registerCompletedAudio(finalPath, task, verifiedKind: kind);
+        case CatCatchMediaKind.other:
+          throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
       }
-    } catch (e) {
-      debugPrint('[TaskExecutor] Register ${kind.name} to gallery failed: $e');
     }
+  } catch (e) {
+    // The original download is still available for retry. Do not leave an
+    // unregistered copy in the completed directory after registration fails.
+    try {
+      await File(finalPath).delete();
+    } catch (cleanupError) {
+      debugPrint('[TaskExecutor] Remove incomplete copy failed: $cleanupError');
+    }
+    rethrow;
   }
 
   markExecutorStep(steps, 7, done: true);
@@ -75,8 +111,12 @@ Future<String> executeSave({
   return finalPath;
 }
 
-Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
-  if (catCatchMediaKind(task, filePath) != CatCatchMediaKind.video) return;
+Future<void> registerCompletedVideo(String filePath, CatCatchTask task,
+    {CatCatchMediaKind? verifiedKind}) async {
+  if ((verifiedKind ?? await catCatchMediaKindFromFile(task, filePath)) !=
+      CatCatchMediaKind.video) {
+    throw const FormatException('保存文件不是可验证的视频');
+  }
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
   const videoExts = {
     'mp4',
@@ -87,12 +127,18 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
     'ogv',
     'avi',
     'flv',
-    'wmv'
+    'wmv',
+    'mpeg',
+    'mpg',
   };
-  if (!videoExts.contains(ext)) return;
+  if (!videoExts.contains(ext)) {
+    throw FormatException('不支持的视频文件格式: .$ext');
+  }
 
   final file = File(filePath);
-  if (!await file.exists()) return;
+  if (!await file.exists()) {
+    throw FileSystemException('保存的视频文件不存在', filePath);
+  }
 
   final hash = await _computeHashInIsolate(filePath);
   final size = await file.length();
@@ -117,11 +163,11 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
 
   // Only write the physical file once — hash-addressed storage. Copy the
   // file directly (streamed, no full-file buffer) into the storage dir.
-  final existing = await VideoManifest.getRecordByHash(hash);
-  if (existing == null) {
-    final storageDir = await VideoManifest.videoDir;
-    await file.copy(p.join(storageDir, '$hash.$ext'));
-  }
+  final storageDir = await VideoManifest.videoDir;
+  final storageFile = File(p.join(storageDir, '$hash.$ext'));
+  // An older record with this hash may use a different extension. Each new
+  // record must have the exact storage path named by its own format.
+  if (!await storageFile.exists()) await file.copy(storageFile.path);
 
   // Always register a record so every download appears in the gallery.
   final record = VideoRecord(
@@ -139,8 +185,12 @@ Future<void> registerCompletedVideo(String filePath, CatCatchTask task) async {
       '[TaskExecutor] Registered video to gallery: $recordName.$ext (folder: $videoFolder)');
 }
 
-Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
-  if (catCatchMediaKind(task, filePath) != CatCatchMediaKind.audio) return;
+Future<void> registerCompletedAudio(String filePath, CatCatchTask task,
+    {CatCatchMediaKind? verifiedKind}) async {
+  if ((verifiedKind ?? await catCatchMediaKindFromFile(task, filePath)) !=
+      CatCatchMediaKind.audio) {
+    throw const FormatException('保存文件不是可验证的音频');
+  }
   final ext = p.extension(filePath).toLowerCase().replaceAll('.', '');
   const audioExts = {
     'mp3',
@@ -150,15 +200,25 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
     'wma',
     'opus',
     'flac',
+    'mka',
     'ogg',
     'mp4',
     'webm',
     'weba',
+    'mov',
+    'flv',
+    'avi',
+    'mpeg',
+    'mpg',
   };
-  if (!audioExts.contains(ext)) return;
+  if (!audioExts.contains(ext)) {
+    throw FormatException('不支持的音频文件格式: .$ext');
+  }
 
   final file = File(filePath);
-  if (!await file.exists()) return;
+  if (!await file.exists()) {
+    throw FileSystemException('保存的音频文件不存在', filePath);
+  }
 
   final hash = await _computeHashInIsolate(filePath);
   final size = await file.length();
@@ -180,11 +240,9 @@ Future<void> registerCompletedAudio(String filePath, CatCatchTask task) async {
 
   // Only write the physical file once — hash-addressed storage. Copy the
   // file directly (streamed, no full-file buffer) into the storage dir.
-  final existing = await FileManifest.getRecordByHash(hash);
-  if (existing == null) {
-    final storageDir = await FileManifest.ttsAudioDir;
-    await file.copy(p.join(storageDir, '$hash.$ext'));
-  }
+  final storageDir = await FileManifest.ttsAudioDir;
+  final storageFile = File(p.join(storageDir, '$hash.$ext'));
+  if (!await storageFile.exists()) await file.copy(storageFile.path);
 
   // Always register a record so every download appears in the gallery.
   final record = AudioRecord(
