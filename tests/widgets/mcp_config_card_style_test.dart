@@ -327,7 +327,7 @@ void main() {
     );
   });
 
-  testWidgets('updating HTTP search API key preserves unrelated empty headers',
+  testWidgets('updating HTTP search API key preserves unrelated headers',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = mixedState();
@@ -340,6 +340,7 @@ void main() {
       'headers': {
         'X-Subscription-Token': 'stale-header-key',
         'X-Custom-Optional': '',
+        'X-Custom-Metadata': 'old-explicit-key',
       },
     };
     await pumpPage(tester, Brightness.light, state: state);
@@ -364,6 +365,7 @@ void main() {
       {
         'X-Subscription-Token': 'replacement-key',
         'X-Custom-Optional': '',
+        'X-Custom-Metadata': 'old-explicit-key',
       },
     );
   });

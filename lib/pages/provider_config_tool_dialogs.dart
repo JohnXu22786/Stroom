@@ -51,14 +51,13 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
     if (updated.models.isEmpty) return updated;
 
     final typeConfig = Map<String, dynamic>.from(updated.models[0].typeConfig);
-    final oldApiKey = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
     final apiKey = _apiKeyController.text.trim();
     if (apiKey.isEmpty) {
       typeConfig.remove('apiKey');
     } else {
       typeConfig['apiKey'] = apiKey;
     }
-    _updateCredentialHeaders(typeConfig, oldApiKey, apiKey);
+    _updateCredentialHeaders(typeConfig, apiKey);
     if (_allowsCustomUrl) {
       final url = _urlController.text.trim();
       typeConfig['url'] = url;
@@ -70,7 +69,6 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
 
   void _updateCredentialHeaders(
     Map<String, dynamic> typeConfig,
-    String oldApiKey,
     String apiKey,
   ) {
     final credentialHeaderNames = switch (widget.config.providerName) {
@@ -83,14 +81,9 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
 
     final headers = Map<String, dynamic>.from(rawHeaders);
     for (final key in headers.keys.toList()) {
-      final trimmed = headers[key].toString().trim();
-      final headerApiKey = trimmed.startsWith('Bearer ')
-          ? trimmed.substring('Bearer '.length).trim()
-          : trimmed;
-      final isKeyHeader =
-          credentialHeaderNames.contains(key.toString().toLowerCase()) ||
-          (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
-      if (!isKeyHeader) continue;
+      if (!credentialHeaderNames.contains(key.toString().toLowerCase())) {
+        continue;
+      }
 
       headers[key] = key.toString().toLowerCase() == 'authorization'
           ? (apiKey.isEmpty ? 'Bearer ' : 'Bearer $apiKey')
