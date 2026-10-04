@@ -23,12 +23,21 @@ const hookScript = scriptMatch[1]
   .replace(/\\\$/g, '$');
 
 class FakeSource {
-  constructor(src, parentElement = null) {
+  constructor(src, parentElement = null, {dataSrc = '', dataUrl = ''} = {}) {
     this.nodeName = 'SOURCE';
     this.src = src;
     this.type = '';
     this.parentElement = parentElement;
+    this.attributes = {'data-src': dataSrc, 'data-url': dataUrl};
     this._catCatchScanned = false;
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] || null;
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = value;
   }
 
   querySelectorAll() {
@@ -37,15 +46,27 @@ class FakeSource {
 }
 
 class FakeMedia {
-  constructor(tagName, {src = '', sources = []} = {}) {
+  constructor(
+    tagName,
+    {src = '', dataSrc = '', dataUrl = '', sources = []} = {},
+  ) {
     this.nodeName = tagName;
     this.tagName = tagName;
     this.currentSrc = '';
     this.src = src;
     this.parentElement = null;
+    this.attributes = {'data-src': dataSrc, 'data-url': dataUrl};
     this.sources = [];
     this._catCatchScanned = false;
     sources.forEach((source) => this.appendSource(source));
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] || null;
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = value;
   }
 
   querySelectorAll(selector) {
@@ -178,6 +199,65 @@ test('reports a source added after its media element was scanned and keeps URL d
     [
       'https://cdn.example/initial.mp4',
       'https://cdn.example/added.mp4',
+    ],
+  );
+});
+
+test('reports lazy media and source URLs initially and after watched attribute changes', () => {
+  const source = new FakeSource('', null, {
+    dataSrc: 'https://cdn.example/source-lazy.mp4',
+    dataUrl: 'https://cdn.example/source-lazy.m3u8',
+  });
+  const video = new FakeMedia('VIDEO', {
+    src: 'https://cdn.example/direct.mp4',
+    dataSrc: 'https://cdn.example/video-lazy.mp4',
+    dataUrl: 'https://cdn.example/video-lazy.mpd',
+    sources: [source],
+  });
+  const audio = new FakeMedia('AUDIO', {
+    dataSrc: 'https://cdn.example/audio-lazy.m4a',
+    dataUrl: 'https://cdn.example/audio-lazy.mp3',
+  });
+  const {messages, observer} = installHook([video, audio]);
+
+  video.setAttribute('data-url', 'https://cdn.example/video-updated.webm');
+  observer.callback([{
+    type: 'attributes',
+    attributeName: 'data-url',
+    target: video,
+  }]);
+  observer.callback([{
+    type: 'attributes',
+    attributeName: 'data-url',
+    target: video,
+  }]);
+
+  source.setAttribute('data-src', 'https://cdn.example/source-updated.m4a');
+  observer.callback([{
+    type: 'attributes',
+    attributeName: 'data-src',
+    target: source,
+  }]);
+
+  video.setAttribute('data-src', 'https://cdn.example/poster.jpg');
+  observer.callback([{
+    type: 'attributes',
+    attributeName: 'data-src',
+    target: video,
+  }]);
+
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    [
+      'https://cdn.example/direct.mp4',
+      'https://cdn.example/video-lazy.mp4',
+      'https://cdn.example/video-lazy.mpd',
+      'https://cdn.example/source-lazy.mp4',
+      'https://cdn.example/source-lazy.m3u8',
+      'https://cdn.example/audio-lazy.m4a',
+      'https://cdn.example/audio-lazy.mp3',
+      'https://cdn.example/video-updated.webm',
+      'https://cdn.example/source-updated.m4a',
     ],
   );
 });
