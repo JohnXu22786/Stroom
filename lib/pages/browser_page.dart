@@ -589,8 +589,7 @@ class _BrowserPageState extends State<BrowserPage> {
               // --- WebView + Loading ---
               Column(
                 children: [
-                  if (_isLoading && _progress < 1.0)
-                    LinearProgressIndicator(value: _progress),
+                  if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
                     child: InAppWebView(
                       // The initial page is loaded explicitly in onWebViewCreated
@@ -693,7 +692,8 @@ class _BrowserPageState extends State<BrowserPage> {
                         _stopLoadingForMainFrameError(request);
                       },
                       onReceivedHttpError: (controller, request, response) {
-                        _stopLoadingForMainFrameError(request);
+                        // HTTP error responses can still load a body; progress
+                        // is completed by onLoadStop.
                       },
                       shouldOverrideUrlLoading: (controller, action) async {
                         if (action.isForMainFrame) {
