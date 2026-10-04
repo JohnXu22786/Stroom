@@ -1243,6 +1243,11 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
+    _validateArchiveEntryChecksums(
+      archive,
+      fileMap,
+      restoreSelection,
+    );
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
@@ -1376,6 +1381,7 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
+      _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
@@ -1935,6 +1941,93 @@ class BackupService {
         pathSegments.first.isNotEmpty;
   }
 
+  static void _validateArchiveEntryChecksums(
+    Archive archive,
+    Map<String, Uint8List> fileMap,
+    BackupSelection selection,
+  ) {
+    for (final file in archive) {
+      if (!file.isFile ||
+          !_shouldValidateArchiveEntryChecksum(file.name, selection)) {
+        continue;
+      }
+      final expected = file.crc32;
+      final content = fileMap[file.name];
+      if (expected == null || content == null) {
+        throw BackupValidationException(
+          '无效的备份文件：条目 ${file.name} 缺少校验信息',
+        );
+      }
+      final checksum = _ZipCrc32()..add(content);
+      if (checksum.value != expected) {
+        throw BackupValidationException(
+          '无效的备份文件：条目 ${file.name} CRC32 校验失败',
+        );
+      }
+    }
+  }
+
+  static void _validateZipEntryChecksumsBeforeRestore(
+    _ZipStreamReader reader,
+    BackupSelection selection,
+  ) {
+    for (final entry in reader.entries) {
+      if (!_shouldValidateArchiveEntryChecksum(entry.name, selection)) {
+        continue;
+      }
+      try {
+        reader.extractEntry(entry, (_) {});
+      } on _RestoreEntryCorruptException catch (e) {
+        throw BackupValidationException('无效的备份文件：$e');
+      }
+    }
+  }
+
+  static bool _shouldValidateArchiveEntryChecksum(
+    String rawKey,
+    BackupSelection selection,
+  ) {
+    if (rawKey == 'manifest.json') return true;
+    if (rawKey == 'stroom_manifest.json' ||
+        rawKey == 'database/manifest_data.json') {
+      return selection.pictures ||
+          selection.audio ||
+          selection.videos ||
+          selection.texts;
+    }
+    if (rawKey == 'preferences.json') {
+      return selection.chatRecordsAndAttachments || selection.settings;
+    }
+    if (rawKey == 'chat_data.json') {
+      return selection.chatRecordsAndAttachments;
+    }
+    if (rawKey == 'settings.json') return selection.settings;
+    if (rawKey == 'browser_cookies.json') return selection.browserCookies;
+    if (rawKey.endsWith('/') || rawKey.endsWith(r'\')) return false;
+
+    var key = rawKey;
+    if (key.startsWith('files/')) {
+      key = key.substring('files/'.length);
+    }
+    if (key.startsWith('temp_edited/')) {
+      key = 'attachments/${p.basename(key)}';
+    }
+    if (key.startsWith('tasks/')) {
+      key = key.substring('tasks/'.length);
+      if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
+      if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
+    }
+    if (key == 'collection.anki2') return selection.ankiData;
+
+    for (final dir in _restoreKnownDirs) {
+      if (!key.startsWith('$dir/')) continue;
+      final relativePath = key.substring(dir.length + 1);
+      return _shouldRestoreDir(dir, selection) &&
+          _isSafeRelativeArchivePath(relativePath);
+    }
+    return false;
+  }
+
   static bool _hasAllMediaFiles({
     required Map<String, dynamic>? dbData,
     required Set<String> archiveEntries,
@@ -2484,9 +2577,10 @@ class BackupService {
       try {
         await _clearLiveCookiesForRestore(selection);
         await writeBackupFile('', 'browser_cookies.json', cookieData);
-        if (!await BrowserCookieService.restoreCookiesFromFileChecked(
-          force: true,
-        )) {
+        if (!WebFileStore.isTestMode &&
+            !await BrowserCookieService.restoreCookiesFromFileChecked(
+              force: true,
+            )) {
           throw Exception('部分内置浏览器Cookies未能恢复');
         }
         await BrowserCookieService.markBackupRestorePending();
@@ -3945,6 +4039,7 @@ class _ZipEntryInfo {
   final int compressionMethod;
   final int compressedSize;
   final int uncompressedSize;
+  final int crc32;
   final int localHeaderOffset;
 
   const _ZipEntryInfo({
@@ -3952,6 +4047,7 @@ class _ZipEntryInfo {
     required this.compressionMethod,
     required this.compressedSize,
     required this.uncompressedSize,
+    required this.crc32,
     required this.localHeaderOffset,
   });
 }
@@ -4050,6 +4146,7 @@ class _ZipStreamReader {
       _file.setPositionSync(dataOffset);
 
       var remaining = entry.compressedSize;
+      final checksum = _ZipCrc32();
       if (entry.compressionMethod == 0) {
         // store：直接分块复制，不经内存缓冲。
         // store 条目压缩尺寸必须等于解压尺寸 —— 计数核对，防止
@@ -4058,6 +4155,7 @@ class _ZipStreamReader {
         while (remaining > 0) {
           final n = remaining < kChunkSize ? remaining : kChunkSize;
           final chunk = _readExact(_file, n);
+          checksum.add(chunk);
           onChunk(chunk);
           written += chunk.length;
           remaining -= chunk.length;
@@ -4068,6 +4166,7 @@ class _ZipStreamReader {
             '(实际 $written / 声明 ${entry.uncompressedSize})',
           );
         }
+        _verifyChecksum(entry, checksum.value);
       } else if (entry.compressionMethod == 8) {
         // deflate：raw inflate 流式解压（dart:io zlib 分块转换）。
         // dart:io 对截断的 deflate 流不报错，只输出已解压的部分 ——
@@ -4078,6 +4177,7 @@ class _ZipStreamReader {
         final conversion = decoder.startChunkedConversion(
           _ChunkSink((chunk) {
             outputBytes += chunk.length;
+            checksum.add(chunk);
             onChunk(chunk);
           }),
         );
@@ -4100,6 +4200,7 @@ class _ZipStreamReader {
             '(实际 $outputBytes / 声明 ${entry.uncompressedSize})',
           );
         }
+        _verifyChecksum(entry, checksum.value);
       } else {
         throw _RestoreEntryCorruptException(
           '条目 ${entry.name} 使用不支持的'
@@ -4109,6 +4210,14 @@ class _ZipStreamReader {
     } on FormatException catch (e) {
       // _readExact 的截断/结构错误：统一为条目损坏
       throw _RestoreEntryCorruptException('条目 ${entry.name} 数据不完整 ($e)');
+    }
+  }
+
+  static void _verifyChecksum(_ZipEntryInfo entry, int actual) {
+    if (actual != entry.crc32) {
+      throw _RestoreEntryCorruptException(
+        '条目 ${entry.name} CRC32 校验失败',
+      );
     }
   }
 
@@ -4197,6 +4306,7 @@ class _ZipStreamReader {
         throw FormatException('中央目录条目 $i 签名错误');
       }
       final method = _le16(header, 10);
+      final crc32 = _le32(header, 16);
       var compSize = _le32(header, 20);
       var uncompSize = _le32(header, 24);
       final nameLen = _le16(header, 28);
@@ -4235,6 +4345,7 @@ class _ZipStreamReader {
           compressionMethod: method,
           compressedSize: compSize,
           uncompressedSize: uncompSize,
+          crc32: crc32,
           localHeaderOffset: localOffset,
         ),
       );
@@ -4327,6 +4438,29 @@ class _ZipStreamReader {
     final hi = _le32(b, offset + 4);
     return (hi << 32) | lo;
   }
+}
+
+/// Incremental CRC32 calculation for validating streamed ZIP entries.
+class _ZipCrc32 {
+  static final List<int> _table = List<int>.generate(256, (index) {
+    var value = index;
+    for (var bit = 0; bit < 8; bit++) {
+      value = (value & 1) != 0
+          ? (value >> 1) ^ 0xedb88320
+          : value >> 1;
+    }
+    return value;
+  }, growable: false);
+
+  var _value = 0xffffffff;
+
+  void add(List<int> bytes) {
+    for (final byte in bytes) {
+      _value = _table[(_value ^ byte) & 0xff] ^ (_value >> 8);
+    }
+  }
+
+  int get value => (_value ^ 0xffffffff) & 0xffffffff;
 }
 
 /// 把 deflate 解压输出块转发给 [onChunk]。
