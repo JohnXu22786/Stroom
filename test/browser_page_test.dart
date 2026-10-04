@@ -8,6 +8,33 @@ import 'package:stroom/pages/browser_page.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
 
 void main() {
+  group('BrowserPageNavigationAttemptTracker', () {
+    test('ignores a stale same-URL error while a newer load is active', () {
+      const url = 'https://example.com/page';
+      final attempts = BrowserPageNavigationAttemptTracker();
+
+      attempts.startNavigation(url);
+      attempts.startNavigation(url);
+
+      expect(
+        attempts.shouldStopLoadingForMainFrameError(
+          isForMainFrame: true,
+          requestUrl: url,
+          activeNavigationUrl: url,
+        ),
+        isFalse,
+      );
+      expect(
+        attempts.shouldStopLoadingForMainFrameError(
+          isForMainFrame: true,
+          requestUrl: url,
+          activeNavigationUrl: url,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('BrowserCookieStorePreparation', () {
     test('shares preparation between initial load and address submission',
         () async {

@@ -45,6 +45,64 @@ String? trackBrowserPageRedirectUrl(String? url) {
   return url;
 }
 
+/// Correlates terminal main-frame callbacks with browser navigation starts.
+/// WebResourceRequest has no attempt ID, so repeated URLs are matched in start
+/// order to distinguish an older load from the active one.
+@visibleForTesting
+class BrowserPageNavigationAttemptTracker {
+  var _nextAttemptId = 0;
+  int? _activeAttemptId;
+  final List<_BrowserPageNavigationAttempt> _attempts = [];
+
+  void startNavigation(String? url) {
+    final id = ++_nextAttemptId;
+    _activeAttemptId = id;
+    _attempts.add(_BrowserPageNavigationAttempt(id, url));
+  }
+
+  void trackRedirect(String? url) {
+    if (url == null || _activeAttemptId == null) return;
+    for (final attempt in _attempts) {
+      if (attempt.id == _activeAttemptId) {
+        attempt.urls.add(url);
+        return;
+      }
+    }
+  }
+
+  bool shouldStopLoadingForMainFrameError({
+    required bool isForMainFrame,
+    required String? requestUrl,
+    required String? activeNavigationUrl,
+  }) {
+    if (!isForMainFrame) return false;
+
+    final attempt = _takeAttemptForUrl(requestUrl);
+    if (attempt != null) return attempt.id == _activeAttemptId;
+    return requestUrl == activeNavigationUrl;
+  }
+
+  void completeNavigation(String? url) {
+    _takeAttemptForUrl(url);
+  }
+
+  _BrowserPageNavigationAttempt? _takeAttemptForUrl(String? url) {
+    if (url == null) return null;
+    final index = _attempts.indexWhere((attempt) => attempt.urls.contains(url));
+    if (index < 0) return null;
+    return _attempts.removeAt(index);
+  }
+}
+
+class _BrowserPageNavigationAttempt {
+  final int id;
+  final Set<String> urls = {};
+
+  _BrowserPageNavigationAttempt(this.id, String? url) {
+    if (url != null) urls.add(url);
+  }
+}
+
 /// Runs cookie preparation before a browser navigation.
 ///
 /// Exposed for tests so they can verify the ordering without creating a
@@ -315,6 +373,8 @@ class _BrowserPageState extends State<BrowserPage> {
   /// The current main-frame request URL, including redirects, for load errors.
   String? _activeNavigationUrl;
 
+  final _navigationAttempts = BrowserPageNavigationAttemptTracker();
+
   /// Whether the cat-catch floating panel is currently visible.
   /// The panel persists its visibility state across page navigations
   /// and is only hidden when the user manually closes it or toggles
@@ -496,8 +556,11 @@ class _BrowserPageState extends State<BrowserPage> {
   }
 
   void _stopLoadingForMainFrameError(WebResourceRequest request) {
-    if (request.isForMainFrame != true ||
-        request.url.toString() != _activeNavigationUrl) {
+    if (!_navigationAttempts.shouldStopLoadingForMainFrameError(
+      isForMainFrame: request.isForMainFrame == true,
+      requestUrl: request.url.toString(),
+      activeNavigationUrl: _activeNavigationUrl,
+    )) {
       return;
     }
     setState(() => _isLoading = false);
@@ -652,6 +715,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         // Record the requested host before a redirect replaces
                         // it with the final URL reported by onLoadStop.
                         noteBrowserPageNavigationUrl(urlString);
+                        _navigationAttempts.startNavigation(urlString);
                         _activeNavigationUrl = urlString;
                         setState(() {
                           _isLoading = true;
@@ -665,6 +729,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         _injectCatCatchHook(urlString);
                       },
                       onLoadStop: (controller, url) {
+                        _navigationAttempts.completeNavigation(url?.toString());
                         setState(() => _isLoading = false);
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
@@ -705,9 +770,13 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       shouldOverrideUrlLoading: (controller, action) async {
                         if (action.isForMainFrame) {
-                          _activeNavigationUrl = trackBrowserPageRedirectUrl(
+                          final requestUrl = trackBrowserPageRedirectUrl(
                             action.request.url?.toString(),
                           );
+                          _activeNavigationUrl = requestUrl;
+                          if (action.isRedirect == true) {
+                            _navigationAttempts.trackRedirect(requestUrl);
+                          }
                         }
                         return NavigationActionPolicy.ALLOW;
                       },
