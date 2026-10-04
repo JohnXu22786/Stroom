@@ -119,11 +119,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  /// Scrolls to config [index], which may be lazily built in a later group.
+  Future<void> scrollToCard(
+    WidgetTester tester,
+    int index, {
+    required double delta,
+  }) async {
+    final card = find.byKey(ValueKey('config_test_mcp_$index'));
+    await tester.scrollUntilVisible(
+      card,
+      delta,
+      scrollable: find.byType(Scrollable).first,
+    );
+  }
+
   /// The card-level Container for config [index]. The page emits stable
   /// keys (`ValueKey('config_${entryId}_$i')`) on each _McpConfigCard; the
   /// card's outer Container (the one with the rounded BoxDecoration) is its
   /// first descendant Container.
-  BoxDecoration cardDecoration(WidgetTester tester, int index) {
+  Future<BoxDecoration> cardDecoration(WidgetTester tester, int index) async {
+    await scrollToCard(tester, index, delta: 200);
     final card = find.byKey(ValueKey('config_test_mcp_$index'));
     expect(card, findsOneWidget);
     final container = tester.widget<Container>(
@@ -133,9 +148,11 @@ void main() {
   }
 
   /// The icon-box Containers (borderRadius 10) of all cards.
-  List<Color?> iconBoxColors(WidgetTester tester) {
+  Future<List<Color?>> iconBoxColors(WidgetTester tester) async {
     final colors = <Color?>[];
-    for (var i = 0; i < 3; i++) {
+    // The preceding style checks leave the scroll view at the last card.
+    for (var i = 2; i >= 0; i--) {
+      await scrollToCard(tester, i, delta: -200);
       final card = find.byKey(ValueKey('config_test_mcp_$i'));
       final boxes = find
           .descendant(of: card, matching: find.byType(Container))
@@ -162,7 +179,7 @@ void main() {
     final expectedBg = cs.surfaceContainerLow;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'vendor and user-added cards must use the same background '
               '(matching the LLM provider page) — no primaryContainer tint');
@@ -176,7 +193,7 @@ void main() {
     // Icon boxes: all use the same primaryContainer tint regardless of
     // vendor/transport.
     final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
@@ -192,7 +209,7 @@ void main() {
     final expectedBg = cs.surfaceContainerHigh;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'dark mode must use the same adaptive background for every '
               'card, no vendor tint');
@@ -204,10 +221,81 @@ void main() {
     }
 
     final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
+  });
+
+  testWidgets(
+      'Search group toggle leaves the MCP entry and other group enabled',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    final searchGroupTitle = find.text('搜索').first;
+    final searchGroupCard = find
+        .ancestor(of: searchGroupTitle, matching: find.byType(Container))
+        .first;
+    final groupSwitch =
+        find.descendant(of: searchGroupCard, matching: find.byType(Switch));
+    expect(groupSwitch, findsOneWidget);
+
+    await tester.tap(groupSwitch);
+    await tester.pumpAndSettle();
+
+    final state = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinSearchMcpGroupId)
+          .enabled,
+      isFalse,
+    );
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinMcpServicesGroupId)
+          .enabled,
+      isTrue,
+    );
+    expect(state.entries.single.enabled, isTrue);
+  });
+
+  testWidgets('built-in MCP group accepts newly added content', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    final otherGroupTitle = find.text('其他 MCP 服务').first;
+    await tester.scrollUntilVisible(
+      otherGroupTitle,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final groupCard = find
+        .ancestor(of: otherGroupTitle, matching: find.byType(Container))
+        .first;
+    final addButton = find.descendant(
+      of: groupCard,
+      matching: find.byTooltip('添加内容'),
+    );
+    expect(addButton, findsOneWidget);
+    await tester.tap(addButton);
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Local Docs');
+    await tester.enterText(fields.at(1), 'http://localhost:3000/sse');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final state = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    final added = state.entries.single.configs.singleWhere(
+      (config) => config.providerName == 'Local Docs',
+    );
+    expect(added.groupId, builtinMcpServicesGroupId);
   });
 
   testWidgets('MCP master switch renders and toggles the entry enabled flag',

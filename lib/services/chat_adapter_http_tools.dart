@@ -7,9 +7,14 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
   /// HTTP 搜索工具的处理器始终注册，不受 MCP 服务器连接状态影响；
   /// 但它们的可选定义会遵循 MCP 总开关，关闭时不提供给助手与对话。
   void initializeBuiltinTools(ProviderEntriesState entriesState) {
+    _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
+    _disabledMcpToolNames = {
+      ...disabledMcpToolNames(entriesState),
+      if (!_mcpMasterSwitchEnabled) ...kMcpSearchToolNames,
+    };
+    ChatService.setDisabledToolNames(_disabledMcpToolNames);
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
-    _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
 
     String? braveApiKey, bochaApiKey, queritApiKey, searxngUrl, searxngApiKey;
 

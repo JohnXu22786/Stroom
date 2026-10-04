@@ -8,11 +8,17 @@ part of 'chat_adapter.dart';
 /// whose servers are unreachable.
 class _McpConfigEntry {
   final McpServerConfig config;
+  final String configId;
   final String description;
+  final String placeholderToolName;
+  final Object sourceConfig;
 
   const _McpConfigEntry({
     required this.config,
+    required this.configId,
     required this.description,
+    required this.placeholderToolName,
+    required this.sourceConfig,
   });
 }
 
@@ -28,28 +34,39 @@ extension ChatAdapterMcpExt on ChatAdapter {
   /// 实际调用时按需进行（见 chat_service_tools.dart 的 _executeTool），
   /// 避免页面进入时对每个服务器发起连接尝试（真实端点可能数十秒超时）。
   ///
-  /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）关闭时，不发布任何
-  /// 占位工具并释放旧客户端——MCP 工具从助手页面与对话页一起消失。
+  /// MCP 条目的 [ProviderEntry.enabled]（MCP总开关）或某个配置所属的组别
+  /// 关闭时，不发布对应占位工具并释放旧客户端。
   Future<void> initializeMcpServers(ProviderEntriesState entriesState) async {
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
     _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
     // MCP 配置未变（同一实例）：占位符与客户端都无需重建。页面重复进入、
     // 或其它供应商（TTS/OCR 等）配置变更时，MCP 条目实例不变，跳过。
-    if (identical(_lastMcpEntry, mcpEntry)) return;
+    if (identical(_lastMcpEntry, mcpEntry) &&
+        identical(_lastMcpGroups, entriesState.mcpGroups)) {
+      return;
+    }
+    final keepExistingClients = identical(_lastMcpEntry, mcpEntry);
     _lastMcpEntry = mcpEntry;
+    _lastMcpGroups = entriesState.mcpGroups;
 
     if (mcpEntry == null || mcpEntry.configs.isEmpty || !mcpEntry.enabled) {
       // 没有配置任何 MCP 服务器，或 MCP总开关已关闭：发布空列表并释放
       // 旧客户端，避免上一份配置的工具/连接残留在工具列表与客户端管理器中。
       _mcpToolDefinitions = [];
       _mcpClientManager.disposeAll();
+      _lastMcpConfigSourcesByName = {};
       return;
     }
 
     // Build MCP server configs (skip HTTP tools — handled by initializeBuiltinTools)
     // and capture descriptions for placeholder tool creation.
     final mcpConfigs = <_McpConfigEntry>[];
+    final placeholderNamesByConfigId =
+        mcpPlaceholderToolNamesByConfigId(mcpEntry.configs);
+    final reservedPlaceholderClientNames = <String, String>{};
+    final validConfigIds = <String>{};
+    final configIdsByServerName = <String, List<String>>{};
 
     for (final config in mcpEntry.configs) {
       final typeConfig =
@@ -63,62 +80,141 @@ extension ChatAdapterMcpExt on ChatAdapter {
         providerName: config.providerName,
         typeConfig: typeConfig,
       );
-      if (serverConfig != null) {
-        final description = typeConfig?['description'] as String? ?? '';
-        mcpConfigs.add(_McpConfigEntry(
-          config: serverConfig,
-          description: description,
-        ));
-      }
+      if (serverConfig == null) continue;
+
+      final placeholderToolName = placeholderNamesByConfigId[config.id]!;
+      reservedPlaceholderClientNames[placeholderToolName] = serverConfig.name;
+      validConfigIds.add(config.id);
+      configIdsByServerName
+          .putIfAbsent(serverConfig.name, () => <String>[])
+          .add(config.id);
+      if (!isMcpProviderConfigEnabled(config, entriesState.mcpGroups)) continue;
+
+      final description = typeConfig?['description'] as String? ?? '';
+      mcpConfigs.add(_McpConfigEntry(
+        config: serverConfig,
+        configId: config.id,
+        description: description,
+        placeholderToolName: placeholderToolName,
+        sourceConfig: config,
+      ));
     }
+    // The manager's client key is the server name. When duplicate configs
+    // share that key, keep alias identity tied to the same deterministic
+    // config ID even when a group toggle selects a different config instance.
+    final stableConfigIdsByServerName = <String, String>{
+      for (final entry in configIdsByServerName.entries)
+        entry.key: (List<String>.of(entry.value)..sort()).first,
+    };
 
     if (mcpConfigs.isEmpty) {
-      // 只剩 HTTP 工具等非 MCP 配置：清空并释放旧客户端。
+      // 只剩 HTTP 工具等非 MCP 配置，或所有 MCP 配置都属于关闭组别。
+      // 清空占位工具并释放旧客户端。
       _mcpToolDefinitions = [];
-      _mcpClientManager.disposeAll();
+      _mcpClientManager.disposeAll(preserveToolAliases: keepExistingClients);
+      _mcpClientManager.setPlaceholderClientNames(
+        const {},
+        reservedPlaceholderClientNames: reservedPlaceholderClientNames,
+        validConfigIds: validConfigIds,
+      );
+      _lastMcpConfigSourcesByName = {};
       return;
     }
 
-    // 配置变化：旧客户端（旧 URL/命令）作废。按需执行时这些客户端
-    // 尚未连接，dispose 只是释放句柄，不影响任何进行中的工具调用。
-    _mcpClientManager.disposeAll();
+    if (!keepExistingClients) {
+      // MCP 条目变化时配置可能包含新 URL/命令，旧客户端作废。
+      _mcpClientManager.disposeAll();
+      _lastMcpConfigSourcesByName = {};
+    }
 
     // 为每个 MCP 服务器创建客户端但**不连接**：连接延迟到工具被调用时。
-    // 无效配置（缺 URL/命令，McpClient 构造会抛 ArgumentError）跳过其
-    // 客户端但仍保留占位符，避免单条损坏配置让整个工具列表消失。
+    // 按配置顺序选择每个名称下第一个能创建客户端的启用配置，保证
+    // source map 和实际客户端总是同一份配置。同名配置中首个无效时，
+    // 继续尝试后续配置；失败的配置仍保留占位符。
+    final selectedConfigSourcesByName = <String, Object>{};
     for (final entry in mcpConfigs) {
+      final name = entry.config.name;
+      if (selectedConfigSourcesByName.containsKey(name)) continue;
+      final existingClient = _mcpClientManager.getClient(name);
+      if (existingClient != null &&
+          identical(_lastMcpConfigSourcesByName[name], entry.sourceConfig)) {
+        selectedConfigSourcesByName[name] = entry.sourceConfig;
+        continue;
+      }
       try {
         _mcpClientManager.addClient(
-          entry.config.name,
+          name,
           McpClient(config: entry.config),
         );
       } catch (e) {
-        debugPrint('MCP[${entry.config.name}]: 无效配置，跳过客户端: $e');
+        debugPrint('MCP[$name]: 无效配置，跳过客户端: $e');
+        continue;
+      }
+      selectedConfigSourcesByName[name] = entry.sourceConfig;
+    }
+    for (final name in _mcpClientManager.clients.keys.toList()) {
+      if (!selectedConfigSourcesByName.containsKey(name)) {
+        _mcpClientManager.removeClient(name);
+      }
+    }
+    // Group toggles can append a newly enabled earlier config after retained
+    // clients. Preserve instances while restoring configured dispatch order.
+    _mcpClientManager.reorderClients(selectedConfigSourcesByName.keys);
+    _lastMcpConfigSourcesByName = selectedConfigSourcesByName;
+
+    final selectedConfigIdsByName = <String, String>{};
+    for (final entry in mcpConfigs) {
+      if (identical(
+        selectedConfigSourcesByName[entry.config.name],
+        entry.sourceConfig,
+      )) {
+        selectedConfigIdsByName[entry.config.name] =
+            stableConfigIdsByServerName[entry.config.name] ?? entry.configId;
       }
     }
 
     // 同步发布占位工具定义（不做任何网络等待）：每个配置的 MCP 服务器
     // 都先以一个占位工具出现在工具列表中。占位工具不是真实工具——模型
     // 调用占位符时 _executeTool 会按需连接该服务器、列出真实工具并把
-    // 可用工具名告知模型。同名服务器只保留第一份占位符，避免重复工具名
-    // 被 API 拒绝。
-    final seenNames = <String>{};
+    // 可用工具名告知模型。规范化名称冲突时使用配置 ID 后缀区分服务器；
+    // 同一原始名称则继续共用成功注册的客户端。
+    final placeholderEntriesByToolName = <String, _McpConfigEntry>{};
+    final placeholderClientNamesByToolName = <String, String>{};
+    final failedServerNames = <String>{};
+    for (final entry in mcpConfigs) {
+      final selectedSource = selectedConfigSourcesByName[entry.config.name];
+      if (selectedSource != null &&
+          !identical(selectedSource, entry.sourceConfig)) {
+        continue;
+      }
+      final toolName = entry.placeholderToolName;
+      if (selectedSource != null) {
+        placeholderEntriesByToolName[toolName] = entry;
+        placeholderClientNamesByToolName[toolName] = entry.config.name;
+      } else if (failedServerNames.add(entry.config.name)) {
+        placeholderEntriesByToolName[toolName] = entry;
+        placeholderClientNamesByToolName[toolName] = entry.config.name;
+      }
+    }
+    _mcpClientManager.setPlaceholderClientNames(
+      placeholderClientNamesByToolName,
+      configIdsByClientName: selectedConfigIdsByName,
+      reservedPlaceholderClientNames: reservedPlaceholderClientNames,
+      validConfigIds: validConfigIds,
+    );
     _mcpToolDefinitions = [
-      for (final entry in mcpConfigs)
-        if (seenNames.add(
-          McpServerConfig.placeholderToolName(entry.config.name),
-        ))
-          ToolDefinition(
-            name: McpServerConfig.placeholderToolName(entry.config.name),
-            description: entry.description.isNotEmpty
-                ? entry.description
-                : 'MCP 服务器工具：${entry.config.name}',
-            parameters: const {
-              'type': 'object',
-              'properties': {},
-              'required': <String>[],
-            },
-          ),
+      for (final placeholder in placeholderEntriesByToolName.entries)
+        ToolDefinition(
+          name: placeholder.key,
+          description: placeholder.value.description.isNotEmpty
+              ? placeholder.value.description
+              : 'MCP 服务器工具：${placeholder.value.config.name}',
+          parameters: const {
+            'type': 'object',
+            'properties': {},
+            'required': <String>[],
+          },
+        ),
     ];
   }
 
@@ -127,5 +223,7 @@ extension ChatAdapterMcpExt on ChatAdapter {
     _mcpClientManager.disposeAll();
     _mcpToolDefinitions = [];
     _lastMcpEntry = null;
+    _lastMcpGroups = null;
+    _lastMcpConfigSourcesByName = {};
   }
 }

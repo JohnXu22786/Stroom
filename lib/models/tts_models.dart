@@ -617,6 +617,7 @@ class ProviderConfigItem {
   /// Local identity, independent of display names and remote API model IDs.
   final String id;
   String providerName;
+  String? groupId;
   String host;
   String key;
   List<ModelConfig> models;
@@ -631,6 +632,7 @@ class ProviderConfigItem {
   ProviderConfigItem({
     String? id,
     this.providerName = '',
+    this.groupId,
     this.host = '',
     this.key = '',
     List<ModelConfig>? models,
@@ -646,6 +648,7 @@ class ProviderConfigItem {
   Map<String, dynamic> toMap() => {
         'id': id,
         'providerName': providerName,
+        if (groupId != null) 'groupId': groupId,
         'host': host,
         'key': key,
         'models': models.map((m) => m.toMap()).toList(),
@@ -659,6 +662,7 @@ class ProviderConfigItem {
       ProviderConfigItem(
         id: map['id'] as String?,
         providerName: map['providerName'] as String? ?? '',
+        groupId: map['groupId'] is String ? map['groupId'] as String : null,
         host: map['host'] as String? ?? '',
         key: map['key'] as String? ?? '',
         models: (map['models'] as List?)
@@ -683,6 +687,7 @@ class ProviderConfigItem {
   ProviderConfigItem copy() => ProviderConfigItem(
         id: id,
         providerName: providerName,
+        groupId: groupId,
         host: host,
         key: key,
         models: models.map((m) => m.copy()).toList(),

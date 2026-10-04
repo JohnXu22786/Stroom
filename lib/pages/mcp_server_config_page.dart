@@ -8,12 +8,14 @@ Future<bool?> showMcpServerConfigDialog({
   required BuildContext context,
   required String entryId,
   required int configIndex,
+  String? groupId,
 }) {
   return showDialog<bool>(
     context: context,
     builder: (_) => _McpServerConfigDialog(
       entryId: entryId,
       configIndex: configIndex,
+      groupId: groupId,
     ),
   );
 }
@@ -22,11 +24,13 @@ Future<bool?> showMcpServerConfigDialog({
 class _McpServerConfigDialog extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
+  final String? groupId;
 
   const _McpServerConfigDialog({
     super.key,
     required this.entryId,
     required this.configIndex,
+    this.groupId,
   });
 
   @override
@@ -325,8 +329,19 @@ class _McpServerConfigDialogState
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
+    final existingConfigId = _isExistingConfig &&
+            widget.configIndex >= 0 &&
+            widget.configIndex < configs.length
+        ? configs[widget.configIndex].id
+        : null;
     final newConfig = ProviderConfigItem(
+      id: existingConfigId,
       providerName: name,
+      groupId: _isExistingConfig &&
+              widget.configIndex >= 0 &&
+              widget.configIndex < configs.length
+          ? configs[widget.configIndex].groupId
+          : widget.groupId,
       host: _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '',
