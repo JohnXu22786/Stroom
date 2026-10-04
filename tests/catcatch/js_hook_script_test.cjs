@@ -1042,6 +1042,41 @@ test('keeps redirect capture when the page assigns onreadystatechange after send
   );
 });
 
+test('captures only HTTP(S) media fetches and preserves native fetch outcomes', async () => {
+  const unsupportedFetchError = new TypeError(
+    'fetch rejected unsupported URL scheme',
+  );
+  const urls = [
+    'ftp://cdn.example/video.mp4',
+    'http://cdn.example/video.mp4',
+    'https://cdn.example/video.mp4',
+  ];
+  const responses = new Map(
+    urls.slice(1).map((url) => [url, {url}]),
+  );
+  const fetchCalls = [];
+  const {messages, window} = installHook([], (url) => {
+    fetchCalls.push(url);
+    if (url.startsWith('ftp:')) return Promise.reject(unsupportedFetchError);
+    return Promise.resolve(responses.get(url));
+  });
+
+  await assert.rejects(
+    window.fetch(urls[0]),
+    (error) => error === unsupportedFetchError,
+  );
+  const httpResponse = await window.fetch(urls[1]);
+  const httpsResponse = await window.fetch(urls[2]);
+
+  assert.deepEqual(fetchCalls, urls);
+  assert.equal(httpResponse, responses.get(urls[1]));
+  assert.equal(httpsResponse, responses.get(urls[2]));
+  assert.deepEqual(
+    messages.map(({url}) => url),
+    urls.slice(1),
+  );
+});
+
 test('reports fetch redirect media URLs with request metadata and usable responses', async () => {
   const response = {
     url: 'https://cdn.example/video.m3u8',
