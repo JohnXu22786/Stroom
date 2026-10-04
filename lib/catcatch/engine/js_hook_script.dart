@@ -134,15 +134,14 @@ class JsHookScript {
       if ((hasHeadersOption &&
           typeof headerIteratorMethod === 'function') ||
           shouldReplayRequestInit) {
-        replayMethodOption = opts.method;
+        replayMethodOption = methodOption !== undefined ? method : undefined;
         if (replayMethodOption !== undefined) {
-          replayMethodOption = String(replayMethodOption);
           method = replayMethodOption;
         } else {
           method = requestMethod || 'GET';
         }
         hasReplayMethodOption = true;
-        replayHeadersOption = opts.headers;
+        replayHeadersOption = headersOption;
         hasReplayHeadersOption = true;
         hasHeadersOption = replayHeadersOption !== undefined;
         headers = hasHeadersOption
