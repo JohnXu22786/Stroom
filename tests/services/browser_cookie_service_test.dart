@@ -27,6 +27,7 @@ class _FakeCookiePlatform implements CookiePlatform {
   final List<Map<String, dynamic>> deleteCookieCalls = [];
   final List<Map<String, dynamic>> deleteCookiesCalls = [];
   int deleteAllCookiesCalls = 0;
+  bool deleteAllCookiesResult = true;
 
   @override
   Future<List<Cookie>> getAllCookies() async {
@@ -111,7 +112,7 @@ class _FakeCookiePlatform implements CookiePlatform {
   @override
   Future<bool> deleteAllCookies() async {
     deleteAllCookiesCalls++;
-    return true;
+    return deleteAllCookiesResult;
   }
 }
 
@@ -529,6 +530,28 @@ void main() {
       expect(ok, isTrue);
       expect(fake.deleteAllCookiesCalls, 1);
       expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+
+    test('failed clear-all does not leave a backup restore marker for startup',
+        () async {
+      final fake = _FakeCookiePlatform()..deleteAllCookiesResult = false;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+      await BrowserCookieService.markBackupRestorePending();
+
+      final cleared = await BrowserCookieService.clearAllCookies();
+
+      expect(cleared, isFalse);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+      expect(await BrowserCookieService.hasBackupRestorePending(), isFalse);
+
+      // Startup must retry native cleanup instead of treating the stale
+      // marker as permission to skip cleanup and restore the empty snapshot.
+      expect(await BrowserCookieService.prepareForBrowserPageLoad(), isFalse);
+      expect(fake.deleteAllCookiesCalls, 2);
+      expect(fake.setCookieCalls, isEmpty);
     });
 
     test('serializes with an in-flight cookie snapshot', () async {
