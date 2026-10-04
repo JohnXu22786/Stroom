@@ -1893,6 +1893,7 @@ class BackupService {
                 defaultExtension: 'txt',
               )),
       tasks:
+          !kIsWeb &&
           declared.tasks &&
           const [
             'synthesis/tasks.json',
@@ -1902,6 +1903,7 @@ class BackupService {
             'task_flows/executions.json',
           ].every(entries.contains),
       ankiData:
+          !kIsWeb &&
           declared.ankiData &&
           (entries.contains('anki/collection.anki2') ||
               entries.contains('collection.anki2')),
@@ -2092,10 +2094,11 @@ class BackupService {
         'texts',
         'txt',
       ),
-      tasks: hasTaskData,
+      tasks: !kIsWeb && hasTaskData,
       ankiData:
-          normalizedEntries.contains('anki/collection.anki2') ||
-          normalizedEntries.contains('collection.anki2'),
+          !kIsWeb &&
+          (normalizedEntries.contains('anki/collection.anki2') ||
+              normalizedEntries.contains('collection.anki2')),
       browserCookies:
           !kIsWeb && normalizedEntries.contains('browser_cookies.json'),
     );
