@@ -135,9 +135,9 @@ class BrowserCookieStorePreparation {
 InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
   return InAppWebViewSettings(
     javaScriptEnabled: true,
-    // Privacy: disable persistent DOM storage.
-    // All data stays in memory and is discarded when the browser closes.
-    domStorageEnabled: false,
+    // Keep site storage available so Android's WebView profile can be included
+    // in manual browser-data backups.
+    domStorageEnabled: true,
     mixedContentMode: MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
     // Mobile mode: use device viewport for correct touch targeting.
     // Desktop mode: use wide viewport to show full desktop pages.

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_log_service.dart';
+import 'services/browser_profile_service.dart';
 import 'services/video_player_init.dart';
 
 import 'startup/startup_app.dart';
@@ -175,6 +176,7 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        await BrowserProfileService.applyPendingAction();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();
         // 桌面端：在 runApp 之前初始化窗口管理器，

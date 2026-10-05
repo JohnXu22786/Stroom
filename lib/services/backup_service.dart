@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
 import 'browser_cookie_service.dart';
+import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
 import 'manifest_database.dart';
 import 'storage_service.dart';
@@ -118,7 +119,7 @@ class BackupSelection {
   /// Anki 闪卡原始数据库（collection.anki2）
   final bool ankiData;
 
-  /// 浏览器Cookies持久化数据（browser_cookies.json）
+  /// 内置浏览器Cookies及平台支持的网站数据
   final bool browserCookies;
 
   /// 是否包含媒体文件与附件文件（图片/音频/视频/文本/附件本体）。
@@ -162,7 +163,7 @@ class BackupSelection {
     if (texts) labels.add('文本');
     if (tasks) labels.add('任务');
     if (ankiData) labels.add('Anki闪卡数据');
-    if (browserCookies) labels.add('浏览器Cookies');
+    if (browserCookies) labels.add('内置浏览器数据');
     return labels;
   }
 
@@ -306,35 +307,16 @@ class BackupService {
       onProgress: onProgress,
     );
 
-    // ------------------------------------------------------------
-    // 第 2 阶段：同步构建 ZIP。
-    // 生产环境放后台 isolate；测试环境（FakeAsync 不支持真实
-    // Isolate）在调用方 isolate 同步执行并保留逐文件取消检查。
-    // ------------------------------------------------------------
-    debugPrint('[BackupService] streaming: building archive in background');
-    onProgress?.call(0.95);
-    checkCancelled();
-    if (WebFileStore.isTestMode) {
-      _createBackupStreamingSync(
-        plan.jsonFiles,
-        plan.memoryFiles,
-        plan.diskFiles,
-        outputPath,
-        isCancelled: isCancelled,
-      );
-    } else {
-      try {
-        await Isolate.run(
-          () => _createBackupStreamingSync(
-            plan.jsonFiles,
-            plan.memoryFiles,
-            plan.diskFiles,
-            outputPath,
-          ),
-        );
-      } on UnsupportedError catch (e) {
-        // Isolate 不可用（受限环境）：回退主 isolate 同步执行
-        debugPrint('[BackupService] Isolate 不可用，回退同步执行: $e');
+    try {
+      // ------------------------------------------------------------
+      // 第 2 阶段：同步构建 ZIP。
+      // 生产环境放后台 isolate；测试环境（FakeAsync 不支持真实
+      // Isolate）在调用方 isolate 同步执行并保留逐文件取消检查。
+      // ------------------------------------------------------------
+      debugPrint('[BackupService] streaming: building archive in background');
+      onProgress?.call(0.95);
+      checkCancelled();
+      if (WebFileStore.isTestMode) {
         _createBackupStreamingSync(
           plan.jsonFiles,
           plan.memoryFiles,
@@ -342,11 +324,36 @@ class BackupService {
           outputPath,
           isCancelled: isCancelled,
         );
+      } else {
+        try {
+          await Isolate.run(
+            () => _createBackupStreamingSync(
+              plan.jsonFiles,
+              plan.memoryFiles,
+              plan.diskFiles,
+              outputPath,
+            ),
+          );
+        } on UnsupportedError catch (e) {
+          // Isolate 不可用（受限环境）：回退主 isolate 同步执行
+          debugPrint('[BackupService] Isolate 不可用，回退同步执行: $e');
+          _createBackupStreamingSync(
+            plan.jsonFiles,
+            plan.memoryFiles,
+            plan.diskFiles,
+            outputPath,
+            isCancelled: isCancelled,
+          );
+        }
       }
+      onProgress?.call(1.0);
+      await _yieldToEventLoop();
+      checkCancelled();
+    } finally {
+      await BrowserProfileService.deleteBackupSnapshot(
+        plan.browserProfileSnapshotPath,
+      );
     }
-    onProgress?.call(1.0);
-    await _yieldToEventLoop();
-    checkCancelled();
   }
 
   /// 主 isolate 收集备份计划。
@@ -366,9 +373,29 @@ class BackupService {
     final browserCookieSnapshot = selection.browserCookies && useStreaming
         ? await BrowserCookieService.snapshotCookiesForBackup()
         : null;
+    String? browserProfilePlatform;
+    Directory? browserProfileSourceDirectory;
     final ankiDbPath = await _findAnkiDatabasePath(selection);
     if (browserCookieSnapshot != null) {
-      jsonFiles['browser_cookies.json'] = jsonEncode(browserCookieSnapshot);
+      jsonFiles[_browserCookieArchivePath] = jsonEncode(browserCookieSnapshot);
+    }
+
+    if (selection.browserCookies && useStreaming) {
+      final platform = BrowserProfileService.currentPlatformName;
+      final profileDirectory =
+          await BrowserProfileService.currentProfileDirectory();
+      if (platform != null && profileDirectory != null) {
+        try {
+          if (await BrowserProfileService.hasExportableData()) {
+            browserProfilePlatform = platform;
+            browserProfileSourceDirectory = profileDirectory;
+          }
+        } catch (e) {
+          throw DataManagementPreflightException(
+            '无法读取内置浏览器网站数据，已取消备份以避免遗漏：$e',
+          );
+        }
+      }
     }
 
     // 1. manifest.json
@@ -380,8 +407,11 @@ class BackupService {
       'dataParts': _exportedPartIds(
         selection,
         hasBrowserCookieSnapshot: browserCookieSnapshot != null,
+        hasBrowserProfile: browserProfilePlatform != null,
         hasAnkiDatabase: ankiDbPath != null,
       ).toList(),
+      if (browserProfilePlatform != null)
+        'browserProfilePlatform': browserProfilePlatform,
       'dataPartVersions': await DataMigrationService.getStoredPartVersions(),
     });
     onProgress?.call(0.05);
@@ -772,10 +802,42 @@ class BackupService {
       ManifestTables.videoFolders: manifestVideoFolders ?? <String>[],
     });
 
+    String? browserProfileSnapshotPath;
+    final profileSource = browserProfileSourceDirectory;
+    final profilePlatform = browserProfilePlatform;
+    if (profileSource != null && profilePlatform != null) {
+      Directory? snapshot;
+      try {
+        snapshot = await BrowserProfileService.createBackupSnapshot(
+          profileSource,
+        );
+        final previousFileCount = diskFiles.length + memoryFiles.length;
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'browser_data/$profilePlatform',
+          sourcePath: snapshot.path,
+          useStreaming: useStreaming,
+          includeRelativePath: BrowserProfileService.shouldArchiveRelativePath,
+        );
+        if (diskFiles.length + memoryFiles.length > previousFileCount) {
+          browserProfileSnapshotPath = snapshot.path;
+        } else {
+          await BrowserProfileService.deleteBackupSnapshot(snapshot.path);
+        }
+      } catch (e) {
+        await BrowserProfileService.deleteBackupSnapshot(snapshot?.path);
+        throw DataManagementPreflightException(
+          '无法稳定读取内置浏览器网站数据，已取消备份以避免遗漏：$e',
+        );
+      }
+    }
+
     return _BackupPlan(
       jsonFiles: jsonFiles,
       memoryFiles: memoryFiles,
       diskFiles: diskFiles,
+      browserProfileSnapshotPath: browserProfileSnapshotPath,
     );
   }
 
@@ -970,6 +1032,7 @@ class BackupService {
     required String archivePrefix,
     required String sourcePath,
     required bool useStreaming,
+    bool Function(String relativePath)? includeRelativePath,
   }) async {
     final archived = <String>{
       ...memoryFiles.keys,
@@ -1020,7 +1083,11 @@ class BackupService {
       if (entity is! File) continue;
       final relativePath = p.relative(entity.path, from: directory.path);
       final archiveRelativePath = relativePath.split(p.separator).join('/');
-      if (!_isSafeRelativeArchivePath(archiveRelativePath)) continue;
+      if (!_isSafeRelativeArchivePath(archiveRelativePath) ||
+          (includeRelativePath != null &&
+              !includeRelativePath(archiveRelativePath))) {
+        continue;
+      }
       final archiveName = '$archivePrefix/$archiveRelativePath';
       if (archived.contains(archiveName)) continue;
       await _addPlanFile(
@@ -1399,6 +1466,7 @@ class BackupService {
       'dataParts': _exportedPartIds(
         selection,
         hasBrowserCookieSnapshot: browserCookieSnapshot != null,
+        hasBrowserProfile: false,
         hasAnkiDatabase: ankiDbPath != null,
       ).toList(),
       'dataPartVersions': await DataMigrationService.getStoredPartVersions(),
@@ -1601,7 +1669,7 @@ class BackupService {
     if (browserCookieSnapshot != null) {
       addStringToArchive(
         archive,
-        'browser_cookies.json',
+        _browserCookieArchivePath,
         jsonEncode(browserCookieSnapshot),
       );
     }
@@ -1836,7 +1904,21 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
-    _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
+    _validateArchiveEntryChecksums(
+      archive,
+      fileMap,
+      restoreSelection,
+      includeBrowserProfile: metadata.restoreBrowserProfile,
+    );
+    if (restoreSelection.browserCookies) {
+      try {
+        await BrowserProfileService.prepareForRestore();
+      } catch (e) {
+        throw DataManagementPreflightException(
+          '请先重启应用，完成上一次内置浏览器数据操作后再导入：$e',
+        );
+      }
+    }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       restoreSelection,
       taskFilesToReplace: metadata.taskFilesToReplace,
@@ -1844,6 +1926,7 @@ class BackupService {
     final previousCookies = await _captureCookiesForRestoreRollback(
       restoreSelection,
       metadata.browserCookiesData,
+      deferLiveRestore: metadata.restoreBrowserProfile,
     );
     onProgress?.call(0.15);
     await _yieldToEventLoop();
@@ -1879,7 +1962,7 @@ class BackupService {
         final builder = BytesBuilder(copy: false);
         builder.add(entry.value);
         await writeBackupFile(subDir, fileName, builder.takeBytes());
-      });
+      }, restoreBrowserProfile: metadata.restoreBrowserProfile);
       if (handled) {
         restoreIndex++;
         // 每处理 20 个文件让出事件循环
@@ -1906,7 +1989,13 @@ class BackupService {
       restoreSelection,
       metadata.browserCookiesData,
       previousCookies: previousCookies,
+      deferLiveRestore: metadata.restoreBrowserProfile,
     );
+    if (metadata.restoreBrowserProfile) {
+      await BrowserProfileService.commitPendingRestore(
+        metadata.browserProfilePlatform!,
+      );
+    }
     onProgress?.call(1.0);
     return metadata.skippedLabels;
   }
@@ -1970,7 +2059,20 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
-      _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
+      _validateZipEntryChecksumsBeforeRestore(
+        reader,
+        restoreSelection,
+        includeBrowserProfile: metadata.restoreBrowserProfile,
+      );
+      if (restoreSelection.browserCookies) {
+        try {
+          await BrowserProfileService.prepareForRestore();
+        } catch (e) {
+          throw DataManagementPreflightException(
+            '请先重启应用，完成上一次内置浏览器数据操作后再导入：$e',
+          );
+        }
+      }
       final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
         restoreSelection,
         taskFilesToReplace: metadata.taskFilesToReplace,
@@ -1978,6 +2080,7 @@ class BackupService {
       final previousCookies = await _captureCookiesForRestoreRollback(
         restoreSelection,
         metadata.browserCookiesData,
+        deferLiveRestore: metadata.restoreBrowserProfile,
       );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
@@ -2009,6 +2112,7 @@ class BackupService {
           restoreSelection,
           (subDir, fileName) =>
               _writeZipEntryStreamed(reader, entry, subDir, fileName),
+          restoreBrowserProfile: metadata.restoreBrowserProfile,
         );
         if (handled) {
           restoreIndex++;
@@ -2034,7 +2138,13 @@ class BackupService {
         restoreSelection,
         metadata.browserCookiesData,
         previousCookies: previousCookies,
+        deferLiveRestore: metadata.restoreBrowserProfile,
       );
+      if (metadata.restoreBrowserProfile) {
+        await BrowserProfileService.commitPendingRestore(
+          metadata.browserProfilePlatform!,
+        );
+      }
       onProgress?.call(1.0);
       return metadata.skippedLabels;
     } finally {
@@ -2063,8 +2173,8 @@ class BackupService {
     }
     final appDir = await AppStorage.directory;
     final dir = Directory(p.join(appDir, subDir));
-    await dir.create(recursive: true);
     final dest = File(p.join(dir.path, fileName));
+    await dest.parent.create(recursive: true);
     final raf = dest.openSync(mode: FileMode.write);
     try {
       reader.extractEntry(entry, raf.writeFromSync);
@@ -2121,6 +2231,14 @@ class BackupService {
       throw BackupValidationException('不支持的备份版本: $version (仅支持 v1 和 v2)');
     }
     final isV1Format = version == 1;
+    final rawBrowserProfilePlatform = manifest['browserProfilePlatform'];
+    if (rawBrowserProfilePlatform != null &&
+        rawBrowserProfilePlatform is! String) {
+      throw const BackupValidationException(
+        '无效的备份文件：browserProfilePlatform 字段损坏',
+      );
+    }
+    final browserProfilePlatform = rawBrowserProfilePlatform as String?;
 
     // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
@@ -2370,9 +2488,31 @@ class BackupService {
             )
             .toList()
         : <String>[];
-    final restoreSelection = skipMissingCategories
+    final candidateRestoreSelection = skipMissingCategories
         ? _intersectSelections(selection, availableSelection)
         : selection;
+    final restoreBrowserProfile =
+        candidateRestoreSelection.browserCookies &&
+            browserProfilePlatform != null &&
+            BrowserProfileService.currentPlatformName ==
+                browserProfilePlatform &&
+            BrowserProfileService.archiveContainsProfile(
+              archiveEntries,
+              browserProfilePlatform,
+            );
+    final cannotSafelyRestoreCookieSnapshot =
+        candidateRestoreSelection.browserCookies &&
+            !restoreBrowserProfile &&
+            !kIsWeb &&
+            (Platform.isAndroid || Platform.isWindows || Platform.isLinux);
+    final restoreSelection = cannotSafelyRestoreCookieSnapshot
+        ? _withoutBrowserCookies(candidateRestoreSelection)
+        : candidateRestoreSelection;
+    if (cannotSafelyRestoreCookieSnapshot) {
+      skippedLabels.add('内置浏览器数据');
+    } else if (restoreSelection.browserCookies && !restoreBrowserProfile) {
+      skippedLabels.add('内置浏览器网站存储');
+    }
     // Tasks is a single selectable category. When an archive makes that
     // category available, clear every known task payload before restoring the
     // files it contains so a partial legacy archive cannot merge stale local
@@ -2382,9 +2522,7 @@ class BackupService {
             ..._taskPayloadFiles
                 .map(_canonicalTaskPayloadName)
                 .whereType<String>(),
-            ..._taskStateArchiveFiles
-                .where(archiveEntries.contains)
-                .map((name) => name),
+            ..._taskStateArchiveFiles,
           }
         : <String>{};
 
@@ -2394,7 +2532,8 @@ class BackupService {
 
     Uint8List? browserCookiesData;
     if (restoreSelection.browserCookies) {
-      browserCookiesData = readFile('browser_cookies.json');
+      browserCookiesData =
+          readFile(_browserCookieArchivePath) ?? readFile('browser_cookies.json');
       if (browserCookiesData != null) {
         try {
           BrowserCookieService.validateCookieSnapshotForRestore(
@@ -2402,7 +2541,7 @@ class BackupService {
           );
         } catch (e) {
           throw BackupValidationException(
-            '无效的备份文件：browser_cookies.json 损坏 ($e)',
+            '无效的备份文件：内置浏览器 Cookies 数据损坏 ($e)',
           );
         }
       }
@@ -2457,6 +2596,8 @@ class BackupService {
       skippedLabels: skippedLabels,
       dataPartVersions: dataPartVersions,
       browserCookiesData: browserCookiesData,
+      browserProfilePlatform: browserProfilePlatform,
+      restoreBrowserProfile: restoreBrowserProfile,
     );
   }
 
@@ -2479,6 +2620,7 @@ class BackupService {
   static Set<String> _exportedPartIds(
     BackupSelection selection, {
     required bool hasBrowserCookieSnapshot,
+    required bool hasBrowserProfile,
     required bool hasAnkiDatabase,
   }) {
     final parts = selection.selectedPartIds;
@@ -2487,7 +2629,7 @@ class BackupService {
         ..remove(DataParts.tasks)
         ..remove(DataParts.anki)
         ..remove(DataParts.browserCookies);
-    } else if (!hasBrowserCookieSnapshot) {
+    } else if (!hasBrowserCookieSnapshot && !hasBrowserProfile) {
       parts.remove(DataParts.browserCookies);
     }
     if (!hasAnkiDatabase) parts.remove(DataParts.anki);
@@ -2531,6 +2673,20 @@ class BackupService {
         includeMediaFiles: requested.includeMediaFiles,
       );
 
+  static BackupSelection _withoutBrowserCookies(BackupSelection selection) =>
+      BackupSelection(
+        chatRecordsAndAttachments: selection.chatRecordsAndAttachments,
+        settings: selection.settings,
+        pictures: selection.pictures,
+        audio: selection.audio,
+        videos: selection.videos,
+        texts: selection.texts,
+        tasks: selection.tasks,
+        ankiData: selection.ankiData,
+        browserCookies: false,
+        includeMediaFiles: selection.includeMediaFiles,
+      );
+
   static bool _isSafeRelativeArchivePath(String path) {
     final pathSegments = path.split(RegExp(r'[/\\]'));
     return !pathSegments.any((part) => part == '..') &&
@@ -2547,11 +2703,16 @@ class BackupService {
   static void _validateArchiveEntryChecksums(
     Archive archive,
     Map<String, Uint8List> fileMap,
-    BackupSelection selection,
-  ) {
+    BackupSelection selection, {
+    bool includeBrowserProfile = false,
+  }) {
     for (final file in archive) {
       if (!file.isFile ||
-          !_shouldValidateArchiveEntryChecksum(file.name, selection)) {
+          !_shouldValidateArchiveEntryChecksum(
+            file.name,
+            selection,
+            includeBrowserProfile: includeBrowserProfile,
+          )) {
         continue;
       }
       final expected = file.crc32;
@@ -2568,10 +2729,15 @@ class BackupService {
 
   static void _validateZipEntryChecksumsBeforeRestore(
     _ZipStreamReader reader,
-    BackupSelection selection,
-  ) {
+    BackupSelection selection, {
+    bool includeBrowserProfile = false,
+  }) {
     for (final entry in reader.entries) {
-      if (!_shouldValidateArchiveEntryChecksum(entry.name, selection)) {
+      if (!_shouldValidateArchiveEntryChecksum(
+        entry.name,
+        selection,
+        includeBrowserProfile: includeBrowserProfile,
+      )) {
         continue;
       }
       try {
@@ -2584,8 +2750,9 @@ class BackupService {
 
   static bool _shouldValidateArchiveEntryChecksum(
     String rawKey,
-    BackupSelection selection,
-  ) {
+    BackupSelection selection, {
+    bool includeBrowserProfile = false,
+  }) {
     if (rawKey == 'manifest.json') return true;
     if (rawKey == 'stroom_manifest.json' ||
         rawKey == 'database/manifest_data.json') {
@@ -2601,7 +2768,10 @@ class BackupService {
       return selection.chatRecordsAndAttachments;
     }
     if (rawKey == 'settings.json') return selection.settings;
-    if (rawKey == 'browser_cookies.json') return selection.browserCookies;
+    if (rawKey == 'browser_cookies.json' ||
+        rawKey == _browserCookieArchivePath) {
+      return selection.browserCookies;
+    }
     if (rawKey.endsWith('/') || rawKey.endsWith(r'\')) return false;
 
     var key = rawKey;
@@ -2632,6 +2802,12 @@ class BackupService {
             selection.includeMediaFiles &&
             _isAudioRecordingDraft(relativePath) &&
             _isSafeRelativeArchivePath(relativePath);
+      }
+      if (dir == 'browser_data') {
+        return selection.browserCookies &&
+            includeBrowserProfile &&
+            _isSafeRelativeArchivePath(relativePath) &&
+            BrowserProfileService.shouldArchiveRelativePath(relativePath);
       }
       return _shouldRestoreDir(dir, selection) &&
           _isSafeRelativeArchivePath(relativePath);
@@ -2741,7 +2917,7 @@ class BackupService {
             'task_flows/executions.json',
           ].every(entries.contains) &&
           (!requireTaskAttachments ||
-              _hasAllPortableTaskFlowAttachments(
+              _hasAllPortableTaskFileReferences(
                 readFile: readFile,
                 archiveEntries: entries,
               )),
@@ -2751,7 +2927,12 @@ class BackupService {
               entries.contains('collection.anki2')),
       browserCookies: declared.browserCookies &&
           !kIsWeb &&
-          entries.contains('browser_cookies.json'),
+          (_hasBrowserCookieArchiveEntry(entries) ||
+              (BrowserProfileService.currentPlatformName != null &&
+                  BrowserProfileService.archiveContainsProfile(
+                    entries,
+                    BrowserProfileService.currentPlatformName!,
+                  ))),
     );
   }
 
@@ -2827,7 +3008,7 @@ class BackupService {
     return allPresent;
   }
 
-  static bool _hasAllPortableTaskFlowAttachments({
+  static bool _hasAllPortableTaskFileReferences({
     required Uint8List? Function(String name) readFile,
     required Set<String> archiveEntries,
   }) {
@@ -2842,8 +3023,9 @@ class BackupService {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
-        final isCatCatchOutput = relative.startsWith('catcatch/completed/');
-        if (!isTaskAttachment && !isCatCatchOutput) return;
+        final isCatCatchFile = relative.startsWith('catcatch/') &&
+            _isCatCatchMediaPath(relative.substring('catcatch/'.length));
+        if (!isTaskAttachment && !isCatCatchFile) return;
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
                 '${relative.substring('attachments/'.length)}'
@@ -2864,6 +3046,10 @@ class BackupService {
     }
 
     for (final name in const [
+      'catcatch/tasks.json',
+      'files/catcatch/tasks.json',
+      'tasks/catcatch_tasks.json',
+      'files/tasks/catcatch_tasks.json',
       'task_flows/flows.json',
       'files/task_flows/flows.json',
       'task_flows/executions.json',
@@ -3011,7 +3197,7 @@ class BackupService {
       tasks: !kIsWeb &&
           hasTaskData &&
           (!requireTaskAttachments ||
-              _hasAllPortableTaskFlowAttachments(
+              _hasAllPortableTaskFileReferences(
                 readFile: readFile,
                 archiveEntries: normalizedEntries,
               )),
@@ -3019,7 +3205,13 @@ class BackupService {
           (normalizedEntries.contains('anki/collection.anki2') ||
               normalizedEntries.contains('collection.anki2')),
       browserCookies:
-          !kIsWeb && normalizedEntries.contains('browser_cookies.json'),
+          !kIsWeb &&
+              (_hasBrowserCookieArchiveEntry(normalizedEntries) ||
+                  (BrowserProfileService.currentPlatformName != null &&
+                      BrowserProfileService.archiveContainsProfile(
+                        normalizedEntries,
+                        BrowserProfileService.currentPlatformName!,
+                      ))),
     );
   }
 
@@ -3150,10 +3342,12 @@ class BackupService {
 
   static Future<List<Map<String, dynamic>>?> _captureCookiesForRestoreRollback(
     BackupSelection selection,
-    Uint8List? cookieData,
-  ) async {
+    Uint8List? cookieData, {
+    bool deferLiveRestore = false,
+  }) async {
     if (!selection.browserCookies ||
         cookieData == null ||
+        deferLiveRestore ||
         kIsWeb ||
         WebFileStore.isTestMode) {
       return null;
@@ -3248,8 +3442,12 @@ class BackupService {
     BackupSelection selection,
     Uint8List? cookieData, {
     required List<Map<String, dynamic>>? previousCookies,
+    bool deferLiveRestore = false,
   }) async {
-    if (!selection.browserCookies || cookieData == null) return;
+    if (!selection.browserCookies ||
+        (cookieData == null && !deferLiveRestore)) {
+      return;
+    }
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
       // Retention may have persisted or cleared cookies while the other
@@ -3263,9 +3461,16 @@ class BackupService {
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
-        await _clearLiveCookiesForRestore(selection);
-        await writeBackupFile('', 'browser_cookies.json', cookieData);
-        if (!WebFileStore.isTestMode &&
+        await writeBackupFile(
+          '',
+          'browser_cookies.json',
+          cookieData ?? Uint8List.fromList(utf8.encode('[]')),
+        );
+        if (!deferLiveRestore) {
+          await _clearLiveCookiesForRestore(selection);
+        }
+        if (!deferLiveRestore &&
+            !WebFileStore.isTestMode &&
             !await BrowserCookieService.restoreCookiesFromFileChecked(
               force: true,
             )) {
@@ -3451,8 +3656,9 @@ class BackupService {
   static Future<bool> _restoreArchiveEntry(
     String rawKey,
     BackupSelection selection,
-    Future<void> Function(String subDir, String fileName) writeEntry,
-  ) async {
+    Future<void> Function(String subDir, String fileName) writeEntry, {
+    bool restoreBrowserProfile = false,
+  }) async {
     var key = rawKey;
 
     // ZIP 归档可能包含显式目录条目；它们不是数据文件，不能作为类别
@@ -3479,6 +3685,25 @@ class BackupService {
       // synthesis_tasks.json → synthesis/tasks.json
       if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
       if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
+    }
+
+    if (key.startsWith('browser_data/')) {
+      if (!selection.browserCookies || !restoreBrowserProfile) return false;
+      final relative = key.substring('browser_data/'.length);
+      final separator = relative.indexOf('/');
+      if (separator <= 0) return false;
+      final platform = relative.substring(0, separator);
+      final profilePath = relative.substring(separator + 1);
+      if (platform != BrowserProfileService.currentPlatformName ||
+          !_isSafeRelativeArchivePath(profilePath) ||
+          !BrowserProfileService.shouldArchiveRelativePath(profilePath)) {
+        return false;
+      }
+      await writeEntry(
+        '${BrowserProfileService.restoreStagingDirectoryName}/$platform',
+        profilePath,
+      );
+      return true;
     }
 
     // 兼容较早归档中存放在根目录的 Anki 数据库。
@@ -4020,6 +4245,7 @@ class BackupService {
   }
 
   /// 清除选中的数据类别（不涉及任何备份文件）。
+  /// 返回值表示当前平台是否支持清除完整的内置浏览器网站存储。
   ///
   /// 只清除 [selection] 中选中的类别，未选中的类别保持原样：
   /// - 聊天记录和附件：删除聊天相关 Preferences 键 + 附件文件（含孤儿）
@@ -4032,12 +4258,22 @@ class BackupService {
   ///
   /// 与选择性恢复的语义一致：选中的类别被清空，未选中的保持原样。
   /// 若有文件删除失败（如 Windows 上文件被占用），抛出异常，由调用方提示。
-  static Future<void> clearSelectedData(
+  static Future<bool> clearSelectedData(
     BackupSelection selection, {
     void Function(double progress)? onProgress,
   }) async {
+    var browserWebsiteDataCleared = true;
     onProgress?.call(0.0);
     await _yieldToEventLoop();
+    if (selection.browserCookies) {
+      try {
+        await BrowserProfileService.prepareForRestore();
+      } catch (e) {
+        throw DataManagementPreflightException(
+          '请先重启应用，完成上一次内置浏览器数据操作后再清除：$e',
+        );
+      }
+    }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
       selection,
     );
@@ -4111,7 +4347,13 @@ class BackupService {
       throw Exception('部分数据文件删除失败，请重启应用后重试');
     }
 
+    if (selection.browserCookies) {
+      browserWebsiteDataCleared =
+          await BrowserProfileService.scheduleClear();
+    }
+
     onProgress?.call(1.0);
+    return browserWebsiteDataCleared;
   }
 
   /// Returns attachment-store keys referenced by task-flow files that will
@@ -4657,10 +4899,14 @@ class _BackupPlan {
   /// 磁盘文件（[归档路径, 源文件路径]），写入时流式读取。
   final List<List<String>> diskFiles;
 
+  /// Temporary stable copy of the browser profile, deleted after ZIP creation.
+  final String? browserProfileSnapshotPath;
+
   const _BackupPlan({
     required this.jsonFiles,
     required this.memoryFiles,
     required this.diskFiles,
+    this.browserProfileSnapshotPath,
   });
 }
 
@@ -4886,10 +5132,18 @@ const Set<String> _restoreSkipFiles = {
   'chat_data.json',
   'settings.json',
   'browser_cookies.json',
+  _browserCookieArchivePath,
 };
+
+const String _browserCookieArchivePath = 'browser_data/cookies.json';
+
+bool _hasBrowserCookieArchiveEntry(Set<String> entries) =>
+    entries.contains(_browserCookieArchivePath) ||
+    entries.contains('browser_cookies.json');
 
 /// 恢复时识别的存储目录（兼容新旧两种路径格式）。
 const List<String> _restoreKnownDirs = [
+  'browser_data',
   'pictures',
   'tts_audio',
   'audio_drafts',
@@ -4912,6 +5166,8 @@ const List<String> _restoreKnownDirs = [
 /// v1 导入时 attachments 由 chatRecordsAndAttachments 控制。
 bool _shouldRestoreDir(String dir, BackupSelection selection) {
   switch (dir) {
+    case 'browser_data':
+      return selection.browserCookies;
     case 'pictures':
       return selection.pictures && selection.includeMediaFiles;
     case 'tts_audio':
@@ -4952,6 +5208,8 @@ class _RestoreMetadata {
   final List<String> skippedLabels;
   final Map<String, int>? dataPartVersions;
   final Uint8List? browserCookiesData;
+  final String? browserProfilePlatform;
+  final bool restoreBrowserProfile;
 
   const _RestoreMetadata({
     required this.isV1,
@@ -4960,6 +5218,8 @@ class _RestoreMetadata {
     required this.taskFilesToReplace,
     required this.skippedLabels,
     required this.dataPartVersions,
+    required this.browserProfilePlatform,
+    required this.restoreBrowserProfile,
     this.browserCookiesData,
     this.dbData,
     this.v1Prefs,
