@@ -551,10 +551,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             halfHeight,
             halfWidth / aspect,
           );
-          cameraDistance = dart_math.max(
-            4.0,
-            requiredScale * 1.1 / _orthographicDistanceScale,
-          ).toDouble();
+          cameraDistance = dart_math
+              .max(
+                4.0,
+                requiredScale * 1.1 / _orthographicDistanceScale,
+              )
+              .toDouble();
         } else {
           const fitMargin = 0.9;
           final tanHalfFov = dart_math.tan(dart_math.pi / 6);
@@ -567,19 +569,25 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             final forwardOffset = offset.dot(forward);
             final projectedRight = offset.dot(right).abs();
             final projectedUp = offset.dot(up).abs();
-            requiredDistance = dart_math.max(
-              requiredDistance,
-              projectedRight / (fitMargin * tanHalfFov * aspect) -
-                  forwardOffset,
-            ).toDouble();
-            requiredDistance = dart_math.max(
-              requiredDistance,
-              projectedUp / (fitMargin * tanHalfFov) - forwardOffset,
-            ).toDouble();
-            requiredDistance = dart_math.max(
-              requiredDistance,
-              0.1 - forwardOffset,
-            ).toDouble();
+            requiredDistance = dart_math
+                .max(
+                  requiredDistance,
+                  projectedRight / (fitMargin * tanHalfFov * aspect) -
+                      forwardOffset,
+                )
+                .toDouble();
+            requiredDistance = dart_math
+                .max(
+                  requiredDistance,
+                  projectedUp / (fitMargin * tanHalfFov) - forwardOffset,
+                )
+                .toDouble();
+            requiredDistance = dart_math
+                .max(
+                  requiredDistance,
+                  0.1 - forwardOffset,
+                )
+                .toDouble();
           }
           cameraDistance = requiredDistance;
         }
@@ -2303,12 +2311,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         case Object3DType.plane:
           final equation = _normalizedPlaneEquation(object);
           if (equation == null) return false;
-          final distance = (point - equation.origin)
-                  .dot(equation.normal)
-                  .abs() /
-              dart_math.sqrt(equation.normalSquared);
-          return distance <=
-              intersectionTolerance(point, equation.origin, 1.0);
+          final distance =
+              (point - equation.origin).dot(equation.normal).abs() /
+                  dart_math.sqrt(equation.normalSquared);
+          return distance <= intersectionTolerance(point, equation.origin, 1.0);
         case Object3DType.sphere:
           final radius = object.sphereRadius.abs();
           final radialDistance = point.distanceTo(object.sphereCenter);
@@ -2338,10 +2344,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             final c = object.vertices[ic];
             final normal = _normalizedTriangleNormal(a, b, c);
             if (normal == null) continue;
-            final scale = dart_math.max(
-              (b - a).magnitude,
-              dart_math.max((c - b).magnitude, (a - c).magnitude),
-            ).toDouble();
+            final scale = dart_math
+                .max(
+                  (b - a).magnitude,
+                  dart_math.max((c - b).magnitude, (a - c).magnitude),
+                )
+                .toDouble();
             if ((point - a).dot(normal).abs() <=
                     intersectionTolerance(point, a, scale) &&
                 _pointInTriangle3D(point, a, b, c)) {
@@ -2375,10 +2383,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
 
     List<Point3D> collinearLineIntersectionPoints(
-      ({Point3D origin, Vector3D direction, double minT, double maxT})
-          firstLine,
-      ({Point3D origin, Vector3D direction, double minT, double maxT})
-          secondLine,
+      ({
+        Point3D origin,
+        Vector3D direction,
+        double minT,
+        double maxT
+      }) firstLine,
+      ({
+        Point3D origin,
+        Vector3D direction,
+        double minT,
+        double maxT
+      }) secondLine,
     ) {
       final firstLengthSquared = firstLine.direction.dot(firstLine.direction);
       final secondLengthSquared =
@@ -2429,14 +2445,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           : secondParameterScale > 0
               ? double.infinity
               : double.negativeInfinity;
-      final overlapStart = dart_math.max(
-        firstLine.minT,
-        dart_math.min(mappedStart, mappedEnd),
-      ).toDouble();
-      final overlapEnd = dart_math.min(
-        firstLine.maxT,
-        dart_math.max(mappedStart, mappedEnd),
-      ).toDouble();
+      final overlapStart = dart_math
+          .max(
+            firstLine.minT,
+            dart_math.min(mappedStart, mappedEnd),
+          )
+          .toDouble();
+      final overlapEnd = dart_math
+          .min(
+            firstLine.maxT,
+            dart_math.max(mappedStart, mappedEnd),
+          )
+          .toDouble();
       if (!overlapStart.isFinite || !overlapEnd.isFinite) return const [];
 
       final firstOverlapPoint =
@@ -2895,14 +2915,18 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final endDeviation = (endOffset - firstAxis * endProjection).magnitude;
       if (startDeviation > tolerance || endDeviation > tolerance) return null;
 
-      final overlapStart = dart_math.max(
-        0,
-        dart_math.min(startProjection, endProjection),
-      ).toDouble();
-      final overlapEnd = dart_math.min(
-        firstLength,
-        dart_math.max(startProjection, endProjection),
-      ).toDouble();
+      final overlapStart = dart_math
+          .max(
+            0,
+            dart_math.min(startProjection, endProjection),
+          )
+          .toDouble();
+      final overlapEnd = dart_math
+          .min(
+            firstLength,
+            dart_math.max(startProjection, endProjection),
+          )
+          .toDouble();
       if (overlapEnd - overlapStart <= tolerance) return null;
       return (
         start: firstStart + firstAxis * overlapStart,
@@ -2921,12 +2945,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final fraction = (point - overlap.start).dot(direction) / lengthSquared;
       final fractionTolerance =
           overlap.tolerance / dart_math.sqrt(lengthSquared);
-      if (fraction < -fractionTolerance ||
-          fraction > 1 + fractionTolerance) {
+      if (fraction < -fractionTolerance || fraction > 1 + fractionTolerance) {
         return false;
       }
-      final closest = overlap.start +
-          direction * fraction.clamp(0.0, 1.0).toDouble();
+      final closest =
+          overlap.start + direction * fraction.clamp(0.0, 1.0).toDouble();
       return point.distanceTo(closest) <= overlap.tolerance;
     }
 
@@ -2968,8 +2991,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           : const [];
     }
     if (second.type == Object3DType.point) {
-      return !second.isTextAnnotation &&
-              pointLiesOnObject(second.point, first)
+      return !second.isTextAnnotation && pointLiesOnObject(second.point, first)
           ? [second.point]
           : const [];
     }
@@ -3049,8 +3071,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       return [
         for (final intersection in intersections)
           if (coincidentOverlaps.every(
-            (overlap) =>
-                !liesOnCoincidentOverlap(intersection.point, overlap),
+            (overlap) => !liesOnCoincidentOverlap(intersection.point, overlap),
           ))
             intersection.point,
       ];
@@ -3781,9 +3802,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   void _zoomBy(double factor, {Offset? focalPoint}) {
     if (!factor.isFinite || factor <= 0) return;
     final oldDistance = _cameraDistance;
-    final newDistance = (oldDistance / factor)
-        .clamp(0.25, double.maxFinite)
-        .toDouble();
+    final newDistance =
+        (oldDistance / factor).clamp(0.25, double.maxFinite).toDouble();
     if ((newDistance - oldDistance).abs() < 1e-10) return;
 
     var newTarget = _cameraTarget;
@@ -3896,9 +3916,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       final delta =
           _lastFocalPoint == null ? Offset.zero : focalPoint - _lastFocalPoint!;
       final startDistance = _initialScaleDistance ?? _cameraDistance;
-      final newDistance = (startDistance / scale)
-          .clamp(0.25, double.maxFinite)
-          .toDouble();
+      final newDistance =
+          (startDistance / scale).clamp(0.25, double.maxFinite).toDouble();
       final panned = Camera3D(
         target: _cameraTarget,
         distance: newDistance,
@@ -5485,9 +5504,7 @@ class MathCanvas3DPainter extends CustomPainter {
       }
     }
 
-    for (var fixed = -_planeGridRange;
-        fixed <= _planeGridRange;
-        fixed += 1.0) {
+    for (var fixed = -_planeGridRange; fixed <= _planeGridRange; fixed += 1.0) {
       if (c.abs() >= a.abs() && c.abs() >= b.abs()) {
         considerSegment(
           Point3D(-_planeGridRange, fixed,
@@ -5503,10 +5520,10 @@ class MathCanvas3DPainter extends CustomPainter {
         );
       } else if (b.abs() >= a.abs()) {
         considerSegment(
-          Point3D(-_planeGridRange,
-              (d + a * _planeGridRange - c * fixed) / b, fixed),
-          Point3D(_planeGridRange,
-              (d - a * _planeGridRange - c * fixed) / b, fixed),
+          Point3D(-_planeGridRange, (d + a * _planeGridRange - c * fixed) / b,
+              fixed),
+          Point3D(_planeGridRange, (d - a * _planeGridRange - c * fixed) / b,
+              fixed),
         );
         considerSegment(
           Point3D(fixed, (d - a * fixed + c * _planeGridRange) / b,
@@ -5516,10 +5533,10 @@ class MathCanvas3DPainter extends CustomPainter {
         );
       } else {
         considerSegment(
-          Point3D((d + b * _planeGridRange - c * fixed) / a,
-              -_planeGridRange, fixed),
-          Point3D((d - b * _planeGridRange - c * fixed) / a,
-              _planeGridRange, fixed),
+          Point3D((d + b * _planeGridRange - c * fixed) / a, -_planeGridRange,
+              fixed),
+          Point3D((d - b * _planeGridRange - c * fixed) / a, _planeGridRange,
+              fixed),
         );
         considerSegment(
           Point3D((d - b * fixed + c * _planeGridRange) / a, fixed,

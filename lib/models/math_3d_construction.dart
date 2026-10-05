@@ -424,7 +424,9 @@ class ConstructionState {
     final maxStep = totalSteps - 1;
     _stepIndex = _points.length < totalSteps ? _points.length : maxStep;
 
-    final extendedAction = _addExtendedTool();
+    final extendedAction = _addExtendedTool(
+      closeToFirstPoint: closeToFirstPoint,
+    );
     if (extendedAction != null) return extendedAction;
 
     // Determine if we have enough points based on tool type
@@ -646,7 +648,7 @@ class ConstructionState {
     }
   }
 
-  ConstructionAction? _addExtendedTool() {
+  ConstructionAction? _addExtendedTool({required bool closeToFirstPoint}) {
     final count = _points.length;
 
     ConstructionAction finishWhenReady(
@@ -790,7 +792,8 @@ class ConstructionState {
         );
       case ConstructionTool.parallelPlane:
         return finishWhenReady(4, () {
-          final normal = _triangleUnitNormal(_points[0], _points[1], _points[2]);
+          final normal =
+              _triangleUnitNormal(_points[0], _points[1], _points[2]);
           return _createPlaneFromNormal(_points[3], normal);
         });
       case ConstructionTool.perpendicularPlane:
@@ -2464,7 +2467,8 @@ class ConstructionState {
         previousScaledRadius = null;
         continue;
       }
-      final startsNewBranch = samples.isNotEmpty && previousScaledRadius == null;
+      final startsNewBranch =
+          samples.isNotEmpty && previousScaledRadius == null;
       final radius = scaledRadius * coordinateScale;
       if (!radius.isFinite) {
         previousScaledRadius = null;
