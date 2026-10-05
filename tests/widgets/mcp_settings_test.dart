@@ -414,7 +414,10 @@ void main() {
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
-        await tester.enterText(_descriptionFieldFinder(), 'Saved description');
+        await tester.enterText(
+          _descriptionFieldFinder(),
+          '  Saved description  ',
+        );
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
 
@@ -423,6 +426,7 @@ void main() {
         expect(
           _readOnlyDescriptionValueFinder('Saved description'),
           findsOneWidget,
+          reason: 'the read-only view must display the persisted trimmed value',
         );
 
         final preferences = await SharedPreferences.getInstance();
@@ -441,6 +445,13 @@ void main() {
                 );
         expect(
           (model['typeConfig'] as Map<String, dynamic>)['description'],
+          'Saved description',
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_descriptionFieldFinder()).controller!.text,
           'Saved description',
         );
       },
