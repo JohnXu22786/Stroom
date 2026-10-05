@@ -79,8 +79,10 @@ class _McpServerConfigDialogState
     super.initState();
     if (_isExistingConfig) {
       _loadExistingConfig();
+      _isEditMode = false;
+    } else {
+      _isEditMode = true;
     }
-    _isEditMode = true;
   }
 
   void _loadExistingConfig() {
@@ -134,13 +136,101 @@ class _McpServerConfigDialogState
   /// Placeholders ('Bearer ' 前缀等) are treated as unset so the field is
   /// never auto-filled with a fake key.
   String _extractApiKeyFromEnvOrHeaders(McpServerConfig config) {
-    final typeConfig = <String, dynamic>{
-      if (config.apiKey != null && config.apiKey!.isNotEmpty)
-        'apiKey': config.apiKey!,
-      if (config.env.isNotEmpty) 'env': config.env,
-      if (config.headers.isNotEmpty) 'headers': config.headers,
+    final explicitApiKey = McpServerConfig.extractApiKeyFromTypeConfig({
+      if (config.apiKey != null) 'apiKey': config.apiKey,
+    });
+    if (explicitApiKey.isNotEmpty) return explicitApiKey;
+
+    for (final entry in config.headers.entries) {
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
+      final apiKey = _extractApiKeyFromFieldValue(entry.value);
+      if (apiKey.isNotEmpty) return apiKey;
+    }
+
+    for (final entry in config.env.entries) {
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
+      final apiKey = _extractApiKeyFromFieldValue(entry.value);
+      if (apiKey.isNotEmpty) return apiKey;
+    }
+    return '';
+  }
+
+  String _extractApiKeyFromFieldValue(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty || trimmedValue.toLowerCase() == 'bearer') {
+      return '';
+    }
+    final bearerMatch =
+        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    if (bearerMatch == null) return trimmedValue;
+
+    final key = trimmedValue.substring(bearerMatch.end).trim();
+    return key.toLowerCase() == 'bearer' ? '' : key;
+  }
+
+  bool _isApiKeySourceFieldName(String name) {
+    final separatedName = name.replaceAllMapped(
+      RegExp(r'([a-z0-9])([A-Z])'),
+      (match) => '${match[1]} ${match[2]}',
+    );
+    final nameParts = separatedName
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((part) => part.isNotEmpty);
+    final hasToken = nameParts.contains('token');
+    const unrelatedTokenNameParts = {
+      'refresh',
+      'session',
+      'csrf',
+      'xsrf',
+      'id',
     };
-    return McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+    // Custom MCPs often use provider-specific names such as OPENAI_TOKEN.
+    final isApiToken =
+        hasToken && !nameParts.any(unrelatedTokenNameParts.contains);
+
+    return nameParts.contains('authorization') ||
+        nameParts.contains('apikey') ||
+        (nameParts.contains('api') &&
+            (nameParts.contains('key') || nameParts.contains('secret'))) ||
+        isApiToken;
+  }
+
+  String _apiKeyValueForSource(
+      String fieldName, String originalValue, String newApiKey) {
+    final trimmedValue = originalValue.trim();
+    final bearerMatch =
+        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    if (bearerMatch != null) {
+      return '${trimmedValue.substring(0, bearerMatch.end)}$newApiKey';
+    }
+
+    if (fieldName.toLowerCase() == 'authorization') {
+      return 'Bearer $newApiKey';
+    }
+    return newApiKey;
+  }
+
+  bool _isApiKeyPlaceholder(String fieldName, String value) {
+    final trimmedValue = value.trim();
+    return trimmedValue.isEmpty ||
+        trimmedValue.toLowerCase() == 'bearer' ||
+        trimmedValue.toLowerCase() == fieldName.trim().toLowerCase();
+  }
+
+  void _syncExistingApiKey(Map<String, String> values, String? newApiKey) {
+    if (_originalApiKey.isEmpty || newApiKey == _originalApiKey) return;
+
+    for (final entry in values.entries.toList()) {
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
+
+      if (newApiKey == null) {
+        values.remove(entry.key);
+      } else {
+        values[entry.key] =
+            _apiKeyValueForSource(entry.key, entry.value, newApiKey);
+      }
+    }
   }
 
   @override
@@ -176,11 +266,41 @@ class _McpServerConfigDialogState
     setState(() {
       _isEditMode = true;
       _hasUnsavedChanges = false;
+      _obscureApiKey = true;
     });
   }
 
   void _discardChanges() {
-    Navigator.maybePop(context);
+    _nameController.text = _originalName;
+    _descriptionController.text = _originalDescription;
+    _transportType = _originalTransport;
+    _commandController.text = _originalCommand;
+    _argsController.text = _originalArgs;
+    _urlController.text = _originalUrl;
+    _apiKeyController.text = _originalApiKey;
+    setState(() {
+      _isEditMode = false;
+      _hasUnsavedChanges = false;
+      _obscureApiKey = true;
+    });
+    if (!_isExistingConfig) {
+      Navigator.pop(context);
+    }
+  }
+
+  void _exitEditMode() {
+    _originalName = _nameController.text;
+    _originalDescription = _descriptionController.text;
+    _originalTransport = _transportType;
+    _originalCommand = _commandController.text;
+    _originalArgs = _argsController.text;
+    _originalUrl = _urlController.text;
+    _originalApiKey = _apiKeyController.text;
+    setState(() {
+      _isEditMode = false;
+      _hasUnsavedChanges = false;
+      _obscureApiKey = true;
+    });
   }
 
   Future<void> _save() async {
@@ -245,11 +365,13 @@ class _McpServerConfigDialogState
           }
         }
       }
+      _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey: replace empty placeholder values in env
       if (effectiveApiKey != null) {
-        for (final key in effectiveEnv.keys.toList()) {
-          if (effectiveEnv[key]!.isEmpty) {
-            effectiveEnv[key] = effectiveApiKey;
+        for (final entry in effectiveEnv.entries.toList()) {
+          if (_isApiKeySourceFieldName(entry.key) &&
+              _isApiKeyPlaceholder(entry.key, entry.value)) {
+            effectiveEnv[entry.key] = effectiveApiKey;
           }
         }
       }
@@ -287,21 +409,15 @@ class _McpServerConfigDialogState
           }
         }
       }
+      _syncExistingApiKey(effectiveHeaders, effectiveApiKey);
+      _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey into headers: replace placeholder values
       if (effectiveApiKey != null) {
-        for (final key in effectiveHeaders.keys.toList()) {
-          final val = effectiveHeaders[key]!;
-          // Match empty, key-only (e.g. "x-api-key "), or prefix-only (e.g. "Bearer ")
-          final isEmptyOrPlaceholder = val.isEmpty ||
-              val == '$key ' ||
-              val.endsWith(' ') ||
-              !RegExp(r'\S').hasMatch(val.trim());
-          if (isEmptyOrPlaceholder) {
-            if (key.toLowerCase() == 'authorization') {
-              effectiveHeaders[key] = 'Bearer $effectiveApiKey';
-            } else {
-              effectiveHeaders[key] = effectiveApiKey;
-            }
+        for (final entry in effectiveHeaders.entries.toList()) {
+          if (_isApiKeySourceFieldName(entry.key) &&
+              _isApiKeyPlaceholder(entry.key, entry.value)) {
+            effectiveHeaders[entry.key] =
+                _apiKeyValueForSource(entry.key, entry.value, effectiveApiKey);
           }
         }
       }
@@ -321,6 +437,7 @@ class _McpServerConfigDialogState
     if (description.isNotEmpty) {
       typeConfigMap['description'] = description;
     }
+    final savedApiKey = _extractApiKeyFromEnvOrHeaders(serverConfig);
 
     // Store in ProviderConfigItem with typeConfig in models[0]
     final modelConfig = ModelConfig(
@@ -373,7 +490,22 @@ class _McpServerConfigDialogState
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    Navigator.pop(context, true);
+    if (_isExistingConfig) {
+      _nameController.text = name;
+      _descriptionController.text = description;
+      _commandController.text = _transportType == McpTransportType.stdio
+          ? _commandController.text.trim()
+          : '';
+      _argsController.text =
+          _transportType == McpTransportType.stdio ? args.join(', ') : '';
+      _urlController.text = _transportType == McpTransportType.sse
+          ? _urlController.text.trim()
+          : '';
+      _apiKeyController.text = savedApiKey;
+      _exitEditMode();
+    } else {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
@@ -440,6 +572,7 @@ class _McpServerConfigDialogState
                 if (_isEditMode && !_isVendor)
                   TextField(
                     controller: _nameController,
+                    enabled: !_isSaving,
                     decoration: const InputDecoration(
                       hintText: '输入 MCP 服务器名称',
                       border: OutlineInputBorder(),
@@ -464,6 +597,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _commandController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText: '例如: npx',
                         border: OutlineInputBorder(),
@@ -484,6 +618,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _argsController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText:
                             '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
@@ -505,6 +640,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _urlController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText: '例如: http://localhost:3001/sse',
                         border: OutlineInputBorder(),
@@ -526,45 +662,67 @@ class _McpServerConfigDialogState
                 // API Key (for built-in and regular configs)
                 const SectionHeader(title: 'API 密钥'),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _apiKeyController,
-                  decoration: InputDecoration(
-                    hintText: '输入 API Key（可选）',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscureApiKey
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                if (_isEditMode)
+                  TextField(
+                    controller: _apiKeyController,
+                    enabled: !_isSaving,
+                    decoration: InputDecoration(
+                      hintText: '输入 API Key（可选）',
+                      border: const OutlineInputBorder(),
+                      prefixIcon:
+                          const Icon(Icons.vpn_key, color: Colors.amber),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureApiKey
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                        onPressed: _isSaving
+                            ? null
+                            : () => setState(
+                                  () => _obscureApiKey = !_obscureApiKey,
+                                ),
                       ),
-                      tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
-                      onPressed: () =>
-                          setState(() => _obscureApiKey = !_obscureApiKey),
                     ),
+                    obscureText: _obscureApiKey,
+                    onChanged: (_) => _checkUnsavedChanges(),
+                  )
+                else
+                  ReadOnlyField(
+                    icon: Icons.vpn_key,
+                    iconColor: Colors.amber,
+                    label: 'API 密钥',
+                    value: _apiKeyController.text.isNotEmpty ? '••••••••' : '',
                   ),
-                  obscureText: _obscureApiKey,
-                  onChanged: (_) => _checkUnsavedChanges(),
-                ),
 
                 const SizedBox(height: 16),
 
                 // Description
                 const SectionHeader(title: '描述'),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    hintText: '输入此 MCP 服务器的描述信息（可选）',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.description, color: Colors.teal),
+                if (_isEditMode && !_isVendor)
+                  TextField(
+                    controller: _descriptionController,
+                    enabled: !_isSaving,
+                    decoration: const InputDecoration(
+                      hintText: '输入此 MCP 服务器的描述信息（可选）',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.description, color: Colors.teal),
+                    ),
+                    maxLines: 2,
+                    minLines: 1,
+                    onChanged: (_) => _checkUnsavedChanges(),
+                  )
+                else
+                  ReadOnlyField(
+                    icon: Icons.description,
+                    iconColor: Colors.teal,
+                    label: '描述',
+                    value: _descriptionController.text,
                   ),
-                  maxLines: 2,
-                  minLines: 1,
-                  onChanged: (_) => _checkUnsavedChanges(),
-                ),
 
                 const SizedBox(height: 16),
 
@@ -630,12 +788,14 @@ class _McpServerConfigDialogState
     final selected = _transportType == type;
     final cs = Theme.of(context).colorScheme;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _transportType = type;
-          _checkUnsavedChanges();
-        });
-      },
+      onTap: _isSaving
+          ? null
+          : () {
+              setState(() {
+                _transportType = type;
+                _checkUnsavedChanges();
+              });
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
