@@ -411,6 +411,7 @@ void main() {
         });
         late Future<bool> Function(Iterable<String>) remove;
         late void Function() add;
+        BackgroundTaskNotifier? backgroundNotifier;
         final speech = Completer<Uint8List>();
         final config = ProviderConfigItem(
             providerName: 'test',
@@ -420,6 +421,7 @@ void main() {
         if (kind == 'background') {
           final notifier =
               container.read(backgroundTasksProvider.notifier) as _Backgrounds;
+          backgroundNotifier = notifier;
           notifier.load([
             BackgroundTask(
                 id: 'old',
@@ -489,6 +491,7 @@ void main() {
           release.complete();
           expect(await removal.timeout(const Duration(seconds: 5)), !fails);
           await _expectSavedIds(file, fails ? ['new', 'old'] : ['new']);
+          await backgroundNotifier?.pendingPersistence;
         }, createDirectory: (path) {
           final delegate = outerZone.run(() => Directory(path));
           return p.normalize(path) == p.normalize(parent)

@@ -566,13 +566,13 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   Future<bool> persist() {
     final removalBarrier = _removalBarrier;
     if (removalBarrier != null) {
-      return removalBarrier.future.then((_) => persist());
+      return _persistAfterBarrier(removalBarrier.future);
     }
     _persistTimer?.cancel();
     _persistTimer = null;
     final barrier = _registrationBarrier;
     if (barrier != null && Zone.current[_registrationWriteZone] != true) {
-      return barrier.future.then((_) => persist());
+      return _persistAfterBarrier(barrier.future);
     }
     if (!mounted) {
       final snapshot = _disposedSnapshot;
@@ -583,6 +583,19 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       return _disposedPersistence ??= super.persistSnapshot(snapshot);
     }
     return super.persist();
+  }
+
+  Future<bool> _persistAfterBarrier(Future<void> barrier) {
+    if (!mounted) {
+      return _disposedPersistence ??= persistSnapshotAfter(
+        barrier,
+        () => _disposedSnapshot ?? const <TaskFlowExecution>[],
+      );
+    }
+    return persistSnapshotAfter(barrier, () {
+      if (mounted) return state;
+      return _disposedSnapshot ?? const <TaskFlowExecution>[];
+    });
   }
 
   Future<bool> restoreFromPersistence() async {
