@@ -406,6 +406,7 @@ class _McpServerConfigDialogState
     setState(() => _isSaving = false);
 
     if (_isExistingConfig) {
+      _apiKeyController.text = effectiveApiKey ?? _originalApiKey;
       _exitEditMode();
     } else {
       Navigator.pop(context, true);

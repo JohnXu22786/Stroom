@@ -222,6 +222,28 @@ void main() {
         isFalse,
         reason: 'the API key must be viewable via the visibility toggle',
       );
+
+      await tester.enterText(_apiKeyFieldFinder(), '   ');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      expect(_readOnlyApiKeyFinder(), findsOneWidget);
+      expect(
+        find.descendant(
+          of: _readOnlyApiKeyFinder(),
+          matching: find.text('（未设置）'),
+        ),
+        findsOneWidget,
+        reason: 'whitespace-only input must not appear as a saved key',
+      );
+      expect(find.text('••••••••'), findsNothing);
+
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+        isEmpty,
+        reason: 'the editor must match the persisted empty placeholder',
+      );
     });
 
     testWidgets(
