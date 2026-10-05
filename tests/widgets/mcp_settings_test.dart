@@ -286,6 +286,34 @@ void main() {
           tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
           isTrue,
         );
+
+        await tester.tap(find.byTooltip('显示密钥'));
+        await tester.pump();
+        await tester.tap(find.text('放弃'));
+        await tester.pumpAndSettle();
+        expect(find.text('sk-123'), findsNothing);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+          isTrue,
+          reason: 'the key must be masked again after discarding edit mode',
+        );
+
+        await tester.tap(find.byTooltip('显示密钥'));
+        await tester.pump();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+        expect(find.text('sk-123'), findsNothing);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
+          isTrue,
+          reason: 'the key must be masked again after saving edit mode',
+        );
       },
     );
 

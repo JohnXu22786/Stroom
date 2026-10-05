@@ -178,6 +178,7 @@ class _McpServerConfigDialogState
     setState(() {
       _isEditMode = true;
       _hasUnsavedChanges = false;
+      _obscureApiKey = true;
     });
   }
 
@@ -192,6 +193,7 @@ class _McpServerConfigDialogState
     setState(() {
       _isEditMode = false;
       _hasUnsavedChanges = false;
+      _obscureApiKey = true;
     });
     if (!_isExistingConfig) {
       Navigator.pop(context);
@@ -209,6 +211,7 @@ class _McpServerConfigDialogState
     setState(() {
       _isEditMode = false;
       _hasUnsavedChanges = false;
+      _obscureApiKey = true;
     });
   }
 
