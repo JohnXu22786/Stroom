@@ -133,6 +133,14 @@ void main() {
     );
   }
 
+  Future<void> revealHttpSearchCard(WidgetTester tester) async {
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+  }
+
   /// The card-level Container for config [index]. The page emits stable
   /// keys (`ValueKey('config_${entryId}_$i')`) on each _McpConfigCard; the
   /// card's outer Container (the one with the rounded BoxDecoration) is its
@@ -190,9 +198,9 @@ void main() {
           reason: 'all cards must use the same border width');
     }
 
-    // Icon boxes: all use the same primaryContainer tint regardless of
-    // vendor/transport.
-    final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
+    // MCP icon boxes use the same theme-aware primary container color across
+    // vendor and transport types.
+    final expectedIconBox = cs.primaryContainer;
     for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
@@ -220,7 +228,7 @@ void main() {
           reason: 'all cards must use the same border width');
     }
 
-    final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
+    final expectedIconBox = cs.primaryContainer;
     for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
@@ -266,12 +274,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
 
+    // The group header is in a later sliver and is not built until its first
+    // config enters the viewport.
+    await scrollToCard(tester, 2, delta: 200);
     final otherGroupTitle = find.text('其他 MCP 服务').first;
-    await tester.scrollUntilVisible(
-      otherGroupTitle,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
     final groupCard = find
         .ancestor(of: otherGroupTitle, matching: find.byType(Container))
         .first;
@@ -298,23 +304,67 @@ void main() {
     expect(added.groupId, builtinMcpServicesGroupId);
   });
 
+  testWidgets('editing an MCP config preserves its group and saved test',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final config = state.entries.single.configs[2];
+    const savedTest = {
+      'type': 'object',
+      'properties': {
+        'query': {'type': 'string'},
+      },
+    };
+    config.groupId = builtinMcpServicesGroupId;
+    config.models[0].typeConfig['connectivityTest'] = savedTest;
+    final configId = config.id;
+    await pumpPage(tester, Brightness.light, state: state);
+
+    final configCard = find.byKey(const ValueKey('config_test_mcp_2'));
+    await tester.scrollUntilVisible(
+      configCard,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(configCard);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final updated = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider).entries.single.configs.singleWhere(
+          (item) => item.providerName == 'My Files',
+        );
+    expect(updated.id, configId);
+    expect(updated.groupId, builtinMcpServicesGroupId);
+    expect(updated.models[0].typeConfig['connectivityTest'], savedTest);
+  });
+
   testWidgets('MCP master switch renders and toggles the entry enabled flag',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
 
-    // 总开关卡片渲染在配置列表顶部，值为 entry.enabled（默认 true）
-    final switchFinder = find.widgetWithText(SwitchListTile, 'MCP 总开关');
-    expect(switchFinder, findsOneWidget);
-    final switchTile = tester.widget<SwitchListTile>(switchFinder);
-    expect(switchTile.value, isTrue);
-
-    // 点击后写入 enabled=false，provider 状态同步更新
-    await tester.tap(find.descendant(
-      of: switchFinder,
+    // 总开关卡片渲染在配置列表顶部，状态徽标和开关对应 entry.enabled。
+    final masterCard = find
+        .ancestor(
+          of: find.text('MCP 服务器'),
+          matching: find.byType(Container),
+        )
+        .first;
+    final switchFinder = find.descendant(
+      of: masterCard,
       matching: find.byType(Switch),
-    ));
-    await tester.pump();
+    );
+    expect(switchFinder, findsOneWidget);
+    expect(find.descendant(of: masterCard, matching: find.text('已启用')),
+        findsOneWidget);
+    expect(tester.widget<Switch>(switchFinder).value, isTrue);
+
+    // 点击后写入 enabled=false，provider 状态同步更新。
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
 
     final container = tester.element(switchFinder);
     final entries = ProviderScope.containerOf(container).read(
@@ -342,6 +392,7 @@ void main() {
       find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
       findsOneWidget,
     );
+    await revealHttpSearchCard(tester);
     await tester.tap(httpSearchCard);
     await tester.pumpAndSettle();
 
@@ -405,6 +456,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '');
@@ -450,6 +502,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'replacement-key');
@@ -490,6 +543,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'http:///search');

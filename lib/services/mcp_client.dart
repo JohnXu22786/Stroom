@@ -871,6 +871,25 @@ class McpClient {
     }
   }
 
+  /// List tools while preserving transport errors for explicit connectivity
+  /// probes. [listTools] keeps its historical empty-list-on-error behavior for
+  /// chat initialization; a settings-page test needs to distinguish that from
+  /// a server which is reachable and exposes no tools.
+  Future<List<McpTool>> discoverTools({
+    Map<String, dynamic> params = const <String, dynamic>{},
+  }) async {
+    if (_state != _McpClientState.connected) {
+      final connected = await connect();
+      if (!connected) {
+        throw StateError('MCP server "${config.name}" could not connect');
+      }
+    }
+
+    final result = await _sendRequest('tools/list', params);
+    _cachedTools = JsonRpcUtils.extractTools(result);
+    return List.from(_cachedTools);
+  }
+
   /// 调用 MCP 服务器上的工具
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
     await AppLogService.info('McpClient', '调用 MCP 工具: $name (${config.name})');

@@ -472,12 +472,16 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   }
 
   /// 更新条目
-  Future<void> update(String id, ProviderEntry updated) async {
+  Future<void> update(
+    String id,
+    ProviderEntry updated, {
+    bool requirePersistence = false,
+  }) async {
     state = ProviderEntriesState(
       entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
       mcpGroups: state.mcpGroups,
     );
-    await _persist();
+    await _persist(rethrowOnFailure: requirePersistence);
   }
 
   /// 删除条目

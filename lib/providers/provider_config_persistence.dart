@@ -466,6 +466,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
               _applyApiKeyToTypeConfig(
                   updatedConfig.models[0].typeConfig, oldApiKey);
             }
+            final connectivityTest = oldTypeConfig['connectivityTest'];
+            if (connectivityTest is Map) {
+              updatedConfig.models[0].typeConfig['connectivityTest'] =
+                  Map<String, dynamic>.from(connectivityTest);
+            }
             mcpEntry.configs[idx] = updatedConfig;
             changed = true;
           }
@@ -563,17 +568,21 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     }
   }
 
-  Future<void> _persist() async {
+  Future<void> _persist({bool rethrowOnFailure = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
-      await prefs.setString('provider_entries', json);
-      await prefs.setString(
+      final entriesSaved = await prefs.setString('provider_entries', json);
+      final groupsSaved = await prefs.setString(
         'mcp_provider_groups',
         jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
       );
+      if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
+        throw StateError('Failed to persist provider configuration.');
+      }
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
+      if (rethrowOnFailure) rethrow;
     }
   }
 }

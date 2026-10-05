@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
 import '../services/todo_tool_service.dart';
 import '../services/web_search_service.dart';
+import 'connectivity_test_dialog.dart';
 import 'provider_config_detail_page.dart';
 import 'mcp_server_config_page.dart';
 import 'provider_config_tool_dialogs.dart';
@@ -156,6 +158,99 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     );
   }
 
+  Future<void> _testProviderConnectivity(int configIndex) async {
+    final entry = _entry;
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
+
+    final config = entry.configs[configIndex];
+    final typeConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : config.typeConfig;
+    final isHttpTool = typeConfig['isHttpTool'] == true;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ConnectivityTestDialog(
+        title: config.providerName,
+        initialContent: ConnectivityTestService.configuredTestContent(
+          config,
+          isHttpTool: isHttpTool,
+        ),
+        note: _connectivityTestNote,
+        onSave: (content) =>
+            _saveProviderConnectivityTest(configIndex, content),
+        onRun: (content) => ConnectivityTestService.runProviderTest(
+          config: config,
+          testContent: content,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveProviderConnectivityTest(
+    int configIndex,
+    Map<String, dynamic> content,
+  ) async {
+    final entry = _entry;
+    if (entry == null ||
+        configIndex < 0 ||
+        configIndex >= entry.configs.length) {
+      return;
+    }
+
+    final configs = entry.configs.map((config) => config.copy()).toList();
+    final config = configs[configIndex];
+    if (config.models.isNotEmpty) {
+      final model = config.models[0];
+      model.typeConfig = Map<String, dynamic>.from(model.typeConfig)
+        ..['connectivityTest'] = content;
+    } else {
+      config.typeConfig = Map<String, dynamic>.from(config.typeConfig)
+        ..['connectivityTest'] = content;
+    }
+    await ref.read(providerEntriesProvider.notifier).update(
+          entry.id,
+          ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            configs: configs,
+            enabled: entry.enabled,
+          ),
+          requirePersistence: true,
+        );
+  }
+
+  Future<void> _testBuiltinTool(ToolDefinition definition) async {
+    final initialContent = await ConnectivityTestService.loadBuiltinTestContent(
+      definition.name,
+    );
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ConnectivityTestDialog(
+        title: definition.name,
+        initialContent: initialContent,
+        note: _connectivityTestNote,
+        onSave: (content) => ConnectivityTestService.saveBuiltinTestContent(
+          definition.name,
+          content,
+        ),
+        onRun: (content) => ConnectivityTestService.runBuiltinTest(
+          toolName: definition.name,
+          testContent: content,
+        ),
+      ),
+    );
+  }
+
+  static const _connectivityTestNote =
+      '测试会向对应服务发出真实请求。MCP 仅调用只读 tools/list，HTTP/网页搜索会执行一次查询；'
+      'Todo 默认读取清单；为保护当前数据，todos 参数必须省略或设置为 null。';
+
   Future<void> _reorderConfigs(int oldIndex, int newIndex) async {
     final entry = _entry;
     if (entry == null) return;
@@ -251,8 +346,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     }
   }
 
-  /// 切换 MCP 总开关。关闭后 MCP 服务器和内置搜索工具不再提供给
-  /// 助手页面与对话页。
+  /// 切换 MCP 总开关。关闭后 MCP 工具不再发布，助手页面与对话页
+  /// 都不再显示这些工具。
   Future<void> _toggleMcpEnabled(bool value) async {
     final entry = _entry;
     if (entry == null ||
@@ -469,6 +564,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       // The full entry index stays unique across groups and preserves the
       // stable key used by existing card finders.
       key: ValueKey('config_${widget.entryId}_$fullIndex'),
+      isMcp: true,
       isVendor: isVendor,
       integrationType: integrationType,
       providerName: providerName,
@@ -483,6 +579,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       ),
       onSettings: null,
       onDelete: isVendor ? null : () => _deleteConfig(fullIndex),
+      onTest: () => _testProviderConnectivity(fullIndex),
       onMove: isVendor ? null : () => _moveMcpConfig(config),
       onTap: () => _editConfig(fullIndex),
     );
@@ -508,42 +605,52 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       body: CustomScrollView(
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                Row(
-                  children: [
-                    Text(
-                      '供应商组别',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _McpPageIntro(colorScheme: Theme.of(context).colorScheme),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _McpMasterSwitchCard(
+                    enabled: entry.enabled,
+                    onChanged: _toggleMcpEnabled,
+                  ),
+                  const SizedBox(height: 24),
+                  _McpSectionHeader(
+                    title: '服务配置',
+                    description: '按组管理远程连接、本地 stdio 与 HTTP 搜索',
+                    count: entry.configs.length,
+                    action: FilledButton.tonalIcon(
+                      onPressed: _createMcpGroup,
                       icon: const Icon(
                         Icons.create_new_folder_outlined,
                         size: 18,
                       ),
                       label: const Text('新建组别'),
-                      onPressed: _createMcpGroup,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _McpMasterSwitchCard(
-                  enabled: entry.enabled,
-                  onChanged: _toggleMcpEnabled,
-                ),
-              ]),
+                  ),
+                ],
+              ),
             ),
           ),
+          if (entry.configs.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: _McpEmptyState(
+                  onAdd: () => _addConfig(groupId: builtinMcpServicesGroupId),
+                ),
+              ),
+            ),
           for (final group in groups) ...[
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
                   itemCount: (configsByGroup[group.id]?.length ?? 0) +
@@ -559,7 +666,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             ),
             if (group.id == builtinSearchMcpGroupId)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverToBoxAdapter(
                   child: _buildBuiltinToolCard(webSearchDefinition),
                 ),
@@ -568,7 +675,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               if (group.id != builtinSearchMcpGroupId)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                     child: Text(
                       '此组暂无配置，点击“添加”加入内容。',
                       style: TextStyle(
@@ -580,7 +687,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 ),
             if (configsByGroup[group.id]?.isNotEmpty ?? false)
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverReorderableList(
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
@@ -604,26 +711,27 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
               ),
           ],
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                Text(
-                  '内置工具',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final definition in _builtinToolDefinitions.where(
-                  (definition) => definition.name != 'web_search',
-                ))
-                  _buildBuiltinToolCard(definition),
-              ]),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _McpSectionHeader(
+                title: '内置工具',
+                description: 'Stroom 提供的本地工具接口；网页搜索归入对应服务组。',
+                count: _builtinToolDefinitions.length - 1,
+              ),
             ),
           ),
-          const SliverPadding(padding: EdgeInsets.all(16)),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final definition = _builtinToolDefinitions
+                    .where((definition) => definition.name != 'web_search')
+                    .elementAt(index);
+                return _buildBuiltinToolCard(definition);
+              }, childCount: _builtinToolDefinitions.length - 1),
+            ),
+          ),
+          const SliverPadding(padding: EdgeInsets.all(20)),
         ],
       ),
     );
@@ -632,6 +740,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
   Widget _buildBuiltinToolCard(ToolDefinition definition) {
     return _McpConfigCard(
       key: ValueKey('builtin_tool_${definition.name}'),
+      isMcp: true,
       isVendor: false,
       integrationType: '内置工具',
       providerName: definition.name,
@@ -645,6 +754,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       settingsTooltip: '查看接口',
       onSettings: () => _showBuiltinToolDetails(definition),
       onDelete: null,
+      onTest: () => _testBuiltinTool(definition),
       onTap: () => _showBuiltinToolDetails(definition),
     );
   }
@@ -661,11 +771,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         body: const Center(child: Text('供应商未找到')),
       );
     }
-    final isBuiltinWebSearch = entry.id == kBuiltinWebSearchEntryId;
-
     if (entry.type == 'mcp') {
       return _buildMcpGroupsPage(entry, entriesState.mcpGroups);
     }
+    final isBuiltinWebSearch = entry.id == kBuiltinWebSearchEntryId;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: Text(entry.name), centerTitle: true),
@@ -675,40 +785,25 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             padding: const EdgeInsets.all(16),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // 供应商配置列表
                 Row(
                   children: [
                     Text(
-                      isBuiltinWebSearch
-                          ? '内置工具'
-                          : entry.type == 'mcp'
-                              ? '服务与工具'
-                              : '供应商配置',
+                      isBuiltinWebSearch ? '内置工具' : '供应商配置',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: cs.primary,
                       ),
                     ),
                     const Spacer(),
                     if (!isBuiltinWebSearch)
                       TextButton.icon(
                         icon: const Icon(Icons.add, size: 18),
-                        label: Text(entry.type == 'mcp' ? '添加 MCP' : '添加'),
+                        label: const Text('添加'),
                         onPressed: _addConfig,
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                // MCP 总开关：仅 MCP 条目显示。关闭后 MCP 服务器和内置
-                // 搜索工具不会提供给助手页面或对话页。
-                if (entry.type == 'mcp' && !isBuiltinWebSearch) ...[
-                  _McpMasterSwitchCard(
-                    enabled: entry.enabled,
-                    onChanged: _toggleMcpEnabled,
-                  ),
-                  const SizedBox(height: 8),
-                ],
               ]),
             ),
           ),
@@ -721,9 +816,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   child: Text(
                     isBuiltinWebSearch
                         ? '内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'
-                        : entry.type == 'mcp'
-                            ? '暂无服务配置，请点击"添加 MCP"创建'
-                            : '暂无供应商配置，请点击"添加"创建',
+                        : '暂无供应商配置，请点击"添加"创建',
                     style: const TextStyle(color: Colors.grey),
                     textAlign: TextAlign.center,
                   ),
@@ -741,98 +834,203 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   borderRadius: BorderRadius.circular(12),
                   child: child,
                 ),
-                itemBuilder: (context, i) {
-                  final config = entry.configs[i];
+                itemBuilder: (context, index) {
+                  final config = entry.configs[index];
                   final providerName = config.providerName.isNotEmpty
                       ? config.providerName
                       : '（未命名）';
-
-                  // Determine if this is a built-in (vendor) MCP config
-                  final mcpTypeConfig =
-                      entry.type == 'mcp' && config.models.isNotEmpty
-                          ? config.models[0].typeConfig
-                          : null;
-                  final isVendor = mcpTypeConfig?['isVendor'] as bool? ?? false;
-
-                  // For MCP entries, show transport details
-                  String subtitle;
-                  IconData leadIcon;
-                  Color iconColor;
-                  final isHttpTool = entry.type == 'mcp'
-                      ? (mcpTypeConfig?['isHttpTool'] as bool? ?? false)
-                      : false;
-                  final transport =
-                      mcpTypeConfig?['transport'] as String? ?? 'sse';
-                  final integrationType = entry.type == 'mcp'
-                      ? isHttpTool
-                          ? 'HTTP 搜索'
-                          : 'MCP · ${transport == 'stdio' ? 'stdio' : 'SSE'}'
-                      : '';
-
-                  if (entry.type == 'mcp') {
-                    if (isHttpTool) {
-                      // HTTP 工具（纯 Dart 实现，非 MCP 协议）
-                      final url = mcpTypeConfig?['url'] as String? ?? '';
-                      leadIcon = Icons.http;
-                      iconColor = Colors.orange;
-                      subtitle = 'HTTP 工具: ${url.isNotEmpty ? url : '(未设置)'}';
-                    } else if (transport == 'stdio') {
-                      final cmd = mcpTypeConfig?['command'] as String? ?? '';
-                      leadIcon = Icons.desktop_windows;
-                      iconColor = Colors.purple;
-                      subtitle = '本地(stdio): $cmd';
-                    } else {
-                      final url =
-                          mcpTypeConfig?['url'] as String? ?? config.host;
-                      leadIcon = Icons.cloud;
-                      iconColor = Colors.blue;
-                      subtitle =
-                          '远程(SSE): ${url.isNotEmpty ? url : '(未设置 URL)'}';
-                    }
-                  } else {
-                    leadIcon = Icons.dns;
-                    iconColor = Colors.teal;
-                    subtitle =
-                        config.host.isNotEmpty ? config.host : '(未设置 Host)';
-                  }
-
-                  // Show API key hint if available
-                  final apiKeyHint = mcpTypeConfig?['apiKeyHint'] as String?;
-
-                  // Description text (replaces platform badges)
-                  final mcpDescription = entry.type == 'mcp'
-                      ? (mcpTypeConfig?['description'] as String?)
-                      : null;
-
                   return _McpConfigCard(
-                    key: ValueKey('config_${widget.entryId}_$i'),
-                    isVendor: isVendor,
-                    integrationType: integrationType,
+                    key: ValueKey('config_${widget.entryId}_$index'),
+                    isMcp: false,
+                    isVendor: false,
+                    integrationType: '',
                     providerName: providerName,
-                    leadIcon: leadIcon,
-                    iconColor: iconColor,
-                    subtitle: subtitle,
-                    apiKeyHint: apiKeyHint,
-                    mcpDescription: mcpDescription,
-                    dragHandle: !isVendor
-                        ? ReorderableDragStartListener(
-                            index: i,
-                            child: const Icon(
-                              Icons.drag_handle,
-                              color: Colors.grey,
-                            ),
-                          )
-                        : const SizedBox(width: 32),
-                    onSettings: entry.type == 'mcp'
-                        ? null
-                        : () => _openSettingsPanel(i),
-                    onDelete: isVendor ? null : () => _deleteConfig(i),
-                    onTap: () => _editConfig(i),
+                    leadIcon: Icons.dns,
+                    iconColor: Colors.teal,
+                    subtitle:
+                        config.host.isNotEmpty ? config.host : '(未设置 Host)',
+                    apiKeyHint: null,
+                    mcpDescription: null,
+                    dragHandle: ReorderableDragStartListener(
+                      index: index,
+                      child: const Icon(Icons.drag_handle, color: Colors.grey),
+                    ),
+                    onSettings: () => _openSettingsPanel(index),
+                    onDelete: () => _deleteConfig(index),
+                    onTap: () => _editConfig(index),
                   );
                 },
               ),
             ),
           const SliverPadding(padding: EdgeInsets.all(16)),
+        ],
+      ),
+    );
+  }
+}
+
+class _McpPageIntro extends StatelessWidget {
+  final ColorScheme colorScheme;
+
+  const _McpPageIntro({required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(
+            Icons.hub_outlined,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '服务与工具',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _McpSectionHeader extends StatelessWidget {
+  final String title;
+  final String description;
+  final int count;
+  final Widget? action;
+
+  const _McpSectionHeader({
+    required this.title,
+    required this.description,
+    required this.count,
+    this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                description,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        if (action != null) ...[const SizedBox(width: 12), action!],
+      ],
+    );
+  }
+}
+
+class _McpEmptyState extends StatelessWidget {
+  final VoidCallback onAdd;
+
+  const _McpEmptyState({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.hub_outlined, size: 30, color: cs.onSurfaceVariant),
+          const SizedBox(height: 10),
+          Text(
+            '还没有服务配置',
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '添加一个 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.tonalIcon(
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('添加服务'),
+          ),
         ],
       ),
     );
@@ -850,6 +1048,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 // ====================================================================
 
 class _McpConfigCard extends StatelessWidget {
+  final bool isMcp;
   final bool isVendor;
   final String integrationType;
   final String providerName;
@@ -863,11 +1062,13 @@ class _McpConfigCard extends StatelessWidget {
   final IconData settingsIcon;
   final String settingsTooltip;
   final VoidCallback? onDelete;
+  final VoidCallback? onTest;
   final VoidCallback? onMove;
   final VoidCallback onTap;
 
   const _McpConfigCard({
     super.key,
+    required this.isMcp,
     required this.isVendor,
     required this.integrationType,
     required this.providerName,
@@ -881,6 +1082,7 @@ class _McpConfigCard extends StatelessWidget {
     this.settingsIcon = Icons.tune,
     this.settingsTooltip = '设置',
     required this.onDelete,
+    this.onTest,
     this.onMove,
     required this.onTap,
   });
@@ -901,170 +1103,201 @@ class _McpConfigCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: borderColor, width: 0.5),
       ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                dragHandle,
-                const SizedBox(width: 8),
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMcp ? 14 : 12,
+                vertical: isMcp ? 12 : 10,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  dragHandle,
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isMcp
+                          ? cs.primaryContainer
+                          : cs.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      leadIcon,
+                      color: isMcp ? cs.onPrimaryContainer : iconColor,
+                      size: 22,
+                    ),
                   ),
-                  child: Icon(leadIcon, color: iconColor, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              providerName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (isVendor) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: cs.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
                               child: Text(
-                                '内置',
+                                providerName,
                                 style: TextStyle(
-                                  fontSize: 10,
-                                  color: cs.primary,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface,
+                                  fontSize: 14,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ],
-                          if (integrationType.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: cs.tertiaryContainer.withValues(
-                                  alpha: 0.55,
+                            if (isVendor) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
                                 ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                integrationType,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: cs.onTertiaryContainer,
-                                  fontWeight: FontWeight.w500,
+                                decoration: BoxDecoration(
+                                  color: isMcp
+                                      ? cs.surfaceContainerHighest
+                                      : cs.primary.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '内置',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isMcp
+                                        ? cs.onSurfaceVariant
+                                        : cs.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
+                            if (integrationType.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isMcp
+                                      ? cs.secondaryContainer
+                                      : cs.tertiaryContainer.withValues(
+                                          alpha: 0.55,
+                                        ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  integrationType,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: isMcp
+                                        ? cs.onSecondaryContainer
+                                        : cs.onTertiaryContainer,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: cs.onSurfaceVariant,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (apiKeyHint != null && apiKeyHint!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 4),
                         Text(
-                          '提示: $apiKeyHint',
+                          subtitle,
                           style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                            fontStyle: FontStyle.italic,
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                      if (mcpDescription != null &&
-                          mcpDescription!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          mcpDescription!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurfaceVariant,
+                        if (apiKeyHint != null && apiKeyHint!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '提示: $apiKeyHint',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                              fontStyle: FontStyle.italic,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        ],
+                        if (mcpDescription != null &&
+                            mcpDescription!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            mcpDescription!,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-                if (onSettings != null)
-                  IconButton(
-                    icon: Icon(
-                      settingsIcon,
-                      size: 20,
-                      color: cs.onSurfaceVariant,
                     ),
-                    onPressed: onSettings,
-                    tooltip: settingsTooltip,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
                   ),
-                if (onMove != null) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(
-                      Icons.drive_file_move_outline,
-                      size: 20,
-                      color: cs.onSurfaceVariant,
+                  if (onSettings != null)
+                    IconButton(
+                      icon: Icon(
+                        settingsIcon,
+                        size: 20,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      onPressed: onSettings,
+                      tooltip: settingsTooltip,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    onPressed: onMove,
-                    tooltip: '移动到组别',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-                if (onDelete != null) ...[
+                  if (onTest != null)
+                    IconButton(
+                      icon: const Icon(Icons.network_check, size: 20),
+                      onPressed: onTest,
+                      tooltip: '连通性测试',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (onMove != null) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        Icons.drive_file_move_outline,
+                        size: 20,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      onPressed: onMove,
+                      tooltip: '移动到组别',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                  if (onDelete != null) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: cs.error,
+                      ),
+                      onPressed: onDelete,
+                      tooltip: '删除配置',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
                   const SizedBox(width: 4),
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
-                    onPressed: onDelete,
-                    tooltip: '删除配置',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
                 ],
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
-              ],
+              ),
             ),
           ),
         ),
@@ -1209,29 +1442,90 @@ class _McpMasterSwitchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Material(
           type: MaterialType.transparency,
-          child: SwitchListTile(
-            value: enabled,
-            onChanged: onChanged,
-            activeThumbColor: cs.primary,
-            title: Text(
-              'MCP 总开关',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: cs.onSurface,
-                fontSize: 14,
-              ),
-            ),
-            subtitle: Text(
-              enabled
-                  ? '已开启：MCP 服务器和搜索工具可用。'
-                  : '已关闭：MCP 服务器和搜索工具不在助手页面与对话页中显示。',
-              style: TextStyle(
-                fontSize: 12,
-                color: cs.onSurfaceVariant,
+          child: InkWell(
+            onTap: () => onChanged(!enabled),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.power_settings_new,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'MCP 服务器',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(
+                                      color: cs.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _McpStatusLabel(enabled: enabled),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Switch(value: enabled, onChanged: onChanged),
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _McpStatusLabel extends StatelessWidget {
+  final bool enabled;
+
+  const _McpStatusLabel({required this.enabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: enabled ? cs.primaryContainer : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        enabled ? '已启用' : '已停用',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: enabled ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }
