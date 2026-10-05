@@ -117,9 +117,7 @@ void main() {
   });
 
   group('Startup JSON batch parsing on Web', () {
-    test(
-        'retries bundled worker and preserves parse findings',
-        () async {
+    test('retries bundled worker and preserves parse findings', () async {
       final previousPrimaryWorker =
           json_parser.debugPrimaryValidationWorkerForTesting;
       final previousBundledWorker =
@@ -150,8 +148,7 @@ void main() {
       }
     }, skip: !kIsWeb);
 
-    test(
-        'large payload stays responsive during bundled worker retry',
+    test('large payload stays responsive during bundled worker retry',
         () async {
       _mockStartupValidationWorkerAsset();
       final largeJson =
@@ -192,7 +189,8 @@ void main() {
         expect(
           uiPulses,
           greaterThan(uiPulsesWhenWorkerSourceLoaded),
-          reason: 'the UI event loop should keep running while the Worker parses',
+          reason:
+              'the UI event loop should keep running while the Worker parses',
         );
       } finally {
         uiHeartbeat.cancel();
