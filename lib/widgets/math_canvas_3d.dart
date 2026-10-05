@@ -95,6 +95,47 @@ double _perspectiveFarPlane(
   return dart_math.max(1000.0, far).toDouble();
 }
 
+List<Point3D> _clipPolygonToDepthRange(
+  List<Point3D> polygon,
+  Camera3D camera,
+  Projection3D projection,
+) {
+  if (projection.type != ProjectionType.perspective || polygon.isEmpty) {
+    return polygon;
+  }
+
+  List<Point3D> clipAgainst(
+    List<Point3D> input,
+    double boundary,
+    bool keepGreater,
+  ) {
+    if (input.isEmpty) return input;
+    final output = <Point3D>[];
+    var previous = input.last;
+    var previousDepth = worldToScreen(previous, camera, projection).z;
+    var previousInside =
+        keepGreater ? previousDepth >= boundary : previousDepth <= boundary;
+    for (final current in input) {
+      final currentDepth = worldToScreen(current, camera, projection).z;
+      final currentInside =
+          keepGreater ? currentDepth >= boundary : currentDepth <= boundary;
+      if (currentInside != previousInside) {
+        final fraction = (boundary - previousDepth) /
+            (currentDepth - previousDepth);
+        output.add(previous + (current - previous) * fraction);
+      }
+      if (currentInside) output.add(current);
+      previous = current;
+      previousDepth = currentDepth;
+      previousInside = currentInside;
+    }
+    return output;
+  }
+
+  final nearClipped = clipAgainst(polygon, projection.near, true);
+  return clipAgainst(nearClipped, projection.far, false);
+}
+
 ({Vector3D normal, double d, double normalSquared, Point3D origin})?
     _normalizedPlaneEquation(Object3D plane) {
   final a = plane.planeA;
@@ -895,6 +936,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         if (!hitDepth.isFinite || hitDepth >= projectedPoint.z - 1e-8) {
           continue;
         }
+        if (projection.type == ProjectionType.perspective &&
+            (hitDepth < projection.near || hitDepth > projection.far)) {
+          continue;
+        }
         if (_pointInTriangle3D(hit, a, b, c)) return true;
       }
     }
@@ -1107,8 +1152,6 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           }
         case Object3DType.surface:
         case Object3DType.polyhedron:
-          final projected = object.vertices.map(screen).toList();
-          final projectedDepths = object.vertices.map(depthAt).toList();
           for (var j = 0; j + 2 < object.indices.length; j += 3) {
             final ia = object.indices[j];
             final ib = object.indices[j + 1];
@@ -1116,20 +1159,35 @@ class MathCanvas3DState extends State<MathCanvas3D> {
             if (ia >= 0 &&
                 ib >= 0 &&
                 ic >= 0 &&
-                ia < projected.length &&
-                ib < projected.length &&
-                ic < projected.length) {
+                ia < object.vertices.length &&
+                ib < object.vertices.length &&
+                ic < object.vertices.length) {
               final a = object.vertices[ia];
               final b = object.vertices[ib];
               final c = object.vertices[ic];
               final normal = _normalizedTriangleNormal(a, b, c);
               if (normal == null) continue;
-              if (insideTriangle(
-                position,
-                projected[ia],
-                projected[ib],
-                projected[ic],
-              )) {
+              final clipped = _clipPolygonToDepthRange(
+                [a, b, c],
+                camera,
+                projection,
+              );
+              if (clipped.length < 3) continue;
+              final projected = clipped.map(screen).toList();
+              final projectedDepths = clipped.map(depthAt).toList();
+              var insideClippedTriangle = false;
+              for (var fan = 1; fan + 1 < projected.length; fan++) {
+                if (insideTriangle(
+                  position,
+                  projected[0],
+                  projected[fan],
+                  projected[fan + 1],
+                )) {
+                  insideClippedTriangle = true;
+                  break;
+                }
+              }
+              if (insideClippedTriangle) {
                 final hit = intersectRayPlane(
                   ray,
                   point: a,
@@ -1138,7 +1196,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                 );
                 if (hit != null && _pointInTriangle3D(hit, a, b, c)) {
                   final candidateDepth = depthAt(hit);
-                  if (isVisibleDepth(candidateDepth)) {
+                  if (isVisibleDepth(object, candidateDepth)) {
                     distance = 0;
                     hitDepth =
                         dart_math.min(hitDepth, candidateDepth).toDouble();
@@ -1146,20 +1204,22 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                 }
                 continue;
               }
-              for (final edge in [(ia, ib), (ib, ic), (ic, ia)]) {
+              for (var edge = 0; edge < projected.length; edge++) {
+                final next = (edge + 1) % projected.length;
                 final edgeDistance = segmentDistance(
                   position,
-                  projected[edge.$1],
-                  projected[edge.$2],
+                  projected[edge],
+                  projected[next],
                 );
                 final edgeDepth = depthOnSegmentAtScreen(
                   position,
-                  object.vertices[edge.$1],
-                  object.vertices[edge.$2],
-                  projectedDepths[edge.$1],
-                  projectedDepths[edge.$2],
+                  clipped[edge],
+                  clipped[next],
+                  projectedDepths[edge],
+                  projectedDepths[next],
                 );
-                if (edgeDistance < distance && isVisibleDepth(edgeDepth)) {
+                if (edgeDistance < distance &&
+                    isVisibleDepth(object, edgeDepth)) {
                   distance = edgeDistance;
                   hitDepth = edgeDepth;
                 }
@@ -5274,9 +5334,10 @@ class MathCanvas3DPainter extends CustomPainter {
     Projection3D projection,
   ) {
     final screen = worldToScreen(obj.point, camera, projection);
-    if (obj.isTextAnnotation &&
-        projection.type == ProjectionType.perspective &&
-        (screen.z < projection.near || screen.z > projection.far)) {
+    if (projection.type == ProjectionType.perspective &&
+        (screen.z <= 0 ||
+            (obj.isTextAnnotation &&
+                (screen.z < projection.near || screen.z > projection.far)))) {
       return;
     }
     final objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
@@ -5720,73 +5781,77 @@ class MathCanvas3DPainter extends CustomPainter {
     var totalZ = 0.0;
     var count = 0;
 
+    void addClippedPath(List<Point3D> points) {
+      for (var i = 1; i < points.length; i++) {
+        final clipped = clipLineToView(
+          Object3D.line(points[i - 1], points[i]),
+          camera,
+          projection,
+        );
+        if (clipped.length != 2) continue;
+        final start = worldToScreen(clipped[0], camera, projection);
+        final end = worldToScreen(clipped[1], camera, projection);
+        lines.add([Offset(start.x, start.y), Offset(end.x, end.y)]);
+        totalZ += start.z + end.z;
+        count += 2;
+      }
+    }
+
     if (c.abs() >= a.abs() && c.abs() >= b.abs()) {
       // z = (d - ax - by) / c
       // Lines along X (constant Y)
       for (double y = -range; y <= range; y += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double x = -range; x <= range; x += step * 0.5) {
           final z = (d - a * x - b * y) / c;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
       // Lines along Y (constant X)
       for (double x = -range; x <= range; x += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double y = -range; y <= range; y += step * 0.5) {
           final z = (d - a * x - b * y) / c;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
     } else if (b.abs() >= a.abs()) {
       // y = (d - ax - cz) / b  — vertical plane, free variable z
       for (double z = -range; z <= range; z += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double x = -range; x <= range; x += step * 0.5) {
           final y = (d - a * x - c * z) / b;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
       for (double x = -range; x <= range; x += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double z = -range; z <= range; z += step * 0.5) {
           final y = (d - a * x - c * z) / b;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
     } else {
       // x = (d - by - cz) / a  — vertical plane, free variable z
       for (double z = -range; z <= range; z += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double y = -range; y <= range; y += step * 0.5) {
           final x = (d - b * y - c * z) / a;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
-          totalZ += screen.z;
-          count++;
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
       for (double y = -range; y <= range; y += step) {
-        final pts = <Offset>[];
+        final pts = <Point3D>[];
         for (double z = -range; z <= range; z += step * 0.5) {
           final x = (d - b * y - c * z) / a;
-          final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-          pts.add(Offset(screen.x, screen.y));
+          pts.add(Point3D(x, y, z));
         }
-        if (pts.length >= 2) lines.add(pts);
+        addClippedPath(pts);
       }
     }
 
@@ -5830,35 +5895,53 @@ class MathCanvas3DPainter extends CustomPainter {
       ..strokeWidth = 0.5
       ..style = PaintingStyle.stroke;
 
-    // Project all vertices
-    final projected = <_ProjectedPoint>[];
-    for (final v in vertices) {
-      final s = worldToScreen(v, camera, projection);
-      projected.add(
-        _ProjectedPoint(screen: Offset(s.x, s.y), depth: s.z, world: v),
-      );
-    }
-
     // Create triangle renderables
     for (int i = 0; i < indices.length; i += 3) {
       if (i + 2 >= indices.length) break;
-      final p0 = projected[indices[i]];
-      final p1 = projected[indices[i + 1]];
-      final p2 = projected[indices[i + 2]];
-
-      final avgDepth = (p0.depth + p1.depth + p2.depth) / 3;
-      final triPath = Path()
-        ..moveTo(p0.screen.dx, p0.screen.dy)
-        ..lineTo(p1.screen.dx, p1.screen.dy)
-        ..lineTo(p2.screen.dx, p2.screen.dy)
-        ..close();
+      final clipped = _clipPolygonToDepthRange(
+        [
+          vertices[indices[i]],
+          vertices[indices[i + 1]],
+          vertices[indices[i + 2]],
+        ],
+        camera,
+        projection,
+      );
+      if (clipped.length < 3) continue;
+      final projected = clipped
+          .map((point) => worldToScreen(point, camera, projection))
+          .toList();
+      final fillPaths = <Path>[];
+      for (var fan = 1; fan + 1 < projected.length; fan++) {
+        final p0 = projected[0];
+        final p1 = projected[fan];
+        final p2 = projected[fan + 1];
+        fillPaths.add(
+          Path()
+            ..moveTo(p0.x, p0.y)
+            ..lineTo(p1.x, p1.y)
+            ..lineTo(p2.x, p2.y)
+            ..close(),
+        );
+      }
+      final outlinePath = Path()
+        ..moveTo(projected.first.x, projected.first.y);
+      for (final point in projected.skip(1)) {
+        outlinePath.lineTo(point.x, point.y);
+      }
+      outlinePath.close();
+      final avgDepth =
+          projected.fold<double>(0, (sum, point) => sum + point.z) /
+          projected.length;
 
       renderables.add(
         _Renderable(
           depth: avgDepth,
           draw: (canvas) {
-            canvas.drawPath(triPath, fillPaint);
-            canvas.drawPath(triPath, strokePaint);
+            for (final path in fillPaths) {
+              canvas.drawPath(path, fillPaint);
+            }
+            canvas.drawPath(outlinePath, strokePaint);
           },
         ),
       );
@@ -5882,41 +5965,54 @@ class MathCanvas3DPainter extends CustomPainter {
     var totalZ = 0.0;
     var count = 0;
 
+    void addClippedPath(List<Point3D> points) {
+      for (var i = 1; i < points.length; i++) {
+        final clipped = clipLineToView(
+          Object3D.line(points[i - 1], points[i]),
+          camera,
+          projection,
+        );
+        if (clipped.length != 2) continue;
+        final start = worldToScreen(clipped[0], camera, projection);
+        final end = worldToScreen(clipped[1], camera, projection);
+        lines.add([Offset(start.x, start.y), Offset(end.x, end.y)]);
+        totalZ += start.z + end.z;
+        count += 2;
+      }
+    }
+
     // Longitude lines (around Y axis)
     for (int i = 0; i < segments; i++) {
       final theta = i * 2 * dart_math.pi / segments;
-      final pts = <Offset>[];
+      final worldPoints = <Point3D>[];
       for (int j = 0; j <= segments; j++) {
         final phi = -dart_math.pi / 2 + j * dart_math.pi / segments;
         final x = center.x + radius * dart_math.cos(phi) * dart_math.cos(theta);
         final y = center.y + radius * dart_math.sin(phi);
         final z = center.z + radius * dart_math.cos(phi) * dart_math.sin(theta);
-        final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-        pts.add(Offset(screen.x, screen.y));
-        totalZ += screen.z;
-        count++;
+        worldPoints.add(Point3D(x, y, z));
       }
-      if (pts.length >= 2) lines.add(pts);
+      addClippedPath(worldPoints);
     }
 
     // Latitude lines
     for (int j = 1; j < segments; j++) {
       final phi = -dart_math.pi / 2 + j * dart_math.pi / segments;
-      final pts = <Offset>[];
+      final worldPoints = <Point3D>[];
       for (int i = 0; i <= segments; i++) {
         final theta = i * 2 * dart_math.pi / segments;
         final x = center.x + radius * dart_math.cos(phi) * dart_math.cos(theta);
         final y = center.y + radius * dart_math.sin(phi);
         final z = center.z + radius * dart_math.cos(phi) * dart_math.sin(theta);
-        final screen = worldToScreen(Point3D(x, y, z), camera, projection);
-        pts.add(Offset(screen.x, screen.y));
+        worldPoints.add(Point3D(x, y, z));
       }
-      if (pts.length >= 2) lines.add(pts);
+      addClippedPath(worldPoints);
     }
 
     final avgZ = count > 0
         ? totalZ / count
         : (worldToScreen(center, camera, projection).z);
+    if (lines.isEmpty) return;
 
     renderables.add(
       _Renderable(
@@ -5955,9 +6051,16 @@ class MathCanvas3DPainter extends CustomPainter {
     final objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
     final color = Color(obj.color).withValues(alpha: objAlpha * obj.opacity);
 
-    final originScreen = worldToScreen(origin, camera, projection);
-    final tipScreen = worldToScreen(tip, camera, projection);
+    final clipped = clipLineToView(
+      Object3D.line(origin, tip),
+      camera,
+      projection,
+    );
+    if (clipped.length != 2) return;
+    final originScreen = worldToScreen(clipped[0], camera, projection);
+    final tipScreen = worldToScreen(clipped[1], camera, projection);
     final avgZ = (originScreen.z + tipScreen.z) / 2;
+    final tipIsVisible = clipped[1].distanceTo(tip) <= 1e-9;
 
     renderables.add(
       _Renderable(
@@ -5973,7 +6076,7 @@ class MathCanvas3DPainter extends CustomPainter {
           canvas.drawLine(from, to, paint);
 
           // Arrow head
-          _drawArrowHeadStatic(canvas, from, to, color);
+          if (tipIsVisible) _drawArrowHeadStatic(canvas, from, to, color);
         },
       ),
     );
@@ -6028,25 +6131,37 @@ class MathCanvas3DPainter extends CustomPainter {
         pathStart = pathEnd;
         return;
       }
-      final projected = <Offset>[];
+      final projectedSegments = <(Offset, Offset)>[];
       var totalDepth = 0.0;
-      for (var i = pathStart; i < pathEnd; i++) {
-        final screen = worldToScreen(vertices[i], camera, projection);
-        projected.add(Offset(screen.x, screen.y));
-        totalDepth += screen.z;
+      for (var i = pathStart + 1; i < pathEnd; i++) {
+        final clipped = clipLineToView(
+          Object3D.line(vertices[i - 1], vertices[i]),
+          camera,
+          projection,
+        );
+        if (clipped.length != 2) continue;
+        final start = worldToScreen(clipped[0], camera, projection);
+        final end = worldToScreen(clipped[1], camera, projection);
+        projectedSegments.add(
+          (Offset(start.x, start.y), Offset(end.x, end.y)),
+        );
+        totalDepth += start.z + end.z;
       }
       pathStart = pathEnd;
+      if (projectedSegments.isEmpty) return;
       renderables.add(
         _Renderable(
-          depth: totalDepth / projected.length,
+          depth: totalDepth / (projectedSegments.length * 2),
           draw: (canvas) {
             final paint = Paint()
               ..color = color
               ..strokeWidth = 2
               ..style = PaintingStyle.stroke;
-            final path = Path()..moveTo(projected.first.dx, projected.first.dy);
-            for (final point in projected.skip(1)) {
-              path.lineTo(point.dx, point.dy);
+            final path = Path();
+            for (final (start, end) in projectedSegments) {
+              path
+                ..moveTo(start.dx, start.dy)
+                ..lineTo(end.dx, end.dy);
             }
             canvas.drawPath(path, paint);
           },
@@ -6091,19 +6206,6 @@ class MathCanvas3DPainter extends CustomPainter {
 // ======================================================================
 // Internal types
 // ======================================================================
-
-/// A projected point with screen position and depth.
-class _ProjectedPoint {
-  final Offset screen;
-  final double depth;
-  final Point3D world;
-
-  const _ProjectedPoint({
-    required this.screen,
-    required this.depth,
-    required this.world,
-  });
-}
 
 /// A renderable element with depth for z-sorting.
 class _Renderable {
