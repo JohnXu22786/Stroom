@@ -1,4 +1,4 @@
-<!-- Write the PR description in English. Summarize the complete PR across all commits, not only the latest commit. Omit sections that do not apply. -->
+<!-- Write the PR description in English. Summarize the complete PR across all commits, not only the latest commit. Omit sections that do not apply. CI checks the required sections and rejects non-Latin text. -->
 
 ## What this PR does
 
