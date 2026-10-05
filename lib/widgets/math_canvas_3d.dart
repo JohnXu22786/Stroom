@@ -2079,10 +2079,10 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
 
     final sourceDirection = sourceLine.pointB - sourceLine.pointA;
-    final direction = _conicCoordinates(conic, sourceDirection);
-    if (direction == null) return null;
-    final directionX = direction.x;
-    final directionY = direction.y;
+    final directionCoordinates = _conicCoordinates(conic, sourceDirection);
+    if (directionCoordinates == null) return null;
+    final directionX = directionCoordinates.x;
+    final directionY = directionCoordinates.y;
     final directionScale =
         dart_math.max(directionX.abs(), directionY.abs()).toDouble();
     if (!directionScale.isFinite || directionScale == 0) return null;
@@ -2124,21 +2124,21 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     if (!formScale.isFinite || formScale == 0) return null;
 
     final center = conic.origin + conic.axisU * centerX + conic.axisV * centerY;
-    final direction =
+    final diameterDirection =
         conic.axisU * (-formY / formScale) + conic.axisV * (formX / formScale);
     if (!center.x.isFinite ||
         !center.y.isFinite ||
         !center.z.isFinite ||
-        !direction.x.isFinite ||
-        !direction.y.isFinite ||
-        !direction.z.isFinite ||
-        direction.magnitude == 0) {
+        !diameterDirection.x.isFinite ||
+        !diameterDirection.y.isFinite ||
+        !diameterDirection.z.isFinite ||
+        diameterDirection.magnitude == 0) {
       return null;
     }
 
     return Object3D.line(
       center,
-      center + direction,
+      center + diameterDirection,
       lineKind: Line3DKind.line,
       color: 0xFF4CAF50,
       label: 'Conjugate diameter',
