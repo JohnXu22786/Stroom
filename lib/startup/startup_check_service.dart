@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/data_migration_service.dart';
 import '../services/data_integrity_json_parser.dart' as json_parser;
+import '../services/startup_data_validation_unavailable.dart';
 
 // ====================================================================
 // Startup Issue Severity
@@ -39,6 +41,17 @@ class StartupIssue {
     this.severity = StartupIssueSeverity.info,
     this.dataKey,
   });
+}
+
+@visibleForTesting
+Future<List<StartupIssue>> Function(List<StartupIssue> Function() computation)?
+    debugStartupIsolateRunnerForTesting;
+
+Future<List<StartupIssue>> _runStartupIsolate(
+  List<StartupIssue> Function() computation,
+) {
+  final runner = debugStartupIsolateRunnerForTesting;
+  return runner == null ? Isolate.run(computation) : runner(computation);
 }
 
 // ====================================================================
@@ -194,20 +207,19 @@ class StartupCheckService {
     }
 
     // 在测试环境下回退到同步执行（Isolate 在 FakeAsync 中不可用）
-    if (_inTestMode()) {
+    if (_inTestMode() && debugStartupIsolateRunnerForTesting == null) {
       return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
     }
 
     // 生产环境：在后台 Isolate 中执行 CPU 密集的 JSON 解析和验证
     try {
-      final resultMaps = await Isolate.run(() {
+      final resultMaps = await _runStartupIsolate(() {
         return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
       });
       return resultMaps;
     } catch (e) {
       debugPrint('[StartupCheckService] Isolate validation failed: $e');
-      // Isolate 不可用时（如部分受限环境），回退到同步执行
-      return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
+      throw StartupDataValidationUnavailable.isolate(e);
     }
   }
 
@@ -457,8 +469,9 @@ class StartupCheckService {
 
     if (kIsWeb) {
       try {
-        final resultMaps =
-            await json_parser.checkDataIntegrityWeb(providerEntriesJson);
+        final resultMaps = await json_parser.checkDataIntegrityWeb(
+          providerEntriesJson,
+        );
         return resultMaps.map((issue) {
           return StartupIssue(
             message: issue['message']!,
@@ -477,19 +490,19 @@ class StartupCheckService {
     }
 
     // 在测试环境下回退到同步执行
-    if (_inTestMode()) {
+    if (_inTestMode() && debugStartupIsolateRunnerForTesting == null) {
       return _checkDataIntegritySync(providerEntriesJson);
     }
 
     // 生产环境：在后台 Isolate 中执行
     try {
-      final resultMaps = await Isolate.run(() {
+      final resultMaps = await _runStartupIsolate(() {
         return _checkDataIntegritySync(providerEntriesJson);
       });
       return resultMaps;
     } catch (e) {
       debugPrint('[StartupCheckService] Isolate check failed: $e');
-      return _checkDataIntegritySync(providerEntriesJson);
+      throw StartupDataValidationUnavailable.isolate(e);
     }
   }
 

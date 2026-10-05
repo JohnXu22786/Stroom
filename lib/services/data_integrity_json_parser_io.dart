@@ -3,6 +3,19 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
+import 'startup_data_validation_unavailable.dart';
+
+@visibleForTesting
+Future<List<String?>> Function(List<String?> Function() computation)?
+    debugJsonBatchIsolateRunnerForTesting;
+
+Future<List<String?>> _runJsonBatchIsolate(
+  List<String?> Function() computation,
+) {
+  final runner = debugJsonBatchIsolateRunnerForTesting;
+  return runner == null ? Isolate.run(computation) : runner(computation);
+}
+
 @visibleForTesting
 Future<String> Function(List<Object?> message)?
     debugPrimaryValidationWorkerForTesting;
@@ -13,10 +26,10 @@ Future<String> Function(List<Object?> message)?
 Future<List<String?>> parseJsonBatch(List<String> contents) async {
   if (contents.isEmpty) return const [];
   try {
-    return await Isolate.run(() => _parseJsonBatchSync(contents));
+    return await _runJsonBatchIsolate(() => _parseJsonBatchSync(contents));
   } catch (e) {
-    debugPrint('[DataIntegrityChecker] JSON Isolate 不可用，回退同步解析: $e');
-    return _parseJsonBatchSync(contents);
+    debugPrint('[DataIntegrityChecker] JSON Isolate 不可用，验证已中止: $e');
+    throw StartupDataValidationUnavailable.isolate(e);
   }
 }
 
