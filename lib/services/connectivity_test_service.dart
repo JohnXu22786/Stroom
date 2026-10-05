@@ -33,14 +33,12 @@ class ConnectivityTestService {
   static final _jsonEncoder = const JsonEncoder.withIndent('  ');
 
   static String defaultMcpTestContent() => _jsonEncoder.convert({
-        'method': 'tools/list',
-        'params': <String, dynamic>{},
-      });
+    'method': 'tools/list',
+    'params': <String, dynamic>{},
+  });
 
-  static String defaultSearchTestContent() => _jsonEncoder.convert({
-        'query': 'Stroom 连通性测试',
-        'count': 1,
-      });
+  static String defaultSearchTestContent() =>
+      _jsonEncoder.convert({'query': 'Stroom 连通性测试', 'count': 1});
 
   static String defaultBuiltinTestContent(String toolName) {
     if (toolName == 'todowrite') return '{}';
@@ -111,10 +109,7 @@ class ConnectivityTestService {
         final result = await HttpToolService.runConnectivityTest(
           providerName: toolName,
           arguments: content,
-          apiKey: HttpToolService.extractHttpToolApiKey(
-            toolName,
-            typeConfig,
-          ),
+          apiKey: HttpToolService.extractHttpToolApiKey(toolName, typeConfig),
           url: typeConfig['url'] as String? ?? config.host,
         );
         final succeeded = !result.startsWith('错误:');
@@ -131,14 +126,10 @@ class ConnectivityTestService {
         typeConfig: typeConfig,
       );
       if (serverConfig == null) {
-        return _finish(
-          stopwatch,
-          false,
-          'MCP 配置无效',
-          '缺少有效的传输类型配置。',
-        );
+        return _finish(stopwatch, false, 'MCP 配置无效', '缺少有效的传输类型配置。');
       }
-      final isMobile = defaultTargetPlatform == TargetPlatform.android ||
+      final isMobile =
+          defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS;
       if (serverConfig.transportType == McpTransportType.stdio &&
           (kIsWeb || isMobile)) {
@@ -152,12 +143,7 @@ class ConnectivityTestService {
 
       final rawMethod = content['method'];
       if (rawMethod != null && rawMethod is! String) {
-        return _finish(
-          stopwatch,
-          false,
-          '测试内容无效',
-          'method 必须是字符串。',
-        );
+        return _finish(stopwatch, false, '测试内容无效', 'method 必须是字符串。');
       }
       final method = rawMethod as String? ?? 'tools/list';
       if (method != 'tools/list') {
@@ -170,12 +156,7 @@ class ConnectivityTestService {
       }
       final rawParams = content['params'];
       if (rawParams != null && rawParams is! Map) {
-        return _finish(
-          stopwatch,
-          false,
-          '测试内容无效',
-          'params 必须是 JSON 对象。',
-        );
+        return _finish(stopwatch, false, '测试内容无效', 'params 必须是 JSON 对象。');
       }
 
       final client = McpClient(config: serverConfig);
@@ -191,11 +172,13 @@ class ConnectivityTestService {
             '请检查地址、认证信息、网络，或查看应用日志获取连接详情。',
           );
         }
-        final tools = await client.discoverTools(
-          params: rawParams == null
-              ? const <String, dynamic>{}
-              : Map<String, dynamic>.from(rawParams as Map),
-        ).timeout(const Duration(seconds: 35));
+        final tools = await client
+            .discoverTools(
+              params: rawParams == null
+                  ? const <String, dynamic>{}
+                  : Map<String, dynamic>.from(rawParams as Map),
+            )
+            .timeout(const Duration(seconds: 35));
         final names = tools.map((tool) => tool.name).take(12).join(', ');
         final suffix = tools.length > 12 ? '，其余工具已省略' : '';
         return _finish(
@@ -209,12 +192,7 @@ class ConnectivityTestService {
         client.dispose();
       }
     } catch (error) {
-      return _finish(
-        stopwatch,
-        false,
-        '连通性测试失败',
-        _readableError(error),
-      );
+      return _finish(stopwatch, false, '连通性测试失败', _readableError(error));
     }
   }
 
@@ -258,12 +236,7 @@ class ConnectivityTestService {
         result,
       );
     } catch (error) {
-      return _finish(
-        stopwatch,
-        false,
-        '内置工具测试失败',
-        _readableError(error),
-      );
+      return _finish(stopwatch, false, '内置工具测试失败', _readableError(error));
     }
   }
 

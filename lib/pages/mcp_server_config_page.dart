@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/mcp.dart';
 import '../providers/provider_config.dart';
 import 'mcp_server_config_shared.dart';
@@ -38,7 +39,8 @@ class _McpServerConfigDialog extends ConsumerStatefulWidget {
       _McpServerConfigDialogState();
 }
 
-class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> {
+class _McpServerConfigDialogState
+    extends ConsumerState<_McpServerConfigDialog> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _commandController = TextEditingController();
@@ -88,8 +90,9 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
       return;
     }
     final config = entry.configs[widget.configIndex];
-    final mcpConfig =
-        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    final mcpConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : null;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
       typeConfig: mcpConfig,
@@ -160,7 +163,8 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
       return;
     }
 
-    final changed = _nameController.text != _originalName ||
+    final changed =
+        _nameController.text != _originalName ||
         _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
@@ -184,25 +188,22 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入 MCP 服务器名称')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请输入 MCP 服务器名称')));
       return;
     }
 
     // Validate transport-specific fields
     if (_transportType == McpTransportType.stdio &&
         _commandController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('stdio 模式需要指定命令')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('stdio 模式需要指定命令')));
       return;
     }
     if (_transportType == McpTransportType.sse &&
         _urlController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SSE 模式需要指定 URL')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('SSE 模式需要指定 URL')));
       return;
     }
 
@@ -215,10 +216,10 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
         ? argsStr
-            .split(',')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
         : <String>[];
 
     final apiKey = _apiKeyController.text.trim();
@@ -229,7 +230,7 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
       // For stdio: merge apiKey into env vars
       // Load existing env from the original config if editing
       var effectiveEnv = <String, String>{
-        'PATH': '/usr/local/bin:/usr/bin:/bin'
+        'PATH': '/usr/local/bin:/usr/bin:/bin',
       };
       if (_isExistingConfig) {
         final entry = _entry;
@@ -239,8 +240,9 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
             final tc = existingConfig.models[0].typeConfig;
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv =
-                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv = envRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
           }
         }
@@ -274,13 +276,15 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
             final tc = existingConfig.models[0].typeConfig;
             final headersRaw = tc['headers'];
             if (headersRaw is Map) {
-              effectiveHeaders = headersRaw
-                  .map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveHeaders = headersRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv =
-                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv = envRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
           }
         }
@@ -290,7 +294,8 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
         for (final key in effectiveHeaders.keys.toList()) {
           final val = effectiveHeaders[key]!;
           // Match empty, key-only (e.g. "x-api-key "), or prefix-only (e.g. "Bearer ")
-          final isEmptyOrPlaceholder = val.isEmpty ||
+          final isEmptyOrPlaceholder =
+              val.isEmpty ||
               val == '$key ' ||
               val.endsWith(' ') ||
               !RegExp(r'\S').hasMatch(val.trim());
@@ -328,7 +333,8 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
-    final existingConfig = _isExistingConfig &&
+    final existingConfig =
+        _isExistingConfig &&
             widget.configIndex >= 0 &&
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
@@ -418,10 +424,7 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
           width: 560,
           height: MediaQuery.sizeOf(context).height * 0.85,
           child: Scaffold(
-            appBar: AppBar(
-              title: Text(title),
-              actions: _buildAppBarActions(),
-            ),
+            appBar: AppBar(title: Text(title), actions: _buildAppBarActions()),
             body: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -486,8 +489,7 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
                     TextField(
                       controller: _argsController,
                       decoration: const InputDecoration(
-                        hintText:
-                            '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
+                        hintText: '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
@@ -535,7 +537,9 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
                     prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureApiKey ? Icons.visibility_off : Icons.visibility,
+                        _obscureApiKey
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                         size: 20,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -581,8 +585,10 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
                             _transportType == McpTransportType.stdio
                                 ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
                                 : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
-                            style:
-                                TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ],
@@ -620,7 +626,10 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
   }
 
   Widget _buildTransportOption(
-      McpTransportType type, IconData icon, String label) {
+    McpTransportType type,
+    IconData icon,
+    String label,
+  ) {
     final selected = _transportType == type;
     final cs = Theme.of(context).colorScheme;
     return GestureDetector(
@@ -642,9 +651,11 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
         ),
         child: Column(
           children: [
-            Icon(icon,
-                color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-                size: 28),
+            Icon(
+              icon,
+              color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              size: 28,
+            ),
             const SizedBox(height: 8),
             Text(
               label,
@@ -665,8 +676,9 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
     final icon = _transportType == McpTransportType.stdio
         ? Icons.desktop_windows
         : Icons.cloud;
-    final label =
-        _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
+    final label = _transportType == McpTransportType.stdio
+        ? '本地 (stdio)'
+        : '远程 (SSE)';
     return ReadOnlyField(
       icon: icon,
       iconColor: cs.primary,
