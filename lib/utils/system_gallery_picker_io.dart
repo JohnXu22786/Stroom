@@ -55,10 +55,7 @@ Future<List<XFile>> pickNativeGalleryMedia(
         targetWidth / asset.width,
         targetHeight / asset.height,
       );
-      final width = (asset.width * scale)
-          .round()
-          .clamp(1, targetWidth)
-          .toInt();
+      final width = (asset.width * scale).round().clamp(1, targetWidth).toInt();
       final height = (asset.height * scale)
           .round()
           .clamp(1, targetHeight)
@@ -75,12 +72,7 @@ Future<List<XFile>> pickNativeGalleryMedia(
       final basename = p.basenameWithoutExtension(title);
       final name = '${basename.isEmpty ? 'image' : basename}.jpg';
       files.add(
-        XFile.fromData(
-          bytes,
-          mimeType: 'image/jpeg',
-          name: name,
-          path: name,
-        ),
+        XFile.fromData(bytes, mimeType: 'image/jpeg', name: name, path: name),
       );
       continue;
     }
@@ -99,9 +91,7 @@ Future<void> _showGalleryPermissionDialog(BuildContext context) async {
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('需要访问相册'),
-      content: const Text(
-        '允许 Stroom 访问照片和视频后，才能浏览并导入设备媒体。返回应用后请再次打开设备相册。',
-      ),
+      content: const Text('允许 Stroom 访问照片和视频后，才能浏览并导入设备媒体。返回应用后请再次打开设备相册。'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
