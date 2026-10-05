@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,31 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/startup_data_validation_unavailable.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/startup/startup_check_service.dart';
+
+Future<String> Function()? loadStartupValidationWorkerSourceForTesting;
+
+void _mockStartupValidationWorkerAsset() {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMessageHandler('flutter/assets', (message) async {
+    final assetKey = utf8.decode(
+      message!.buffer.asUint8List(
+        message.offsetInBytes,
+        message.lengthInBytes,
+      ),
+    );
+    if (assetKey != 'web/data_integrity_json_worker.js') return null;
+    final loadWorkerSource = loadStartupValidationWorkerSourceForTesting;
+    if (loadWorkerSource == null) {
+      throw StateError('Web validation worker asset source is missing');
+    }
+    final source = await loadWorkerSource();
+    return ByteData.sublistView(Uint8List.fromList(utf8.encode(source)));
+  });
+  addTearDown(() {
+    messenger.setMockMessageHandler('flutter/assets', null);
+  });
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +120,8 @@ void main() {
     test(
       'preserves all format findings when the primary Web worker fails',
       () async {
+        _mockStartupValidationWorkerAsset();
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
           'provider_entries',
@@ -135,8 +163,8 @@ void main() {
             throwsA(isA<StartupDataValidationUnavailable>()),
           );
 
-          json_parser.debugBundledValidationWorkerForTesting = (_) async =>
-              '[{}]';
+          json_parser.debugBundledValidationWorkerForTesting =
+              (_) async => '[{}]';
           await expectLater(
             StartupCheckService.validateDataFormats(),
             throwsA(isA<StartupDataValidationUnavailable>()),
@@ -369,6 +397,7 @@ void main() {
     test(
       'keeps the Web event loop responsive while checking large provider entries',
       () async {
+        _mockStartupValidationWorkerAsset();
         final providerEntries = List.generate(
           75000,
           (_) => {'type': 'llm'},
