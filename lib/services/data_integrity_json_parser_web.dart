@@ -75,8 +75,8 @@ Future<String> _runWorker(List<Object?> message) async {
 
 String _workerUrl() {
   final baseHref = html.document.querySelector('base')?.getAttribute('href');
-  final appBase = Uri.parse(html.window.location.href)
-      .resolve(baseHref ?? './');
+  final appBase =
+      Uri.parse(html.window.location.href).resolve(baseHref ?? './');
   return appBase.resolve('data_integrity_json_worker.js').toString();
 }
 

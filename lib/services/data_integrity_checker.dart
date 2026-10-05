@@ -56,10 +56,10 @@ class _JsonIntegrityCheck {
   });
 
   DataIntegrityIssue issue(String error) => DataIntegrityIssue(
-    part: part,
-    message: '$messagePrefix$error',
-    isCorruption: true,
-  );
+        part: part,
+        message: '$messagePrefix$error',
+        isCorruption: true,
+      );
 }
 
 /// 启动数据完整性校验器。
@@ -227,8 +227,7 @@ class DataIntegrityChecker {
     var parseIndex = 0;
     final issues = <DataIntegrityIssue>[];
     for (final check in checks) {
-      final error =
-          check.readError ??
+      final error = check.readError ??
           (check.content == null ? null : parseErrors[parseIndex++]);
       if (error != null) issues.add(check.issue(error));
     }
@@ -278,9 +277,8 @@ class DataIntegrityChecker {
       if (db != null) {
         try {
           final rows = await db.rawQuery('PRAGMA integrity_check');
-          final result = rows.isEmpty
-              ? ''
-              : (rows.first.values.first as String?);
+          final result =
+              rows.isEmpty ? '' : (rows.first.values.first as String?);
           if (result != 'ok') {
             issues.add(
               DataIntegrityIssue(
