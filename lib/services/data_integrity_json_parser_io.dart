@@ -1,7 +1,14 @@
 import 'dart:convert';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+
+@visibleForTesting
+Future<String> Function(List<Object?> message)?
+    debugPrimaryValidationWorkerForTesting;
+@visibleForTesting
+Future<String> Function(List<Object?> message)?
+    debugBundledValidationWorkerForTesting;
 
 Future<List<String?>> parseJsonBatch(List<String> contents) async {
   if (contents.isEmpty) return const [];

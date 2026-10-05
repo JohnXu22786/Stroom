@@ -1,5 +1,14 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
+@visibleForTesting
+Future<String> Function(List<Object?> message)?
+    debugPrimaryValidationWorkerForTesting;
+@visibleForTesting
+Future<String> Function(List<Object?> message)?
+    debugBundledValidationWorkerForTesting;
+
 Future<List<String?>> parseJsonBatch(List<String> contents) async =>
     contents.map((content) {
       try {

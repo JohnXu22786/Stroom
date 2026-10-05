@@ -9,6 +9,7 @@ import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
 import 'data_integrity_json_parser.dart' as json_parser;
 import 'manifest_database.dart';
+import 'startup_data_validation_unavailable.dart';
 import 'storage_service.dart';
 
 /// 单条完整性校验问题。
@@ -334,6 +335,7 @@ class DataIntegrityChecker {
         }
       }
     } catch (e) {
+      if (e is StartupDataValidationUnavailable) rethrow;
       debugPrint('[DataIntegrityChecker] 语义校验失败: $e');
     }
   }

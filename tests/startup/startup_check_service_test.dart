@@ -1,13 +1,41 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/startup/startup_check_service.dart';
+import 'package:stroom/services/data_integrity_json_parser.dart' as json_parser;
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/startup_data_validation_unavailable.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/startup/startup_check_service.dart';
+
+Future<String> Function()? loadStartupValidationWorkerSourceForTesting;
+
+void _mockStartupValidationWorkerAsset() {
+  final messenger =
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMessageHandler('flutter/assets', (message) async {
+    final assetKey = utf8.decode(
+      message!.buffer.asUint8List(
+        message.offsetInBytes,
+        message.lengthInBytes,
+      ),
+    );
+    if (assetKey != 'web/data_integrity_json_worker.js') return null;
+    final loadWorkerSource = loadStartupValidationWorkerSourceForTesting;
+    if (loadWorkerSource == null) {
+      throw StateError('Web validation worker asset source is missing');
+    }
+    final source = await loadWorkerSource();
+    return ByteData.sublistView(Uint8List.fromList(utf8.encode(source)));
+  });
+  addTearDown(() {
+    messenger.setMockMessageHandler('flutter/assets', null);
+  });
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -89,6 +117,67 @@ void main() {
   });
 
   group('StartupCheckService - data format validation', () {
+    test(
+      'preserves all format findings when the primary Web worker fails',
+      () async {
+        _mockStartupValidationWorkerAsset();
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'provider_entries',
+          '[{"id":"","type":7,"name":null,"configs":[null]}]',
+        );
+        await prefs.setString(
+          'conversations',
+          '[{"id":1,"messages":"not-a-list"}]',
+        );
+
+        final previousWorker =
+            json_parser.debugPrimaryValidationWorkerForTesting;
+        final previousBundledWorker =
+            json_parser.debugBundledValidationWorkerForTesting;
+        json_parser.debugPrimaryValidationWorkerForTesting = (_) async {
+          throw StateError('simulated primary worker failure');
+        };
+        try {
+          final issues = await StartupCheckService.validateDataFormats();
+          final messages = issues.map((issue) => issue.message).toSet();
+
+          expect(
+            messages,
+            containsAll([
+              'provider_entries[0]: id 字段缺失或为空',
+              'provider_entries[0]: type 字段缺失或为空',
+              'provider_entries[0]: name 字段缺失或为空',
+              'provider_entries[0].configs[0]: 条目不是合法对象，可能会导致解析闪退',
+              'conversations[0]: id 字段缺失',
+              'conversations[0]: messages 字段不是合法列表',
+            ]),
+          );
+
+          json_parser.debugBundledValidationWorkerForTesting = (_) async {
+            throw StateError('simulated bundled worker failure');
+          };
+          await expectLater(
+            StartupCheckService.validateDataFormats(),
+            throwsA(isA<StartupDataValidationUnavailable>()),
+          );
+
+          json_parser.debugBundledValidationWorkerForTesting =
+              (_) async => '[{}]';
+          await expectLater(
+            StartupCheckService.validateDataFormats(),
+            throwsA(isA<StartupDataValidationUnavailable>()),
+          );
+        } finally {
+          json_parser.debugPrimaryValidationWorkerForTesting = previousWorker;
+          json_parser.debugBundledValidationWorkerForTesting =
+              previousBundledWorker;
+        }
+      },
+      skip: !kIsWeb,
+    );
+
     test('validates provider_entries JSON structure', () async {
       final prefs = await SharedPreferences.getInstance();
       // Valid provider_entries
@@ -308,6 +397,7 @@ void main() {
     test(
       'keeps the Web event loop responsive while checking large provider entries',
       () async {
+        _mockStartupValidationWorkerAsset();
         final providerEntries = List.generate(
           75000,
           (_) => {'type': 'llm'},
@@ -322,6 +412,15 @@ void main() {
         var integrityFallbackUsed = false;
         final eventLoopTick = Completer<bool>();
         final previousDebugPrint = debugPrint;
+        final previousWorker =
+            json_parser.debugPrimaryValidationWorkerForTesting;
+        final previousBundledWorker =
+            json_parser.debugBundledValidationWorkerForTesting;
+        var primaryWorkerFailed = false;
+        json_parser.debugPrimaryValidationWorkerForTesting = (_) async {
+          primaryWorkerFailed = true;
+          throw StateError('simulated primary worker failure');
+        };
         debugPrint = (message, {wrapWidth}) {
           if (message?.contains('Web worker integrity check failed') == true ||
               message?.contains('Isolate check failed') == true) {
@@ -339,8 +438,12 @@ void main() {
         } finally {
           integrityCheckCompleted = true;
           debugPrint = previousDebugPrint;
+          json_parser.debugPrimaryValidationWorkerForTesting = previousWorker;
+          json_parser.debugBundledValidationWorkerForTesting =
+              previousBundledWorker;
         }
 
+        expect(primaryWorkerFailed, isTrue);
         expect(
           await eventLoopTick.future,
           isTrue,

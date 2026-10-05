@@ -15,6 +15,7 @@ import '../services/app_log_service.dart';
 import '../services/backup_service.dart';
 import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
+import '../services/startup_data_validation_unavailable.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -51,7 +52,7 @@ class _StartupAppState extends State<StartupApp>
   String _statusMessage = '';
   String? _progressDetail;
 
-  /// 数据安全防线阻断原因（版本哨兵 / 迁移失败冻结 / 无法修复冻结）。
+  /// 数据安全防线阻断原因（版本哨兵 / 检查不可用 / 冻结）。
   /// 非 null 时启动页显示阻断页（拒绝进入主应用），不再渐出。
   String? _dataSafetyBlocked;
 
@@ -263,6 +264,7 @@ class _StartupAppState extends State<StartupApp>
             'StartupApp', '数据格式验证完成: 发现 ${formatIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] validateDataFormats failed: $e');
+        if (e is StartupDataValidationUnavailable) rethrow;
         await AppLogService.error('StartupApp', '验证数据格式失败', e);
         formatIssues = <StartupIssue>[];
       }
@@ -286,6 +288,7 @@ class _StartupAppState extends State<StartupApp>
             'StartupApp', '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题');
       } catch (e) {
         debugPrint('[StartupApp] checkDataIntegrity failed: $e');
+        if (e is StartupDataValidationUnavailable) rethrow;
         await AppLogService.error('StartupApp', '检查数据完整性失败', e);
         integrityIssues = <StartupIssue>[];
       }
@@ -390,6 +393,16 @@ class _StartupAppState extends State<StartupApp>
       debugPrint('[StartupApp] Startup sequence failed: $e');
       debugPrint('[StartupApp] Stack: $stack');
       if (!mounted) return;
+
+      if (e is StartupDataValidationUnavailable) {
+        setState(() {
+          _isWorking = false;
+          _progressDetail = null;
+          _dataSafetyBlocked = '无法完成启动数据安全检查，应用已阻止继续启动以保护数据。'
+              '\n\n请检查浏览器设置并重新打开应用。';
+        });
+        return;
+      }
 
       // Show the actual error to the user, don't hide it
       setState(() {
