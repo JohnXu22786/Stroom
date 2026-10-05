@@ -166,25 +166,33 @@ class _McpServerConfigDialogState
   }
 
   bool _isCredentialFieldName(String name) {
-    final normalizedName = name.toLowerCase().replaceAll(
-          RegExp(r'[^a-z0-9]'),
-          '',
-        );
-    return normalizedName.contains('auth') ||
-        normalizedName.contains('key') ||
-        normalizedName.contains('token') ||
-        normalizedName.contains('secret');
+    final separatedName = name.replaceAllMapped(
+      RegExp(r'([a-z0-9])([A-Z])'),
+      (match) => '${match[1]} ${match[2]}',
+    );
+    final nameParts = separatedName
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((part) => part.isNotEmpty);
+    const credentialNameParts = {
+      'auth',
+      'authorization',
+      'authentication',
+      'apikey',
+      'key',
+      'token',
+      'secret',
+    };
+    return nameParts.any(credentialNameParts.contains);
   }
 
   void _syncExistingApiKey(Map<String, String> values, String? newApiKey) {
-    if (_originalApiKey.isEmpty) return;
+    if (_originalApiKey.isEmpty || newApiKey == _originalApiKey) return;
 
     for (final entry in values.entries.toList()) {
       final value = entry.value.trim();
       final hasBearerPrefix = value.startsWith('Bearer ');
       if (!_isCredentialFieldName(entry.key) && !hasBearerPrefix) continue;
-      final bearerValue = hasBearerPrefix ? value.substring(7).trim() : null;
-      if (value != _originalApiKey && bearerValue != _originalApiKey) continue;
 
       if (newApiKey == null) {
         values.remove(entry.key);

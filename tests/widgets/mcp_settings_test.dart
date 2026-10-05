@@ -155,19 +155,24 @@ void main() {
         });
         await _openCustomMcpConfig(
           tester,
+          apiKey: 'sk-current',
           headers: {
             'X-Mode': 'keep-this-header',
-            'Authorization': 'Bearer sk-old',
+            'Authorization': 'Bearer sk-header-old',
           },
           env: {
             'CUSTOM_SETTING': 'keep-this-value',
-            'CUSTOM_API_KEY': 'sk-old',
+            'CUSTOM_API_KEY': 'sk-env-old',
             'PATH': '/custom/bin',
           },
         );
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-current',
+        );
         await tester.enterText(_apiKeyFieldFinder(), 'sk-new');
         await tester.tap(find.text('保存'));
         await tester.pumpAndSettle();
@@ -279,6 +284,7 @@ void main() {
           tester,
           stdio: true,
           env: {
+            'KEYBOARD_LAYOUT': 'us',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'sk-env',
             'PATH': '/custom/bin',
@@ -309,6 +315,7 @@ void main() {
         expect(
           typeConfig['env'],
           {
+            'KEYBOARD_LAYOUT': 'us',
             'CUSTOM_SETTING': 'keep-this-value',
             'PATH': '/custom/bin',
           },
@@ -339,7 +346,19 @@ void main() {
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
         });
-        await _openCustomMcpConfig(tester, apiKey: 'sk-123');
+        await _openCustomMcpConfig(
+          tester,
+          apiKey: 'sk-123',
+          headers: {
+            'X-Mode': 'keep-this-header',
+            'Authorization': 'Bearer stale-header-key',
+          },
+          env: {
+            'CUSTOM_SETTING': 'keep-this-value',
+            'CUSTOM_API_KEY': 'stale-env-key',
+            'PATH': '/custom/bin',
+          },
+        );
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
@@ -363,6 +382,14 @@ void main() {
             (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig, isNot(contains('apiKey')));
+        expect(typeConfig['headers'], {'X-Mode': 'keep-this-header'});
+        expect(
+          typeConfig['env'],
+          {
+            'CUSTOM_SETTING': 'keep-this-value',
+            'PATH': '/custom/bin',
+          },
+        );
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),
