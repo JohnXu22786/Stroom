@@ -408,9 +408,14 @@ class _McpServerConfigDialogState
     if (_isExistingConfig) {
       _nameController.text = name;
       _descriptionController.text = description;
-      _commandController.text = _commandController.text.trim();
-      _argsController.text = args.join(', ');
-      _urlController.text = _urlController.text.trim();
+      _commandController.text = _transportType == McpTransportType.stdio
+          ? _commandController.text.trim()
+          : '';
+      _argsController.text =
+          _transportType == McpTransportType.stdio ? args.join(', ') : '';
+      _urlController.text = _transportType == McpTransportType.sse
+          ? _urlController.text.trim()
+          : '';
       _apiKeyController.text = effectiveApiKey ?? _originalApiKey;
       _exitEditMode();
     } else {

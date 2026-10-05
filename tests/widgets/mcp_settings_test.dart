@@ -59,6 +59,21 @@ Finder _descriptionFieldFinder() => find.byWidgetPredicate(
       (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
     );
 
+Finder _commandFieldFinder() => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '例如: npx',
+    );
+
+Finder _argsFieldFinder() => find.byWidgetPredicate(
+      (w) =>
+          w is TextField && w.decoration?.hintText?.startsWith('用逗号分隔') == true,
+    );
+
+Finder _urlFieldFinder() => find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == '例如: http://localhost:3001/sse',
+    );
+
 Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
       (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
     );
@@ -71,6 +86,7 @@ Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
 Future<void> _openCustomMcpConfig(
   WidgetTester tester, {
   Future<void>? updateGate,
+  bool stdio = false,
 }) async {
   SharedPreferences.setMockInitialValues({
     'provider_entries': jsonEncode([
@@ -81,17 +97,24 @@ Future<void> _openCustomMcpConfig(
         'configs': [
           {
             'providerName': 'Custom MCP',
-            'host': 'https://mcp.example.com/sse',
+            'host': stdio ? '' : 'https://mcp.example.com/sse',
             'key': '',
             'models': [
               {
                 'name': 'Custom MCP',
-                'modelId': 'sse',
-                'typeConfig': {
-                  'transport': 'sse',
-                  'url': 'https://mcp.example.com/sse',
-                  'description': 'Original description',
-                },
+                'modelId': stdio ? 'stdio' : 'sse',
+                'typeConfig': stdio
+                    ? {
+                        'transport': 'stdio',
+                        'command': 'npx',
+                        'args': ['-y', 'example-server'],
+                        'description': 'Original description',
+                      }
+                    : {
+                        'transport': 'sse',
+                        'url': 'https://mcp.example.com/sse',
+                        'description': 'Original description',
+                      },
               },
             ],
           },
@@ -113,6 +136,67 @@ void main() {
     setUp(() {
       registerBuiltinProviderTypes();
     });
+
+    testWidgets(
+      'saving a transport switch clears fields omitted from persisted config',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(tester, stdio: true);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(_commandFieldFinder()).controller!.text,
+            'npx');
+        expect(
+          tester.widget<TextField>(_argsFieldFinder()).controller!.text,
+          '-y, example-server',
+        );
+
+        await tester.tap(find.text('远程 (SSE)'));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          _urlFieldFinder(),
+          'https://remote.example.com/sse',
+        );
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(typeConfig['transport'], 'sse');
+        expect(typeConfig, isNot(contains('command')));
+        expect(typeConfig, isNot(contains('args')));
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('本地 (stdio)'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_commandFieldFinder()).controller!.text,
+          isEmpty,
+          reason: 'switching back must not reveal the omitted command value',
+        );
+        expect(
+          tester.widget<TextField>(_argsFieldFinder()).controller!.text,
+          isEmpty,
+          reason: 'switching back must not reveal omitted argument values',
+        );
+      },
+    );
 
     testWidgets(
         'built-in MCP details keep the "Bearer " placeholder unset and expose '
