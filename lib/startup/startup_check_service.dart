@@ -56,7 +56,7 @@ class StartupJsonBatchResult {
 
 @visibleForTesting
 Future<List<StartupIssue>> Function(List<StartupIssue> Function() computation)?
-debugStartupIsolateRunnerForTesting;
+    debugStartupIsolateRunnerForTesting;
 
 Future<List<StartupIssue>> _runStartupIsolate(
   List<StartupIssue> Function() computation,
@@ -196,12 +196,10 @@ class StartupCheckService {
     bool validateConversations = true,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final providerEntriesJson = validateProviderEntries
-        ? prefs.getString('provider_entries')
-        : null;
-    final conversationsJson = validateConversations
-        ? prefs.getString('conversations')
-        : null;
+    final providerEntriesJson =
+        validateProviderEntries ? prefs.getString('provider_entries') : null;
+    final conversationsJson =
+        validateConversations ? prefs.getString('conversations') : null;
 
     if (kIsWeb) {
       try {
@@ -487,8 +485,7 @@ class StartupCheckService {
           if (rawModels != null && rawModels is! List) {
             issues.add(
               StartupIssue(
-                message:
-                    'provider_entries[$i].configs[$ci].models: '
+                message: 'provider_entries[$i].configs[$ci].models: '
                     '字段不是合法列表',
                 severity: StartupIssueSeverity.error,
                 dataKey: 'provider_entries',
@@ -524,8 +521,7 @@ class StartupCheckService {
       if (list[j] is! Map<String, dynamic>) {
         issues.add(
           StartupIssue(
-            message:
-                'provider_entries[$entryIndex].$fieldName[$j]: '
+            message: 'provider_entries[$entryIndex].$fieldName[$j]: '
                 '条目不是合法对象，可能会导致解析闪退',
             severity: StartupIssueSeverity.error,
             dataKey: 'provider_entries',
@@ -707,8 +703,7 @@ class StartupCheckService {
       if (!_isKnownProviderType(type)) {
         issues.add(
           StartupIssue(
-            message:
-                'provider_entries[$i]: 未知的供应商类型 "$type"，'
+            message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
                 '应用可能无法正常使用该供应商',
             severity: StartupIssueSeverity.warning,
             dataKey: 'provider_entries',
