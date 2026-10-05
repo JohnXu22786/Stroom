@@ -39,6 +39,20 @@ Future<List<Map<String, String?>>> validateDataFormatsWeb(
       .toList();
 }
 
+Future<List<Map<String, String?>>> checkDataIntegrityWeb(
+  String? providerEntriesJson,
+) async {
+  final decoded = jsonDecode(
+    await _runWorker(['checkDataIntegrity', providerEntriesJson]),
+  );
+  if (decoded is! List || decoded.any((issue) => issue is! Map)) {
+    throw StateError('Invalid JSON worker response');
+  }
+  return decoded
+      .map((issue) => Map<String, String?>.from(issue as Map))
+      .toList();
+}
+
 Future<String> _runWorker(List<Object?> message) async {
   final result = Completer<String>();
   html.Worker? worker;

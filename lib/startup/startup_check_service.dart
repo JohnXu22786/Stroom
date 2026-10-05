@@ -455,6 +455,27 @@ class StartupCheckService {
     final prefs = await SharedPreferences.getInstance();
     final providerEntriesJson = prefs.getString('provider_entries');
 
+    if (kIsWeb) {
+      try {
+        final resultMaps =
+            await json_parser.checkDataIntegrityWeb(providerEntriesJson);
+        return resultMaps.map((issue) {
+          return StartupIssue(
+            message: issue['message']!,
+            severity: issue['severity'] == 'error'
+                ? StartupIssueSeverity.error
+                : StartupIssueSeverity.warning,
+            dataKey: issue['dataKey'],
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint(
+          '[StartupCheckService] Web worker integrity check failed: $e',
+        );
+        return _checkDataIntegritySync(providerEntriesJson);
+      }
+    }
+
     // 在测试环境下回退到同步执行
     if (_inTestMode()) {
       return _checkDataIntegritySync(providerEntriesJson);

@@ -15,3 +15,8 @@ Future<List<Map<String, String?>>> validateDataFormatsWeb(
   String? conversationsJson,
 ) async =>
     throw UnsupportedError('Web JSON worker is not available on this platform');
+
+Future<List<Map<String, String?>>> checkDataIntegrityWeb(
+  String? providerEntriesJson,
+) async =>
+    throw UnsupportedError('Web JSON worker is not available on this platform');

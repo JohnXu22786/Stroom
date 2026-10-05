@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/startup_check_service.dart';
@@ -303,6 +305,65 @@ void main() {
   });
 
   group('StartupCheckService - data integrity checks', () {
+    test(
+      'keeps the Web event loop responsive while checking large provider entries',
+      () async {
+        final providerEntries = List.generate(
+          75000,
+          (_) => {'type': 'llm'},
+        )..add({'type': 'unknown_provider'});
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'provider_entries',
+          jsonEncode(providerEntries),
+        );
+
+        var integrityCheckCompleted = false;
+        var integrityFallbackUsed = false;
+        final eventLoopTick = Completer<bool>();
+        final previousDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) {
+          if (message?.contains('Web worker integrity check failed') == true ||
+              message?.contains('Isolate check failed') == true) {
+            integrityFallbackUsed = true;
+          }
+          previousDebugPrint(message, wrapWidth: wrapWidth);
+        };
+        late List<StartupIssue> issues;
+        try {
+          final integrityCheck = StartupCheckService.checkDataIntegrity();
+          Timer(const Duration(milliseconds: 1), () {
+            eventLoopTick.complete(!integrityCheckCompleted);
+          });
+          issues = await integrityCheck;
+        } finally {
+          integrityCheckCompleted = true;
+          debugPrint = previousDebugPrint;
+        }
+
+        expect(
+          await eventLoopTick.future,
+          isTrue,
+          reason:
+              'large Web integrity checks should yield to the browser event loop',
+        );
+        expect(
+          integrityFallbackUsed,
+          isFalse,
+          reason:
+              'Web integrity checks should not fall back to main-thread parsing',
+        );
+        expect(issues, hasLength(1));
+        expect(issues.single.dataKey, 'provider_entries');
+        expect(
+          issues.single.message,
+          'provider_entries[75000]: 未知的供应商类型 "unknown_provider"，'
+          '应用可能无法正常使用该供应商',
+        );
+      },
+      skip: !kIsWeb,
+    );
+
     test('detects orphaned provider entries with missing type registration',
         () async {
       final prefs = await SharedPreferences.getInstance();
