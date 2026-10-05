@@ -24,11 +24,13 @@ Future<List<Map<String, String?>>> validateDataFormatsWeb(
   String? providerEntriesJson,
   String? conversationsJson,
 ) async {
-  final decoded = jsonDecode(await _runWorker([
-    'validateDataFormats',
-    providerEntriesJson,
-    conversationsJson,
-  ]));
+  final decoded = jsonDecode(
+    await _runWorker([
+      'validateDataFormats',
+      providerEntriesJson,
+      conversationsJson,
+    ]),
+  );
   if (decoded is! List || decoded.any((issue) => issue is! Map)) {
     throw StateError('Invalid JSON worker response');
   }
@@ -56,8 +58,9 @@ Future<String> _runWorker(List<Object?> message) async {
     });
     errorSubscription = activeWorker.onError.listen((event) {
       if (!result.isCompleted) {
-        final message =
-            event is html.ErrorEvent ? event.message : 'JSON worker failed';
+        final message = event is html.ErrorEvent
+            ? event.message ?? 'JSON worker failed'
+            : 'JSON worker failed';
         result.completeError(StateError(message));
       }
     });
@@ -72,7 +75,8 @@ Future<String> _runWorker(List<Object?> message) async {
 
 String _workerUrl() {
   final baseHref = html.document.querySelector('base')?.getAttribute('href');
-  final appBase = Uri.parse(html.window.location.href).resolve(baseHref ?? './');
+  final appBase = Uri.parse(html.window.location.href)
+      .resolve(baseHref ?? './');
   return appBase.resolve('data_integrity_json_worker.js').toString();
 }
 

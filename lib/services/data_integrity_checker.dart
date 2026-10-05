@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -57,10 +56,10 @@ class _JsonIntegrityCheck {
   });
 
   DataIntegrityIssue issue(String error) => DataIntegrityIssue(
-        part: part,
-        message: '$messagePrefix$error',
-        isCorruption: true,
-      );
+    part: part,
+    message: '$messagePrefix$error',
+    isCorruption: true,
+  );
 }
 
 /// 启动数据完整性校验器。
@@ -115,7 +114,8 @@ class DataIntegrityChecker {
   // ================================================================
 
   static Future<void> _readPrefsJsonKeys(
-      List<_JsonIntegrityCheck> checks) async {
+    List<_JsonIntegrityCheck> checks,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final key in [
@@ -125,11 +125,13 @@ class DataIntegrityChecker {
       ]) {
         final raw = prefs.getString(key);
         if (raw == null || raw.isEmpty) continue;
-        checks.add(_JsonIntegrityCheck(
-          part: key == 'data_format_versions' ? 'settings' : 'chat',
-          messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
-          content: raw,
-        ));
+        checks.add(
+          _JsonIntegrityCheck(
+            part: key == 'data_format_versions' ? 'settings' : 'chat',
+            messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
+            content: raw,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
@@ -140,8 +142,7 @@ class DataIntegrityChecker {
   // 2. 任务/任务流 JSON 文件
   // ================================================================
 
-  static Future<void> _readTaskFiles(
-      List<_JsonIntegrityCheck> checks) async {
+  static Future<void> _readTaskFiles(List<_JsonIntegrityCheck> checks) async {
     if (kIsWeb) return;
     try {
       final appDir = await AppStorage.directory;
@@ -151,17 +152,21 @@ class DataIntegrityChecker {
         try {
           final content = await file.readAsString();
           if (content.trim().isEmpty) continue;
-          checks.add(_JsonIntegrityCheck(
-            part: 'tasks',
-            messagePrefix: '任务文件 $rel 无法解析: ',
-            content: content,
-          ));
+          checks.add(
+            _JsonIntegrityCheck(
+              part: 'tasks',
+              messagePrefix: '任务文件 $rel 无法解析: ',
+              content: content,
+            ),
+          );
         } catch (e) {
-          checks.add(_JsonIntegrityCheck(
-            part: 'tasks',
-            messagePrefix: '任务文件 $rel 无法解析: ',
-            readError: e.toString(),
-          ));
+          checks.add(
+            _JsonIntegrityCheck(
+              part: 'tasks',
+              messagePrefix: '任务文件 $rel 无法解析: ',
+              readError: e.toString(),
+            ),
+          );
         }
       }
     } catch (e) {
@@ -182,17 +187,21 @@ class DataIntegrityChecker {
       try {
         final content = await file.readAsString();
         if (content.trim().isEmpty) return;
-        checks.add(_JsonIntegrityCheck(
-          part: 'browserCookies',
-          messagePrefix: 'browser_cookies.json 无法解析: ',
-          content: content,
-        ));
+        checks.add(
+          _JsonIntegrityCheck(
+            part: 'browserCookies',
+            messagePrefix: 'browser_cookies.json 无法解析: ',
+            content: content,
+          ),
+        );
       } catch (e) {
-        checks.add(_JsonIntegrityCheck(
-          part: 'browserCookies',
-          messagePrefix: 'browser_cookies.json 无法解析: ',
-          readError: e.toString(),
-        ));
+        checks.add(
+          _JsonIntegrityCheck(
+            part: 'browserCookies',
+            messagePrefix: 'browser_cookies.json 无法解析: ',
+            readError: e.toString(),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[DataIntegrityChecker] cookies 检查失败: $e');
@@ -208,7 +217,8 @@ class DataIntegrityChecker {
   }
 
   static Future<List<DataIntegrityIssue>> _checkJsonChecks(
-      List<_JsonIntegrityCheck> checks) async {
+    List<_JsonIntegrityCheck> checks,
+  ) async {
     final contents = [
       for (final check in checks)
         if (check.content != null) check.content!,
@@ -217,7 +227,8 @@ class DataIntegrityChecker {
     var parseIndex = 0;
     final issues = <DataIntegrityIssue>[];
     for (final check in checks) {
-      final error = check.readError ??
+      final error =
+          check.readError ??
           (check.content == null ? null : parseErrors[parseIndex++]);
       if (error != null) issues.add(check.issue(error));
     }
@@ -229,7 +240,8 @@ class DataIntegrityChecker {
   // ================================================================
 
   static Future<void> _checkSqliteDatabases(
-      List<DataIntegrityIssue> issues) async {
+    List<DataIntegrityIssue> issues,
+  ) async {
     if (kIsWeb || WebFileStore.isTestMode) return;
 
     // ManifestDatabase（原生 SQLite）
@@ -238,18 +250,22 @@ class DataIntegrityChecker {
       final rows = await db.rawQuery('PRAGMA integrity_check');
       final result = rows.isEmpty ? '' : (rows.first.values.first as String?);
       if (result != 'ok') {
-        issues.add(DataIntegrityIssue(
-          part: 'media',
-          message: 'ManifestDatabase integrity_check: $result',
-          isCorruption: true,
-        ));
+        issues.add(
+          DataIntegrityIssue(
+            part: 'media',
+            message: 'ManifestDatabase integrity_check: $result',
+            isCorruption: true,
+          ),
+        );
       }
     } catch (e) {
-      issues.add(DataIntegrityIssue(
-        part: 'media',
-        message: 'ManifestDatabase 无法打开/校验: $e',
-        isCorruption: true,
-      ));
+      issues.add(
+        DataIntegrityIssue(
+          part: 'media',
+          message: 'ManifestDatabase 无法打开/校验: $e',
+          isCorruption: true,
+        ),
+      );
     }
 
     // Anki 数据库：只读打开 + integrity_check（不经过 provider，
@@ -262,25 +278,30 @@ class DataIntegrityChecker {
       if (db != null) {
         try {
           final rows = await db.rawQuery('PRAGMA integrity_check');
-          final result =
-              rows.isEmpty ? '' : (rows.first.values.first as String?);
+          final result = rows.isEmpty
+              ? ''
+              : (rows.first.values.first as String?);
           if (result != 'ok') {
-            issues.add(DataIntegrityIssue(
-              part: 'anki',
-              message: 'Anki integrity_check: $result',
-              isCorruption: true,
-            ));
+            issues.add(
+              DataIntegrityIssue(
+                part: 'anki',
+                message: 'Anki integrity_check: $result',
+                isCorruption: true,
+              ),
+            );
           }
         } finally {
           await db.close();
         }
       }
     } catch (e) {
-      issues.add(DataIntegrityIssue(
-        part: 'anki',
-        message: 'Anki 数据库校验跳过（无法打开）: $e',
-        isCorruption: false,
-      ));
+      issues.add(
+        DataIntegrityIssue(
+          part: 'anki',
+          message: 'Anki 数据库校验跳过（无法打开）: $e',
+          isCorruption: false,
+        ),
+      );
     }
   }
 
@@ -305,11 +326,13 @@ class DataIntegrityChecker {
       final startupIssues = await StartupCheckService.validateDataFormats();
       for (final issue in startupIssues) {
         if (issue.severity == StartupIssueSeverity.error) {
-          issues.add(DataIntegrityIssue(
-            part: 'chat',
-            message: issue.message,
-            isCorruption: true,
-          ));
+          issues.add(
+            DataIntegrityIssue(
+              part: 'chat',
+              message: issue.message,
+              isCorruption: true,
+            ),
+          );
         }
       }
     } catch (e) {
