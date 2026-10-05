@@ -142,30 +142,33 @@ class _McpServerConfigDialogState
     if (explicitApiKey.isNotEmpty) return explicitApiKey;
 
     for (final entry in config.headers.entries) {
-      if (!_isCredentialFieldName(entry.key) &&
-          !entry.value.trim().startsWith('Bearer ')) {
-        continue;
-      }
-      final apiKey = McpServerConfig.extractApiKeyFromTypeConfig({
-        'headers': {entry.key: entry.value},
-      });
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
+      final apiKey = _extractApiKeyFromFieldValue(entry.value);
       if (apiKey.isNotEmpty) return apiKey;
     }
 
     for (final entry in config.env.entries) {
-      if (!_isCredentialFieldName(entry.key) &&
-          !entry.value.trim().startsWith('Bearer ')) {
-        continue;
-      }
-      final apiKey = McpServerConfig.extractApiKeyFromTypeConfig({
-        'env': {entry.key: entry.value},
-      });
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
+      final apiKey = _extractApiKeyFromFieldValue(entry.value);
       if (apiKey.isNotEmpty) return apiKey;
     }
     return '';
   }
 
-  bool _isCredentialFieldName(String name) {
+  String _extractApiKeyFromFieldValue(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty || trimmedValue.toLowerCase() == 'bearer') {
+      return '';
+    }
+    final bearerMatch =
+        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    if (bearerMatch == null) return trimmedValue;
+
+    final key = trimmedValue.substring(bearerMatch.end).trim();
+    return key.toLowerCase() == 'bearer' ? '' : key;
+  }
+
+  bool _isApiKeySourceFieldName(String name) {
     final separatedName = name.replaceAllMapped(
       RegExp(r'([a-z0-9])([A-Z])'),
       (match) => '${match[1]} ${match[2]}',
@@ -174,30 +177,45 @@ class _McpServerConfigDialogState
         .toLowerCase()
         .split(RegExp(r'[^a-z0-9]+'))
         .where((part) => part.isNotEmpty);
-    const credentialNameParts = {
-      'auth',
-      'authorization',
-      'authentication',
-      'apikey',
-      'key',
-      'token',
-      'secret',
-    };
-    return nameParts.any(credentialNameParts.contains);
+    const apiKeyParts = {'key', 'token', 'secret'};
+    return nameParts.contains('authorization') ||
+        nameParts.contains('apikey') ||
+        (nameParts.contains('api') && nameParts.any(apiKeyParts.contains));
+  }
+
+  String _apiKeyValueForSource(
+      String fieldName, String originalValue, String newApiKey) {
+    final trimmedValue = originalValue.trim();
+    final bearerMatch =
+        RegExp(r'^bearer\s+', caseSensitive: false).firstMatch(trimmedValue);
+    if (bearerMatch != null) {
+      return '${trimmedValue.substring(0, bearerMatch.end)}$newApiKey';
+    }
+
+    if (fieldName.toLowerCase() == 'authorization') {
+      return 'Bearer $newApiKey';
+    }
+    return newApiKey;
+  }
+
+  bool _isApiKeyPlaceholder(String fieldName, String value) {
+    final trimmedValue = value.trim();
+    return trimmedValue.isEmpty ||
+        trimmedValue.toLowerCase() == 'bearer' ||
+        trimmedValue.toLowerCase() == fieldName.trim().toLowerCase();
   }
 
   void _syncExistingApiKey(Map<String, String> values, String? newApiKey) {
     if (_originalApiKey.isEmpty || newApiKey == _originalApiKey) return;
 
     for (final entry in values.entries.toList()) {
-      final value = entry.value.trim();
-      final hasBearerPrefix = value.startsWith('Bearer ');
-      if (!_isCredentialFieldName(entry.key) && !hasBearerPrefix) continue;
+      if (!_isApiKeySourceFieldName(entry.key)) continue;
 
       if (newApiKey == null) {
         values.remove(entry.key);
       } else {
-        values[entry.key] = hasBearerPrefix ? 'Bearer $newApiKey' : newApiKey;
+        values[entry.key] =
+            _apiKeyValueForSource(entry.key, entry.value, newApiKey);
       }
     }
   }
@@ -337,9 +355,10 @@ class _McpServerConfigDialogState
       _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey: replace empty placeholder values in env
       if (effectiveApiKey != null) {
-        for (final key in effectiveEnv.keys.toList()) {
-          if (effectiveEnv[key]!.isEmpty) {
-            effectiveEnv[key] = effectiveApiKey;
+        for (final entry in effectiveEnv.entries.toList()) {
+          if (_isApiKeySourceFieldName(entry.key) &&
+              _isApiKeyPlaceholder(entry.key, entry.value)) {
+            effectiveEnv[entry.key] = effectiveApiKey;
           }
         }
       }
@@ -381,19 +400,11 @@ class _McpServerConfigDialogState
       _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey into headers: replace placeholder values
       if (effectiveApiKey != null) {
-        for (final key in effectiveHeaders.keys.toList()) {
-          final val = effectiveHeaders[key]!;
-          // Match empty, key-only (e.g. "x-api-key "), or prefix-only (e.g. "Bearer ")
-          final isEmptyOrPlaceholder = val.isEmpty ||
-              val == '$key ' ||
-              val.endsWith(' ') ||
-              !RegExp(r'\S').hasMatch(val.trim());
-          if (isEmptyOrPlaceholder) {
-            if (key.toLowerCase() == 'authorization') {
-              effectiveHeaders[key] = 'Bearer $effectiveApiKey';
-            } else {
-              effectiveHeaders[key] = effectiveApiKey;
-            }
+        for (final entry in effectiveHeaders.entries.toList()) {
+          if (_isApiKeySourceFieldName(entry.key) &&
+              _isApiKeyPlaceholder(entry.key, entry.value)) {
+            effectiveHeaders[entry.key] =
+                _apiKeyValueForSource(entry.key, entry.value, effectiveApiKey);
           }
         }
       }

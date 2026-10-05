@@ -157,13 +157,18 @@ void main() {
           tester,
           apiKey: 'sk-current',
           headers: {
-            'X-Mode': 'keep-this-header',
-            'Authorization': 'Bearer sk-header-old',
+            'X-Mode': 'keep-this-header ',
+            'X-Optional': '',
+            'X-Debug-Text': 'Bearer diagnostic',
+            'Authorization': 'bearer sk-header-old',
+            'X-Api-Key': '',
           },
           env: {
+            'REFRESH_TOKEN': 'sk-current',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'sk-env-old',
             'PATH': '/custom/bin',
+            'UNRELATED_EMPTY': '',
           },
         );
 
@@ -192,16 +197,21 @@ void main() {
         expect(
           typeConfig['headers'],
           {
-            'X-Mode': 'keep-this-header',
-            'Authorization': 'Bearer sk-new',
+            'X-Mode': 'keep-this-header ',
+            'X-Optional': '',
+            'X-Debug-Text': 'Bearer diagnostic',
+            'Authorization': 'bearer sk-new',
+            'X-Api-Key': 'sk-new',
           },
         );
         expect(
           typeConfig['env'],
           {
+            'REFRESH_TOKEN': 'sk-current',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'sk-new',
             'PATH': '/custom/bin',
+            'UNRELATED_EMPTY': '',
           },
         );
         expect(find.text('••••••••'), findsOneWidget);
@@ -212,6 +222,58 @@ void main() {
           tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
           'sk-new',
         );
+      },
+    );
+
+    testWidgets(
+      'entering an API key only fills recognized environment placeholders',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(
+          tester,
+          stdio: true,
+          env: {
+            'API_KEY': '',
+            'CUSTOM_APIKEY': '',
+            'REFRESH_TOKEN': '',
+            'UNRELATED_EMPTY': '',
+            'KEYBOARD_LAYOUT': 'us',
+          },
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        await tester.enterText(_apiKeyFieldFinder(), 'sk-new');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(
+          typeConfig['env'],
+          {
+            'API_KEY': 'sk-new',
+            'CUSTOM_APIKEY': 'sk-new',
+            'REFRESH_TOKEN': '',
+            'UNRELATED_EMPTY': '',
+            'KEYBOARD_LAYOUT': 'us',
+          },
+        );
+        expect(find.text('••••••••'), findsOneWidget);
       },
     );
 
@@ -351,9 +413,11 @@ void main() {
           apiKey: 'sk-123',
           headers: {
             'X-Mode': 'keep-this-header',
+            'X-Debug-Text': 'Bearer diagnostic',
             'Authorization': 'Bearer stale-header-key',
           },
           env: {
+            'REFRESH_TOKEN': 'sk-123',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'stale-env-key',
             'PATH': '/custom/bin',
@@ -382,10 +446,17 @@ void main() {
             (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
         expect(typeConfig, isNot(contains('apiKey')));
-        expect(typeConfig['headers'], {'X-Mode': 'keep-this-header'});
+        expect(
+          typeConfig['headers'],
+          {
+            'X-Mode': 'keep-this-header',
+            'X-Debug-Text': 'Bearer diagnostic',
+          },
+        );
         expect(
           typeConfig['env'],
           {
+            'REFRESH_TOKEN': 'sk-123',
             'CUSTOM_SETTING': 'keep-this-value',
             'PATH': '/custom/bin',
           },
