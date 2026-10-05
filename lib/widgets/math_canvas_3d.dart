@@ -120,8 +120,8 @@ List<Point3D> _clipPolygonToDepthRange(
       final currentInside =
           keepGreater ? currentDepth >= boundary : currentDepth <= boundary;
       if (currentInside != previousInside) {
-        final fraction = (boundary - previousDepth) /
-            (currentDepth - previousDepth);
+        final fraction =
+            (boundary - previousDepth) / (currentDepth - previousDepth);
         output.add(previous + (current - previous) * fraction);
       }
       if (currentInside) output.add(current);
@@ -5924,15 +5924,14 @@ class MathCanvas3DPainter extends CustomPainter {
             ..close(),
         );
       }
-      final outlinePath = Path()
-        ..moveTo(projected.first.x, projected.first.y);
+      final outlinePath = Path()..moveTo(projected.first.x, projected.first.y);
       for (final point in projected.skip(1)) {
         outlinePath.lineTo(point.x, point.y);
       }
       outlinePath.close();
       final avgDepth =
           projected.fold<double>(0, (sum, point) => sum + point.z) /
-          projected.length;
+              projected.length;
 
       renderables.add(
         _Renderable(
