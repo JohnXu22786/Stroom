@@ -87,6 +87,7 @@ Future<void> _openCustomMcpConfig(
   WidgetTester tester, {
   Future<void>? updateGate,
   bool stdio = false,
+  String? apiKey,
 }) async {
   SharedPreferences.setMockInitialValues({
     'provider_entries': jsonEncode([
@@ -114,6 +115,7 @@ Future<void> _openCustomMcpConfig(
                         'transport': 'sse',
                         'url': 'https://mcp.example.com/sse',
                         'description': 'Original description',
+                        if (apiKey != null) 'apiKey': apiKey,
                       },
               },
             ],
@@ -136,6 +138,57 @@ void main() {
     setUp(() {
       registerBuiltinProviderTypes();
     });
+
+    testWidgets(
+      'clearing a saved API key stays unset after persistence',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(tester, apiKey: 'sk-123');
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-123',
+        );
+        await tester.enterText(_apiKeyFieldFinder(), '');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(typeConfig, isNot(contains('apiKey')));
+        expect(
+          find.descendant(
+            of: _readOnlyApiKeyFinder(),
+            matching: find.text('（未设置）'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('••••••••'), findsNothing);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          isEmpty,
+        );
+      },
+    );
 
     testWidgets(
       'saving a transport switch clears fields omitted from persisted config',

@@ -353,6 +353,8 @@ class _McpServerConfigDialogState
     if (description.isNotEmpty) {
       typeConfigMap['description'] = description;
     }
+    final savedApiKey =
+        McpServerConfig.extractApiKeyFromTypeConfig(typeConfigMap);
 
     // Store in ProviderConfigItem with typeConfig in models[0]
     final modelConfig = ModelConfig(
@@ -416,7 +418,7 @@ class _McpServerConfigDialogState
       _urlController.text = _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '';
-      _apiKeyController.text = effectiveApiKey ?? _originalApiKey;
+      _apiKeyController.text = savedApiKey;
       _exitEditMode();
     } else {
       Navigator.pop(context, true);
