@@ -46,6 +46,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
     setState(() {
       _isSaving = true;
       _saveError = null;
+      _isSaved = false;
     });
     try {
       final content = ConnectivityTestService.decodeTestContent(
@@ -116,6 +117,7 @@ class _ConnectivityTestDialogState extends State<ConnectivityTestDialog> {
                 controller: _contentController,
                 minLines: 7,
                 maxLines: 12,
+                enabled: !_isRunning && !_isSaving,
                 keyboardType: TextInputType.multiline,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 decoration: const InputDecoration(

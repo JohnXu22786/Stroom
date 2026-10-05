@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/mcp.dart';
 import 'package:stroom/pages/provider_config_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 
@@ -81,13 +82,18 @@ void main() {
     );
   }
 
-  Future<void> pumpPage(WidgetTester tester, Brightness brightness) async {
+  Future<void> pumpPage(
+    WidgetTester tester,
+    Brightness brightness, {
+    ProviderEntriesState? state,
+    String entryId = 'test_mcp',
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith((ref) {
             final notifier = ProviderEntriesNotifier();
-            notifier.state = mixedState();
+            notifier.state = state ?? mixedState();
             return notifier;
           }),
         ],
@@ -105,7 +111,7 @@ void main() {
           ),
           themeMode:
               brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light,
-          home: const ProviderConfigPage(entryId: 'test_mcp'),
+          home: ProviderConfigPage(entryId: entryId),
         ),
       ),
     );
@@ -113,11 +119,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  /// Scrolls to config [index], which may be lazily built in a later group.
+  Future<void> scrollToCard(
+    WidgetTester tester,
+    int index, {
+    required double delta,
+  }) async {
+    final card = find.byKey(ValueKey('config_test_mcp_$index'));
+    await tester.scrollUntilVisible(
+      card,
+      delta,
+      scrollable: find.byType(Scrollable).first,
+    );
+  }
+
   /// The card-level Container for config [index]. The page emits stable
   /// keys (`ValueKey('config_${entryId}_$i')`) on each _McpConfigCard; the
   /// card's outer Container (the one with the rounded BoxDecoration) is its
   /// first descendant Container.
-  BoxDecoration cardDecoration(WidgetTester tester, int index) {
+  Future<BoxDecoration> cardDecoration(WidgetTester tester, int index) async {
+    await scrollToCard(tester, index, delta: 200);
     final card = find.byKey(ValueKey('config_test_mcp_$index'));
     expect(card, findsOneWidget);
     final container = tester.widget<Container>(
@@ -127,9 +148,11 @@ void main() {
   }
 
   /// The icon-box Containers (borderRadius 10) of all cards.
-  List<Color?> iconBoxColors(WidgetTester tester) {
+  Future<List<Color?>> iconBoxColors(WidgetTester tester) async {
     final colors = <Color?>[];
-    for (var i = 0; i < 3; i++) {
+    // The preceding style checks leave the scroll view at the last card.
+    for (var i = 2; i >= 0; i--) {
+      await scrollToCard(tester, i, delta: -200);
       final card = find.byKey(ValueKey('config_test_mcp_$i'));
       final boxes = find
           .descendant(of: card, matching: find.byType(Container))
@@ -156,7 +179,7 @@ void main() {
     final expectedBg = cs.surfaceContainerLow;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'vendor and user-added cards must use the same background '
               '(matching the LLM provider page) — no primaryContainer tint');
@@ -167,10 +190,10 @@ void main() {
           reason: 'all cards must use the same border width');
     }
 
-    // Icon boxes: all use the same primaryContainer tint regardless of
-    // vendor/transport.
-    final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    // MCP icon boxes use the same theme-aware primary container color across
+    // vendor and transport types.
+    final expectedIconBox = cs.primaryContainer;
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
@@ -186,7 +209,7 @@ void main() {
     final expectedBg = cs.surfaceContainerHigh;
     final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
-      final d = cardDecoration(tester, i);
+      final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'dark mode must use the same adaptive background for every '
               'card, no vendor tint');
@@ -197,11 +220,119 @@ void main() {
           reason: 'all cards must use the same border width');
     }
 
-    final expectedIconBox = cs.primaryContainer.withValues(alpha: 0.3);
-    for (final color in iconBoxColors(tester)) {
+    final expectedIconBox = cs.primaryContainer;
+    for (final color in await iconBoxColors(tester)) {
       expect(color, expectedIconBox,
           reason: 'icon boxes must use the same tint for every card');
     }
+  });
+
+  testWidgets(
+      'Search group toggle leaves the MCP entry and other group enabled',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    final searchGroupTitle = find.text('搜索').first;
+    final searchGroupCard = find
+        .ancestor(of: searchGroupTitle, matching: find.byType(Container))
+        .first;
+    final groupSwitch =
+        find.descendant(of: searchGroupCard, matching: find.byType(Switch));
+    expect(groupSwitch, findsOneWidget);
+
+    await tester.tap(groupSwitch);
+    await tester.pumpAndSettle();
+
+    final state = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinSearchMcpGroupId)
+          .enabled,
+      isFalse,
+    );
+    expect(
+      state.mcpGroups
+          .firstWhere((group) => group.id == builtinMcpServicesGroupId)
+          .enabled,
+      isTrue,
+    );
+    expect(state.entries.single.enabled, isTrue);
+  });
+
+  testWidgets('built-in MCP group accepts newly added content', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester, Brightness.light);
+
+    final otherGroupTitle = find.text('其他 MCP 服务').first;
+    await tester.scrollUntilVisible(
+      otherGroupTitle,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    final groupCard = find
+        .ancestor(of: otherGroupTitle, matching: find.byType(Container))
+        .first;
+    final addButton = find.descendant(
+      of: groupCard,
+      matching: find.byTooltip('添加内容'),
+    );
+    expect(addButton, findsOneWidget);
+    await tester.tap(addButton);
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    await tester.enterText(fields.at(0), 'Local Docs');
+    await tester.enterText(fields.at(1), 'http://localhost:3000/sse');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final state = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider);
+    final added = state.entries.single.configs.singleWhere(
+      (config) => config.providerName == 'Local Docs',
+    );
+    expect(added.groupId, builtinMcpServicesGroupId);
+  });
+
+  testWidgets('editing an MCP config preserves its group and saved test',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final config = state.entries.single.configs[2];
+    const savedTest = {
+      'type': 'object',
+      'properties': {
+        'query': {'type': 'string'},
+      },
+    };
+    config.groupId = builtinMcpServicesGroupId;
+    config.models[0].typeConfig['connectivityTest'] = savedTest;
+    final configId = config.id;
+    await pumpPage(tester, Brightness.light, state: state);
+
+    final configCard = find.byKey(const ValueKey('config_test_mcp_2'));
+    await tester.scrollUntilVisible(
+      configCard,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(configCard);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final updated = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    ).read(providerEntriesProvider).entries.single.configs.singleWhere(
+          (item) => item.providerName == 'My Files',
+        );
+    expect(updated.id, configId);
+    expect(updated.groupId, builtinMcpServicesGroupId);
+    expect(updated.models[0].typeConfig['connectivityTest'], savedTest);
   });
 
   testWidgets('MCP master switch renders and toggles the entry enabled flag',
@@ -209,18 +340,25 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
 
-    // 总开关卡片渲染在配置列表顶部，值为 entry.enabled（默认 true）
-    final switchFinder = find.widgetWithText(SwitchListTile, 'MCP 总开关');
-    expect(switchFinder, findsOneWidget);
-    final switchTile = tester.widget<SwitchListTile>(switchFinder);
-    expect(switchTile.value, isTrue);
-
-    // 点击后写入 enabled=false，provider 状态同步更新
-    await tester.tap(find.descendant(
-      of: switchFinder,
+    // 总开关卡片渲染在配置列表顶部，状态徽标和开关对应 entry.enabled。
+    final masterCard = find
+        .ancestor(
+          of: find.text('MCP 服务器'),
+          matching: find.byType(Container),
+        )
+        .first;
+    final switchFinder = find.descendant(
+      of: masterCard,
       matching: find.byType(Switch),
-    ));
-    await tester.pump();
+    );
+    expect(switchFinder, findsOneWidget);
+    expect(find.descendant(of: masterCard, matching: find.text('已启用')),
+        findsOneWidget);
+    expect(tester.widget<Switch>(switchFinder).value, isTrue);
+
+    // 点击后写入 enabled=false，provider 状态同步更新。
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
 
     final container = tester.element(switchFinder);
     final entries = ProviderScope.containerOf(container).read(
@@ -228,5 +366,186 @@ void main() {
     );
     final mcpEntry = entries.entries.firstWhere((e) => e.type == 'mcp');
     expect(mcpEntry.enabled, isFalse);
+  });
+
+  testWidgets('catalog separates integrations and opens the HTTP search editor',
+      (tester) async {
+    await pumpPage(tester, Brightness.light);
+
+    final serverCard = find.byKey(const ValueKey('config_test_mcp_0'));
+    final httpSearchCard = find.byKey(const ValueKey('config_test_mcp_1'));
+    final builtinSearchCard =
+        find.byKey(const ValueKey('builtin_tool_web_search'));
+    expect(serverCard, findsOneWidget);
+    expect(httpSearchCard, findsOneWidget);
+    expect(
+      find.descendant(of: serverCard, matching: find.text('MCP · SSE')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
+      findsOneWidget,
+    );
+    await tester.tap(httpSearchCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
+    expect(find.text('工具接口：brave_web_search'), findsOneWidget);
+    final fields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(
+      fields.first.readOnly,
+      isTrue,
+      reason: 'the Brave endpoint remains fixed to its provider URL',
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      builtinSearchCard,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(builtinSearchCard, findsOneWidget);
+    expect(
+      find.descendant(of: builtinSearchCard, matching: find.text('内置工具')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('built-in Web Search settings entry remains read-only',
+      (tester) async {
+    await pumpPage(
+      tester,
+      Brightness.light,
+      entryId: kBuiltinWebSearchEntryId,
+    );
+
+    expect(find.text(kBuiltinWebSearchEntryName), findsOneWidget);
+    expect(find.text('内置工具'), findsOneWidget);
+    expect(
+      find.text('内置网络搜索支持 Google、Bing 和百度，模型调用名为 web_search。'),
+      findsOneWidget,
+    );
+    expect(find.text('添加'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+    expect(find.text('服务与工具'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('builtin_tool_web_search')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('clearing HTTP search API key removes stale credential headers',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final braveConfig = state.entries.single.configs[1];
+    braveConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'apiKey': 'new-explicit-key',
+      'headers': {'X-Subscription-Token': 'stale-header-key'},
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    );
+    final updatedTypeConfig = container
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs[1]
+        .models[0]
+        .typeConfig;
+    expect(updatedTypeConfig, isNot(contains('apiKey')));
+    expect(
+      updatedTypeConfig['headers'],
+      {'X-Subscription-Token': ''},
+    );
+    expect(
+      McpServerConfig.extractApiKeyFromTypeConfig(updatedTypeConfig),
+      isEmpty,
+    );
+  });
+
+  testWidgets('updating HTTP search API key preserves unrelated headers',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final braveConfig = state.entries.single.configs[1];
+    braveConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'apiKey': 'old-explicit-key',
+      'headers': {
+        'X-Subscription-Token': 'stale-header-key',
+        'X-Custom-Optional': '',
+        'X-Custom-Metadata': 'old-explicit-key',
+      },
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'replacement-key');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final updatedTypeConfig = ProviderScope.containerOf(
+      tester.element(find.byType(ProviderConfigPage)),
+    )
+        .read(providerEntriesProvider)
+        .entries
+        .single
+        .configs[1]
+        .models[0]
+        .typeConfig;
+    expect(
+      updatedTypeConfig['headers'],
+      {
+        'X-Subscription-Token': 'replacement-key',
+        'X-Custom-Optional': '',
+        'X-Custom-Metadata': 'old-explicit-key',
+      },
+    );
+  });
+
+  testWidgets('Searxng editor rejects URLs without a host', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = mixedState();
+    final searxngConfig = state.entries.single.configs[1];
+    searxngConfig.providerName = 'Searxng';
+    searxngConfig.host = 'http://localhost:8080';
+    searxngConfig.models[0].typeConfig = {
+      'transport': 'http',
+      'isHttpTool': true,
+      'isVendor': true,
+      'url': 'http://localhost:8080',
+      'headers': <String, String>{},
+    };
+    await pumpPage(tester, Brightness.light, state: state);
+
+    await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'http:///search');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请输入有效的 HTTP 或 HTTPS 地址'), findsOneWidget);
+    expect(find.text('接入类型：HTTP 搜索'), findsOneWidget);
+    expect(
+      state.entries.single.configs[1].host,
+      'http://localhost:8080',
+      reason: 'invalid URLs are not saved to the provider config',
+    );
   });
 }

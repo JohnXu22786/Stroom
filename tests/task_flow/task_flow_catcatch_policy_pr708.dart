@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:mocktail/mocktail.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/models/media_resource.dart';
@@ -28,10 +29,10 @@ void registerCatCatchPr708PolicyTests() {
       name: 'split',
       ext: 'mp4',
       isLikelySplitTrack: true);
-  const videoZ =
-      MediaResource(url: 'https://x/z.mp4', name: 'video', ext: 'mp4');
-  const videoA =
-      MediaResource(url: 'https://x/a.mp4', name: 'video', ext: 'mp4');
+  const videoZ = MediaResource(
+      url: 'https://x/z.mp4', name: 'video', ext: 'mp4', mimeType: 'video/mp4');
+  const videoA = MediaResource(
+      url: 'https://x/a.mp4', name: 'video', ext: 'mp4', mimeType: 'video/mp4');
   const playlist = MediaResource(
       url: 'https://x/list.m3u8', name: 'list', ext: 'm3u8', isPlaylist: true);
 
@@ -95,20 +96,20 @@ void registerCatCatchPr708PolicyTests() {
         isNull);
   });
 
-  test('output type uses selected audio MIME even in an MP4 container', () {
+  test('output type verifies audio bytes in an MP4 container', () async {
     final task = catcatch.CatCatchTask(
       id: 'task',
       url: 'https://x',
       expectedDurationSec: 0,
       createdAt: DateTime(2026),
-      downloadedFilePath: '/downloads/recording.mp4',
+      downloadedFilePath: p.absolute('tests/fixtures/catcatch/audio_only.mp4'),
       selectedMedia: const MediaResource(
           url: 'https://x/audio.mp4',
           name: 'audio',
           ext: 'mp4',
           mimeType: 'audio/mp4'),
     );
-    expect(catCatchOutputType(task), IOType.audio);
+    expect(await catCatchOutputType(task), IOType.audio);
   });
 
   for (final pendingConfirm in [false, true]) {
@@ -156,7 +157,9 @@ void registerCatCatchPr708PolicyTests() {
                         running: true)
                   ]
                 : [],
-            downloadedFilePath: reads < 5 ? null : '/downloads/video.mp4',
+            downloadedFilePath: reads < 5
+                ? null
+                : p.absolute('tests/fixtures/catcatch/video_only.mp4'),
           )
         ];
       });
@@ -174,7 +177,7 @@ void registerCatCatchPr708PolicyTests() {
         stallTimeout: const Duration(milliseconds: 1),
         pollInterval: const Duration(milliseconds: 5),
       );
-      expect(result, '/downloads/video.mp4');
+      expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
       expect(reads, greaterThanOrEqualTo(5));
       verifyNever(() => notifier.selectMedia(any(), any()));
       verifyNever(() => notifier.confirmAndContinue(any()));
@@ -197,8 +200,9 @@ void registerCatCatchPr708PolicyTests() {
     late String taskId;
     var stage = 0;
     MediaResource? selected;
-    when(() => notifier.addTask(any(), any(), taskId: any(named: 'taskId')))
-        .thenAnswer((invocation) {
+    when(() => notifier.addTask(any(), any(),
+        taskId: any(named: 'taskId'),
+        deferSingleResourceSelection: true)).thenAnswer((invocation) {
       taskId = invocation.namedArguments[#taskId] as String;
       return taskId;
     });
@@ -225,7 +229,9 @@ void registerCatCatchPr708PolicyTests() {
                         type: catcatch.StepType.userSelecting, running: true)
                   ]
                 : [],
-            downloadedFilePath: stage == 2 ? '/downloads/video.mp4' : null,
+            downloadedFilePath: stage == 2
+                ? p.absolute('tests/fixtures/catcatch/video_only.mp4')
+                : null,
           )
         ]);
     final result = await executeCatCatchBlock(
@@ -240,7 +246,7 @@ void registerCatCatchPr708PolicyTests() {
       catcatchNotifier: notifier,
       pollInterval: const Duration(milliseconds: 1),
     );
-    expect(result, '/downloads/video.mp4');
+    expect(result, p.absolute('tests/fixtures/catcatch/video_only.mp4'));
     expect(selected, videoA);
     verify(() => notifier.confirmAndContinue(taskId)).called(1);
   });
@@ -270,7 +276,8 @@ void registerCatCatchPr708PolicyTests() {
             expectedDurationSec: 0,
             createdAt: DateTime(2026),
             status: catcatch.TaskStatus.completed,
-            downloadedFilePath: '/downloads/audio.mp3',
+            downloadedFilePath:
+                p.absolute('tests/fixtures/catcatch/audio_only.mp3'),
             selectedMedia: audio,
           )
         ]);

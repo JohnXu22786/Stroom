@@ -76,10 +76,13 @@ class ConnectivityTestService {
     Map<String, dynamic> content,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    final saved = await prefs.setString(
       '$_builtinPreferencePrefix$toolName',
       _jsonEncoder.convert(content),
     );
+    if (!saved) {
+      throw StateError('无法保存内置工具的连通性测试内容。');
+    }
   }
 
   static Map<String, dynamic> decodeTestContent(String rawContent) {
@@ -102,10 +105,16 @@ class ConnectivityTestService {
           : config.typeConfig;
 
       if (typeConfig['isHttpTool'] == true) {
+        final toolName = config.models.isNotEmpty
+            ? config.models[0].name
+            : config.providerName;
         final result = await HttpToolService.runConnectivityTest(
-          providerName: config.providerName,
+          providerName: toolName,
           arguments: content,
-          apiKey: McpServerConfig.extractApiKeyFromTypeConfig(typeConfig),
+          apiKey: HttpToolService.extractHttpToolApiKey(
+            toolName,
+            typeConfig,
+          ),
           url: typeConfig['url'] as String? ?? config.host,
         );
         final succeeded = !result.startsWith('错误:');

@@ -9,12 +9,14 @@ import '../models/math_3d_object.dart';
 import '../models/math_drawing_state.dart';
 import '../models/math_expression.dart' show MathExpression;
 import '../models/math_expression_3d.dart';
+import '../models/math_parameter.dart';
 import '../models/formula_entry.dart';
 import '../widgets/math_canvas.dart';
 import '../widgets/math_canvas_3d.dart';
 import '../widgets/math_3d_toolbar.dart';
 import '../widgets/math_formula_field.dart';
 import '../widgets/math_keyboard.dart';
+import '../widgets/math_parameter_controls.dart';
 
 /// 数学绘图页面 — 多公式、等价的公式行、颜色选择、显隐切换。
 class MathDrawingPage extends StatefulWidget {
@@ -53,6 +55,9 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   bool _keyboardVisible = false;
   bool _modeTouched = false;
   static const _modePreference = 'math_drawing_mathematical_input';
+  final Map<String, MathParameter> _parameters = {};
+  Set<String> _activeParameterNames = {};
+  List<FormulaEntry> _plottedFormulas = [];
 
   @override
   void initState() {
@@ -192,12 +197,45 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     }
     // Mark all rows as committed
     setState(() {
+      _activeParameterNames = {
+        for (final entry in entries)
+          ...entry.parsed!.parameters
+              .where((name) => name != 'x' && name != 'y'),
+      };
+      for (final name in _activeParameterNames) {
+        _parameters.putIfAbsent(name, MathParameter.new);
+      }
+      _plottedFormulas = entries;
       for (final f in _formulas) {
         f.committedText = f.controller.text.trim();
       }
     });
 
+    _refreshParameterCurves();
+  }
+
+  /// Keep slider redraws tied to the last plotted formulas, not editor drafts.
+  void _refreshParameterCurves() {
+    final entries = [
+      for (final entry in _plottedFormulas)
+        entry.copyWith(
+          parameterValues: {
+            for (final name in entry.parsed!.parameters)
+              if (_parameters.containsKey(name)) name: _parameters[name]!.value,
+          },
+          parsed: entry.parsed!.withParameters({
+            for (final name in entry.parsed!.parameters)
+              if (_parameters.containsKey(name)) name: _parameters[name]!.value,
+          }),
+        ),
+    ];
     _canvasKey.currentState?.setFormulas(entries);
+  }
+
+  void _updateParameter(String name, MathParameter parameter) {
+    if (!mounted || !_activeParameterNames.contains(name)) return;
+    setState(() => _parameters[name] = parameter);
+    _refreshParameterCurves();
   }
 
   void _plotAll3D() {
@@ -523,13 +561,24 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // ==================================================================
 
   Widget _buildFormulaList(ColorScheme cs) {
+    final parameterNames = _activeParameterNames.toList()..sort();
+    final showParameters =
+        _currentView == ViewMode.mode2D && parameterNames.isNotEmpty;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
       shrinkWrap: true,
       controller: _formulaScroll,
       physics: const ClampingScrollPhysics(),
-      itemCount: _formulas.length,
-      itemBuilder: (_, index) => _buildFormulaRow(cs, index),
+      itemCount: _formulas.length + (showParameters ? 1 : 0),
+      itemBuilder: (_, index) => index < _formulas.length
+          ? _buildFormulaRow(cs, index)
+          : MathParameterControls(
+              key: const ValueKey('math-parameter-controls'),
+              parameters: {
+                for (final name in parameterNames) name: _parameters[name]!,
+              },
+              onChanged: _updateParameter,
+            ),
     );
   }
 

@@ -401,6 +401,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
     return ProviderConfigItem(
       providerName: name,
+      groupId: defaultMcpGroupIdForProvider(name),
       host: url ?? '',
       key: '',
       models: [
@@ -457,6 +458,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
           if (idx >= 0) {
             // Preserve user's API key if they had one
             final updatedConfig = builtinConfig.copy();
+            updatedConfig.groupId = existing.groupId ?? updatedConfig.groupId;
             final oldApiKey = _extractApiKeyFromConfig(existing);
             if (oldApiKey.isNotEmpty) {
               updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
@@ -566,13 +568,21 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
     }
   }
 
-  Future<void> _persist() async {
+  Future<void> _persist({bool rethrowOnFailure = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
-      await prefs.setString('provider_entries', json);
+      final entriesSaved = await prefs.setString('provider_entries', json);
+      final groupsSaved = await prefs.setString(
+        'mcp_provider_groups',
+        jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
+      );
+      if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
+        throw StateError('Failed to persist provider configuration.');
+      }
     } catch (e) {
       debugPrint('Failed to persist provider entries: $e');
+      if (rethrowOnFailure) rethrow;
     }
   }
 }

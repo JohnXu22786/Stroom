@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,28 +12,46 @@ class _FakeCookiePlatform implements CookiePlatform {
   bool throwOnGetAll = false;
   bool throwOtherErrorOnGetAll = false;
   List<Cookie> allCookies = [];
+  Completer<void>? getAllCookiesStarted;
+  Completer<void>? allowGetAllCookies;
+  int getAllCookiesCalls = 0;
+  final Map<int, Completer<void>> getAllCookiesStartedByCall = {};
+  final Map<int, Completer<void>> allowGetAllCookiesByCall = {};
+  String? blockedDeleteCookieName;
+  Completer<void>? deleteCookieStarted;
+  Completer<void>? allowDeleteCookie;
   final Map<String, List<Cookie>> perUrlCookies = {};
   int getCookiesCalls = 0;
+  final List<String> getCookiesUrls = [];
   final List<Map<String, dynamic>> setCookieCalls = [];
   final List<Map<String, dynamic>> deleteCookieCalls = [];
   final List<Map<String, dynamic>> deleteCookiesCalls = [];
   int deleteAllCookiesCalls = 0;
+  bool deleteAllCookiesResult = true;
 
   @override
   Future<List<Cookie>> getAllCookies() async {
+    final callNumber = ++getAllCookiesCalls;
     if (throwOnGetAll) {
       throw UnimplementedError('getAllCookies is not implemented');
     }
     if (throwOtherErrorOnGetAll) {
       throw StateError('platform exploded');
     }
-    return allCookies;
+    final snapshot = List<Cookie>.from(allCookies);
+    final started =
+        getAllCookiesStartedByCall[callNumber] ?? getAllCookiesStarted;
+    if (started != null && !started.isCompleted) started.complete();
+    await (allowGetAllCookiesByCall[callNumber] ?? allowGetAllCookies)?.future;
+    return snapshot;
   }
 
   @override
   Future<List<Cookie>> getCookies({required WebUri url}) async {
     getCookiesCalls++;
-    return perUrlCookies[url.toString()] ?? [];
+    final requestUrl = url.toString();
+    getCookiesUrls.add(requestUrl);
+    return perUrlCookies[requestUrl] ?? [];
   }
 
   @override
@@ -73,6 +93,11 @@ class _FakeCookiePlatform implements CookiePlatform {
       'path': path,
       'domain': domain,
     });
+    if (name == blockedDeleteCookieName) {
+      final started = deleteCookieStarted;
+      if (started != null && !started.isCompleted) started.complete();
+      await allowDeleteCookie?.future;
+    }
     return true;
   }
 
@@ -87,7 +112,7 @@ class _FakeCookiePlatform implements CookiePlatform {
   @override
   Future<bool> deleteAllCookies() async {
     deleteAllCookiesCalls++;
-    return true;
+    return deleteAllCookiesResult;
   }
 }
 
@@ -171,6 +196,16 @@ void main() {
       await BrowserCookieService.setRetentionMode(true);
       final newValue = await BrowserCookieService.toggleRetentionMode();
       expect(newValue, isFalse);
+      expect(await BrowserCookieService.getRetentionMode(), isFalse);
+    });
+
+    test('concurrent toggles each flip the preceding value', () async {
+      final results = await Future.wait([
+        BrowserCookieService.toggleRetentionMode(),
+        BrowserCookieService.toggleRetentionMode(),
+      ]);
+
+      expect(results, [isTrue, isFalse]);
       expect(await BrowserCookieService.getRetentionMode(), isFalse);
     });
   });
@@ -446,6 +481,35 @@ void main() {
       expect(cookies.containsKey('example.com'), isFalse);
       expect(cookies.containsKey('other.org'), isTrue);
     });
+
+    test('serializes with an in-flight cookie snapshot', () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+              name: 'session', value: 'abc', domain: 'example.com', path: '/'),
+          Cookie(name: 'keep', value: 'me', domain: 'other.org', path: '/'),
+        ]
+        ..getAllCookiesStartedByCall[1] = Completer<void>()
+        ..allowGetAllCookiesByCall[1] = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStartedByCall[1]!.future;
+      final clearing =
+          BrowserCookieService.clearCookiesForDomain('example.com');
+      await Future<void>.delayed(Duration.zero);
+      final deleteCallsBeforeSnapshotReleased =
+          List<Map<String, dynamic>>.from(fake.deleteCookiesCalls);
+      fake.allowGetAllCookiesByCall[1]!.complete();
+      await Future.wait([persistence, clearing]);
+
+      expect(deleteCallsBeforeSnapshotReleased, isEmpty,
+          reason: 'domain clearing must wait for the pending cookie snapshot');
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies.containsKey('example.com'), isFalse);
+      expect(cookies['other.org']!.single['name'], 'keep');
+    });
   });
 
   // ====================================================================
@@ -465,6 +529,74 @@ void main() {
       final ok = await BrowserCookieService.clearAllCookies();
       expect(ok, isTrue);
       expect(fake.deleteAllCookiesCalls, 1);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+
+    test('failed clear-all does not leave a backup restore marker for startup',
+        () async {
+      final fake = _FakeCookiePlatform()..deleteAllCookiesResult = false;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+      await BrowserCookieService.markBackupRestorePending();
+
+      final cleared = await BrowserCookieService.clearAllCookies();
+
+      expect(cleared, isFalse);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+      expect(await BrowserCookieService.hasBackupRestorePending(), isFalse);
+
+      // Startup must retry native cleanup instead of treating the stale
+      // marker as permission to skip cleanup and restore the empty snapshot.
+      expect(await BrowserCookieService.prepareForBrowserPageLoad(), isFalse);
+      expect(fake.deleteAllCookiesCalls, 2);
+      expect(fake.setCookieCalls, isEmpty);
+    });
+
+    test('serializes with an in-flight cookie snapshot', () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+              name: 'session', value: 'abc', domain: 'example.com', path: '/'),
+        ]
+        ..getAllCookiesStarted = Completer<void>()
+        ..allowGetAllCookies = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStarted!.future;
+      final clearing = BrowserCookieService.clearAllCookies();
+      fake.allowGetAllCookies!.complete();
+      await Future.wait([persistence, clearing]);
+
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+    });
+  });
+
+  group('queue-safe browser cleanup', () {
+    test('page preparation and browser close clear without re-entering queue',
+        () async {
+      final fake = _FakeCookiePlatform();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+
+      expect(
+          await BrowserCookieService.prepareForBrowserPageLoad()
+              .timeout(const Duration(seconds: 5)),
+          isTrue);
+      expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
+
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
+      ]);
+      await BrowserCookieService.handleBrowserClose()
+          .timeout(const Duration(seconds: 5));
+
+      expect(fake.deleteAllCookiesCalls, 2);
       expect(await BrowserCookieService.getCookiesFromFile(), isEmpty);
     });
   });
@@ -646,6 +778,107 @@ void main() {
   // ====================================================================
 
   group('persistCookiesToFile fallback merge', () {
+    test('a stale snapshot cannot restore a cookie deleted while blocked',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(name: 'session', value: 'stale', domain: 'example.com'),
+          Cookie(name: 'keep', value: 'current', domain: 'example.com'),
+        ]
+        ..getAllCookiesStarted = Completer<void>()
+        ..allowGetAllCookies = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {
+          'domain': 'example.com',
+          'name': 'session',
+          'value': 'stale',
+          'path': '/',
+        },
+      ]);
+
+      final persistence = BrowserCookieService.persistCookiesToFile();
+      await fake.getAllCookiesStarted!.future;
+      final deletion =
+          BrowserCookieService.deleteCookie('example.com', 'session');
+
+      // Let an unqueued delete finish removing the file entry before the
+      // blocked snapshot is released. A serialized delete remains queued.
+      await Future<void>.delayed(Duration.zero);
+      fake.allowGetAllCookies!.complete();
+      await Future.wait([persistence, deletion]);
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.map((cookie) => cookie['name']), ['keep']);
+    });
+
+    test(
+        'persists cookies scoped to visited paths and deduplicates path results',
+        () async {
+      final fake = _FakeCookiePlatform()..throwOnGetAll = true;
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      BrowserCookieService.noteVisitedUrl(
+          'https://shop.example.com/account/profile?tab=orders');
+      // Queries and fragments do not create extra platform lookups for the
+      // same visited cookie path.
+      BrowserCookieService.noteVisitedUrl(
+          'https://shop.example.com/account/profile?tab=settings#details');
+      BrowserCookieService.noteVisitedUrl('https://shop.example.com/settings');
+
+      fake.perUrlCookies['https://shop.example.com'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+      ];
+      fake.perUrlCookies['https://shop.example.com/account/profile'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+        Cookie(
+            name: 'profile', value: 'profile-value', path: '/account/profile'),
+        // Null domains are host-only and must be stamped with the queried
+        // host; a genuine domain cookie keeps its leading dot.
+        Cookie(name: 'host-only', value: 'host-value', path: '/account'),
+        Cookie(
+            name: 'domain-cookie',
+            value: 'domain-value',
+            domain: '.example.com',
+            path: '/account'),
+      ];
+      fake.perUrlCookies['https://shop.example.com/settings'] = [
+        Cookie(name: 'root', value: 'root-value', path: '/'),
+        Cookie(name: 'settings', value: 'settings-value', path: '/settings'),
+      ];
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      expect(fake.getCookiesUrls.toSet(), {
+        'https://shop.example.com',
+        'https://shop.example.com/account/profile',
+        'https://shop.example.com/settings',
+      });
+      expect(fake.getCookiesUrls.length, 3,
+          reason: 'the same path visited with different query strings is '
+              'queried only once');
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      final allCookies = stored.values.expand((cookies) => cookies).toList();
+      expect(
+          allCookies
+              .map((cookie) =>
+                  '${cookie['domain']}|${cookie['name']}|${cookie['path']}')
+              .toSet(),
+          hasLength(allCookies.length),
+          reason: 'cookies repeated across URL path queries are stored once');
+      expect(stored['shop.example.com']!.map((cookie) => cookie['name']),
+          containsAll(['root', 'profile', 'host-only', 'settings']));
+      expect(
+          stored['shop.example.com']!
+              .singleWhere((cookie) => cookie['name'] == 'host-only')['domain'],
+          'shop.example.com');
+      expect(stored['.example.com']!.single['name'], 'domain-cookie');
+      expect(stored['.example.com']!.single['path'], '/account');
+    });
+
     test('merges with the existing file so unvisited domains survive',
         () async {
       final fake = _FakeCookiePlatform()..throwOnGetAll = true;
@@ -840,6 +1073,63 @@ void main() {
   // ====================================================================
 
   group('platform delete forwarding', () {
+    test('overlapping deletes serialize native deletion and file updates',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..blockedDeleteCookieName = 'first'
+        ..deleteCookieStarted = Completer<void>()
+        ..allowDeleteCookie = Completer<void>();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {'domain': 'example.com', 'name': 'first', 'value': '1', 'path': '/'},
+        {'domain': 'example.com', 'name': 'second', 'value': '2', 'path': '/'},
+        {'domain': 'example.com', 'name': 'keep', 'value': '3', 'path': '/'},
+      ]);
+
+      final firstDelete =
+          BrowserCookieService.deleteCookie('example.com', 'first');
+      await fake.deleteCookieStarted!.future;
+      final secondDelete =
+          BrowserCookieService.deleteCookie('example.com', 'second');
+      await Future<void>.delayed(Duration.zero);
+
+      try {
+        expect(
+          fake.deleteCookieCalls.map((call) => call['name']),
+          everyElement('first'),
+          reason: 'the second delete must wait for the first native delete',
+        );
+      } finally {
+        fake.allowDeleteCookie!.complete();
+      }
+      expect(await firstDelete, isTrue);
+      expect(await secondDelete, isTrue);
+      expect(
+        fake.deleteCookieCalls.map((call) => call['name']).toList(),
+        ['first', 'first', 'second', 'second'],
+      );
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.map((cookie) => cookie['name']), ['keep']);
+    });
+
+    test('browser close persists without re-entering the retention queue',
+        () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(name: 'session', value: 'current', domain: 'example.com'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      await BrowserCookieService.handleBrowserClose()
+          .timeout(const Duration(seconds: 5));
+
+      final stored = await BrowserCookieService.getCookiesFromFile();
+      expect(stored['example.com']!.single['name'], 'session');
+    });
+
     test('deleteCookie forwards path and leading-dot domain', () async {
       final fake = _FakeCookiePlatform();
       BrowserCookieService.cookiePlatform = fake;

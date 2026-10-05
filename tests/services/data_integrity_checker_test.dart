@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -105,6 +106,41 @@ void main() {
       expect(
           report.corruptions.any((i) => i.message.contains('browser_cookies')),
           isTrue);
+    });
+
+    test('large startup JSON validation yields to the UI isolate', () async {
+      final largeJson =
+          '[${List<String>.filled(1000000, '"payload"').join(',')}]';
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': largeJson,
+      });
+
+      final stopwatch = Stopwatch()..start();
+      var previousPulse = Duration.zero;
+      var maximumPulseGap = Duration.zero;
+      final heartbeat = Timer.periodic(
+        const Duration(milliseconds: 25),
+        (_) {
+          final currentPulse = stopwatch.elapsed;
+          final pulseGap = currentPulse - previousPulse;
+          if (pulseGap > maximumPulseGap) maximumPulseGap = pulseGap;
+          previousPulse = currentPulse;
+        },
+      );
+
+      final report = await DataIntegrityChecker.checkCurrentData();
+      final elapsed = stopwatch.elapsed;
+      heartbeat.cancel();
+      final finalPulseGap = elapsed - previousPulse;
+      if (finalPulseGap > maximumPulseGap) maximumPulseGap = finalPulseGap;
+
+      expect(report.hasCorruption, isFalse);
+      expect(
+        maximumPulseGap,
+        lessThan(const Duration(milliseconds: 250)),
+        reason:
+            'large JSON parsing delayed the UI event loop by $maximumPulseGap',
+      );
     });
 
     test('missing files are not corruption (fresh install)', () async {

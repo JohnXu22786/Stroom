@@ -59,7 +59,7 @@ void main() {
         findsOneWidget,
         reason: 'Confirmation dialog must list the selected category',
       );
-      expect(find.text('确定清除'), findsOneWidget);
+      expect(find.text('确定清除（10）'), findsOneWidget);
 
       // Cancel closes the dialog without clearing
       await tester.tap(find.text('取消'));
@@ -67,7 +67,7 @@ void main() {
       expect(find.text('确认清除'), findsNothing);
     });
 
-    testWidgets('clear flow shows button-based restart prompt (no countdown)',
+    testWidgets('clear flow unlocks confirmation after the countdown',
         (tester) async {
       await tester.pumpWidget(createTestApp());
       await tester.pump();
@@ -80,6 +80,8 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.widgetWithText(OutlinedButton, '清除所选数据'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
       await tester.tap(find.text('确定清除'));
       await tester.pumpAndSettle();

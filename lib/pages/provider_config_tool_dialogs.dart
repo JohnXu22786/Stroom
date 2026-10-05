@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
+import '../services/http_tool_service.dart';
 
 class HttpToolConfigDialog extends StatefulWidget {
   final ProviderConfigItem config;
@@ -32,7 +32,10 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
   void initState() {
     super.initState();
     _apiKeyController = TextEditingController(
-      text: McpServerConfig.extractApiKeyFromTypeConfig(_typeConfig),
+      text: HttpToolService.extractHttpToolApiKey(
+        widget.config.providerName,
+        _typeConfig,
+      ),
     );
     _urlController = TextEditingController(
       text: _typeConfig['url'] as String? ?? widget.config.host,
@@ -51,14 +54,13 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
     if (updated.models.isEmpty) return updated;
 
     final typeConfig = Map<String, dynamic>.from(updated.models[0].typeConfig);
-    final oldApiKey = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
     final apiKey = _apiKeyController.text.trim();
     if (apiKey.isEmpty) {
       typeConfig.remove('apiKey');
     } else {
       typeConfig['apiKey'] = apiKey;
     }
-    _updateCredentialHeaders(typeConfig, oldApiKey, apiKey);
+    _updateCredentialHeaders(typeConfig, apiKey);
     if (_allowsCustomUrl) {
       final url = _urlController.text.trim();
       typeConfig['url'] = url;
@@ -70,22 +72,20 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
 
   void _updateCredentialHeaders(
     Map<String, dynamic> typeConfig,
-    String oldApiKey,
     String apiKey,
   ) {
+    final credentialHeaderNames =
+        HttpToolService.credentialHeaderNamesForProvider(
+      widget.config.providerName,
+    );
     final rawHeaders = typeConfig['headers'];
     if (rawHeaders is! Map) return;
 
     final headers = Map<String, dynamic>.from(rawHeaders);
     for (final key in headers.keys.toList()) {
-      final trimmed = headers[key].toString().trim();
-      final headerApiKey = trimmed.startsWith('Bearer ')
-          ? trimmed.substring('Bearer '.length).trim()
-          : trimmed;
-      final isKeyHeader = trimmed.isEmpty ||
-          trimmed == 'Bearer' ||
-          (oldApiKey.isNotEmpty && headerApiKey == oldApiKey);
-      if (!isKeyHeader) continue;
+      if (!credentialHeaderNames.contains(key.toString().toLowerCase())) {
+        continue;
+      }
 
       headers[key] = key.toString().toLowerCase() == 'authorization'
           ? (apiKey.isEmpty ? 'Bearer ' : 'Bearer $apiKey')
@@ -99,7 +99,8 @@ class _HttpToolConfigDialogState extends State<HttpToolConfigDialog> {
       final url = Uri.tryParse(_urlController.text.trim());
       if (url == null ||
           (url.scheme != 'http' && url.scheme != 'https') ||
-          !url.hasAuthority) {
+          !url.hasAuthority ||
+          url.host.isEmpty) {
         setState(() => _urlError = '请输入有效的 HTTP 或 HTTPS 地址');
         return;
       }

@@ -8,12 +8,14 @@ Future<bool?> showMcpServerConfigDialog({
   required BuildContext context,
   required String entryId,
   required int configIndex,
+  String? groupId,
 }) {
   return showDialog<bool>(
     context: context,
     builder: (_) => _McpServerConfigDialog(
       entryId: entryId,
       configIndex: configIndex,
+      groupId: groupId,
     ),
   );
 }
@@ -22,11 +24,13 @@ Future<bool?> showMcpServerConfigDialog({
 class _McpServerConfigDialog extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
+  final String? groupId;
 
   const _McpServerConfigDialog({
     super.key,
     required this.entryId,
     required this.configIndex,
+    this.groupId,
   });
 
   @override
@@ -324,8 +328,15 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
+    final existingConfig = _isExistingConfig &&
+            widget.configIndex >= 0 &&
+            widget.configIndex < configs.length
+        ? configs[widget.configIndex]
+        : null;
     final newConfig = ProviderConfigItem(
+      id: existingConfig?.id,
       providerName: name,
+      groupId: existingConfig == null ? widget.groupId : existingConfig.groupId,
       host: _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '',
@@ -333,13 +344,10 @@ class _McpServerConfigDialogState extends ConsumerState<_McpServerConfigDialog> 
       models: [modelConfig],
     );
 
-    if (_isExistingConfig &&
-        widget.configIndex >= 0 &&
-        widget.configIndex < configs.length) {
-      final existing = configs[widget.configIndex];
-      final existingTypeConfig = existing.models.isNotEmpty
-          ? existing.models[0].typeConfig
-          : existing.typeConfig;
+    if (existingConfig != null) {
+      final existingTypeConfig = existingConfig.models.isNotEmpty
+          ? existingConfig.models[0].typeConfig
+          : existingConfig.typeConfig;
       final connectivityTest = existingTypeConfig['connectivityTest'];
       if (connectivityTest is Map) {
         newConfig.models[0].typeConfig['connectivityTest'] =

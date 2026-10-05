@@ -18,8 +18,8 @@ import 'ev1_decoder.dart';
 /// - **TS / M3U8 合并产物**：纯 Dart 转封装（[TsDemuxer]，H.264/H.265 + AAC）
 /// - **FLV**：纯 Dart 转封装（[FlvDemuxer]）
 /// - **EV1**：纯 Dart 解码（还原混淆后按 FLV 转封装，[Ev1Decoder]）
-/// - **其他特殊格式**（mkv/avi/wmv/ogg/m4s 等）：回退到 fvp（mdk）转码
-/// - **已经是可播放格式**：直接复制
+/// - **其他需转码格式**（avi/wmv/m4s 等）：回退到 fvp（mdk）转码
+/// - **已经是可播放格式**：保留原文件与容器扩展名
 class FFmpegConverter {
   FFmpegConverter._();
 
@@ -30,7 +30,7 @@ class FFmpegConverter {
   /// [onProgress] 进度回调 0-100
   /// [cancelToken] 取消令牌
   ///
-  /// 返回输出文件路径。
+  /// 返回输出文件路径；若输入已经可播放，则返回原路径以保留实际容器。
   static Future<String> convertToMp4({
     required String inputPath,
     required String outputPath,
@@ -38,7 +38,18 @@ class FFmpegConverter {
     CancelToken? cancelToken,
   }) async {
     final inputExt = p.extension(inputPath).toLowerCase();
-    final playableExts = ['.mp4', '.webm', '.ogg', '.mov', '.mkv'];
+    const playableExts = {
+      '.mp4',
+      '.m4a',
+      '.mov',
+      '.webm',
+      '.weba',
+      '.mkv',
+      '.mka',
+      '.ogg',
+      '.ogv',
+      '.opus',
+    };
 
     bool isCancelled() => cancelToken?.isCancelled ?? false;
 
@@ -81,14 +92,16 @@ class FFmpegConverter {
       }
     }
 
-    // 如果已经是可播放格式，直接复制
+    // Keep the original filename for a playable container. Copying WebM,
+    // Ogg, Matroska, or QuickTime bytes to outputPath (which ends in .mp4)
+    // produces a file with a false type and prevents gallery registration.
     if (playableExts.contains(inputExt)) {
       final sourceFile = File(inputPath);
       if (!await sourceFile.exists()) {
-        throw FileSystemException('源文件不存在，无法复制', inputPath);
+        throw FileSystemException('源文件不存在', inputPath);
       }
-      await sourceFile.copy(outputPath);
-      return outputPath;
+      onProgress?.call(100);
+      return inputPath;
     }
 
     // TS 流：纯 Dart 转封装（H.264/H.265 + AAC → MP4）

@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'app_log_service.dart';
 
+import '../models/mcp.dart';
 import '../models/tool_call.dart';
+import 'app_log_service.dart';
 
 // ============================================================================
 // HTTP 工具服务层
@@ -14,6 +15,13 @@ import '../models/tool_call.dart';
 
 /// HTTP 工具的服务层，管理 API Key 并提供工具处理函数
 class HttpToolService {
+  static const Map<String, Set<String>> _credentialHeaderNamesByProvider = {
+    'Brave Search': {'x-subscription-token'},
+    'Bocha': {'authorization'},
+    'Querit': {'authorization'},
+    'Searxng': {'authorization'},
+  };
+
   static final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
@@ -25,6 +33,36 @@ class HttpToolService {
   static String _searxngApiKey = '';
   static String _bochaApiKey = '';
   static String _queritApiKey = '';
+
+  static Set<String> credentialHeaderNamesForProvider(String providerName) =>
+      _credentialHeaderNamesByProvider[providerName] ?? const {};
+
+  /// Reads an HTTP search key from its explicit field or the provider's own
+  /// credential header, ignoring unrelated custom headers.
+  static String extractHttpToolApiKey(
+    String providerName,
+    Map<String, dynamic>? typeConfig,
+  ) {
+    if (typeConfig == null) return '';
+
+    final credentialHeaderNames =
+        credentialHeaderNamesForProvider(providerName);
+    final rawHeaders = typeConfig['headers'];
+    final credentialHeaders = <String, dynamic>{};
+    if (rawHeaders is Map) {
+      for (final entry in rawHeaders.entries) {
+        final name = entry.key.toString();
+        if (credentialHeaderNames.contains(name.toLowerCase())) {
+          credentialHeaders[name] = entry.value;
+        }
+      }
+    }
+
+    return McpServerConfig.extractApiKeyFromTypeConfig({
+      'apiKey': typeConfig['apiKey'],
+      'headers': credentialHeaders,
+    });
+  }
 
   /// Update API keys from provider config
   static void updateApiKeys({

@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
+import 'browser_cookie_service.dart';
 import 'data_migration_service.dart';
 import 'manifest_database.dart';
 import 'storage_service.dart';
@@ -22,6 +23,11 @@ import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import '../catcatch/models/catcatch_task.dart' show CatCatchTask;
+import '../providers/background_task_provider.dart' show BackgroundTask;
+import '../providers/task_provider_shared.dart' show SynthesisTask;
+import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
+import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -40,6 +46,16 @@ class BackupCancelledException implements Exception {
 class BackupValidationException implements Exception {
   final String message;
   const BackupValidationException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// Exception thrown when a data operation cannot safely begin before any
+/// existing data is touched.
+class DataManagementPreflightException implements Exception {
+  final String message;
+  const DataManagementPreflightException(this.message);
 
   @override
   String toString() => message;
@@ -64,7 +80,7 @@ class _RestoreEntryCorruptException implements Exception {
 // ====================================================================
 //
 // 用于手动操作时选择要备份或恢复的数据类别。
-// 自动备份时始终使用全量选择。
+// 私有启动快照使用 structuredOnly 选择。
 //
 // 【重要】该类字段变更说明：
 // - v1: conversations(聊天记录和设置) + attachments(附件)
@@ -128,8 +144,11 @@ class BackupSelection {
   /// 全量选择（所有类别）。
   static const all = BackupSelection();
 
-  /// 结构化数据快照选择：记录/配置/任务全包含，媒体与附件文件排除。
-  static const structuredOnly = BackupSelection(includeMediaFiles: false);
+  /// 结构化数据快照选择：保留结构化数据，排除媒体/附件文件和浏览器Cookies。
+  static const structuredOnly = BackupSelection(
+    includeMediaFiles: false,
+    browserCookies: false,
+  );
 
   /// 根据选择结果返回包含的类别名称列表（用于 UI 显示）。
   List<String> get selectedLabels {
@@ -145,6 +164,18 @@ class BackupSelection {
     if (browserCookies) labels.add('浏览器Cookies');
     return labels;
   }
+
+  Set<String> get selectedPartIds => {
+        if (chatRecordsAndAttachments) DataParts.chat,
+        if (settings) DataParts.settings,
+        if (pictures) DataParts.pictures,
+        if (audio) DataParts.audio,
+        if (videos) DataParts.videos,
+        if (texts) DataParts.texts,
+        if (tasks) DataParts.tasks,
+        if (ankiData) DataParts.anki,
+        if (browserCookies) DataParts.browserCookies,
+      };
 }
 
 // ====================================================================
@@ -157,6 +188,8 @@ class BackupSelection {
 // ====================================================================
 
 class BackupService {
+  static int? _lastBackupFileTimestampSeconds;
+
   BackupService._();
 
   static Future<String> createBackup({
@@ -166,10 +199,13 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
   }) async {
     await AppLogService.info(
-        'BackupService', 'createBackup: outputPath=$outputPath');
+      'BackupService',
+      'createBackup: outputPath=$outputPath',
+    );
     if (kIsWeb) {
       throw UnsupportedError(
-          'createBackup is not available on web. Use exportBackup instead.');
+        'createBackup is not available on web. Use exportBackup instead.',
+      );
     }
     if (isCancelled != null && isCancelled()) {
       throw const BackupCancelledException();
@@ -191,19 +227,28 @@ class BackupService {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
+    bool skipMissingCategories = false,
+    bool trustEmptyLegacyTaskPayloads = false,
   }) async {
     await AppLogService.info(
-        'BackupService', 'restoreBackup: zipPath=$zipPath');
+      'BackupService',
+      'restoreBackup: zipPath=$zipPath',
+    );
     if (kIsWeb) {
       throw UnsupportedError(
-          'restoreBackup is not available on web. Use importBackup instead.');
+        'restoreBackup is not available on web. Use importBackup instead.',
+      );
     }
     // 流式恢复：只解析中央目录 + 按条目分块解压落盘，
     // 峰值内存 O(块大小)，不再把整个备份包 readAsBytes 进内存。
-    await _restoreFromZipFile(zipPath,
-        onProgress: onProgress,
-        selection: selection,
-        skipPostRestoreMigration: skipPostRestoreMigration);
+    await _restoreFromZipFile(
+      zipPath,
+      onProgress: onProgress,
+      selection: selection,
+      skipPostRestoreMigration: skipPostRestoreMigration,
+      skipMissingCategories: skipMissingCategories,
+      trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+    );
   }
 
   // ================================================================
@@ -262,18 +307,32 @@ class BackupService {
     checkCancelled();
     if (WebFileStore.isTestMode) {
       _createBackupStreamingSync(
-          plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath,
-          isCancelled: isCancelled);
+        plan.jsonFiles,
+        plan.memoryFiles,
+        plan.diskFiles,
+        outputPath,
+        isCancelled: isCancelled,
+      );
     } else {
       try {
-        await Isolate.run(() => _createBackupStreamingSync(
-            plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath));
+        await Isolate.run(
+          () => _createBackupStreamingSync(
+            plan.jsonFiles,
+            plan.memoryFiles,
+            plan.diskFiles,
+            outputPath,
+          ),
+        );
       } on UnsupportedError catch (e) {
         // Isolate 不可用（受限环境）：回退主 isolate 同步执行
         debugPrint('[BackupService] Isolate 不可用，回退同步执行: $e');
         _createBackupStreamingSync(
-            plan.jsonFiles, plan.memoryFiles, plan.diskFiles, outputPath,
-            isCancelled: isCancelled);
+          plan.jsonFiles,
+          plan.memoryFiles,
+          plan.diskFiles,
+          outputPath,
+          isCancelled: isCancelled,
+        );
       }
     }
     onProgress?.call(1.0);
@@ -295,12 +354,26 @@ class BackupService {
     final diskFiles = <List<String>>[];
     final useStreaming = !kIsWeb && !WebFileStore.isTestMode;
 
+    final browserCookieSnapshot = selection.browserCookies && useStreaming
+        ? await BrowserCookieService.snapshotCookiesForBackup()
+        : null;
+    final ankiDbPath = await _findAnkiDatabasePath(selection);
+    if (browserCookieSnapshot != null) {
+      jsonFiles['browser_cookies.json'] = jsonEncode(browserCookieSnapshot);
+    }
+
     // 1. manifest.json
     debugPrint('[BackupService] streaming: building manifest');
     jsonFiles['manifest.json'] = jsonEncode({
       'version': 2,
       'createdAt': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
+      'dataParts': _exportedPartIds(
+        selection,
+        hasBrowserCookieSnapshot: browserCookieSnapshot != null,
+        hasAnkiDatabase: ankiDbPath != null,
+      ).toList(),
+      'dataPartVersions': await DataMigrationService.getStoredPartVersions(),
     });
     onProgress?.call(0.05);
     await _yieldToEventLoop();
@@ -313,7 +386,12 @@ class BackupService {
       final chatData = <String, dynamic>{};
       final settingsData = <String, dynamic>{};
       for (final key in prefs.getKeys()) {
-        if (key.startsWith('flutter.')) continue;
+        if (key.startsWith('flutter.') ||
+            DataMigrationService.isFormatMetadataKey(key) ||
+            _isDeviceLocalPreferenceKey(key) ||
+            (key == _browserCookieRetentionKey && !selection.browserCookies)) {
+          continue;
+        }
         if (_isChatPrefKey(key)) {
           if (selection.chatRecordsAndAttachments) {
             chatData[key] = prefs.get(key);
@@ -324,10 +402,10 @@ class BackupService {
           }
         }
       }
-      if (chatData.isNotEmpty) {
+      if (selection.chatRecordsAndAttachments) {
         jsonFiles['chat_data.json'] = jsonEncode(chatData);
       }
-      if (settingsData.isNotEmpty) {
+      if (selection.settings) {
         jsonFiles['settings.json'] = jsonEncode(settingsData);
       }
     }
@@ -339,36 +417,55 @@ class BackupService {
     if (selection.tasks) {
       debugPrint('[BackupService] streaming: adding task files');
       final appDir = await AppStorage.directory;
-      await _addPlanFile(diskFiles, memoryFiles, 'synthesis/tasks.json',
-          p.join(appDir, 'synthesis', 'tasks.json'), useStreaming);
-      await _addPlanFile(diskFiles, memoryFiles, 'catcatch/tasks.json',
-          p.join(appDir, 'catcatch', 'tasks.json'), useStreaming);
-      await _addPlanFile(diskFiles, memoryFiles, 'background/tasks.json',
-          p.join(appDir, 'background', 'tasks.json'), useStreaming);
-      await _addPlanFile(diskFiles, memoryFiles, 'task_flows/flows.json',
-          p.join(appDir, 'task_flows', 'flows.json'), useStreaming);
-      await _addPlanFile(diskFiles, memoryFiles, 'task_flows/executions.json',
-          p.join(appDir, 'task_flows', 'executions.json'), useStreaming);
+      await _addTaskPlanFile(
+        jsonFiles,
+        memoryFiles,
+        diskFiles,
+        'synthesis/tasks.json',
+        p.join(appDir, 'synthesis', 'tasks.json'),
+        useStreaming,
+      );
+      await _addTaskPlanFile(
+        jsonFiles,
+        memoryFiles,
+        diskFiles,
+        'catcatch/tasks.json',
+        p.join(appDir, 'catcatch', 'tasks.json'),
+        useStreaming,
+      );
+      await _addTaskPlanFile(
+        jsonFiles,
+        memoryFiles,
+        diskFiles,
+        'background/tasks.json',
+        p.join(appDir, 'background', 'tasks.json'),
+        useStreaming,
+      );
+      await _addTaskPlanFile(
+        jsonFiles,
+        memoryFiles,
+        diskFiles,
+        'task_flows/flows.json',
+        p.join(appDir, 'task_flows', 'flows.json'),
+        useStreaming,
+      );
+      await _addTaskPlanFile(
+        jsonFiles,
+        memoryFiles,
+        diskFiles,
+        'task_flows/executions.json',
+        p.join(appDir, 'task_flows', 'executions.json'),
+        useStreaming,
+      );
     }
-    if (selection.ankiData) {
-      try {
-        final appDir = await AppStorage.directory;
-        final ankiDb = p.join(appDir, 'collection.anki2');
-        if (File(ankiDb).existsSync()) {
-          await _addPlanFile(diskFiles, memoryFiles, 'anki/collection.anki2',
-              ankiDb, useStreaming);
-        }
-      } catch (_) {}
-    }
-    if (selection.browserCookies) {
-      try {
-        final appDir = await AppStorage.directory;
-        final cookiesFile = p.join(appDir, 'browser_cookies.json');
-        if (File(cookiesFile).existsSync()) {
-          await _addPlanFile(diskFiles, memoryFiles, 'browser_cookies.json',
-              cookiesFile, useStreaming);
-        }
-      } catch (_) {}
+    if (ankiDbPath != null) {
+      await _addPlanFile(
+        diskFiles,
+        memoryFiles,
+        'anki/collection.anki2',
+        ankiDbPath,
+        useStreaming,
+      );
     }
     onProgress?.call(0.25);
     await _yieldToEventLoop();
@@ -391,21 +488,29 @@ class BackupService {
       final records = await ManifestDatabase.getAllImageRecords();
       manifestImageRecords = records;
       manifestImageFolders = await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.imageRecords);
+        recordTable: ManifestTables.imageRecords,
+      );
       if (selection.includeMediaFiles) {
         for (var i = 0; i < records.length; i++) {
           final record = records[i];
           final hash = record['hash'] as String?;
           final format = record['format'] as String? ?? 'jpg';
           if (hash == null) continue;
-          await _addPlanFile(diskFiles, memoryFiles, 'pictures/$hash.$format',
-              p.join(appDir, 'pictures', '$hash.$format'), useStreaming);
           await _addPlanFile(
-              diskFiles,
-              memoryFiles,
-              'pictures/${imageThumbFileName(hash)}',
-              p.join(appDir, 'pictures', imageThumbFileName(hash)),
-              useStreaming);
+            diskFiles,
+            memoryFiles,
+            'pictures/$hash.$format',
+            p.join(appDir, 'pictures', '$hash.$format'),
+            useStreaming,
+          );
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'pictures/${imageThumbFileName(hash)}',
+            p.join(appDir, 'pictures', imageThumbFileName(hash)),
+            useStreaming,
+            required: false,
+          );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
             checkCancelled();
@@ -422,17 +527,29 @@ class BackupService {
       final records = await ManifestDatabase.getAllAudioRecords();
       manifestAudioRecords = records;
       manifestAudioFolders = await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.audioRecords);
+        recordTable: ManifestTables.audioRecords,
+      );
       if (selection.includeMediaFiles) {
         for (var i = 0; i < records.length; i++) {
           final record = records[i];
           final hash = record['hash'] as String?;
           final format = record['format'] as String? ?? 'wav';
           if (hash == null) continue;
-          await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.$format',
-              p.join(appDir, 'tts_audio', '$hash.$format'), useStreaming);
-          await _addPlanFile(diskFiles, memoryFiles, 'tts_audio/$hash.txt',
-              p.join(appDir, 'tts_audio', '$hash.txt'), useStreaming);
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'tts_audio/$hash.$format',
+            p.join(appDir, 'tts_audio', '$hash.$format'),
+            useStreaming,
+          );
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'tts_audio/$hash.txt',
+            p.join(appDir, 'tts_audio', '$hash.txt'),
+            useStreaming,
+            required: false,
+          );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
             checkCancelled();
@@ -449,15 +566,21 @@ class BackupService {
       final records = await ManifestDatabase.getAllVideoRecords();
       manifestVideoRecords = records;
       manifestVideoFolders = await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.videoRecords);
+        recordTable: ManifestTables.videoRecords,
+      );
       if (selection.includeMediaFiles) {
         for (var i = 0; i < records.length; i++) {
           final record = records[i];
           final hash = record['hash'] as String?;
           final format = record['format'] as String? ?? 'mp4';
           if (hash == null) continue;
-          await _addPlanFile(diskFiles, memoryFiles, 'videos/$hash.$format',
-              p.join(appDir, 'videos', '$hash.$format'), useStreaming);
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'videos/$hash.$format',
+            p.join(appDir, 'videos', '$hash.$format'),
+            useStreaming,
+          );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
             checkCancelled();
@@ -474,14 +597,20 @@ class BackupService {
       final records = await ManifestDatabase.getAllTextRecords();
       manifestTextRecords = records;
       manifestTextFolders = await ManifestDatabase.getAllFolders(
-          recordTable: ManifestTables.textRecords);
+        recordTable: ManifestTables.textRecords,
+      );
       if (selection.includeMediaFiles) {
         for (var i = 0; i < records.length; i++) {
           final record = records[i];
           final hash = record['hash'] as String?;
           if (hash == null) continue;
-          await _addPlanFile(diskFiles, memoryFiles, 'texts/$hash.txt',
-              p.join(appDir, 'texts', '$hash.txt'), useStreaming);
+          await _addPlanFile(
+            diskFiles,
+            memoryFiles,
+            'texts/$hash.txt',
+            p.join(appDir, 'texts', '$hash.txt'),
+            useStreaming,
+          );
           if (i % 10 == 0) {
             await _yieldToEventLoop();
             checkCancelled();
@@ -501,8 +630,13 @@ class BackupService {
         if (parts.length < 2) continue;
         final subDir = parts[0];
         final fileName = parts.sublist(1).join('/');
-        await _addPlanFile(diskFiles, memoryFiles, storagePath,
-            p.join(appDir, subDir, fileName), useStreaming);
+        await _addPlanFile(
+          diskFiles,
+          memoryFiles,
+          storagePath,
+          p.join(appDir, subDir, fileName),
+          useStreaming,
+        );
       }
     }
     onProgress?.call(0.93);
@@ -539,24 +673,63 @@ class BackupService {
     Map<String, Uint8List> memoryFiles,
     String archiveName,
     String filePath,
-    bool useStreaming,
-  ) async {
+    bool useStreaming, {
+    bool required = true,
+  }) async {
     if (useStreaming) {
+      if (!await File(filePath).exists()) {
+        if (required) {
+          throw FileSystemException('备份文件不存在', filePath);
+        }
+        return;
+      }
       diskFiles.add([archiveName, filePath]);
       return;
     }
     // Web/测试模式：从内存读取
+    final parts = archiveName.split('/');
+    if (parts.length < 2) {
+      if (required) throw FileSystemException('无效的备份路径', archiveName);
+      return;
+    }
+    final subDir = parts[0];
+    final fileName = parts.sublist(1).join('/');
     try {
-      final parts = archiveName.split('/');
-      if (parts.length < 2) return;
-      final subDir = parts[0];
-      final fileName = parts.sublist(1).join('/');
       final data = await readBackupFile(subDir, fileName);
       if (data != null) {
         memoryFiles[archiveName] = data;
+      } else if (required) {
+        throw FileSystemException('备份文件不存在', '$subDir/$fileName');
       }
     } catch (e) {
       debugPrint('添加文件 $archiveName 失败: $e');
+      if (required) rethrow;
+    }
+  }
+
+  static Future<void> _addTaskPlanFile(
+    Map<String, String> jsonFiles,
+    Map<String, Uint8List> memoryFiles,
+    List<List<String>> diskFiles,
+    String archiveName,
+    String filePath,
+    bool useStreaming,
+  ) async {
+    if (useStreaming) {
+      if (await File(filePath).exists()) {
+        diskFiles.add([archiveName, filePath]);
+      } else {
+        jsonFiles[archiveName] = '[]';
+      }
+      return;
+    }
+
+    final parts = archiveName.split('/');
+    final data = await readBackupFile(parts.first, parts.skip(1).join('/'));
+    if (data == null) {
+      jsonFiles[archiveName] = '[]';
+    } else {
+      memoryFiles[archiveName] = data;
     }
   }
 
@@ -580,11 +753,24 @@ class BackupService {
     return key == 'conversations' || key == 'active_conversation_id';
   }
 
+  static const _browserCookieRetentionKey = 'browser_cookie_retention';
+
+  /// Device-specific filesystem permissions cannot be transferred safely.
+  static bool _isDeviceLocalPreferenceKey(String key) =>
+      key == 'backup_saf_uri' || key == 'browser_cookie_backup_restore_pending';
+
   /// 判断一个 SharedPreferences 键是否属于 [selection] 中选中的类别。
   ///
   /// `flutter.*` 内部键永不参与备份/恢复/清除。
   static bool _isKeyInSelection(String key, BackupSelection selection) {
-    if (key.startsWith('flutter.')) return false;
+    if (key.startsWith('flutter.') ||
+        _isDeviceLocalPreferenceKey(key) ||
+        DataMigrationService.isFormatMetadataKey(key)) {
+      return false;
+    }
+    if (key == _browserCookieRetentionKey) {
+      return selection.settings && selection.browserCookies;
+    }
     if (_isChatPrefKey(key)) return selection.chatRecordsAndAttachments;
     return selection.settings;
   }
@@ -626,7 +812,8 @@ class BackupService {
   /// 在测试模式下（Isolate 无法在 Flutter 测试环境的 FakeAsync Zone 中正常
   /// 工作），回退到同步编码。在其他不支持 Isolate 的环境也回退到同步编码。
   static Future<Uint8List> _encodeArchiveInBackground(
-      List<Map<String, Object?>> files) async {
+    List<Map<String, Object?>> files,
+  ) async {
     // 测试模式下无法使用 Isolate.run（FakeAsync Zone 不支持真正的 Isolate），
     // 回退到同步编码
     if (WebFileStore.isTestMode) {
@@ -670,7 +857,6 @@ class BackupService {
   /// 如果返回 `true`，则抛出 [BackupCancelledException] 终止备份。
   ///
   /// [selection] 控制哪些数据类别包含在归档中。默认全量。
-  /// 自动备份始终使用全量选择。
   ///
   /// 备份格式版本：
   /// - v1: preferences.json（聊天+设置合并）+ attachments/ 分开
@@ -691,6 +877,11 @@ class BackupService {
     await _yieldToEventLoop();
     checkCancelled();
     final archive = Archive();
+    final browserCookieSnapshot =
+        selection.browserCookies && !kIsWeb && !WebFileStore.isTestMode
+            ? await BrowserCookieService.snapshotCookiesForBackup()
+            : null;
+    final ankiDbPath = await _findAnkiDatabasePath(selection);
 
     // 1. manifest.json（始终包含）
     debugPrint('[BackupService] _buildBackupBytes: building manifest');
@@ -698,6 +889,12 @@ class BackupService {
       'version': 2,
       'createdAt': DateTime.now().toIso8601String(),
       'appVersion': appVersion,
+      'dataParts': _exportedPartIds(
+        selection,
+        hasBrowserCookieSnapshot: browserCookieSnapshot != null,
+        hasAnkiDatabase: ankiDbPath != null,
+      ).toList(),
+      'dataPartVersions': await DataMigrationService.getStoredPartVersions(),
     };
     addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
     onProgress?.call(0.05);
@@ -721,19 +918,23 @@ class BackupService {
     final folders = <String>[];
     final textFolders = selection.texts
         ? await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.textRecords)
+            recordTable: ManifestTables.textRecords,
+          )
         : <String>[];
     final audioFolders = selection.audio
         ? await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.audioRecords)
+            recordTable: ManifestTables.audioRecords,
+          )
         : <String>[];
     final imageFolders = selection.pictures
         ? await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.imageRecords)
+            recordTable: ManifestTables.imageRecords,
+          )
         : <String>[];
     final videoFolders = selection.videos
         ? await ManifestDatabase.getAllFolders(
-            recordTable: ManifestTables.videoRecords)
+            recordTable: ManifestTables.videoRecords,
+          )
         : <String>[];
     final dbData = {
       'image_records': imageRecords,
@@ -754,8 +955,6 @@ class BackupService {
     // 3. SharedPreferences — 拆分聊天记录和设置
     // chatRecordsAndAttachments → chat_data.json（聊天相关键）
     // settings → settings.json（设置相关键）
-    bool hasChatData = false;
-    bool hasSettingsData = false;
     final chatData = <String, dynamic>{};
     final settingsData = <String, dynamic>{};
 
@@ -763,25 +962,28 @@ class BackupService {
       debugPrint('[BackupService] _buildBackupBytes: reading preferences');
       final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys()) {
-        if (key.startsWith('flutter.')) continue;
+        if (key.startsWith('flutter.') ||
+            DataMigrationService.isFormatMetadataKey(key) ||
+            _isDeviceLocalPreferenceKey(key) ||
+            (key == _browserCookieRetentionKey && !selection.browserCookies)) {
+          continue;
+        }
         if (_isChatPrefKey(key)) {
           if (selection.chatRecordsAndAttachments) {
             chatData[key] = prefs.get(key);
-            hasChatData = true;
           }
         } else {
           if (selection.settings) {
             settingsData[key] = prefs.get(key);
-            hasSettingsData = true;
           }
         }
       }
     }
 
-    if (hasChatData) {
+    if (selection.chatRecordsAndAttachments) {
       addStringToArchive(archive, 'chat_data.json', jsonEncode(chatData));
     }
-    if (hasSettingsData) {
+    if (selection.settings) {
       addStringToArchive(archive, 'settings.json', jsonEncode(settingsData));
     }
     onProgress?.call(0.25);
@@ -793,16 +995,31 @@ class BackupService {
       debugPrint('[BackupService] _buildBackupBytes: adding task files');
       if (!kIsWeb && !WebFileStore.isTestMode) {
         final appDir = await AppStorage.directory;
-        await addTaskFileToArchive(archive, 'synthesis/tasks.json',
-            p.join(appDir, 'synthesis', 'tasks.json'));
-        await addTaskFileToArchive(archive, 'catcatch/tasks.json',
-            p.join(appDir, 'catcatch', 'tasks.json'));
-        await addTaskFileToArchive(archive, 'background/tasks.json',
-            p.join(appDir, 'background', 'tasks.json'));
-        await addTaskFileToArchive(archive, 'task_flows/flows.json',
-            p.join(appDir, 'task_flows', 'flows.json'));
-        await addTaskFileToArchive(archive, 'task_flows/executions.json',
-            p.join(appDir, 'task_flows', 'executions.json'));
+        await addTaskFileToArchive(
+          archive,
+          'synthesis/tasks.json',
+          p.join(appDir, 'synthesis', 'tasks.json'),
+        );
+        await addTaskFileToArchive(
+          archive,
+          'catcatch/tasks.json',
+          p.join(appDir, 'catcatch', 'tasks.json'),
+        );
+        await addTaskFileToArchive(
+          archive,
+          'background/tasks.json',
+          p.join(appDir, 'background', 'tasks.json'),
+        );
+        await addTaskFileToArchive(
+          archive,
+          'task_flows/flows.json',
+          p.join(appDir, 'task_flows', 'flows.json'),
+        );
+        await addTaskFileToArchive(
+          archive,
+          'task_flows/executions.json',
+          p.join(appDir, 'task_flows', 'executions.json'),
+        );
       } else {
         addStringToArchive(archive, 'synthesis/tasks.json', '[]');
         addStringToArchive(archive, 'catcatch/tasks.json', '[]');
@@ -816,26 +1033,17 @@ class BackupService {
     checkCancelled();
 
     // 4b. Anki 闪卡数据库（原始格式）
-    if (selection.ankiData && !kIsWeb && !WebFileStore.isTestMode) {
-      try {
-        final appDir = await AppStorage.directory;
-        final ankiDb = p.join(appDir, 'collection.anki2');
-        if (File(ankiDb).existsSync()) {
-          await addTaskFileToArchive(archive, 'anki/collection.anki2', ankiDb);
-        }
-      } catch (_) {}
+    if (ankiDbPath != null) {
+      await addTaskFileToArchive(archive, 'anki/collection.anki2', ankiDbPath);
     }
 
     // 4c. 浏览器Cookies持久化数据
-    if (selection.browserCookies && !kIsWeb && !WebFileStore.isTestMode) {
-      try {
-        final appDir = await AppStorage.directory;
-        final cookiesFile = p.join(appDir, 'browser_cookies.json');
-        if (File(cookiesFile).existsSync()) {
-          await addTaskFileToArchive(
-              archive, 'browser_cookies.json', cookiesFile);
-        }
-      } catch (_) {}
+    if (browserCookieSnapshot != null) {
+      addStringToArchive(
+        archive,
+        'browser_cookies.json',
+        jsonEncode(browserCookieSnapshot),
+      );
     }
 
     // 5. 二进制文件（按存储格式：pictures/, tts_audio/, videos/, texts/, attachments/）
@@ -848,9 +1056,18 @@ class BackupService {
         final format = record['format'] as String? ?? 'jpg';
         if (hash == null) continue;
         await addFileToArchive(
-            archive, 'pictures/$hash.$format', 'pictures', '$hash.$format');
-        await addFileToArchive(archive, 'pictures/${imageThumbFileName(hash)}',
-            'pictures', imageThumbFileName(hash));
+          archive,
+          'pictures/$hash.$format',
+          'pictures',
+          '$hash.$format',
+        );
+        await addFileToArchive(
+          archive,
+          'pictures/${imageThumbFileName(hash)}',
+          'pictures',
+          imageThumbFileName(hash),
+          required: false,
+        );
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -868,9 +1085,18 @@ class BackupService {
         final format = record['format'] as String? ?? 'wav';
         if (hash == null) continue;
         await addFileToArchive(
-            archive, 'tts_audio/$hash.$format', 'tts_audio', '$hash.$format');
+          archive,
+          'tts_audio/$hash.$format',
+          'tts_audio',
+          '$hash.$format',
+        );
         await addFileToArchive(
-            archive, 'tts_audio/$hash.txt', 'tts_audio', '$hash.txt');
+          archive,
+          'tts_audio/$hash.txt',
+          'tts_audio',
+          '$hash.txt',
+          required: false,
+        );
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -888,7 +1114,11 @@ class BackupService {
         final format = record['format'] as String? ?? 'mp4';
         if (hash == null) continue;
         await addFileToArchive(
-            archive, 'videos/$hash.$format', 'videos', '$hash.$format');
+          archive,
+          'videos/$hash.$format',
+          'videos',
+          '$hash.$format',
+        );
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -905,7 +1135,11 @@ class BackupService {
         final hash = record['hash'] as String?;
         if (hash == null) continue;
         await addFileToArchive(
-            archive, 'texts/$hash.txt', 'texts', '$hash.txt');
+          archive,
+          'texts/$hash.txt',
+          'texts',
+          '$hash.txt',
+        );
         if (i % 10 == 0) {
           await _yieldToEventLoop();
           checkCancelled();
@@ -962,11 +1196,12 @@ class BackupService {
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
   ///       attachments/ 作为聊天记录和附件的一部分
-  static Future<void> _restoreFromBytes(
+  static Future<List<String>> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
+    bool skipMissingCategories = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -993,58 +1228,65 @@ class BackupService {
     }
 
     debugPrint(
-        '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)');
+      '[BackupService] _restoreFromBytes: archive decoded (${fileMap.length} files)',
+    );
 
     // ================================================================
     // 预解析并校验备份中的全部 JSON 数据（在删除任何现有文件之前）。
     // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
     // 造成的数据丢失。
     // ================================================================
-    final metadata =
-        _validateAndParseMetadata((name) => fileMap[name], selection);
+    final metadata = _validateAndParseMetadata(
+      (name) => fileMap[name],
+      selection,
+      archiveEntries: fileMap.keys.toSet(),
+      skipMissingCategories: skipMissingCategories,
+    );
+    final restoreSelection = metadata.restoreSelection;
+    _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
+    final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
+      restoreSelection,
+      taskFilesToReplace: metadata.taskFilesToReplace,
+    );
+    final previousCookies = await _captureCookiesForRestoreRollback(
+      restoreSelection,
+      metadata.browserCookiesData,
+    );
     onProgress?.call(0.15);
     await _yieldToEventLoop();
 
-    // 勾选即清空：先清除选中类别的现有文件。
-    // 即使备份中缺少对应文件，选中的类别也会被清空（与数据库/偏好设置
-    // 类别的语义一致）。必须在数据库记录替换之前执行，因为媒体文件按
-    // 当前数据库记录逐个删除。
+    // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
+    // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
     // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
     // 与清除功能的行为一致。
-    if (await _deleteSelectedFiles(selection)) {
-      throw Exception('部分数据文件删除失败，请重启应用后重试');
-    }
+    await _prepareSelectedFilesForRestore(
+      restoreSelection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      taskFilesToReplace: metadata.taskFilesToReplace,
+    );
 
     // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
     debugPrint('[BackupService] _restoreFromBytes: restoring database');
-    await _restoreRecordsAndPrefs(metadata, selection);
+    await _restoreRecordsAndPrefs(metadata, restoreSelection);
     onProgress?.call(0.55);
     await _yieldToEventLoop();
-
-    // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
-    if (selection.browserCookies) {
-      final bcData = fileMap['browser_cookies.json'];
-      if (bcData != null) {
-        await writeBackupFile('', 'browser_cookies.json', bcData);
-      }
-    }
 
     // 恢复二进制文件和任务文件（兼容新旧两种路径格式）
     // 新格式: pictures/, tts_audio/, videos/, texts/, attachments/, synthesis/, catcatch/
     // 旧格式: files/pictures/, files/tts_audio/, ..., tasks/synthesis_tasks.json
     debugPrint(
-        '[BackupService] _restoreFromBytes: restoring binary files (selection: ${selection.selectedLabels})');
+      '[BackupService] _restoreFromBytes: restoring binary files (selection: ${restoreSelection.selectedLabels})',
+    );
     var restoreIndex = 0;
     for (final entry in fileMap.entries) {
-      final handled = await _restoreArchiveEntry(
-        entry.key,
-        selection,
-        (subDir, fileName) async {
-          final builder = BytesBuilder(copy: false);
-          builder.add(entry.value);
-          await writeBackupFile(subDir, fileName, builder.takeBytes());
-        },
-      );
+      final handled = await _restoreArchiveEntry(entry.key, restoreSelection, (
+        subDir,
+        fileName,
+      ) async {
+        final builder = BytesBuilder(copy: false);
+        builder.add(entry.value);
+        await writeBackupFile(subDir, fileName, builder.takeBytes());
+      });
       if (handled) {
         restoreIndex++;
         // 每处理 20 个文件让出事件循环
@@ -1052,19 +1294,27 @@ class BackupService {
       }
     }
 
-    // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
-    // 只有选中的类别会被备份中的数据替换。
-    // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
-    // 这里只需写入备份中包含的文件。
-
     // 数据迁移：确保恢复后的数据格式是最新的
     // 旧格式备份（pre-migration）中包含 chat_configs、null IDs 等，
     // 需要迁移到当前数据格式才能正常使用。
     // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-    if (!skipPostRestoreMigration) {
-      await DataMigrationService.migrateDataFormatIfNeeded();
+    final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+    await DataMigrationService.mergeRestoredPartVersions(
+      backupVersions: metadata.dataPartVersions,
+      restoredParts: restoredPartIds,
+    );
+    if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+      await DataMigrationService.migrateDataFormatIfNeeded(
+        onlyParts: restoredPartIds,
+      );
     }
+    await _restoreBrowserCookiesAfterDataRestore(
+      restoreSelection,
+      metadata.browserCookiesData,
+      previousCookies: previousCookies,
+    );
     onProgress?.call(1.0);
+    return metadata.skippedLabels;
   }
 
   // ================================================================
@@ -1081,11 +1331,13 @@ class BackupService {
   ///
   /// 峰值内存 O(最大元数据文件 + 分块缓冲)，不随备份体积增长 ——
   /// 手动导入含数百 MB 视频的备份不再 OOM（与旧自动备份的流式创建对称）。
-  static Future<void> _restoreFromZipFile(
+  static Future<List<String>> _restoreFromZipFile(
     String zipPath, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
+    bool skipMissingCategories = false,
+    bool trustEmptyLegacyTaskPayloads = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -1105,11 +1357,10 @@ class BackupService {
       // 无效备份直接中止恢复，避免"选中类别的文件已被删除但恢复失败"
       // 造成的数据丢失。
       //
-      // 注意：此处读取元数据时把条目损坏（_RestoreEntryCorruptException）
-      // 包装为 BackupValidationException —— 校验期失败意味着什么都没动；
-      // 删除之后的读取（cookies / 二进制条目）不再包装，让调用方提示
-      // "恢复未完成，请重启"（流式恢复的固有差异：条目内容在删除后才
-      // 逐块解压，二进制条目的损坏只能在中途发现）。
+      // 注意：元数据读取和所选条目的尺寸/CRC 预检都在删除之前；条目
+      // 损坏会包装为 BackupValidationException，表示现有数据没有变动。
+      // 预检通过后，实际写入仍可能因文件系统错误中断；这些错误不包装，
+      // 让调用方提示恢复未完成并建议重启。
       // ================================================================
       final metadata = _validateAndParseMetadata(
         (name) {
@@ -1120,40 +1371,48 @@ class BackupService {
           }
         },
         selection,
+        archiveEntries: reader.entries.map((entry) => entry.name).toSet(),
+        skipMissingCategories: skipMissingCategories,
+        trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+      );
+      final restoreSelection = metadata.restoreSelection;
+      _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
+      final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
+        restoreSelection,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+      );
+      final previousCookies = await _captureCookiesForRestoreRollback(
+        restoreSelection,
+        metadata.browserCookiesData,
       );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
 
       // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
-      if (await _deleteSelectedFiles(selection)) {
-        throw Exception('部分数据文件删除失败，请重启应用后重试');
-      }
+      await _prepareSelectedFilesForRestore(
+        restoreSelection,
+        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+      );
 
       // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
       debugPrint('[BackupService] _restoreFromZipFile: restoring database');
-      await _restoreRecordsAndPrefs(metadata, selection);
+      await _restoreRecordsAndPrefs(metadata, restoreSelection);
       onProgress?.call(0.55);
       await _yieldToEventLoop();
-
-      // 恢复浏览器Cookies持久化数据（选中则恢复，未选中则保持原样）
-      // （此处在删除之后：读取失败按恢复中途失败传播）
-      if (selection.browserCookies) {
-        final bcData = reader.readMetaFile('browser_cookies.json');
-        if (bcData != null) {
-          await writeBackupFile('', 'browser_cookies.json', bcData);
-        }
-      }
 
       // 恢复二进制文件和任务文件：逐条目分块流式落盘
       // （新格式: pictures/, tts_audio/, ...；旧格式: files/, tasks/ 前缀）
       // （条目损坏在此处按恢复中途失败传播，调用方需提示重启）
-      debugPrint('[BackupService] _restoreFromZipFile: restoring binary files '
-          '(selection: ${selection.selectedLabels})');
+      debugPrint(
+        '[BackupService] _restoreFromZipFile: restoring binary files '
+        '(selection: ${restoreSelection.selectedLabels})',
+      );
       var restoreIndex = 0;
       for (final entry in reader.entries) {
         final handled = await _restoreArchiveEntry(
           entry.name,
-          selection,
+          restoreSelection,
           (subDir, fileName) =>
               _writeZipEntryStreamed(reader, entry, subDir, fileName),
         );
@@ -1164,17 +1423,25 @@ class BackupService {
         }
       }
 
-      // 未选中的类别保持原样：不清理、不覆盖其现有文件/记录，
-      // 只有选中的类别会被备份中的数据替换。
-      // 选中类别的现有文件已在恢复开始时清除（见 _deleteSelectedFiles），
-      // 这里只需写入备份中包含的文件。
-
       // 数据迁移：确保恢复后的数据格式是最新的
       // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
-      if (!skipPostRestoreMigration) {
-        await DataMigrationService.migrateDataFormatIfNeeded();
+      final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
+      await DataMigrationService.mergeRestoredPartVersions(
+        backupVersions: metadata.dataPartVersions,
+        restoredParts: restoredPartIds,
+      );
+      if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
+        await DataMigrationService.migrateDataFormatIfNeeded(
+          onlyParts: restoredPartIds,
+        );
       }
+      await _restoreBrowserCookiesAfterDataRestore(
+        restoreSelection,
+        metadata.browserCookiesData,
+        previousCookies: previousCookies,
+      );
       onProgress?.call(1.0);
+      return metadata.skippedLabels;
     } finally {
       reader.close();
     }
@@ -1229,8 +1496,11 @@ class BackupService {
   ///       attachments/ 作为聊天记录和附件的一部分
   static _RestoreMetadata _validateAndParseMetadata(
     Uint8List? Function(String name) readFile,
-    BackupSelection selection,
-  ) {
+    BackupSelection selection, {
+    required Set<String> archiveEntries,
+    required bool skipMissingCategories,
+    bool trustEmptyLegacyTaskPayloads = false,
+  }) {
     // 验证 manifest（兼容 v1 和 v2）
     final manifestJson = readFile('manifest.json');
     if (manifestJson == null) {
@@ -1259,8 +1529,14 @@ class BackupService {
 
     // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
-    final dbJson = readFile('stroom_manifest.json') ??
-        readFile('database/manifest_data.json');
+    final needsMediaManifest = selection.pictures ||
+        selection.audio ||
+        selection.videos ||
+        selection.texts;
+    final dbJson = needsMediaManifest
+        ? readFile('stroom_manifest.json') ??
+            readFile('database/manifest_data.json')
+        : null;
     if (dbJson != null) {
       try {
         final decoded = jsonDecode(utf8.decode(dbJson));
@@ -1269,13 +1545,75 @@ class BackupService {
         }
         // 校验嵌套结构（与 _restoreDatabaseFromJson 的取值逻辑一致），
         // 防止恢复中途因字段形状错误抛错
-        void validateRecordList(Object? value, String field) {
+        void validateRecordList(
+          Object? value,
+          String field,
+          Set<String> allowedColumns,
+          Set<String> stringColumns,
+          Set<String> integerColumns,
+        ) {
           if (value == null) return;
           if (value is! List) throw FormatException('$field 不是数组');
           for (final item in value) {
             if (item is! Map<String, dynamic>) {
               throw FormatException('$field 包含非对象记录');
             }
+
+            final columns = <String, Object?>{};
+            final sanitizedItem = <String, dynamic>{};
+            for (final entry in item.entries) {
+              final column = camelToSnake[entry.key] ?? entry.key;
+              if (!allowedColumns.contains(column)) {
+                // Ignore fields from newer app versions. This app cannot
+                // persist unknown columns, but they should not make an
+                // otherwise usable cross-version backup unrestorable.
+                continue;
+              }
+              if (columns.containsKey(column)) {
+                throw FormatException('$field 中字段 ${entry.key} 重复');
+              }
+              columns[column] = entry.value;
+              sanitizedItem[entry.key] = entry.value;
+            }
+
+            for (final requiredColumn in const {
+              'id',
+              'name',
+              'hash',
+              'created_at',
+            }) {
+              if (!columns.containsKey(requiredColumn)) {
+                throw FormatException('$field 缺少必需字段 $requiredColumn');
+              }
+            }
+
+            for (final entry in columns.entries) {
+              final value = entry.value;
+              if (stringColumns.contains(entry.key)) {
+                if (value is! String) {
+                  throw FormatException('$field 字段 ${entry.key} 不是字符串');
+                }
+              } else if (integerColumns.contains(entry.key)) {
+                if (entry.key == 'duration' ? value is! num : value is! int) {
+                  throw FormatException('$field 字段 ${entry.key} 不是有效数字');
+                }
+              } else if (entry.key == 'created_at' ||
+                  entry.key == 'modified_at') {
+                if (value is String) {
+                  try {
+                    DateTime.parse(value);
+                  } on FormatException {
+                    throw FormatException('$field 字段 ${entry.key} 日期无效');
+                  }
+                } else if (value is! int) {
+                  throw FormatException('$field 字段 ${entry.key} 不是有效日期');
+                }
+              }
+            }
+
+            item
+              ..clear()
+              ..addAll(sanitizedItem);
           }
         }
 
@@ -1289,19 +1627,74 @@ class BackupService {
           }
         }
 
-        validateRecordList(decoded['image_records'], 'image_records');
-        validateRecordList(decoded['audio_records'], 'audio_records');
-        validateRecordList(decoded['video_records'], 'video_records');
-        validateRecordList(decoded['text_records'], 'text_records');
-        validateFolderList(decoded['folders'], 'folders');
-        validateFolderList(
-            decoded[ManifestTables.textFolders], ManifestTables.textFolders);
-        validateFolderList(
-            decoded[ManifestTables.audioFolders], ManifestTables.audioFolders);
-        validateFolderList(
-            decoded[ManifestTables.imageFolders], ManifestTables.imageFolders);
-        validateFolderList(
-            decoded[ManifestTables.videoFolders], ManifestTables.videoFolders);
+        const commonColumns = {
+          'id',
+          'name',
+          'hash',
+          'format',
+          'created_at',
+          'modified_at',
+          'size',
+          'folder',
+        };
+        const commonStringColumns = {'id', 'name', 'hash', 'format', 'folder'};
+        const commonIntegerColumns = {'size'};
+        bool needsLegacyFolders(Object? value) =>
+            value is! List || value.isEmpty;
+        bool usesLegacyFolders = false;
+        if (selection.pictures) {
+          final folders = decoded[ManifestTables.imageFolders];
+          validateRecordList(
+            decoded['image_records'],
+            'image_records',
+            commonColumns,
+            commonStringColumns,
+            commonIntegerColumns,
+          );
+          validateFolderList(folders, ManifestTables.imageFolders);
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.audio) {
+          final folders = decoded[ManifestTables.audioFolders];
+          validateRecordList(
+            decoded['audio_records'],
+            'audio_records',
+            {...commonColumns, 'source_text', 'duration'},
+            {...commonStringColumns, 'source_text'},
+            {...commonIntegerColumns, 'duration'},
+          );
+          validateFolderList(folders, ManifestTables.audioFolders);
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.videos) {
+          final folders = decoded[ManifestTables.videoFolders];
+          validateRecordList(
+            decoded['video_records'],
+            'video_records',
+            {...commonColumns, 'duration'},
+            commonStringColumns,
+            {...commonIntegerColumns, 'duration'},
+          );
+          validateFolderList(folders, ManifestTables.videoFolders);
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        if (selection.texts) {
+          final folders = decoded[ManifestTables.textFolders];
+          validateRecordList(
+            decoded['text_records'],
+            'text_records',
+            {...commonColumns, 'text_length'},
+            commonStringColumns,
+            {...commonIntegerColumns, 'text_length'},
+          );
+          validateFolderList(folders, ManifestTables.textFolders);
+          usesLegacyFolders = usesLegacyFolders || needsLegacyFolders(folders);
+        }
+        // Older v1 manifests used one shared folder list as a fallback for
+        // every selected media type that has no per-type folders.
+        if (usesLegacyFolders) {
+          validateFolderList(decoded['folders'], 'folders');
+        }
         dbData = decoded;
       } catch (e) {
         throw BackupValidationException('无效的备份文件：数据库记录损坏 ($e)');
@@ -1340,13 +1733,909 @@ class BackupService {
       }
     }
 
+    final declaredSelection = _selectionFromDeclaredParts(
+      manifest['dataParts'],
+    );
+    final availableSelection = declaredSelection != null
+        ? _getAvailableDeclaredSelection(
+            declared: declaredSelection,
+            archiveEntries: archiveEntries,
+            dbData: dbData,
+            chatPrefs: isV1Format ? v1Prefs : chatPrefs,
+            requireMediaFiles: selection.includeMediaFiles,
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
+                selection.includeMediaFiles,
+          )
+        : _getAvailableSelection(
+            archiveEntries: archiveEntries,
+            dbData: dbData,
+            v1Prefs: v1Prefs,
+            chatPrefs: chatPrefs,
+            settingsPrefs: settingsPrefs,
+            isV1: isV1Format,
+            hasTaskData: skipMissingCategories &&
+                selection.tasks &&
+                (trustEmptyLegacyTaskPayloads
+                    ? _hasTaskPayloadFile(archiveEntries)
+                    : _hasNonEmptyTaskPayload(readFile)),
+            requireMediaFiles: selection.includeMediaFiles,
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
+                selection.includeMediaFiles,
+          );
+    final skippedLabels = skipMissingCategories
+        ? selection.selectedLabels
+            .where(
+              (label) => !availableSelection.selectedLabels.contains(label),
+            )
+            .toList()
+        : <String>[];
+    final restoreSelection = skipMissingCategories
+        ? _intersectSelections(selection, availableSelection)
+        : selection;
+    // Tasks is a single selectable category. When an archive makes that
+    // category available, clear every known task payload before restoring the
+    // files it contains so a partial legacy archive cannot merge stale local
+    // task types into the restored category.
+    final taskFilesToReplace = restoreSelection.tasks
+        ? _taskPayloadFiles
+            .map(_canonicalTaskPayloadName)
+            .whereType<String>()
+            .toSet()
+        : <String>{};
+
+    if (restoreSelection.tasks) {
+      _validateTaskPayloads(readFile, archiveEntries);
+    }
+
+    Uint8List? browserCookiesData;
+    if (restoreSelection.browserCookies) {
+      browserCookiesData = readFile('browser_cookies.json');
+      if (browserCookiesData != null) {
+        try {
+          BrowserCookieService.validateCookieSnapshotForRestore(
+            jsonDecode(utf8.decode(browserCookiesData)),
+          );
+        } catch (e) {
+          throw BackupValidationException(
+            '无效的备份文件：browser_cookies.json 损坏 ($e)',
+          );
+        }
+      }
+    }
+
+    Map<String, dynamic>? versionPrefs = v1Prefs ?? settingsPrefs;
+    if (versionPrefs == null) {
+      // Older archives stored the source format version in preferences. Read
+      // that metadata even when restoring another category, but ignore a
+      // malformed unselected preferences file so it cannot block the restore.
+      final rawPrefs = readFile(
+        isV1Format ? 'preferences.json' : 'settings.json',
+      );
+      if (rawPrefs != null) {
+        try {
+          final decoded = jsonDecode(utf8.decode(rawPrefs));
+          if (decoded is Map<String, dynamic>) versionPrefs = decoded;
+        } catch (_) {}
+      }
+    }
+    final dataPartVersions =
+        _parseBackupPartVersions(manifest['dataPartVersions']) ??
+            _parseBackupPartVersions(versionPrefs?['data_format_versions']) ??
+            DataMigrationService.partVersionsFromLegacyGlobal(
+              versionPrefs?['data_format_version'],
+            );
+
+    for (final part in restoreSelection.selectedPartIds) {
+      final backupVersion = dataPartVersions?[part];
+      final currentVersion = DataMigrationService.currentPartVersions[part];
+      if (backupVersion != null &&
+          currentVersion != null &&
+          backupVersion > currentVersion) {
+        throw const BackupValidationException(
+          '备份包含由较新版本 Stroom 创建的数据格式，请先更新应用后再导入',
+        );
+      }
+    }
+
     return _RestoreMetadata(
       isV1: isV1Format,
+      restoreChatPreferences: declaredSelection?.chatRecordsAndAttachments ??
+          (isV1Format
+              ? v1Prefs?.keys.any(_isChatPrefKey) ?? false
+              : chatPrefs != null),
       dbData: dbData,
       v1Prefs: v1Prefs,
       chatPrefs: chatPrefs,
       settingsPrefs: settingsPrefs,
+      restoreSelection: restoreSelection,
+      taskFilesToReplace: taskFilesToReplace,
+      skippedLabels: skippedLabels,
+      dataPartVersions: dataPartVersions,
+      browserCookiesData: browserCookiesData,
     );
+  }
+
+  /// 新格式清单明确记录导出时选中的类别；旧备份没有该字段，需按归档
+  /// 内容推断。显式字段可区分“选中的空类别”和“未导出的类别”。
+  /// Web 和测试文件存储不导出任务文件、原生 Anki 数据库与浏览器
+  /// Cookies，因此清单也必须排除这些类别，避免导入时清理目标端数据。
+  static Future<String?> _findAnkiDatabasePath(
+    BackupSelection selection,
+  ) async {
+    if (!selection.ankiData || kIsWeb || WebFileStore.isTestMode) return null;
+    try {
+      final path = p.join(await AppStorage.directory, 'collection.anki2');
+      return await File(path).exists() ? path : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Set<String> _exportedPartIds(
+    BackupSelection selection, {
+    required bool hasBrowserCookieSnapshot,
+    required bool hasAnkiDatabase,
+  }) {
+    final parts = selection.selectedPartIds;
+    if (kIsWeb || WebFileStore.isTestMode) {
+      parts
+        ..remove(DataParts.tasks)
+        ..remove(DataParts.anki)
+        ..remove(DataParts.browserCookies);
+    } else if (!hasBrowserCookieSnapshot) {
+      parts.remove(DataParts.browserCookies);
+    }
+    if (!hasAnkiDatabase) parts.remove(DataParts.anki);
+    return parts;
+  }
+
+  static BackupSelection? _selectionFromDeclaredParts(Object? value) {
+    if (value == null) return null;
+    if (value is! List || value.any((part) => part is! String)) {
+      throw BackupValidationException('无效的备份文件：dataParts 字段损坏');
+    }
+    final parts = value.whereType<String>().toSet();
+    return BackupSelection(
+      chatRecordsAndAttachments: parts.contains(DataParts.chat),
+      settings: parts.contains(DataParts.settings),
+      pictures: parts.contains(DataParts.pictures),
+      audio: parts.contains(DataParts.audio),
+      videos: parts.contains(DataParts.videos),
+      texts: parts.contains(DataParts.texts),
+      tasks: parts.contains(DataParts.tasks),
+      ankiData: parts.contains(DataParts.anki),
+      browserCookies: parts.contains(DataParts.browserCookies),
+    );
+  }
+
+  static BackupSelection _intersectSelections(
+    BackupSelection requested,
+    BackupSelection available,
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: requested.chatRecordsAndAttachments &&
+            available.chatRecordsAndAttachments,
+        settings: requested.settings && available.settings,
+        pictures: requested.pictures && available.pictures,
+        audio: requested.audio && available.audio,
+        videos: requested.videos && available.videos,
+        texts: requested.texts && available.texts,
+        tasks: requested.tasks && available.tasks,
+        ankiData: requested.ankiData && available.ankiData,
+        browserCookies: requested.browserCookies && available.browserCookies,
+        includeMediaFiles: requested.includeMediaFiles,
+      );
+
+  static bool _isSafeRelativeArchivePath(String path) {
+    final pathSegments = path.split(RegExp(r'[/\\]'));
+    return !pathSegments.any((part) => part == '..') &&
+        !RegExp(r'^[a-zA-Z]:').hasMatch(path) &&
+        !path.startsWith('/') &&
+        pathSegments.first.isNotEmpty;
+  }
+
+  static void _validateArchiveEntryChecksums(
+    Archive archive,
+    Map<String, Uint8List> fileMap,
+    BackupSelection selection,
+  ) {
+    for (final file in archive) {
+      if (!file.isFile ||
+          !_shouldValidateArchiveEntryChecksum(file.name, selection)) {
+        continue;
+      }
+      final expected = file.crc32;
+      final content = fileMap[file.name];
+      if (expected == null || content == null) {
+        throw BackupValidationException('无效的备份文件：条目 ${file.name} 缺少校验信息');
+      }
+      final checksum = _ZipCrc32()..add(content);
+      if (checksum.value != expected) {
+        throw BackupValidationException('无效的备份文件：条目 ${file.name} CRC32 校验失败');
+      }
+    }
+  }
+
+  static void _validateZipEntryChecksumsBeforeRestore(
+    _ZipStreamReader reader,
+    BackupSelection selection,
+  ) {
+    for (final entry in reader.entries) {
+      if (!_shouldValidateArchiveEntryChecksum(entry.name, selection)) {
+        continue;
+      }
+      try {
+        reader.extractEntry(entry, (_) {});
+      } on _RestoreEntryCorruptException catch (e) {
+        throw BackupValidationException('无效的备份文件：$e');
+      }
+    }
+  }
+
+  static bool _shouldValidateArchiveEntryChecksum(
+    String rawKey,
+    BackupSelection selection,
+  ) {
+    if (rawKey == 'manifest.json') return true;
+    if (rawKey == 'stroom_manifest.json' ||
+        rawKey == 'database/manifest_data.json') {
+      return selection.pictures ||
+          selection.audio ||
+          selection.videos ||
+          selection.texts;
+    }
+    if (rawKey == 'preferences.json') {
+      return selection.chatRecordsAndAttachments || selection.settings;
+    }
+    if (rawKey == 'chat_data.json') {
+      return selection.chatRecordsAndAttachments;
+    }
+    if (rawKey == 'settings.json') return selection.settings;
+    if (rawKey == 'browser_cookies.json') return selection.browserCookies;
+    if (rawKey.endsWith('/') || rawKey.endsWith(r'\')) return false;
+
+    var key = rawKey;
+    if (key.startsWith('files/')) {
+      key = key.substring('files/'.length);
+    }
+    if (key.startsWith('temp_edited/')) {
+      key = 'attachments/${p.basename(key)}';
+    }
+    if (key.startsWith('tasks/')) {
+      key = key.substring('tasks/'.length);
+      if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
+      if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
+    }
+    if (key == 'collection.anki2') return selection.ankiData;
+
+    for (final dir in _restoreKnownDirs) {
+      if (!key.startsWith('$dir/')) continue;
+      final relativePath = key.substring(dir.length + 1);
+      return _shouldRestoreDir(dir, selection) &&
+          _isSafeRelativeArchivePath(relativePath);
+    }
+    return false;
+  }
+
+  static bool _hasAllMediaFiles({
+    required Map<String, dynamic>? dbData,
+    required Set<String> archiveEntries,
+    required String recordsKey,
+    required String directory,
+    required String defaultExtension,
+  }) {
+    final records = dbData?[recordsKey];
+    if (records is! List) return false;
+    for (final record in records) {
+      if (record is! Map || record['hash'] is! String) return false;
+      final rawExtension = record['format'];
+      if (rawExtension != null && rawExtension is! String) return false;
+      final extension = (rawExtension as String?) ?? defaultExtension;
+      final relativePath = '${record['hash']}.$extension';
+      if (!_isSafeRelativeArchivePath(relativePath) ||
+          !archiveEntries.contains('$directory/$relativePath')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static BackupSelection _getAvailableDeclaredSelection({
+    required BackupSelection declared,
+    required Set<String> archiveEntries,
+    required Map<String, dynamic>? dbData,
+    required Map<String, dynamic>? chatPrefs,
+    required bool requireMediaFiles,
+    required bool requireAttachmentFiles,
+  }) {
+    final entries = archiveEntries
+        .where((entry) => !entry.endsWith('/') && !entry.endsWith(r'\'))
+        .map(
+          (entry) => entry.startsWith('files/')
+              ? entry.substring('files/'.length)
+              : entry,
+        )
+        .toSet();
+
+    final hasManifest = dbData != null;
+    return BackupSelection(
+      chatRecordsAndAttachments: declared.chatRecordsAndAttachments &&
+          entries.contains('chat_data.json') &&
+          _hasAllReferencedAttachmentFiles(
+            chatPrefs: chatPrefs,
+            archiveEntries: entries,
+            requireFiles: requireAttachmentFiles,
+          ),
+      settings: declared.settings && entries.contains('settings.json'),
+      pictures: declared.pictures &&
+          hasManifest &&
+          (!requireMediaFiles ||
+              _hasAllMediaFiles(
+                dbData: dbData,
+                archiveEntries: entries,
+                recordsKey: 'image_records',
+                directory: 'pictures',
+                defaultExtension: 'jpg',
+              )),
+      audio: declared.audio &&
+          hasManifest &&
+          (!requireMediaFiles ||
+              _hasAllMediaFiles(
+                dbData: dbData,
+                archiveEntries: entries,
+                recordsKey: 'audio_records',
+                directory: 'tts_audio',
+                defaultExtension: 'wav',
+              )),
+      videos: declared.videos &&
+          hasManifest &&
+          (!requireMediaFiles ||
+              _hasAllMediaFiles(
+                dbData: dbData,
+                archiveEntries: entries,
+                recordsKey: 'video_records',
+                directory: 'videos',
+                defaultExtension: 'mp4',
+              )),
+      texts: declared.texts &&
+          hasManifest &&
+          (!requireMediaFiles ||
+              _hasAllMediaFiles(
+                dbData: dbData,
+                archiveEntries: entries,
+                recordsKey: 'text_records',
+                directory: 'texts',
+                defaultExtension: 'txt',
+              )),
+      tasks: !kIsWeb &&
+          declared.tasks &&
+          const [
+            'synthesis/tasks.json',
+            'catcatch/tasks.json',
+            'background/tasks.json',
+            'task_flows/flows.json',
+            'task_flows/executions.json',
+          ].every(entries.contains),
+      ankiData: !kIsWeb &&
+          declared.ankiData &&
+          (entries.contains('anki/collection.anki2') ||
+              entries.contains('collection.anki2')),
+      browserCookies: declared.browserCookies &&
+          !kIsWeb &&
+          entries.contains('browser_cookies.json'),
+    );
+  }
+
+  static bool _hasAllReferencedAttachmentFiles({
+    required Map<String, dynamic>? chatPrefs,
+    required Set<String> archiveEntries,
+    required bool requireFiles,
+  }) {
+    if (!requireFiles) return true;
+    final rawConversations = chatPrefs?['conversations'];
+    if (rawConversations == null) return true;
+    if (rawConversations is! String) return false;
+
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(rawConversations);
+    } catch (_) {
+      return false;
+    }
+    if (decoded is! List) return false;
+
+    bool allPresent = true;
+    void checkAttachments(Object? rawAttachments) {
+      if (rawAttachments == null) return;
+      if (rawAttachments is! List) {
+        allPresent = false;
+        return;
+      }
+      for (final attachment in rawAttachments) {
+        if (attachment is! Map) {
+          allPresent = false;
+          continue;
+        }
+        for (final key in const ['storagePath', 'thumbnailPath']) {
+          final path = attachment[key];
+          if (path == null || path == '') continue;
+          if (path is! String) {
+            allPresent = false;
+            continue;
+          }
+          final normalizedPath = path.replaceAll(r'\', '/');
+          if (!_isSafeRelativeArchivePath(normalizedPath)) {
+            allPresent = false;
+            continue;
+          }
+          final archivePaths = normalizedPath.startsWith('temp_edited/')
+              ? {normalizedPath, 'attachments/${p.basename(normalizedPath)}'}
+              : {normalizedPath};
+          if (!archivePaths.any(archiveEntries.contains)) allPresent = false;
+        }
+      }
+    }
+
+    for (final conversation in decoded) {
+      if (conversation is! Map) {
+        allPresent = false;
+        continue;
+      }
+      final messages = conversation['messages'];
+      if (messages is! List) {
+        allPresent = false;
+      } else {
+        for (final message in messages) {
+          if (message is! Map) {
+            allPresent = false;
+            continue;
+          }
+          checkAttachments(message['attachments']);
+        }
+      }
+      checkAttachments(conversation['draftAttachments']);
+    }
+    return allPresent;
+  }
+
+  static Set<String> _restoredPartIds(
+    _RestoreMetadata metadata,
+    BackupSelection selection,
+  ) {
+    final parts = {...selection.selectedPartIds};
+    if (selection.chatRecordsAndAttachments &&
+        !metadata.restoreChatPreferences) {
+      parts.remove(DataParts.chat);
+    }
+    return parts;
+  }
+
+  static BackupSelection _getAvailableSelection({
+    required Set<String> archiveEntries,
+    required Map<String, dynamic>? dbData,
+    required Map<String, dynamic>? v1Prefs,
+    required Map<String, dynamic>? chatPrefs,
+    required Map<String, dynamic>? settingsPrefs,
+    required bool isV1,
+    required bool hasTaskData,
+    required bool requireMediaFiles,
+    required bool requireAttachmentFiles,
+  }) {
+    final normalizedEntries = archiveEntries
+        .where((entry) => !entry.endsWith('/') && !entry.endsWith(r'\'))
+        .map(
+          (entry) => entry.startsWith('files/')
+              ? entry.substring('files/'.length)
+              : entry,
+        )
+        .toSet();
+    bool hasNonEmptyList(Map<String, dynamic>? data, String key) =>
+        data?[key] is List && (data![key] as List).isNotEmpty;
+
+    bool hasDirectory(String directory) =>
+        normalizedEntries.any((entry) => entry.startsWith('$directory/'));
+
+    bool hasV1Preference(bool Function(String key) predicate) =>
+        v1Prefs?.keys.any(
+          (key) =>
+              !_isDeviceLocalPreferenceKey(key) &&
+              !DataMigrationService.isFormatMetadataKey(key) &&
+              predicate(key),
+        ) ??
+        false;
+
+    bool hasSettingsPreference(Map<String, dynamic>? prefs) =>
+        prefs?.keys.any(
+          (key) =>
+              key != _browserCookieRetentionKey &&
+              !key.startsWith('flutter.') &&
+              !_isDeviceLocalPreferenceKey(key) &&
+              !DataMigrationService.isFormatMetadataKey(key),
+        ) ??
+        false;
+
+    bool hasMediaData(
+      String recordsKey,
+      String foldersKey,
+      String directory,
+      String defaultExtension,
+    ) {
+      final records = dbData?[recordsKey];
+      if (records != null) {
+        if (records is! List) return false;
+        if (records.isNotEmpty) {
+          if (!requireMediaFiles) return true;
+          return _hasAllMediaFiles(
+            dbData: dbData,
+            archiveEntries: normalizedEntries,
+            recordsKey: recordsKey,
+            directory: directory,
+            defaultExtension: defaultExtension,
+          );
+        }
+      }
+      if (requireMediaFiles && hasDirectory(directory)) return false;
+      return hasNonEmptyList(dbData, foldersKey);
+    }
+
+    final hasChatData = normalizedEntries.contains('chat_data.json') ||
+        (isV1 && hasV1Preference(_isChatPrefKey));
+    final chatAttachmentsPresent = _hasAllReferencedAttachmentFiles(
+      chatPrefs: isV1 ? v1Prefs : chatPrefs,
+      archiveEntries: normalizedEntries,
+      requireFiles: requireAttachmentFiles,
+    );
+
+    return BackupSelection(
+      chatRecordsAndAttachments: hasChatData && chatAttachmentsPresent,
+      settings: hasSettingsPreference(settingsPrefs) ||
+          (isV1 &&
+              hasV1Preference(
+                (key) =>
+                    !_isChatPrefKey(key) &&
+                    key != _browserCookieRetentionKey &&
+                    !DataMigrationService.isFormatMetadataKey(key),
+              )),
+      pictures: hasMediaData(
+        'image_records',
+        ManifestTables.imageFolders,
+        'pictures',
+        'jpg',
+      ),
+      audio: hasMediaData(
+        'audio_records',
+        ManifestTables.audioFolders,
+        'tts_audio',
+        'wav',
+      ),
+      videos: hasMediaData(
+        'video_records',
+        ManifestTables.videoFolders,
+        'videos',
+        'mp4',
+      ),
+      texts: hasMediaData(
+        'text_records',
+        ManifestTables.textFolders,
+        'texts',
+        'txt',
+      ),
+      tasks: !kIsWeb && hasTaskData,
+      ankiData: !kIsWeb &&
+          (normalizedEntries.contains('anki/collection.anki2') ||
+              normalizedEntries.contains('collection.anki2')),
+      browserCookies:
+          !kIsWeb && normalizedEntries.contains('browser_cookies.json'),
+    );
+  }
+
+  static const _taskPayloadFiles = [
+    'synthesis/tasks.json',
+    'files/synthesis/tasks.json',
+    'catcatch/tasks.json',
+    'files/catcatch/tasks.json',
+    'background/tasks.json',
+    'files/background/tasks.json',
+    'task_flows/flows.json',
+    'files/task_flows/flows.json',
+    'task_flows/executions.json',
+    'files/task_flows/executions.json',
+    'tasks/synthesis_tasks.json',
+    'files/tasks/synthesis_tasks.json',
+    'tasks/catcatch_tasks.json',
+    'files/tasks/catcatch_tasks.json',
+  ];
+
+  static bool _hasTaskPayloadFile(Set<String> archiveEntries) =>
+      _taskPayloadFiles.any(archiveEntries.contains);
+
+  /// Older Web archives have task filenames containing only placeholder
+  /// empty arrays. Without `dataParts`, count task data as available only if
+  /// at least one recognized task file actually contains records.
+  static bool _hasNonEmptyTaskPayload(
+    Uint8List? Function(String name) readFile,
+  ) {
+    for (final name in _taskPayloadFiles) {
+      final raw = readFile(name);
+      if (raw == null) continue;
+      try {
+        final decoded = jsonDecode(utf8.decode(raw));
+        if (decoded is List && decoded.isNotEmpty) return true;
+        if (decoded is Map) {
+          final jobs = decoded['jobs'];
+          if (jobs is List && jobs.isNotEmpty) return true;
+        }
+      } catch (_) {
+        // A malformed or unrelated task entry is not usable task data.
+      }
+    }
+    return false;
+  }
+
+  /// Parses every selected task payload through the same model factories used
+  /// by the task providers. A malformed entry must be caught before restore
+  /// clears the existing task files.
+  static void _validateTaskPayloads(
+    Uint8List? Function(String name) readFile,
+    Set<String> archiveEntries,
+  ) {
+    for (final name in _taskPayloadFiles) {
+      if (!archiveEntries.contains(name)) continue;
+      final raw = readFile(name);
+      if (raw == null) continue;
+      final target = _canonicalTaskPayloadName(name);
+      if (target == null) continue;
+      try {
+        final decoded = jsonDecode(utf8.decode(raw));
+        if (decoded is! List) {
+          final legacyName = name.startsWith('files/')
+              ? name.substring('files/'.length)
+              : name;
+          if (legacyName == 'tasks/synthesis_tasks.json' &&
+              decoded is Map &&
+              decoded['jobs'] is List &&
+              (decoded['jobs'] as List).every((job) => job is Map)) {
+            // Older backups stored synthesis jobs in an object envelope.
+            // Preserve this supported legacy payload as-is.
+            continue;
+          }
+          throw const FormatException('结构不是数组');
+        }
+        for (final item in decoded) {
+          if (item is! Map) {
+            throw const FormatException('包含非对象任务记录');
+          }
+          final map = Map<String, dynamic>.from(item);
+          switch (target) {
+            case 'synthesis/tasks.json':
+              SynthesisTask.fromMap(map);
+              break;
+            case 'catcatch/tasks.json':
+              CatCatchTask.fromMap(map);
+              break;
+            case 'background/tasks.json':
+              BackgroundTask.fromMap(map);
+              break;
+            case 'task_flows/flows.json':
+              TaskFlowDefinition.fromMap(map);
+              break;
+            case 'task_flows/executions.json':
+              TaskFlowExecution.fromMap(map);
+              break;
+          }
+        }
+      } catch (e) {
+        throw BackupValidationException('无效的备份文件：$name 损坏 ($e)');
+      }
+    }
+  }
+
+  static String? _canonicalTaskPayloadName(String name) {
+    var normalized =
+        name.startsWith('files/') ? name.substring('files/'.length) : name;
+    if (normalized == 'tasks/synthesis_tasks.json') {
+      normalized = 'synthesis/tasks.json';
+    } else if (normalized == 'tasks/catcatch_tasks.json') {
+      normalized = 'catcatch/tasks.json';
+    }
+    return const {
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    }.contains(normalized)
+        ? normalized
+        : null;
+  }
+
+  static Future<List<Map<String, dynamic>>?> _captureCookiesForRestoreRollback(
+    BackupSelection selection,
+    Uint8List? cookieData,
+  ) async {
+    if (!selection.browserCookies ||
+        cookieData == null ||
+        kIsWeb ||
+        WebFileStore.isTestMode) {
+      return null;
+    }
+
+    if (!(Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isMacOS ||
+        Platform.isWindows)) {
+      throw const DataManagementPreflightException(
+        '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
+      );
+    }
+
+    final snapshot = await BrowserCookieService.runExclusiveRetentionOperation(
+      () => BrowserCookieService.snapshotCookiesForRestoreRollback(),
+    );
+    if (snapshot == null) {
+      throw const DataManagementPreflightException(
+        '当前平台无法完整读取现有内置浏览器Cookies，已中止恢复以保护现有数据。',
+      );
+    }
+    return snapshot;
+  }
+
+  static Future<void> _clearLiveCookiesForRestore(
+    BackupSelection selection,
+  ) async {
+    if (!selection.browserCookies ||
+        kIsWeb ||
+        WebFileStore.isTestMode ||
+        !(Platform.isAndroid ||
+            Platform.isIOS ||
+            Platform.isMacOS ||
+            Platform.isWindows ||
+            Platform.isLinux)) {
+      return;
+    }
+    if (!await BrowserCookieService.clearPlatformCookies()) {
+      throw Exception('清除本机内置浏览器Cookies失败，已中止恢复');
+    }
+  }
+
+  static Future<Set<String>> _taskFlowAttachmentsToPreserve(
+    BackupSelection selection, {
+    Set<String>? taskFilesToReplace,
+  }) async {
+    if (!selection.chatRecordsAndAttachments || !selection.includeMediaFiles) {
+      return <String>{};
+    }
+
+    const taskFlowFiles = <String>{
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    };
+    final taskFlowFilesToPreserve = taskFilesToReplace == null
+        ? (selection.tasks ? <String>{} : taskFlowFiles)
+        : taskFlowFiles.difference(taskFilesToReplace);
+    if (taskFlowFilesToPreserve.isEmpty) return <String>{};
+
+    final preservedTaskFiles = await _collectTaskFlowAttachmentKeys(
+      taskFlowFilesToPreserve,
+    );
+    if (preservedTaskFiles == null) {
+      throw const DataManagementPreflightException(
+        '无法读取未被替换任务中的附件引用，已取消操作以避免误删数据。',
+      );
+    }
+    return preservedTaskFiles;
+  }
+
+  /// Keep the existing cookie snapshot until all other selected data has been
+  /// restored, so an earlier failure leaves the destination's cookies intact.
+  static Future<void> _prepareSelectedFilesForRestore(
+    BackupSelection selection, {
+    required Set<String> taskFlowAttachmentKeys,
+    required Set<String> taskFilesToReplace,
+  }) async {
+    if (await _deleteSelectedFiles(
+      selection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      preserveBrowserCookieSnapshot: selection.browserCookies,
+      taskFilesToReplace: taskFilesToReplace,
+    )) {
+      throw Exception('部分数据文件删除失败，请重启应用后重试');
+    }
+  }
+
+  /// Replaces cookies after all other selected data and migrations succeed.
+  /// On failure, restore the old live state and snapshot file.
+  static Future<void> _restoreBrowserCookiesAfterDataRestore(
+    BackupSelection selection,
+    Uint8List? cookieData, {
+    required List<Map<String, dynamic>>? previousCookies,
+  }) async {
+    if (!selection.browserCookies || cookieData == null) return;
+
+    await BrowserCookieService.runExclusiveRetentionOperation(() async {
+      // Retention may have persisted or cleared cookies while the other
+      // selected categories were being restored. Capture the latest rollback
+      // state after joining the queue, before replacing the cookie snapshot.
+      final rollbackCookies = previousCookies == null
+          ? null
+          : (await BrowserCookieService.snapshotCookiesForRestoreRollback() ??
+              previousCookies);
+      final previousFileData = await readBackupFile('', 'browser_cookies.json');
+      final previousRestorePending =
+          await BrowserCookieService.hasBackupRestorePending();
+      try {
+        await _clearLiveCookiesForRestore(selection);
+        await writeBackupFile('', 'browser_cookies.json', cookieData);
+        if (!WebFileStore.isTestMode &&
+            !await BrowserCookieService.restoreCookiesFromFileChecked(
+              force: true,
+            )) {
+          throw Exception('部分内置浏览器Cookies未能恢复');
+        }
+        await BrowserCookieService.markBackupRestorePending();
+      } catch (e) {
+        await _rollbackCookiesAfterFailedRestore(
+          previousCookies: rollbackCookies,
+          previousFileData: previousFileData,
+          previousRestorePending: previousRestorePending,
+        );
+        rethrow;
+      }
+    });
+  }
+
+  static Future<void> _rollbackCookiesAfterFailedRestore({
+    required List<Map<String, dynamic>>? previousCookies,
+    required Uint8List? previousFileData,
+    required bool previousRestorePending,
+  }) async {
+    try {
+      if (previousCookies != null) {
+        await BrowserCookieService.clearPlatformCookies();
+      }
+      if (previousFileData == null) {
+        await _deleteFile('', 'browser_cookies.json');
+      } else {
+        await writeBackupFile('', 'browser_cookies.json', previousFileData);
+      }
+      if (previousCookies == null) {
+        if (previousFileData != null) {
+          await BrowserCookieService.restoreCookiesFromFile(force: true);
+        }
+      } else {
+        await BrowserCookieService.restoreCookiesFromSnapshot(
+          previousCookies,
+          force: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('恢复失败后回滚Cookies状态时出错: $e');
+    } finally {
+      if (previousRestorePending) {
+        await BrowserCookieService.markBackupRestorePending();
+      } else {
+        await BrowserCookieService.clearBackupRestorePending();
+      }
+    }
+  }
+
+  static Map<String, int>? _parseBackupPartVersions(Object? value) {
+    Object? decoded = value;
+    if (decoded is String) {
+      try {
+        decoded = jsonDecode(decoded);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (decoded is! Map) return null;
+
+    final versions = <String, int>{};
+    for (final part in DataMigrationService.currentPartVersions.keys) {
+      final version = decoded[part];
+      if (version is num) versions[part] = version.toInt();
+    }
+    return versions.isEmpty ? null : versions;
   }
 
   /// 恢复数据库记录与 SharedPreferences（删除操作已在调用前完成）。
@@ -1371,63 +2660,84 @@ class BackupService {
       if (selection.pictures) {
         await ManifestDatabase.clearRecords(ManifestTables.imageRecords);
         await ManifestDatabase.clearFolders(
-            recordTable: ManifestTables.imageRecords);
+          recordTable: ManifestTables.imageRecords,
+        );
       }
       if (selection.audio) {
         await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
         await ManifestDatabase.clearFolders(
-            recordTable: ManifestTables.audioRecords);
+          recordTable: ManifestTables.audioRecords,
+        );
       }
       if (selection.videos) {
         await ManifestDatabase.clearRecords(ManifestTables.videoRecords);
         await ManifestDatabase.clearFolders(
-            recordTable: ManifestTables.videoRecords);
+          recordTable: ManifestTables.videoRecords,
+        );
       }
       if (selection.texts) {
         await ManifestDatabase.clearRecords(ManifestTables.textRecords);
         await ManifestDatabase.clearFolders(
-            recordTable: ManifestTables.textRecords);
+          recordTable: ManifestTables.textRecords,
+        );
       }
     }
 
     // 恢复 SharedPreferences（兼容 v1/v2 格式）
+    final restoreChatPreferences =
+        selection.chatRecordsAndAttachments && metadata.restoreChatPreferences;
+    final preferenceSelection = BackupSelection(
+      chatRecordsAndAttachments: restoreChatPreferences,
+      settings: selection.settings,
+      browserCookies: selection.browserCookies,
+      includeMediaFiles: false,
+    );
     if (metadata.isV1) {
       // v1 格式：preferences.json 包含所有键（聊天+设置合并）
       // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
-      if (selection.chatRecordsAndAttachments || selection.settings) {
+      if (restoreChatPreferences || selection.settings) {
         debugPrint(
-            '[BackupService] _restoreRecordsAndPrefs: restoring v1 preferences');
+          '[BackupService] _restoreRecordsAndPrefs: restoring v1 preferences',
+        );
         final restorePrefs = <String, dynamic>{};
         if (metadata.v1Prefs != null) {
           for (final entry in metadata.v1Prefs!.entries) {
             final isChat = _isChatPrefKey(entry.key);
-            if ((isChat && selection.chatRecordsAndAttachments) ||
+            if ((isChat && restoreChatPreferences) ||
                 (!isChat && selection.settings)) {
               restorePrefs[entry.key] = entry.value;
             }
           }
         }
-        await _restorePreferencesFromJson(restorePrefs, selection: selection);
+        await _restorePreferencesFromJson(
+          restorePrefs,
+          selection: preferenceSelection,
+        );
       }
     } else {
       // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
       final mergedPrefs = <String, dynamic>{};
-      if (selection.chatRecordsAndAttachments) {
+      if (restoreChatPreferences) {
         debugPrint(
-            '[BackupService] _restoreRecordsAndPrefs: merging chat_data.json');
+          '[BackupService] _restoreRecordsAndPrefs: merging chat_data.json',
+        );
         if (metadata.chatPrefs != null) {
           mergedPrefs.addAll(metadata.chatPrefs!);
         }
       }
       if (selection.settings) {
         debugPrint(
-            '[BackupService] _restoreRecordsAndPrefs: merging settings.json');
+          '[BackupService] _restoreRecordsAndPrefs: merging settings.json',
+        );
         if (metadata.settingsPrefs != null) {
           mergedPrefs.addAll(metadata.settingsPrefs!);
         }
       }
-      if (selection.chatRecordsAndAttachments || selection.settings) {
-        await _restorePreferencesFromJson(mergedPrefs, selection: selection);
+      if (restoreChatPreferences || selection.settings) {
+        await _restorePreferencesFromJson(
+          mergedPrefs,
+          selection: preferenceSelection,
+        );
       }
     }
   }
@@ -1446,6 +2756,10 @@ class BackupService {
   ) async {
     var key = rawKey;
 
+    // ZIP 归档可能包含显式目录条目；它们不是数据文件，不能作为类别
+    // 存在的依据，也不能尝试写成普通文件。
+    if (key.endsWith('/') || key.endsWith(r'\')) return false;
+
     // 跳过元数据文件
     if (_restoreSkipFiles.contains(key)) return false;
 
@@ -1454,12 +2768,26 @@ class BackupService {
       key = key.substring('files/'.length);
     }
 
+    // Earlier Web backups stored edited attachments in temp_edited/;
+    // current storage keeps them with the rest of the attachments.
+    if (key.startsWith('temp_edited/')) {
+      key = 'attachments/${p.basename(key)}';
+    }
+
     // 旧格式 task: tasks/synthesis_tasks.json → synthesis/tasks.json
     if (key.startsWith('tasks/')) {
       key = key.substring('tasks/'.length);
       // synthesis_tasks.json → synthesis/tasks.json
       if (key == 'synthesis_tasks.json') key = 'synthesis/tasks.json';
       if (key == 'catcatch_tasks.json') key = 'catcatch/tasks.json';
+    }
+
+    // 兼容较早归档中存放在根目录的 Anki 数据库。
+    if (key == 'collection.anki2') {
+      if (!selection.ankiData) return false;
+      await AnkiDatabase.closeOpenedInstance();
+      await writeEntry('', key);
+      return true;
     }
 
     // 匹配已知存储目录
@@ -1484,11 +2812,7 @@ class BackupService {
     // 任何平台上都不是合法的备份相对路径，一律跳过（不依赖
     // p.isAbsolute —— 它在 POSIX 上不识别盘符）。
     // 未知条目按"跳过"处理，与未知目录语义一致。
-    final pathSegments = relativePath.split(RegExp(r'[/\\]'));
-    if (pathSegments.any((part) => part == '..') ||
-        RegExp(r'^[a-zA-Z]:').hasMatch(relativePath) ||
-        relativePath.startsWith('/') ||
-        relativePath.startsWith(r'\')) {
+    if (!_isSafeRelativeArchivePath(relativePath)) {
       debugPrint('[BackupService] 跳过不安全路径条目: $rawKey');
       return false;
     }
@@ -1570,37 +2894,61 @@ class BackupService {
     Map<String, dynamic> data, {
     BackupSelection selection = BackupSelection.all,
   }) async {
-    final imageRecords = (data['image_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final audioRecords = (data['audio_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final videoRecords = (data['video_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final textRecords = (data['text_records'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+    final imageRecords = selection.pictures
+        ? (data['image_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final audioRecords = selection.audio
+        ? (data['audio_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final videoRecords = selection.videos
+        ? (data['video_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
+    final textRecords = selection.texts
+        ? (data['text_records'] as List<dynamic>?)
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
+        : <Map<String, dynamic>>[];
 
     // Per-type folders (v2+ backups)
-    final textFolders =
-        (data[ManifestTables.textFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final audioFolders =
-        (data[ManifestTables.audioFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final imageFolders =
-        (data[ManifestTables.imageFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final videoFolders =
-        (data[ManifestTables.videoFolders] as List<dynamic>?)?.cast<String>() ??
-            <String>[];
-    final folders = (data['folders'] as List<dynamic>?)?.cast<String>() ?? [];
+    final textFolders = selection.texts
+        ? (data[ManifestTables.textFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final audioFolders = selection.audio
+        ? (data[ManifestTables.audioFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final imageFolders = selection.pictures
+        ? (data[ManifestTables.imageFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final videoFolders = selection.videos
+        ? (data[ManifestTables.videoFolders] as List<dynamic>?)
+                ?.cast<String>() ??
+            <String>[]
+        : <String>[];
+    final usesLegacyFolders = (selection.texts && textFolders.isEmpty) ||
+        (selection.audio && audioFolders.isEmpty) ||
+        (selection.pictures && imageFolders.isEmpty) ||
+        (selection.videos && videoFolders.isEmpty);
+    final folders = usesLegacyFolders
+        ? (data['folders'] as List<dynamic>?)?.cast<String>() ?? <String>[]
+        : <String>[];
 
-    debugPrint('[BackupService] _restoreDatabaseFromJson: '
-        'image(${imageRecords.length}) audio(${audioRecords.length}) '
-        'video(${videoRecords.length}) text(${textRecords.length})');
+    debugPrint(
+      '[BackupService] _restoreDatabaseFromJson: '
+      'image(${imageRecords.length}) audio(${audioRecords.length}) '
+      'video(${videoRecords.length}) text(${textRecords.length})',
+    );
 
     // 选择性恢复：勾选的类别清空后从备份恢复，未勾选的类别保持原样。
     // 选中的类别：先清除现有记录，再写入备份中的记录（即使备份中为空）。
@@ -1634,37 +2982,49 @@ class BackupService {
     if (selection.texts) {
       final dirs = textFolders.isNotEmpty ? textFolders : folders;
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.textRecords);
+        recordTable: ManifestTables.textRecords,
+      );
       for (final folder in dirs) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.textRecords);
+        await ManifestDatabase.insertFolder(
+          folder,
+          recordTable: ManifestTables.textRecords,
+        );
       }
     }
     if (selection.audio) {
       final dirs = audioFolders.isNotEmpty ? audioFolders : folders;
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.audioRecords);
+        recordTable: ManifestTables.audioRecords,
+      );
       for (final folder in dirs) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.audioRecords);
+        await ManifestDatabase.insertFolder(
+          folder,
+          recordTable: ManifestTables.audioRecords,
+        );
       }
     }
     if (selection.pictures) {
       final dirs = imageFolders.isNotEmpty ? imageFolders : folders;
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.imageRecords);
+        recordTable: ManifestTables.imageRecords,
+      );
       for (final folder in dirs) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.imageRecords);
+        await ManifestDatabase.insertFolder(
+          folder,
+          recordTable: ManifestTables.imageRecords,
+        );
       }
     }
     if (selection.videos) {
       final dirs = videoFolders.isNotEmpty ? videoFolders : folders;
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.videoRecords);
+        recordTable: ManifestTables.videoRecords,
+      );
       for (final folder in dirs) {
-        await ManifestDatabase.insertFolder(folder,
-            recordTable: ManifestTables.videoRecords);
+        await ManifestDatabase.insertFolder(
+          folder,
+          recordTable: ManifestTables.videoRecords,
+        );
       }
     }
   }
@@ -1708,13 +3068,45 @@ class BackupService {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
       }
     }
-    await AppLogService.info('BackupService',
-        '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${keysToRemove.length}');
+    await AppLogService.info(
+      'BackupService',
+      '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${keysToRemove.length}',
+    );
   }
 
   // ================================================================
   // UI 便捷方法（双平台）
   // ================================================================
+
+  static Future<String> _nextBackupFileName({String? directoryPath}) async {
+    final existingNames = kIsWeb || directoryPath != null
+        ? <String>{}
+        : (await BackupLocationManager.listBackupFiles()).toSet();
+    var timestampSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final lastTimestamp = _lastBackupFileTimestampSeconds;
+    if (lastTimestamp != null && timestampSeconds <= lastTimestamp) {
+      timestampSeconds = lastTimestamp + 1;
+    }
+
+    String fileNameFor(int seconds) {
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
+          .toIso8601String()
+          .split('.')
+          .first
+          .replaceAll(':', '-');
+      return 'backup_$timestamp.zip';
+    }
+
+    var fileName = fileNameFor(timestampSeconds);
+    while (existingNames.contains(fileName) ||
+        (directoryPath != null &&
+            await File(p.join(directoryPath, fileName)).exists())) {
+      timestampSeconds++;
+      fileName = fileNameFor(timestampSeconds);
+    }
+    _lastBackupFileTimestampSeconds = timestampSeconds;
+    return fileName;
+  }
 
   /// 导出备份：弹出保存文件对话框，创建 zip。
   ///
@@ -1735,27 +3127,32 @@ class BackupService {
   }) async {
     await AppLogService.info('BackupService', 'exportBackup: start');
     try {
-      final dateStr =
-          DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-      final defaultName = 'stroom_backup_$dateStr.zip';
+      final defaultName = await _nextBackupFileName();
 
       String? savedLocation;
       if (kIsWeb) {
         // Web：内存构建 + 浏览器下载（Web 无法流式写本地文件）
         final bytes = await _buildBackupBytes(
-            onProgress: onProgress, selection: selection);
-        savedLocation =
-            await FilePicker.saveFile(fileName: defaultName, bytes: bytes);
+          onProgress: onProgress,
+          selection: selection,
+        );
+        savedLocation = await FilePicker.saveFile(
+          fileName: defaultName,
+          bytes: bytes,
+        );
       } else if (Platform.isAndroid || Platform.isIOS) {
         // Android/iOS：流式构建到系统临时文件，再写入备份位置
         final tempPath = p.join(Directory.systemTemp.path, defaultName);
         try {
           await createBackup(
-              outputPath: tempPath,
-              onProgress: onProgress,
-              selection: selection);
+            outputPath: tempPath,
+            onProgress: onProgress,
+            selection: selection,
+          );
           await BackupLocationManager.writeBackupFileFromPath(
-              defaultName, tempPath);
+            defaultName,
+            tempPath,
+          );
         } finally {
           try {
             await File(tempPath).delete();
@@ -1776,28 +3173,35 @@ class BackupService {
           await AppLogService.info('BackupService', 'exportBackup: 用户取消');
           return;
         }
+        var destinationPath = outputPath;
+        if (await File(destinationPath).exists()) {
+          final uniqueName = await _nextBackupFileName(
+            directoryPath: p.dirname(outputPath),
+          );
+          destinationPath = p.join(p.dirname(outputPath), uniqueName);
+        }
         try {
           await createBackup(
-              outputPath: outputPath,
-              onProgress: onProgress,
-              selection: selection);
+            outputPath: destinationPath,
+            onProgress: onProgress,
+            selection: selection,
+          );
         } catch (e) {
           // 构建失败时清理用户位置留下的半成品 zip
           try {
-            final partial = File(outputPath);
+            final partial = File(destinationPath);
             if (await partial.exists()) {
               await partial.delete();
             }
           } catch (_) {}
           rethrow;
         }
-        savedLocation = outputPath;
+        savedLocation = destinationPath;
       }
 
       if (savedLocation != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('备份已保存到: $savedLocation')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
     } catch (e) {
@@ -1818,6 +3222,7 @@ class BackupService {
   static Future<bool> importBackup(
     BuildContext context, {
     BackupSelection selection = BackupSelection.all,
+    void Function(List<String> skippedCategories)? onSkippedCategories,
   }) async {
     await AppLogService.info('BackupService', 'importBackup: start');
     try {
@@ -1830,12 +3235,25 @@ class BackupService {
 
       final file = result.files.first;
       final bytes = file.bytes;
+      final List<String> skippedCategories;
 
       if (bytes != null) {
-        await _restoreFromBytes(bytes, selection: selection);
+        skippedCategories = await _restoreFromBytes(
+          bytes,
+          selection: selection,
+          skipMissingCategories: true,
+        );
       } else if (file.path != null) {
-        await restoreBackup(file.path!, selection: selection);
+        skippedCategories = await _restoreFromZipFile(
+          file.path!,
+          selection: selection,
+          skipMissingCategories: true,
+        );
+      } else {
+        return false;
       }
+
+      onSkippedCategories?.call(skippedCategories);
 
       // 恢复成功 — 让调用方处理重启提示
       await AppLogService.info('BackupService', 'importBackup: success');
@@ -1862,7 +3280,7 @@ class BackupService {
   ///   （Web/测试模式同样生效），并在原生模式删除整个目录
   /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
   /// - Anki数据：先关闭可能打开的数据库连接，再删除 collection.anki2
-  /// - 浏览器Cookies：删除 browser_cookies.json
+  /// - 浏览器Cookies：清除内置浏览器Cookies并删除 browser_cookies.json
   ///
   /// 与选择性恢复的语义一致：选中的类别被清空，未选中的保持原样。
   /// 若有文件删除失败（如 Windows 上文件被占用），抛出异常，由调用方提示。
@@ -1872,6 +3290,22 @@ class BackupService {
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
+    final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
+      selection,
+    );
+
+    // Clear live and persisted Cookies together so browser-close persistence
+    // cannot recreate the snapshot after the selected data is deleted.
+    var cookieDeleteFailed = false;
+    if (selection.browserCookies) {
+      cookieDeleteFailed =
+          await BrowserCookieService.runExclusiveRetentionOperation(() async {
+        await _clearLiveCookiesForRestore(selection);
+        final deleted = await _deleteFile('', 'browser_cookies.json');
+        await BrowserCookieService.clearBackupRestorePending();
+        return !deleted;
+      });
+    }
 
     // 1. SharedPreferences — 只删除选中类别的键
     if (selection.chatRecordsAndAttachments || selection.settings) {
@@ -1883,33 +3317,44 @@ class BackupService {
       for (final key in keysToRemove) {
         await prefs.remove(key);
       }
-      await AppLogService.info('BackupService',
-          'clearSelectedData: removed ${keysToRemove.length} preference keys');
+      await AppLogService.info(
+        'BackupService',
+        'clearSelectedData: removed ${keysToRemove.length} preference keys',
+      );
     }
 
     // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
-    final deleteFailed = await _deleteSelectedFiles(selection);
+    final otherDeleteFailed = await _deleteSelectedFiles(
+      selection,
+      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+      preserveBrowserCookieSnapshot: selection.browserCookies,
+    );
+    final deleteFailed = cookieDeleteFailed || otherDeleteFailed;
 
     // 3. 媒体数据库记录 + 文件夹表（文件已由 _deleteSelectedFiles 删除）
     if (selection.pictures) {
       await ManifestDatabase.clearRecords(ManifestTables.imageRecords);
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.imageRecords);
+        recordTable: ManifestTables.imageRecords,
+      );
     }
     if (selection.audio) {
       await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.audioRecords);
+        recordTable: ManifestTables.audioRecords,
+      );
     }
     if (selection.videos) {
       await ManifestDatabase.clearRecords(ManifestTables.videoRecords);
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.videoRecords);
+        recordTable: ManifestTables.videoRecords,
+      );
     }
     if (selection.texts) {
       await ManifestDatabase.clearRecords(ManifestTables.textRecords);
       await ManifestDatabase.clearFolders(
-          recordTable: ManifestTables.textRecords);
+        recordTable: ManifestTables.textRecords,
+      );
     }
     onProgress?.call(0.6);
     await _yieldToEventLoop();
@@ -1921,33 +3366,160 @@ class BackupService {
     onProgress?.call(1.0);
   }
 
+  /// Returns attachment-store keys referenced by task-flow files that will
+  /// remain in place, so clearing chat attachments does not break them. A null
+  /// result means the references could not be read safely.
+  static Future<Set<String>?> _collectTaskFlowAttachmentKeys(
+    Set<String> taskFlowFilesToPreserve,
+  ) async {
+    final preservedKeys = <String>{};
+    try {
+      final isWebStore = kIsWeb || WebFileStore.isTestMode;
+      final appDir = isWebStore ? null : await AppStorage.directory;
+      final attachmentDir =
+          appDir == null ? null : p.normalize(p.join(appDir, 'attachments'));
+
+      void preserveReference(String reference) {
+        final slashPath = reference.replaceAll('\\', '/');
+        final webPath = p.posix.normalize(slashPath);
+        if (p.posix.isWithin('attachments', webPath)) {
+          preservedKeys.add(webPath);
+          return;
+        }
+        if (p.posix.isWithin('temp_edited', webPath)) {
+          preservedKeys.add(webPath);
+          preservedKeys.add(
+            p.posix.join('attachments', p.posix.basename(webPath)),
+          );
+          return;
+        }
+        if (isWebStore) return;
+
+        final normalized = p.normalize(reference);
+        String? relativePath;
+        if (p.isAbsolute(normalized) &&
+            p.isWithin(attachmentDir!, normalized)) {
+          relativePath = p.relative(normalized, from: attachmentDir);
+        } else if (!p.isAbsolute(normalized) &&
+            normalized.split(p.separator).first == 'attachments') {
+          relativePath = normalized.split(p.separator).skip(1).join('/');
+        }
+        if (relativePath == null || relativePath.isEmpty) return;
+        final normalizedRelative = p.posix.normalize(
+          relativePath.split(p.separator).join('/'),
+        );
+        if (normalizedRelative == '..' ||
+            normalizedRelative.startsWith('../')) {
+          return;
+        }
+        preservedKeys.add(p.posix.join('attachments', normalizedRelative));
+      }
+
+      void collectReferences(Object? value) {
+        if (value is String) {
+          preserveReference(value);
+        } else if (value is Map) {
+          for (final child in value.values) {
+            collectReferences(child);
+          }
+        } else if (value is Iterable) {
+          for (final child in value) {
+            collectReferences(child);
+          }
+        }
+      }
+
+      for (final taskFlowFile in taskFlowFilesToPreserve) {
+        final fileName = p.posix.basename(taskFlowFile);
+        Uint8List? data;
+        if (isWebStore) {
+          if (!await WebFileStore.exists(taskFlowFile)) continue;
+          data = await WebFileStore.read(taskFlowFile);
+        } else {
+          final file = File(p.join(appDir!, 'task_flows', fileName));
+          if (!await file.exists()) continue;
+          data = await file.readAsBytes();
+        }
+        if (data == null) return null;
+        collectReferences(jsonDecode(utf8.decode(data)));
+      }
+      return preservedKeys;
+    } catch (e) {
+      debugPrint('读取任务流附件引用失败，保留附件以避免误删: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> _deleteAttachmentsExceptTaskFiles(
+    Set<String> preservedKeys,
+  ) async {
+    try {
+      if (kIsWeb || WebFileStore.isTestMode) {
+        await WebFileStore.deleteByPrefixExcept('attachments/', preservedKeys);
+        await WebFileStore.deleteByPrefixExcept('temp_edited/', preservedKeys);
+        return true;
+      }
+
+      final appDir = await AppStorage.directory;
+      final attachmentDir = Directory(p.join(appDir, 'attachments'));
+      if (!await attachmentDir.exists()) return true;
+      await for (final entity in attachmentDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        final relativePath = p.relative(entity.path, from: attachmentDir.path);
+        final key = p.posix.join(
+          'attachments',
+          relativePath.split(p.separator).join('/'),
+        );
+        if (!preservedKeys.contains(key)) await entity.delete();
+      }
+      return true;
+    } catch (e) {
+      debugPrint('删除未被任务流引用的附件失败: $e');
+      return false;
+    }
+  }
+
   /// 删除 [selection] 中选中类别的现有文件。
   ///
   /// 恢复"勾选即清空"与清除功能共用此方法。
   /// 返回是否有删除失败（调用方决定如何处理）：
-  /// - 聊天附件：整个 attachments/ 目录/前缀删除 —— 附件全部存储在该目录，
-  ///   引用文件与无引用的孤儿文件一并清除
+  /// - 聊天附件：清理附件目录中未被未选中任务流引用的文件
   /// - 图片/音频/视频/文本：按当前数据库记录逐文件删除（Web/测试模式），
   ///   原生模式再整目录删除（清理无记录的孤儿文件）
   /// - 任务：删除 synthesis/tasks.json 和 catcatch/tasks.json
   /// - Anki：先关闭可能打开的数据库连接，再删除 collection.anki2
   ///   （应用数据目录根路径 + 历史恢复写入的 anki/ 残留）
-  /// - 浏览器Cookies：删除 browser_cookies.json
-  static Future<bool> _deleteSelectedFiles(BackupSelection selection) async {
+  /// - 浏览器Cookies：默认删除 browser_cookies.json；恢复时可暂时保留
+  static Future<bool> _deleteSelectedFiles(
+    BackupSelection selection, {
+    required Set<String> taskFlowAttachmentKeys,
+    bool preserveBrowserCookieSnapshot = false,
+    Set<String>? taskFilesToReplace,
+  }) async {
     var deleteFailed = false;
 
-    // 聊天附件：附件全部存储在 attachments/ 目录，整目录/前缀删除
-    // 即可同时清掉引用文件与无引用的孤儿文件。
+    // 聊天附件与任务流输入共用 attachments/。保留未被本次替换的
+    // flows.json / executions.json 所引用的文件，只清除其余聊天附件。
     // （includeMediaFiles=false 的结构化快照恢复不动附件文件）
     if (selection.chatRecordsAndAttachments && selection.includeMediaFiles) {
-      if (kIsWeb || WebFileStore.isTestMode) {
-        try {
-          await WebFileStore.deleteByPrefix('attachments/');
-        } catch (e) {
-          debugPrint('删除附件文件失败: $e');
+      if (taskFlowAttachmentKeys.isEmpty) {
+        if (kIsWeb || WebFileStore.isTestMode) {
+          try {
+            await WebFileStore.deleteByPrefix('attachments/');
+            await WebFileStore.deleteByPrefix('temp_edited/');
+          } catch (e) {
+            debugPrint('删除附件文件失败: $e');
+            deleteFailed = true;
+          }
+        } else if (!await _deleteDirectory('attachments')) {
           deleteFailed = true;
         }
-      } else if (!await _deleteDirectory('attachments')) {
+      } else if (!await _deleteAttachmentsExceptTaskFiles(
+        taskFlowAttachmentKeys,
+      )) {
         deleteFailed = true;
       }
     }
@@ -2016,11 +3588,32 @@ class BackupService {
 
     // 任务文件
     if (selection.tasks) {
-      if (!await _deleteFile('synthesis', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('catcatch', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('background', 'tasks.json')) deleteFailed = true;
-      if (!await _deleteFile('task_flows', 'flows.json')) deleteFailed = true;
-      if (!await _deleteFile('task_flows', 'executions.json')) {
+      final taskFiles = taskFilesToReplace ??
+          const {
+            'synthesis/tasks.json',
+            'catcatch/tasks.json',
+            'background/tasks.json',
+            'task_flows/flows.json',
+            'task_flows/executions.json',
+          };
+      if (taskFiles.contains('synthesis/tasks.json') &&
+          !await _deleteFile('synthesis', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('catcatch/tasks.json') &&
+          !await _deleteFile('catcatch', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('background/tasks.json') &&
+          !await _deleteFile('background', 'tasks.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('task_flows/flows.json') &&
+          !await _deleteFile('task_flows', 'flows.json')) {
+        deleteFailed = true;
+      }
+      if (taskFiles.contains('task_flows/executions.json') &&
+          !await _deleteFile('task_flows', 'executions.json')) {
         deleteFailed = true;
       }
     }
@@ -2037,7 +3630,12 @@ class BackupService {
 
     // 浏览器Cookies持久化数据
     if (selection.browserCookies) {
-      if (!await _deleteFile('', 'browser_cookies.json')) deleteFailed = true;
+      if (!preserveBrowserCookieSnapshot) {
+        if (!await _deleteFile('', 'browser_cookies.json')) {
+          deleteFailed = true;
+        }
+        await BrowserCookieService.clearBackupRestorePending();
+      }
     }
 
     return deleteFailed;
@@ -2055,9 +3653,10 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
   }) =>
       _buildBackupBytes(
-          onProgress: onProgress,
-          isCancelled: isCancelled,
-          selection: selection);
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+        selection: selection,
+      );
 
   /// 公开流式备份的同步构建核心供测试使用（大文件路径）。
   ///
@@ -2079,8 +3678,15 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
-  }) =>
-      _restoreFromBytes(bytes, onProgress: onProgress, selection: selection);
+    bool skipMissingCategories = false,
+  }) async {
+    await _restoreFromBytes(
+      bytes,
+      onProgress: onProgress,
+      selection: selection,
+      skipMissingCategories: skipMissingCategories,
+    );
+  }
 
   /// 公开 [_restoreDatabaseFromJson] 供测试使用。
   @visibleForTesting
@@ -2088,8 +3694,10 @@ class BackupService {
     String json, {
     BackupSelection selection = BackupSelection.all,
   }) =>
-      _restoreDatabaseFromJson(jsonDecode(json) as Map<String, dynamic>,
-          selection: selection);
+      _restoreDatabaseFromJson(
+        jsonDecode(json) as Map<String, dynamic>,
+        selection: selection,
+      );
 }
 
 // ====================================================================
@@ -2175,17 +3783,16 @@ void _createBackupStreamingSync(
     for (final entry in diskFiles) {
       final archiveName = entry[0];
       final sourcePath = entry[1];
-      try {
-        final file = File(sourcePath);
-        if (file.existsSync()) {
-          final input = _FileInputStream(sourcePath);
-          final af = ArchiveFile.stream(archiveName, input);
-          af.compression = CompressionType.none;
-          encoder.add(af);
-        }
-      } catch (e) {
-        debugPrint('添加文件 $archiveName 失败: $e');
+      final file = File(sourcePath);
+      if (!file.existsSync()) {
+        debugPrint('[BackupService] skipping missing backup file: $sourcePath');
+        checkCancelled();
+        continue;
       }
+      final input = _FileInputStream(sourcePath);
+      final af = ArchiveFile.stream(archiveName, input);
+      af.compression = CompressionType.none;
+      encoder.add(af);
       checkCancelled();
     }
 
@@ -2389,13 +3996,25 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
 /// 备份元数据校验结果（[_restoreFromBytes] / [_restoreFromZipFile] 共用）。
 class _RestoreMetadata {
   final bool isV1;
+  final bool restoreChatPreferences;
   final Map<String, dynamic>? dbData;
   final Map<String, dynamic>? v1Prefs;
   final Map<String, dynamic>? chatPrefs;
   final Map<String, dynamic>? settingsPrefs;
+  final BackupSelection restoreSelection;
+  final Set<String> taskFilesToReplace;
+  final List<String> skippedLabels;
+  final Map<String, int>? dataPartVersions;
+  final Uint8List? browserCookiesData;
 
   const _RestoreMetadata({
     required this.isV1,
+    required this.restoreChatPreferences,
+    required this.restoreSelection,
+    required this.taskFilesToReplace,
+    required this.skippedLabels,
+    required this.dataPartVersions,
+    this.browserCookiesData,
     this.dbData,
     this.v1Prefs,
     this.chatPrefs,
@@ -2409,6 +4028,7 @@ class _ZipEntryInfo {
   final int compressionMethod;
   final int compressedSize;
   final int uncompressedSize;
+  final int crc32;
   final int localHeaderOffset;
 
   const _ZipEntryInfo({
@@ -2416,6 +4036,7 @@ class _ZipEntryInfo {
     required this.compressionMethod,
     required this.compressedSize,
     required this.uncompressedSize,
+    required this.crc32,
     required this.localHeaderOffset,
   });
 }
@@ -2492,11 +4113,13 @@ class _ZipStreamReader {
   ///
   /// 条目损坏（本地头签名错误、数据截断、解压失败、不支持的压缩方式、
   /// 解压尺寸与声明不符）时抛 [_RestoreEntryCorruptException]：
-  /// - 校验期调用方（[_restoreFromZipFile] 元数据读取）包装为
+  /// - 校验期调用方（[_restoreFromZipFile] 元数据读取和条目预检）包装为
   ///   [BackupValidationException]（未删除任何数据）；
   /// - 删除之后的恢复循环直接传播（恢复可能已部分完成）。
   void extractEntry(
-      _ZipEntryInfo entry, void Function(Uint8List chunk) onChunk) {
+    _ZipEntryInfo entry,
+    void Function(Uint8List chunk) onChunk,
+  ) {
     // 定位条目数据区：本地头（30 字节固定）+ 文件名 + extra 之后。
     // 条目在备份中的存储方式由中央目录的尺寸字段决定（archive 包的
     // 写入器不会使用 data descriptor，尺寸总是已知）。
@@ -2512,6 +4135,7 @@ class _ZipStreamReader {
       _file.setPositionSync(dataOffset);
 
       var remaining = entry.compressedSize;
+      final checksum = _ZipCrc32();
       if (entry.compressionMethod == 0) {
         // store：直接分块复制，不经内存缓冲。
         // store 条目压缩尺寸必须等于解压尺寸 —— 计数核对，防止
@@ -2520,14 +4144,18 @@ class _ZipStreamReader {
         while (remaining > 0) {
           final n = remaining < kChunkSize ? remaining : kChunkSize;
           final chunk = _readExact(_file, n);
+          checksum.add(chunk);
           onChunk(chunk);
           written += chunk.length;
           remaining -= chunk.length;
         }
         if (written != entry.uncompressedSize) {
-          throw _RestoreEntryCorruptException('条目 ${entry.name} 尺寸不符 '
-              '(实际 $written / 声明 ${entry.uncompressedSize})');
+          throw _RestoreEntryCorruptException(
+            '条目 ${entry.name} 尺寸不符 '
+            '(实际 $written / 声明 ${entry.uncompressedSize})',
+          );
         }
+        _verifyChecksum(entry, checksum.value);
       } else if (entry.compressionMethod == 8) {
         // deflate：raw inflate 流式解压（dart:io zlib 分块转换）。
         // dart:io 对截断的 deflate 流不报错，只输出已解压的部分 ——
@@ -2538,6 +4166,7 @@ class _ZipStreamReader {
         final conversion = decoder.startChunkedConversion(
           _ChunkSink((chunk) {
             outputBytes += chunk.length;
+            checksum.add(chunk);
             onChunk(chunk);
           }),
         );
@@ -2555,16 +4184,27 @@ class _ZipStreamReader {
           throw _RestoreEntryCorruptException('条目 ${entry.name} 解压失败 ($e)');
         }
         if (outputBytes != entry.uncompressedSize) {
-          throw _RestoreEntryCorruptException('条目 ${entry.name} 解压尺寸不符 '
-              '(实际 $outputBytes / 声明 ${entry.uncompressedSize})');
+          throw _RestoreEntryCorruptException(
+            '条目 ${entry.name} 解压尺寸不符 '
+            '(实际 $outputBytes / 声明 ${entry.uncompressedSize})',
+          );
         }
+        _verifyChecksum(entry, checksum.value);
       } else {
-        throw _RestoreEntryCorruptException('条目 ${entry.name} 使用不支持的'
-            '压缩方式 (${entry.compressionMethod})');
+        throw _RestoreEntryCorruptException(
+          '条目 ${entry.name} 使用不支持的'
+          '压缩方式 (${entry.compressionMethod})',
+        );
       }
     } on FormatException catch (e) {
       // _readExact 的截断/结构错误：统一为条目损坏
       throw _RestoreEntryCorruptException('条目 ${entry.name} 数据不完整 ($e)');
+    }
+  }
+
+  static void _verifyChecksum(_ZipEntryInfo entry, int actual) {
+    if (actual != entry.crc32) {
+      throw _RestoreEntryCorruptException('条目 ${entry.name} CRC32 校验失败');
     }
   }
 
@@ -2653,6 +4293,7 @@ class _ZipStreamReader {
         throw FormatException('中央目录条目 $i 签名错误');
       }
       final method = _le16(header, 10);
+      final crc32 = _le32(header, 16);
       var compSize = _le32(header, 20);
       var uncompSize = _le32(header, 24);
       final nameLen = _le16(header, 28);
@@ -2685,13 +4326,16 @@ class _ZipStreamReader {
         throw FormatException('条目 $i ZIP64 字段溢出（负数）');
       }
 
-      entries.add(_ZipEntryInfo(
-        name: utf8.decode(nameBytes, allowMalformed: true),
-        compressionMethod: method,
-        compressedSize: compSize,
-        uncompressedSize: uncompSize,
-        localHeaderOffset: localOffset,
-      ));
+      entries.add(
+        _ZipEntryInfo(
+          name: utf8.decode(nameBytes, allowMalformed: true),
+          compressionMethod: method,
+          compressedSize: compSize,
+          uncompressedSize: uncompSize,
+          crc32: crc32,
+          localHeaderOffset: localOffset,
+        ),
+      );
     }
     return entries;
   }
@@ -2781,6 +4425,27 @@ class _ZipStreamReader {
     final hi = _le32(b, offset + 4);
     return (hi << 32) | lo;
   }
+}
+
+/// Incremental CRC32 calculation for validating streamed ZIP entries.
+class _ZipCrc32 {
+  static final List<int> _table = List<int>.generate(256, (index) {
+    var value = index;
+    for (var bit = 0; bit < 8; bit++) {
+      value = (value & 1) != 0 ? (value >> 1) ^ 0xedb88320 : value >> 1;
+    }
+    return value;
+  }, growable: false);
+
+  var _value = 0xffffffff;
+
+  void add(List<int> bytes) {
+    for (final byte in bytes) {
+      _value = _table[(_value ^ byte) & 0xff] ^ (_value >> 8);
+    }
+  }
+
+  int get value => (_value ^ 0xffffffff) & 0xffffffff;
 }
 
 /// 把 deflate 解压输出块转发给 [onChunk]。

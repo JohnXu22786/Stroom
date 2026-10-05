@@ -39,22 +39,34 @@ Future<void> addTaskFileToArchive(
 }
 
 Future<void> addFileToArchive(
-    Archive archive, String archiveName, String subDir, String fileName) async {
+  Archive archive,
+  String archiveName,
+  String subDir,
+  String fileName, {
+  bool required = false,
+}) async {
   debugPrint('[BackupServiceShared] addFileToArchive: $archiveName');
   try {
     final data = await readBackupFile(subDir, fileName);
     if (data != null) {
       archive.addFile(ArchiveFile(archiveName, data.length, data));
+    } else if (required) {
+      throw FileSystemException('备份文件不存在', '$subDir/$fileName');
     }
   } catch (e) {
     debugPrint('添加文件 $archiveName 失败: $e');
+    if (required) rethrow;
   }
 }
 
 Future<Uint8List?> readBackupFile(String subDir, String fileName) async {
   try {
     if (kIsWeb || WebFileStore.isTestMode) {
-      return WebFileStore.read('$subDir/$fileName');
+      final data = await WebFileStore.read('$subDir/$fileName');
+      if (data != null || subDir != 'attachments') return data;
+      // Edited attachments were historically stored under temp_edited/ on
+      // Web, while native platforms store the same bytes in attachments/.
+      return await WebFileStore.read('temp_edited/$fileName');
     } else {
       final appDir = await AppStorage.directory;
       final file = File(p.join(appDir, subDir, fileName));
@@ -112,23 +124,15 @@ Future<Set<String>> collectAttachmentPaths() async {
       // 吞掉，静默丢失）。
       if (conv is! Map<String, dynamic>) continue;
       final rawMessages = conv['messages'];
-      if (rawMessages is! List) continue;
-      for (final msg in rawMessages) {
-        if (msg is! Map<String, dynamic>) continue;
-        final rawAttachments = msg['attachments'];
-        if (rawAttachments is! List) continue;
-        for (final att in rawAttachments) {
-          if (att is! Map<String, dynamic>) continue;
-          final storagePath = att['storagePath'];
-          if (storagePath is String && storagePath.isNotEmpty) {
-            paths.add(storagePath);
-          }
-          final thumbnailPath = att['thumbnailPath'];
-          if (thumbnailPath is String && thumbnailPath.isNotEmpty) {
-            paths.add(thumbnailPath);
-          }
+      if (rawMessages is List) {
+        for (final msg in rawMessages) {
+          if (msg is! Map<String, dynamic>) continue;
+          _collectAttachments(msg['attachments'], paths);
         }
       }
+      // Draft attachments are persisted with the conversation too; retaining
+      // the draft without its files would leave broken references after import.
+      _collectAttachments(conv['draftAttachments'], paths);
     }
   } catch (e) {
     // 仅当整体 JSON 无法解析时才放弃（逐条目损坏已在上面跳过）。
@@ -137,4 +141,23 @@ Future<Set<String>> collectAttachmentPaths() async {
   debugPrint(
       '[BackupServiceShared] collectAttachmentPaths: ${paths.length} paths found');
   return paths;
+}
+
+void _collectAttachments(Object? rawAttachments, Set<String> paths) {
+  if (rawAttachments is! List) return;
+  for (final att in rawAttachments) {
+    if (att is! Map<String, dynamic>) continue;
+    final storagePath = _canonicalAttachmentPath(att['storagePath']);
+    if (storagePath != null) paths.add(storagePath);
+    final thumbnailPath = _canonicalAttachmentPath(att['thumbnailPath']);
+    if (thumbnailPath != null) paths.add(thumbnailPath);
+  }
+}
+
+String? _canonicalAttachmentPath(Object? value) {
+  if (value is! String || value.isEmpty) return null;
+  if (value.startsWith('temp_edited/')) {
+    return 'attachments/${p.basename(value)}';
+  }
+  return value;
 }
