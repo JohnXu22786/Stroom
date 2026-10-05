@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'app_log_service.dart';
 
+import '../models/mcp.dart';
 import '../models/tool_call.dart';
+import 'app_log_service.dart';
 
 // ============================================================================
 // HTTP 工具服务层
@@ -14,6 +15,13 @@ import '../models/tool_call.dart';
 
 /// HTTP 工具的服务层，管理 API Key 并提供工具处理函数
 class HttpToolService {
+  static const Map<String, Set<String>> _credentialHeaderNamesByProvider = {
+    'Brave Search': {'x-subscription-token'},
+    'Bocha': {'authorization'},
+    'Querit': {'authorization'},
+    'Searxng': {'authorization'},
+  };
+
   static final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
@@ -25,6 +33,36 @@ class HttpToolService {
   static String _searxngApiKey = '';
   static String _bochaApiKey = '';
   static String _queritApiKey = '';
+
+  static Set<String> credentialHeaderNamesForProvider(String providerName) =>
+      _credentialHeaderNamesByProvider[providerName] ?? const {};
+
+  /// Reads an HTTP search key from its explicit field or the provider's own
+  /// credential header, ignoring unrelated custom headers.
+  static String extractHttpToolApiKey(
+    String providerName,
+    Map<String, dynamic>? typeConfig,
+  ) {
+    if (typeConfig == null) return '';
+
+    final credentialHeaderNames =
+        credentialHeaderNamesForProvider(providerName);
+    final rawHeaders = typeConfig['headers'];
+    final credentialHeaders = <String, dynamic>{};
+    if (rawHeaders is Map) {
+      for (final entry in rawHeaders.entries) {
+        final name = entry.key.toString();
+        if (credentialHeaderNames.contains(name.toLowerCase())) {
+          credentialHeaders[name] = entry.value;
+        }
+      }
+    }
+
+    return McpServerConfig.extractApiKeyFromTypeConfig({
+      'apiKey': typeConfig['apiKey'],
+      'headers': credentialHeaders,
+    });
+  }
 
   /// Update API keys from provider config
   static void updateApiKeys({
@@ -130,13 +168,17 @@ class HttpToolService {
   // ======================================================================
 
   /// Brave Search handler (async)
-  static Future<String> handleBraveSearch(Map<String, dynamic> args) async {
+  static Future<String> handleBraveSearch(
+    Map<String, dynamic> args, {
+    String? apiKey,
+  }) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    final effectiveApiKey = apiKey ?? _braveApiKey;
     await AppLogService.info(
         'HttpToolService', 'Brave 搜索: query=$query, count=$count');
 
-    if (_braveApiKey.isEmpty) {
+    if (effectiveApiKey.isEmpty) {
       return '错误: Brave Search API Key 未配置，请在设置页面配置。';
     }
     if (query.isEmpty) return '错误: 搜索关键词不能为空。';
@@ -150,7 +192,7 @@ class HttpToolService {
         },
         options: Options(
           headers: {
-            'X-Subscription-Token': _braveApiKey,
+            'X-Subscription-Token': effectiveApiKey,
             'Accept': 'application/json',
           },
         ),
@@ -169,13 +211,17 @@ class HttpToolService {
   }
 
   /// Bocha Search handler (async)
-  static Future<String> handleBochaSearch(Map<String, dynamic> args) async {
+  static Future<String> handleBochaSearch(
+    Map<String, dynamic> args, {
+    String? apiKey,
+  }) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    final effectiveApiKey = apiKey ?? _bochaApiKey;
     await AppLogService.info(
         'HttpToolService', 'Bocha 搜索: query=$query, count=$count');
 
-    if (_bochaApiKey.isEmpty) {
+    if (effectiveApiKey.isEmpty) {
       return '错误: Bocha API Key 未配置，请在设置页面配置。';
     }
     if (query.isEmpty) return '错误: 搜索关键词不能为空。';
@@ -185,7 +231,7 @@ class HttpToolService {
         'https://api.bochaai.com/v1/web-search',
         options: Options(
           headers: {
-            'Authorization': 'Bearer $_bochaApiKey',
+            'Authorization': 'Bearer $effectiveApiKey',
             'Content-Type': 'application/json',
           },
         ),
@@ -209,13 +255,17 @@ class HttpToolService {
   }
 
   /// Querit Search handler (async)
-  static Future<String> handleQueritSearch(Map<String, dynamic> args) async {
+  static Future<String> handleQueritSearch(
+    Map<String, dynamic> args, {
+    String? apiKey,
+  }) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    final effectiveApiKey = apiKey ?? _queritApiKey;
     await AppLogService.info(
         'HttpToolService', 'Querit 搜索: query=$query, count=$count');
 
-    if (_queritApiKey.isEmpty) {
+    if (effectiveApiKey.isEmpty) {
       return '错误: Querit API Key 未配置，请在设置页面配置。';
     }
     if (query.isEmpty) return '错误: 搜索关键词不能为空。';
@@ -225,7 +275,7 @@ class HttpToolService {
         'https://api.querit.ai/v1/search',
         options: Options(
           headers: {
-            'Authorization': 'Bearer $_queritApiKey',
+            'Authorization': 'Bearer $effectiveApiKey',
             'Content-Type': 'application/json',
           },
         ),
@@ -248,13 +298,19 @@ class HttpToolService {
   }
 
   /// SearXNG Search handler (async)
-  static Future<String> handleSearxngSearch(Map<String, dynamic> args) async {
+  static Future<String> handleSearxngSearch(
+    Map<String, dynamic> args, {
+    String? url,
+    String? apiKey,
+  }) async {
     final query = (args['query'] as String?) ?? '';
     final count = (args['count'] as num?)?.toInt() ?? 10;
+    final effectiveUrl = url ?? _searxngUrl;
+    final effectiveApiKey = apiKey ?? _searxngApiKey;
     await AppLogService.info(
         'HttpToolService', 'SearXNG 搜索: query=$query, count=$count');
 
-    if (_searxngUrl.isEmpty || _searxngUrl == 'http://localhost:8080') {
+    if (effectiveUrl.isEmpty || effectiveUrl == 'http://localhost:8080') {
       return '错误: SearXNG 实例 URL 未配置，请在设置页面配置。';
     }
     if (query.isEmpty) return '错误: 搜索关键词不能为空。';
@@ -263,12 +319,12 @@ class HttpToolService {
       final headers = <String, String>{
         'Accept': 'application/json',
       };
-      if (_searxngApiKey.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $_searxngApiKey';
+      if (effectiveApiKey.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $effectiveApiKey';
       }
 
       final response = await _dio.get(
-        '${_searxngUrl.replaceAll(RegExp(r'/+$'), '')}/search',
+        '${effectiveUrl.replaceAll(RegExp(r'/+$'), '')}/search',
         queryParameters: {
           'q': query,
           'format': 'json',
@@ -286,6 +342,32 @@ class HttpToolService {
       debugPrint('Searxng search error: $e');
       await AppLogService.error('HttpToolService', 'SearXNG 搜索失败: $query', e);
       return '错误: SearXNG 请求失败: $e';
+    }
+  }
+
+  /// Runs one of the configured HTTP tools without changing the active chat
+  /// service's process-wide credentials.
+  static Future<String> runConnectivityTest({
+    required String providerName,
+    required Map<String, dynamic> arguments,
+    required String apiKey,
+    required String url,
+  }) {
+    switch (providerName) {
+      case 'Brave Search':
+        return handleBraveSearch(arguments, apiKey: apiKey);
+      case 'Bocha':
+        return handleBochaSearch(arguments, apiKey: apiKey);
+      case 'Querit':
+        return handleQueritSearch(arguments, apiKey: apiKey);
+      case 'Searxng':
+        return handleSearxngSearch(
+          arguments,
+          url: url,
+          apiKey: apiKey,
+        );
+      default:
+        return Future.value('错误: 未知的 HTTP 工具 "$providerName"');
     }
   }
 

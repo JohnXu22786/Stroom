@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/math_drawing_page.dart';
+import 'package:stroom/widgets/math_canvas.dart';
 import 'package:stroom/widgets/math_formula_field.dart';
+import 'package:stroom/widgets/math_parameter_controls.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
@@ -23,6 +25,104 @@ Widget _buildTestApp({String? initialExpression}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   editorInteractionTests();
+
+  group('MathDrawingPage - adjustable parameters', () {
+    MathCanvasState canvas(WidgetTester tester) =>
+        tester.state<MathCanvasState>(find.byType(MathCanvas));
+    MathParameterControls controls(WidgetTester tester) => tester
+        .widget<MathParameterControls>(find.byType(MathParameterControls));
+
+    testWidgets(
+        'shared sliders update committed curves without submitting drafts',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialExpression: 'A*x'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加公式'));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField).at(1), '2*A*x');
+      await tester.tap(find.byTooltip('绘制').first);
+      await tester.pumpAndSettle();
+      expect(controls(tester).parameters.keys, ['A']);
+      final original = canvas(tester).curvePoints;
+      expect(original, isNotEmpty);
+
+      await tester.enterText(find.byType(TextField).first, 'A*x+100');
+      controls(tester)
+          .onChanged('A', controls(tester).parameters['A']!.withValue(3));
+      await tester.pump();
+      final updated = canvas(tester).curvePoints;
+      expect(updated.length, original.length);
+      for (var i = 0; i < updated.length; i += 37) {
+        expect(updated[i]['y'], closeTo(original[i]['y']! * 3, 1e-9));
+      }
+      expect(
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
+          'A*x+100');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'parameter settings survive replot and visibility reconciliation',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialExpression: 'A*x'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('绘制'));
+      await tester.pumpAndSettle();
+      controls(tester).onChanged(
+          'A',
+          controls(tester)
+              .parameters['A']!
+              .reconfigure(min: 0, max: 3, step: 0.25, value: 2.5));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'A*x+2');
+      await tester.pump();
+      await tester.tap(find.byTooltip('绘制'));
+      await tester.pumpAndSettle();
+      final parameter = controls(tester).parameters['A']!;
+      expect([parameter.value, parameter.min, parameter.max, parameter.step],
+          [2.5, 0, 3, 0.25]);
+      final point = canvas(tester).curvePoints.first;
+      expect(point['y'], closeTo(2.5 * point['x']! + 2, 1e-9));
+
+      await tester.tap(find.byTooltip('隐藏公式'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MathParameterControls), findsNothing);
+      expect(canvas(tester).curvePoints, isEmpty);
+      await tester.tap(find.byTooltip('显示公式'));
+      await tester.pumpAndSettle();
+      expect(controls(tester).parameters['A']!.value, 2.5);
+      expect(controls(tester).parameters['A']!.step, 0.25);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'implicit curves use shared parameters excluding coordinates and constants',
+        (tester) async {
+      await tester
+          .pumpWidget(_buildTestApp(initialExpression: r'x^2+y^2=A+0*e+0*\pi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('绘制'));
+      await tester.pumpAndSettle();
+      expect(controls(tester).parameters.keys, ['A']);
+      final before = canvas(tester)
+          .curvePoints
+          .map((point) => point['x']!.abs())
+          .reduce((a, b) => a > b ? a : b);
+      controls(tester)
+          .onChanged('A', controls(tester).parameters['A']!.withValue(4));
+      await tester.pump();
+      final after = canvas(tester)
+          .curvePoints
+          .map((point) => point['x']!.abs())
+          .reduce((a, b) => a > b ? a : b);
+      expect(before, closeTo(1, 0.08));
+      expect(after, closeTo(2, 0.08));
+      expect(tester.takeException(), isNull);
+    });
+  });
 
   group('MathDrawingPage - formula input', () {
     testWidgets('checkmark button plots formulas', (tester) async {

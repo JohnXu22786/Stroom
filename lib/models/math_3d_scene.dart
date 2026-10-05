@@ -32,18 +32,19 @@ class Ray3D {
 /// Intersect a world-space ray with an infinite plane.
 ///
 /// Returns null when the ray is parallel to the plane or the hit is behind
-/// the ray origin. Keeping this in the scene math makes construction input
-/// testable without needing a Flutter canvas.
+/// the ray origin, unless [allowBehind] is enabled for parallel projection.
+/// Keeping this in scene math makes construction input testable without a canvas.
 Point3D? intersectRayPlane(
   Ray3D ray, {
   required Point3D point,
   required Vector3D normal,
+  bool allowBehind = false,
 }) {
   final denominator = ray.direction.dot(normal);
   if (denominator.abs() < 1e-10) return null;
 
   final distance = (point - ray.origin).dot(normal) / denominator;
-  if (!distance.isFinite || distance < 0) return null;
+  if (!distance.isFinite || (!allowBehind && distance < 0)) return null;
   return ray.pointAt(distance);
 }
 
@@ -564,4 +565,54 @@ ScreenPoint worldToScreen(
 
   // View → Projection (clip space → screen)
   return projection.project(viewPoint);
+}
+
+/// Clip a segment, ray or infinite line against the camera's viewing volume.
+/// The returned world endpoints are shared by rendering and pointer snapping.
+List<Point3D> clipLineToView(
+  Object3D object,
+  Camera3D camera,
+  Projection3D projection,
+) {
+  final view = camera.viewMatrix();
+  final a = _transformPoint(view, object.pointA);
+  final direction = _transformPoint(view, object.pointB) - a;
+  var lower =
+      object.lineKind == Line3DKind.line ? double.negativeInfinity : 0.0;
+  var upper = object.lineKind == Line3DKind.segment ? 1.0 : double.infinity;
+
+  bool clip(double value, double slope) {
+    if (slope.abs() < 1e-12) return value >= 0;
+    final bound = -value / slope;
+    if (slope > 0) {
+      lower = dart_math.max(lower, bound);
+    } else {
+      upper = dart_math.min(upper, bound);
+    }
+    return lower <= upper;
+  }
+
+  // Parallel projection displays geometry on either side of the camera.
+  if (projection.type == ProjectionType.perspective &&
+      (!clip(-a.z - projection.near, -direction.z) ||
+          !clip(projection.far + a.z, direction.z))) return const [];
+  final aspect = projection.width / projection.height;
+  if (projection.type == ProjectionType.parallel) {
+    final width = projection.scale * aspect;
+    if (!clip(width + a.x, direction.x) ||
+        !clip(width - a.x, -direction.x) ||
+        !clip(projection.scale + a.y, direction.y) ||
+        !clip(projection.scale - a.y, -direction.y)) return const [];
+  } else {
+    final height = dart_math.tan(projection.fov * dart_math.pi / 360);
+    final width = height * aspect;
+    if (!clip(-a.z * width + a.x, -direction.z * width + direction.x) ||
+        !clip(-a.z * width - a.x, -direction.z * width - direction.x) ||
+        !clip(-a.z * height + a.y, -direction.z * height + direction.y) ||
+        !clip(-a.z * height - a.y, -direction.z * height - direction.y))
+      return const [];
+  }
+  if (!lower.isFinite || !upper.isFinite) return const [];
+  final edge = object.pointB - object.pointA;
+  return [object.pointA + edge * lower, object.pointA + edge * upper];
 }

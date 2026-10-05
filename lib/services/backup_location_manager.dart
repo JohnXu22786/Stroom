@@ -571,7 +571,15 @@ class BackupLocationManager {
       if (!await src.exists()) {
         throw Exception('备份源文件不存在: $srcPath');
       }
-      await src.copy(dest.path);
+      await dest.create(exclusive: true);
+      try {
+        await src.copy(dest.path);
+      } catch (_) {
+        try {
+          await dest.delete();
+        } catch (_) {}
+        rethrow;
+      }
     } catch (e) {
       debugPrint('[BackupLocationManager] 写入备份文件失败(流式): $relativePath: $e');
       rethrow;

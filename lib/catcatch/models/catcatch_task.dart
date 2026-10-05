@@ -150,6 +150,10 @@ enum TaskStatus {
 
 /// 猫抓下载任务
 class CatCatchTask {
+  /// Written only after native save registered this exact completed file.
+  /// Legacy task records require the task-flow registration fallback.
+  static const nativeRegisteredPathKey = 'nativeRegisteredPath';
+
   final String id;
   final String url;
   final int expectedDurationSec;

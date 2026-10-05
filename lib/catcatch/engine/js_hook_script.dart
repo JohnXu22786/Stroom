@@ -29,28 +29,22 @@ class JsHookScript {
   // Core: Send URL to Flutter via CatCatchChannel
   // =========================================================================
   function sendMediaUrl(url, opts) {
+    if (url && typeof url === 'object') {
+      try {
+        url = URL.prototype.toString.call(url);
+      } catch(e) {
+        // Non-URL objects keep their existing handling.
+      }
+    }
     if (!url || typeof url !== 'string') return;
 
-    // Handle blob: URLs — report them but skip extension check
-    if (url.startsWith('blob:')) {
-      if (seenUrls[url]) return;
-      seenUrls[url] = true;
-      var method = (opts && opts.method) || 'GET';
-      var initiator = (opts && opts.initiator) || PAGE_URL;
-      var msg = JSON.stringify({
-        url: url,
-        method: method,
-        initiator: initiator,
-        mimeType: (opts && opts.mimeType) || '',
-        requestHeaders: (opts && opts.headers) || {}
-      });
-      sendToFlutter(msg);
-      return;
-    }
-
-    // Normalize: ensure absolute URL
+    // Normalize before filtering so only supported network URL schemes pass.
     try {
-      url = new URL(url, PAGE_URL).href;
+      var parsedUrl = new URL(url, PAGE_URL);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return;
+      }
+      url = parsedUrl.href;
     } catch(e) {
       return; // Invalid URL, skip
     }
@@ -102,21 +96,286 @@ class JsHookScript {
     var args = arguments;
     var url = args[0];
     var opts = args[1] || {};
+    var methodOption = opts.method;
+    var method = methodOption !== undefined ? String(methodOption) : 'GET';
+    var headersOption = opts.headers;
+    var hasHeadersOption = headersOption !== undefined;
+    var shouldReplayRequestInit = args.length > 1 && args[1] &&
+      (typeof args[1] === 'object' || typeof args[1] === 'function');
+    var headers = hasHeadersOption ? headersOption : {};
+    var fetchArgs = args;
+    var requestHeaders;
+    var requestMethod;
 
     // Resolve URL if it's a Request object
     if (url && typeof url === 'object' && url.url) {
+      requestMethod = url.method;
+      method = methodOption !== undefined ? method : (requestMethod || method);
+      requestHeaders = url.headers;
+      headers = hasHeadersOption ? headersOption : (requestHeaders || headers);
       url = url.url;
     }
 
+    // Normalize HeadersInit forms and make them JSON-serializable.
+    var hasIterableHeaders = false;
+    var hasReplayMethodOption = false;
+    var replayMethodOption;
+    var hasReplayHeadersOption = false;
+    var replayHeadersOption;
+    var headerSnapshotFailed = false;
+    var headerSnapshotError;
+    var replayInvalidHeaderStructure = false;
+    var replayHeaderPairs = [];
+    var headerIteratorMethod;
+    try {
+      if (headers && !shouldReplayRequestInit) {
+        headerIteratorMethod = headers[Symbol.iterator];
+      }
+      if ((hasHeadersOption &&
+          typeof headerIteratorMethod === 'function') ||
+          shouldReplayRequestInit) {
+        replayMethodOption = methodOption !== undefined ? method : undefined;
+        if (replayMethodOption !== undefined) {
+          method = replayMethodOption;
+        } else {
+          method = requestMethod || 'GET';
+        }
+        hasReplayMethodOption = true;
+        replayHeadersOption = headersOption;
+        hasReplayHeadersOption = true;
+        hasHeadersOption = replayHeadersOption !== undefined;
+        headers = hasHeadersOption
+          ? replayHeadersOption
+          : (requestHeaders || {});
+        headerIteratorMethod = headers
+          ? headers[Symbol.iterator]
+          : undefined;
+      }
+      if (typeof headerIteratorMethod === 'function') {
+        hasIterableHeaders = true;
+        var headerIterator = Reflect.apply(
+          headerIteratorMethod,
+          headers,
+          [],
+        );
+        var replayableHeaders = {};
+        replayableHeaders[Symbol.iterator] = function() {
+          return headerIterator;
+        };
+        Array.from(replayableHeaders, function(headerPair) {
+          var replayPair = headerPair;
+          var pairIterator;
+          var hasPairIterator = false;
+          var pairIterationComplete = false;
+          var pairIteratorClosed = false;
+          var pairConversionPending = false;
+          var replayablePair;
+          if (headerPair) {
+            var pairIteratorMethod = headerPair[Symbol.iterator];
+            if (typeof pairIteratorMethod !== 'function') {
+              if (typeof headerPair === 'object' ||
+                  typeof headerPair === 'function') {
+                throw new TypeError('Header pair iterator is not callable');
+              }
+            } else {
+              var pairIterator = Reflect.apply(
+                pairIteratorMethod,
+                  headerPair,
+                  [],
+                );
+              if (!pairIterator ||
+                  (typeof pairIterator !== 'object' &&
+                   typeof pairIterator !== 'function')) {
+                throw new TypeError('Header pair iterator is not an object');
+              }
+              var pairNextMethod = pairIterator.next;
+              hasPairIterator = true;
+              replayPair = [];
+              var pairSnapshotIterator = {
+                next: function() {
+                  pairConversionPending = false;
+                  var pairResult = Reflect.apply(
+                    pairNextMethod,
+                    pairIterator,
+                    [],
+                  );
+                  if (pairResult === null ||
+                      (typeof pairResult !== 'object' &&
+                       typeof pairResult !== 'function')) {
+                    throw new TypeError(
+                      'Header pair iterator result is not an object',
+                    );
+                  }
+                  var pairResultDone = false;
+                  return {
+                    get done() {
+                      var done = pairResult.done;
+                      pairResultDone = !!done;
+                      if (pairResultDone) pairIterationComplete = true;
+                      return done;
+                    },
+                    get value() {
+                      if (pairResultDone) return pairResult.value;
+                      pairConversionPending = true;
+                      var value = pairResult.value;
+                      if (typeof value === 'symbol') {
+                        throw new TypeError(
+                          'Cannot convert a Symbol value to a string',
+                        );
+                      }
+                      value = String(value);
+                      replayPair.push(value);
+                      return value;
+                    },
+                  };
+                },
+                return: function() {
+                  if (pairIteratorClosed) {
+                    return {value: undefined, done: true};
+                  }
+                  pairIteratorClosed = true;
+                  var pairReturnMethod = pairIterator.return;
+                  if (pairReturnMethod === undefined ||
+                      pairReturnMethod === null) {
+                    return {value: undefined, done: true};
+                  }
+                  return Reflect.apply(pairReturnMethod, pairIterator, []);
+                },
+              };
+              replayablePair = {};
+              replayablePair[Symbol.iterator] = function() {
+                return pairSnapshotIterator;
+              };
+            }
+          }
+          try {
+            var parsedPair = new Headers([
+              hasPairIterator ? replayablePair : replayPair,
+            ]);
+            var normalizedPair;
+            parsedPair.forEach(function(value, name) {
+              normalizedPair = [name, value];
+            });
+            replayHeaderPairs.push(normalizedPair);
+            return normalizedPair;
+          } catch(e) {
+            if (pairConversionPending && !pairIterationComplete &&
+                !pairIteratorClosed) {
+              try {
+                pairSnapshotIterator.return();
+              } catch(closeError) {
+                // Preserve the original header conversion error.
+              }
+            }
+            var invalidPairStructure = hasPairIterator
+              ? pairIterationComplete && replayPair.length !== 2
+              : !Array.isArray(replayPair) || replayPair.length !== 2;
+            if (invalidPairStructure) {
+              replayInvalidHeaderStructure = true;
+              replayHeaderPairs.push(replayPair);
+            }
+            throw e;
+          }
+        });
+        headers = replayHeaderPairs;
+      }
+    } catch(e) {
+      headerSnapshotFailed = true;
+      headerSnapshotError = e;
+      headers = replayHeaderPairs;
+    }
+    var normalizedHeaders = Object.create(null);
+    try {
+      if (headerSnapshotFailed && !replayInvalidHeaderStructure) {
+        throw headerSnapshotError;
+      }
+      var headersForParsing = headers;
+      if (shouldReplayRequestInit && headers &&
+          (typeof headers === 'object' || typeof headers === 'function') &&
+          typeof headerIteratorMethod !== 'function') {
+        headersForParsing = new Proxy(headers, {
+          get: function(target, property) {
+            if (property === Symbol.iterator) return headerIteratorMethod;
+            return Reflect.get(target, property, target);
+          },
+        });
+      }
+      var replayOptions;
+      var replayOptionsSource;
+      var replayHeadersOverride;
+      if (hasIterableHeaders || hasReplayHeadersOption) {
+        replayOptionsSource = Object(opts);
+        replayHeadersOverride = hasIterableHeaders
+          ? headers
+          : replayHeadersOption;
+        replayOptions = new Proxy({}, {
+          get: function(target, property) {
+            if (property === 'method' && hasReplayMethodOption) {
+              return replayMethodOption;
+            }
+            if (property === 'headers') return replayHeadersOverride;
+            return Reflect.get(
+              replayOptionsSource,
+              property,
+              replayOptionsSource,
+            );
+          }
+        });
+        fetchArgs = Array.prototype.slice.call(args);
+        fetchArgs[1] = replayOptions;
+      }
+      var parsedHeaders = new Headers(headersForParsing);
+      if (replayOptions && (hasIterableHeaders || hasHeadersOption)) {
+        replayHeadersOverride = parsedHeaders;
+      }
+      parsedHeaders.forEach(function(value, name) {
+        normalizedHeaders[name] = value;
+      });
+    } catch(e) {
+      // Let fetch produce its normal rejected promise for invalid headers.
+      try {
+        sendMediaUrl(url, {
+          method: method,
+          headers: {},
+          initiator: PAGE_URL
+        });
+      } catch(captureError) {
+        console.log('[CatCatch] fetch request capture error:', captureError);
+      }
+      if ((headerSnapshotFailed && !replayInvalidHeaderStructure) ||
+          (hasIterableHeaders && fetchArgs === args) ||
+          (!hasIterableHeaders && headersForParsing &&
+              (typeof headersForParsing === 'object' ||
+               typeof headersForParsing === 'function'))) {
+        return Promise.reject(e);
+      }
+      return ORIGINAL_FETCH.apply(this, fetchArgs);
+    }
+    headers = normalizedHeaders;
+
     // Check on request
     sendMediaUrl(url, {
-      method: opts.method || 'GET',
-      headers: opts.headers || {},
+      method: method,
+      headers: headers,
       initiator: PAGE_URL
     });
 
-    // Return original promise
-    return ORIGINAL_FETCH.apply(this, args);
+    // Capture a media URL reached after a redirect without consuming the
+    // response or changing its rejection behavior.
+    return ORIGINAL_FETCH.apply(this, fetchArgs).then(function(response) {
+      try {
+        if (response && response.url) {
+          sendMediaUrl(response.url, {
+            method: method,
+            headers: headers,
+            initiator: PAGE_URL
+          });
+        }
+      } catch(e) {
+        console.log('[CatCatch] fetch response capture error:', e);
+      }
+      return response;
+    });
   };
 
   // =========================================================================
@@ -142,25 +401,25 @@ class JsHookScript {
       });
     }
 
-    // Also intercept on loadend to catch redirected URLs
+    // Listen independently so page handlers assigned before or after send
+    // remain intact.
     try {
-      var originalOnReadyStateChange = xhr.onreadystatechange;
-      xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
+      if (!xhr._catCatchRedirectListener) {
+        xhr._catCatchRedirectListener = function() {
+          if (xhr.readyState !== 4) return;
+
           var responseUrl = xhr.responseURL;
-          if (responseUrl && responseUrl !== url) {
+          if (responseUrl && responseUrl !== xhr._catCatchUrl) {
             sendMediaUrl(responseUrl, {
               method: xhr._catCatchMethod || 'GET',
               initiator: PAGE_URL
             });
           }
-        }
-        if (originalOnReadyStateChange) {
-          originalOnReadyStateChange.apply(xhr, arguments);
-        }
-      };
+        };
+        xhr.addEventListener('readystatechange', xhr._catCatchRedirectListener);
+      }
     } catch(e) {
-      // Some environments restrict onreadystatechange access
+      // Some environments restrict event listener access
     }
 
     return ORIGINAL_XHR_SEND.apply(this, arguments);
@@ -169,6 +428,19 @@ class JsHookScript {
   // =========================================================================
   // MutationObserver: Scan for <video>/<audio> elements
   // =========================================================================
+  function markSourceForRescan(source) {
+    source._catCatchScanned = false;
+
+    var parent = source.parentElement;
+    while (parent && parent.nodeName !== 'VIDEO' &&
+        parent.nodeName !== 'AUDIO') {
+      parent = parent.parentElement;
+    }
+    if (parent) {
+      parent._catCatchScanned = false;
+    }
+  }
+
   function scanMediaElements() {
     try {
       document.querySelectorAll('video, audio').forEach(function(el) {
@@ -177,22 +449,36 @@ class JsHookScript {
 
         // Check current src
         var src = el.currentSrc || el.src || '';
-        if (src) {
-          sendMediaUrl(src, {
+        var mediaUrls = [
+          src,
+          el.getAttribute('data-src'),
+          el.getAttribute('data-url')
+        ];
+        mediaUrls.forEach(function(mediaUrl) {
+          if (!mediaUrl) return;
+          sendMediaUrl(mediaUrl, {
             method: 'GET',
             mimeType: el.tagName === 'VIDEO' ? 'video/*' : 'audio/*',
             initiator: PAGE_URL
           });
-        }
+        });
 
         // Check <source> children
         el.querySelectorAll('source').forEach(function(source) {
-          if (source.src && !source._catCatchScanned) {
+          if (!source._catCatchScanned) {
             source._catCatchScanned = true;
-            sendMediaUrl(source.src, {
-              method: 'GET',
-              mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
-              initiator: PAGE_URL
+            var sourceUrls = [
+              source.src,
+              source.getAttribute('data-src'),
+              source.getAttribute('data-url')
+            ];
+            sourceUrls.forEach(function(sourceUrl) {
+              if (!sourceUrl) return;
+              sendMediaUrl(sourceUrl, {
+                method: 'GET',
+                mimeType: source.type || (el.tagName === 'VIDEO' ? 'video/*' : 'audio/*'),
+                initiator: PAGE_URL
+              });
             });
           }
         });
@@ -220,7 +506,12 @@ class JsHookScript {
           if (node.nodeName === 'VIDEO' || node.nodeName === 'AUDIO' ||
               node.querySelectorAll) {
             needsScan = true;
-            break;
+          }
+          if (node.nodeName === 'SOURCE') {
+            markSourceForRescan(node);
+          }
+          if (node.querySelectorAll) {
+            node.querySelectorAll('source').forEach(markSourceForRescan);
           }
         }
       } else if (mutation.type === 'attributes' &&
@@ -230,7 +521,11 @@ class JsHookScript {
         var target = mutation.target;
         if (target && (target.nodeName === 'VIDEO' || target.nodeName === 'AUDIO' ||
             target.nodeName === 'SOURCE')) {
-          target._catCatchScanned = false;
+          if (target.nodeName === 'SOURCE') {
+            markSourceForRescan(target);
+          } else {
+            target._catCatchScanned = false;
+          }
           needsScan = true;
         }
       }

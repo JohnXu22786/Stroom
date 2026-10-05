@@ -4,10 +4,15 @@ part of 'chat_adapter.dart';
 extension ChatAdapterHttpToolsExt on ChatAdapter {
   /// 初始化内置工具（HTTP 工具），与 MCP SSE 服务器初始化独立。
   ///
-  /// 此方法确保 HTTP 工具（如 brave_web_search、bocha_web_search 等）
-  /// 始终被注册，不受 MCP 服务器连接状态影响。
-  /// 即使 MCP 条目不存在或为空，也会尝试注册已缓存的工具。
+  /// HTTP 搜索工具的处理器始终注册，不受 MCP 服务器连接状态影响；
+  /// 但它们的可选定义会遵循 MCP 总开关，关闭时不提供给助手与对话。
   void initializeBuiltinTools(ProviderEntriesState entriesState) {
+    _mcpMasterSwitchEnabled = isMcpMasterSwitchEnabled(entriesState);
+    _disabledMcpToolNames = {
+      ...disabledMcpToolNames(entriesState),
+      if (!_mcpMasterSwitchEnabled) ...kMcpSearchToolNames,
+    };
+    ChatService.setDisabledToolNames(_disabledMcpToolNames);
     final mcpEntry =
         entriesState.entries.where((e) => e.type == 'mcp').firstOrNull;
 
@@ -36,9 +41,9 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
       }
     }
 
-    // Always update API keys and register HTTP tools, even if no configs
-    // were found. This ensures previously registered tools remain available
-    // and new API keys take effect.
+    // Always update API keys and register HTTP handlers, even if no configs
+    // were found. Search-tool definitions are filtered separately by the MCP
+    // master switch in getAllToolDefinitions().
     HttpToolService.updateApiKeys(
       braveApiKey: braveApiKey,
       bochaApiKey: bochaApiKey,
@@ -68,7 +73,7 @@ extension ChatAdapterHttpToolsExt on ChatAdapter {
 
     // 占位符（'Bearer ' 前缀等）视为未设置，避免默认工具自动填入假 Key
     String? extractKey() {
-      final key = McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+      final key = HttpToolService.extractHttpToolApiKey(name, typeConfig);
       return key.isNotEmpty ? key : null;
     }
 

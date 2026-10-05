@@ -1,27 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/mcp.dart';
 import '../providers/provider_config.dart';
 import 'mcp_server_config_shared.dart';
 
-/// MCP 服务器配置页面
-/// 用于添加或编辑 MCP 服务器的连接信息
-class McpServerConfigPage extends ConsumerStatefulWidget {
+Future<bool?> showMcpServerConfigDialog({
+  required BuildContext context,
+  required String entryId,
+  required int configIndex,
+  String? groupId,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => _McpServerConfigDialog(
+      entryId: entryId,
+      configIndex: configIndex,
+      groupId: groupId,
+    ),
+  );
+}
+
+/// MCP 服务器配置对话框，用于添加或编辑服务器连接信息。
+class _McpServerConfigDialog extends ConsumerStatefulWidget {
   final String entryId;
   final int configIndex; // -1 for new config
+  final String? groupId;
 
-  const McpServerConfigPage({
+  const _McpServerConfigDialog({
     super.key,
     required this.entryId,
     required this.configIndex,
+    this.groupId,
   });
 
   @override
-  ConsumerState<McpServerConfigPage> createState() =>
-      _McpServerConfigPageState();
+  ConsumerState<_McpServerConfigDialog> createState() =>
+      _McpServerConfigDialogState();
 }
 
-class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
+class _McpServerConfigDialogState
+    extends ConsumerState<_McpServerConfigDialog> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _commandController = TextEditingController();
@@ -196,25 +215,22 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   Future<void> _save() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入 MCP 服务器名称')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请输入 MCP 服务器名称')));
       return;
     }
 
     // Validate transport-specific fields
     if (_transportType == McpTransportType.stdio &&
         _commandController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('stdio 模式需要指定命令')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('stdio 模式需要指定命令')));
       return;
     }
     if (_transportType == McpTransportType.sse &&
         _urlController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SSE 模式需要指定 URL')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('SSE 模式需要指定 URL')));
       return;
     }
 
@@ -241,7 +257,7 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       // For stdio: merge apiKey into env vars
       // Load existing env from the original config if editing
       var effectiveEnv = <String, String>{
-        'PATH': '/usr/local/bin:/usr/bin:/bin'
+        'PATH': '/usr/local/bin:/usr/bin:/bin',
       };
       if (_isExistingConfig) {
         final entry = _entry;
@@ -251,8 +267,9 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             final tc = existingConfig.models[0].typeConfig;
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv =
-                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv = envRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
           }
         }
@@ -286,13 +303,15 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
             final tc = existingConfig.models[0].typeConfig;
             final headersRaw = tc['headers'];
             if (headersRaw is Map) {
-              effectiveHeaders = headersRaw
-                  .map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveHeaders = headersRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
             final envRaw = tc['env'];
             if (envRaw is Map) {
-              effectiveEnv =
-                  envRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
+              effectiveEnv = envRaw.map(
+                (k, v) => MapEntry(k.toString(), v.toString()),
+              );
             }
           }
         }
@@ -340,8 +359,15 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
+    final existingConfig = _isExistingConfig &&
+            widget.configIndex >= 0 &&
+            widget.configIndex < configs.length
+        ? configs[widget.configIndex]
+        : null;
     final newConfig = ProviderConfigItem(
+      id: existingConfig?.id,
       providerName: name,
+      groupId: existingConfig == null ? widget.groupId : existingConfig.groupId,
       host: _transportType == McpTransportType.sse
           ? _urlController.text.trim()
           : '',
@@ -349,9 +375,15 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
       models: [modelConfig],
     );
 
-    if (_isExistingConfig &&
-        widget.configIndex >= 0 &&
-        widget.configIndex < configs.length) {
+    if (existingConfig != null) {
+      final existingTypeConfig = existingConfig.models.isNotEmpty
+          ? existingConfig.models[0].typeConfig
+          : existingConfig.typeConfig;
+      final connectivityTest = existingTypeConfig['connectivityTest'];
+      if (connectivityTest is Map) {
+        newConfig.models[0].typeConfig['connectivityTest'] =
+            Map<String, dynamic>.from(connectivityTest);
+      }
       configs[widget.configIndex] = newConfig;
     } else {
       configs.insert(0, newConfig);
@@ -415,195 +447,204 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
           Navigator.pop(context);
         }
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(title),
-          actions: _buildAppBarActions(),
-        ),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Transport type
-            const SectionHeader(title: '传输方式'),
-            const SizedBox(height: 8),
-            if (_isEditMode && !_isVendor)
-              _buildTransportSelector()
-            else
-              _buildReadOnlyTransport(),
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: SizedBox(
+          width: 560,
+          height: MediaQuery.sizeOf(context).height * 0.85,
+          child: Scaffold(
+            appBar: AppBar(title: Text(title), actions: _buildAppBarActions()),
+            body: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Transport type
+                const SectionHeader(title: '传输方式'),
+                const SizedBox(height: 8),
+                if (_isEditMode && !_isVendor)
+                  _buildTransportSelector()
+                else
+                  _buildReadOnlyTransport(),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // Server name
-            const SectionHeader(title: '服务器名称'),
-            const SizedBox(height: 8),
-            if (_isEditMode && !_isVendor)
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  hintText: '输入 MCP 服务器名称',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.label, color: Colors.teal),
-                ),
-                onChanged: (_) => _checkUnsavedChanges(),
-              )
-            else
-              ReadOnlyField(
-                icon: Icons.label,
-                iconColor: Colors.teal,
-                label: '名称',
-                value: _nameController.text,
-              ),
-
-            const SizedBox(height: 16),
-
-            // Transport-specific fields
-            if (_transportType == McpTransportType.stdio) ...[
-              const SectionHeader(title: '命令'),
-              const SizedBox(height: 8),
-              if (_isEditMode && !_isVendor)
-                TextField(
-                  controller: _commandController,
-                  decoration: const InputDecoration(
-                    hintText: '例如: npx',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.terminal, color: Colors.orange),
-                  ),
-                  onChanged: (_) => _checkUnsavedChanges(),
-                )
-              else
-                ReadOnlyField(
-                  icon: Icons.terminal,
-                  iconColor: Colors.orange,
-                  label: '命令',
-                  value: _commandController.text,
-                ),
-              const SizedBox(height: 12),
-              const SectionHeader(title: '参数'),
-              const SizedBox(height: 8),
-              if (_isEditMode && !_isVendor)
-                TextField(
-                  controller: _argsController,
-                  decoration: const InputDecoration(
-                    hintText:
-                        '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.list, color: Colors.purple),
-                  ),
-                  onChanged: (_) => _checkUnsavedChanges(),
-                )
-              else
-                ReadOnlyField(
-                  icon: Icons.list,
-                  iconColor: Colors.purple,
-                  label: '参数',
-                  value: _argsController.text,
-                ),
-            ] else ...[
-              const SectionHeader(title: 'SSE URL'),
-              const SizedBox(height: 8),
-              if (_isEditMode && !_isVendor)
-                TextField(
-                  controller: _urlController,
-                  decoration: const InputDecoration(
-                    hintText: '例如: http://localhost:3001/sse',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.link, color: Colors.blue),
-                  ),
-                  onChanged: (_) => _checkUnsavedChanges(),
-                )
-              else
-                ReadOnlyField(
-                  icon: Icons.link,
-                  iconColor: Colors.blue,
-                  label: 'URL',
-                  value: _urlController.text,
-                ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // API Key (for built-in and regular configs)
-            const SectionHeader(title: 'API 密钥'),
-            const SizedBox(height: 8),
-            if (_isEditMode)
-              TextField(
-                controller: _apiKeyController,
-                decoration: InputDecoration(
-                  hintText: '输入 API Key（可选）',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.vpn_key, color: Colors.amber),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureApiKey ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                // Server name
+                const SectionHeader(title: '服务器名称'),
+                const SizedBox(height: 8),
+                if (_isEditMode && !_isVendor)
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      hintText: '输入 MCP 服务器名称',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.label, color: Colors.teal),
                     ),
-                    tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
-                    onPressed: () =>
-                        setState(() => _obscureApiKey = !_obscureApiKey),
+                    onChanged: (_) => _checkUnsavedChanges(),
+                  )
+                else
+                  ReadOnlyField(
+                    icon: Icons.label,
+                    iconColor: Colors.teal,
+                    label: '名称',
+                    value: _nameController.text,
                   ),
-                ),
-                obscureText: _obscureApiKey,
-                onChanged: (_) => _checkUnsavedChanges(),
-              )
-            else
-              ReadOnlyField(
-                icon: Icons.vpn_key,
-                iconColor: Colors.amber,
-                label: 'API 密钥',
-                value: _apiKeyController.text.isNotEmpty ? '••••••••' : '',
-              ),
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // Description
-            const SectionHeader(title: '描述'),
-            const SizedBox(height: 8),
-            if (_isEditMode && !_isVendor)
-              TextField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  hintText: '输入此 MCP 服务器的描述信息（可选）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.description, color: Colors.teal),
-                ),
-                maxLines: 2,
-                minLines: 1,
-                onChanged: (_) => _checkUnsavedChanges(),
-              )
-            else
-              ReadOnlyField(
-                icon: Icons.description,
-                iconColor: Colors.teal,
-                label: '描述',
-                value: _descriptionController.text,
-              ),
+                // Transport-specific fields
+                if (_transportType == McpTransportType.stdio) ...[
+                  const SectionHeader(title: '命令'),
+                  const SizedBox(height: 8),
+                  if (_isEditMode && !_isVendor)
+                    TextField(
+                      controller: _commandController,
+                      decoration: const InputDecoration(
+                        hintText: '例如: npx',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.terminal, color: Colors.orange),
+                      ),
+                      onChanged: (_) => _checkUnsavedChanges(),
+                    )
+                  else
+                    ReadOnlyField(
+                      icon: Icons.terminal,
+                      iconColor: Colors.orange,
+                      label: '命令',
+                      value: _commandController.text,
+                    ),
+                  const SizedBox(height: 12),
+                  const SectionHeader(title: '参数'),
+                  const SizedBox(height: 8),
+                  if (_isEditMode && !_isVendor)
+                    TextField(
+                      controller: _argsController,
+                      decoration: const InputDecoration(
+                        hintText:
+                            '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.list, color: Colors.purple),
+                      ),
+                      onChanged: (_) => _checkUnsavedChanges(),
+                    )
+                  else
+                    ReadOnlyField(
+                      icon: Icons.list,
+                      iconColor: Colors.purple,
+                      label: '参数',
+                      value: _argsController.text,
+                    ),
+                ] else ...[
+                  const SectionHeader(title: 'SSE URL'),
+                  const SizedBox(height: 8),
+                  if (_isEditMode && !_isVendor)
+                    TextField(
+                      controller: _urlController,
+                      decoration: const InputDecoration(
+                        hintText: '例如: http://localhost:3001/sse',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.link, color: Colors.blue),
+                      ),
+                      onChanged: (_) => _checkUnsavedChanges(),
+                    )
+                  else
+                    ReadOnlyField(
+                      icon: Icons.link,
+                      iconColor: Colors.blue,
+                      label: 'URL',
+                      value: _urlController.text,
+                    ),
+                ],
 
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            // Description
-            Card(
-              color: cs.surfaceContainerLow,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _transportType == McpTransportType.stdio
-                            ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
-                            : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
-                        style:
-                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                // API Key (for built-in and regular configs)
+                const SectionHeader(title: 'API 密钥'),
+                const SizedBox(height: 8),
+                if (_isEditMode)
+                  TextField(
+                    controller: _apiKeyController,
+                    decoration: InputDecoration(
+                      hintText: '输入 API Key（可选）',
+                      border: const OutlineInputBorder(),
+                      prefixIcon:
+                          const Icon(Icons.vpn_key, color: Colors.amber),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureApiKey
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
+                        onPressed: () =>
+                            setState(() => _obscureApiKey = !_obscureApiKey),
                       ),
                     ),
-                  ],
+                    obscureText: _obscureApiKey,
+                    onChanged: (_) => _checkUnsavedChanges(),
+                  )
+                else
+                  ReadOnlyField(
+                    icon: Icons.vpn_key,
+                    iconColor: Colors.amber,
+                    label: 'API 密钥',
+                    value: _apiKeyController.text.isNotEmpty ? '••••••••' : '',
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Description
+                const SectionHeader(title: '描述'),
+                const SizedBox(height: 8),
+                if (_isEditMode && !_isVendor)
+                  TextField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(
+                      hintText: '输入此 MCP 服务器的描述信息（可选）',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.description, color: Colors.teal),
+                    ),
+                    maxLines: 2,
+                    minLines: 1,
+                    onChanged: (_) => _checkUnsavedChanges(),
+                  )
+                else
+                  ReadOnlyField(
+                    icon: Icons.description,
+                    iconColor: Colors.teal,
+                    label: '描述',
+                    value: _descriptionController.text,
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Description
+                Card(
+                  color: cs.surfaceContainerLow,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _transportType == McpTransportType.stdio
+                                ? 'stdio 模式：在本地启动一个子进程作为 MCP 服务器，通过标准输入/输出通信。推荐用于本地工具。'
+                                : 'SSE 模式：连接到一个远程 MCP 服务器，通过 HTTP SSE 通信。推荐用于远程服务。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -632,7 +673,10 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
   }
 
   Widget _buildTransportOption(
-      McpTransportType type, IconData icon, String label) {
+    McpTransportType type,
+    IconData icon,
+    String label,
+  ) {
     final selected = _transportType == type;
     final cs = Theme.of(context).colorScheme;
     return GestureDetector(
@@ -654,9 +698,11 @@ class _McpServerConfigPageState extends ConsumerState<McpServerConfigPage> {
         ),
         child: Column(
           children: [
-            Icon(icon,
-                color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-                size: 28),
+            Icon(
+              icon,
+              color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              size: 28,
+            ),
             const SizedBox(height: 8),
             Text(
               label,

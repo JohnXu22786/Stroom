@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
 import 'package:stroom/startup/startup_app.dart';
 import 'package:stroom/startup/startup_check_service.dart';
+import 'package:stroom/startup/startup_page.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
@@ -133,7 +134,7 @@ void main() {
       await tester.pumpWidget(const ProviderScope(child: StartupApp()));
       await tester.pump();
       // 启动页先显示。
-      expect(find.text('Stroom'), findsOneWidget);
+      expect(find.byType(StartupPage), findsOneWidget);
 
       // 推进启动序列（最小显示 1.5s + 各检查延时 + 完成态 0.6s）。
       // 迁移链路包含大量真实文件 I/O（备份 ZIP 创建/清理），而

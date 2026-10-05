@@ -1,6 +1,81 @@
 part of 'chat_service_tools_test.dart';
 
 void chatServiceToolsGroup1() {
+  group('ChatService - MCP master switch', () {
+    test('blocks a stale search tool call after the switch is turned off',
+        () async {
+      final adapter = ChatAdapter();
+      addTearDown(() {
+        adapter.initializeBuiltinTools(const ProviderEntriesState());
+        adapter.dispose();
+      });
+
+      final disabledState = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'test_mcp',
+            type: 'mcp',
+            name: 'MCP供应商',
+            enabled: false,
+          ),
+        ],
+      );
+      adapter.initializeBuiltinTools(disabledState);
+      expect(
+        adapter.getAllToolDefinitions().map((tool) => tool.name),
+        isNot(contains('brave_web_search')),
+      );
+
+      var handlerCalled = false;
+      ChatService.registerTool(
+        const ToolDefinition(
+          name: 'brave_web_search',
+          description: 'Search the web',
+          parameters: {'type': 'object'},
+        ),
+        (_) {
+          handlerCalled = true;
+          return 'unexpected execution';
+        },
+      );
+
+      final provider = _MockToolCallProvider([
+        const [
+          {
+            'id': 'call_stale_search',
+            'type': 'function',
+            'function': {
+              'name': 'brave_web_search',
+              'arguments': '{}',
+            },
+          },
+        ],
+      ]);
+      final service = ChatService(
+        provider: provider,
+        modelConfig: _createMockModelConfig(),
+      );
+      addTearDown(service.dispose);
+
+      final events = <ChatEvent>[];
+      await service
+          .sendStreamWithTools(
+            'Search',
+            history: [ChatMessage(role: 'user', content: 'Search')],
+            tools: adapter.getAllToolDefinitions(),
+          )
+          .listen(
+            events.add,
+            onError: (error) => fail('Unexpected error: $error'),
+          )
+          .asFuture();
+
+      final toolComplete = events.whereType<ToolCallCompleteEvent>().first;
+      expect(toolComplete.result, contains('is disabled'));
+      expect(handlerCalled, isFalse);
+    });
+  });
+
   // ====================================================================
   // 懒连接 MCP：进入对话页面不发起任何连接，工具被调用时才按需
   // 连接服务器并列出真实工具。

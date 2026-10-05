@@ -3,6 +3,7 @@ name: CI Checks
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
 concurrency:
@@ -10,6 +11,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pr-description:
+    name: PR description format
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/ci/requirements.txt
+      - name: Install PR description validator dependencies
+        run: python3 -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
+      - name: Test PR description validator
+        run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
+      - name: Validate PR description
+        run: python3 tools/ci/validate_pr_description.py "$GITHUB_EVENT_PATH"
+
   math-editor:
     name: Math editor bridge
     runs-on: ubuntu-latest

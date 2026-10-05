@@ -403,13 +403,29 @@ class ManifestDatabase {
     await prefs.setBool('migrated_video_records', true);
   }
 
-  /// Migrate legacy shared folders from `folders` table to all 4 per-type
-  /// tables, then drop the legacy table. Idempotent — safe to call multiple
-  /// times.
-  static Future<void> migrateLegacyFoldersToPerType() async {
+  /// Migrate legacy shared folders into the requested per-type tables.
+  ///
+  /// By default this migrates all media categories and removes the legacy
+  /// table. A partial category restore passes only the categories it migrated
+  /// and keeps the shared table until the remaining categories are current.
+  /// Idempotent — safe to call multiple times.
+  static Future<void> migrateLegacyFoldersToPerType({
+    Set<String>? onlyFolderTables,
+    bool removeLegacyTable = true,
+  }) async {
+    final targetFolderTables = ManifestTables.allPerTypeFolderTables
+        .where(
+          (folderTable) =>
+              onlyFolderTables == null ||
+              onlyFolderTables.contains(folderTable),
+        )
+        .toList();
     if (_useJsonStore) {
       await _loadWebData();
-      await _migrateLegacyFoldersJsonV2();
+      await _migrateLegacyFoldersJsonV2(
+        folderTables: targetFolderTables,
+        removeLegacyTable: removeLegacyTable,
+      );
       return;
     }
     // For SQLite, the onUpgrade path in _initDatabase already copies
@@ -442,13 +458,15 @@ class ManifestDatabase {
         if (rows.isNotEmpty) {
           for (final row in rows) {
             final path = row['path'] as String;
-            for (final ft in ManifestTables.allPerTypeFolderTables) {
+            for (final ft in targetFolderTables) {
               await db.insert(ft, {'path': path},
                   conflictAlgorithm: ConflictAlgorithm.ignore);
             }
           }
         }
-        await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
+        if (removeLegacyTable) {
+          await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
+        }
       }
     } catch (e) {
       await AppLogService.error(
@@ -459,23 +477,33 @@ class ManifestDatabase {
   }
 
   /// Internal: migrate legacy folders in JSON/web mode (v2 format).
-  /// Removes the legacy [ManifestTables.folders] key after migrating.
-  static Future<void> _migrateLegacyFoldersJsonV2() async {
+  static Future<void> _migrateLegacyFoldersJsonV2({
+    required List<String> folderTables,
+    required bool removeLegacyTable,
+  }) async {
     final legacyFolders =
         _webData![ManifestTables.folders] as List<dynamic>? ?? [];
-    if (legacyFolders.isEmpty) return;
+    if (legacyFolders.isEmpty) {
+      if (removeLegacyTable &&
+          _webData!.remove(ManifestTables.folders) != null) {
+        await _saveWebData();
+      }
+      return;
+    }
 
-    for (final folderTable in ManifestTables.allPerTypeFolderTables) {
+    for (final folderTable in folderTables) {
       final existing =
           (_webData![folderTable] as List<dynamic>?)?.cast<String>() ?? [];
       final merged = <String>{...existing, ...legacyFolders.cast<String>()};
       _webData![folderTable] = merged.toList();
     }
 
-    // Remove the legacy key
-    _webData!.remove(ManifestTables.folders);
+    if (removeLegacyTable) _webData!.remove(ManifestTables.folders);
     await _saveWebData();
-    debugPrint('[ManifestDatabase] Migrated legacy folders to per-type (JSON)');
+    debugPrint(
+      '[ManifestDatabase] Migrated legacy folders to ${folderTables.length} '
+      'per-type table(s) (JSON)',
+    );
   }
 
   // ==================================================================

@@ -27,11 +27,8 @@ class Point3D {
   }
 
   /// Midpoint between this and another point.
-  Point3D midpoint(Point3D other) => Point3D(
-        (x + other.x) / 2,
-        (y + other.y) / 2,
-        (z + other.z) / 2,
-      );
+  Point3D midpoint(Point3D other) =>
+      Point3D((x + other.x) / 2, (y + other.y) / 2, (z + other.z) / 2);
 
   /// Convert to a position vector (from origin).
   Vector3D toVector() => Vector3D(x, y, z);
@@ -110,6 +107,33 @@ class Vector3D {
   String toString() => '[$x, $y, $z]';
 }
 
+/// Implicit conic equation in the local plane coordinates:
+/// `quadraticX*x² + quadraticXY*x*y + quadraticY*y² +`
+/// `linearX*x + linearY*y + constant = 0`.
+class Conic3D {
+  final Point3D origin;
+  final Vector3D axisU;
+  final Vector3D axisV;
+  final double quadraticX;
+  final double quadraticXY;
+  final double quadraticY;
+  final double linearX;
+  final double linearY;
+  final double constant;
+
+  const Conic3D({
+    required this.origin,
+    required this.axisU,
+    required this.axisV,
+    required this.quadraticX,
+    required this.quadraticXY,
+    required this.quadraticY,
+    required this.linearX,
+    required this.linearY,
+    required this.constant,
+  });
+}
+
 /// Types of 3D objects that can be rendered.
 enum Object3DType {
   point,
@@ -122,6 +146,8 @@ enum Object3DType {
   curve,
 }
 
+enum Line3DKind { segment, line, ray }
+
 /// A 3D object in the scene.
 ///
 /// Uses a tagged-union pattern with constructors for each type.
@@ -132,6 +158,8 @@ class Object3D {
   // Point fields
   final Point3D? _point;
   Point3D get point => _point ?? Point3D.origin;
+
+  final Line3DKind lineKind;
 
   // Line fields
   final Point3D? _pointA;
@@ -157,6 +185,10 @@ class Object3D {
   final List<Vector3D>? _normals;
   List<Vector3D> get normals => _normals ?? const [];
 
+  /// Vertex indexes that begin new disconnected paths in a curve.
+  final List<int> curveStarts;
+  final Conic3D? conic;
+
   // Sphere fields
   final Point3D? _sphereCenter;
   Point3D get sphereCenter => _sphereCenter ?? Point3D.origin;
@@ -172,9 +204,14 @@ class Object3D {
   final double opacity;
   final String? label;
   final bool transformOrigin;
+  final bool visible;
+
+  /// Render this point's text independently from geometric point labels.
+  final bool isTextAnnotation;
 
   const Object3D._({
     required this.type,
+    this.lineKind = Line3DKind.segment,
     Point3D? point,
     Point3D? pointA,
     Point3D? pointB,
@@ -185,6 +222,8 @@ class Object3D {
     List<Point3D>? vertices,
     List<int>? indices,
     List<Vector3D>? normals,
+    this.curveStarts = const [],
+    this.conic,
     Point3D? sphereCenter,
     double? sphereRadius,
     Vector3D? vector,
@@ -192,6 +231,8 @@ class Object3D {
     this.opacity = 1.0,
     this.label,
     this.transformOrigin = false,
+    this.visible = true,
+    this.isTextAnnotation = false,
   })  : _point = point,
         _pointA = pointA,
         _pointB = pointB,
@@ -206,6 +247,40 @@ class Object3D {
         _sphereRadius = sphereRadius,
         _vector = vector;
 
+  /// Preserve geometry and appearance when naming or moving an object.
+  Object3D copyWith({
+    Point3D? point,
+    String? label,
+    int? color,
+    double? opacity,
+    bool? visible,
+  }) =>
+      Object3D._(
+        type: type,
+        lineKind: lineKind,
+        point: point ?? _point,
+        pointA: _pointA,
+        pointB: _pointB,
+        planeA: _planeA,
+        planeB: _planeB,
+        planeC: _planeC,
+        planeD: _planeD,
+        vertices: _vertices,
+        indices: _indices,
+        normals: _normals,
+        curveStarts: curveStarts,
+        conic: conic,
+        sphereCenter: _sphereCenter,
+        sphereRadius: _sphereRadius,
+        vector: _vector,
+        color: color ?? this.color,
+        opacity: opacity ?? this.opacity,
+        label: label ?? this.label,
+        transformOrigin: transformOrigin,
+        visible: visible ?? this.visible,
+        isTextAnnotation: isTextAnnotation,
+      );
+
   // ==================================================================
   // Factory constructors
   // ==================================================================
@@ -217,9 +292,17 @@ class Object3D {
     String? label,
   }) = _Object3DPoint;
 
+  const factory Object3D.text(
+    Point3D point, {
+    required String text,
+    int color,
+    double opacity,
+  }) = _Object3DText;
+
   const factory Object3D.line(
     Point3D a,
     Point3D b, {
+    Line3DKind lineKind,
     int color,
     double opacity,
     String? label,
@@ -270,6 +353,8 @@ class Object3D {
 
   const factory Object3D.curve({
     required List<Point3D> points,
+    List<int> curveStarts,
+    Conic3D? conic,
     int color,
     double opacity,
     String? label,
@@ -292,15 +377,33 @@ class _Object3DPoint extends Object3D {
         );
 }
 
+class _Object3DText extends Object3D {
+  const _Object3DText(
+    Point3D point, {
+    required String text,
+    int color = 0xFFAAAAAA,
+    double opacity = 1.0,
+  }) : super._(
+          type: Object3DType.point,
+          point: point,
+          color: color,
+          opacity: opacity,
+          label: text,
+          isTextAnnotation: true,
+        );
+}
+
 class _Object3DLine extends Object3D {
   const _Object3DLine(
     Point3D a,
     Point3D b, {
+    Line3DKind lineKind = Line3DKind.segment,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
     String? label,
   }) : super._(
           type: Object3DType.line,
+          lineKind: lineKind,
           pointA: a,
           pointB: b,
           color: color,
@@ -403,12 +506,16 @@ class _Object3DVector extends Object3D {
 class _Object3DCurve extends Object3D {
   const _Object3DCurve({
     required List<Point3D> points,
+    List<int> curveStarts = const [],
+    Conic3D? conic,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
     String? label,
   }) : super._(
           type: Object3DType.curve,
           vertices: points,
+          curveStarts: curveStarts,
+          conic: conic,
           color: color,
           opacity: opacity,
           label: label,

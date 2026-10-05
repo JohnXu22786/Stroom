@@ -159,7 +159,10 @@ class TaskExecutor {
             detectedMedia = withSplitTrack;
             break;
           case StepType.userSelecting:
-            if (selectedMedia == null && detectedMedia.length > 1) {
+            if (selectedMedia == null &&
+                detectedMedia.isNotEmpty &&
+                (detectedMedia.length > 1 ||
+                    task.metadata['deferSingleResourceSelection'] == 'true')) {
               final detail = '共${detectedMedia.length}个资源，请用户选择';
               onUpdate(task.copyWith(
                   steps: steps.map((s) {
@@ -236,16 +239,16 @@ class TaskExecutor {
               onUpdate(task.copyWith(downloadedFilePath: downloadedFilePath));
             }
 
-            // 检查是否需要用户确认转换操作（特殊格式/播放列表）
+            // Only formats that actually need MP4 conversion require
+            // confirmation. A playlist may already have produced a playable
+            // file, in which case its container must be preserved.
             final pendingConfirm = task.metadata['pendingConfirm'];
             if (pendingConfirm != 'done') {
               final ext = p
                   .extension(downloadedFilePath)
                   .toLowerCase()
                   .replaceAll('.', '');
-              final isPlaylistSelected =
-                  task.selectedMedia?.isPlaylist ?? false;
-              if (isPlaylistSelected || isSpecialFormat(ext)) {
+              if (isSpecialFormat(ext)) {
                 onUpdate(task.copyWith(
                   steps: steps,
                   metadata: {
@@ -263,8 +266,7 @@ class TaskExecutor {
                 .extension(downloadedFilePath)
                 .toLowerCase()
                 .replaceAll('.', '');
-            final isPlaylistSel = task.selectedMedia?.isPlaylist ?? false;
-            if (!isPlaylistSel && !isSpecialFormat(skipExt)) {
+            if (!isSpecialFormat(skipExt)) {
               markExecutorStep(steps, i,
                   skipped: true, detail: '.$skipExt 格式无需转换，已跳过');
               onUpdate(task.copyWith(
@@ -284,10 +286,18 @@ class TaskExecutor {
                 task: task.copyWith(selectedMedia: selectedMedia),
                 steps: steps,
                 sourcePath: downloadedFilePath,
-                onUpdate: onUpdate);
+                onUpdate: onUpdate,
+                cancelToken: cancelToken);
+            if (!kIsWeb) {
+              task = task.copyWith(metadata: {
+                ...task.metadata,
+                CatCatchTask.nativeRegisteredPathKey: downloadedFilePath,
+              });
+            }
             break;
         }
       }
+      if (cancelToken?.isCancelled ?? false) return null;
       markAllExecutorStepsDone(steps);
       onUpdate(task.copyWith(
           steps: steps,

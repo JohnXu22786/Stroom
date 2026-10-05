@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Process, ProcessStartMode;
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
@@ -870,6 +871,25 @@ class McpClient {
     }
   }
 
+  /// List tools while preserving transport errors for explicit connectivity
+  /// probes. [listTools] keeps its historical empty-list-on-error behavior for
+  /// chat initialization; a settings-page test needs to distinguish that from
+  /// a server which is reachable and exposes no tools.
+  Future<List<McpTool>> discoverTools({
+    Map<String, dynamic> params = const <String, dynamic>{},
+  }) async {
+    if (_state != _McpClientState.connected) {
+      final connected = await connect();
+      if (!connected) {
+        throw StateError('MCP server "${config.name}" could not connect');
+      }
+    }
+
+    final result = await _sendRequest('tools/list', params);
+    _cachedTools = JsonRpcUtils.extractTools(result);
+    return List.from(_cachedTools);
+  }
+
   /// 调用 MCP 服务器上的工具
   Future<String> callTool(String name, Map<String, dynamic> arguments) async {
     await AppLogService.info('McpClient', '调用 MCP 工具: $name (${config.name})');
@@ -976,6 +996,15 @@ class McpClient {
 /// 管理多个 MCP 客户端实例
 class McpClientManager {
   final Map<String, McpClient> _clients = {};
+  final Map<String, String> _placeholderClientNames = {};
+  final Map<String, String> _clientConfigIdsByName = {};
+  final Map<String, String> _allPlaceholderClientNames = {};
+  final Map<String, String> _toolClientNames = {};
+  final Map<String, String> _toolActualNamesByPublishedName = {};
+  final Map<String, Set<String>> _toolClientNamesByTool = {};
+  final Map<String, Set<String>> _knownToolConfigIdsByName = {};
+  final Map<String, Map<String, String>> _publishedToolNamesByClient = {};
+  final Set<String> _aliasedToolNames = {};
 
   /// 所有客户端
   Map<String, McpClient> get clients => Map.unmodifiable(_clients);
@@ -983,12 +1012,179 @@ class McpClientManager {
   /// 获取指定 ID 的客户端
   McpClient? getClient(String id) => _clients[id];
 
+  /// Sets the server that owns each published placeholder tool name.
+  void setPlaceholderClientNames(
+    Map<String, String> clientNames, {
+    Map<String, String> configIdsByClientName = const {},
+    Map<String, String> reservedPlaceholderClientNames = const {},
+    Iterable<String> validConfigIds = const [],
+  }) {
+    _placeholderClientNames
+      ..clear()
+      ..addAll(clientNames);
+    _clientConfigIdsByName
+      ..clear()
+      ..addAll(configIdsByClientName);
+    _allPlaceholderClientNames
+      ..clear()
+      ..addAll(reservedPlaceholderClientNames)
+      ..addAll(clientNames);
+    final currentConfigIds = validConfigIds.toSet();
+    for (final toolName in _knownToolConfigIdsByName.keys.toList()) {
+      final configIds = _knownToolConfigIdsByName[toolName]!
+        ..removeWhere((configId) => !currentConfigIds.contains(configId));
+      if (configIds.isEmpty) {
+        _knownToolConfigIdsByName.remove(toolName);
+      } else if (configIds.length > 1) {
+        _aliasedToolNames.add(toolName);
+      }
+    }
+    _refreshToolRoutes();
+  }
+
+  /// Returns the configured server name for a placeholder tool, if any.
+  String? getPlaceholderClientName(String toolName) =>
+      _placeholderClientNames[toolName];
+
+  /// Keeps dispatch order aligned with the active provider config order while
+  /// preserving explicit routes for tools discovered on retained clients.
+  void reorderClients(Iterable<String> clientNames) {
+    final orderedClients = <String, McpClient>{};
+    for (final name in clientNames) {
+      final client = _clients[name];
+      if (client != null) orderedClients[name] = client;
+    }
+    final activeClientNames = orderedClients.keys.toSet();
+    _removeToolRoutesForInactiveClients(activeClientNames);
+    _clients
+      ..clear()
+      ..addAll(orderedClients);
+    _refreshToolRoutes();
+  }
+
+  /// Routes discovered tools to the server whose placeholder was just called.
+  void routeToolsToClient(String clientName, Iterable<String> toolNames) {
+    if (!_clients.containsKey(clientName)) return;
+    final configId = _clientConfigIdsByName[clientName];
+    for (final toolName in toolNames) {
+      _toolClientNamesByTool
+          .putIfAbsent(toolName, () => <String>{})
+          .add(clientName);
+      if (configId != null) {
+        final knownConfigIds = _knownToolConfigIdsByName.putIfAbsent(
+            toolName, () => <String>{})
+          ..add(configId);
+        if (knownConfigIds.length > 1) _aliasedToolNames.add(toolName);
+      }
+      final placeholderOwner = _allPlaceholderClientNames[toolName];
+      if (placeholderOwner != null) {
+        _aliasedToolNames.add(toolName);
+      }
+    }
+    _refreshToolRoutes();
+  }
+
+  /// Returns the server for a published tool name, if it has been discovered.
+  String? getToolClientName(String publishedToolName) =>
+      _toolClientNames[publishedToolName];
+
+  /// Returns the server's original tool name for a published alias.
+  String getActualToolName(String publishedToolName) =>
+      _toolActualNamesByPublishedName[publishedToolName] ?? publishedToolName;
+
+  /// Returns the published name for this server's [actualToolName].
+  String getPublishedToolName(String clientName, String actualToolName) =>
+      _publishedToolNamesByClient[clientName]?[actualToolName] ??
+      actualToolName;
+
+  /// Returns every active server that has exposed [toolName].
+  List<String> getToolClientNames(String toolName) =>
+      List.unmodifiable(_toolClientNamesByTool[toolName] ?? const <String>{});
+
+  void _removeToolRoutesForClient(String clientName) {
+    _clientConfigIdsByName.remove(clientName);
+    for (final toolName in _toolClientNamesByTool.keys.toList()) {
+      final clientNames = _toolClientNamesByTool[toolName]!..remove(clientName);
+      if (clientNames.isEmpty) {
+        _toolClientNamesByTool.remove(toolName);
+      }
+    }
+    _refreshToolRoutes();
+  }
+
+  void _removeToolRoutesForInactiveClients(Set<String> activeClientNames) {
+    for (final toolName in _toolClientNamesByTool.keys.toList()) {
+      final clientNames = _toolClientNamesByTool[toolName]!
+        ..removeWhere((name) => !activeClientNames.contains(name));
+      if (clientNames.isEmpty) {
+        _toolClientNamesByTool.remove(toolName);
+      }
+    }
+  }
+
+  void _refreshToolRoutes() {
+    _toolClientNames.clear();
+    _toolActualNamesByPublishedName.clear();
+    _publishedToolNamesByClient.clear();
+    final reservedNames = <String>{
+      ..._allPlaceholderClientNames.keys,
+      ..._toolClientNamesByTool.keys,
+    };
+
+    for (final entry in _toolClientNamesByTool.entries) {
+      final actualToolName = entry.key;
+      final clientNames =
+          _clients.keys.where(entry.value.contains).toList(growable: false);
+      if (clientNames.isEmpty) continue;
+
+      final knownConfigIds = _knownToolConfigIdsByName[actualToolName];
+      final placeholderOwner = _allPlaceholderClientNames[actualToolName];
+      if (clientNames.length > 1 ||
+          (knownConfigIds?.length ?? 0) > 1 ||
+          placeholderOwner != null) {
+        _aliasedToolNames.add(actualToolName);
+      }
+
+      for (final clientName in clientNames) {
+        final publishedToolName = _aliasedToolNames.contains(actualToolName)
+            ? _stableToolAlias(clientName, actualToolName, reservedNames)
+            : actualToolName;
+        _toolClientNames[publishedToolName] = clientName;
+        _toolActualNamesByPublishedName[publishedToolName] = actualToolName;
+        _publishedToolNamesByClient.putIfAbsent(
+                clientName, () => <String, String>{})[actualToolName] =
+            publishedToolName;
+        reservedNames.add(publishedToolName);
+      }
+    }
+  }
+
+  String _stableToolAlias(
+    String clientName,
+    String actualToolName,
+    Set<String> reservedNames,
+  ) {
+    final configId = _clientConfigIdsByName[clientName] ?? clientName;
+    for (var salt = 0;; salt++) {
+      final source = salt == 0
+          ? '$configId\u0000$actualToolName'
+          : '$configId\u0000$actualToolName\u0000$salt';
+      final digest = sha256.convert(utf8.encode(source)).toString();
+      // Tool names are limited to 64 characters. Keep the full stable config
+      // and original-name digest in that budget to avoid order-dependent
+      // prefixes when two aliases are registered in a different order.
+      final alias = 'm_${digest.substring(0, 62)}';
+      if (!reservedNames.contains(alias)) return alias;
+    }
+  }
+
   /// 添加一个客户端
   void addClient(String id, McpClient client) {
     // 如果已存在相同 ID 的客户端，先释放旧的
     final existing = _clients[id];
     if (existing != null) {
       existing.dispose();
+      _removeToolRoutesForClient(id);
     }
     _clients[id] = client;
   }
@@ -997,13 +1193,25 @@ class McpClientManager {
   void removeClient(String id) {
     final client = _clients.remove(id);
     client?.dispose();
+    _removeToolRoutesForClient(id);
   }
 
   /// 释放所有客户端
-  void disposeAll() {
+  void disposeAll({bool preserveToolAliases = false}) {
     for (final client in _clients.values) {
       client.dispose();
     }
     _clients.clear();
+    _placeholderClientNames.clear();
+    _clientConfigIdsByName.clear();
+    _allPlaceholderClientNames.clear();
+    _toolClientNames.clear();
+    _toolActualNamesByPublishedName.clear();
+    _toolClientNamesByTool.clear();
+    _publishedToolNamesByClient.clear();
+    if (!preserveToolAliases) {
+      _knownToolConfigIdsByName.clear();
+      _aliasedToolNames.clear();
+    }
   }
 }

@@ -265,6 +265,8 @@ class DataSafetyManager {
         await BackupService.restoreBackup(
           file.path,
           selection: BackupSelection.structuredOnly,
+          skipMissingCategories: true,
+          trustEmptyLegacyTaskPayloads: true,
         );
         final check = await DataIntegrityChecker.checkCurrentData();
         if (!check.hasCorruption) {
@@ -312,6 +314,8 @@ class DataSafetyManager {
         file.path,
         selection: BackupSelection.structuredOnly,
         skipPostRestoreMigration: true,
+        skipMissingCategories: true,
+        trustEmptyLegacyTaskPayloads: true,
       );
       return true;
     } catch (e) {

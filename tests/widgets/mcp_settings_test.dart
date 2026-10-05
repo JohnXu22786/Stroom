@@ -44,6 +44,11 @@ Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
       (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
     );
 
+Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
+      of: _readOnlyDescriptionFinder(),
+      matching: find.text(value),
+    );
+
 Future<void> _openCustomMcpConfig(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues({
     'provider_entries': jsonEncode([
@@ -297,7 +302,10 @@ void main() {
 
         expect(_descriptionFieldFinder(), findsNothing);
         expect(_readOnlyDescriptionFinder(), findsOneWidget);
-        expect(find.text('Original description'), findsOneWidget);
+        expect(
+          _readOnlyDescriptionValueFinder('Original description'),
+          findsOneWidget,
+        );
 
         await tester.tap(find.text('编辑'));
         await tester.pumpAndSettle();
@@ -313,7 +321,10 @@ void main() {
         await tester.tap(find.text('放弃'));
         await tester.pumpAndSettle();
         expect(_descriptionFieldFinder(), findsNothing);
-        expect(find.text('Original description'), findsOneWidget);
+        expect(
+          _readOnlyDescriptionValueFinder('Original description'),
+          findsOneWidget,
+        );
         expect(find.text('Discarded description'), findsNothing);
       },
     );
@@ -337,7 +348,10 @@ void main() {
 
         expect(_descriptionFieldFinder(), findsNothing);
         expect(_readOnlyDescriptionFinder(), findsOneWidget);
-        expect(find.text('Saved description'), findsOneWidget);
+        expect(
+          _readOnlyDescriptionValueFinder('Saved description'),
+          findsOneWidget,
+        );
 
         final preferences = await SharedPreferences.getInstance();
         final entries =

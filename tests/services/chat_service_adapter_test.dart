@@ -11,6 +11,7 @@ import 'package:stroom/models/tool_call.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
+import 'package:stroom/services/http_tool_service.dart';
 
 void main() {
   // ====================================================================
@@ -750,6 +751,60 @@ void main() {
       // remains empty (correctly — no MCP servers were configured).
     });
 
+    test('HTTP key collection ignores unrelated headers', () async {
+      const unrelatedHeaderKey = 'legacy-stale-key';
+      final typeConfig = <String, dynamic>{
+        'transport': 'http',
+        'isHttpTool': true,
+        'headers': {'X-Custom-Metadata': unrelatedHeaderKey},
+      };
+      expect(
+        HttpToolService.extractHttpToolApiKey('Brave Search', typeConfig),
+        isEmpty,
+      );
+      expect(
+        HttpToolService.extractHttpToolApiKey(
+          'Brave Search',
+          {
+            'headers': {
+              'X-Subscription-Token': 'legacy-provider-key',
+              'X-Custom-Metadata': unrelatedHeaderKey,
+            },
+          },
+        ),
+        'legacy-provider-key',
+      );
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              configs: [
+                ProviderConfigItem(
+                  providerName: 'Brave Search',
+                  host: 'https://api.search.brave.com',
+                  models: [
+                    ModelConfig(
+                      name: 'Brave Search',
+                      modelId: 'http',
+                      typeConfig: typeConfig,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      final result = await HttpToolService.handleBraveSearch(
+        {'query': 'test'},
+      );
+      expect(result, contains('Brave Search API Key 未配置'));
+    });
+
     test(
         'initializeMcpServers with an empty entries state does not prevent '
         'later discovery with the real state', () async {
@@ -1031,6 +1086,62 @@ void main() {
       expect(names, contains('bocha_web_search'));
       expect(names, contains('querit_search'));
       expect(names, contains('searxng_search'));
+    });
+
+    test('MCP master switch filters all search tool definitions', () {
+      const searchToolNames = {
+        'brave_web_search',
+        'bocha_web_search',
+        'querit_search',
+        'searxng_search',
+        'web_search',
+      };
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              enabled: false,
+            ),
+          ],
+        ),
+      );
+
+      var names =
+          adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
+      expect(
+        names.intersection(searchToolNames),
+        isEmpty,
+        reason: 'the switch must hide HTTP and Stroom-built-in search tools',
+      );
+      expect(
+        names,
+        contains('todowrite'),
+        reason: 'the switch must leave unrelated built-in tools available',
+      );
+
+      adapter.initializeBuiltinTools(
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'test_mcp',
+              type: 'mcp',
+              name: 'MCP供应商',
+              enabled: true,
+            ),
+          ],
+        ),
+      );
+
+      names = adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
+      expect(
+        names,
+        containsAll(searchToolNames),
+        reason: 're-enabling the switch must restore all search tools',
+      );
     });
 
     test('vendor SSE placeholder tools are visible via mcpToolDefinitions',

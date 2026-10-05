@@ -12,9 +12,9 @@
   field.smartFence = true;
   field.defaultMode = 'math';
   let revision = -1, sequence = 0, original = '', canonical = '', selection = '', edited = false, importing = false;
-  // Text/operator names contain literal underscores, not mathematical scripts.
-  function mapMath(source, transform, literal = text => text) {
-    const groups = /\\(?:text[a-zA-Z]*|operatorname)\*?\s*\{/g;
+  // Literal names and roman identifier namespaces are not ordinary math runs.
+  function mapMath(source, transform, literal = text => text,
+    groups = /\\(?:text[a-zA-Z]*|operatorname|mathrm|begin|end)\*?\s*\{/g) {
     let result = '', from = 0, match;
     while ((match = groups.exec(source))) {
       let end = groups.lastIndex, depth = 1;
@@ -34,7 +34,22 @@
     return mapMath(latex, source => source.replace(/_\{\w+\}|\\[a-zA-Z]+|\\.|_[0-9]/g,
       token => /^_[0-9]$/.test(token) ? '_{' + token[1] + '}' : token));
   }
+  function editedLatex(latex) {
+    // MathLive compacts consecutive letter atoms (A then x becomes Ax).
+    // Spaces keep those mathematical atoms distinct for the graph tokenizer.
+    // A digit run is still one number; scripts and literal namespaces keep
+    // their identifiers. Imported legacy names live in protected roman groups.
+    return mapMath(explicitSubscripts(latex), source => source.replace(
+      /_\{\w+\}|\\[a-zA-Z]+|\\.|[a-zA-Z0-9]+/g,
+      token => /^[a-zA-Z0-9]/.test(token) ? token.match(/[a-zA-Z]|\d+/g).join(' ') : token));
+  }
   function plainToLatex(source) {
+    // An underscore inside a roman subscript is literal identifier content,
+    // but MathLive would rebuild it as another mathematical script.
+    source = mapMath(source, text => text.replace(
+      /\\mathrm\{([a-zA-Z](?:\w|\\_)*)\}_\{(\w*_\w*)\}/g,
+      (_, base, index) => '\\mathrm{' + (base.replaceAll('\\_', '_') + '_' + index).replaceAll('_','\\_') + '}'),
+      text => text, /\\(?:text[a-zA-Z]*|operatorname|begin|end)\*?\s*\{/g);
     // Import evaluator constants with the same structures as the keyboard.
     const constants = {
       pi:'\\pi ', e:'e', ln2:'\\ln\\left(2\\right)', ln10:'\\ln\\left(10\\right)',
@@ -55,12 +70,15 @@
       literals.push(value);
       return '{' + marker + (literals.length-1) + '\uE001}';
     };
+    const restore = text => text.replace(new RegExp('\\{' + marker + '(\\d+)\uE001\\}', 'g'),
+      (_, i) => literals[Number(i)]);
     source = mapMath(source, text => text, protect);
     source = source.replace(/_\{\w+\}|\\mathrm\{[a-zA-Z]\w*\}/g, protect);
     source = source.replace(/\\[a-zA-Z]+|[a-zA-Z]\w*/g, token => {
       if (asConstant(token) !== null) return token;
       const script = /^([a-zA-Z][a-zA-Z0-9]*)_(\w+)$/.exec(token);
       if (!script) return token;
+      if (script[2].includes('_')) return protect('\\mathrm{' + token.replaceAll('_','\\_') + '}');
       const base = script[1].length === 1 ? script[1] : '\\mathrm{' + script[1] + '}';
       return base + '_{' + script[2] + '}';
     });
@@ -72,8 +90,8 @@
       (_, number, exponent) => number + '\\cdot10^{' + exponent + '}');
     source = source.replace(/(?<!\\)%/g, '\\bmod ');
     const calls = /(?<!\\)\b(sqrt|abs|floor|ceil|round|fact|pow|nrt|sin|cos|tan|arcsin|arccos|arctan|cot|sec|csc|sinh|cosh|tanh|coth|sech|csch|ln|log|exp)\s*\(/g;
-    // Named parameters with digits/underscores must remain whole identifiers.
-    if (!/[\\{}]/.test(source) && !/[a-zA-Z]\w*[0-9_]\w*/.test(source) && !calls.test(source)) return MathLive.convertAsciiMathToLatex(source);
+    // Multi-character legacy identifiers need namespace preservation.
+    if (!/[\\{}]/.test(source) && !/[a-zA-Z]\w+/.test(source) && !calls.test(source)) return MathLive.convertAsciiMathToLatex(source);
     calls.lastIndex = 0;
     // Convert balanced legacy calls even when they are mixed with TeX. The
     // ASCII converter does not preserve floor/fact/nrt and other graph calls.
@@ -88,7 +106,7 @@
       }
       if (depth) break;
       const rawBody = source.slice(begin,end-1);
-      const args = splitArguments(rawBody).map(plainToLatex);
+      const args = splitArguments(rawBody).map(argument => plainToLatex(restore(argument)));
       const body = args.join(',');
       const name = match[1];
       const latex = name === 'pow' && args.length === 2 ? '{' + args[0] + '}^{' + args[1] + '}'
@@ -104,8 +122,20 @@
       result += source.slice(from,match.index) + latex;
       from = end; calls.lastIndex = end;
     }
-    return (result + source.slice(from)).replace(/(?<!\\)\*/g,'\\cdot ')
-      .replace(new RegExp('\\{' + marker + '(\\d+)\uE001\\}', 'g'), (_, i) => literals[Number(i)]);
+    result = (result + source.slice(from)).replace(/(?<!\\)\*/g,'\\cdot ');
+    // Preserve legacy multi-letter/digit identifiers without applying a global
+    // split in Dart. Constants and calls were converted before this namespace
+    // pass so coefficients such as 2ln2 still import as multiplication.
+    result = mapMath(result, text => text.replace(
+      /_\{\w+\}|\\[a-zA-Z]+|\\.|(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[a-zA-Z](?:[a-zA-Z0-9]|_(?!\{))*/g,
+      (token, offset) => {
+        if (!/^[a-zA-Z]\w+$/.test(token)) return token;
+        const following = text.slice(offset + token.length);
+        const script = new RegExp('^\\{' + marker + '(\\d+)\uE001\\}').exec(following);
+        if (following.startsWith('_{') || (script && literals[Number(script[1])].startsWith('_{'))) return token;
+        return '\\mathrm{' + token.replaceAll('_','\\_') + '}';
+      }));
+    return restore(result);
   }
   function splitArguments(source) {
     const result = []; let depth = 0, start = 0;
@@ -134,7 +164,7 @@
     // MathLive's input event is deferred. Read the model synchronously so a
     // Plot/toggle immediately after an insertion still sees that insertion.
     observeChanges();
-    return {revision, sequence, latex: edited ? explicitSubscripts(field.getValue('latex')) : original,
+    return {revision, sequence, latex: edited ? editedLatex(field.getValue('latex')) : original,
       edited, location:navigation.location(), height: field.getBoundingClientRect().height + problem.getBoundingClientRect().height,
       errors: field.errors.map(e => e.code), canUndo: field.canUndo(), canRedo: field.canRedo()};
   }
@@ -165,7 +195,7 @@
       return snapshot();
     },
     snapshot,
-    selectedLatex() { return explicitSubscripts(field.getValue(field.selection, 'latex')); },
+    selectedLatex() { return editedLatex(field.getValue(field.selection, 'latex')); },
     activate() { field.focus(); return snapshot(); },
     blur() { field.blur(); return snapshot(); },
     theme(ink, accent, error) {

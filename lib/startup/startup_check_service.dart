@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/data_migration_service.dart';
+import '../services/data_integrity_json_parser.dart' as json_parser;
 
 // ====================================================================
 // Startup Issue Severity
@@ -147,12 +148,11 @@ class StartupCheckService {
   /// Isolate 间传递的可序列化检查结果。
   @pragma('vm:entry-point')
   static Map<String, String?> _makeIssueMap(
-      String message, String severity, String? dataKey) {
-    return {
-      'message': message,
-      'severity': severity,
-      'dataKey': dataKey,
-    };
+    String message,
+    String severity,
+    String? dataKey,
+  ) {
+    return {'message': message, 'severity': severity, 'dataKey': dataKey};
   }
 
   // ================================================================
@@ -171,6 +171,27 @@ class StartupCheckService {
     final prefs = await SharedPreferences.getInstance();
     final providerEntriesJson = prefs.getString('provider_entries');
     final conversationsJson = prefs.getString('conversations');
+
+    if (kIsWeb) {
+      try {
+        final resultMaps = await json_parser.validateDataFormatsWeb(
+          providerEntriesJson,
+          conversationsJson,
+        );
+        return resultMaps.map((issue) {
+          return StartupIssue(
+            message: issue['message']!,
+            severity: issue['severity'] == 'error'
+                ? StartupIssueSeverity.error
+                : StartupIssueSeverity.warning,
+            dataKey: issue['dataKey'],
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint('[StartupCheckService] Web worker validation failed: $e');
+        rethrow;
+      }
+    }
 
     // 在测试环境下回退到同步执行（Isolate 在 FakeAsync 中不可用）
     if (_inTestMode()) {
@@ -193,7 +214,9 @@ class StartupCheckService {
   /// 数据格式验证的同步实现（可在 Isolate 中执行或测试环境使用）。
   @pragma('vm:entry-point')
   static List<StartupIssue> _validateDataFormatsSync(
-      String? providerEntriesJson, String? conversationsJson) {
+    String? providerEntriesJson,
+    String? conversationsJson,
+  ) {
     final issues = <StartupIssue>[];
 
     _validateProviderEntriesSync(providerEntriesJson, issues);
@@ -213,22 +236,26 @@ class StartupCheckService {
     try {
       list = jsonDecode(json) as List<dynamic>;
     } catch (_) {
-      issues.add(const StartupIssue(
-        message: 'provider_entries 数据格式错误：不是合法的 JSON 数组',
-        severity: StartupIssueSeverity.error,
-        dataKey: 'provider_entries',
-      ));
+      issues.add(
+        const StartupIssue(
+          message: 'provider_entries 数据格式错误：不是合法的 JSON 数组',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'provider_entries',
+        ),
+      );
       return;
     }
 
     for (int i = 0; i < list.length; i++) {
       // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
       if (list[i] is! Map<String, dynamic>) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i]: 条目为 null 或类型无效',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i]: 条目为 null 或类型无效',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'provider_entries',
+          ),
+        );
         continue;
       }
       final entry = list[i] as Map<String, dynamic>;
@@ -238,29 +265,35 @@ class StartupCheckService {
       // 用 `is! String` 判断，非字符串一律视为「缺失/无效」。
       final id = entry['id'];
       if (id is! String || id.isEmpty) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i]: id 字段缺失或为空',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i]: id 字段缺失或为空',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
 
       final type = entry['type'];
       if (type is! String || type.isEmpty) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i]: type 字段缺失或为空',
-          severity: StartupIssueSeverity.warning,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i]: type 字段缺失或为空',
+            severity: StartupIssueSeverity.warning,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
 
       final name = entry['name'];
       if (name is! String || name.isEmpty) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i]: name 字段缺失或为空',
-          severity: StartupIssueSeverity.warning,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i]: name 字段缺失或为空',
+            severity: StartupIssueSeverity.warning,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
 
       // ================================================================
@@ -272,11 +305,13 @@ class StartupCheckService {
       // 不能用 `as List?` 强转 —— 非 List 类型一律按「字段无效」上报。
       final rawConfigs = entry['configs'];
       if (rawConfigs != null && rawConfigs is! List) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i].configs: 字段不是合法列表',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i].configs: 字段不是合法列表',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
       _validateNestedListSync(entry, 'configs', i, issues);
       final configs = rawConfigs is List ? rawConfigs : null;
@@ -286,12 +321,14 @@ class StartupCheckService {
           final config = configs[ci] as Map<String, dynamic>;
           final rawModels = config['models'];
           if (rawModels != null && rawModels is! List) {
-            issues.add(StartupIssue(
-              message: 'provider_entries[$i].configs[$ci].models: '
-                  '字段不是合法列表',
-              severity: StartupIssueSeverity.error,
-              dataKey: 'provider_entries',
-            ));
+            issues.add(
+              StartupIssue(
+                message: 'provider_entries[$i].configs[$ci].models: '
+                    '字段不是合法列表',
+                severity: StartupIssueSeverity.error,
+                dataKey: 'provider_entries',
+              ),
+            );
           }
           _validateNestedListSync(config, 'models', i, issues);
           final models = rawModels is List ? rawModels : null;
@@ -320,12 +357,14 @@ class StartupCheckService {
     if (list is! List) return;
     for (int j = 0; j < list.length; j++) {
       if (list[j] is! Map<String, dynamic>) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$entryIndex].$fieldName[$j]: '
-              '条目不是合法对象，可能会导致解析闪退',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$entryIndex].$fieldName[$j]: '
+                '条目不是合法对象，可能会导致解析闪退',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
     }
   }
@@ -341,22 +380,26 @@ class StartupCheckService {
     try {
       list = jsonDecode(json) as List<dynamic>;
     } catch (_) {
-      issues.add(const StartupIssue(
-        message: 'conversations 数据格式错误：不是合法的 JSON 数组',
-        severity: StartupIssueSeverity.error,
-        dataKey: 'conversations',
-      ));
+      issues.add(
+        const StartupIssue(
+          message: 'conversations 数据格式错误：不是合法的 JSON 数组',
+          severity: StartupIssueSeverity.error,
+          dataKey: 'conversations',
+        ),
+      );
       return;
     }
 
     for (int i = 0; i < list.length; i++) {
       // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
       if (list[i] is! Map<String, dynamic>) {
-        issues.add(StartupIssue(
-          message: 'conversations[$i]: 会话为 null 或类型无效',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'conversations',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'conversations[$i]: 会话为 null 或类型无效',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'conversations',
+          ),
+        );
         continue;
       }
       final conv = list[i] as Map<String, dynamic>;
@@ -365,28 +408,34 @@ class StartupCheckService {
       // 强转会抛 TypeError 中断整个检查。
       final convId = conv['id'];
       if (convId is! String || convId.isEmpty) {
-        issues.add(StartupIssue(
-          message: 'conversations[$i]: id 字段缺失',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'conversations',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'conversations[$i]: id 字段缺失',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'conversations',
+          ),
+        );
       }
 
       // messages 非 List（如字符串/对象）时运行时会静默当作空列表，
       // 用户聊天记录无声消失 —— 必须显式上报。
       final rawMessages = conv['messages'];
       if (rawMessages == null) {
-        issues.add(StartupIssue(
-          message: 'conversations[$i]: messages 字段缺失',
-          severity: StartupIssueSeverity.warning,
-          dataKey: 'conversations',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'conversations[$i]: messages 字段缺失',
+            severity: StartupIssueSeverity.warning,
+            dataKey: 'conversations',
+          ),
+        );
       } else if (rawMessages is! List) {
-        issues.add(StartupIssue(
-          message: 'conversations[$i]: messages 字段不是合法列表',
-          severity: StartupIssueSeverity.error,
-          dataKey: 'conversations',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'conversations[$i]: messages 字段不是合法列表',
+            severity: StartupIssueSeverity.error,
+            dataKey: 'conversations',
+          ),
+        );
       }
     }
   }
@@ -405,6 +454,27 @@ class StartupCheckService {
   static Future<List<StartupIssue>> checkDataIntegrity() async {
     final prefs = await SharedPreferences.getInstance();
     final providerEntriesJson = prefs.getString('provider_entries');
+
+    if (kIsWeb) {
+      try {
+        final resultMaps =
+            await json_parser.checkDataIntegrityWeb(providerEntriesJson);
+        return resultMaps.map((issue) {
+          return StartupIssue(
+            message: issue['message']!,
+            severity: issue['severity'] == 'error'
+                ? StartupIssueSeverity.error
+                : StartupIssueSeverity.warning,
+            dataKey: issue['dataKey'],
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint(
+          '[StartupCheckService] Web worker integrity check failed: $e',
+        );
+        rethrow;
+      }
+    }
 
     // 在测试环境下回退到同步执行
     if (_inTestMode()) {
@@ -426,7 +496,8 @@ class StartupCheckService {
   /// 数据完整性检查的同步实现（可在 Isolate 中或测试环境使用）。
   @pragma('vm:entry-point')
   static List<StartupIssue> _checkDataIntegritySync(
-      String? providerEntriesJson) {
+    String? providerEntriesJson,
+  ) {
     final issues = <StartupIssue>[];
     if (providerEntriesJson == null || providerEntriesJson.isEmpty) {
       return issues;
@@ -453,12 +524,14 @@ class StartupCheckService {
       final type = entry['type'];
       if (type is! String || type.isEmpty) continue;
       if (!_isKnownProviderType(type)) {
-        issues.add(StartupIssue(
-          message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
-              '应用可能无法正常使用该供应商',
-          severity: StartupIssueSeverity.warning,
-          dataKey: 'provider_entries',
-        ));
+        issues.add(
+          StartupIssue(
+            message: 'provider_entries[$i]: 未知的供应商类型 "$type"，'
+                '应用可能无法正常使用该供应商',
+            severity: StartupIssueSeverity.warning,
+            dataKey: 'provider_entries',
+          ),
+        );
       }
     }
     return issues;

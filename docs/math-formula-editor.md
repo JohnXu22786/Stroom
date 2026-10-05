@@ -6,11 +6,16 @@ The mathematical-input preference is remembered. Mathematical keys stay disabled
 until the editor finishes loading; the source toggle remains available. 3D continues using source input.
 
 The shared bottom keyboard follows the active formula. Its tabs separate common
-arithmetic, exponents/logarithms, functions, constants, Greek lowercase/uppercase/
-variants, calculus, matrices, sets/logic, relations, arrows, fences/intervals,
+arithmetic, exponents/logarithms, functions, constants, Greek letters/variants,
+calculus, matrices, sets/logic, relations, arrows, fences/intervals,
 typography and Latin letters. Scroll the tabs or open the category directory to
 jump directly to a category; this resets its page and scroll position.
-Numbers and backspace keep their positions. Use page buttons for more symbols.
+Numbers and backspace keep their positions in symbol categories. The Latin
+letter tab has a numeric row above all 26 letters in full-width QWERTY rows,
+with Shift and backspace. Shift toggles Latin and ordinary Greek case and
+keeps the current Greek page; all 24 Greek letters are present in both cases.
+The separate variants tab contains eight additional forms. Use page buttons
+for more symbols.
 The logarithm tab offers explicit base-ten, base-two and arbitrary-base templates
 alongside natural ln and powers of e, 2 and 10. Legacy bare log remains natural.
 Templates accept the selected expression; powers can capture the complete item
@@ -57,6 +62,9 @@ Edited exports and clipboard selections use explicit digit-subscript groups so
 `a_{1}x` remains a product instead of becoming the identifier `a_1x`. Legacy
 underscore identifiers import with grouped subscripts and retain their names;
 multi-letter bases use roman formatting. Literal text/operator names are preserved.
+Separate ordinary Latin letter/number atoms export token boundaries, so entering
+A then x produces A times x. Legacy multi-character identifiers import as exact
+roman namespaces and retain their original parameter names after editing.
 Deletion captures the formula identity before confirmation and rechecks that a
 row remains after pending editor snapshots finish.
 
@@ -76,6 +84,25 @@ content and caret restoration when moving between slots before typing; check
 that hook and structural metadata when upgrading MathLive.
 
 ## Plotting and platform boundaries
+
+After plotting, named parameters appear beneath the formula rows as shared
+sliders, with an initial value of 1 and range -5 to 5. The same case-sensitive
+name uses the same value across visible formulas. Dragging a slider redraws the
+committed curves without submitting formula drafts. Click a value or its settings
+button to edit the value, minimum, maximum and step (initially 0.1).
+Each field accepts the system keyboard or a numeric-only math keyboard with
+arithmetic, absolute-value and square-root keys; variables and named constants
+are rejected. The dialog rejects nonfinite values, reversed ranges and invalid
+steps; changing the range clamps the value to its bounds. Slider steps start at
+the minimum; if the range does not divide evenly, its final tick stays below the
+maximum.
+Typing a numeric value preserves it exactly rather than rounding to a slider tick.
+Keyboard arrows and screen-reader adjustments visit the same configured ticks;
+from a typed value between ticks, they move to the next tick in that direction.
+Values and range settings survive replotting and hiding/showing formulas for the
+current page session. Coordinates x/y and existing built-in constants e, pi,
+E, PI and their aliases are not adjustable parameters. The parameter display
+shows A = value; this does not introduce assignment rows or dependent definitions.
 
 Editing is broader than graph evaluation. Integrals, sums, matrices, annotations,
 relations and other display-only structures can be edited, but are not numerically
@@ -113,6 +140,7 @@ not validate browser geometry or platform-view composition.
 
 ```sh
 flutter test tests/widgets/math_formula_field_test.dart tests/widgets/math_keyboard_test.dart tests/models/math_editor_plot_compatibility_test.dart tests/models/math_input_catalog_test.dart tests/pages/content/math_drawing_page_test.dart
+flutter test tests/models/math_parameter_test.dart tests/widgets/math_parameter_controls_test.dart
 flutter test tests/models/math_expression_test.dart --name 'fromInput|withParameters|LaTeX conversion|isValid|parameters'
 npm ci --prefix tools/math_editor_test
 npm test --prefix tools/math_editor_test

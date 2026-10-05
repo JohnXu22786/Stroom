@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -11,6 +12,7 @@ import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 
 const _scriptsKey = 'browser_user_scripts';
+const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
 
 /// Desktop user agent string for desktop-mode browsing.
 const _desktopUserAgent =
@@ -28,6 +30,103 @@ String normalizeBrowserUrl(String url) {
     return 'https://$trimmedUrl';
   }
   return trimmedUrl;
+}
+
+/// Records a top-level browser navigation URL for cookie persistence.
+@visibleForTesting
+void noteBrowserPageNavigationUrl(String url) {
+  BrowserCookieService.noteVisitedUrl(url);
+}
+
+/// Records a main-frame redirect URL and returns it for active-navigation
+/// tracking.
+@visibleForTesting
+String? trackBrowserPageRedirectUrl(String? url) {
+  if (url != null) noteBrowserPageNavigationUrl(url);
+  return url;
+}
+
+/// Runs cookie preparation before a browser navigation.
+///
+/// Exposed for tests so they can verify the ordering without creating a
+/// native WebView.
+@visibleForTesting
+Future<bool> navigateBrowserPageAfterCookiePreparation({
+  required Future<bool> Function() prepareCookies,
+  required Future<void> Function() loadUrl,
+}) async {
+  try {
+    if (!await prepareCookies()) {
+      debugPrint(
+          '[BrowserPage] native cookie cleanup failed; skipping navigation');
+      return false;
+    }
+  } catch (e) {
+    debugPrint('[BrowserPage] cookie preparation failed: $e');
+    return false;
+  }
+  await loadUrl();
+  return true;
+}
+
+/// Navigates from the browser address bar and restores its prior page address
+/// when preparation or page loading prevents the requested navigation.
+@visibleForTesting
+Future<bool> navigateBrowserPageFromAddress({
+  required String requestedUrl,
+  required String previousAddress,
+  required String currentUrl,
+  required ValueChanged<String> updateAddress,
+  required Future<bool> Function() prepareCookies,
+  required Future<void> Function(String url) loadUrl,
+  required VoidCallback onNavigationFailure,
+}) async {
+  final uri = normalizeBrowserUrl(requestedUrl);
+  if (uri.isEmpty) return false;
+
+  updateAddress(uri);
+  var navigated = false;
+  try {
+    navigated = await navigateBrowserPageAfterCookiePreparation(
+      prepareCookies: prepareCookies,
+      loadUrl: () => loadUrl(uri),
+    );
+  } catch (e) {
+    debugPrint('[BrowserPage] address navigation failed: $e');
+  }
+  if (!navigated) {
+    updateAddress(currentUrl.isNotEmpty ? currentUrl : previousAddress);
+    onNavigationFailure();
+  }
+  return navigated;
+}
+
+/// Shares cookie-store preparation between overlapping browser navigations.
+@visibleForTesting
+class BrowserCookieStorePreparation {
+  final Future<bool> Function() _prepareCookies;
+  bool _prepared = false;
+  Future<bool>? _inFlightPreparation;
+
+  BrowserCookieStorePreparation(this._prepareCookies);
+
+  Future<bool> ensurePrepared() {
+    if (_prepared) return Future<bool>.value(true);
+    final inFlightPreparation = _inFlightPreparation;
+    if (inFlightPreparation != null) return inFlightPreparation;
+
+    late final Future<bool> preparation;
+    preparation = Future<bool>.sync(_prepareCookies).then((prepared) {
+      if (prepared) _prepared = true;
+      return prepared;
+    }).whenComplete(() {
+      if (identical(_inFlightPreparation, preparation)) {
+        _inFlightPreparation = null;
+      }
+    });
+    _inFlightPreparation = preparation;
+    return preparation;
+  }
 }
 
 /// Builds the [InAppWebViewSettings] appropriate for the given mode.
@@ -60,6 +159,7 @@ InAppWebViewSettings _buildSettings({required bool isDesktopMode}) {
     // Enable scrollbars for scrollable content.
     verticalScrollBarEnabled: true,
     horizontalScrollBarEnabled: true,
+    useShouldOverrideUrlLoading: true,
     userAgent: isDesktopMode ? _desktopUserAgent : _mobileUserAgent,
   );
 }
@@ -169,7 +269,16 @@ class UserScript {
 
 class BrowserPage extends StatefulWidget {
   final String initialUrl;
-  const BrowserPage({super.key, this.initialUrl = 'https://www.google.com'});
+
+  /// Builds a test body with the real capture callback, without a native WebView.
+  @visibleForTesting
+  final Widget Function(BuildContext, ValueChanged<String>)? testBodyBuilder;
+
+  const BrowserPage({
+    super.key,
+    this.initialUrl = 'https://www.google.com',
+    this.testBodyBuilder,
+  });
 
   @override
   State<BrowserPage> createState() => _BrowserPageState();
@@ -180,6 +289,8 @@ class _BrowserPageState extends State<BrowserPage> {
   final _urlController = TextEditingController();
   bool _isLoading = false;
   double _progress = 0;
+  Timer? _mainFrameErrorTimer;
+  String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
 
   /// Whether to use desktop user agent.
@@ -204,6 +315,9 @@ class _BrowserPageState extends State<BrowserPage> {
   /// user-script match rules and cookie domain tracking.
   String _currentUrl = '';
 
+  /// The current main-frame request URL, including redirects, for load errors.
+  String? _activeNavigationUrl;
+
   /// Whether the cat-catch floating panel is currently visible.
   /// The panel persists its visibility state across page navigations
   /// and is only hidden when the user manually closes it or toggles
@@ -213,6 +327,10 @@ class _BrowserPageState extends State<BrowserPage> {
   /// Whether cookie retention mode is enabled.
   /// When enabled, cookies are not deleted on browser close.
   bool _cookieRetentionEnabled = false;
+
+  final _cookieStorePreparation = BrowserCookieStorePreparation(
+    BrowserCookieService.prepareForBrowserPageLoad,
+  );
 
   /// Current position offset of the floating panel, managed by the parent
   /// (BrowserPage) instead of internally by DraggableFloatingPanel.
@@ -245,35 +363,22 @@ class _BrowserPageState extends State<BrowserPage> {
     setState(() => _cookieRetentionEnabled = enabled);
   }
 
-  /// Restores persisted cookies to the WebView (if retention is enabled).
-  /// Should be called after the WebView is created, BEFORE the initial page
-  /// is loaded, so the first request carries the restored cookies.
-  Future<void> _restoreCookies() async {
-    await BrowserCookieService.restoreCookiesFromFile();
-  }
-
   /// Persists current cookies to file (if retention is enabled).
   /// Should be called after page loads and on browser close.
   Future<void> _persistCookies() async {
     await BrowserCookieService.persistCookiesToFile();
   }
 
+  Future<bool> _ensureCookieStorePrepared() =>
+      _cookieStorePreparation.ensurePrepared();
+
   @override
   void dispose() {
+    _cancelPendingMainFrameError();
     _urlController.dispose();
 
-    // When cookie retention is enabled, persist cookies to file so they
-    // survive the browser close. When disabled, clear everything.
-    // clearAllCookies already clears the persisted store internally.
-    // Read the persisted value here (not the possibly-stale widget state)
-    // so a toggle that was still in flight when the page closed wins.
-    BrowserCookieService.getRetentionMode().then((enabled) {
-      if (enabled) {
-        BrowserCookieService.persistCookiesToFile();
-      } else {
-        BrowserCookieService.clearAllCookies();
-      }
-    });
+    // Queue the final preference decision after any in-flight toggle.
+    unawaited(BrowserCookieService.handleBrowserClose());
 
     super.dispose();
   }
@@ -376,29 +481,10 @@ class _BrowserPageState extends State<BrowserPage> {
   /// expected to await the push result and pre-fill the download form.
   void _onConfirmCapture(String selectedUrl) {
     debugPrint('[BrowserPage] User confirmed capture: $selectedUrl');
-
-    // Short display name; falls back to the URL for trailing-slash URLs.
-    final shortName = selectedUrl.split('/').last;
-    final displayName = shortName.isEmpty ? selectedUrl : shortName;
-
-    // Show a snackbar with options
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('已捕获: $displayName'),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: '下载',
-          onPressed: () {
-            // Navigate back to the cat-catch page with the URL pre-filled.
-            // Guard against being the root route (pop is a no-op then).
-            final navigator = Navigator.of(context);
-            if (navigator.canPop()) {
-              navigator.pop(selectedUrl);
-            }
-          },
-        ),
-      ),
-    );
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop<String>(selectedUrl);
+    }
   }
 
   /// Reset detected URLs for a new page load.
@@ -413,11 +499,73 @@ class _BrowserPageState extends State<BrowserPage> {
     });
   }
 
-  void _goToUrl(String url) {
-    final uri = normalizeBrowserUrl(url);
-    if (uri.isEmpty) return;
-    _urlController.text = uri;
-    _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+  void _handleMainFrameError(WebResourceRequest request) {
+    final requestUrl = request.url.toString();
+    if (request.isForMainFrame != true ||
+        !_isLoading ||
+        requestUrl != _activeNavigationUrl) {
+      return;
+    }
+
+    // The WebView error callback has no navigation ID. A matching same-URL
+    // error may belong to an older load, so wait for a quiet period before
+    // treating it as the active load's failure. Repeated errors alone do not
+    // extend the deadline; only observed progress does.
+    if (_pendingMainFrameErrorUrl == requestUrl) return;
+    _pendingMainFrameErrorUrl = requestUrl;
+    _scheduleMainFrameErrorTimeout();
+  }
+
+  void _scheduleMainFrameErrorTimeout() {
+    final requestUrl = _pendingMainFrameErrorUrl;
+    if (requestUrl == null) return;
+
+    _mainFrameErrorTimer?.cancel();
+    _mainFrameErrorTimer = Timer(_ambiguousMainFrameErrorTimeout, () {
+      _mainFrameErrorTimer = null;
+      if (!mounted ||
+          !_isLoading ||
+          _pendingMainFrameErrorUrl != requestUrl ||
+          _activeNavigationUrl != requestUrl) {
+        return;
+      }
+      _pendingMainFrameErrorUrl = null;
+      setState(() => _isLoading = false);
+    });
+  }
+
+  void _cancelPendingMainFrameError() {
+    _mainFrameErrorTimer?.cancel();
+    _mainFrameErrorTimer = null;
+    _pendingMainFrameErrorUrl = null;
+  }
+
+  Future<void> _goToUrl(String url) async {
+    final controller = _webViewController;
+    if (controller == null) return;
+    final previousAddress = _urlController.text;
+    await navigateBrowserPageFromAddress(
+      requestedUrl: url,
+      previousAddress: previousAddress,
+      currentUrl: _currentUrl,
+      updateAddress: (address) {
+        if (mounted) _urlController.text = address;
+      },
+      prepareCookies: _ensureCookieStorePrepared,
+      loadUrl: (address) async {
+        if (!mounted || controller != _webViewController) return;
+        await controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
+      },
+      onNavigationFailure: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('页面导航失败，地址已恢复'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+    );
   }
 
   /// Clamps the floating panel offset so the panel's header stays within the
@@ -436,6 +584,11 @@ class _BrowserPageState extends State<BrowserPage> {
 
   @override
   Widget build(BuildContext context) {
+    final testBodyBuilder = widget.testBodyBuilder;
+    if (testBodyBuilder != null) {
+      return testBodyBuilder(context, _onConfirmCapture);
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -481,13 +634,12 @@ class _BrowserPageState extends State<BrowserPage> {
               // --- WebView + Loading ---
               Column(
                 children: [
-                  if (_isLoading && _progress < 1.0)
-                    LinearProgressIndicator(value: _progress),
+                  if (_isLoading) LinearProgressIndicator(value: _progress),
                   Expanded(
                     child: InAppWebView(
                       // The initial page is loaded explicitly in onWebViewCreated
-                      // AFTER persisted cookies are restored, so the first request
-                      // carries them (restore no-ops when retention is disabled).
+                      // after the native cookie store is prepared for the selected
+                      // retention mode.
                       initialUrlRequest: null,
                       initialSettings:
                           _buildSettings(isDesktopMode: _isDesktopMode),
@@ -513,20 +665,20 @@ class _BrowserPageState extends State<BrowserPage> {
                               '[BrowserPage] JS handler bridge unavailable: $e');
                         }
 
-                        // Restore persisted cookies before the first page load.
-                        // A restore failure must not block the initial
-                        // navigation (restore itself already no-ops when
-                        // retention is disabled).
+                        // Clear stale native cookies when retention is disabled,
+                        // or restore persisted cookies when it is enabled, before
+                        // the first page load. If native cleanup fails, skip the
+                        // first navigation rather than sending stale cookies.
                         try {
-                          await _restoreCookies();
-                        } catch (e) {
-                          debugPrint('[BrowserPage] cookie restore failed: $e');
-                        }
-                        if (!mounted) return;
-                        try {
-                          await controller.loadUrl(
-                            urlRequest:
-                                URLRequest(url: WebUri(widget.initialUrl)),
+                          await navigateBrowserPageAfterCookiePreparation(
+                            prepareCookies: _ensureCookieStorePrepared,
+                            loadUrl: () async {
+                              if (!mounted) return;
+                              await controller.loadUrl(
+                                urlRequest:
+                                    URLRequest(url: WebUri(widget.initialUrl)),
+                              );
+                            },
                           );
                         } catch (e) {
                           debugPrint('[BrowserPage] initial load failed: $e');
@@ -534,6 +686,11 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       onLoadStart: (controller, url) {
                         final urlString = url.toString();
+                        _cancelPendingMainFrameError();
+                        // Record the requested host before a redirect replaces
+                        // it with the final URL reported by onLoadStop.
+                        noteBrowserPageNavigationUrl(urlString);
+                        _activeNavigationUrl = urlString;
                         setState(() {
                           _isLoading = true;
                           _progress = 0;
@@ -546,11 +703,12 @@ class _BrowserPageState extends State<BrowserPage> {
                         _injectCatCatchHook(urlString);
                       },
                       onLoadStop: (controller, url) {
+                        _cancelPendingMainFrameError();
                         setState(() => _isLoading = false);
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
                         // even on platforms without CookieManager.getAllCookies.
-                        BrowserCookieService.noteVisitedUrl(url.toString());
+                        noteBrowserPageNavigationUrl(url.toString());
                         _injectScripts();
                         // Re-inject cat-catch hook if somehow missed or if an
                         // earlier injection was for a previous page
@@ -577,8 +735,29 @@ class _BrowserPageState extends State<BrowserPage> {
 })();
 ''');
                       },
+                      onReceivedError: (controller, request, error) {
+                        _handleMainFrameError(request);
+                      },
+                      onReceivedHttpError: (controller, request, response) {
+                        // HTTP error responses can still load a body; progress
+                        // is completed by onLoadStop.
+                      },
+                      shouldOverrideUrlLoading: (controller, action) async {
+                        if (action.isForMainFrame) {
+                          _cancelPendingMainFrameError();
+                          _activeNavigationUrl = trackBrowserPageRedirectUrl(
+                            action.request.url?.toString(),
+                          );
+                        }
+                        return NavigationActionPolicy.ALLOW;
+                      },
                       onProgressChanged: (controller, progress) {
-                        setState(() => _progress = progress / 100.0);
+                        final nextProgress = progress / 100.0;
+                        if (nextProgress > _progress &&
+                            _pendingMainFrameErrorUrl != null) {
+                          _scheduleMainFrameErrorTimeout();
+                        }
+                        setState(() => _progress = nextProgress);
                       },
                     ),
                   ),
