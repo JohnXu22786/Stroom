@@ -203,6 +203,9 @@ void main() {
         final restored = TaskFlowExecutionNotifier();
         try {
           expect(await restored.restoreFromPersistence(), isTrue);
+          final restoredIds = restored.executions.map((e) => e.id).toList()
+            ..sort();
+          expect(restoredIds, fails ? ['removed', 'survivor'] : ['survivor']);
           expect(restored.execution(removed.id) != null, fails);
           final savedSurvivor = restored.execution(survivor.id)!;
           expect(savedSurvivor.status, FlowExecutionStatus.paused);
