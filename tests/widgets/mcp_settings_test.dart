@@ -156,10 +156,11 @@ void main() {
         await _openCustomMcpConfig(
           tester,
           headers: {
+            'X-Mode': 'keep-this-header',
             'Authorization': 'Bearer sk-old',
-            'X-Mode': 'on',
           },
           env: {
+            'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'sk-old',
             'PATH': '/custom/bin',
           },
@@ -185,11 +186,18 @@ void main() {
         expect(typeConfig['apiKey'], 'sk-new');
         expect(
           typeConfig['headers'],
-          {'Authorization': 'Bearer sk-new', 'X-Mode': 'on'},
+          {
+            'X-Mode': 'keep-this-header',
+            'Authorization': 'Bearer sk-new',
+          },
         );
         expect(
           typeConfig['env'],
-          {'CUSTOM_API_KEY': 'sk-new', 'PATH': '/custom/bin'},
+          {
+            'CUSTOM_SETTING': 'keep-this-value',
+            'CUSTOM_API_KEY': 'sk-new',
+            'PATH': '/custom/bin',
+          },
         );
         expect(find.text('••••••••'), findsOneWidget);
 
@@ -214,8 +222,8 @@ void main() {
         await _openCustomMcpConfig(
           tester,
           headers: {
+            'X-Mode': 'keep-this-header',
             'Authorization': 'Bearer sk-header',
-            'X-Mode': 'on',
           },
         );
 
@@ -240,7 +248,7 @@ void main() {
         final model =
             (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(typeConfig['headers'], {'X-Mode': 'on'});
+        expect(typeConfig['headers'], {'X-Mode': 'keep-this-header'});
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),
@@ -271,6 +279,7 @@ void main() {
           tester,
           stdio: true,
           env: {
+            'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'sk-env',
             'PATH': '/custom/bin',
           },
@@ -297,7 +306,13 @@ void main() {
         final model =
             (config['models'] as List).cast<Map<String, dynamic>>().first;
         final typeConfig = model['typeConfig'] as Map<String, dynamic>;
-        expect(typeConfig['env'], {'PATH': '/custom/bin'});
+        expect(
+          typeConfig['env'],
+          {
+            'CUSTOM_SETTING': 'keep-this-value',
+            'PATH': '/custom/bin',
+          },
+        );
         expect(
           find.descendant(
             of: _readOnlyApiKeyFinder(),

@@ -136,13 +136,44 @@ class _McpServerConfigDialogState
   /// Placeholders ('Bearer ' 前缀等) are treated as unset so the field is
   /// never auto-filled with a fake key.
   String _extractApiKeyFromEnvOrHeaders(McpServerConfig config) {
-    final typeConfig = <String, dynamic>{
-      if (config.apiKey != null && config.apiKey!.isNotEmpty)
-        'apiKey': config.apiKey!,
-      if (config.env.isNotEmpty) 'env': config.env,
-      if (config.headers.isNotEmpty) 'headers': config.headers,
-    };
-    return McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
+    final explicitApiKey = McpServerConfig.extractApiKeyFromTypeConfig({
+      if (config.apiKey != null) 'apiKey': config.apiKey,
+    });
+    if (explicitApiKey.isNotEmpty) return explicitApiKey;
+
+    for (final entry in config.headers.entries) {
+      if (!_isCredentialFieldName(entry.key) &&
+          !entry.value.trim().startsWith('Bearer ')) {
+        continue;
+      }
+      final apiKey = McpServerConfig.extractApiKeyFromTypeConfig({
+        'headers': {entry.key: entry.value},
+      });
+      if (apiKey.isNotEmpty) return apiKey;
+    }
+
+    for (final entry in config.env.entries) {
+      if (!_isCredentialFieldName(entry.key) &&
+          !entry.value.trim().startsWith('Bearer ')) {
+        continue;
+      }
+      final apiKey = McpServerConfig.extractApiKeyFromTypeConfig({
+        'env': {entry.key: entry.value},
+      });
+      if (apiKey.isNotEmpty) return apiKey;
+    }
+    return '';
+  }
+
+  bool _isCredentialFieldName(String name) {
+    final normalizedName = name.toLowerCase().replaceAll(
+          RegExp(r'[^a-z0-9]'),
+          '',
+        );
+    return normalizedName.contains('auth') ||
+        normalizedName.contains('key') ||
+        normalizedName.contains('token') ||
+        normalizedName.contains('secret');
   }
 
   void _syncExistingApiKey(Map<String, String> values, String? newApiKey) {
@@ -151,6 +182,7 @@ class _McpServerConfigDialogState
     for (final entry in values.entries.toList()) {
       final value = entry.value.trim();
       final hasBearerPrefix = value.startsWith('Bearer ');
+      if (!_isCredentialFieldName(entry.key) && !hasBearerPrefix) continue;
       final bearerValue = hasBearerPrefix ? value.substring(7).trim() : null;
       if (value != _originalApiKey && bearerValue != _originalApiKey) continue;
 
@@ -373,8 +405,7 @@ class _McpServerConfigDialogState
     if (description.isNotEmpty) {
       typeConfigMap['description'] = description;
     }
-    final savedApiKey =
-        McpServerConfig.extractApiKeyFromTypeConfig(typeConfigMap);
+    final savedApiKey = _extractApiKeyFromEnvOrHeaders(serverConfig);
 
     // Store in ProviderConfigItem with typeConfig in models[0]
     final modelConfig = ModelConfig(
