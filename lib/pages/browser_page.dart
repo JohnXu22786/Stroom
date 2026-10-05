@@ -12,6 +12,7 @@ import '../catcatch/widgets/draggable_floating_panel.dart';
 import '../services/browser_cookie_service.dart';
 
 const _scriptsKey = 'browser_user_scripts';
+const _ambiguousMainFrameErrorTimeout = Duration(seconds: 5);
 
 /// Desktop user agent string for desktop-mode browsing.
 const _desktopUserAgent =
@@ -288,6 +289,8 @@ class _BrowserPageState extends State<BrowserPage> {
   final _urlController = TextEditingController();
   bool _isLoading = false;
   double _progress = 0;
+  Timer? _mainFrameErrorTimer;
+  String? _pendingMainFrameErrorUrl;
   List<UserScript> _scripts = [];
 
   /// Whether to use desktop user agent.
@@ -371,6 +374,7 @@ class _BrowserPageState extends State<BrowserPage> {
 
   @override
   void dispose() {
+    _cancelPendingMainFrameError();
     _urlController.dispose();
 
     // Queue the final preference decision after any in-flight toggle.
@@ -495,12 +499,45 @@ class _BrowserPageState extends State<BrowserPage> {
     });
   }
 
-  void _stopLoadingForMainFrameError(WebResourceRequest request) {
+  void _handleMainFrameError(WebResourceRequest request) {
+    final requestUrl = request.url.toString();
     if (request.isForMainFrame != true ||
-        request.url.toString() != _activeNavigationUrl) {
+        !_isLoading ||
+        requestUrl != _activeNavigationUrl) {
       return;
     }
-    setState(() => _isLoading = false);
+
+    // The WebView error callback has no navigation ID. A matching same-URL
+    // error may belong to an older load, so wait for a quiet period before
+    // treating it as the active load's failure. Repeated errors alone do not
+    // extend the deadline; only observed progress does.
+    if (_pendingMainFrameErrorUrl == requestUrl) return;
+    _pendingMainFrameErrorUrl = requestUrl;
+    _scheduleMainFrameErrorTimeout();
+  }
+
+  void _scheduleMainFrameErrorTimeout() {
+    final requestUrl = _pendingMainFrameErrorUrl;
+    if (requestUrl == null) return;
+
+    _mainFrameErrorTimer?.cancel();
+    _mainFrameErrorTimer = Timer(_ambiguousMainFrameErrorTimeout, () {
+      _mainFrameErrorTimer = null;
+      if (!mounted ||
+          !_isLoading ||
+          _pendingMainFrameErrorUrl != requestUrl ||
+          _activeNavigationUrl != requestUrl) {
+        return;
+      }
+      _pendingMainFrameErrorUrl = null;
+      setState(() => _isLoading = false);
+    });
+  }
+
+  void _cancelPendingMainFrameError() {
+    _mainFrameErrorTimer?.cancel();
+    _mainFrameErrorTimer = null;
+    _pendingMainFrameErrorUrl = null;
   }
 
   Future<void> _goToUrl(String url) async {
@@ -649,6 +686,7 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       onLoadStart: (controller, url) {
                         final urlString = url.toString();
+                        _cancelPendingMainFrameError();
                         // Record the requested host before a redirect replaces
                         // it with the final URL reported by onLoadStop.
                         noteBrowserPageNavigationUrl(urlString);
@@ -665,6 +703,7 @@ class _BrowserPageState extends State<BrowserPage> {
                         _injectCatCatchHook(urlString);
                       },
                       onLoadStop: (controller, url) {
+                        _cancelPendingMainFrameError();
                         setState(() => _isLoading = false);
                         _currentUrl = url.toString();
                         // Track the host so cookies can be persisted/displayed
@@ -697,7 +736,7 @@ class _BrowserPageState extends State<BrowserPage> {
 ''');
                       },
                       onReceivedError: (controller, request, error) {
-                        _stopLoadingForMainFrameError(request);
+                        _handleMainFrameError(request);
                       },
                       onReceivedHttpError: (controller, request, response) {
                         // HTTP error responses can still load a body; progress
@@ -705,6 +744,7 @@ class _BrowserPageState extends State<BrowserPage> {
                       },
                       shouldOverrideUrlLoading: (controller, action) async {
                         if (action.isForMainFrame) {
+                          _cancelPendingMainFrameError();
                           _activeNavigationUrl = trackBrowserPageRedirectUrl(
                             action.request.url?.toString(),
                           );
@@ -712,7 +752,12 @@ class _BrowserPageState extends State<BrowserPage> {
                         return NavigationActionPolicy.ALLOW;
                       },
                       onProgressChanged: (controller, progress) {
-                        setState(() => _progress = progress / 100.0);
+                        final nextProgress = progress / 100.0;
+                        if (nextProgress > _progress &&
+                            _pendingMainFrameErrorUrl != null) {
+                          _scheduleMainFrameErrorTimeout();
+                        }
+                        setState(() => _progress = nextProgress);
                       },
                     ),
                   ),
