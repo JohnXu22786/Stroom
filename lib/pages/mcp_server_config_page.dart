@@ -177,17 +177,14 @@ class _McpServerConfigDialogState
         .toLowerCase()
         .split(RegExp(r'[^a-z0-9]+'))
         .where((part) => part.isNotEmpty);
-    const apiKeyParts = {'key', 'token', 'secret'};
     final hasToken = nameParts.contains('token');
     if (hasToken && nameParts.contains('refresh')) return false;
 
     return nameParts.contains('authorization') ||
         nameParts.contains('apikey') ||
-        (nameParts.contains('api') && nameParts.any(apiKeyParts.contains)) ||
-        (hasToken &&
-            (nameParts.contains('access') ||
-                nameParts.contains('auth') ||
-                nameParts.contains('authentication')));
+        (nameParts.contains('api') &&
+            (nameParts.contains('key') || nameParts.contains('secret'))) ||
+        hasToken;
   }
 
   String _apiKeyValueForSource(

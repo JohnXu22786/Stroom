@@ -482,6 +482,7 @@ void main() {
           },
           env: {
             'REFRESH_TOKEN': 'sk-123',
+            'MCP_TOKEN': 'stale-token',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'stale-env-key',
             'PATH': '/custom/bin',
