@@ -1243,7 +1243,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.photo_library,
-                    title: '从设备相册选择',
+                    title: '从系统相册选择',
                     subtitle: '浏览并选择设备中的图片',
                     color: Colors.blue,
                     onTap: () {

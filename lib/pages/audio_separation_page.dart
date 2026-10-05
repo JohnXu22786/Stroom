@@ -396,7 +396,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.file_present,
-                    title: '从设备相册选择',
+                    title: '从系统相册选择',
                     subtitle: '从设备存储中选择视频文件',
                     color: Colors.blue,
                     onTap: () {
