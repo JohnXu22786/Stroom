@@ -14,7 +14,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     showChatAttachmentPanel(
       context: context,
       onPickFromCamera: _pickFromCamera,
-      // 设备相册直接打开 WeChat 风格选择器（不再弹出中间选择对话框）
+      // 设备相册直接通过 image_picker 打开（不再弹出中间选择对话框）
       onPickFromGallery: _pickFromGallery,
       onPickFromFilePicker: _pickFromFilePicker,
       onPickFromAppFiles: _pickFromAppFiles,
@@ -65,13 +65,12 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// 从设备相册选取图片
   ///
   /// 支持多选图片，自动适配不同平台：
-  /// - Android/iOS: WeChat 风格应用内相册
-  /// - Web (桌面/移动): 浏览器文件选择器（image/*）
-  /// - 桌面原生: 系统文件对话框（定位到系统"图片"目录）
+  /// - Android/iOS/移动 Web: image_picker 平台选择器
+  /// - 桌面原生/桌面 Web: file_picker 文件选择器
   /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
     try {
-      final files = await pickGalleryMedia(context, GalleryMediaKind.image);
+      final files = await pickGalleryMedia(GalleryMediaKind.image);
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();

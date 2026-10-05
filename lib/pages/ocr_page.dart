@@ -1295,10 +1295,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
-      // 移动端直接打开 WeChat 风格图片选择器，
+      // 移动端直接通过 image_picker 打开系统相册，
       // 桌面端打开文件选择器并定位到系统"图片"目录
       final files = await pickGalleryMedia(
-        context,
         GalleryMediaKind.image,
         imageQuality: 90,
         maxWidth: 2048,

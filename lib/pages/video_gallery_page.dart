@@ -260,10 +260,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      // 移动端直接打开 WeChat 风格视频选择器，
+      // 移动端直接通过 image_picker 打开系统视频选择器，
       // 桌面端打开文件选择器并定位到系统"视频"目录
       final pickedFiles = await pickGalleryMedia(
-        context,
         GalleryMediaKind.video,
       );
       if (pickedFiles.isEmpty) {
