@@ -36,7 +36,9 @@ void main() {
       ]);
     }))));
     await tester.pump();
-    await tester.tap(find.text('直线与多边形'));
+    final lineAndPolygonCategory = find.text('直线与多边形');
+    await tester.ensureVisible(lineAndPolygonCategory);
+    await tester.tap(lineAndPolygonCategory);
     await tester.pumpAndSettle();
     final regularPolygonTool = find.text('正多边形');
     await tester.ensureVisible(regularPolygonTool);

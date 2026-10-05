@@ -805,7 +805,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       if (!screen.x.isFinite || !screen.y.isFinite || !screen.z.isFinite) {
         continue;
       }
-      if (_projectionType == ProjectionType.perspective &&
+      if (object.isTextAnnotation &&
+          _projectionType == ProjectionType.perspective &&
           (screen.z < projection.near || screen.z > projection.far)) {
         continue;
       }
@@ -958,10 +959,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       return startDepth + (endDepth - startDepth) * fraction;
     }
 
-    bool isVisibleDepth(double depth) =>
+    bool isVisibleDepth(Object3D object, double depth) =>
         depth.isFinite &&
         (projection.type == ProjectionType.parallel ||
-            (depth >= projection.near && depth <= projection.far));
+            (object.type == Object3DType.point && !object.isTextAnnotation
+                ? depth > 0
+                : depth >= projection.near && depth <= projection.far));
 
     bool insideTriangle(Offset point, Offset a, Offset b, Offset c) {
       final d1 =
@@ -1226,7 +1229,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           nearestDistance <= _pointMarkerRadius &&
           (hitDepth - nearestDepth).abs() <= _hitDepthTieTolerance;
       if (distance < 24 &&
-          isVisibleDepth(hitDepth) &&
+          isVisibleDepth(object, hitDepth) &&
           !nearestPointWinsMarkerOverlap &&
           (nearestIndex < 0 ||
               distance < nearestDistance - _hitScreenDistanceTieTolerance ||
