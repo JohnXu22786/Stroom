@@ -117,6 +117,37 @@ void main() {
   });
 
   group('Startup JSON batch parsing on Web', () {
+    test(
+      'parses a batch once and preserves semantic findings in the worker',
+      () async {
+        _mockStartupValidationWorkerAsset();
+
+        final result =
+            await StartupCheckService.validateJsonBatchAndDataFormats(
+          [
+            '[{"id":"","type":"llm","name":"provider"}]',
+            '[{"id":1,"messages":"not-a-list"}]',
+            '{not-valid-json',
+          ],
+          providerEntriesIndex: 0,
+          conversationsIndex: 1,
+        );
+
+        expect(result.parseErrors[0], isNull);
+        expect(result.parseErrors[1], isNull);
+        expect(result.parseErrors[2], isNotNull);
+        expect(
+          result.formatIssues.map((issue) => issue.message),
+          containsAll([
+            'provider_entries[0]: id 字段缺失或为空',
+            'conversations[0]: id 字段缺失',
+            'conversations[0]: messages 字段不是合法列表',
+          ]),
+        );
+      },
+      skip: !kIsWeb,
+    );
+
     test('retries bundled worker and preserves parse findings', () async {
       final previousPrimaryWorker =
           json_parser.debugPrimaryValidationWorkerForTesting;

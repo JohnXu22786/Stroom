@@ -43,6 +43,17 @@ class StartupIssue {
   });
 }
 
+/// The result of checking JSON syntax and data-format semantics together.
+class StartupJsonBatchResult {
+  final List<String?> parseErrors;
+  final List<StartupIssue> formatIssues;
+
+  const StartupJsonBatchResult({
+    required this.parseErrors,
+    required this.formatIssues,
+  });
+}
+
 @visibleForTesting
 Future<List<StartupIssue>> Function(List<StartupIssue> Function() computation)?
     debugStartupIsolateRunnerForTesting;
@@ -180,10 +191,17 @@ class StartupCheckService {
   ///
   /// CPU 密集的 JSON 解析工作会在后台 Isolate 中执行，
   /// 避免阻塞主 UI 线程导致页面顿住。测试环境下回退到同步执行。
-  static Future<List<StartupIssue>> validateDataFormats() async {
+  static Future<List<StartupIssue>> validateDataFormats({
+    bool validateProviderEntries = true,
+    bool validateConversations = true,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    final providerEntriesJson = prefs.getString('provider_entries');
-    final conversationsJson = prefs.getString('conversations');
+    final providerEntriesJson = validateProviderEntries
+        ? prefs.getString('provider_entries')
+        : null;
+    final conversationsJson = validateConversations
+        ? prefs.getString('conversations')
+        : null;
 
     if (kIsWeb) {
       try {
@@ -223,6 +241,124 @@ class StartupCheckService {
     }
   }
 
+  /// Parses an integrity-check JSON batch once and validates the two
+  /// SharedPreferences payloads against the decoded values.
+  ///
+  /// The Task 0 integrity gate uses this to retain syntax and semantic
+  /// findings without parsing `provider_entries` and `conversations` twice.
+  static Future<StartupJsonBatchResult> validateJsonBatchAndDataFormats(
+    List<String> contents, {
+    int? providerEntriesIndex,
+    int? conversationsIndex,
+  }) async {
+    if (kIsWeb) {
+      final result = await json_parser.validateJsonBatchAndDataFormatsWeb(
+        contents,
+        providerEntriesIndex: providerEntriesIndex,
+        conversationsIndex: conversationsIndex,
+      );
+      return _startupJsonBatchResultFromMap(result);
+    }
+
+    if (_inTestMode()) {
+      return _startupJsonBatchResultFromMap(
+        _validateJsonBatchAndDataFormatsSync(
+          contents,
+          providerEntriesIndex,
+          conversationsIndex,
+        ),
+      );
+    }
+
+    try {
+      final result = await Isolate.run(
+        () => _validateJsonBatchAndDataFormatsSync(
+          contents,
+          providerEntriesIndex,
+          conversationsIndex,
+        ),
+      );
+      return _startupJsonBatchResultFromMap(result);
+    } catch (e) {
+      debugPrint('[StartupCheckService] JSON batch validation failed: $e');
+      throw StartupDataValidationUnavailable.isolate(e);
+    }
+  }
+
+  static StartupJsonBatchResult _startupJsonBatchResultFromMap(
+    Map<String, Object?> result,
+  ) {
+    return StartupJsonBatchResult(
+      parseErrors: (result['parseErrors']! as List).cast<String?>(),
+      formatIssues: (result['issues']! as List).map((rawIssue) {
+        final issue = Map<String, String?>.from(rawIssue as Map);
+        return StartupIssue(
+          message: issue['message']!,
+          severity: issue['severity'] == 'error'
+              ? StartupIssueSeverity.error
+              : StartupIssueSeverity.warning,
+          dataKey: issue['dataKey'],
+        );
+      }).toList(),
+    );
+  }
+
+  @pragma('vm:entry-point')
+  static Map<String, Object?> _validateJsonBatchAndDataFormatsSync(
+    List<String> contents,
+    int? providerEntriesIndex,
+    int? conversationsIndex,
+  ) {
+    final parseErrors = <String?>[];
+    Object? providerEntries;
+    var providerEntriesParseFailed = false;
+    Object? conversations;
+    var conversationsParseFailed = false;
+    for (var index = 0; index < contents.length; index++) {
+      try {
+        final decoded = jsonDecode(contents[index]);
+        if (index == providerEntriesIndex) providerEntries = decoded;
+        if (index == conversationsIndex) conversations = decoded;
+        parseErrors.add(null);
+      } catch (e) {
+        parseErrors.add(e.toString());
+        if (index == providerEntriesIndex) {
+          providerEntriesParseFailed = true;
+        }
+        if (index == conversationsIndex) conversationsParseFailed = true;
+      }
+    }
+
+    final issues = <StartupIssue>[];
+    if (providerEntriesIndex != null) {
+      _validateProviderEntriesParsed(
+        providerEntries,
+        providerEntriesParseFailed,
+        issues,
+      );
+    }
+    if (conversationsIndex != null) {
+      _validateConversationsParsed(
+        conversations,
+        conversationsParseFailed,
+        issues,
+      );
+    }
+
+    return {
+      'parseErrors': parseErrors,
+      'issues': issues
+          .map((issue) => _makeIssueMap(
+                issue.message,
+                issue.severity == StartupIssueSeverity.error
+                    ? 'error'
+                    : 'warning',
+                issue.dataKey,
+              ))
+          .toList(),
+    };
+  }
+
   /// 数据格式验证的同步实现（可在 Isolate 中执行或测试环境使用）。
   @pragma('vm:entry-point')
   static List<StartupIssue> _validateDataFormatsSync(
@@ -244,10 +380,23 @@ class StartupCheckService {
   ) {
     if (json == null || json.isEmpty) return;
 
-    List<dynamic> list;
+    Object? decoded;
     try {
-      list = jsonDecode(json) as List<dynamic>;
+      decoded = jsonDecode(json);
     } catch (_) {
+      _validateProviderEntriesParsed(null, true, issues);
+      return;
+    }
+
+    _validateProviderEntriesParsed(decoded, false, issues);
+  }
+
+  static void _validateProviderEntriesParsed(
+    Object? decoded,
+    bool parseFailed,
+    List<StartupIssue> issues,
+  ) {
+    if (parseFailed || decoded is! List) {
       issues.add(
         const StartupIssue(
           message: 'provider_entries 数据格式错误：不是合法的 JSON 数组',
@@ -257,6 +406,7 @@ class StartupCheckService {
       );
       return;
     }
+    final list = decoded;
 
     for (int i = 0; i < list.length; i++) {
       // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退
@@ -388,10 +538,23 @@ class StartupCheckService {
   ) {
     if (json == null || json.isEmpty) return;
 
-    List<dynamic> list;
+    Object? decoded;
     try {
-      list = jsonDecode(json) as List<dynamic>;
+      decoded = jsonDecode(json);
     } catch (_) {
+      _validateConversationsParsed(null, true, issues);
+      return;
+    }
+
+    _validateConversationsParsed(decoded, false, issues);
+  }
+
+  static void _validateConversationsParsed(
+    Object? decoded,
+    bool parseFailed,
+    List<StartupIssue> issues,
+  ) {
+    if (parseFailed || decoded is! List) {
       issues.add(
         const StartupIssue(
           message: 'conversations 数据格式错误：不是合法的 JSON 数组',
@@ -401,6 +564,7 @@ class StartupCheckService {
       );
       return;
     }
+    final list = decoded;
 
     for (int i = 0; i < list.length; i++) {
       // 兜底：跳过非 Map 条目，避免 `as Map` 类型转换闪退

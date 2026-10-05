@@ -40,6 +40,63 @@ Future<List<String?>> parseJsonBatch(List<String> contents) async {
   }
 }
 
+Future<Map<String, Object?>> validateJsonBatchAndDataFormatsWeb(
+  List<String> contents, {
+  int? providerEntriesIndex,
+  int? conversationsIndex,
+}) async {
+  final message = [
+    'validateJsonBatchAndDataFormats',
+    contents,
+    providerEntriesIndex,
+    conversationsIndex,
+  ];
+  try {
+    return _decodeJsonBatchAndValidation(
+      await _runPrimaryValidationWorker(message),
+      contents.length,
+    );
+  } catch (primaryError) {
+    debugPrint('[DataIntegrityChecker] Combined JSON worker failed; '
+        'retrying bundled worker: $primaryError');
+    try {
+      final testWorker = debugBundledValidationWorkerForTesting;
+      final response = testWorker == null
+          ? await _runBundledValidationWorker(message)
+          : await testWorker(message);
+      return _decodeJsonBatchAndValidation(response, contents.length);
+    } catch (bundledWorkerError) {
+      throw StartupDataValidationUnavailable(
+        primaryError,
+        bundledWorkerError,
+      );
+    }
+  }
+}
+
+Map<String, Object?> _decodeJsonBatchAndValidation(
+  String response,
+  int expectedLength,
+) {
+  final decoded = jsonDecode(response);
+  if (decoded is! Map) throw StateError('Invalid JSON worker response');
+  final rawParseErrors = decoded['parseErrors'];
+  final rawIssues = decoded['issues'];
+  if (rawParseErrors is! List ||
+      rawParseErrors.length != expectedLength ||
+      rawParseErrors.any((value) => value != null && value is! String) ||
+      rawIssues is! List ||
+      rawIssues.any((issue) => !_isValidationIssue(issue))) {
+    throw StateError('Invalid JSON worker response');
+  }
+  return {
+    'parseErrors': rawParseErrors.cast<String?>(),
+    'issues': rawIssues
+        .map((issue) => Map<String, Object?>.from(issue as Map))
+        .toList(),
+  };
+}
+
 List<String?> _decodeParseErrors(String response, int expectedLength) {
   final decoded = jsonDecode(response);
   if (decoded is! List ||
