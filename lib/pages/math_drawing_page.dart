@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/math_3d_object.dart';
+import '../models/math_3d_tool.dart';
 import '../models/math_drawing_state.dart';
 import '../models/math_expression.dart' show MathExpression;
 import '../models/math_expression_3d.dart';
@@ -45,6 +46,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
 
   // 3D construction state
   ConstructionTool _current3DTool = ConstructionTool.move;
+  int _polygonSides = 6;
   String _toolInstruction = '';
 
   /// All formula rows (each is equal).
@@ -767,16 +769,22 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         // Construction toolbar
         Math3DToolbar(
           activeTool: _current3DTool,
+          polygonSides: _polygonSides,
+          onPolygonSidesChanged: (sides) =>
+              setState(() => _polygonSides = sides),
           instruction: _current3DTool != ConstructionTool.move
               ? (_canvas3DKey.currentState?.constructionInstruction ??
                   _toolInstruction)
               : null,
           onToolSelected: (tool) {
+            if (ToolInfo.all[tool]!.behavior == ToolBehavior.command) {
+              _canvas3DKey.currentState?.performToolCommand(tool);
+              return;
+            }
             setState(() {
               _current3DTool = tool;
               _toolInstruction = '';
             });
-            _canvas3DKey.currentState?.setTool(tool);
           },
         ),
         // 3D canvas
@@ -793,6 +801,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 child: MathCanvas3D(
                   key: _canvas3DKey,
                   currentTool: _current3DTool,
+                  polygonSides: _polygonSides,
                   onReady: () {},
                   onViewportChange: () {},
                   onObjectCreated: (obj) {
