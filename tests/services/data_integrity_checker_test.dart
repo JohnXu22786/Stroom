@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/data_integrity_checker.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
+import 'package:stroom/startup/startup_check_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +60,50 @@ void main() {
           .toList();
       expect(hit, isNotEmpty);
     });
+
+    test(
+      'checks persisted JSON syntax and semantics in one batch',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'provider_entries': '[{"id":"","type":"llm","name":"p"}]',
+          'conversations': '[{"id":1,"messages":"not-a-list"}]',
+          'data_format_versions': 1,
+        });
+        await File(p.join(appDir, 'browser_cookies.json'))
+            .writeAsString('{not-valid-json');
+        var separateSemanticValidationStarted = false;
+        final previousRunner = debugStartupIsolateRunnerForTesting;
+        debugStartupIsolateRunnerForTesting = (computation) async {
+          separateSemanticValidationStarted = true;
+          return computation();
+        };
+
+        try {
+          final report = await DataIntegrityChecker.checkCurrentData();
+          final messages =
+              report.corruptions.map((issue) => issue.message).toList();
+
+          expect(
+            messages,
+            contains('provider_entries[0]: id 字段缺失或为空'),
+          );
+          expect(messages, contains('conversations[0]: id 字段缺失'));
+          expect(
+            messages,
+            contains('conversations[0]: messages 字段不是合法列表'),
+          );
+          expect(messages.join('\n'), contains('browser_cookies.json 无法解析'));
+          expect(
+            separateSemanticValidationStarted,
+            isFalse,
+            reason:
+                'semantic validation should consume the JSON batch parse result',
+          );
+        } finally {
+          debugStartupIsolateRunnerForTesting = previousRunner;
+        }
+      },
+    );
 
     test(
         'corrupt provider_entries structure is reported (as Map crash '

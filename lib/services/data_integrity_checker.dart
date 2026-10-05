@@ -7,7 +7,6 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
-import 'data_integrity_json_parser.dart' as json_parser;
 import 'manifest_database.dart';
 import 'startup_data_validation_unavailable.dart';
 import 'storage_service.dart';
@@ -48,12 +47,14 @@ class _JsonIntegrityCheck {
   final String messagePrefix;
   final String? content;
   final String? readError;
+  final String? prefsKey;
 
   const _JsonIntegrityCheck({
     required this.part,
     required this.messagePrefix,
     this.content,
     this.readError,
+    this.prefsKey,
   });
 
   DataIntegrityIssue issue(String error) => DataIntegrityIssue(
@@ -63,13 +64,20 @@ class _JsonIntegrityCheck {
       );
 }
 
+class _JsonChecksReadResult {
+  final List<_JsonIntegrityCheck> checks;
+  final Set<String> prefsKeysReadSuccessfully;
+
+  const _JsonChecksReadResult(this.checks, this.prefsKeysReadSuccessfully);
+}
+
 /// 启动数据完整性校验器。
 ///
 /// 四层检查：
 /// 1. 物理层：SQLite `PRAGMA integrity_check`（原生平台）、JSON 可解析性
 /// 2. 格式层：版本记录 `data_format_versions` 合法性（超前版本由
 ///    版本哨兵另行处理，这里只判"记录本身是否可解析"）
-/// 3. 语义层：复用 [StartupCheckService.validateDataFormats] 的
+/// 3. 语义层：复用 [StartupCheckService.validateJsonBatchAndDataFormats] 的
 ///    provider_entries / conversations 结构校验（防闪退检查）
 ///
 /// 语义层只查"必然正确"的硬性不变量，绝不查"记录数"等软指标，
@@ -93,50 +101,122 @@ class DataIntegrityChecker {
 
   /// 检查当前数据完整性。
   static Future<DataIntegrityReport> checkCurrentData() async {
-    final jsonChecks = await _readJsonChecks();
-    // 开始后台解析后继续执行剩余安全检查。SQLite 和语义检查仍全部完成，
-    // 且只有所有结果汇总后才会返回给调用方进行修复决策。
-    final jsonIssuesFuture = _checkJsonChecks(jsonChecks);
+    final jsonChecksRead = await _readJsonChecks();
+    final jsonChecks = jsonChecksRead.checks;
+    final jsonContents = [
+      for (final check in jsonChecks)
+        if (check.content != null) check.content!,
+    ];
+    final jsonValidationFuture =
+        StartupCheckService.validateJsonBatchAndDataFormats(
+      jsonContents,
+      providerEntriesIndex: jsonChecksRead.prefsKeysReadSuccessfully.contains(
+        'provider_entries',
+      )
+          ? _contentIndexForPrefsKey(jsonChecks, 'provider_entries')
+          : null,
+      conversationsIndex:
+          jsonChecksRead.prefsKeysReadSuccessfully.contains('conversations')
+              ? _contentIndexForPrefsKey(jsonChecks, 'conversations')
+              : null,
+    );
 
     final sqliteIssues = <DataIntegrityIssue>[];
     await _checkSqliteDatabases(sqliteIssues);
+    final jsonValidation = await jsonValidationFuture;
     final semanticIssues = <DataIntegrityIssue>[];
-    await _checkSemantics(semanticIssues);
+    for (final issue in jsonValidation.formatIssues) {
+      if (issue.severity != StartupIssueSeverity.error) continue;
+      semanticIssues.add(
+        DataIntegrityIssue(
+          part: 'chat',
+          message: issue.message,
+          isCorruption: true,
+        ),
+      );
+    }
+    final prefsKeysRead = jsonChecksRead.prefsKeysReadSuccessfully;
+    if (!prefsKeysRead.contains('provider_entries') ||
+        !prefsKeysRead.contains('conversations')) {
+      await _checkSemantics(
+        semanticIssues,
+        validateProviderEntries: !prefsKeysRead.contains('provider_entries'),
+        validateConversations: !prefsKeysRead.contains('conversations'),
+      );
+    }
 
     return DataIntegrityReport([
-      ...await jsonIssuesFuture,
+      ..._jsonIssues(jsonChecks, jsonValidation.parseErrors),
       ...sqliteIssues,
       ...semanticIssues,
     ]);
+  }
+
+  static int? _contentIndexForPrefsKey(
+    List<_JsonIntegrityCheck> checks,
+    String prefsKey,
+  ) {
+    var contentIndex = 0;
+    for (final check in checks) {
+      if (check.content == null) continue;
+      if (check.prefsKey == prefsKey) return contentIndex;
+      contentIndex++;
+    }
+    return null;
+  }
+
+  static List<DataIntegrityIssue> _jsonIssues(
+    List<_JsonIntegrityCheck> checks,
+    List<String?> parseErrors,
+  ) {
+    var parseIndex = 0;
+    final issues = <DataIntegrityIssue>[];
+    for (final check in checks) {
+      final error = check.readError ??
+          (check.content == null ? null : parseErrors[parseIndex++]);
+      if (error != null) issues.add(check.issue(error));
+    }
+    return issues;
   }
 
   // ================================================================
   // 1. prefs JSON 键解析
   // ================================================================
 
-  static Future<void> _readPrefsJsonKeys(
+  static Future<Set<String>> _readPrefsJsonKeys(
     List<_JsonIntegrityCheck> checks,
   ) async {
+    final keysReadSuccessfully = <String>{};
+    late final SharedPreferences prefs;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      for (final key in [
-        'conversations',
-        'provider_entries',
-        'data_format_versions',
-      ]) {
+      prefs = await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
+      return keysReadSuccessfully;
+    }
+
+    for (final key in [
+      'conversations',
+      'provider_entries',
+      'data_format_versions',
+    ]) {
+      try {
         final raw = prefs.getString(key);
+        keysReadSuccessfully.add(key);
         if (raw == null || raw.isEmpty) continue;
         checks.add(
           _JsonIntegrityCheck(
             part: key == 'data_format_versions' ? 'settings' : 'chat',
             messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
             content: raw,
+            prefsKey: key,
           ),
         );
+      } catch (e) {
+        debugPrint('[DataIntegrityChecker] prefs 键 $key 检查失败: $e');
       }
-    } catch (e) {
-      debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
     }
+    return keysReadSuccessfully;
   }
 
   // ================================================================
@@ -209,30 +289,12 @@ class DataIntegrityChecker {
     }
   }
 
-  static Future<List<_JsonIntegrityCheck>> _readJsonChecks() async {
+  static Future<_JsonChecksReadResult> _readJsonChecks() async {
     final checks = <_JsonIntegrityCheck>[];
-    await _readPrefsJsonKeys(checks);
+    final prefsKeysReadSuccessfully = await _readPrefsJsonKeys(checks);
     await _readTaskFiles(checks);
     await _readCookies(checks);
-    return checks;
-  }
-
-  static Future<List<DataIntegrityIssue>> _checkJsonChecks(
-    List<_JsonIntegrityCheck> checks,
-  ) async {
-    final contents = [
-      for (final check in checks)
-        if (check.content != null) check.content!,
-    ];
-    final parseErrors = await json_parser.parseJsonBatch(contents);
-    var parseIndex = 0;
-    final issues = <DataIntegrityIssue>[];
-    for (final check in checks) {
-      final error = check.readError ??
-          (check.content == null ? null : parseErrors[parseIndex++]);
-      if (error != null) issues.add(check.issue(error));
-    }
-    return issues;
+    return _JsonChecksReadResult(checks, prefsKeysReadSuccessfully);
   }
 
   // ================================================================
@@ -316,13 +378,16 @@ class DataIntegrityChecker {
     }
   }
 
-  // ================================================================
-  // 5. 语义层（复用现有防闪退结构校验）
-  // ================================================================
-
-  static Future<void> _checkSemantics(List<DataIntegrityIssue> issues) async {
+  static Future<void> _checkSemantics(
+    List<DataIntegrityIssue> issues, {
+    required bool validateProviderEntries,
+    required bool validateConversations,
+  }) async {
     try {
-      final startupIssues = await StartupCheckService.validateDataFormats();
+      final startupIssues = await StartupCheckService.validateDataFormats(
+        validateProviderEntries: validateProviderEntries,
+        validateConversations: validateConversations,
+      );
       for (final issue in startupIssues) {
         if (issue.severity == StartupIssueSeverity.error) {
           issues.add(

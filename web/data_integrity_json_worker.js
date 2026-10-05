@@ -1,5 +1,5 @@
 self.addEventListener('message', function (event) {
-  const [operation, first, second] = event.data;
+  const [operation, first, second, third] = event.data;
   let result;
   if (operation === 'parseJsonBatch') {
     result = first.map(function (content) {
@@ -12,6 +12,8 @@ self.addEventListener('message', function (event) {
     });
   } else if (operation === 'validateDataFormats') {
     result = validateDataFormats(first, second);
+  } else if (operation === 'validateJsonBatchAndDataFormats') {
+    result = validateJsonBatchAndDataFormats(first, second, third);
   } else if (operation === 'checkDataIntegrity') {
     result = checkDataIntegrity(first);
   } else {
@@ -25,6 +27,45 @@ function validateDataFormats(providerEntriesJson, conversationsJson) {
   validateProviderEntries(providerEntriesJson, issues);
   validateConversations(conversationsJson, issues);
   return issues;
+}
+
+function validateJsonBatchAndDataFormats(contents, providerEntriesIndex, conversationsIndex) {
+  const parseErrors = [];
+  let providerEntries;
+  let providerEntriesParseFailed = false;
+  let conversations;
+  let conversationsParseFailed = false;
+  contents.forEach(function (content, index) {
+    try {
+      const decoded = JSON.parse(content);
+      if (index === providerEntriesIndex) providerEntries = decoded;
+      if (index === conversationsIndex) conversations = decoded;
+      parseErrors.push(null);
+    } catch (error) {
+      parseErrors.push(String(error));
+      if (index === providerEntriesIndex) providerEntriesParseFailed = true;
+      if (index === conversationsIndex) conversationsParseFailed = true;
+    }
+  });
+  const issues = [];
+  if (providerEntriesIndex != null) {
+    validateProviderEntriesValue(
+      providerEntries,
+      providerEntriesParseFailed,
+      issues,
+    );
+  }
+  if (conversationsIndex != null) {
+    validateConversationsValue(
+      conversations,
+      conversationsParseFailed,
+      issues,
+    );
+  }
+  return {
+    parseErrors,
+    issues,
+  };
 }
 
 function checkDataIntegrity(providerEntriesJson) {
@@ -63,8 +104,15 @@ function validateProviderEntries(json, issues) {
   let list;
   try {
     list = JSON.parse(json);
-    if (!Array.isArray(list)) throw new Error();
   } catch (_) {
+    validateProviderEntriesValue(null, true, issues);
+    return;
+  }
+  validateProviderEntriesValue(list, false, issues);
+}
+
+function validateProviderEntriesValue(list, parseFailed, issues) {
+  if (parseFailed || !Array.isArray(list)) {
     issues.push(issue(
       'provider_entries 数据格式错误：不是合法的 JSON 数组',
       'error',
@@ -144,8 +192,15 @@ function validateConversations(json, issues) {
   let list;
   try {
     list = JSON.parse(json);
-    if (!Array.isArray(list)) throw new Error();
   } catch (_) {
+    validateConversationsValue(null, true, issues);
+    return;
+  }
+  validateConversationsValue(list, false, issues);
+}
+
+function validateConversationsValue(list, parseFailed, issues) {
+  if (parseFailed || !Array.isArray(list)) {
     issues.push(issue(
       'conversations 数据格式错误：不是合法的 JSON 数组',
       'error',
