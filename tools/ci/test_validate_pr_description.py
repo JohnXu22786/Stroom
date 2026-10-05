@@ -67,6 +67,16 @@ class ValidatePrDescriptionTest(unittest.TestCase):
             any("under the required template headings" in error for error in validate_pr_body(body))
         )
 
+    def test_rejects_unrecognized_headings_with_unvalidated_content(self):
+        body = VALID_BODY.replace(
+            "### Type of change",
+            "#### Notes\nTexte français avec TODO.\n\n### Type of change",
+        )
+
+        self.assertTrue(
+            any("unrecognized heading" in error.lower() for error in validate_pr_body(body))
+        )
+
     def test_does_not_accept_headings_inside_a_code_block(self):
         body = "```markdown\n" + VALID_BODY + "```\n"
 

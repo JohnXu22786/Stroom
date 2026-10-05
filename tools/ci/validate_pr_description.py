@@ -197,6 +197,13 @@ def validate_pr_body(body: str) -> list[str]:
         if heading is not None:
             heading_indices.setdefault(heading, []).append(index)
 
+    allowed_headings = set(REQUIRED_HEADINGS) | {OPTIONAL_HEADING}
+    for heading in heading_indices:
+        if heading not in allowed_headings:
+            errors.append(
+                f'Unrecognized heading: "{heading}". Use only headings from the PR template.'
+            )
+
     first_section_indices = heading_indices.get(REQUIRED_HEADINGS[0], [])
     if first_section_indices and any(
         line.strip() for line in lines[: first_section_indices[0]]
