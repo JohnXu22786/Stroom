@@ -12,6 +12,8 @@ self.addEventListener('message', function (event) {
     });
   } else if (operation === 'validateDataFormats') {
     result = validateDataFormats(first, second);
+  } else if (operation === 'checkDataIntegrity') {
+    result = checkDataIntegrity(first);
   } else {
     throw new Error('Unknown JSON worker operation');
   }
@@ -22,6 +24,37 @@ function validateDataFormats(providerEntriesJson, conversationsJson) {
   const issues = [];
   validateProviderEntries(providerEntriesJson, issues);
   validateConversations(conversationsJson, issues);
+  return issues;
+}
+
+function checkDataIntegrity(providerEntriesJson) {
+  if (providerEntriesJson == null || providerEntriesJson.length === 0) return [];
+
+  let list;
+  try {
+    list = JSON.parse(providerEntriesJson);
+    if (!Array.isArray(list)) return [];
+  } catch (_) {
+    return [];
+  }
+
+  const knownProviderTypes = ['llm', 'tts', 'ocr', 'asr', 'mcp', 'builtin'];
+  const issues = [];
+  for (let i = 0; i < list.length; i++) {
+    const entry = list[i];
+    if (!isRecord(entry)) continue;
+
+    const type = entry.type;
+    if (typeof type !== 'string' || type.length === 0) continue;
+    if (!knownProviderTypes.includes(type)) {
+      issues.push(issue(
+        `provider_entries[${i}]: 未知的供应商类型 "${type}"，` +
+          '应用可能无法正常使用该供应商',
+        'warning',
+        'provider_entries',
+      ));
+    }
+  }
   return issues;
 }
 
