@@ -16,18 +16,38 @@ Future<String> Function(List<Object?> message)?
 
 Future<List<String?>> parseJsonBatch(List<String> contents) async {
   if (contents.isEmpty) return const [];
+  final message = ['parseJsonBatch', contents];
   try {
-    final decoded = jsonDecode(await _runWorker(['parseJsonBatch', contents]));
-    if (decoded is! List ||
-        decoded.length != contents.length ||
-        decoded.any((value) => value != null && value is! String)) {
-      throw StateError('Invalid JSON worker response');
+    return _decodeParseErrors(
+      await _runPrimaryValidationWorker(message),
+      contents.length,
+    );
+  } catch (primaryError) {
+    debugPrint('[DataIntegrityChecker] JSON worker failed; '
+        'retrying bundled worker: $primaryError');
+    try {
+      final testWorker = debugBundledValidationWorkerForTesting;
+      final response = testWorker == null
+          ? await _runBundledValidationWorker(message)
+          : await testWorker(message);
+      return _decodeParseErrors(response, contents.length);
+    } catch (bundledWorkerError) {
+      throw StartupDataValidationUnavailable(
+        primaryError,
+        bundledWorkerError,
+      );
     }
-    return decoded.cast<String?>();
-  } catch (e) {
-    debugPrint('[DataIntegrityChecker] JSON Worker 不可用，回退同步解析: $e');
-    return contents.map(_parseJsonSync).toList();
   }
+}
+
+List<String?> _decodeParseErrors(String response, int expectedLength) {
+  final decoded = jsonDecode(response);
+  if (decoded is! List ||
+      decoded.length != expectedLength ||
+      decoded.any((value) => value != null && value is! String)) {
+    throw StateError('Invalid JSON worker response');
+  }
+  return decoded.cast<String?>();
 }
 
 Future<List<Map<String, String?>>> validateDataFormatsWeb(
@@ -159,13 +179,4 @@ String _workerUrl() {
   final appBase =
       Uri.parse(html.window.location.href).resolve(baseHref ?? './');
   return appBase.resolve('data_integrity_json_worker.js').toString();
-}
-
-String? _parseJsonSync(String content) {
-  try {
-    jsonDecode(content);
-    return null;
-  } catch (e) {
-    return e.toString();
-  }
 }

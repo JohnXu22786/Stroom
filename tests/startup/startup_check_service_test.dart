@@ -116,6 +116,121 @@ void main() {
     });
   });
 
+  group('Startup JSON batch parsing on Web', () {
+    test(
+        'retries bundled worker and preserves parse findings',
+        () async {
+      final previousPrimaryWorker =
+          json_parser.debugPrimaryValidationWorkerForTesting;
+      final previousBundledWorker =
+          json_parser.debugBundledValidationWorkerForTesting;
+      var bundledWorkerCalled = false;
+      json_parser.debugPrimaryValidationWorkerForTesting = (_) async {
+        throw StateError('simulated primary parse worker failure');
+      };
+      json_parser.debugBundledValidationWorkerForTesting = (message) async {
+        bundledWorkerCalled = true;
+        expect(message.first, 'parseJsonBatch');
+        return jsonEncode([null, 'simulated JSON parse error']);
+      };
+
+      try {
+        final parseErrors = await json_parser.parseJsonBatch([
+          '[]',
+          '{broken',
+        ]);
+
+        expect(bundledWorkerCalled, isTrue);
+        expect(parseErrors, [null, 'simulated JSON parse error']);
+      } finally {
+        json_parser.debugPrimaryValidationWorkerForTesting =
+            previousPrimaryWorker;
+        json_parser.debugBundledValidationWorkerForTesting =
+            previousBundledWorker;
+      }
+    }, skip: !kIsWeb);
+
+    test(
+        'large payload stays responsive during bundled worker retry',
+        () async {
+      _mockStartupValidationWorkerAsset();
+      final largeJson =
+          '[${List<String>.filled(1000000, '"payload"').join(',')}]';
+      final previousPrimaryWorker =
+          json_parser.debugPrimaryValidationWorkerForTesting;
+      final previousBundledWorker =
+          json_parser.debugBundledValidationWorkerForTesting;
+      final previousWorkerSourceLoader =
+          loadStartupValidationWorkerSourceForTesting;
+      var bundledWorkerSourceLoaded = false;
+      var uiPulses = 0;
+      var uiPulsesWhenWorkerSourceLoaded = 0;
+      json_parser.debugPrimaryValidationWorkerForTesting = (_) async {
+        throw StateError('simulated primary parse worker failure');
+      };
+      json_parser.debugBundledValidationWorkerForTesting = null;
+      loadStartupValidationWorkerSourceForTesting = () async {
+        final loadSource = previousWorkerSourceLoader;
+        if (loadSource == null) {
+          throw StateError('Web validation worker asset source is missing');
+        }
+        final source = await loadSource();
+        bundledWorkerSourceLoaded = true;
+        uiPulsesWhenWorkerSourceLoaded = uiPulses;
+        return source;
+      };
+      final uiHeartbeat = Timer.periodic(
+        const Duration(milliseconds: 10),
+        (_) => uiPulses++,
+      );
+
+      try {
+        final parseErrors = await json_parser.parseJsonBatch([largeJson]);
+
+        expect(parseErrors, [null]);
+        expect(bundledWorkerSourceLoaded, isTrue);
+        expect(
+          uiPulses,
+          greaterThan(uiPulsesWhenWorkerSourceLoaded),
+          reason: 'the UI event loop should keep running while the Worker parses',
+        );
+      } finally {
+        uiHeartbeat.cancel();
+        json_parser.debugPrimaryValidationWorkerForTesting =
+            previousPrimaryWorker;
+        json_parser.debugBundledValidationWorkerForTesting =
+            previousBundledWorker;
+        loadStartupValidationWorkerSourceForTesting =
+            previousWorkerSourceLoader;
+      }
+    }, skip: !kIsWeb);
+
+    test('blocks validation when both parse workers fail', () async {
+      final previousPrimaryWorker =
+          json_parser.debugPrimaryValidationWorkerForTesting;
+      final previousBundledWorker =
+          json_parser.debugBundledValidationWorkerForTesting;
+      json_parser.debugPrimaryValidationWorkerForTesting = (_) async {
+        throw StateError('simulated primary parse worker failure');
+      };
+      json_parser.debugBundledValidationWorkerForTesting = (_) async {
+        throw StateError('simulated bundled parse worker failure');
+      };
+
+      try {
+        await expectLater(
+          json_parser.parseJsonBatch(['[]']),
+          throwsA(isA<StartupDataValidationUnavailable>()),
+        );
+      } finally {
+        json_parser.debugPrimaryValidationWorkerForTesting =
+            previousPrimaryWorker;
+        json_parser.debugBundledValidationWorkerForTesting =
+            previousBundledWorker;
+      }
+    }, skip: !kIsWeb);
+  });
+
   group('StartupCheckService - data format validation', () {
     test(
       'preserves all format findings when the primary Web worker fails',
