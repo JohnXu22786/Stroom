@@ -50,7 +50,6 @@ class _StartupAppState extends State<StartupApp>
   bool _isWorking = true;
   String _statusMessage = '';
   String? _progressDetail;
-  bool _migrationPerformed = false;
 
   /// 数据安全防线阻断原因（版本哨兵 / 迁移失败冻结 / 无法修复冻结）。
   /// 非 null 时启动页显示阻断页（拒绝进入主应用），不再渐出。
@@ -362,7 +361,6 @@ class _StartupAppState extends State<StartupApp>
       // 所有预检查完成，显示完成状态
       setState(() {
         _isWorking = false;
-        _migrationPerformed = didMigration;
         _progressDetail = null;
         if (_startupError != null) {
           _statusMessage = '启动完成（注意: $_startupError）';
@@ -548,7 +546,6 @@ class _StartupAppState extends State<StartupApp>
                       isWorking: _isWorking,
                       statusMessage: _statusMessage,
                       progressDetail: _progressDetail,
-                      migrationPerformed: _migrationPerformed,
                     ),
             ),
           ),

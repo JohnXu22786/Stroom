@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/startup/startup_page.dart';
+import 'package:stroom/startup/startup_visual_style.dart';
 
 /// Helper to create a standalone StartupPage for focused widget testing.
 Widget wrapStartupPage({
   bool isWorking = true,
   String statusMessage = '',
   String? progressDetail,
-  bool migrationPerformed = false,
+  StartupVisualStyle? visualStyle,
 }) {
   return MaterialApp(
     home: StartupPage(
       isWorking: isWorking,
       statusMessage: statusMessage,
       progressDetail: progressDetail,
-      migrationPerformed: migrationPerformed,
+      visualStyle: visualStyle,
     ),
   );
 }
@@ -77,6 +78,28 @@ void main() {
 
       expect(find.text(longMessage), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
+    });
+
+    testWidgets('all concepts fit a compact landscape viewport', (tester) async {
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      for (final style in StartupVisualStyle.values) {
+        await tester.pumpWidget(wrapStartupPage(
+          statusMessage: '正在准备你的学习空间',
+          progressDetail: '1/4',
+          visualStyle: style,
+        ));
+        await tester.pump();
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: '${style.title} should fit a short landscape screen',
+        );
+      }
     });
   });
 }
