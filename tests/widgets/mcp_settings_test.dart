@@ -88,6 +88,8 @@ Future<void> _openCustomMcpConfig(
   Future<void>? updateGate,
   bool stdio = false,
   String? apiKey,
+  Map<String, String>? headers,
+  Map<String, String>? env,
 }) async {
   SharedPreferences.setMockInitialValues({
     'provider_entries': jsonEncode([
@@ -110,12 +112,15 @@ Future<void> _openCustomMcpConfig(
                         'command': 'npx',
                         'args': ['-y', 'example-server'],
                         'description': 'Original description',
+                        if (env != null) 'env': env,
                       }
                     : {
                         'transport': 'sse',
                         'url': 'https://mcp.example.com/sse',
                         'description': 'Original description',
                         if (apiKey != null) 'apiKey': apiKey,
+                        if (headers != null) 'headers': headers,
+                        if (env != null) 'env': env,
                       },
               },
             ],
@@ -138,6 +143,177 @@ void main() {
     setUp(() {
       registerBuiltinProviderTypes();
     });
+
+    testWidgets(
+      'updating a header-backed API key replaces credential sources',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(
+          tester,
+          headers: {
+            'Authorization': 'Bearer sk-old',
+            'X-Mode': 'on',
+          },
+          env: {
+            'CUSTOM_API_KEY': 'sk-old',
+            'PATH': '/custom/bin',
+          },
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        await tester.enterText(_apiKeyFieldFinder(), 'sk-new');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(typeConfig['apiKey'], 'sk-new');
+        expect(
+          typeConfig['headers'],
+          {'Authorization': 'Bearer sk-new', 'X-Mode': 'on'},
+        );
+        expect(
+          typeConfig['env'],
+          {'CUSTOM_API_KEY': 'sk-new', 'PATH': '/custom/bin'},
+        );
+        expect(find.text('••••••••'), findsOneWidget);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-new',
+        );
+      },
+    );
+
+    testWidgets(
+      'clearing a header-backed API key removes it but preserves unrelated headers',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(
+          tester,
+          headers: {
+            'Authorization': 'Bearer sk-header',
+            'X-Mode': 'on',
+          },
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-header',
+        );
+        await tester.enterText(_apiKeyFieldFinder(), '');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(typeConfig['headers'], {'X-Mode': 'on'});
+        expect(
+          find.descendant(
+            of: _readOnlyApiKeyFinder(),
+            matching: find.text('（未设置）'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
+      'clearing an environment-backed API key removes it but preserves unrelated environment values',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(
+          tester,
+          stdio: true,
+          env: {
+            'CUSTOM_API_KEY': 'sk-env',
+            'PATH': '/custom/bin',
+          },
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-env',
+        );
+        await tester.enterText(_apiKeyFieldFinder(), '');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(typeConfig['env'], {'PATH': '/custom/bin'});
+        expect(
+          find.descendant(
+            of: _readOnlyApiKeyFinder(),
+            matching: find.text('（未设置）'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          isEmpty,
+        );
+      },
+    );
 
     testWidgets(
       'clearing a saved API key stays unset after persistence',

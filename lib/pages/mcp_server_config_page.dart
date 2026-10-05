@@ -145,6 +145,23 @@ class _McpServerConfigDialogState
     return McpServerConfig.extractApiKeyFromTypeConfig(typeConfig);
   }
 
+  void _syncExistingApiKey(Map<String, String> values, String? newApiKey) {
+    if (_originalApiKey.isEmpty) return;
+
+    for (final entry in values.entries.toList()) {
+      final value = entry.value.trim();
+      final hasBearerPrefix = value.startsWith('Bearer ');
+      final bearerValue = hasBearerPrefix ? value.substring(7).trim() : null;
+      if (value != _originalApiKey && bearerValue != _originalApiKey) continue;
+
+      if (newApiKey == null) {
+        values.remove(entry.key);
+      } else {
+        values[entry.key] = hasBearerPrefix ? 'Bearer $newApiKey' : newApiKey;
+      }
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -277,6 +294,7 @@ class _McpServerConfigDialogState
           }
         }
       }
+      _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey: replace empty placeholder values in env
       if (effectiveApiKey != null) {
         for (final key in effectiveEnv.keys.toList()) {
@@ -319,6 +337,8 @@ class _McpServerConfigDialogState
           }
         }
       }
+      _syncExistingApiKey(effectiveHeaders, effectiveApiKey);
+      _syncExistingApiKey(effectiveEnv, effectiveApiKey);
       // Merge apiKey into headers: replace placeholder values
       if (effectiveApiKey != null) {
         for (final key in effectiveHeaders.keys.toList()) {
