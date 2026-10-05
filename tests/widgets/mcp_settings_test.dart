@@ -464,6 +464,70 @@ void main() {
     );
 
     testWidgets(
+      'clearing a provider-token API key preserves independent tokens',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(
+          tester,
+          stdio: true,
+          env: {
+            'OPENAI_TOKEN': 'sk-openai',
+            'SESSION_TOKEN': 'session-secret',
+            'CSRF_TOKEN': 'csrf-secret',
+          },
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          'sk-openai',
+        );
+        await tester.enterText(_apiKeyFieldFinder(), '');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().first;
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().first;
+        final typeConfig = model['typeConfig'] as Map<String, dynamic>;
+        expect(
+          typeConfig['env'],
+          {
+            'SESSION_TOKEN': 'session-secret',
+            'CSRF_TOKEN': 'csrf-secret',
+          },
+        );
+        expect(
+          find.descendant(
+            of: _readOnlyApiKeyFinder(),
+            matching: find.text('（未设置）'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_apiKeyFieldFinder()).controller!.text,
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
       'clearing a saved API key stays unset after persistence',
       (tester) async {
         tester.view.physicalSize = const Size(1080, 4000);

@@ -178,24 +178,22 @@ class _McpServerConfigDialogState
         .split(RegExp(r'[^a-z0-9]+'))
         .where((part) => part.isNotEmpty);
     final hasToken = nameParts.contains('token');
-    const apiTokenNameParts = {
-      'api',
-      'access',
-      'auth',
-      'authentication',
-      'mcp',
-      'github',
+    const unrelatedTokenNameParts = {
+      'refresh',
+      'session',
+      'csrf',
+      'xsrf',
+      'id',
     };
-    const unrelatedTokenNameParts = {'refresh', 'session', 'csrf', 'xsrf'};
-    final isNamedApiToken = hasToken &&
-        nameParts.any(apiTokenNameParts.contains) &&
-        !nameParts.any(unrelatedTokenNameParts.contains);
+    // Custom MCPs often use provider-specific names such as OPENAI_TOKEN.
+    final isApiToken =
+        hasToken && !nameParts.any(unrelatedTokenNameParts.contains);
 
     return nameParts.contains('authorization') ||
         nameParts.contains('apikey') ||
         (nameParts.contains('api') &&
             (nameParts.contains('key') || nameParts.contains('secret'))) ||
-        isNamedApiToken;
+        isApiToken;
   }
 
   String _apiKeyValueForSource(
