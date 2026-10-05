@@ -189,7 +189,7 @@ class StartupCheckService {
         }).toList();
       } catch (e) {
         debugPrint('[StartupCheckService] Web worker validation failed: $e');
-        return _validateDataFormatsSync(providerEntriesJson, conversationsJson);
+        rethrow;
       }
     }
 
@@ -472,7 +472,7 @@ class StartupCheckService {
         debugPrint(
           '[StartupCheckService] Web worker integrity check failed: $e',
         );
-        return _checkDataIntegritySync(providerEntriesJson);
+        rethrow;
       }
     }
 
