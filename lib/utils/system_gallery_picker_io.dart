@@ -38,28 +38,23 @@ Future<List<XFile>> pickNativeGalleryMedia(
 
   final files = <XFile>[];
   for (final asset in selectedAssets) {
-    final shouldResizeImage =
-        !isVideo &&
+    final shouldResizeImage = !isVideo &&
         (maxWidth != null || maxHeight != null || imageQuality != null);
     if (shouldResizeImage) {
       if (asset.width <= 0 || asset.height <= 0) {
         throw FileSystemException('无法读取所选图片的尺寸', asset.id);
       }
-      final targetWidth = (maxWidth?.round() ?? asset.width)
-          .clamp(1, asset.width)
-          .toInt();
-      final targetHeight = (maxHeight?.round() ?? asset.height)
-          .clamp(1, asset.height)
-          .toInt();
+      final targetWidth =
+          (maxWidth?.round() ?? asset.width).clamp(1, asset.width).toInt();
+      final targetHeight =
+          (maxHeight?.round() ?? asset.height).clamp(1, asset.height).toInt();
       final scale = math.min(
         targetWidth / asset.width,
         targetHeight / asset.height,
       );
       final width = (asset.width * scale).round().clamp(1, targetWidth).toInt();
-      final height = (asset.height * scale)
-          .round()
-          .clamp(1, targetHeight)
-          .toInt();
+      final height =
+          (asset.height * scale).round().clamp(1, targetHeight).toInt();
       final bytes = await asset.thumbnailDataWithSize(
         ThumbnailSize(width, height),
         format: ThumbnailFormat.jpeg,
