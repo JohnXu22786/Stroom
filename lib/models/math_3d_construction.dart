@@ -73,7 +73,11 @@ class ConstructionState {
   bool get isComplete => _result != null;
 
   /// Add a point to the construction and return the action to take.
-  ConstructionAction addPoint(Point3D point, {Vector3D? workingPlaneNormal}) {
+  ConstructionAction addPoint(
+    Point3D point, {
+    Vector3D? workingPlaneNormal,
+    bool closeToFirstPoint = false,
+  }) {
     if (!_isFinitePoint(point)) {
       return _reject('无法放置无效坐标，请重新选择位置');
     }
@@ -97,8 +101,8 @@ class ConstructionState {
           ConstructionTool.area,
         }.contains(tool) &&
         _points.isNotEmpty &&
-        _points.first.distanceTo(point) <
-            _closureTolerance(includeLastPoint: true) &&
+        (_points.first.distanceTo(point) < _closureTolerance() ||
+            closeToFirstPoint) &&
         !_hasThreeDistinctVertices()) {
       return _reject('至少选择三个不同的顶点后才能点击首点闭合');
     }
@@ -187,7 +191,7 @@ class ConstructionState {
     }
     if (tool == ConstructionTool.perpendicularPlane && _points.length == 4) {
       final referenceNormal =
-          (_points[1] - _points[0]).cross(_points[2] - _points[0]).normalized();
+          _triangleUnitNormal(_points[0], _points[1], _points[2]);
       final direction = point - _points[3];
       if (direction.magnitude < 1e-9) {
         return _reject('方向点不能与平面经过点重合，请重新选择');
@@ -347,7 +351,7 @@ class ConstructionState {
             tool == ConstructionTool.pyramid) &&
         _points.length == 3) {
       final baseNormal =
-          (_points[1] - _points[0]).cross(_points[2] - _points[0]).normalized();
+          _triangleUnitNormal(_points[0], _points[1], _points[2]);
       final baseScale = dart_math
           .max(
             _points[0].distanceTo(_points[1]),
@@ -497,7 +501,8 @@ class ConstructionState {
       case ConstructionTool.polygon:
         // Check if we closed the polygon (clicked near first point)
         if (_points.length >= 4 &&
-            _points.first.distanceTo(_points.last) < _closureTolerance()) {
+            (_points.first.distanceTo(_points.last) < _closureTolerance() ||
+                closeToFirstPoint)) {
           // Remove the duplicate closing point
           final vertices = List<Point3D>.from(_points)..removeLast();
           if (vertices.length >= 3) {
@@ -659,7 +664,8 @@ class ConstructionState {
 
     ConstructionAction finishOpenCurve({required bool filled}) {
       if (count >= 4 &&
-          _points.first.distanceTo(_points.last) < _closureTolerance()) {
+          (_points.first.distanceTo(_points.last) < _closureTolerance() ||
+              closeToFirstPoint)) {
         if (filled) {
           _points.removeLast();
         } else {
@@ -784,18 +790,15 @@ class ConstructionState {
         );
       case ConstructionTool.parallelPlane:
         return finishWhenReady(4, () {
-          final normal = (_points[1] - _points[0]).cross(
-            _points[2] - _points[0],
-          );
+          final normal = _triangleUnitNormal(_points[0], _points[1], _points[2]);
           return _createPlaneFromNormal(_points[3], normal);
         });
       case ConstructionTool.perpendicularPlane:
         return finishWhenReady(5, () {
-          final referenceNormal = (_points[1] - _points[0])
-              .cross(_points[2] - _points[0])
-              .normalized();
+          final referenceNormal =
+              _triangleUnitNormal(_points[0], _points[1], _points[2]);
           final direction = _points[4] - _points[3];
-          final normal = referenceNormal.cross(direction).normalized();
+          final normal = _stableNormalize(referenceNormal.cross(direction));
           return _createPlaneFromNormal(_points[3], normal);
         });
       case ConstructionTool.circleAxisPoint:
@@ -874,7 +877,8 @@ class ConstructionState {
         return finishOpenCurve(filled: false);
       case ConstructionTool.polyline:
         if (count >= 4 &&
-            _points.first.distanceTo(_points.last) < _closureTolerance()) {
+            (_points.first.distanceTo(_points.last) < _closureTolerance() ||
+                closeToFirstPoint)) {
           _points[_points.length - 1] = _points.first;
           _result = Object3D.curve(
             points: List<Point3D>.from(_points),
@@ -1294,7 +1298,36 @@ class ConstructionState {
       final firstNext = (first + 1) % normalized.length;
       for (var second = first + 1; second < normalized.length; second++) {
         final secondNext = (second + 1) % normalized.length;
-        if (firstNext == second || secondNext == first) continue;
+        if (firstNext == second) {
+          if (onSegment(
+                normalized[secondNext],
+                normalized[first],
+                normalized[firstNext],
+              ) ||
+              onSegment(
+                normalized[first],
+                normalized[second],
+                normalized[secondNext],
+              )) {
+            return true;
+          }
+          continue;
+        }
+        if (secondNext == first) {
+          if (onSegment(
+                normalized[firstNext],
+                normalized[second],
+                normalized[secondNext],
+              ) ||
+              onSegment(
+                normalized[second],
+                normalized[first],
+                normalized[firstNext],
+              )) {
+            return true;
+          }
+          continue;
+        }
         if (segmentsIntersect(
           normalized[first],
           normalized[firstNext],
@@ -1437,7 +1470,11 @@ class ConstructionState {
     final normal = u.cross(v);
     final offset = (v.cross(normal) * u.dot(u) + normal.cross(u) * v.dot(v)) *
         (1 / (2 * normal.dot(normal)));
-    return _createCircle(a + offset, a, planeNormal: normal.normalized());
+    return _createCircle(
+      a + offset,
+      a,
+      planeNormal: _triangleUnitNormal(a, b, c),
+    );
   }
 
   /// Create a polygon from a list of vertices.
@@ -1600,10 +1637,7 @@ class ConstructionState {
 
   /// Create a plane through three points.
   static Object3D _createPlane(Point3D a, Point3D b, Point3D c) {
-    // Compute plane normal from cross product of edges
-    final ab = b - a;
-    final ac = c - a;
-    final normal = ab.cross(ac).normalized();
+    final normal = _triangleUnitNormal(a, b, c);
 
     // Plane equation: normal · (x, y, z) = normal · a
     final d = normal.x * a.x + normal.y * a.y + normal.z * a.z;
@@ -1734,7 +1768,7 @@ class ConstructionState {
     Point3D c,
     Point3D heightPoint,
   ) {
-    final normal = (b - a).cross(c - a).normalized();
+    final normal = _triangleUnitNormal(a, b, c);
     final height = (heightPoint - a).dot(normal);
     final offset = normal * height;
     final vertices = <Point3D>[a, b, c, a + offset, b + offset, c + offset];
@@ -1786,7 +1820,7 @@ class ConstructionState {
     Point3D apex,
   ) {
     final indices = [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3];
-    final signedHeight = (apex - a).dot((b - a).cross(c - a));
+    final signedHeight = (apex - a).dot(_triangleUnitNormal(a, b, c));
     if (signedHeight < 0) {
       for (var i = 0; i < indices.length; i += 3) {
         final second = indices[i + 1];
@@ -1892,7 +1926,7 @@ class ConstructionState {
   }
 
   static Object3D _createPlaneFromNormal(Point3D point, Vector3D normal) {
-    final unit = normal.normalized();
+    final unit = _stableNormalize(normal);
     if (unit.magnitude < 1e-9) return Object3D.point(point);
     return Object3D.plane(
       a: unit.x,
@@ -1909,8 +1943,8 @@ class ConstructionState {
     final endVector = end - center;
     final radius = startVector.magnitude;
     final u = startVector.normalized();
-    var normal = startVector.cross(endVector).normalized();
-    if (normal.magnitude < 1e-9) {
+    var normal = _stableNormalize(u.cross(endVector.normalized()));
+    if (normal.magnitude == 0) {
       final workingNormal = _workingPlaneNormal.normalized();
       normal = workingNormal.cross(u).magnitude < 1e-9
           ? _stablePerpendicular(u)
@@ -1954,12 +1988,37 @@ class ConstructionState {
     final u = b - a;
     final v = c - a;
     if (u.magnitude < 1e-9 || v.magnitude < 1e-9) return false;
-    return u.normalized().cross(v.normalized()).magnitude >= 1e-9;
+    return _stableNormalize(u).cross(_stableNormalize(v)).magnitude >= 1e-9;
+  }
+
+  static Vector3D _triangleUnitNormal(Point3D a, Point3D b, Point3D c) {
+    return _stableNormalize(
+      _stableNormalize(b - a).cross(_stableNormalize(c - a)),
+    );
+  }
+
+  static Vector3D _stableNormalize(Vector3D vector) {
+    final scale = dart_math
+        .max(vector.x.abs(), dart_math.max(vector.y.abs(), vector.z.abs()))
+        .toDouble();
+    if (scale == 0 || !scale.isFinite) return Vector3D.zero;
+    final scaled = Vector3D(
+      vector.x / scale,
+      vector.y / scale,
+      vector.z / scale,
+    );
+    final magnitude = scaled.magnitude;
+    if (magnitude == 0 || !magnitude.isFinite) return Vector3D.zero;
+    return Vector3D(
+      scaled.x / magnitude,
+      scaled.y / magnitude,
+      scaled.z / magnitude,
+    );
   }
 
   Object3D _createCircumcircleArc(Point3D a, Point3D b, Point3D c) {
     final center = _circumcenter(a, b, c);
-    final normal = (b - a).cross(c - a).normalized();
+    final normal = _triangleUnitNormal(a, b, c);
     final u = (a - center).normalized();
     final v = normal.cross(u).normalized();
     double angleFor(Point3D point) {
@@ -2139,6 +2198,35 @@ class ConstructionState {
       normalizedCoefficients[5],
     ];
     if (coefficients.any((coefficient) => !coefficient.isFinite)) return null;
+    final a = normalizedCoefficients[0];
+    final b = normalizedCoefficients[1];
+    final c = normalizedCoefficients[2];
+    final d = normalizedCoefficients[3];
+    final e = normalizedCoefficients[4];
+    final f = normalizedCoefficients[5];
+    // A zero determinant of the homogeneous conic matrix describes a pair of
+    // lines, a point, or another degenerate quadratic rather than one conic.
+    final determinantTerms = [
+      4 * a * c * f,
+      -a * e * e,
+      -c * d * d,
+      -b * b * f,
+      b * d * e,
+    ];
+    final conicDeterminant = determinantTerms.fold<double>(
+      0,
+      (sum, term) => sum + term,
+    );
+    final determinantScale = determinantTerms.fold<double>(
+      0,
+      (sum, term) => sum + term.abs(),
+    );
+    const determinantPrecision = 64 * 2.220446049250313e-16;
+    if (!conicDeterminant.isFinite ||
+        determinantScale == 0 ||
+        conicDeterminant.abs() <= determinantScale * determinantPrecision) {
+      return null;
+    }
 
     final samples = <Point3D>[];
     final curveStarts = <int>[];
@@ -2161,7 +2249,6 @@ class ConstructionState {
     final hyperbolaPaths = List.generate(2, (_) => <List<Point3D>>[]);
     final activeHyperbolaPaths = List<List<Point3D>?>.filled(2, null);
     double? previousScaledRadius;
-    int? previousRootIndex;
     final coefficientMagnitude = normalizedCoefficients.fold<double>(
       0,
       (maximum, coefficient) =>
@@ -2362,7 +2449,6 @@ class ConstructionState {
       }
 
       double? scaledRadius;
-      int? selectedRootIndex;
       if (candidates.isNotEmpty) {
         var selected = candidates.first;
         for (final candidate in candidates.skip(1)) {
@@ -2373,25 +2459,19 @@ class ConstructionState {
           }
         }
         scaledRadius = selected.radius;
-        selectedRootIndex = selected.index;
       }
       if (scaledRadius == null || !scaledRadius.isFinite) {
         previousScaledRadius = null;
-        previousRootIndex = null;
         continue;
       }
-      final startsNewBranch = samples.isNotEmpty &&
-          (previousScaledRadius == null ||
-              previousRootIndex != selectedRootIndex);
+      final startsNewBranch = samples.isNotEmpty && previousScaledRadius == null;
       final radius = scaledRadius * coordinateScale;
       if (!radius.isFinite) {
         previousScaledRadius = null;
-        previousRootIndex = null;
         continue;
       }
       if (startsNewBranch) curveStarts.add(samples.length);
       previousScaledRadius = scaledRadius;
-      previousRootIndex = selectedRootIndex;
       samples.add(origin + u * (radius * cosine) + v * (radius * sine));
     }
     if (isHyperbola) {
@@ -2615,21 +2695,7 @@ class ConstructionState {
     return sum.magnitude / 2;
   }
 
-  double _closureTolerance({bool includeLastPoint = false}) {
-    final vertexCount = _points.length - (includeLastPoint ? 0 : 1);
-    if (vertexCount < 3) return 1e-9;
-    var shortestEdge = double.infinity;
-    // The last point is the proposed closing click, so size the tolerance
-    // from the already selected edges rather than the closing distance.
-    for (var i = 1; i < vertexCount; i++) {
-      final edgeLength = _points[i - 1].distanceTo(_points[i]);
-      if (edgeLength > 1e-9) {
-        shortestEdge = dart_math.min(shortestEdge, edgeLength).toDouble();
-      }
-    }
-    if (!shortestEdge.isFinite) return 1e-9;
-    return dart_math.max(1e-9, shortestEdge * 0.1).toDouble();
-  }
+  double _closureTolerance() => 1e-9;
 
   bool _hasThreeDistinctVertices() {
     final distinctVertices = <Point3D>[];
