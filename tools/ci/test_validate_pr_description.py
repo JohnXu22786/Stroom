@@ -91,6 +91,7 @@ Result.
     def test_rejects_placeholders_in_every_required_and_optional_section(self):
         cases = (
             VALID_BODY.replace("Adds a single Mint Glass startup screen.", "[summary]"),
+            VALID_BODY.replace("Adds a single Mint Glass startup screen.", "[fill this in]"),
             VALID_BODY.replace(
                 "The startup palette changed when migration ran.", "TODO"
             ),
@@ -115,6 +116,14 @@ Result.
         body = VALID_BODY.replace(
             "The startup palette changed when migration ran.",
             "The startup palette removes an obsolete TODO marker.",
+        )
+
+        self.assertEqual(validate_pr_body(body), [])
+
+    def test_inline_code_does_not_start_html_comments_or_count_as_placeholders(self):
+        body = VALID_BODY.replace(
+            "Adds a single Mint Glass startup screen.",
+            "Adds a single Mint Glass startup screen with literal `<!--` and `[summary]` tokens.",
         )
 
         self.assertEqual(validate_pr_body(body), [])
@@ -148,6 +157,23 @@ Result.
                 self.assertTrue(
                     any("English" in error for error in validate_pr_body(body))
                 )
+
+    def test_english_cognates_are_not_mistaken_for_foreign_language(self):
+        body = VALID_BODY.replace(
+            "Adds a single Mint Glass startup screen.",
+            "This page change affects startup behavior.",
+        )
+
+        self.assertEqual(validate_pr_body(body), [])
+
+    def test_rejects_a_short_non_english_description(self):
+        body = VALID_BODY.replace(
+            "Adds a single Mint Glass startup screen.", "El startup cambia."
+        )
+
+        self.assertTrue(
+            any("English" in error for error in validate_pr_body(body))
+        )
 
     def test_rejects_an_empty_breaking_changes_section(self):
         body = VALID_BODY + "\n### Breaking changes (if any)\n"

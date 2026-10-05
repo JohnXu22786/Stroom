@@ -9,47 +9,26 @@ import sys
 import unicodedata
 from pathlib import Path
 
+from langdetect import DetectorFactory, LangDetectException, detect_langs
+
+DetectorFactory.seed = 0
+
 HEADING_PATTERN = re.compile(r"^#{1,6}\s+.+$")
 FENCE_PATTERN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 FENCE_CLOSE_PATTERN = re.compile(r"^ {0,3}(`+|~+)[ \t]*$")
+INLINE_CODE_PATTERN = re.compile(
+    r"(?<!\\)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL
+)
 PLACEHOLDER_PATTERN = re.compile(
-    r"\[(?:type|summary|description|placeholder|todo|tbd|write|describe|add)"
+    r"\[\s*\]"
+    r"|\[(?:type|summary|description|placeholder|todo|tbd|write|describe|add|"
+    r"fill|enter|replace|insert|choose)"
     r"[^\]]*\]"
     r"|^[ \t]*(?:TODO|TBD|FIXME|PLACEHOLDER)(?:[ \t]*[:—-][^\n]*)?[ \t]*$"
     r"|^[ \t]*Fixes\s+#[ \t]*$"
     r"|^[ \t]*To be (?:filled in|determined)[.!]?[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
-ENGLISH_WORDS = frozenset(
-    "a about after all also an and any are as at be because been before being but "
-    "by can change changed changes check checks could did do does each every for "
-    "from had has have he her here him his how if in into is it its may more most "
-    "must new no not of off on one or other our out over same she should so some "
-    "such than that the their them then there these they this those through to "
-    "under until up use used uses using was we were what when where which while "
-    "who will with without would you your add adds added adding fix fixes fixed "
-    "improve improves improved keep keeps kept show shows remove removes removed "
-    "replace replaces replaced allow allows ensure ensures require requires "
-    "support supports update updates updated run runs test tests work works "
-    "screen page startup description section template format workflow behavior "
-    "color colors palette migration state status progress breaking none always "
-    "single same independent regardless complete across full"
-    .split()
-)
-NON_ENGLISH_MARKERS = frozenset(
-    "después cuando cambia ejecuta migración migracion pantalla inicio siempre usa"
-    " del los las una uno para pero por que se sin está esta son con desde"
-    " après apres chaque démarrage demarrage page écran ecran change dans avec"
-    " pour sur qui est une des les le la du au aux cette ces elle il nous vous sont et"
-    " wird beim jeder die das der den dem eine einer und mit nicht von zum zur"
-    " auf bei sich ist sind für für immer verwendet ändert geandert"
-    " depois quando muda tela inicial usa para mas por que uma dos das não nao"
-    " della della ogni avvio cambia sempre usa con per che sono il lo gli"
-    " wordt iedere startscherm altijd gebruikt voor maar niet het een de"
-    .split()
-)
-WORD_PATTERN = re.compile(r"[^\W_]+", re.UNICODE)
-
 REQUIRED_HEADINGS = (
     "## What this PR does",
     "### Before this PR:",
@@ -100,8 +79,16 @@ def _strip_comments(body: str) -> tuple[str, bool]:
         cursor = end + 3
 
 
+def _remove_inline_code_spans(body: str) -> str:
+    return INLINE_CODE_PATTERN.sub(
+        lambda match: "\n" * match.group().count("\n"), body
+    )
+
+
 def _clean_body(body: str) -> tuple[str, bool]:
-    return _strip_comments(_remove_code_blocks(body))
+    without_fences = _remove_code_blocks(body)
+    without_inline_code = _remove_inline_code_spans(without_fences)
+    return _strip_comments(without_inline_code)
 
 
 def _heading_name(line: str) -> str | None:
@@ -125,14 +112,11 @@ def _section_content(lines: list[str], heading_index: int) -> str:
 
 
 def _is_english_prose(content: str) -> bool:
-    words = set(WORD_PATTERN.findall(content.casefold()))
-    english_indicators = words & ENGLISH_WORDS
-    foreign_indicators = words & NON_ENGLISH_MARKERS
-    minimum_english_indicators = 1 if len(words) < 4 else 2
-    return (
-        len(english_indicators) >= minimum_english_indicators
-        and len(foreign_indicators) < 2
-    )
+    try:
+        languages = detect_langs(content)
+    except LangDetectException:
+        return False
+    return languages[0].lang == "en" and languages[0].prob >= 0.8
 
 
 def validate_pr_body(body: str) -> list[str]:
@@ -203,8 +187,9 @@ def validate_pr_body(body: str) -> list[str]:
             errors.append(
                 f'The "{OPTIONAL_HEADING}" section still contains a placeholder.'
             )
-        elif breaking_content.casefold().strip(" .!\t\n") != "none" and not _is_english_prose(
-            breaking_content
+        elif (
+            breaking_content.casefold().strip(" .!\t\n") != "none"
+            and not _is_english_prose(breaking_content)
         ):
             errors.append(
                 f'The "{OPTIONAL_HEADING}" section must be written in English.'

@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install PR description validator dependencies
+        run: python3 -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
       - name: Test PR description validator
         run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
       - name: Validate PR description
