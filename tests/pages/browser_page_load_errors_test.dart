@@ -15,7 +15,7 @@ void main() {
 
   tearDown(BrowserCookieService.disableTestMode);
 
-  testWidgets('main-frame load error clears the loading indicator',
+  testWidgets('ambiguous same-URL error waits for active load completion',
       (tester) async {
     final previousPlatform = InAppWebViewPlatform.instance;
     final platform = _installBrowserPagePlatform();
@@ -24,6 +24,10 @@ void main() {
     final controller = await _startNavigation(tester, platform);
     final webView = platform.webView!;
 
+    // A repeated same-URL start makes the next error callback ambiguous: it
+    // could belong to the earlier load or to this active one.
+    webView.params.onLoadStart!(controller, WebUri('https://failed.example/'));
+    await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
 
     webView.params.onReceivedError!(
@@ -39,6 +43,105 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    // The newer same-URL load advances and completes before the error grace
+    // window expires, so the ambiguous error must not stop it early.
+    webView.params.onProgressChanged!(controller, 25);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    webView.params.onLoadStop!(controller, WebUri('https://failed.example/'));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('same-URL errors in reverse callback order keep one deadline',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final controller = await _startNavigation(tester, platform);
+    final webView = platform.webView!;
+    webView.params.onLoadStart!(controller, WebUri('https://failed.example/'));
+    await tester.pump();
+
+    // Model the active request failing before the stale same-URL callback.
+    webView.params.onReceivedError!(
+      controller,
+      WebResourceRequest(
+        url: WebUri('https://failed.example/'),
+        isForMainFrame: true,
+      ),
+      WebResourceError(
+        type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+        description: 'Could not connect to host',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    // A later stale error cannot identify a different request and must not
+    // extend the no-progress deadline by itself.
+    webView.params.onReceivedError!(
+      controller,
+      WebResourceRequest(
+        url: WebUri('https://failed.example/'),
+        isForMainFrame: true,
+      ),
+      WebResourceError(
+        type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+        description: 'Could not connect to host',
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('regressing progress does not postpone the error timeout',
+      (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final controller = await _startNavigation(tester, platform);
+    final webView = platform.webView!;
+
+    webView.params.onReceivedError!(
+      controller,
+      WebResourceRequest(
+        url: WebUri('https://failed.example/'),
+        isForMainFrame: true,
+      ),
+      WebResourceError(
+        type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+        description: 'Could not connect to host',
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+
+    webView.params.onProgressChanged!(controller, 30);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    // A decreasing progress callback is not evidence that the load advanced.
+    webView.params.onProgressChanged!(controller, 20);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
     expect(find.byType(LinearProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -145,6 +248,52 @@ void main() {
     webView.params.onLoadStop!(controller, WebUri(redirectUrl));
     await tester.pump();
 
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('redirect cancels the prior URL error timeout', (tester) async {
+    final previousPlatform = InAppWebViewPlatform.instance;
+    final platform = _installBrowserPagePlatform();
+    addTearDown(() => InAppWebViewPlatform.instance =
+        previousPlatform ?? _BrowserPagePlatform());
+    final controller = await _startNavigation(tester, platform);
+    final webView = platform.webView!;
+    const redirectUrl = 'https://redirected.example/final';
+
+    webView.params.onReceivedError!(
+      controller,
+      WebResourceRequest(
+        url: WebUri('https://failed.example/'),
+        isForMainFrame: true,
+      ),
+      WebResourceError(
+        type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+        description: 'Could not connect to host',
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    final navigationPolicy = await webView.params.shouldOverrideUrlLoading!(
+      controller,
+      NavigationAction(
+        request: URLRequest(url: WebUri(redirectUrl)),
+        isForMainFrame: true,
+        isRedirect: true,
+      ),
+    );
+    expect(navigationPolicy, NavigationActionPolicy.ALLOW);
+    await tester.pump();
+
+    // The previous URL's pending error cannot end a redirected navigation.
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    webView.params.onLoadStart!(controller, WebUri(redirectUrl));
+    await tester.pump();
+    webView.params.onLoadStop!(controller, WebUri(redirectUrl));
+    await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
