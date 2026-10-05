@@ -26,6 +26,34 @@ class ValidatePrDescriptionTest(unittest.TestCase):
 
         self.assertEqual(validate_pr_body(body), [])
 
+    def test_accepts_the_standard_english_change_type_labels(self):
+        labels = (
+            "Bug fix",
+            "Feature",
+            "Documentation",
+            "Refactor",
+            "Performance",
+            "Test",
+            "CI/build",
+            "Chore",
+        )
+
+        for label in labels:
+            with self.subTest(label=label):
+                body = VALID_BODY.replace("Bug fix, Documentation", label)
+
+                self.assertEqual(validate_pr_body(body), [])
+
+    def test_rejects_a_non_english_change_type(self):
+        body = VALID_BODY.replace("Bug fix, Documentation", "Correction de bogue")
+
+        self.assertTrue(
+            any(
+                "Type of change" in error and "English" in error
+                for error in validate_pr_body(body)
+            )
+        )
+
     def test_rejects_missing_required_headings(self):
         errors = validate_pr_body("## What this PR does\nSummary.\n")
 

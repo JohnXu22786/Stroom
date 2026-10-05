@@ -50,6 +50,18 @@ REQUIRED_HEADINGS = (
     "### Type of change",
 )
 OPTIONAL_HEADING = "### Breaking changes (if any)"
+STANDARD_CHANGE_TYPES = frozenset(
+    {
+        "bug fix",
+        "feature",
+        "documentation",
+        "refactor",
+        "performance",
+        "test",
+        "ci/build",
+        "chore",
+    }
+)
 
 
 def _remove_code_blocks(body: str) -> str:
@@ -143,6 +155,14 @@ def _is_english_prose(content: str) -> bool:
     return languages[0].lang == "en" and languages[0].prob >= 0.8
 
 
+def _is_english_change_type(content: str) -> bool:
+    labels = [label.strip().casefold() for label in re.split(r"[,;]", content)]
+    return all(
+        label in STANDARD_CHANGE_TYPES or _is_english_prose(label)
+        for label in labels
+    )
+
+
 def _contains_template_placeholder(content: str) -> bool:
     return bool(
         PLACEHOLDER_PATTERN.search(content)
@@ -201,16 +221,22 @@ def validate_pr_body(body: str) -> list[str]:
         if not indices:
             continue
         content = _section_content(lines, indices[0])
+        contains_template_prompt = _contains_template_placeholder(content)
         if not content:
             errors.append(f'The "{heading}" section must contain text.')
-        elif _contains_template_placeholder(content):
+        elif contains_template_prompt:
             errors.append(
                 f'The "{heading}" section still contains a template '
                 "placeholder or instruction."
             )
 
-        if heading in REQUIRED_HEADINGS[:3] and content:
-            if not _is_english_prose(content):
+        if content and not contains_template_prompt:
+            if heading in REQUIRED_HEADINGS[:3] and not _is_english_prose(content):
+                errors.append(f'The "{heading}" section must be written in English.')
+            elif (
+                heading == REQUIRED_HEADINGS[3]
+                and not _is_english_change_type(content)
+            ):
                 errors.append(f'The "{heading}" section must be written in English.')
 
     if optional_indices and not _section_content(lines, optional_indices[0]):
