@@ -55,7 +55,8 @@ jobs:
           pub-cache: true
       - run: flutter pub get
       - name: Check Dart formatting
-        run: dart format --set-exit-if-changed .
+        # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
+        run: dart format --language-version=3.0 --set-exit-if-changed .
 
   # ── Static Analysis ───────────────────────────────────────────────────────
   analyze:
