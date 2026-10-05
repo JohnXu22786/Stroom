@@ -39,6 +39,36 @@ class ValidatePrDescriptionTest(unittest.TestCase):
 
         self.assertTrue(any("Missing required heading" in error for error in errors))
 
+    def test_fence_closers_must_match_the_opening_length_and_have_no_info(self):
+        cases = (
+            "````markdown\n```\n" + VALID_BODY + "````\n",
+            "```markdown\n``` trailing text\n" + VALID_BODY + "```\n",
+        )
+
+        for body in cases:
+            with self.subTest(body=body[:30]):
+                errors = validate_pr_body(body)
+
+                self.assertTrue(
+                    any("Missing required heading" in error for error in errors)
+                )
+
+    def test_indented_headings_do_not_satisfy_required_sections(self):
+        body = "\n".join(
+            f"    {line}" if line.startswith("#") else line
+            for line in VALID_BODY.splitlines()
+        )
+
+        errors = validate_pr_body(body)
+
+        self.assertTrue(any("Missing required heading" in error for error in errors))
+
+    def test_unclosed_comment_cannot_hide_missing_sections(self):
+        errors = validate_pr_body("<!--\n" + VALID_BODY)
+
+        self.assertTrue(any("Close every HTML comment" in error for error in errors))
+        self.assertTrue(any("Missing required heading" in error for error in errors))
+
     def test_rejects_empty_sections_and_unfilled_type_placeholder(self):
         body = """## What this PR does
 Summary.
@@ -56,12 +86,68 @@ Result.
         errors = validate_pr_body(body)
 
         self.assertTrue(any("Before this PR:" in error for error in errors))
-        self.assertTrue(any("[type]" in error for error in errors))
+        self.assertTrue(any("placeholder" in error.lower() for error in errors))
+
+    def test_rejects_placeholders_in_every_required_and_optional_section(self):
+        cases = (
+            VALID_BODY.replace("Adds a single Mint Glass startup screen.", "[summary]"),
+            VALID_BODY.replace(
+                "The startup palette changed when migration ran.", "TODO"
+            ),
+            VALID_BODY.replace(
+                "The startup screen always uses Mint Glass.", "[description]"
+            ),
+            VALID_BODY.replace("Bug fix, Documentation", "FIXME"),
+            VALID_BODY + "\n### Breaking changes (if any)\nTBD\n",
+            VALID_BODY.replace(
+                "The startup screen always uses Mint Glass.",
+                "The startup screen always uses Mint Glass.\nFixes #",
+            ),
+        )
+
+        for body in cases:
+            with self.subTest(body=body[-50:]):
+                self.assertTrue(
+                    any("placeholder" in error.lower() for error in validate_pr_body(body))
+                )
+
+    def test_does_not_treat_a_description_of_removed_todo_as_a_placeholder(self):
+        body = VALID_BODY.replace(
+            "The startup palette changed when migration ran.",
+            "The startup palette removes an obsolete TODO marker.",
+        )
+
+        self.assertEqual(validate_pr_body(body), [])
 
     def test_rejects_non_latin_description_text(self):
         errors = validate_pr_body(VALID_BODY + "\n中文说明")
 
         self.assertTrue(any("English" in error for error in errors))
+
+    def test_rejects_latin_script_non_english_narrative_and_breaking_sections(self):
+        french_summary = VALID_BODY.replace(
+            "Adds a single Mint Glass startup screen.",
+            "La palette change après chaque démarrage.",
+        )
+        spanish_before = VALID_BODY.replace(
+            "The startup palette changed when migration ran.",
+            "El color cambia cuando se ejecuta una migración.",
+        )
+        german_after = VALID_BODY.replace(
+            "The startup screen always uses Mint Glass.",
+            "Die Startseite wird bei jeder Migration grün.",
+        )
+        french_breaking = (
+            VALID_BODY
+            + "\n### Breaking changes (if any)\n"
+            + "La page de démarrage change après chaque migration.\n"
+        )
+
+        for body in (french_summary, spanish_before, german_after, french_breaking):
+            with self.subTest(body=body[-70:]):
+                self.assertTrue(
+                    any("English" in error for error in validate_pr_body(body))
+                )
 
     def test_rejects_an_empty_breaking_changes_section(self):
         body = VALID_BODY + "\n### Breaking changes (if any)\n"
