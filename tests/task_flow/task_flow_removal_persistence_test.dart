@@ -98,9 +98,18 @@ class _HeldRemoval extends TaskFlowExecutionNotifier {
   Future<bool> _holdWrite(Future<bool> Function() write) async {
     if (holdNextWrite) {
       holdNextWrite = false;
+      if (failHeldWrite) {
+        started.complete();
+        await release.future;
+        return false;
+      }
+      // Enqueue the atomic write before blocking its caller. This mirrors the
+      // real writer, where a held filesystem operation already owns its place
+      // in the persistence queue before later barrier-dependent flushes queue.
+      final pending = write();
       started.complete();
       await release.future;
-      if (failHeldWrite) return false;
+      return pending;
     }
     return write();
   }

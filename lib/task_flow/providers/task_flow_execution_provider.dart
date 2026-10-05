@@ -546,6 +546,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     // A retry can hold a picker-file lock while awaiting registration. Release
     // the mutation queue before taking those same locks for input cleanup.
     if (saved) await cleanupInputStoragePaths(inputPaths);
+    if (!mounted && _disposedSnapshot != null) {
+      // The removal can finish after dispose has queued its barrier-dependent
+      // flush. Persist the resolved snapshot last so a flush queued before the
+      // removal outcome cannot leave stale IDs or omit a surviving update.
+      final finalFlush = persistSnapshot(_disposedSnapshot!);
+      _disposedPersistence = finalFlush;
+      await finalFlush;
+    }
     return saved;
   }
 
