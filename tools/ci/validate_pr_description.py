@@ -29,6 +29,16 @@ PLACEHOLDER_PATTERN = re.compile(
     r"|^[ \t]*To be (?:filled in|determined)[.!]?[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
+TEMPLATE_INSTRUCTION_PATTERN = re.compile(
+    r"^[ \t]*(?:(?:[-*+]|\d+\.)[ \t]+|>[ \t]*)?"
+    r"(?:Describe the behavior or state before these changes\."
+    r"|Describe the resulting behavior or state\..*"
+    r"|Enter the applicable type, such as .*"
+    r"|Describe backwards-incompatible changes, or write None\..*"
+    r"|Write the PR description in English\..*"
+    r"|Add Fixes #123 here only when this PR closes an issue\.)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 REQUIRED_HEADINGS = (
     "## What this PR does",
     "### Before this PR:",
@@ -119,6 +129,13 @@ def _is_english_prose(content: str) -> bool:
     return languages[0].lang == "en" and languages[0].prob >= 0.8
 
 
+def _contains_template_placeholder(content: str) -> bool:
+    return bool(
+        PLACEHOLDER_PATTERN.search(content)
+        or TEMPLATE_INSTRUCTION_PATTERN.search(content)
+    )
+
+
 def validate_pr_body(body: str) -> list[str]:
     """Return formatting errors for a PR body; an empty list means it is valid."""
     if not body.strip():
@@ -170,8 +187,11 @@ def validate_pr_body(body: str) -> list[str]:
         content = _section_content(lines, indices[0])
         if not content:
             errors.append(f'The "{heading}" section must contain text.')
-        elif PLACEHOLDER_PATTERN.search(content):
-            errors.append(f'The "{heading}" section still contains a placeholder.')
+        elif _contains_template_placeholder(content):
+            errors.append(
+                f'The "{heading}" section still contains a template '
+                "placeholder or instruction."
+            )
 
         if heading in REQUIRED_HEADINGS[:3] and content:
             if not _is_english_prose(content):
@@ -183,9 +203,10 @@ def validate_pr_body(body: str) -> list[str]:
         )
     elif optional_indices:
         breaking_content = _section_content(lines, optional_indices[0])
-        if PLACEHOLDER_PATTERN.search(breaking_content):
+        if _contains_template_placeholder(breaking_content):
             errors.append(
-                f'The "{OPTIONAL_HEADING}" section still contains a placeholder.'
+                f'The "{OPTIONAL_HEADING}" section still contains a template '
+                "placeholder or instruction."
             )
         elif (
             breaking_content.casefold().strip(" .!\t\n") != "none"

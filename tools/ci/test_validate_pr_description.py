@@ -112,6 +112,35 @@ Result.
                     any("placeholder" in error.lower() for error in validate_pr_body(body))
                 )
 
+    def test_rejects_unremoved_template_instruction_sentences(self):
+        cases = (
+            VALID_BODY.replace(
+                "The startup palette changed when migration ran.",
+                "Describe the behavior or state before these changes.",
+            ),
+            VALID_BODY.replace(
+                "The startup screen always uses Mint Glass.",
+                "Describe the resulting behavior or state.",
+            ),
+            VALID_BODY.replace(
+                "Bug fix, Documentation",
+                "Enter the applicable type, such as Bug fix, Feature, Documentation, "
+                "Refactor, Performance, Test, CI/build, or Chore.",
+            ),
+            VALID_BODY
+            + "\n### Breaking changes (if any)\n"
+            + "Describe backwards-incompatible changes, or write None.\n",
+        )
+
+        for body in cases:
+            with self.subTest(body=body[-80:]):
+                self.assertTrue(
+                    any(
+                        "instruction" in error.lower()
+                        for error in validate_pr_body(body)
+                    )
+                )
+
     def test_does_not_treat_a_description_of_removed_todo_as_a_placeholder(self):
         body = VALID_BODY.replace(
             "The startup palette changed when migration ran.",
