@@ -482,6 +482,8 @@ void main() {
           },
           env: {
             'REFRESH_TOKEN': 'sk-123',
+            'SESSION_TOKEN': 'session-secret',
+            'CSRF_TOKEN': 'csrf-secret',
             'MCP_TOKEN': 'stale-token',
             'CUSTOM_SETTING': 'keep-this-value',
             'CUSTOM_API_KEY': 'stale-env-key',
@@ -522,6 +524,8 @@ void main() {
           typeConfig['env'],
           {
             'REFRESH_TOKEN': 'sk-123',
+            'SESSION_TOKEN': 'session-secret',
+            'CSRF_TOKEN': 'csrf-secret',
             'CUSTOM_SETTING': 'keep-this-value',
             'PATH': '/custom/bin',
           },
