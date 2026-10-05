@@ -197,7 +197,9 @@ void main() {
           if (current['status'] == FlowExecutionStatus.paused.name) break;
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
-        await executions.persistenceResult;
+        expect(await executions.persistenceResult, isTrue);
+        expect(await _savedIds(file),
+            fails ? ['removed', 'survivor'] : ['survivor']);
         final restored = TaskFlowExecutionNotifier();
         try {
           expect(await restored.restoreFromPersistence(), isTrue);
