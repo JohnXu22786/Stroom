@@ -476,6 +476,7 @@ class _McpServerConfigDialogState
                 if (_isEditMode && !_isVendor)
                   TextField(
                     controller: _nameController,
+                    enabled: !_isSaving,
                     decoration: const InputDecoration(
                       hintText: '输入 MCP 服务器名称',
                       border: OutlineInputBorder(),
@@ -500,6 +501,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _commandController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText: '例如: npx',
                         border: OutlineInputBorder(),
@@ -520,6 +522,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _argsController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText:
                             '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
@@ -541,6 +544,7 @@ class _McpServerConfigDialogState
                   if (_isEditMode && !_isVendor)
                     TextField(
                       controller: _urlController,
+                      enabled: !_isSaving,
                       decoration: const InputDecoration(
                         hintText: '例如: http://localhost:3001/sse',
                         border: OutlineInputBorder(),
@@ -565,6 +569,7 @@ class _McpServerConfigDialogState
                 if (_isEditMode)
                   TextField(
                     controller: _apiKeyController,
+                    enabled: !_isSaving,
                     decoration: InputDecoration(
                       hintText: '输入 API Key（可选）',
                       border: const OutlineInputBorder(),
@@ -579,8 +584,11 @@ class _McpServerConfigDialogState
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         tooltip: _obscureApiKey ? '显示密钥' : '隐藏密钥',
-                        onPressed: () =>
-                            setState(() => _obscureApiKey = !_obscureApiKey),
+                        onPressed: _isSaving
+                            ? null
+                            : () => setState(
+                                  () => _obscureApiKey = !_obscureApiKey,
+                                ),
                       ),
                     ),
                     obscureText: _obscureApiKey,
@@ -602,6 +610,7 @@ class _McpServerConfigDialogState
                 if (_isEditMode && !_isVendor)
                   TextField(
                     controller: _descriptionController,
+                    enabled: !_isSaving,
                     decoration: const InputDecoration(
                       hintText: '输入此 MCP 服务器的描述信息（可选）',
                       border: OutlineInputBorder(),
@@ -683,12 +692,14 @@ class _McpServerConfigDialogState
     final selected = _transportType == type;
     final cs = Theme.of(context).colorScheme;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _transportType = type;
-          _checkUnsavedChanges();
-        });
-      },
+      onTap: _isSaving
+          ? null
+          : () {
+              setState(() {
+                _transportType = type;
+                _checkUnsavedChanges();
+              });
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(

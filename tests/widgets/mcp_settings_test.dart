@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,12 +13,14 @@ import 'package:stroom/providers/update_provider.dart';
 
 /// Builds the test app with all required provider overrides.
 /// Uses a large screen size to avoid needing to scroll.
-Widget _buildTestApp() {
+Widget _buildTestApp({Future<void>? updateGate}) {
   return ProviderScope(
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = ProviderEntriesNotifier();
+        final notifier = updateGate == null
+            ? ProviderEntriesNotifier()
+            : _BlockingProviderEntriesNotifier(updateGate);
         // load() is normally called in the provider factory, so we call it here too.
         notifier.load();
         return notifier;
@@ -26,6 +29,22 @@ Widget _buildTestApp() {
     ],
     child: const MaterialApp(home: SettingsPage()),
   );
+}
+
+class _BlockingProviderEntriesNotifier extends ProviderEntriesNotifier {
+  _BlockingProviderEntriesNotifier(this._updateGate);
+
+  final Future<void> _updateGate;
+
+  @override
+  Future<void> update(
+    String id,
+    ProviderEntry updated, {
+    bool requirePersistence = false,
+  }) async {
+    await _updateGate;
+    await super.update(id, updated, requirePersistence: requirePersistence);
+  }
 }
 
 Finder _apiKeyFieldFinder() => find.byWidgetPredicate(
@@ -49,7 +68,10 @@ Finder _readOnlyDescriptionValueFinder(String value) => find.descendant(
       matching: find.text(value),
     );
 
-Future<void> _openCustomMcpConfig(WidgetTester tester) async {
+Future<void> _openCustomMcpConfig(
+  WidgetTester tester, {
+  Future<void>? updateGate,
+}) async {
   SharedPreferences.setMockInitialValues({
     'provider_entries': jsonEncode([
       {
@@ -78,7 +100,7 @@ Future<void> _openCustomMcpConfig(WidgetTester tester) async {
     ]),
   });
 
-  await tester.pumpWidget(_buildTestApp());
+  await tester.pumpWidget(_buildTestApp(updateGate: updateGate));
   await tester.pumpAndSettle();
   await tester.tap(find.text('MCP供应商'));
   await tester.pumpAndSettle();
@@ -398,6 +420,61 @@ void main() {
         expect(
           (model['typeConfig'] as Map<String, dynamic>)['description'],
           'Saved description',
+        );
+      },
+    );
+
+    testWidgets(
+      'custom MCP fields are disabled while a save is pending',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final updateGate = Completer<void>();
+        await _openCustomMcpConfig(tester, updateGate: updateGate.future);
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        await tester.enterText(_descriptionFieldFinder(), 'Saved description');
+        await tester.tap(find.text('保存'));
+        await tester.pump();
+
+        final dialogFields = tester.widgetList<TextField>(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.byType(TextField),
+          ),
+        );
+        final allFieldsDisabled = dialogFields.isNotEmpty &&
+            dialogFields.every((field) => field.enabled == false);
+
+        try {
+          if (!allFieldsDisabled) {
+            await tester.enterText(
+              _descriptionFieldFinder(),
+              'Changed while save was pending',
+            );
+          }
+        } finally {
+          updateGate.complete();
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          allFieldsDisabled,
+          isTrue,
+          reason: 'form fields must not accept edits during persistence',
+        );
+        expect(
+          _readOnlyDescriptionValueFinder('Saved description'),
+          findsOneWidget,
+        );
+        expect(
+          _readOnlyDescriptionValueFinder('Changed while save was pending'),
+          findsNothing,
         );
       },
     );
