@@ -7,9 +7,7 @@ import 'startup_visual_style.dart';
 
 /// A pure-Dart startup screen shown while Stroom performs its startup checks.
 ///
-/// The selected launch style defaults to [StartupVisualStyle.launchDefault].
-/// Pass [visualStyle] to show a particular concept, for example in the design
-/// gallery or a test.
+/// The launch appearance is the fixed Mint Glass visual style.
 class StartupPage extends StatefulWidget {
   /// Whether startup checks are still running.
   final bool isWorking;
@@ -20,9 +18,6 @@ class StartupPage extends StatefulWidget {
   /// Progress description (e.g. "2/3" or "50%").
   final String? progressDetail;
 
-  /// Optional fixed appearance; omitted styles use the Mint Glass default.
-  final StartupVisualStyle? visualStyle;
-
   /// Called when the minimum duration has elapsed AND checks are done.
   final VoidCallback? onComplete;
 
@@ -31,7 +26,6 @@ class StartupPage extends StatefulWidget {
     this.isWorking = true,
     this.statusMessage = '',
     this.progressDetail,
-    this.visualStyle,
     this.onComplete,
   });
 
@@ -41,16 +35,15 @@ class StartupPage extends StatefulWidget {
 
 class _StartupPageState extends State<StartupPage>
     with TickerProviderStateMixin {
+  static const _visualStyle = StartupVisualStyle.mintGlass;
+
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
   late final AnimationController _gradientController;
-  late StartupVisualStyle _visualStyle;
 
   @override
   void initState() {
     super.initState();
-    _visualStyle = widget.visualStyle ?? StartupVisualStyle.launchDefault;
-
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -67,14 +60,6 @@ class _StartupPageState extends State<StartupPage>
   }
 
   @override
-  void didUpdateWidget(covariant StartupPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.visualStyle != oldWidget.visualStyle) {
-      _visualStyle = widget.visualStyle ?? StartupVisualStyle.launchDefault;
-    }
-  }
-
-  @override
   void dispose() {
     _pulseController.dispose();
     _gradientController.dispose();
@@ -86,7 +71,7 @@ class _StartupPageState extends State<StartupPage>
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: _visualStyle.palette.first,
+        backgroundColor: StartupVisualStyle.mintGlass.palette.first,
         body: AnimatedBuilder(
           animation: _gradientController,
           builder: (context, child) {
@@ -96,7 +81,7 @@ class _StartupPageState extends State<StartupPage>
                 gradient: LinearGradient(
                   begin: Alignment(math.cos(angle), math.sin(angle)),
                   end: Alignment(-math.cos(angle), -math.sin(angle)),
-                  colors: _visualStyle.palette,
+                  colors: StartupVisualStyle.mintGlass.palette,
                 ),
               ),
               child: Stack(
@@ -104,7 +89,6 @@ class _StartupPageState extends State<StartupPage>
                 children: [
                   CustomPaint(
                     painter: StartupBackdropPainter(
-                      style: _visualStyle,
                       phase: _gradientController.value,
                     ),
                   ),
@@ -122,7 +106,7 @@ class _StartupPageState extends State<StartupPage>
                     child: Center(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: _buildHero(),
+                        child: _buildMintHero(),
                       ),
                     ),
                   ),
@@ -134,140 +118,6 @@ class _StartupPageState extends State<StartupPage>
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildHero() {
-    return switch (_visualStyle) {
-      StartupVisualStyle.violetCurrent => _buildVioletHero(),
-      StartupVisualStyle.paperDawn => _buildPaperHero(),
-      StartupVisualStyle.oceanSignal => _buildOceanHero(),
-      StartupVisualStyle.mintGlass => _buildMintHero(),
-    };
-  }
-
-  Widget _buildVioletHero() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildAppIcon(),
-        const SizedBox(height: 24),
-        _buildBrandName(fontSize: 38, letterSpacing: 2.2),
-        const SizedBox(height: 8),
-        _buildTagline(),
-      ],
-    );
-  }
-
-  Widget _buildPaperHero() {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-        decoration: BoxDecoration(
-          color: _visualStyle.cardSurface.withValues(alpha: 0.94),
-          border: Border.all(color: _visualStyle.cardBorder),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: _visualStyle.accent.withValues(alpha: 0.13),
-              blurRadius: 28,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                _buildAppIcon(size: 58),
-                const Spacer(),
-                Text(
-                  'STUDY  /  01',
-                  style: TextStyle(
-                    color: _visualStyle.secondaryForeground,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-            _buildBrandName(fontSize: 34, letterSpacing: 0.2),
-            const SizedBox(height: 10),
-            Container(
-              width: 44,
-              height: 2,
-              decoration: BoxDecoration(
-                color: _visualStyle.accent,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 13),
-            _buildTagline(textAlign: TextAlign.left),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Icon(Icons.wb_sunny_outlined,
-                    size: 15, color: _visualStyle.accent),
-                const SizedBox(width: 8),
-                Text(
-                  '把好奇，慢慢写下来',
-                  style: TextStyle(
-                    color: _visualStyle.secondaryForeground,
-                    fontSize: 12,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOceanHero() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 216,
-          height: 216,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _gradientController,
-                builder: (context, child) => CustomPaint(
-                  size: const Size(216, 216),
-                  painter: StartupSignalOrbitPainter(
-                    style: _visualStyle,
-                    phase: _gradientController.value,
-                  ),
-                ),
-              ),
-              _buildAppIcon(size: 78),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'STROOM  /  ON AIR',
-          style: TextStyle(
-            color: _visualStyle.accent,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 2.6,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _buildTagline(),
-      ],
     );
   }
 
@@ -323,11 +173,6 @@ class _StartupPageState extends State<StartupPage>
   }
 
   Widget _buildAppIcon({double size = 82}) {
-    final radius = _visualStyle == StartupVisualStyle.oceanSignal
-        ? size
-        : _visualStyle == StartupVisualStyle.paperDawn
-            ? 18.0
-            : 24.0;
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
@@ -338,10 +183,9 @@ class _StartupPageState extends State<StartupPage>
             height: size,
             decoration: BoxDecoration(
               color: _visualStyle.cardSurface.withValues(
-                alpha:
-                    _visualStyle == StartupVisualStyle.paperDawn ? 0.94 : 0.18,
+                alpha: 0.18,
               ),
-              borderRadius: BorderRadius.circular(radius),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: _visualStyle.cardBorder),
               boxShadow: [
                 BoxShadow(
@@ -392,8 +236,7 @@ class _StartupPageState extends State<StartupPage>
       style: TextStyle(
         fontSize: 15,
         color: _visualStyle.secondaryForeground,
-        letterSpacing:
-            _visualStyle == StartupVisualStyle.violetCurrent ? 1 : 0.4,
+        letterSpacing: 0.4,
       ),
     );
   }

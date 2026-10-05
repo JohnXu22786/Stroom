@@ -9,14 +9,12 @@ Widget wrapStartupPage({
   bool isWorking = true,
   String statusMessage = '',
   String? progressDetail,
-  StartupVisualStyle? visualStyle,
 }) {
   return MaterialApp(
     home: StartupPage(
       isWorking: isWorking,
       statusMessage: statusMessage,
       progressDetail: progressDetail,
-      visualStyle: visualStyle,
     ),
   );
 }
@@ -91,27 +89,23 @@ void main() {
       expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
     });
 
-    testWidgets('all concepts fit a compact landscape viewport',
-        (tester) async {
+    testWidgets('Mint Glass fits a compact landscape viewport', (tester) async {
       tester.view.physicalSize = const Size(640, 320);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      for (final style in StartupVisualStyle.values) {
-        await tester.pumpWidget(wrapStartupPage(
-          statusMessage: '正在准备你的学习空间',
-          progressDetail: '1/4',
-          visualStyle: style,
-        ));
-        await tester.pump();
+      await tester.pumpWidget(wrapStartupPage(
+        statusMessage: '正在准备你的学习空间',
+        progressDetail: '1/3',
+      ));
+      await tester.pump();
 
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: '${style.title} should fit a short landscape screen',
-        );
-      }
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Mint Glass should fit a short landscape screen',
+      );
     });
   });
 }
