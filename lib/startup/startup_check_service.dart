@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/data_migration_service.dart';
+import '../services/data_integrity_json_parser.dart' as json_parser;
 
 // ====================================================================
 // Startup Issue Severity
@@ -171,6 +172,28 @@ class StartupCheckService {
     final prefs = await SharedPreferences.getInstance();
     final providerEntriesJson = prefs.getString('provider_entries');
     final conversationsJson = prefs.getString('conversations');
+
+    if (kIsWeb) {
+      try {
+        final resultMaps = await json_parser.validateDataFormatsWeb(
+          providerEntriesJson,
+          conversationsJson,
+        );
+        return resultMaps.map((issue) {
+          return StartupIssue(
+            message: issue['message']!,
+            severity: issue['severity'] == 'error'
+                ? StartupIssueSeverity.error
+                : StartupIssueSeverity.warning,
+            dataKey: issue['dataKey'],
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint('[StartupCheckService] Web worker validation failed: $e');
+        return _validateDataFormatsSync(
+            providerEntriesJson, conversationsJson);
+      }
+    }
 
     // 在测试环境下回退到同步执行（Isolate 在 FakeAsync 中不可用）
     if (_inTestMode()) {

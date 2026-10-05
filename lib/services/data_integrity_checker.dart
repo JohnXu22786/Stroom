@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
+import 'data_integrity_json_parser.dart' as json_parser;
 import 'manifest_database.dart';
 import 'storage_service.dart';
 
@@ -42,6 +43,26 @@ class DataIntegrityReport {
       issues.where((i) => i.isCorruption).toList();
 }
 
+class _JsonIntegrityCheck {
+  final String part;
+  final String messagePrefix;
+  final String? content;
+  final String? readError;
+
+  const _JsonIntegrityCheck({
+    required this.part,
+    required this.messagePrefix,
+    this.content,
+    this.readError,
+  });
+
+  DataIntegrityIssue issue(String error) => DataIntegrityIssue(
+        part: part,
+        message: '$messagePrefix$error',
+        isCorruption: true,
+      );
+}
+
 /// 启动数据完整性校验器。
 ///
 /// 四层检查：
@@ -72,23 +93,29 @@ class DataIntegrityChecker {
 
   /// 检查当前数据完整性。
   static Future<DataIntegrityReport> checkCurrentData() async {
-    final issues = <DataIntegrityIssue>[];
+    final jsonChecks = await _readJsonChecks();
+    // 开始后台解析后继续执行剩余安全检查。SQLite 和语义检查仍全部完成，
+    // 且只有所有结果汇总后才会返回给调用方进行修复决策。
+    final jsonIssuesFuture = _checkJsonChecks(jsonChecks);
 
-    await _checkPrefsJsonKeys(issues);
-    await _checkTaskFiles(issues);
-    await _checkCookies(issues);
-    await _checkSqliteDatabases(issues);
-    await _checkSemantics(issues);
+    final sqliteIssues = <DataIntegrityIssue>[];
+    await _checkSqliteDatabases(sqliteIssues);
+    final semanticIssues = <DataIntegrityIssue>[];
+    await _checkSemantics(semanticIssues);
 
-    return DataIntegrityReport(issues);
+    return DataIntegrityReport([
+      ...await jsonIssuesFuture,
+      ...sqliteIssues,
+      ...semanticIssues,
+    ]);
   }
 
   // ================================================================
   // 1. prefs JSON 键解析
   // ================================================================
 
-  static Future<void> _checkPrefsJsonKeys(
-      List<DataIntegrityIssue> issues) async {
+  static Future<void> _readPrefsJsonKeys(
+      List<_JsonIntegrityCheck> checks) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final key in [
@@ -98,15 +125,11 @@ class DataIntegrityChecker {
       ]) {
         final raw = prefs.getString(key);
         if (raw == null || raw.isEmpty) continue;
-        try {
-          jsonDecode(raw);
-        } catch (e) {
-          issues.add(DataIntegrityIssue(
-            part: key == 'data_format_versions' ? 'settings' : 'chat',
-            message: 'SharedPreferences 键 $key 无法解析: $e',
-            isCorruption: true,
-          ));
-        }
+        checks.add(_JsonIntegrityCheck(
+          part: key == 'data_format_versions' ? 'settings' : 'chat',
+          messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
+          content: raw,
+        ));
       }
     } catch (e) {
       debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
@@ -117,7 +140,8 @@ class DataIntegrityChecker {
   // 2. 任务/任务流 JSON 文件
   // ================================================================
 
-  static Future<void> _checkTaskFiles(List<DataIntegrityIssue> issues) async {
+  static Future<void> _readTaskFiles(
+      List<_JsonIntegrityCheck> checks) async {
     if (kIsWeb) return;
     try {
       final appDir = await AppStorage.directory;
@@ -127,12 +151,16 @@ class DataIntegrityChecker {
         try {
           final content = await file.readAsString();
           if (content.trim().isEmpty) continue;
-          jsonDecode(content);
-        } catch (e) {
-          issues.add(DataIntegrityIssue(
+          checks.add(_JsonIntegrityCheck(
             part: 'tasks',
-            message: '任务文件 $rel 无法解析: $e',
-            isCorruption: true,
+            messagePrefix: '任务文件 $rel 无法解析: ',
+            content: content,
+          ));
+        } catch (e) {
+          checks.add(_JsonIntegrityCheck(
+            part: 'tasks',
+            messagePrefix: '任务文件 $rel 无法解析: ',
+            readError: e.toString(),
           ));
         }
       }
@@ -145,7 +173,7 @@ class DataIntegrityChecker {
   // 3. Cookies JSON 文件
   // ================================================================
 
-  static Future<void> _checkCookies(List<DataIntegrityIssue> issues) async {
+  static Future<void> _readCookies(List<_JsonIntegrityCheck> checks) async {
     if (kIsWeb) return;
     try {
       final appDir = await AppStorage.directory;
@@ -154,17 +182,46 @@ class DataIntegrityChecker {
       try {
         final content = await file.readAsString();
         if (content.trim().isEmpty) return;
-        jsonDecode(content);
-      } catch (e) {
-        issues.add(DataIntegrityIssue(
+        checks.add(_JsonIntegrityCheck(
           part: 'browserCookies',
-          message: 'browser_cookies.json 无法解析: $e',
-          isCorruption: true,
+          messagePrefix: 'browser_cookies.json 无法解析: ',
+          content: content,
+        ));
+      } catch (e) {
+        checks.add(_JsonIntegrityCheck(
+          part: 'browserCookies',
+          messagePrefix: 'browser_cookies.json 无法解析: ',
+          readError: e.toString(),
         ));
       }
     } catch (e) {
       debugPrint('[DataIntegrityChecker] cookies 检查失败: $e');
     }
+  }
+
+  static Future<List<_JsonIntegrityCheck>> _readJsonChecks() async {
+    final checks = <_JsonIntegrityCheck>[];
+    await _readPrefsJsonKeys(checks);
+    await _readTaskFiles(checks);
+    await _readCookies(checks);
+    return checks;
+  }
+
+  static Future<List<DataIntegrityIssue>> _checkJsonChecks(
+      List<_JsonIntegrityCheck> checks) async {
+    final contents = [
+      for (final check in checks)
+        if (check.content != null) check.content!,
+    ];
+    final parseErrors = await json_parser.parseJsonBatch(contents);
+    var parseIndex = 0;
+    final issues = <DataIntegrityIssue>[];
+    for (final check in checks) {
+      final error = check.readError ??
+          (check.content == null ? null : parseErrors[parseIndex++]);
+      if (error != null) issues.add(check.issue(error));
+    }
+    return issues;
   }
 
   // ================================================================
