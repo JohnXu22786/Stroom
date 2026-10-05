@@ -36,6 +36,51 @@ Finder _readOnlyApiKeyFinder() => find.byWidgetPredicate(
       (w) => w is mcp_shared.ReadOnlyField && w.label == 'API 密钥',
     );
 
+Finder _descriptionFieldFinder() => find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '输入此 MCP 服务器的描述信息（可选）',
+    );
+
+Finder _readOnlyDescriptionFinder() => find.byWidgetPredicate(
+      (w) => w is mcp_shared.ReadOnlyField && w.label == '描述',
+    );
+
+Future<void> _openCustomMcpConfig(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues({
+    'provider_entries': jsonEncode([
+      {
+        'id': 'builtin_mcp',
+        'type': 'mcp',
+        'name': 'MCP供应商',
+        'configs': [
+          {
+            'providerName': 'Custom MCP',
+            'host': 'https://mcp.example.com/sse',
+            'key': '',
+            'models': [
+              {
+                'name': 'Custom MCP',
+                'modelId': 'sse',
+                'typeConfig': {
+                  'transport': 'sse',
+                  'url': 'https://mcp.example.com/sse',
+                  'description': 'Original description',
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ]),
+  });
+
+  await tester.pumpWidget(_buildTestApp());
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('MCP供应商'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Custom MCP'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('SettingsPage - MCP section', () {
     setUp(() {
@@ -235,6 +280,82 @@ void main() {
         expect(
           tester.widget<TextField>(_apiKeyFieldFinder()).obscureText,
           isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      'custom MCP descriptions stay read-only until edit and discard restores',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(tester);
+
+        expect(_descriptionFieldFinder(), findsNothing);
+        expect(_readOnlyDescriptionFinder(), findsOneWidget);
+        expect(find.text('Original description'), findsOneWidget);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(_descriptionFieldFinder()).controller!.text,
+          'Original description',
+        );
+
+        await tester.enterText(
+          _descriptionFieldFinder(),
+          'Discarded description',
+        );
+        await tester.tap(find.text('放弃'));
+        await tester.pumpAndSettle();
+        expect(_descriptionFieldFinder(), findsNothing);
+        expect(find.text('Original description'), findsOneWidget);
+        expect(find.text('Discarded description'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'saving a custom MCP description persists it and returns to read-only',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await _openCustomMcpConfig(tester);
+
+        await tester.tap(find.text('编辑'));
+        await tester.pumpAndSettle();
+        await tester.enterText(_descriptionFieldFinder(), 'Saved description');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(_descriptionFieldFinder(), findsNothing);
+        expect(_readOnlyDescriptionFinder(), findsOneWidget);
+        expect(find.text('Saved description'), findsOneWidget);
+
+        final preferences = await SharedPreferences.getInstance();
+        final entries =
+            jsonDecode(preferences.getString('provider_entries')!) as List;
+        final entry = entries.singleWhere(
+          (item) => item['id'] == 'builtin_mcp',
+        ) as Map<String, dynamic>;
+        final config =
+            (entry['configs'] as List).cast<Map<String, dynamic>>().firstWhere(
+                  (item) => item['providerName'] == 'Custom MCP',
+                );
+        final model =
+            (config['models'] as List).cast<Map<String, dynamic>>().firstWhere(
+                  (item) => item['name'] == 'Custom MCP',
+                );
+        expect(
+          (model['typeConfig'] as Map<String, dynamic>)['description'],
+          'Saved description',
         );
       },
     );
