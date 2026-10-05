@@ -396,7 +396,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.file_present,
-                    title: '从系统相册选择',
+                    title: '从设备相册选择',
                     subtitle: '从设备存储中选择视频文件',
                     color: Colors.blue,
                     onTap: () {
@@ -795,9 +795,12 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
   Future<void> _pickVideoFile() async {
     try {
-      // 移动端直接打开系统相册（视频专用选择 UI），
+      // 移动端直接打开 WeChat 风格视频选择器，
       // 桌面端打开文件选择器并定位到系统"视频"目录
-      final pickedFiles = await pickSystemMedia(SystemMediaKind.video);
+      final pickedFiles = await pickGalleryMedia(
+        context,
+        GalleryMediaKind.video,
+      );
       if (pickedFiles.isEmpty) return;
 
       final newVideos = <SelectedVideo>[];

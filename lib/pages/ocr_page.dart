@@ -1243,8 +1243,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.photo_library,
-                    title: '从系统相册选择',
-                    subtitle: '从设备系统相册中选择图片',
+                    title: '从设备相册选择',
+                    subtitle: '浏览并选择设备中的图片',
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1292,13 +1292,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
   }
 
-  /// Pick images from the system gallery (supports batch selection).
+  /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
-      // 移动端直接打开系统相册（图片专用选择 UI），
+      // 移动端直接打开 WeChat 风格图片选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await pickSystemMedia(
-        SystemMediaKind.image,
+      final files = await pickGalleryMedia(
+        context,
+        GalleryMediaKind.image,
         imageQuality: 90,
         maxWidth: 2048,
         maxHeight: 2048,

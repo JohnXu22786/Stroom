@@ -209,13 +209,16 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     if (_isImporting) return;
     _isImporting = true;
     // 记录加载对话框是否弹出：异常发生在弹窗之前（如文件选择器/系统
-    // 相册抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
+    // 相册选择器抛错）或成功弹出之后（如 loadRecords 抛错）时，catch 中的
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      // 移动端直接打开系统相册（图片专用选择 UI），
+      // 移动端直接打开 WeChat 风格图片选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final pickedFiles = await pickSystemMedia(SystemMediaKind.image);
+      final pickedFiles = await pickGalleryMedia(
+        context,
+        GalleryMediaKind.image,
+      );
       if (pickedFiles.isEmpty) {
         _isImporting = false;
         return;
