@@ -55,7 +55,10 @@ Future<List<XFile>> pickNativeGalleryMedia(
         targetWidth / asset.width,
         targetHeight / asset.height,
       );
-      final width = (asset.width * scale).round().clamp(1, targetWidth).toInt();
+      final width = (asset.width * scale)
+          .round()
+          .clamp(1, targetWidth)
+          .toInt();
       final height = (asset.height * scale)
           .round()
           .clamp(1, targetHeight)
