@@ -197,6 +197,12 @@ def validate_pr_body(body: str) -> list[str]:
         if heading is not None:
             heading_indices.setdefault(heading, []).append(index)
 
+    first_section_indices = heading_indices.get(REQUIRED_HEADINGS[0], [])
+    if first_section_indices and any(
+        line.strip() for line in lines[: first_section_indices[0]]
+    ):
+        errors.append("Place PR description text under the required template headings.")
+
     required_indices: list[int] = []
     for heading in REQUIRED_HEADINGS:
         indices = heading_indices.get(heading, [])

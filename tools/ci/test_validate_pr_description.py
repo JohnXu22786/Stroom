@@ -60,6 +60,13 @@ class ValidatePrDescriptionTest(unittest.TestCase):
         self.assertTrue(any("Before this PR" in error for error in errors))
         self.assertTrue(any("Type of change" in error for error in errors))
 
+    def test_rejects_visible_preface_before_the_required_sections(self):
+        body = "Résumé en français.\n\n" + VALID_BODY
+
+        self.assertTrue(
+            any("under the required template headings" in error for error in validate_pr_body(body))
+        )
+
     def test_does_not_accept_headings_inside_a_code_block(self):
         body = "```markdown\n" + VALID_BODY + "```\n"
 
