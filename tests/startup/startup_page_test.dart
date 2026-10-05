@@ -80,7 +80,8 @@ void main() {
       expect(tester.takeException(), isNull, reason: '长状态文案必须可滚动而非溢出报错');
     });
 
-    testWidgets('all concepts fit a compact landscape viewport', (tester) async {
+    testWidgets('all concepts fit a compact landscape viewport',
+        (tester) async {
       tester.view.physicalSize = const Size(640, 320);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
