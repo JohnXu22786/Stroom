@@ -90,9 +90,8 @@ class _McpServerConfigDialogState
       return;
     }
     final config = entry.configs[widget.configIndex];
-    final mcpConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final mcpConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
       typeConfig: mcpConfig,
@@ -163,8 +162,7 @@ class _McpServerConfigDialogState
       return;
     }
 
-    final changed =
-        _nameController.text != _originalName ||
+    final changed = _nameController.text != _originalName ||
         _descriptionController.text != _originalDescription ||
         _transportType != _originalTransport ||
         _commandController.text != _originalCommand ||
@@ -216,10 +214,10 @@ class _McpServerConfigDialogState
     final argsStr = _argsController.text.trim();
     final args = argsStr.isNotEmpty
         ? argsStr
-              .split(',')
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty)
-              .toList()
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
         : <String>[];
 
     final apiKey = _apiKeyController.text.trim();
@@ -294,8 +292,7 @@ class _McpServerConfigDialogState
         for (final key in effectiveHeaders.keys.toList()) {
           final val = effectiveHeaders[key]!;
           // Match empty, key-only (e.g. "x-api-key "), or prefix-only (e.g. "Bearer ")
-          final isEmptyOrPlaceholder =
-              val.isEmpty ||
+          final isEmptyOrPlaceholder = val.isEmpty ||
               val == '$key ' ||
               val.endsWith(' ') ||
               !RegExp(r'\S').hasMatch(val.trim());
@@ -333,8 +330,7 @@ class _McpServerConfigDialogState
     );
 
     var configs = entry.configs.map((c) => c.copy()).toList();
-    final existingConfig =
-        _isExistingConfig &&
+    final existingConfig = _isExistingConfig &&
             widget.configIndex >= 0 &&
             widget.configIndex < configs.length
         ? configs[widget.configIndex]
@@ -489,7 +485,8 @@ class _McpServerConfigDialogState
                     TextField(
                       controller: _argsController,
                       decoration: const InputDecoration(
-                        hintText: '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
+                        hintText:
+                            '用逗号分隔，例如: -y, @modelcontextprotocol/server-filesystem, /tmp',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.list, color: Colors.purple),
                       ),
@@ -676,9 +673,8 @@ class _McpServerConfigDialogState
     final icon = _transportType == McpTransportType.stdio
         ? Icons.desktop_windows
         : Icons.cloud;
-    final label = _transportType == McpTransportType.stdio
-        ? '本地 (stdio)'
-        : '远程 (SSE)';
+    final label =
+        _transportType == McpTransportType.stdio ? '本地 (stdio)' : '远程 (SSE)';
     return ReadOnlyField(
       icon: icon,
       iconColor: cs.primary,

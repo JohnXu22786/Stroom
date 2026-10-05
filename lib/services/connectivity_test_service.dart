@@ -33,9 +33,9 @@ class ConnectivityTestService {
   static final _jsonEncoder = const JsonEncoder.withIndent('  ');
 
   static String defaultMcpTestContent() => _jsonEncoder.convert({
-    'method': 'tools/list',
-    'params': <String, dynamic>{},
-  });
+        'method': 'tools/list',
+        'params': <String, dynamic>{},
+      });
 
   static String defaultSearchTestContent() =>
       _jsonEncoder.convert({'query': 'Stroom 连通性测试', 'count': 1});
@@ -128,8 +128,7 @@ class ConnectivityTestService {
       if (serverConfig == null) {
         return _finish(stopwatch, false, 'MCP 配置无效', '缺少有效的传输类型配置。');
       }
-      final isMobile =
-          defaultTargetPlatform == TargetPlatform.android ||
+      final isMobile = defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS;
       if (serverConfig.transportType == McpTransportType.stdio &&
           (kIsWeb || isMobile)) {
@@ -162,8 +161,8 @@ class ConnectivityTestService {
       final client = McpClient(config: serverConfig);
       try {
         final connected = await client.connect().timeout(
-          const Duration(seconds: 60),
-        );
+              const Duration(seconds: 60),
+            );
         if (!connected) {
           return _finish(
             stopwatch,
