@@ -636,6 +636,53 @@ void main() {
     });
   });
 
+  group('StartupCheckService - native Isolate failures', () {
+    test(
+      'fails closed when format validation cannot start its Isolate',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('provider_entries', '{broken');
+        final previousRunner = debugStartupIsolateRunnerForTesting;
+        debugStartupIsolateRunnerForTesting =
+            (_) async => throw StateError('simulated Isolate failure');
+
+        try {
+          await expectLater(
+            StartupCheckService.validateDataFormats(),
+            throwsA(isA<StartupDataValidationUnavailable>()),
+          );
+        } finally {
+          debugStartupIsolateRunnerForTesting = previousRunner;
+        }
+      },
+      skip: kIsWeb,
+    );
+
+    test(
+      'fails closed when integrity checking cannot start its Isolate',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'provider_entries',
+          '[{"id":"p1","type":"unregistered","name":"P1"}]',
+        );
+        final previousRunner = debugStartupIsolateRunnerForTesting;
+        debugStartupIsolateRunnerForTesting =
+            (_) async => throw StateError('simulated Isolate failure');
+
+        try {
+          await expectLater(
+            StartupCheckService.checkDataIntegrity(),
+            throwsA(isA<StartupDataValidationUnavailable>()),
+          );
+        } finally {
+          debugStartupIsolateRunnerForTesting = previousRunner;
+        }
+      },
+      skip: kIsWeb,
+    );
+  });
+
   group('StartupCheckService - checkFormatVersion tests', () {
     test('runs format version check and returns result', () async {
       final prefs = await SharedPreferences.getInstance();
