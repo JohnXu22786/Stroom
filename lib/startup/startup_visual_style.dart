@@ -49,6 +49,9 @@ enum StartupVisualStyle {
     icon: Icons.bubble_chart_rounded,
   );
 
+  /// User-selected default for the production startup screen.
+  static const StartupVisualStyle launchDefault = StartupVisualStyle.mintGlass;
+
   const StartupVisualStyle({
     required this.title,
     required this.palette,

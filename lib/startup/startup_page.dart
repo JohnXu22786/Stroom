@@ -7,8 +7,9 @@ import 'startup_visual_style.dart';
 
 /// A pure-Dart startup screen shown while Stroom performs its startup checks.
 ///
-/// A style is sampled once per launch by default. Pass [visualStyle] to keep a
-/// particular concept fixed, for example in the design gallery or a test.
+/// The selected launch style defaults to [StartupVisualStyle.launchDefault].
+/// Pass [visualStyle] to show a particular concept, for example in the design
+/// gallery or a test.
 class StartupPage extends StatefulWidget {
   /// Whether startup checks are still running.
   final bool isWorking;
@@ -19,7 +20,7 @@ class StartupPage extends StatefulWidget {
   /// Progress description (e.g. "2/3" or "50%").
   final String? progressDetail;
 
-  /// Optional fixed appearance; omitted styles are sampled at page creation.
+  /// Optional fixed appearance; omitted styles use the Mint Glass default.
   final StartupVisualStyle? visualStyle;
 
   /// Called when the minimum duration has elapsed AND checks are done.
@@ -48,7 +49,7 @@ class _StartupPageState extends State<StartupPage>
   @override
   void initState() {
     super.initState();
-    _visualStyle = widget.visualStyle ?? StartupVisualStyle.random();
+    _visualStyle = widget.visualStyle ?? StartupVisualStyle.launchDefault;
 
     _pulseController = AnimationController(
       vsync: this,
@@ -69,7 +70,7 @@ class _StartupPageState extends State<StartupPage>
   void didUpdateWidget(covariant StartupPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.visualStyle != oldWidget.visualStyle) {
-      _visualStyle = widget.visualStyle ?? StartupVisualStyle.random();
+      _visualStyle = widget.visualStyle ?? StartupVisualStyle.launchDefault;
     }
   }
 

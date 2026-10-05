@@ -64,6 +64,17 @@ void main() {
       expect(find.text('1/3'), findsOneWidget);
     });
 
+    testWidgets('uses Mint Glass as the default launch style', (tester) async {
+      await tester.pumpWidget(wrapStartupPage());
+      await tester.pump();
+
+      expect(find.byIcon(StartupVisualStyle.mintGlass.icon), findsOneWidget);
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+        StartupVisualStyle.mintGlass.palette.first,
+      );
+    });
+
     testWidgets('long status message does not overflow the layout',
         (tester) async {
       // 启动检查发现多个问题时状态文案会非常长（所有问题拼接），
