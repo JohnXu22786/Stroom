@@ -328,6 +328,8 @@ void main() {
     );
     await tester.tap(configCard);
     await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
