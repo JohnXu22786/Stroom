@@ -19,6 +19,10 @@ FENCE_CLOSE_PATTERN = re.compile(r"^ {0,3}(`+|~+)[ \t]*$")
 INLINE_CODE_PATTERN = re.compile(
     r"(?<!\\)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL
 )
+PRE_BLOCK_PATTERN = re.compile(
+    r"^ {0,3}<pre\b[^>]*>.*?</pre\s*>", re.IGNORECASE | re.MULTILINE | re.DOTALL
+)
+PRE_OPEN_PATTERN = re.compile(r"^ {0,3}<pre\b[^>]*>", re.IGNORECASE | re.MULTILINE)
 PLACEHOLDER_PATTERN = re.compile(
     r"\[\s*\]"
     r"|\[(?:type|summary|description|placeholder|todo|tbd|write|describe|add|"
@@ -36,7 +40,7 @@ TEMPLATE_INSTRUCTION_PATTERN = re.compile(
     r"|Enter the applicable type, such as .*"
     r"|Describe backwards-incompatible changes, or write None\..*"
     r"|Write the PR description in English\..*"
-    r"|Add Fixes #123 here only when this PR closes an issue\.)[ \t]*$",
+    r"|Add\s+(?:Fixes\s+#123\s+)?here only when this PR closes an issue\.)[ \t]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 REQUIRED_HEADINGS = (
@@ -95,10 +99,20 @@ def _remove_inline_code_spans(body: str) -> str:
     )
 
 
-def _clean_body(body: str) -> tuple[str, bool]:
+def _remove_html_pre_blocks(body: str) -> tuple[str, bool]:
+    cleaned_body = PRE_BLOCK_PATTERN.sub("", body)
+    unclosed_pre = PRE_OPEN_PATTERN.search(cleaned_body)
+    if unclosed_pre:
+        return cleaned_body[: unclosed_pre.start()], True
+    return cleaned_body, False
+
+
+def _clean_body(body: str) -> tuple[str, bool, bool]:
     without_fences = _remove_code_blocks(body)
     without_inline_code = _remove_inline_code_spans(without_fences)
-    return _strip_comments(without_inline_code)
+    without_pre, has_unclosed_pre = _remove_html_pre_blocks(without_inline_code)
+    cleaned, has_unclosed_comment = _strip_comments(without_pre)
+    return cleaned, has_unclosed_comment, has_unclosed_pre
 
 
 def _heading_name(line: str) -> str | None:
@@ -141,10 +155,12 @@ def validate_pr_body(body: str) -> list[str]:
     if not body.strip():
         return ["The pull request description is empty."]
 
-    cleaned_body, has_unclosed_comment = _clean_body(body)
+    cleaned_body, has_unclosed_comment, has_unclosed_pre = _clean_body(body)
     errors: list[str] = []
     if has_unclosed_comment:
         errors.append("Close every HTML comment in the PR description.")
+    if has_unclosed_pre:
+        errors.append("Close every HTML <pre> block in the PR description.")
     if any(
         character.isalpha()
         and not unicodedata.name(character, "").startswith("LATIN ")

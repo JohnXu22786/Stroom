@@ -39,6 +39,16 @@ class ValidatePrDescriptionTest(unittest.TestCase):
 
         self.assertTrue(any("Missing required heading" in error for error in errors))
 
+    def test_html_pre_blocks_do_not_satisfy_required_sections(self):
+        errors = validate_pr_body("<pre>\n" + VALID_BODY + "\n</pre>")
+
+        self.assertTrue(any("Missing required heading" in error for error in errors))
+
+    def test_unclosed_html_pre_block_is_rejected(self):
+        errors = validate_pr_body("<pre>\n" + VALID_BODY)
+
+        self.assertTrue(any("HTML <pre>" in error for error in errors))
+
     def test_fence_closers_must_match_the_opening_length_and_have_no_info(self):
         cases = (
             "````markdown\n```\n" + VALID_BODY + "````\n",
@@ -140,6 +150,16 @@ Result.
                         for error in validate_pr_body(body)
                     )
                 )
+
+    def test_sanitized_fixes_instruction_is_still_rejected(self):
+        body = VALID_BODY.replace(
+            "The startup screen always uses Mint Glass.",
+            "Add `Fixes #123` here only when this PR closes an issue.",
+        )
+
+        self.assertTrue(
+            any("instruction" in error.lower() for error in validate_pr_body(body))
+        )
 
     def test_does_not_treat_a_description_of_removed_todo_as_a_placeholder(self):
         body = VALID_BODY.replace(
