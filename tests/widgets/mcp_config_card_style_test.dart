@@ -133,6 +133,14 @@ void main() {
     );
   }
 
+  Future<void> revealHttpSearchCard(WidgetTester tester) async {
+    await tester.drag(
+      find.byType(CustomScrollView),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+  }
+
   /// The card-level Container for config [index]. The page emits stable
   /// keys (`ValueKey('config_${entryId}_$i')`) on each _McpConfigCard; the
   /// card's outer Container (the one with the rounded BoxDecoration) is its
@@ -266,12 +274,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester, Brightness.light);
 
+    // The group header is in a later sliver and is not built until its first
+    // config enters the viewport.
+    await scrollToCard(tester, 2, delta: 200);
     final otherGroupTitle = find.text('其他 MCP 服务').first;
-    await tester.scrollUntilVisible(
-      otherGroupTitle,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
     final groupCard = find
         .ancestor(of: otherGroupTitle, matching: find.byType(Container))
         .first;
@@ -386,6 +392,7 @@ void main() {
       find.descendant(of: httpSearchCard, matching: find.text('HTTP 搜索')),
       findsOneWidget,
     );
+    await revealHttpSearchCard(tester);
     await tester.tap(httpSearchCard);
     await tester.pumpAndSettle();
 
@@ -449,6 +456,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '');
@@ -494,6 +502,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'replacement-key');
@@ -534,6 +543,7 @@ void main() {
     };
     await pumpPage(tester, Brightness.light, state: state);
 
+    await revealHttpSearchCard(tester);
     await tester.tap(find.byKey(const ValueKey('config_test_mcp_1')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'http:///search');
