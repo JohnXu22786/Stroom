@@ -1334,8 +1334,7 @@ void main() {
     await _waitFor(
         () =>
             received.length == 1 &&
-            notifier.execution('cold')?.status ==
-                FlowExecutionStatus.completed,
+            notifier.execution('cold')?.status == FlowExecutionStatus.completed,
         'cold restored audio MP4 dispatch');
     expect(received.single.type, IOType.audio);
     expect(received.single.mimeType, 'audio/mp4');
