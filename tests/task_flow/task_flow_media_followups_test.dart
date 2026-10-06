@@ -148,9 +148,13 @@ class _GatedRegistrationNotifier extends TaskFlowExecutionNotifier {
   Future<bool> persist() async {
     if (holdNextWrite) {
       holdNextWrite = false;
+      // Accepted snapshots enter the production queue before pausing, so
+      // disposal cannot queue ahead of the registration write.
+      final pending = rejectHeldWrite ? null : super.persist();
       entered.complete();
       await release.future;
-      if (rejectHeldWrite) return false;
+      if (pending == null) return false;
+      return pending;
     }
     return super.persist();
   }
@@ -571,6 +575,12 @@ void main() {
     await notifier.entered.future.timeout(const Duration(seconds: 5));
     notifier.release.complete();
     expect(await save, isFalse);
+    final persisted = File('${directory.path}/task_flows/executions.json');
+    if (await persisted.exists()) {
+      final records = (jsonDecode(await persisted.readAsString()) as List)
+          .cast<Map<String, dynamic>>();
+      expect(records.map((entry) => entry['id']), isNot(contains('rejected')));
+    }
     expect(notifier.execution('rejected'), isNull);
     expect(notifier.referencesInputStoragePath(path), isFalse);
     await notifier.cleanupInputStoragePaths([path]);

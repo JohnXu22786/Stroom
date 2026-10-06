@@ -14,7 +14,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     showChatAttachmentPanel(
       context: context,
       onPickFromCamera: _pickFromCamera,
-      // 设备相册直接打开系统相册（不再弹出中间选择对话框）
+      // 设备相册直接通过 image_picker 打开（不再弹出中间选择对话框）
       onPickFromGallery: _pickFromGallery,
       onPickFromFilePicker: _pickFromFilePicker,
       onPickFromAppFiles: _pickFromAppFiles,
@@ -62,23 +62,22 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     }
   }
 
-  /// 从设备相册选取图片（系统 API）
+  /// 从设备相册选取图片
   ///
   /// 支持多选图片，自动适配不同平台：
-  /// - Android/iOS: 原生系统相册（专用相册 UI）
-  /// - Web (桌面/移动): 浏览器文件选择器（image/*）
-  /// - 桌面原生: 系统文件对话框（定位到系统"图片"目录）
+  /// - Android/iOS/移动 Web: image_picker 平台选择器
+  /// - 桌面原生/桌面 Web: file_picker 文件选择器
   /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
     try {
-      final files = await pickSystemMedia(SystemMediaKind.image);
+      final files = await pickGalleryMedia(GalleryMediaKind.image);
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();
         await _addPendingAttachment(file.name, bytes);
       }
     } on UnsupportedError catch (e) {
-      // 平台不支持 ImagePicker（极少数情况）
+      // 平台不支持当前设备的媒体选择能力（极少数情况）
       if (mounted) {
         final platform = kIsWeb ? 'Web浏览器' : '当前设备';
         ScaffoldMessenger.of(context).showSnackBar(

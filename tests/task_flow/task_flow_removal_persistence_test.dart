@@ -98,9 +98,18 @@ class _HeldRemoval extends TaskFlowExecutionNotifier {
   Future<bool> _holdWrite(Future<bool> Function() write) async {
     if (holdNextWrite) {
       holdNextWrite = false;
+      if (failHeldWrite) {
+        started.complete();
+        await release.future;
+        return false;
+      }
+      // Enqueue the atomic write before blocking its caller. This mirrors the
+      // real writer, where a held filesystem operation already owns its place
+      // in the persistence queue before later barrier-dependent flushes queue.
+      final pending = write();
       started.complete();
       await release.future;
-      if (failHeldWrite) return false;
+      return pending;
     }
     return write();
   }
@@ -165,6 +174,7 @@ void main() {
           ]);
       expect(await executions.addExecutions([removed, survivor]), isTrue);
       final parent = p.join(directory.path, 'task_flows');
+      final file = File(p.join(parent, 'executions.json'));
       final started = Completer<void>();
       final release = Completer<void>();
       final outerZone = Zone.current;
@@ -179,7 +189,6 @@ void main() {
         expect(await removal.timeout(const Duration(seconds: 5)), !fails);
         // Observe the automatic flush reaching disk without requesting persist.
         // Its barrier continuation can enqueue after the removal future settles.
-        final file = File(p.join(parent, 'executions.json'));
         final deadline = DateTime.now().add(const Duration(seconds: 2));
         while (DateTime.now().isBefore(deadline)) {
           final saved = jsonDecode(await file.readAsString()) as List;
@@ -188,23 +197,35 @@ void main() {
           if (current['status'] == FlowExecutionStatus.paused.name) break;
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
-        await executions.persistenceResult;
-        final restored = TaskFlowExecutionNotifier();
-        try {
-          expect(await restored.restoreFromPersistence(), isTrue);
-          expect(restored.execution(removed.id) != null, fails);
-          final savedSurvivor = restored.execution(survivor.id)!;
-          expect(savedSurvivor.status, FlowExecutionStatus.paused);
-          expect(savedSurvivor.subTasks.single.outcome, FlowStepOutcome.paused);
-        } finally {
-          restored.dispose();
-        }
+        expect(await executions.persistenceResult, isTrue);
+        expect(await _savedIds(file),
+            fails ? ['removed', 'survivor'] : ['survivor']);
       }, createDirectory: (path) {
         final delegate = outerZone.run(() => Directory(path));
         return p.normalize(path) == p.normalize(parent)
             ? _RemovalDirectory(delegate, started, release, fails)
             : delegate;
       });
+
+      // The IO override above only holds the atomic removal write. Exercise
+      // startup restoration after leaving that write-only test zone.
+      expect(
+        p.normalize(await AppStorage.directory),
+        p.normalize(directory.path),
+      );
+      final restored = TaskFlowExecutionNotifier();
+      try {
+        expect(await restored.restoreFromPersistence(), isTrue);
+        final restoredIds = restored.executions.map((e) => e.id).toList()
+          ..sort();
+        expect(restoredIds, fails ? ['removed', 'survivor'] : ['survivor']);
+        expect(restored.execution(removed.id) != null, fails);
+        final savedSurvivor = restored.execution(survivor.id)!;
+        expect(savedSurvivor.status, FlowExecutionStatus.paused);
+        expect(savedSurvivor.subTasks.single.outcome, FlowStepOutcome.paused);
+      } finally {
+        restored.dispose();
+      }
     });
 
     test(
@@ -411,6 +432,7 @@ void main() {
         });
         late Future<bool> Function(Iterable<String>) remove;
         late void Function() add;
+        BackgroundTaskNotifier? backgroundNotifier;
         final speech = Completer<Uint8List>();
         final config = ProviderConfigItem(
             providerName: 'test',
@@ -420,6 +442,7 @@ void main() {
         if (kind == 'background') {
           final notifier =
               container.read(backgroundTasksProvider.notifier) as _Backgrounds;
+          backgroundNotifier = notifier;
           notifier.load([
             BackgroundTask(
                 id: 'old',
@@ -489,6 +512,7 @@ void main() {
           release.complete();
           expect(await removal.timeout(const Duration(seconds: 5)), !fails);
           await _expectSavedIds(file, fails ? ['new', 'old'] : ['new']);
+          await backgroundNotifier?.pendingPersistence;
         }, createDirectory: (path) {
           final delegate = outerZone.run(() => Directory(path));
           return p.normalize(path) == p.normalize(parent)

@@ -152,6 +152,7 @@ void main() {
 
   tearDown(() async {
     if (executions.mounted) executions.dispose();
+    await executions.persistenceResult;
     background.dispose();
     await background.pendingPersistence;
     container.dispose();

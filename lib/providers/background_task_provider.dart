@@ -582,7 +582,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<void> _persistTasks() {
     final barrier = _removalBarrier;
-    if (barrier != null) return barrier.future.then((_) => _persistTasks());
+    if (barrier != null) {
+      if (!mounted && _disposedPersistence != null) {
+        return _disposedPersistence!;
+      }
+      final previous = _pendingWrite ?? Future<void>.value();
+      final dirOverride = debugStorageDirectoryOverride;
+      final deferred = previous.then((_) async {
+        await barrier.future;
+        final snapshot = mounted ? state : _disposedSnapshot;
+        if (snapshot != null) {
+          await _writeSnapshotNow(snapshot, dirOverride);
+        }
+      });
+      _pendingWrite = deferred;
+      if (!mounted) _disposedPersistence = deferred;
+      return deferred;
+    }
     if (!mounted) {
       final snapshot = _disposedSnapshot;
       if (snapshot == null) return Future<void>.value();
@@ -600,17 +616,32 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final dirOverride = debugStorageDirectoryOverride;
     // 串行化写入：每次写入排在上一次写入完成之后。
     final write = (_pendingWrite ?? Future<void>.value()).then((_) async {
-      try {
-        final file = await _tasksFile(dirOverride);
-        await _writeTasksFile(file, jsonEncode(data));
-        return true;
-      } catch (e) {
-        debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');
-        return false;
-      }
+      return _writeSnapshotData(data, dirOverride);
     });
     _pendingWrite = write.then<void>((_) {});
     return write;
+  }
+
+  Future<void> _writeSnapshotNow(
+    List<BackgroundTask> snapshot,
+    String? dirOverride,
+  ) async {
+    final data = snapshot.map((task) => task.toMap()).toList();
+    await _writeSnapshotData(data, dirOverride);
+  }
+
+  Future<bool> _writeSnapshotData(
+    List<Map<String, dynamic>> data,
+    String? dirOverride,
+  ) async {
+    try {
+      final file = await _tasksFile(dirOverride);
+      await _writeTasksFile(file, jsonEncode(data));
+      return true;
+    } catch (e) {
+      debugPrint('[BackgroundTaskNotifier] Failed to persist tasks: $e');
+      return false;
+    }
   }
 
   /// 原子写入任务文件（委托 [AtomicFile]：写临时文件 + rename 替换）。

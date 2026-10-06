@@ -546,6 +546,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     // A retry can hold a picker-file lock while awaiting registration. Release
     // the mutation queue before taking those same locks for input cleanup.
     if (saved) await cleanupInputStoragePaths(inputPaths);
+    if (!mounted && _disposedSnapshot != null) {
+      // The removal can finish after dispose has queued its barrier-dependent
+      // flush. Persist the resolved snapshot last so a flush queued before the
+      // removal outcome cannot leave stale IDs or omit a surviving update.
+      final finalFlush = persistSnapshot(_disposedSnapshot!);
+      _disposedPersistence = finalFlush;
+      await finalFlush;
+    }
     return saved;
   }
 
@@ -566,13 +574,13 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
   Future<bool> persist() {
     final removalBarrier = _removalBarrier;
     if (removalBarrier != null) {
-      return removalBarrier.future.then((_) => persist());
+      return _persistAfterBarrier(removalBarrier.future);
     }
     _persistTimer?.cancel();
     _persistTimer = null;
     final barrier = _registrationBarrier;
     if (barrier != null && Zone.current[_registrationWriteZone] != true) {
-      return barrier.future.then((_) => persist());
+      return _persistAfterBarrier(barrier.future);
     }
     if (!mounted) {
       final snapshot = _disposedSnapshot;
@@ -583,6 +591,19 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       return _disposedPersistence ??= super.persistSnapshot(snapshot);
     }
     return super.persist();
+  }
+
+  Future<bool> _persistAfterBarrier(Future<void> barrier) {
+    if (!mounted) {
+      return _disposedPersistence ??= persistSnapshotAfter(
+        barrier,
+        () => _disposedSnapshot ?? const <TaskFlowExecution>[],
+      );
+    }
+    return persistSnapshotAfter(barrier, () {
+      if (mounted) return state;
+      return _disposedSnapshot ?? const <TaskFlowExecution>[];
+    });
   }
 
   Future<bool> restoreFromPersistence() async {

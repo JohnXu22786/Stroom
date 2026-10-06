@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于让你选择并导入所选照片和视频。</string>
 	<!-- BGContinuedProcessingTask (iOS 26+) 常驻后台任务：
 	     标识符必须与 AppDelegate 的 taskIdentifier 一致，
 	     且以 bundle id 为前缀。 -->

@@ -1244,7 +1244,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ChoiceCard(
                     icon: Icons.photo_library,
                     title: '从系统相册选择',
-                    subtitle: '从设备系统相册中选择图片',
+                    subtitle: '浏览并选择设备中的图片',
                     color: Colors.blue,
                     onTap: () {
                       Navigator.pop(ctx);
@@ -1292,13 +1292,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
   }
 
-  /// Pick images from the system gallery (supports batch selection).
+  /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
-      // 移动端直接打开系统相册（图片专用选择 UI），
+      // 移动端直接通过 image_picker 打开系统相册，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await pickSystemMedia(
-        SystemMediaKind.image,
+      final files = await pickGalleryMedia(
+        GalleryMediaKind.image,
         imageQuality: 90,
         maxWidth: 2048,
         maxHeight: 2048,

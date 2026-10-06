@@ -38,6 +38,30 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
   /// Queue an owned snapshot without reading notifier state after an await.
   Future<bool> persistSnapshot(T snapshot) => _encodeAndPersist(() => snapshot);
 
+  /// Queue a snapshot whose value is only final after [barrier] completes.
+  /// The resulting write is visible through [persistenceResult] immediately.
+  Future<bool> persistSnapshotAfter(
+    Future<void> barrier,
+    T Function() snapshot,
+  ) {
+    return _pendingPersistence = _pendingPersistence.then((_) async {
+      try {
+        await barrier;
+      } catch (error) {
+        return _writeEncoded(null, error);
+      }
+
+      String? contents;
+      Object? encodingError;
+      try {
+        contents = jsonEncode(toJsonList(snapshot()));
+      } catch (error) {
+        encodingError = error;
+      }
+      return _writeEncoded(contents, encodingError);
+    });
+  }
+
   Future<bool> _encodeAndPersist(T Function() snapshot) {
     String? contents;
     Object? encodingError;
@@ -48,19 +72,22 @@ mixin PersistableNotifier<T> on StateNotifier<T> {
     } catch (e) {
       encodingError = e;
     }
-    return _pendingPersistence = _pendingPersistence.then((_) async {
-      try {
-        if (encodingError != null) throw encodingError;
-        final file = await _dataFile();
-        await AtomicFile.writeString(file, contents!);
-        _persistenceError = null;
-        return true;
-      } catch (e) {
-        _persistenceError = e;
-        debugPrint('Failed to persist $persistenceFileName: $e');
-        return false;
-      }
-    });
+    return _pendingPersistence =
+        _pendingPersistence.then((_) => _writeEncoded(contents, encodingError));
+  }
+
+  Future<bool> _writeEncoded(String? contents, Object? encodingError) async {
+    try {
+      if (encodingError != null) throw encodingError;
+      final file = await _dataFile();
+      await AtomicFile.writeString(file, contents!);
+      _persistenceError = null;
+      return true;
+    } catch (e) {
+      _persistenceError = e;
+      debugPrint('Failed to persist $persistenceFileName: $e');
+      return false;
+    }
   }
 
   /// Whether persisted state was absent or read and decoded successfully.

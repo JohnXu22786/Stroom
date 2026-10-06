@@ -63,8 +63,8 @@ class _GalleryChoiceSheet extends StatelessWidget {
               children: [
                 _ChoiceCard(
                   icon: Icons.photo_library,
-                  title: '系统相册',
-                  subtitle: '从系统相册选择图片',
+                  title: '设备相册',
+                  subtitle: '浏览设备中的照片和视频',
                   color: Colors.blue,
                   onTap: () => Navigator.of(context).pop(
                     const GalleryChoiceResult(choice: GalleryChoice.system),

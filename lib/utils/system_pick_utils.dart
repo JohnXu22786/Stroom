@@ -10,27 +10,26 @@ import 'package:path/path.dart' as p;
 /// 系统默认目录类型。
 enum SystemFolder { documents, music, pictures, videos }
 
-/// 系统媒体类型（用于 [pickSystemMedia]）。
-enum SystemMediaKind { image, video }
+/// 相册媒体类型（用于 [pickGalleryMedia]）。
+enum GalleryMediaKind { image, video }
 
 /// 系统默认目录（桌面端）：为系统文件选择器指定初始目录，让导入/导出
 /// 对话框默认打开到对应的系统文件夹（文档 / 音乐 / 图片 / 视频）。
 ///
 /// 平台差异：
-/// - **Android / iOS**：系统选择器（SAF / UIDocumentPicker）不支持指定
-///   初始目录，相关方法一律返回 `null`；图片/视频改用 [pickSystemMedia]
-///   打开系统相册（专用选择 UI）。
-/// - **Web**：浏览器文件选择器无法指定初始目录，返回 `null`。
+/// - **Android / iOS**：系统选择器不支持指定初始目录，相关方法一律返回
+///   `null`；图片/视频由 [pickGalleryMedia] 使用 `image_picker` 选择。
+/// - **Web**：浏览器文件选择器无法指定初始目录，返回 `null`；移动浏览器会
+///   根据目标平台使用 `image_picker`，桌面浏览器保持 `file_picker`。
 /// - **Windows / macOS / Linux**：返回对应的系统目录；目录不存在时回退
 ///   到用户主目录，比让选择器落在任意历史位置更可预期。
 class SystemPickDirectories {
   SystemPickDirectories._();
 
-  /// 当前是否为移动端（Android / iOS）。
+  /// 当前目标平台是否为 Android / iOS，包括对应的移动浏览器。
   static bool get isMobile =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 
   /// 当前是否为桌面端（Windows / macOS / Linux）。
   static bool get isDesktop =>
@@ -103,40 +102,39 @@ class SystemPickDirectories {
   }
 }
 
-/// 从系统选择图片/视频（多选）。
+/// 从相册选择图片/视频（多选）。
 ///
-/// - **移动端**：打开系统相册 —— 图片/视频的专用选择 UI（Android
-///   相册 / Photo Picker、iOS PHPicker），而非文件列表。
-/// - **桌面端**：打开系统文件选择器并定位到对应的系统目录
-///   （[SystemPickDirectories.pictures] / [SystemPickDirectories.videos]）。
-///   桌面端的 image_picker 只是 file_selector 的包装，无法指定初始目录，
-///   因此这里改用 file_picker。
-/// - **Web**：浏览器文件选择器（无法指定初始目录）。
+/// - **Android / iOS**：使用 `image_picker` 调用系统图片/视频选择器。
+/// - **移动浏览器**：使用 `image_picker` 的 Web 实现，由浏览器打开文件输入
+///   界面；图片与视频可多选。
+/// - **桌面端 / 桌面浏览器**：保持原有 `file_picker` 文件选择器行为。
 ///
-/// 用户取消时返回空列表。[maxWidth] / [maxHeight] / [imageQuality] 仅在
-/// 移动端相册路径生效（与 image_picker 桌面端行为一致）。
-Future<List<XFile>> pickSystemMedia(
-  SystemMediaKind kind, {
+/// 用户取消时返回空列表。[maxWidth] / [maxHeight] / [imageQuality] 用于
+/// `image_picker` 的图片缩放；桌面端保持原有文件选择器行为。
+Future<List<XFile>> pickGalleryMedia(
+  GalleryMediaKind kind, {
   double? maxWidth,
   double? maxHeight,
   int? imageQuality,
 }) async {
   if (SystemPickDirectories.isMobile) {
     final picker = ImagePicker();
-    if (kind == SystemMediaKind.image) {
+    if (kind == GalleryMediaKind.image) {
       return picker.pickMultiImage(
         maxWidth: maxWidth,
         maxHeight: maxHeight,
         imageQuality: imageQuality,
+        // iOS does not need full Photos metadata access for file import.
+        requestFullMetadata: false,
       );
     }
     return picker.pickMultiVideo();
   }
   final result = await FilePicker.pickFiles(
-    type: kind == SystemMediaKind.image ? FileType.image : FileType.video,
+    type: kind == GalleryMediaKind.image ? FileType.image : FileType.video,
     allowMultiple: true,
     withData: true,
-    initialDirectory: kind == SystemMediaKind.image
+    initialDirectory: kind == GalleryMediaKind.image
         ? SystemPickDirectories.pictures()
         : SystemPickDirectories.videos(),
   );
