@@ -148,9 +148,16 @@ class _GatedRegistrationNotifier extends TaskFlowExecutionNotifier {
   Future<bool> persist() async {
     if (holdNextWrite) {
       holdNextWrite = false;
+      // Match production queue ordering: enqueue the snapshot before pausing
+      // the caller, so disposal cannot queue ahead of the registration write.
+      final pending = super.persist();
       entered.complete();
       await release.future;
-      if (rejectHeldWrite) return false;
+      if (rejectHeldWrite) {
+        await pending;
+        return false;
+      }
+      return pending;
     }
     return super.persist();
   }

@@ -174,6 +174,7 @@ void main() {
           ]);
       expect(await executions.addExecutions([removed, survivor]), isTrue);
       final parent = p.join(directory.path, 'task_flows');
+      final file = File(p.join(parent, 'executions.json'));
       final started = Completer<void>();
       final release = Completer<void>();
       final outerZone = Zone.current;
@@ -188,7 +189,6 @@ void main() {
         expect(await removal.timeout(const Duration(seconds: 5)), !fails);
         // Observe the automatic flush reaching disk without requesting persist.
         // Its barrier continuation can enqueue after the removal future settles.
-        final file = File(p.join(parent, 'executions.json'));
         final deadline = DateTime.now().add(const Duration(seconds: 2));
         while (DateTime.now().isBefore(deadline)) {
           final saved = jsonDecode(await file.readAsString()) as List;
@@ -200,25 +200,32 @@ void main() {
         expect(await executions.persistenceResult, isTrue);
         expect(await _savedIds(file),
             fails ? ['removed', 'survivor'] : ['survivor']);
-        final restored = TaskFlowExecutionNotifier();
-        try {
-          expect(await restored.restoreFromPersistence(), isTrue);
-          final restoredIds = restored.executions.map((e) => e.id).toList()
-            ..sort();
-          expect(restoredIds, fails ? ['removed', 'survivor'] : ['survivor']);
-          expect(restored.execution(removed.id) != null, fails);
-          final savedSurvivor = restored.execution(survivor.id)!;
-          expect(savedSurvivor.status, FlowExecutionStatus.paused);
-          expect(savedSurvivor.subTasks.single.outcome, FlowStepOutcome.paused);
-        } finally {
-          restored.dispose();
-        }
       }, createDirectory: (path) {
         final delegate = outerZone.run(() => Directory(path));
         return p.normalize(path) == p.normalize(parent)
             ? _RemovalDirectory(delegate, started, release, fails)
             : delegate;
       });
+
+      // The IO override above only holds the atomic removal write. Exercise
+      // startup restoration after leaving that write-only test zone.
+      expect(
+        p.normalize(await AppStorage.directory),
+        p.normalize(directory.path),
+      );
+      final restored = TaskFlowExecutionNotifier();
+      try {
+        expect(await restored.restoreFromPersistence(), isTrue);
+        final restoredIds = restored.executions.map((e) => e.id).toList()
+          ..sort();
+        expect(restoredIds, fails ? ['removed', 'survivor'] : ['survivor']);
+        expect(restored.execution(removed.id) != null, fails);
+        final savedSurvivor = restored.execution(survivor.id)!;
+        expect(savedSurvivor.status, FlowExecutionStatus.paused);
+        expect(savedSurvivor.subTasks.single.outcome, FlowStepOutcome.paused);
+      } finally {
+        restored.dispose();
+      }
     });
 
     test(
