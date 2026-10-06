@@ -22,6 +22,7 @@ import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
 import '../utils/system_pick_utils.dart';
+import '../utils/text_manifest.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
@@ -40,8 +41,14 @@ import '../providers/assistant_provider.dart'
         resolveAssistantForSend,
         selectedAssistantIdProvider,
         selectedAssistantProvider;
+import '../providers/text_provider.dart';
 import '../widgets/llm/jumping_dots.dart';
 import '../widgets/llm/tool_call_card.dart';
+import '../widgets/file_manager_utils.dart' show sanitizeFileName;
+import '../widgets/folder_picker_dialog.dart';
+import 'files_page_shared.dart' show filesRefreshSignalProvider;
+import 'chat/dialogs/message_save_destination_dialog.dart'
+    show MessageSaveDestination, showMessageSaveDestinationDialog;
 import 'message_search_page.dart';
 import 'provider_config_page.dart';
 
@@ -195,8 +202,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   String? _streamingMsgId;
 
-  /// 防止快速连点保存按钮时弹出多个系统保存对话框。
+  /// 防止快速连点保存按钮时弹出多个保存面板。
   bool _isSavingMarkdown = false;
+  final TextEditingController _saveMarkdownFileNameController =
+      TextEditingController();
 
   // ── Auto-scroll / scroll-to-bottom state ──
   /// Whether auto-scrolling is enabled. Initially false — user must click
@@ -399,6 +408,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // up when the manager is disposed (app lifecycle).
     _controller?.dispose();
     _searchTextController.dispose();
+    _saveMarkdownFileNameController.dispose();
     _chatScrollController.removeListener(_onChatScroll);
     _chatScrollController.dispose();
     _overlayMetricsTick.dispose();

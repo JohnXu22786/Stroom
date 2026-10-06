@@ -838,44 +838,49 @@ extension _ChatPageUiExt on _ChatPageState {
 
   /// 将消息的正式输出保存为 Markdown 文件。
   ///
-  /// - 无多步工具调用、或有多步工具调用但步骤间没有回话反馈（只有工具
-  ///   与思考链）：直接弹出带文件名输入的保存面板。
-  /// - 多步工具调用且步骤之间有回话反馈：先弹出选择面板，让用户选择
-  ///   "保存完整消息"（所有正式输出按顺序以空行分隔）或"保存最后的消息
-  ///   "（仅最后一次正式回复）。
+  /// 先让用户选择保存位置；多步工具调用且步骤间有回复文本时，再选择
+  /// 保存完整消息或仅保存最后的回复。
   Future<void> _saveMessageAsMarkdown(
     BuildContext context,
     TextMessage message,
   ) async {
     if (_isSavingMarkdown) return;
-    final plan = buildMessageSavePlan(
-      segments: _chatSegments[message.id] ?? const <MessageSegment>[],
-      fallbackText: message.text,
-    );
-    if (plan == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('没有可保存的文本内容'),
-          duration: Duration(seconds: 2),
-        ),
+    _isSavingMarkdown = true;
+    try {
+      final plan = buildMessageSavePlan(
+        segments: _chatSegments[message.id] ?? const <MessageSegment>[],
+        fallbackText: message.text,
       );
-      return;
-    }
+      if (plan == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('没有可保存的文本内容'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
 
-    String markdown;
-    if (plan.scope == MessageSaveScope.fullOrLast) {
-      final option = await _askSaveScopeDialog(context);
-      if (option == null) return; // 用户取消选择
-      markdown = option == MessageSaveOption.full
-          ? plan.fullMarkdown
-          : plan.lastMarkdown;
-    } else {
-      markdown = plan.fullMarkdown;
-    }
+      final destination = await _askSaveDestinationDialog(context);
+      if (destination == null || !mounted) return;
 
-    if (!mounted) return;
-    await _saveMarkdownToFile(markdown);
+      if (destination == MessageSaveDestination.appFiles) {
+        await _saveMarkdownToAppFiles(plan);
+      } else {
+        final markdown = await _chooseMarkdownContent(context, plan);
+        if (markdown == null || !mounted) return;
+        await _saveMarkdownToDevice(markdown);
+      }
+    } finally {
+      _isSavingMarkdown = false;
+    }
   }
+
+  /// 首先选择保存位置；应用文件排在第一项。
+  Future<MessageSaveDestination?> _askSaveDestinationDialog(
+    BuildContext context,
+  ) =>
+      showMessageSaveDestinationDialog(context);
 
   /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
   /// "保存完整消息" / "保存最后的消息" / 取消。
@@ -916,15 +921,26 @@ extension _ChatPageUiExt on _ChatPageState {
     );
   }
 
-  /// 弹出系统保存面板（带文件名输入）并把 [markdown] 内容写入 .md 文件。
-  Future<void> _saveMarkdownToFile(String markdown) async {
-    if (_isSavingMarkdown) return;
-    _isSavingMarkdown = true;
+  Future<String?> _chooseMarkdownContent(
+    BuildContext context,
+    MessageSavePlan plan,
+  ) async {
+    if (plan.scope == MessageSaveScope.single) return plan.fullMarkdown;
+
+    final option = await _askSaveScopeDialog(context);
+    if (option == null || !mounted) return null;
+    return option == MessageSaveOption.full
+        ? plan.fullMarkdown
+        : plan.lastMarkdown;
+  }
+
+  /// 弹出系统保存面板并把 [markdown] 内容写入 .md 文件。
+  Future<void> _saveMarkdownToDevice(String markdown) async {
     try {
       final bytes = Uint8List.fromList(utf8.encode(markdown));
       final outputPath = await FilePicker.saveFile(
         dialogTitle: '保存消息为 Markdown',
-        fileName: 'chat_message_${_fileTimestamp()}.md',
+        fileName: '${_defaultMarkdownFileName()}.md',
         type: FileType.custom,
         allowedExtensions: ['md'],
         bytes: bytes,
@@ -947,16 +963,111 @@ extension _ChatPageUiExt on _ChatPageState {
           ),
         );
       }
-    } finally {
-      _isSavingMarkdown = false;
+    }
+  }
+
+  /// 保存到应用的文本储存区，可选择文件夹并编辑默认的 Markdown 文件名。
+  Future<void> _saveMarkdownToAppFiles(MessageSavePlan plan) async {
+    if (!mounted) return;
+    final recordsNotifier = ref.read(textRecordsProvider.notifier);
+    final foldersNotifier = ref.read(textFolderListProvider.notifier);
+    final refreshSignal = ref.read(filesRefreshSignalProvider.notifier);
+
+    try {
+      final folders = await TextManifest.getAllFolders();
+      if (!mounted) return;
+
+      // 控制器由页面持有，在对话框退场动画期间仍保持有效。
+      _saveMarkdownFileNameController.text = _defaultMarkdownFileName();
+      final selectedFolder = await FolderPickerDialog.show(
+        context,
+        availableFolders: folders,
+        title: '保存到应用文件',
+        hintText: '选择或创建文件夹保存 .md 文件',
+        fileNameController: _saveMarkdownFileNameController,
+        fileNameHintText: '输入文件名（自动添加 .md 后缀）',
+        onCreateFolder: (name) async {
+          await TextManifest.addFolder(name);
+          return null;
+        },
+        onRefreshFolders: TextManifest.getAllFolders,
+      );
+      if (selectedFolder == null || !mounted) return;
+
+      final enteredName = sanitizeFileName(
+        _saveMarkdownFileNameController.text.trim(),
+      );
+      final fileName = enteredName
+          .replaceFirst(RegExp(r'\.md$', caseSensitive: false), '')
+          .trim();
+      if (fileName.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('文件名不能为空')),
+        );
+        return;
+      }
+
+      // Show the required folder/name panel immediately after the user picks
+      // app files; ask about multi-step reply contents only after that panel.
+      final markdown = await _chooseMarkdownContent(context, plan);
+      if (markdown == null || !mounted) return;
+
+      final records = await TextManifest.loadRecords();
+      var finalName = fileName;
+      var suffix = 2;
+      while (records.any(
+        (record) => record.name == finalName && record.folder == selectedFolder,
+      )) {
+        finalName = '$fileName ($suffix)';
+        suffix++;
+      }
+
+      final bytes = Uint8List.fromList(utf8.encode(markdown));
+      final hash = computeTextHash(bytes);
+      await TextManifest.writeFile('$hash.txt', bytes);
+      await TextManifest.addRecord(
+        TextRecord(
+          name: finalName,
+          hash: hash,
+          format: 'md',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: markdown.length,
+        ),
+      );
+      await recordsNotifier.loadRecords();
+      await foldersNotifier.loadFolders();
+      refreshSignal.state++;
+
+      if (mounted) {
+        final folderPath = selectedFolder.isEmpty
+            ? '$finalName.md'
+            : '$selectedFolder/$finalName.md';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已保存到应用文件: $folderPath'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('保存失败: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
   /// 紧凑时间戳（yyyyMMdd_HHmmss），用作默认文件名。
-  String _fileTimestamp() {
+  String _defaultMarkdownFileName() {
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${now.year}${two(now.month)}${two(now.day)}'
+    return 'chat_message_${now.year}${two(now.month)}${two(now.day)}'
         '_${two(now.hour)}${two(now.minute)}${two(now.second)}';
   }
 }
