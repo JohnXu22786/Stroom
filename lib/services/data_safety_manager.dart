@@ -340,12 +340,23 @@ class DataSafetyManager {
 
       // 收集当前引用集合（附件 basename + 媒体文件全名）。
       // 任何收集失败都直接中止清理：引用集合不完整时扫描删除
-      // 会把真实数据误判为孤儿（最典型的场景：conversations 损坏
-      // 导致 collectAttachmentPaths 失败，全部附件被当作孤儿）。
+      // 会把真实数据误判为孤儿（例如 conversations 或任务流文件损坏，
+      // 导致附件引用无法完整读取）。
       final referenced = <String>{};
       try {
         final attachments = await collectAttachmentPaths();
         for (final storagePath in attachments) {
+          referenced.add(p.basename(storagePath));
+        }
+        final taskFlowAttachments =
+            await BackupService.collectTaskFlowAttachmentKeysForSafety();
+        if (taskFlowAttachments == null) {
+          debugPrint(
+            '[DataSafetyManager] 收集任务流附件引用失败，中止孤儿清理',
+          );
+          return;
+        }
+        for (final storagePath in taskFlowAttachments) {
           referenced.add(p.basename(storagePath));
         }
       } catch (e) {

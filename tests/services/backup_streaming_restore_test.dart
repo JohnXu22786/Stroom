@@ -754,7 +754,7 @@ void main() {
     if (await File(videoPath).exists()) {
       await File(videoPath).delete();
     }
-    await BackupService.restoreBackup(zipPath);
+    await BackupService.restoreBackup(zipPath, skipMissingCategories: true);
 
     final restoredFile = File(videoPath);
     expect(await restoredFile.exists(), isTrue, reason: '生产路径恢复必须把大文件写回应用数据目录');

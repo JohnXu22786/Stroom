@@ -189,7 +189,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (selection.texts) restoreWarnings.add('文本');
     if (selection.tasks) restoreWarnings.add('任务');
     if (selection.ankiData) restoreWarnings.add('Anki闪卡数据库');
-    if (selection.browserCookies) restoreWarnings.add('浏览器Cookies');
+    if (selection.browserCookies) restoreWarnings.add('内置浏览器数据');
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -286,7 +286,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (success && mounted) {
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
         setState(() => _isImporting = false);
-        if (skippedCategories.length == selection.selectedLabels.length) {
+        if (selection.selectedLabels.every(skippedCategories.contains)) {
           await _showSkippedCategoriesPrompt(skippedCategories);
         } else {
           final message = skippedCategories.isEmpty
@@ -336,10 +336,22 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 
     final selection = _selection;
     final clearLabels = selection.selectedLabels;
+    const browserWebsiteDataClearPlatforms = {
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+    };
+    final browserWebsiteDataUnsupported = selection.browserCookies &&
+        (kIsWeb ||
+            !browserWebsiteDataClearPlatforms.contains(defaultTargetPlatform));
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => _ClearSelectedDataConfirmationDialog(labels: clearLabels),
+      builder: (_) => _ClearSelectedDataConfirmationDialog(
+        labels: clearLabels,
+        browserWebsiteDataUnsupported: browserWebsiteDataUnsupported,
+      ),
     );
 
     if (confirmed != true) return;
@@ -374,7 +386,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      await BackupService.clearSelectedData(selection);
+      final browserWebsiteDataCleared =
+          await BackupService.clearSelectedData(selection);
       // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -383,7 +396,18 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       if (mounted) {
         // 弹窗展示期间停止按钮 spinner（避免模态框背后持续动画）
         setState(() => _isClearing = false);
-        await _showRestartPrompt(title: '数据清除完成', message: '所选数据已清除。请重启应用以生效。');
+        await _showRestartPrompt(
+          title: browserWebsiteDataCleared ? '数据清除完成' : '部分数据已清除',
+          message: browserWebsiteDataCleared
+              ? '所选数据已清除。请重启应用以生效。'
+              : '其他所选数据已清除。当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；未能清除的浏览器数据仍会保留。请重启应用使已清除的数据生效。',
+          icon: browserWebsiteDataCleared
+              ? Icons.check_circle_outline
+              : Icons.warning_amber_rounded,
+          iconColor: browserWebsiteDataCleared
+              ? const Color(0xFF43A047)
+              : Colors.orange,
+        );
       }
     } catch (e) {
       // 先关闭进度弹窗，让失败提示可见
@@ -531,7 +555,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('未恢复任何数据'),
+        title: Text(
+          categories.every((category) => category == '内置浏览器网站存储')
+              ? '部分数据已跳过'
+              : '未恢复任何数据',
+        ),
         content: Text(_skippedCategoriesMessage(categories)),
         actions: [
           FilledButton(
@@ -544,11 +572,24 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    var message = '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
-        '当前数据保持不变：${categories.join('、')}。';
-    if (categories.contains('任务')) {
+    final skippedCategories =
+        categories.where((category) => category != '内置浏览器网站存储').toList();
+    var message = skippedCategories.isEmpty
+        ? ''
+        : '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
+            '当前数据保持不变：${skippedCategories.join('、')}。';
+    if (skippedCategories.contains('任务')) {
       message += '\n\n如果这是旧版备份，空任务文件无法区分“任务列表为空”和“该平台未导出任务”；'
           '为避免覆盖当前任务，任务类别已跳过并保留原数据。';
+    }
+    if (skippedCategories.contains('内置浏览器数据')) {
+      message += '\n\n为保护本机现有浏览器数据，当前平台无法安全恢复备份中的浏览器目录或 Cookies；'
+          '整个内置浏览器类别已跳过，本机原数据保持不变。';
+    }
+    if (categories.contains('内置浏览器网站存储')) {
+      if (message.isNotEmpty) message += '\n\n';
+      message += '备份没有包含可在当前平台恢复的内置浏览器网站存储目录；'
+          'Cookies（若备份中包含）仍可单独恢复。各平台的网站数据目录仅支持同平台导入。';
     }
     return message;
   }
@@ -584,11 +625,11 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '手动导出可按数据类别选择内容。导入时，只恢复已勾选且备份包中包含的类别；未勾选或备份中缺少的类别保持原样。缺少的类别会自动跳过并提示。也可直接清除所选类别的数据。\n\n'
-                      '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 文件保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置及文件保留方式因平台而异。'
-                      '${kIsWeb ? '\n\nWeb 版暂不支持导入或导出任务、Anki 闪卡数据和浏览器 Cookies。' : '\n\nAndroid/Windows 的 Cookies 按已访问域名采集，导出可能不完整；这两个平台无法完整读取设备现有 Cookies，因此从包含 Cookies 的备份中勾选该类别导入时，会在恢复开始前中止；如果备份中没有 Cookies，该类别会自动跳过并提示。若要在这两个平台导入其他类别，请取消勾选 Cookies。在 Android/Windows 上，关闭 Cookies 保留或无法取得可用快照时会省略该类别；其他平台也可能因无法取得快照而省略。在可成功导入 Cookies 的平台上，若未开启 Cookies 保留，导入的 Cookies 仅在当前内置浏览器会话中有效；关闭后下次打开会清除，需跨会话保留请开启 Cookies 保留。\n\n任务备份仅包含任务和流程记录，不会单独打包流程执行引用的本地文件；CatCatch 完成目录中的成品，以及进行中的下载分段和断点续传进度文件，不会随任务类别导出，已登记到音频或视频资料库的文件会随相应类别导出。跨设备后，记录中的本机路径可能失效；任务列表的已读标记和按应用启动记录划分的近期任务会话统计不随备份迁移，导入后按目标设备的本地记录显示。'}'
-                      '\n\nLinux 桌面版无法完整读取本机内置浏览器 Cookies；从包含 Cookies 的备份中勾选该类别导入，会在恢复开始前中止。若要在 Linux 导入其他类别，请取消勾选 Cookies。'
-                      '\n\nAnki 数据库备份和单独导出的 .apkg 牌组均不包含卡片媒体文件。\n\n内置浏览器网站的本地数据（如 localStorage、IndexedDB）不会随备份导出。',
+                      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。\n\n'
+                      '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 备份保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置和文件保留方式因平台而异。'
+                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡和内置浏览器数据的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\nAndroid、Windows、iOS、macOS 会将内置浏览器 Cookies 和可读取的网站存储目录放入备份包的 browser_data/；网站存储目录只支持相同平台导入，恢复后需重启。iOS/macOS 会打包应用沙盒中的 WebKit/WebsiteData（含 localStorage、IndexedDB 等）；这是 WebKit 当前的内部目录布局，系统升级后可能变化。Android/Windows 的 Cookies 快照按已访问域名采集，可能不完整；若缺少完整的同平台网站存储目录，将跳过整个内置浏览器类别（包括 Cookies）并提示，避免执行无法安全回滚的部分恢复。Linux 桌面版无法完整读取本机 Cookies，内置浏览器类别会跳过并提示。其他平台可能因无法取得 Cookies 快照而省略该类别；在可导入的平台上，未开启 Cookies 保留时，导入的 Cookies 仅在当前内置浏览器会话中有效。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
+                      '${kIsWeb ? '' : '\n\n音频类别也会包含尚未保存到音频库的录音草稿，导入后可在录音页继续保存。'}'
+                      '${kIsWeb ? '\n\nWeb 版备份包不包含 browser_data/。' : '\n\n内置浏览器数据集中放在备份包的 browser_data/ 目录：cookies.json 保存 Cookies，android/、windows/、ios/、macos/ 子目录保存各平台的网站存储文件（包括 localStorage、IndexedDB 等）。网站存储目录只支持相同平台导入。'}',
                     ),
                   ),
                 ],
@@ -839,8 +880,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
             _buildCheckboxItem(
               value: _browserCookies,
               onChanged: (v) => setState(() => _browserCookies = v ?? false),
-              title: '浏览器Cookies',
-              subtitle: '内置浏览器持久化的Cookies数据',
+              title: '内置浏览器数据',
+              subtitle: 'Cookies 和网站存储；Android/Windows 支持完整站点目录',
               icon: Icons.cookie,
               iconColor: Colors.orange,
             ),
@@ -892,9 +933,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
 }
 
 class _ClearSelectedDataConfirmationDialog extends StatefulWidget {
-  const _ClearSelectedDataConfirmationDialog({required this.labels});
+  const _ClearSelectedDataConfirmationDialog({
+    required this.labels,
+    required this.browserWebsiteDataUnsupported,
+  });
 
   final List<String> labels;
+  final bool browserWebsiteDataUnsupported;
 
   @override
   State<_ClearSelectedDataConfirmationDialog> createState() =>
@@ -950,6 +995,21 @@ class _ClearSelectedDataConfirmationDialogState
               ),
             ),
           ),
+          if (widget.browserWebsiteDataUnsupported) ...[
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '当前平台不支持完整清除内置浏览器网站存储（localStorage、IndexedDB 等）；确认后会清除其他所选数据，无法清除的浏览器数据将保留。',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (widget.labels.length < 9) ...[
             const SizedBox(height: 12),
             const Row(

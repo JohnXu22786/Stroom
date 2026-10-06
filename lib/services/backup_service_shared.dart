@@ -90,9 +90,9 @@ Future<void> writeBackupFile(
       await WebFileStore.write('$subDir/$fileName', data);
     } else {
       final appDir = await AppStorage.directory;
-      final dir = Directory(p.join(appDir, subDir));
-      await dir.create(recursive: true);
-      await File(p.join(dir.path, fileName)).writeAsBytes(data);
+      final file = File(p.join(appDir, subDir, fileName));
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(data);
     }
   } catch (e) {
     await AppLogService.error(

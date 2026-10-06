@@ -120,6 +120,7 @@ void main() {
       await BackupService.restoreFromBytesForTest(
         bytes,
         selection: BackupSelection.structuredOnly,
+        skipMissingCategories: true,
       );
 
       expect(await WebFileStore.read('attachments/ref_attach.bin'), isNotNull,
@@ -2000,21 +2001,20 @@ void main() {
     });
 
     // ----------------------------------------------------------------
-    // 选择性备份 + 全量恢复：验证从选择性备份全量恢复会清除未选类别的数据
-    // （这是正确但可能令人意外的行为 —— 用户需要知道这个后果）
+    // 选择性备份 + 全量手动恢复：缺失类别应保留本机数据
     // ----------------------------------------------------------------
 
     testWidgets(
-        'FULL restore from SELECTIVE backup clears categories that were not in backup',
+        'manual full restore from selective backup preserves absent categories',
         (WidgetTester t) async {
       // Scenario: user does a selective backup WITHOUT videos, then a full restore
-      // Result: video records are cleared (backup has empty video data, full restore clears all)
+      // Result: missing video data leaves local video records untouched.
 
       // Insert pre-existing video records
       await ManifestDatabase.insertVideoRecord({
-        'id': 'vid_will_be_lost',
-        'name': 'lost_vid',
-        'hash': 'lost_vid_hash',
+        'id': 'vid_preserved',
+        'name': 'preserved_vid',
+        'hash': 'preserved_vid_hash',
         'format': 'mp4',
         'createdAt': DateTime.now().toIso8601String(),
         'size': 500,
@@ -2033,6 +2033,9 @@ void main() {
         'height': 100,
       });
 
+      await WebFileStore.write(
+          '/pictures/old_img_hash.jpg', Uint8List.fromList([1, 2, 3]));
+
       // Build a SELECTIVE backup (pictures only, no videos)
       final selBackup = BackupSelection(
         chatRecordsAndAttachments: false,
@@ -2049,7 +2052,8 @@ void main() {
           await BackupService.buildBackupBytesForTest(selection: selBackup);
 
       // Now do a FULL restore from this selective backup
-      await BackupService.restoreFromBytesForTest(backupBytes);
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          skipMissingCategories: true);
       // Default selection = BackupSelection.all (all true)
 
       // Image records should be replaced by backup data
@@ -2059,13 +2063,11 @@ void main() {
       expect(images[0]['id'], equals('img_will_be_replaced'),
           reason: 'Original image record should be restored from backup');
 
-      // Video records: CLEARED because full restore clears all tables,
-      // but backup has empty video_records (videos were not selected during backup)
+      // Videos were omitted from the backup and must remain unchanged.
       final videos = await ManifestDatabase.getAllVideoRecords();
-      expect(videos.length, equals(0),
-          reason:
-              'Video records are cleared because full restore clears all tables, '
-              'and the backup had empty video data (videos were not in the backup)');
+      expect(videos.length, equals(1),
+          reason: 'Missing backup categories must preserve local records');
+      expect(videos.single['id'], equals('vid_preserved'));
     });
 
     // ----------------------------------------------------------------

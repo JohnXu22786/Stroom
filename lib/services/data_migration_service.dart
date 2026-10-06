@@ -62,7 +62,7 @@ class MigrationResult {
 // 数据格式版本号从「全局单一版本号」改为「每部分各自独立版本号」。
 // 分组与备份页（BackupSelection）的可选类别一一对应：
 // 聊天记录和附件 / 设置 / 图片 / 音频 / 视频 / 文本 / 任务 /
-// Anki闪卡数据 / 浏览器Cookies。
+// Anki闪卡数据 / 内置浏览器数据。
 //
 // 每个部分独立演进：某部分的格式变更只递增该部分的版本号，
 // 其他部分不受影响。启动时只迁移版本落后的部分。
@@ -95,7 +95,7 @@ abstract final class DataParts {
   /// Anki 闪卡数据库（collection.anki2）。
   static const String anki = 'anki';
 
-  /// 浏览器Cookies持久化数据（browser_cookies.json）。
+  /// 内置浏览器数据（Cookies快照及平台支持的网站存储目录）。
   static const String browserCookies = 'browserCookies';
 
   /// 所有部分（顺序即迁移执行顺序）。
