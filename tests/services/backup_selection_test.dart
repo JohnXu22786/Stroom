@@ -120,6 +120,7 @@ void main() {
       await BackupService.restoreFromBytesForTest(
         bytes,
         selection: BackupSelection.structuredOnly,
+        skipMissingCategories: true,
       );
 
       expect(await WebFileStore.read('attachments/ref_attach.bin'), isNotNull,
