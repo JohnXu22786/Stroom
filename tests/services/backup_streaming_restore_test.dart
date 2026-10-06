@@ -61,20 +61,12 @@ void main() {
     int version = 2,
   }) {
     final archive = Archive();
-    archive.addFile(ArchiveFile(
-        'manifest.json',
-        utf8
-            .encode(jsonEncode({
-              'version': version,
-              'createdAt': DateTime.now().toIso8601String(),
-              'appVersion': 'test',
-            }))
-            .length,
-        utf8.encode(jsonEncode({
-          'version': version,
-          'createdAt': DateTime.now().toIso8601String(),
-          'appVersion': 'test',
-        }))));
+    final manifest = utf8.encode(jsonEncode({
+      'version': version,
+      'createdAt': DateTime.now().toIso8601String(),
+      'appVersion': 'test',
+    }));
+    archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
       'image_records': <Map<String, dynamic>>[],
       'audio_records': <Map<String, dynamic>>[],
@@ -86,10 +78,9 @@ void main() {
       ManifestTables.imageFolders: <String>[],
       ManifestTables.videoFolders: <String>[],
     };
+    final databaseManifest = utf8.encode(jsonEncode(dbData));
     archive.addFile(ArchiveFile(
-        'stroom_manifest.json',
-        utf8.encode(jsonEncode(dbData)).length,
-        utf8.encode(jsonEncode(dbData))));
+        'stroom_manifest.json', databaseManifest.length, databaseManifest));
     for (final entry in files.entries) {
       archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
     }
