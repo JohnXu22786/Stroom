@@ -350,19 +350,19 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
   }
 
   Future<void> _resetForReRecord() async {
-    final recoveredDraftPath = _isRecoveredDraft ? _recordedFilePath : null;
+    final discardedRecordingPath = _recordedFilePath;
     _controller.reset();
     setState(() {
       _recordedFilePath = null;
       _recordDurationSeconds = 0;
       _isRecoveredDraft = false;
     });
-    if (recoveredDraftPath != null) {
+    if (discardedRecordingPath != null) {
       try {
-        final draft = File(recoveredDraftPath);
-        if (await draft.exists()) await draft.delete();
+        final recording = File(discardedRecordingPath);
+        if (await recording.exists()) await recording.delete();
       } catch (e) {
-        debugPrint('[AudioRecordingPage] 删除录音草稿失败: $e');
+        debugPrint('[AudioRecordingPage] 删除待保存录音失败: $e');
       }
     }
   }

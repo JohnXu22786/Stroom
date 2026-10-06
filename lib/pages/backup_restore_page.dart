@@ -404,7 +404,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           icon: browserWebsiteDataCleared
               ? Icons.check_circle_outline
               : Icons.warning_amber_rounded,
-          iconColor: browserWebsiteDataCleared ? null : Colors.orange,
+          iconColor: browserWebsiteDataCleared
+              ? const Color(0xFF43A047)
+              : Colors.orange,
         );
       }
     } catch (e) {
@@ -554,9 +556,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          categories.every(
-            (category) => category == '内置浏览器网站存储',
-          )
+          categories.every((category) => category == '内置浏览器网站存储')
               ? '部分数据已跳过'
               : '未恢复任何数据',
         ),
@@ -572,9 +572,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   String _skippedCategoriesMessage(List<String> categories) {
-    final skippedCategories = categories
-        .where((category) => category != '内置浏览器网站存储')
-        .toList();
+    final skippedCategories =
+        categories.where((category) => category != '内置浏览器网站存储').toList();
     var message = skippedCategories.isEmpty
         ? ''
         : '备份中未能确认以下勾选的数据类型包含可恢复内容，已跳过；'
@@ -590,7 +589,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     if (categories.contains('内置浏览器网站存储')) {
       if (message.isNotEmpty) message += '\n\n';
       message += '备份没有包含可在当前平台恢复的内置浏览器网站存储目录；'
-          'Cookies（若备份中包含）仍可单独恢复。Android/Windows 的网站数据目录仅支持同平台导入。';
+          'Cookies（若备份中包含）仍可单独恢复。各平台的网站数据目录仅支持同平台导入。';
     }
     return message;
   }
@@ -628,9 +627,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     child: Text(
                       '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。\n\n'
                       '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 备份保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置和文件保留方式因平台而异。'
-                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡数据和浏览器 Cookies 的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\nAndroid/Windows 会把内置浏览器 Cookies 和网站存储目录一并备份；这些目录仅支持在相同平台导入，恢复或清除后需重启应用。Android/Windows 的 Cookies 快照按已访问域名采集，可能不完整；若备份不含相同平台的网站存储目录，内置浏览器类别会自动跳过并提示，以免覆盖无法完整回滚的本机 Cookies。Linux 桌面版无法完整读取本机 Cookies，浏览器类别也会跳过并提示。其他平台可能因无法取得 Cookies 快照而省略该类别；在可导入的平台上，未开启 Cookies 保留时，导入的 Cookies 仅在当前内置浏览器会话中有效。iOS/macOS 的 WKWebView 不公开网站存储目录，因此只包含可读取的 Cookies。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
+                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡和内置浏览器数据的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\nAndroid、Windows、iOS、macOS 会将内置浏览器 Cookies 和可读取的网站存储目录放入备份包的 browser_data/；网站存储目录只支持相同平台导入，恢复后需重启。iOS/macOS 会打包应用沙盒中的 WebKit/WebsiteData（含 localStorage、IndexedDB 等）；这是 WebKit 当前的内部目录布局，系统升级后可能变化。Android/Windows 的 Cookies 快照按已访问域名采集，可能不完整；若缺少完整的同平台网站存储目录，将跳过整个内置浏览器类别（包括 Cookies）并提示，避免执行无法安全回滚的部分恢复。Linux 桌面版无法完整读取本机 Cookies，内置浏览器类别会跳过并提示。其他平台可能因无法取得 Cookies 快照而省略该类别；在可导入的平台上，未开启 Cookies 保留时，导入的 Cookies 仅在当前内置浏览器会话中有效。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
                       '${kIsWeb ? '' : '\n\n音频类别也会包含尚未保存到音频库的录音草稿，导入后可在录音页继续保存。'}'
-                      '\n\n内置浏览器数据集中放在备份包的 browser_data/ 目录：cookies.json 保存 Cookies，Android/Windows 子目录保存网站存储数据（包括 localStorage、IndexedDB 等）。网站存储目录只支持相同平台导入；iOS/macOS 的 WKWebView 不提供可直接打包的网站数据目录。',
+                      '${kIsWeb ? '\n\nWeb 版备份包不包含 browser_data/。' : '\n\n内置浏览器数据集中放在备份包的 browser_data/ 目录：cookies.json 保存 Cookies，android/、windows/、ios/、macos/ 子目录保存各平台的网站存储文件（包括 localStorage、IndexedDB 等）。网站存储目录只支持相同平台导入。'}',
                     ),
                   ),
                 ],

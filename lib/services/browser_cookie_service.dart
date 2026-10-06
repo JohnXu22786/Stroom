@@ -8,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'browser_profile_service.dart';
 import 'storage_service.dart';
 
 /// Service for managing browser cookie retention mode and persistence.
@@ -196,6 +197,11 @@ class BrowserCookieService {
   /// applied before cookies are persisted or cleared.
   static Future<void> handleBrowserClose() {
     return _serializeRetentionOperation(() async {
+      if (await BrowserProfileService.hasPendingAction()) {
+        // The live WebView still uses the old profile; leave the imported
+        // snapshot and its one-time restore marker intact until the next launch.
+        return;
+      }
       if (await getRetentionMode()) {
         await _persistCookiesToFile();
         await clearBackupRestorePending();
@@ -333,7 +339,10 @@ class BrowserCookieService {
   /// cookies for successfully queried hosts while preserving path-scoped
   /// cookies and cookies for failed or unvisited hosts.
   static Future<void> persistCookiesToFile() {
-    return _serializeRetentionOperation(_persistCookiesToFile);
+    return _serializeRetentionOperation(() async {
+      if (await BrowserProfileService.hasPendingAction()) return;
+      await _persistCookiesToFile();
+    });
   }
 
   static Future<void> _persistCookiesToFile() async {
