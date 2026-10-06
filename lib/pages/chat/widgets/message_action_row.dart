@@ -40,8 +40,8 @@ class MessageActionRow extends StatelessWidget {
   /// Called when the retry (AI) or edit (user) button is pressed.
   final VoidCallback onRetryOrEdit;
 
-  /// Called when the save-as-Markdown button is pressed. When non-null, a
-  /// save button is shown in the second position (AI messages only).
+  /// Called when the save button is pressed. When non-null, it is shown in the
+  /// second position (AI messages only).
   final VoidCallback? onSave;
 
   /// Called when the raw data button is pressed. Ignored when [showRawData] is
@@ -78,14 +78,13 @@ class MessageActionRow extends StatelessWidget {
       ),
     ];
 
-    // [2] Save as Markdown — AI messages only, shown when a callback is
-    // provided.
+    // [2] Save — AI messages only, shown when a callback is provided.
     if (isAi && onSave != null) {
       children.add(const SizedBox(width: _spacerWidth));
       children.add(
         ActionButton(
           icon: Icons.save,
-          tooltip: '保存为 Markdown',
+          tooltip: '保存',
           onPressed: onSave!,
         ),
       );
