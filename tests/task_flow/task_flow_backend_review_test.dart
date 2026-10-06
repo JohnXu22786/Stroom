@@ -1185,7 +1185,12 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .resumeExecution('saved');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(
+        () =>
+            received.length == 1 &&
+            notifier.execution('saved')?.status ==
+                FlowExecutionStatus.completed,
+        'checkpoint audio MP4 resume');
     expect(received, hasLength(1));
     expect(received.single.type, IOType.audio);
     expect(received.single.mimeType, 'audio/mp4');
@@ -1326,7 +1331,12 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .restorePendingExecutions();
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitFor(
+        () =>
+            received.length == 1 &&
+            notifier.execution('cold')?.status ==
+                FlowExecutionStatus.completed,
+        'cold restored audio MP4 dispatch');
     expect(received.single.type, IOType.audio);
     expect(received.single.mimeType, 'audio/mp4');
   });
