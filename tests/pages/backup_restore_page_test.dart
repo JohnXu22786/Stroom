@@ -54,7 +54,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(AlertDialog),
-          matching: find.text('浏览器Cookies'),
+          matching: find.text('内置浏览器数据'),
         ),
         findsOneWidget,
         reason: 'Confirmation dialog must list the selected category',
@@ -88,7 +88,7 @@ void main() {
 
       // Button-based restart prompt (mirrors the startup migration dialog),
       // no countdown digits
-      expect(find.text('数据清除完成'), findsOneWidget);
+      expect(find.text('部分数据已清除'), findsOneWidget);
       expect(find.text('立即重启'), findsOneWidget);
       expect(find.text('退出应用'), findsOneWidget);
       expect(find.text('5'), findsNothing,

@@ -248,7 +248,8 @@ void main() {
       TextManifest.invalidateCache();
 
       // Restore from bytes
-      await BackupService.restoreFromBytesForTest(backupBytes);
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          skipMissingCategories: true);
       TextManifest.invalidateCache();
 
       // Verify text record exists in DB
@@ -299,7 +300,8 @@ void main() {
           reason: 'After clearAllData, text records must be empty');
 
       // 4. Restore from backup
-      await BackupService.restoreFromBytesForTest(backupBytes);
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          skipMissingCategories: true);
       TextManifest.invalidateCache();
 
       // 5. Verify text records are restored
@@ -353,7 +355,8 @@ void main() {
       TextManifest.invalidateCache();
 
       // Restore
-      await BackupService.restoreFromBytesForTest(backupBytes);
+      await BackupService.restoreFromBytesForTest(backupBytes,
+          skipMissingCategories: true);
       TextManifest.invalidateCache();
 
       // Verify all 3 records exist

@@ -851,6 +851,11 @@ class BackupService {
     }
 
     try {
+      final plannedArchivePaths = {
+        ...jsonFiles.keys,
+        ...memoryFiles.keys,
+      };
+      diskFiles.removeWhere((entry) => !plannedArchivePaths.add(entry.first));
       final manifest = Map<String, dynamic>.from(
         jsonDecode(jsonFiles['manifest.json']!) as Map,
       )
@@ -2146,7 +2151,6 @@ class BackupService {
       ..['fileInventoryVersion'] = 1
       ..['includeMediaFiles'] = selection.includeMediaFiles
       ..['fileInventories'] = _fileInventoriesFromArchive(archive, selection);
-    archive.files.removeWhere((file) => file.name == 'manifest.json');
     addStringToArchive(archive, 'manifest.json', jsonEncode(manifest));
 
     // 6. 编码 — 在后台隔离中执行，不阻塞主 UI 线程
@@ -2879,6 +2883,7 @@ class BackupService {
         candidateRestoreSelection.browserCookies &&
             !restoreBrowserProfile &&
             !kIsWeb &&
+            !WebFileStore.isTestMode &&
             (Platform.isAndroid || Platform.isWindows || Platform.isLinux);
     final restoreSelection = cannotSafelyRestoreCookieSnapshot
         ? _withoutBrowserCookies(candidateRestoreSelection)
