@@ -3544,8 +3544,8 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      browserCookies: !kIsWeb &&
-          _hasBrowserCookieArchiveEntry(normalizedEntries),
+      browserCookies:
+          !kIsWeb && _hasBrowserCookieArchiveEntry(normalizedEntries),
     );
   }
 
