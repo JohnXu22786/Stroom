@@ -226,7 +226,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '备份中实际包含的已勾选类别会替换本机现有数据，不会合并。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。',
+                    '备份中实际包含的已勾选类别会恢复到本机。除内置浏览器 Cookies 外，其余类别会替换本机对应数据；Cookies 按域名、名称和路径写入，备份中没有的本机 Cookies 保持原样。未勾选或备份中缺少的类别保持原样；缺少的类别会跳过并提示。',
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ),
@@ -583,13 +583,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           '为避免覆盖当前任务，任务类别已跳过并保留原数据。';
     }
     if (skippedCategories.contains('内置浏览器数据')) {
-      message += '\n\n为保护本机现有浏览器数据，当前平台无法安全恢复备份中的浏览器目录或 Cookies；'
-          '整个内置浏览器类别已跳过，本机原数据保持不变。';
+      message += '\n\n备份中没有可导入的内置浏览器 Cookies，已跳过；本机现有 Cookies 保持不变。';
     }
     if (categories.contains('内置浏览器网站存储')) {
       if (message.isNotEmpty) message += '\n\n';
-      message += '备份没有包含可在当前平台恢复的内置浏览器网站存储目录；'
-          'Cookies（若备份中包含）仍可单独恢复。各平台的网站数据目录仅支持同平台导入。';
+      message += '旧版备份中的网站存储目录已跳过；'
+          '备份包若包含 Cookies 且该类别已勾选，仍可单独导入。';
     }
     return message;
   }
@@ -627,9 +626,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                     child: Text(
                       '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。\n\n'
                       '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 备份保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置和文件保留方式因平台而异。'
-                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡和内置浏览器数据的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\nAndroid、Windows、iOS、macOS 会将内置浏览器 Cookies 和可读取的网站存储目录放入备份包的 browser_data/；网站存储目录只支持相同平台导入，恢复后需重启。iOS/macOS 会打包应用沙盒中的 WebKit/WebsiteData（含 localStorage、IndexedDB 等）；这是 WebKit 当前的内部目录布局，系统升级后可能变化。Android/Windows 的 Cookies 快照按已访问域名采集，可能不完整；若缺少完整的同平台网站存储目录，将跳过整个内置浏览器类别（包括 Cookies）并提示，避免执行无法安全回滚的部分恢复。Linux 桌面版无法完整读取本机 Cookies，内置浏览器类别会跳过并提示。其他平台可能因无法取得 Cookies 快照而省略该类别；在可导入的平台上，未开启 Cookies 保留时，导入的 Cookies 仅在当前内置浏览器会话中有效。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
+                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡和内置浏览器 Cookies 的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\n内置浏览器类别只备份 Cookies，使用原有 ZIP 根目录路径 browser_cookies.json。localStorage、IndexedDB、Service Worker、网页缓存及其他网站存储不在备份中。在不提供全量 Cookies 列表的平台上，会按 Stroom 内置浏览器当前会话访问过的网址查询可读取的 Cookies；若已开启 Cookies 持久化，也会合并此前保留的 Cookies。导入会写入备份里的 Cookies，同域名、名称和路径的条目会更新，目标设备其他 Cookies 保持原样。网站可能会让已迁移的登录状态过期或要求重新验证。若关闭 Cookies 持久化，导入的 Cookies 仅在当前浏览器会话中有效，下次打开内置浏览器时会清除。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
                       '${kIsWeb ? '' : '\n\n音频类别也会包含尚未保存到音频库的录音草稿，导入后可在录音页继续保存。'}'
-                      '${kIsWeb ? '\n\nWeb 版备份包不包含 browser_data/。' : '\n\n内置浏览器数据集中放在备份包的 browser_data/ 目录：cookies.json 保存 Cookies，android/、windows/、ios/、macos/ 子目录保存各平台的网站存储文件（包括 localStorage、IndexedDB 等）。网站存储目录只支持相同平台导入。'}',
+                      '${kIsWeb ? '\n\nWeb 版备份包不包含 browser_cookies.json。' : ''}',
                     ),
                   ),
                 ],
@@ -881,7 +880,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               value: _browserCookies,
               onChanged: (v) => setState(() => _browserCookies = v ?? false),
               title: '内置浏览器数据',
-              subtitle: 'Cookies 和网站存储；Android/Windows 支持完整站点目录',
+              subtitle: '备份与恢复 Cookies；清除时同时清理可支持的网站存储',
               icon: Icons.cookie,
               iconColor: Colors.orange,
             ),
