@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/browser_cookie_service.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 /// Fake platform facade recording every platform call so the platform
 /// branches (merge, per-domain fallback, restore validation, delete
@@ -135,6 +139,62 @@ void main() {
 
   tearDown(() {
     BrowserCookieService.disableTestMode();
+  });
+
+  test(
+      'reads and writes cookie snapshots in WebFileStore test mode without AppStorage',
+      () async {
+    const pathProviderChannel =
+        MethodChannel('plugins.flutter.io/path_provider');
+    var pathProviderCalls = 0;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(pathProviderChannel, (call) async {
+      pathProviderCalls++;
+      return '/tmp/stroom_browser_cookie_service_test';
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(pathProviderChannel, null),
+    );
+
+    BrowserCookieService.disableTestMode();
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    await WebFileStore.write(
+      '/browser_cookies.json',
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode([
+            {
+              'domain': 'example.com',
+              'name': 'session',
+              'value': 'abc',
+              'path': '/',
+            },
+          ]),
+        ),
+      ),
+    );
+
+    final cookies = await BrowserCookieService.getCookiesFromFileChecked();
+
+    expect(cookies['example.com']!.single['name'], 'session');
+    BrowserCookieService.cookiePlatform = _FakeCookiePlatform()
+      ..allCookies = [
+        Cookie(
+          name: 'updated',
+          value: 'next',
+          domain: 'example.com',
+          path: '/',
+        ),
+      ];
+    await BrowserCookieService.setRetentionMode(true);
+    await BrowserCookieService.persistCookiesToFile();
+    final updatedBytes = await WebFileStore.read('/browser_cookies.json');
+    final updatedCookies = jsonDecode(utf8.decode(updatedBytes!)) as List;
+    expect(updatedCookies.single['name'], 'updated');
+    expect(pathProviderCalls, 0,
+        reason: 'WebFileStore mode must not resolve a native documents path');
   });
 
   // ====================================================================
@@ -766,7 +826,9 @@ void main() {
           fake.setCookieCalls.firstWhere((c) => c['name'] == 'domain_cookie');
       expect(domainCall['domain'], '.example.com');
       expect(domainCall['path'], '/api');
-      expect(domainCall['url'], 'https://example.com');
+      // URL supplies the context, while path is also sent as the explicit
+      // cookie attribute. The context must match the path-scoped cookie.
+      expect(domainCall['url'], 'https://example.com/api');
       final hostCall =
           fake.setCookieCalls.firstWhere((c) => c['name'] == 'host_cookie');
       expect(hostCall['domain'], isNull);

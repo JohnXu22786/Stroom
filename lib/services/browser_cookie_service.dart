@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' hide Cookie;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'browser_profile_service.dart';
 import 'storage_service.dart';
+import '../utils/web_file_store.dart';
 
 /// Service for managing browser cookie retention mode and persistence.
 ///
@@ -30,6 +32,8 @@ class BrowserCookieService {
   BrowserCookieService._();
 
   static const String _retentionKey = 'browser_cookie_retention';
+  static const String _cookiesFileName = 'browser_cookies.json';
+  static const String _cookiesWebFileKey = '/$_cookiesFileName';
   // Keep pending callbacks rather than a completed Future tail, which can
   // retain the caller's async zone across independent operations.
   static final Queue<_QueuedRetentionOperation<dynamic>> _retentionOperations =
@@ -81,16 +85,10 @@ class BrowserCookieService {
   // Visited-domain tracking
   // ===========================================================================
 
-  /// Hosts visited in the current app session. Used to enumerate cookies
-  /// per-domain on platforms where [CookieManager.getAllCookies] is not
-  /// implemented (Android/Windows).
-  ///
-  /// Bounded to the most recent [maxVisitedDomains] hosts so it cannot grow
-  /// without limit over a long session.
+  /// Hosts visited in the current app session. Used to enumerate the cookies
+  /// relevant to Stroom's built-in browser on platforms where
+  /// [CookieManager.getAllCookies] is not implemented.
   static final Set<String> _visitedDomains = <String>{};
-
-  /// Maximum number of hosts kept for per-domain cookie enumeration.
-  static const int maxVisitedDomains = 64;
 
   /// Page URLs kept for the current browser session to discover path-scoped
   /// cookies on platforms that cannot enumerate the complete cookie store.
@@ -103,14 +101,6 @@ class BrowserCookieService {
     final uri = Uri.tryParse(url);
     final host = uri?.host;
     if (host == null || host.isEmpty) return;
-    if (_visitedDomains.contains(host)) {
-      // Re-visit: refresh recency (LinkedHashSet.add of an existing element
-      // does NOT move it to the end — remove first).
-      _visitedDomains.remove(host);
-    } else if (_visitedDomains.length >= maxVisitedDomains) {
-      // Evict the oldest host when inserting a NEW one at capacity.
-      _visitedDomains.remove(_visitedDomains.first);
-    }
     _visitedDomains.add(host);
 
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
@@ -314,12 +304,12 @@ class BrowserCookieService {
     }
     try {
       final dir = await AppStorage.directory;
-      return p.join(dir, 'browser_cookies.json');
+      return p.join(dir, _cookiesFileName);
     } catch (e) {
       debugPrint('BrowserCookieService._cookiesFilePath error: $e');
       // Never fall back to a relative path: file operations resolve relative
       // paths against the process CWD (e.g. "/" on Android) and would throw.
-      return p.join(Directory.systemTemp.path, 'browser_cookies.json');
+      return p.join(Directory.systemTemp.path, _cookiesFileName);
     }
   }
 
@@ -368,9 +358,11 @@ class BrowserCookieService {
     }
   }
 
-  /// Captures the current cookies for an explicitly requested backup without
-  /// changing the user's retention preference or persisted cookie file.
-  /// Returns null when the current platform cannot provide a usable snapshot.
+  /// Captures cookies for an explicitly requested backup without changing the
+  /// user's retention preference or persisted cookie file. On platforms
+  /// without a full-store API, this includes cookies readable for URLs visited
+  /// in Stroom's built-in browser during the current session, plus previously
+  /// retained cookies when cookie retention is enabled.
   static Future<List<Map<String, dynamic>>?> snapshotCookiesForBackup() {
     return _serializeRetentionOperation(() async {
       final retentionEnabled = await getRetentionMode();
@@ -384,7 +376,7 @@ class BrowserCookieService {
 
         final currentCookies = result.cookies!.map(_cookieToMap).toList();
         if (result.complete) return currentCookies;
-        if (!retentionEnabled) return null;
+        if (!retentionEnabled) return currentCookies;
 
         final persistedCookies = await _readCookiesFile();
         persistedCookies.removeWhere(
@@ -397,25 +389,6 @@ class BrowserCookieService {
         return null;
       }
     });
-  }
-
-  /// Captures a complete platform cookie snapshot for rolling back a failed
-  /// restore. Returns null when the platform can only enumerate visited
-  /// domains, since that partial view cannot safely replace the full store.
-  /// Callers requiring a consistent state must hold the retention-operation
-  /// queue while capturing this snapshot.
-  static Future<List<Map<String, dynamic>>?>
-      snapshotCookiesForRestoreRollback() async {
-    try {
-      final result = await _collectPlatformCookies();
-      if (result.cookies == null || !result.complete) return null;
-      return result.cookies!.map(_cookieToMap).toList();
-    } catch (e) {
-      debugPrint(
-        'BrowserCookieService.snapshotCookiesForRestoreRollback error: $e',
-      );
-      return null;
-    }
   }
 
   /// Restores cookies from the local JSON file to the platform CookieManager.
@@ -433,16 +406,18 @@ class BrowserCookieService {
   }
 
   /// Restores the persisted cookie snapshot and reports whether every cookie
-  /// was applied successfully. Backup restore uses this result to roll back if
-  /// the platform rejects any cookie.
+  /// was applied successfully. Backup import can opt into restoring the prior
+  /// live values before returning a failure.
   static Future<bool> restoreCookiesFromFileChecked({
     bool force = false,
+    bool rollbackOnFailure = false,
   }) async {
     if (!force && !await getRetentionMode()) return true;
     try {
       return await restoreCookiesFromSnapshot(
         await _readCookiesFile(),
         force: true,
+        rollbackOnFailure: rollbackOnFailure,
       );
     } catch (e) {
       debugPrint(
@@ -453,15 +428,34 @@ class BrowserCookieService {
   }
 
   /// Restores cookies from a captured in-memory snapshot without persisting it.
-  /// This is used to roll back a failed restore while preserving the current
-  /// retention preference and the existing snapshot file.
+  /// [rollbackOnFailure] captures the live values for the target cookies and
+  /// restores them if any cookie is rejected. This is used by backup import,
+  /// which must not leave a partially applied cookie snapshot.
   static Future<bool> restoreCookiesFromSnapshot(
     List<Map<String, dynamic>> cookies, {
     bool force = false,
+    bool rollbackOnFailure = false,
   }) async {
     if (!force && !await getRetentionMode()) return true;
+    if (rollbackOnFailure) {
+      try {
+        validateCookieSnapshotForRestore(cookies);
+      } catch (e) {
+        debugPrint(
+          'BrowserCookieService.restoreCookiesFromSnapshot invalid snapshot: $e',
+        );
+        return false;
+      }
+    }
+    final rollbackState = rollbackOnFailure
+        ? await _captureCookieRestoreRollbackState(cookies)
+        : null;
+    if (rollbackOnFailure && rollbackState == null) return false;
+
+    final attemptedCookies = <_CookieRestoreRollbackEntry>[];
     var allCookiesRestored = true;
-    for (final cookieMap in cookies) {
+    for (var index = 0; index < cookies.length; index++) {
+      final cookieMap = cookies[index];
       try {
         final name = cookieMap['name'];
         final domain = cookieMap['domain'];
@@ -487,8 +481,11 @@ class BrowserCookieService {
         }
         final cleanDomain =
             domain.startsWith('.') ? domain.substring(1) : domain;
+        if (rollbackOnFailure) {
+          attemptedCookies.add(rollbackState![index]);
+        }
         final restored = await cookiePlatform.setCookie(
-          url: WebUri('https://$cleanDomain'),
+          url: WebUri(_cookieUrl(cleanDomain, cookieMap['path'] as String?)),
           name: name,
           value: valueStr,
           // Only genuine domain cookies (leading dot) keep the Domain
@@ -503,16 +500,121 @@ class BrowserCookieService {
             cookieMap['sameSite'],
           ),
         );
-        if (!restored) allCookiesRestored = false;
+        if (!restored) {
+          allCookiesRestored = false;
+          if (rollbackOnFailure) {
+            await _rollbackCookieRestore(attemptedCookies);
+            return false;
+          }
+        }
       } catch (e) {
         allCookiesRestored = false;
         debugPrint(
           'BrowserCookieService.restoreCookiesFromSnapshot: skipping cookie: $e',
         );
+        if (rollbackOnFailure) {
+          await _rollbackCookieRestore(attemptedCookies);
+          return false;
+        }
       }
     }
     return allCookiesRestored;
   }
+
+  static Future<List<_CookieRestoreRollbackEntry>?>
+      _captureCookieRestoreRollbackState(
+    List<Map<String, dynamic>> cookies,
+  ) async {
+    final snapshots = <_CookieRestoreRollbackEntry>[];
+    try {
+      for (final cookie in cookies) {
+        final domain = cookie['domain'] as String;
+        final path = cookie['path'] as String? ?? '/';
+        final cleanDomain =
+            domain.startsWith('.') ? domain.substring(1) : domain;
+        final url = WebUri(_cookieUrl(cleanDomain, path));
+        final liveCookies = await cookiePlatform.getCookies(url: url);
+        Map<String, dynamic>? previousCookie;
+        for (final liveCookie in liveCookies) {
+          final liveMap = _cookieToMap(liveCookie);
+          if (liveMap['name'] == cookie['name'] &&
+              (liveMap['path'] as String? ?? '/') == path &&
+              _rollbackCookieDomain(liveMap['domain'], cleanDomain) ==
+                  _rollbackCookieDomain(cookie['domain'], cleanDomain)) {
+            previousCookie = liveMap;
+            break;
+          }
+        }
+        snapshots.add(
+          _CookieRestoreRollbackEntry(
+            targetCookie: cookie,
+            previousCookie: previousCookie,
+          ),
+        );
+      }
+      return snapshots;
+    } catch (e) {
+      debugPrint(
+        'BrowserCookieService._captureCookieRestoreRollbackState error: $e',
+      );
+      return null;
+    }
+  }
+
+  static Future<void> _rollbackCookieRestore(
+    List<_CookieRestoreRollbackEntry> snapshots,
+  ) async {
+    for (final snapshot in snapshots.reversed) {
+      final target = snapshot.targetCookie;
+      final targetDomain = target['domain'] as String;
+      final cleanDomain = targetDomain.startsWith('.')
+          ? targetDomain.substring(1)
+          : targetDomain;
+      final targetPath = target['path'] as String? ?? '/';
+      final url = WebUri(_cookieUrl(cleanDomain, targetPath));
+      try {
+        final previous = snapshot.previousCookie;
+        final restored = previous == null
+            ? await cookiePlatform.deleteCookie(
+                url: url,
+                name: target['name'] as String,
+                path: targetPath,
+                domain: targetDomain.startsWith('.') ? targetDomain : null,
+              )
+            : await cookiePlatform.setCookie(
+                url: url,
+                name: previous['name'] as String,
+                value: previous['value'].toString(),
+                domain: (previous['domain'] as String?)?.startsWith('.') == true
+                    ? previous['domain'] as String
+                    : null,
+                path: previous['path'] as String? ?? '/',
+                expiresDate: previous['expiresDate'] as int?,
+                isSecure: previous['isSecure'] as bool?,
+                isHttpOnly: previous['isHttpOnly'] as bool?,
+                sameSite: HTTPCookieSameSitePolicy.fromNativeValue(
+                  previous['sameSite'],
+                ),
+              );
+        if (!restored) {
+          debugPrint(
+            'BrowserCookieService._rollbackCookieRestore could not restore '
+            'cookie ${target['name']}',
+          );
+        }
+      } catch (e) {
+        debugPrint(
+          'BrowserCookieService._rollbackCookieRestore error: $e',
+        );
+      }
+    }
+  }
+
+  static String _rollbackCookieDomain(Object? domain, String host) =>
+      (domain is String ? domain : host).toLowerCase();
+
+  static String _cookieUrl(String host, String? path) =>
+      Uri(scheme: 'https', host: host, path: path ?? '/').toString();
 
   /// Validates the shape of a cookie snapshot before a backup import mutates
   /// the current cookie store. Runtime cookie-store failures are still handled
@@ -572,6 +674,16 @@ class BrowserCookieService {
       debugPrint('BrowserCookieService.getCookiesFromFile error: $e');
       return {};
     }
+  }
+
+  /// Reads the persisted snapshot without hiding storage or format failures.
+  /// Backup import must not treat an unreadable destination snapshot as empty,
+  /// because that could discard destination-only cookies from the merged file.
+  static Future<Map<String, List<Map<String, dynamic>>>>
+      getCookiesFromFileChecked() async {
+    final list = await _readCookiesFile(throwOnInvalidStructure: true);
+    validateCookieSnapshotForRestore(list);
+    return _groupAndSort(list);
   }
 
   /// Returns cookies grouped by domain, combining data from the persisted
@@ -1020,7 +1132,7 @@ class BrowserCookieService {
     String keyOf(Map<String, dynamic> cookie) {
       final domain = cookie['domain'];
       final name = cookie['name'];
-      final path = cookie['path'];
+      final path = cookie['path'] as String? ?? '/';
       return '$domain\u0000$name\u0000$path';
     }
 
@@ -1034,6 +1146,14 @@ class BrowserCookieService {
     return byKey.values.toList();
   }
 
+  /// Merges an imported snapshot into the local cookie list. Imported cookies
+  /// replace matching domain/name/path entries; other local cookies remain.
+  static List<Map<String, dynamic>> mergeCookieSnapshots(
+    List<Map<String, dynamic>> existing,
+    List<Map<String, dynamic>> imported,
+  ) =>
+      _mergeCookies(existing, imported);
+
   /// Writes cookies atomically (temp file + rename) so a crash mid-write
   /// cannot corrupt the persisted store. The temp file gets a unique suffix
   /// so concurrent writers (page-load persist + dispose persist) cannot
@@ -1045,6 +1165,13 @@ class BrowserCookieService {
       _testCookies = cookies;
       return;
     }
+    if (WebFileStore.isTestMode) {
+      await WebFileStore.write(
+        _cookiesWebFileKey,
+        Uint8List.fromList(utf8.encode(jsonEncode(cookies))),
+      );
+      return;
+    }
     final path = await _cookiesFilePath;
     final tmpPath = '$path.tmp-${DateTime.now().microsecondsSinceEpoch}';
     await File(tmpPath).writeAsString(jsonEncode(cookies));
@@ -1053,17 +1180,39 @@ class BrowserCookieService {
 
   /// Reads cookies list from the persistence file (or in-memory store in
   /// test mode).
-  static Future<List<Map<String, dynamic>>> _readCookiesFile() async {
+  static Future<List<Map<String, dynamic>>> _readCookiesFile({
+    bool throwOnInvalidStructure = false,
+  }) async {
     if (_testMode) {
       return _testCookies ?? [];
     }
-    final path = await _cookiesFilePath;
-    final file = File(path);
-    if (!await file.exists()) return [];
-    final content = await file.readAsString();
-    if (content.trim().isEmpty) return [];
+    late final String content;
+    if (WebFileStore.isTestMode) {
+      final bytes = await WebFileStore.read(_cookiesWebFileKey);
+      if (bytes == null) return [];
+      content = utf8.decode(bytes);
+    } else {
+      final path = await _cookiesFilePath;
+      final file = File(path);
+      if (!await file.exists()) return [];
+      content = await file.readAsString();
+    }
+    if (content.trim().isEmpty) {
+      if (throwOnInvalidStructure) {
+        throw const FormatException('Cookie snapshot is empty');
+      }
+      return [];
+    }
     final decoded = jsonDecode(content);
-    if (decoded is! List) return [];
+    if (decoded is! List) {
+      if (throwOnInvalidStructure) {
+        throw const FormatException('Cookie snapshot must be a JSON array');
+      }
+      return [];
+    }
+    if (throwOnInvalidStructure && decoded.any((item) => item is! Map)) {
+      throw const FormatException('Cookie snapshot must contain only objects');
+    }
     // Validate entries eagerly: a single non-map element must not abort
     // processing of the rest (see restoreCookiesFromFile).
     return decoded.whereType<Map<String, dynamic>>().toList();
@@ -1125,6 +1274,16 @@ class BrowserCookieService {
     );
     _testCookies = List.from(cookies);
   }
+}
+
+class _CookieRestoreRollbackEntry {
+  const _CookieRestoreRollbackEntry({
+    required this.targetCookie,
+    required this.previousCookie,
+  });
+
+  final Map<String, dynamic> targetCookie;
+  final Map<String, dynamic>? previousCookie;
 }
 
 class _QueuedRetentionOperation<T> {

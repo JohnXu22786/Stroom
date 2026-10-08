@@ -107,33 +107,34 @@ void main() {
       expect(BrowserCookieService.visitedDomainsForTest, isEmpty);
     });
 
-    test('caps the tracked host set to avoid unbounded growth', () async {
-      for (var i = 0; i < BrowserCookieService.maxVisitedDomains + 10; i++) {
+    test('keeps every host visited in the current browser session', () async {
+      for (var i = 0; i < 80; i++) {
         BrowserCookieService.noteVisitedUrl('https://site$i.example.com/');
       }
       expect(
         BrowserCookieService.visitedDomainsForTest.length,
-        BrowserCookieService.maxVisitedDomains,
+        80,
       );
+      expect(BrowserCookieService.visitedDomainsForTest,
+          contains('site0.example.com'));
+      expect(BrowserCookieService.visitedDomainsForTest,
+          contains('site79.example.com'));
     });
 
-    test('revisiting a tracked host refreshes its recency', () async {
-      // Fill the set to capacity.
-      for (var i = 0; i < BrowserCookieService.maxVisitedDomains; i++) {
+    test('revisiting a host does not remove other visited hosts', () async {
+      for (var i = 0; i < 80; i++) {
         BrowserCookieService.noteVisitedUrl('https://site$i.example.com/');
       }
-      // Revisit the OLDEST host — it must move to the most-recent position.
       BrowserCookieService.noteVisitedUrl('https://site0.example.com/');
-      // Insert a brand-new host at capacity — the oldest host (site1) is
-      // evicted, and the revisited site0 survives.
-      BrowserCookieService.noteVisitedUrl('https://brand-new.example.com/');
+      BrowserCookieService.noteVisitedUrl('https://new-site.example.com/');
 
       final tracked = BrowserCookieService.visitedDomainsForTest;
       expect(tracked.contains('site0.example.com'), isTrue,
-          reason: 'a revisited host must not be evicted by the next insert');
-      expect(tracked.contains('site1.example.com'), isFalse,
-          reason: 'the oldest never-revisited host is the one evicted');
-      expect(tracked.length, BrowserCookieService.maxVisitedDomains);
+          reason: 'revisiting a host keeps it in the export scope');
+      expect(tracked.contains('site1.example.com'), isTrue,
+          reason: 'other visited hosts stay in the export scope');
+      expect(tracked.contains('new-site.example.com'), isTrue);
+      expect(tracked.length, 81);
     });
   });
 
