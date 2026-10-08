@@ -202,12 +202,10 @@ class StartupCheckService {
       if (validateConversations) StartupPreferences.getString('conversations'),
     ]);
     var nextPreferenceIndex = 0;
-    final providerEntriesJson = validateProviderEntries
-        ? prefsValues[nextPreferenceIndex++]
-        : null;
-    final conversationsJson = validateConversations
-        ? prefsValues[nextPreferenceIndex]
-        : null;
+    final providerEntriesJson =
+        validateProviderEntries ? prefsValues[nextPreferenceIndex++] : null;
+    final conversationsJson =
+        validateConversations ? prefsValues[nextPreferenceIndex] : null;
 
     if (kIsWeb) {
       try {
