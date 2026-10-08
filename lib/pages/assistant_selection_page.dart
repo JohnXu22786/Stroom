@@ -86,11 +86,14 @@ class AssistantSelectionPage extends ConsumerWidget {
                   // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      '长按拖拽即可调整助手顺序',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                    child: Center(
+                      child: Text(
+                        '长按拖拽即可调整助手顺序',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                        ),
                       ),
                     ),
                   ),
