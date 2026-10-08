@@ -333,6 +333,12 @@ class _MathKeyboardState extends State<MathKeyboard> {
           explicitChildNodes: true,
           label: '符号键盘',
           value: canSwipePages ? '${_page + 1}/$pageCount' : null,
+          increasedValue: canSwipePages
+              ? '${(_page + 1) % pageCount + 1}/$pageCount'
+              : null,
+          decreasedValue: canSwipePages
+              ? '${(_page - 1 + pageCount) % pageCount + 1}/$pageCount'
+              : null,
           hint: canSwipePages ? '使用增减操作切换符号页' : null,
           onIncrease: canSwipePages ? () => _changePage(pageCount, 1) : null,
           onDecrease: canSwipePages ? () => _changePage(pageCount, -1) : null,
