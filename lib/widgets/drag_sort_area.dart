@@ -69,6 +69,11 @@ class DragSortArea extends StatefulWidget {
   final Widget Function(BuildContext context, int index, String value)?
       itemBuilder;
 
+  /// Optional content displayed before the sortable items. It is inside the
+  /// drag-sort scope, so a [DragSortRowHandle] can start reordering an item
+  /// from this area.
+  final Widget Function(BuildContext context)? headerBuilder;
+
   /// 排序提交回调：from/to 为「移除 after 插入」索引（与
   /// `ReorderableListView.onReorderItem` 一致）。
   final void Function(int from, int to) onReorder;
@@ -88,6 +93,7 @@ class DragSortArea extends StatefulWidget {
     this.onTap,
     this.onDelete,
     this.itemBuilder,
+    this.headerBuilder,
     required this.onReorder,
   }) : assert(!(wrap && grid), 'wrap 与 grid 互斥');
 
@@ -95,8 +101,8 @@ class DragSortArea extends StatefulWidget {
   State<DragSortArea> createState() => _DragSortAreaState();
 }
 
-/// 行模式下的拖拽把手：长按 [child]（把手图标）启动整行拖拽。
-/// 必须放在 [DragSortArea] 的 [itemBuilder] 返回的行内。
+/// 长按 [child] 启动对应条目的拖拽。可放在 [DragSortArea] 的
+/// [headerBuilder] 或行模式的 [itemBuilder] 中。
 class DragSortRowHandle extends StatelessWidget {
   final int index;
   final Widget child;
@@ -104,6 +110,7 @@ class DragSortRowHandle extends StatelessWidget {
   /// 拖拽时跟随手指的整行反馈（由调用方构建，通常为整行内容）。
   final Widget feedback;
   final bool enabled;
+  final bool expandFeedback;
   final Duration delay;
 
   const DragSortRowHandle({
@@ -112,6 +119,7 @@ class DragSortRowHandle extends StatelessWidget {
     required this.child,
     required this.feedback,
     this.enabled = true,
+    this.expandFeedback = true,
     this.delay = kDragSortDelay,
   });
 
@@ -131,10 +139,9 @@ class DragSortRowHandle extends StatelessWidget {
       onDraggableCanceled: (velocity, offset) => controller.dragCanceled(),
       // 反馈在 Overlay 上以松散约束布局，必须限定宽度（行内 Expanded
       // 需要有界宽度，否则整行会被撑满屏幕）。
-      feedback: SizedBox(
-        width: controller.maxWidth,
-        child: feedback,
-      ),
+      feedback: expandFeedback
+          ? SizedBox(width: controller.maxWidth, child: feedback)
+          : feedback,
       childWhenDragging: Opacity(opacity: 1.0, child: child),
       child: child,
     );
@@ -163,6 +170,8 @@ const double _kPillHeight = 34;
 const double _kPillDeleteWidth = 24;
 
 class _DragSortAreaState extends State<DragSortArea> {
+  final GlobalKey _itemsKey = GlobalKey();
+
   /// 正在拖拽的条目索引（null = 未拖拽）。
   int? _dragIndex;
 
@@ -219,7 +228,7 @@ class _DragSortAreaState extends State<DragSortArea> {
         height: _gridCellHeight,
       ),
     );
-    final box = context.findRenderObject() as RenderBox?;
+    final box = _itemsKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     setState(() {
       _insertIndex = _computeInsertIndex(box.globalToLocal(globalPosition), d);
@@ -232,7 +241,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final g = _lastDragGlobal;
     final d = _dragIndex;
     if (g == null || d == null || !mounted) return;
-    final box = context.findRenderObject() as RenderBox?;
+    final box = _itemsKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     setState(() {
       _insertIndex = _computeInsertIndex(box.globalToLocal(g), d);
@@ -644,7 +653,8 @@ class _DragSortAreaState extends State<DragSortArea> {
           final totalHeight = entries.isEmpty
               ? 0.0
               : entries.map((e) => e.$2.bottom).reduce(math.max);
-          return SizedBox(
+          final items = SizedBox(
+            key: _itemsKey,
             width: _maxWidth,
             height: totalHeight,
             child: Stack(
@@ -668,6 +678,12 @@ class _DragSortAreaState extends State<DragSortArea> {
                   ),
               ],
             ),
+          );
+          final header = widget.headerBuilder;
+          if (header == null) return items;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [header(context), items],
           );
         },
       ),
