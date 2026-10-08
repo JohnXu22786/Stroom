@@ -105,14 +105,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     setState(() {
       _mathMode = mathematical;
       _activeFormula = formula;
-      _keyboardVisible = mathematical && _currentView == ViewMode.mode2D;
+      _keyboardVisible = mathematical;
     });
     unawaited(SharedPreferences.getInstance()
         .then((prefs) => prefs.setBool(_modePreference, mathematical)));
   }
 
   void _activateFormula(_FormulaState formula) {
-    if (!_mathMode || _currentView != ViewMode.mode2D) return;
+    if (!_mathMode) return;
     _modeTouched = true;
     FocusManager.instance.primaryFocus?.unfocus();
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
@@ -492,8 +492,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                         ),
                       ),
                       if (_keyboardVisible &&
-                          _activeFormula != null &&
-                          _currentView == ViewMode.mode2D)
+                          _activeFormula != null)
                         ConstrainedBox(
                           constraints: BoxConstraints(
                               maxHeight: (constraints.maxHeight - 48)
@@ -619,8 +618,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             child: MathFormulaField(
               key: f.editorKey,
               controller: f.controller,
-              mathematical: _mathMode && _currentView == ViewMode.mode2D,
-              allowModeSwitch: _currentView == ViewMode.mode2D,
+              mathematical: _mathMode,
+              allowModeSwitch: true,
               showWebView: widget.initialShowWebView,
               label: '公式 ${index + 1}',
               fillColor: f.color.withValues(alpha: 0.06),

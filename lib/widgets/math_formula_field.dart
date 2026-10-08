@@ -63,7 +63,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
   String _lastSource = '';
   String? _failure;
   ColorScheme? _colorScheme;
-  double _height = 56;
+  double _height = 48;
   String _location = '公式';
   String get location => _location;
   int get revision => _revision;
@@ -169,7 +169,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
     }
     final height = snapshot['height'];
     if (height is num) {
-      final next = height.toDouble().clamp(56.0, 180.0);
+      final next = height.toDouble().clamp(48.0, 180.0);
       if ((next - _height).abs() > 1) setState(() => _height = next);
     }
   }
@@ -299,7 +299,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
                                     ? r'\square'
                                     : widget.controller.text,
                                 textStyle: TextStyle(
-                                    fontSize: 22, color: cs.onSurface),
+                                    fontSize: 18, color: cs.onSurface),
                                 onErrorFallback: (_) => Text(widget.label),
                               )),
                         ),
