@@ -438,7 +438,7 @@ void main() {
       // 长按第一张卡片（助手甲，第 1 列），向右拖进第 2 列 → 与助手乙换位
       final gesture =
           await tester.startGesture(tester.getCenter(find.text('助手甲')));
-      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 850));
       await gesture.moveBy(const Offset(195, 0));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
@@ -474,7 +474,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // 长按卡片（此前是弹菜单）——现在应只启动拖拽，松手不弹菜单也不跳转
-      await tester.longPress(find.text('拖拽卡'));
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('拖拽卡')));
+      await tester.pump(const Duration(milliseconds: 850));
+      await gesture.up();
       await tester.pumpAndSettle();
 
       expect(find.text('编辑'), findsNothing);

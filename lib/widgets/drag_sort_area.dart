@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// 长按触发拖拽的延迟（约 280ms，比默认 500ms 跟手）。
+/// 长按触发拖拽的默认延迟（约 280ms，比默认 500ms 跟手）。
 const Duration kDragSortDelay = Duration(milliseconds: 280);
 
 /// 可拖拽排序的胶囊（自动换行）、网格或行（垂直）列表。
@@ -52,6 +52,15 @@ class DragSortArea extends StatefulWidget {
   /// 行布局的行高（不含行间距）。
   final double rowExtent;
 
+  /// 胶囊/网格条目的长按拖拽延迟。
+  final Duration dragDelay;
+
+  /// 可选的网格拖拽高亮颜色；用于拖拽浮层和原位占位，接续按压反馈。
+  final Color? dragHighlightColor;
+
+  /// 拖拽中原位条目的透明度。
+  final double draggedItemOpacity;
+
   /// 胶囊布局：当前是否选中（高亮底色）。
   final bool Function(String value)? selected;
 
@@ -83,6 +92,9 @@ class DragSortArea extends StatefulWidget {
     this.gridMainAxisSpacing = 12,
     this.gridChildAspectRatio = 0.85,
     this.rowExtent = 56,
+    this.dragDelay = kDragSortDelay,
+    this.dragHighlightColor,
+    this.draggedItemOpacity = 0.45,
     this.selected,
     this.deletable,
     this.onTap,
@@ -424,11 +436,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   Widget _buildGridItem(int k) {
     final child = widget.itemBuilder!(context, k, widget.values[k]);
     // childWhenDragging 保持原样（opacity 1.0）：拖拽中条目由 build 里的
-    // 外层 Opacity(0.45) 统一变半透明——若内层再叠一层 opacity 透明度会
-    // 变成 ~0.2，与胶囊拖拽的外观不一致。
+    // 外层 Opacity 统一调整透明度，避免重复降低透明度。
     return LongPressDraggable<String>(
       data: 'drag-grid-$k',
-      delay: kDragSortDelay,
+      delay: widget.dragDelay,
       feedbackOffset: Offset(-_gridCellWidth / 2, -_gridCellHeight / 2),
       ignoringFeedbackPointer: true,
       onDragStarted: () => dragStarted(k),
@@ -452,12 +463,34 @@ class _DragSortAreaState extends State<DragSortArea> {
           opacity: 0.95,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: child,
+            child: _withDragHighlight(child),
           ),
         ),
       ),
-      childWhenDragging: Opacity(opacity: 1.0, child: child),
+      childWhenDragging: Opacity(
+        opacity: 1.0,
+        child: _withDragHighlight(child),
+      ),
       child: child,
+    );
+  }
+
+  Widget _withDragHighlight(Widget child) {
+    final color = widget.dragHighlightColor;
+    if (color == null) return child;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(decoration: BoxDecoration(color: color)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -466,7 +499,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final pill = _pillVisual(value, cs);
     return LongPressDraggable<String>(
       data: value,
-      delay: kDragSortDelay,
+      delay: widget.dragDelay,
       feedbackOffset: Offset(-_widthOf(k) / 2, -_kPillHeight / 2),
       // 反馈浮层不接收指针：拖拽中误点浮层不应触发勾选/删除
       ignoringFeedbackPointer: true,
@@ -624,7 +657,12 @@ class _DragSortAreaState extends State<DragSortArea> {
             entries.add((
               _keyOf(d),
               rects[t],
-              !widget.wrap ? Opacity(opacity: 0.45, child: _item(d)) : _item(d),
+              !widget.wrap
+                  ? Opacity(
+                      opacity: widget.draggedItemOpacity,
+                      child: _item(d),
+                    )
+                  : _item(d),
             ));
           } else {
             final rects = _layoutRects(

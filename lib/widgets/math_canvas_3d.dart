@@ -3849,8 +3849,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _orbitBy(Offset delta) {
     setState(() {
-      _cameraTheta -= delta.dx * 0.008;
-      _cameraPhi = (_cameraPhi - delta.dy * 0.008).clamp(
+      _cameraTheta += delta.dx * 0.008;
+      _cameraPhi = (_cameraPhi + delta.dy * 0.008).clamp(
         -dart_math.pi * 0.49,
         dart_math.pi * 0.49,
       );

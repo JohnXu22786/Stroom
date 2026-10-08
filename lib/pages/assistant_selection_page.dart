@@ -29,6 +29,8 @@ class AssistantSelectionPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final assistants = ref.watch(assistantProvider);
     final cs = Theme.of(context).colorScheme;
+    final pressHighlightColor = cs.primary.withValues(alpha: 0.02);
+    final dragHighlightColor = cs.primary.withValues(alpha: 0.06);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -102,6 +104,9 @@ class AssistantSelectionPage extends ConsumerWidget {
                     gridCrossAxisSpacing: 12,
                     gridMainAxisSpacing: 12,
                     gridChildAspectRatio: 0.85,
+                    dragDelay: const Duration(milliseconds: 800),
+                    dragHighlightColor: dragHighlightColor,
+                    draggedItemOpacity: 0.88,
                     values: [for (final a in assistants) a.id],
                     onReorder: (from, to) =>
                         ref.read(assistantProvider.notifier).reorderAssistant(
@@ -112,6 +117,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                       final assistant = assistants[index];
                       return AssistantCard(
                         assistant: assistant,
+                        pressHighlightColor: pressHighlightColor,
                         onTap: () =>
                             _onAssistantSelected(context, ref, assistant),
                         // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮
