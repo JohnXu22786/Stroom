@@ -539,7 +539,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
               children: [
                 Icon(Icons.show_chart, size: 18),
                 SizedBox(width: 6),
-                Text('2D 绘图'),
+                Text('2D'),
               ],
             ),
           ),
