@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' hide Cookie;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'browser_profile_service.dart';
 import 'storage_service.dart';
+import '../utils/web_file_store.dart';
 
 /// Service for managing browser cookie retention mode and persistence.
 ///
@@ -30,6 +32,8 @@ class BrowserCookieService {
   BrowserCookieService._();
 
   static const String _retentionKey = 'browser_cookie_retention';
+  static const String _cookiesFileName = 'browser_cookies.json';
+  static const String _cookiesWebFileKey = '/$_cookiesFileName';
   // Keep pending callbacks rather than a completed Future tail, which can
   // retain the caller's async zone across independent operations.
   static final Queue<_QueuedRetentionOperation<dynamic>> _retentionOperations =
@@ -300,12 +304,12 @@ class BrowserCookieService {
     }
     try {
       final dir = await AppStorage.directory;
-      return p.join(dir, 'browser_cookies.json');
+      return p.join(dir, _cookiesFileName);
     } catch (e) {
       debugPrint('BrowserCookieService._cookiesFilePath error: $e');
       // Never fall back to a relative path: file operations resolve relative
       // paths against the process CWD (e.g. "/" on Android) and would throw.
-      return p.join(Directory.systemTemp.path, 'browser_cookies.json');
+      return p.join(Directory.systemTemp.path, _cookiesFileName);
     }
   }
 
@@ -1161,6 +1165,13 @@ class BrowserCookieService {
       _testCookies = cookies;
       return;
     }
+    if (WebFileStore.isTestMode) {
+      await WebFileStore.write(
+        _cookiesWebFileKey,
+        Uint8List.fromList(utf8.encode(jsonEncode(cookies))),
+      );
+      return;
+    }
     final path = await _cookiesFilePath;
     final tmpPath = '$path.tmp-${DateTime.now().microsecondsSinceEpoch}';
     await File(tmpPath).writeAsString(jsonEncode(cookies));
@@ -1175,10 +1186,17 @@ class BrowserCookieService {
     if (_testMode) {
       return _testCookies ?? [];
     }
-    final path = await _cookiesFilePath;
-    final file = File(path);
-    if (!await file.exists()) return [];
-    final content = await file.readAsString();
+    late final String content;
+    if (WebFileStore.isTestMode) {
+      final bytes = await WebFileStore.read(_cookiesWebFileKey);
+      if (bytes == null) return [];
+      content = utf8.decode(bytes);
+    } else {
+      final path = await _cookiesFilePath;
+      final file = File(path);
+      if (!await file.exists()) return [];
+      content = await file.readAsString();
+    }
     if (content.trim().isEmpty) {
       if (throwOnInvalidStructure) {
         throw const FormatException('Cookie snapshot is empty');
