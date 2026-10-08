@@ -221,7 +221,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Switch back to 2D tab
-      await tester.tap(find.text('2D 绘图'));
+      await tester.tap(find.text('2D'));
       await tester.pumpAndSettle();
 
       // Text field should still have the formula
@@ -431,7 +431,7 @@ void editorInteractionTests() {
     await tester.tap(find.text('3D'));
     await tester.pumpAndSettle();
     expect(find.text('下一项'), findsNothing);
-    await tester.tap(find.text('2D 绘图'));
+    await tester.tap(find.text('2D'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('切换到系统键盘 / LaTeX 源码'));
     await tester.pumpAndSettle();
