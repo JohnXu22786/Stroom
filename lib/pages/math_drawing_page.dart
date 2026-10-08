@@ -491,8 +491,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                           children: [_buildCanvas(cs), _build3DCanvas(cs)],
                         ),
                       ),
-                      if (_keyboardVisible &&
-                          _activeFormula != null)
+                      if (_keyboardVisible && _activeFormula != null)
                         ConstrainedBox(
                           constraints: BoxConstraints(
                               maxHeight: (constraints.maxHeight - 48)

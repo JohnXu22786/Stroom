@@ -420,7 +420,10 @@ class Expression3D {
   ///
   /// Returns null if the format is invalid.
   static List<String>? _parseParametricComponents(String expr) {
-    final trimmed = expr.trim();
+    final trimmed = expr
+        .replaceAll(RegExp(r'\\left\b'), '')
+        .replaceAll(RegExp(r'\\right\b'), '')
+        .trim();
     // Must be wrapped in parentheses
     if (!trimmed.startsWith('(') || !trimmed.endsWith(')')) return null;
 
