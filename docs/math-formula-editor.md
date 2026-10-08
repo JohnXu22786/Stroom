@@ -15,8 +15,9 @@ letter tab has a numeric row above all 26 letters in full-width QWERTY rows,
 with Shift and backspace. Shift toggles Latin and ordinary Greek case and
 keeps the current Greek page; all 24 Greek letters are present in both cases.
 The separate variants tab contains eight additional forms. Swipe horizontally
-across the keys to page through more symbols; the centered page count is a
-read-only indicator.
+across the keys, or press Page Up/Page Down while a symbol key is focused, to
+page through more symbols. Screen readers can use the increase/decrease actions
+on the symbol grid; the centered page count is read-only.
 The logarithm tab offers explicit base-ten, base-two and arbitrary-base templates
 alongside natural ln and powers of e, 2 and 10. Legacy bare log remains natural.
 Templates accept the selected expression; powers can capture the complete item

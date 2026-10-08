@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../models/math_input_catalog.dart';
@@ -83,6 +84,19 @@ class _MathKeyboardState extends State<MathKeyboard> {
     _keyGridDragDistance = 0;
     if (distance.abs() < 40) return;
     _changePage(pageCount, distance < 0 ? 1 : -1);
+  }
+
+  KeyEventResult _handleKeyGridKeyEvent(int pageCount, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.pageUp) {
+      _changePage(pageCount, -1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.pageDown) {
+      _changePage(pageCount, 1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   static const _numbers = [
@@ -277,55 +291,67 @@ class _MathKeyboardState extends State<MathKeyboard> {
 
   Widget _keyArea(List<_MathKey> keys, int pageCount) {
     final canSwipePages = pageCount > 1 && _category != '字母';
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onHorizontalDragStart:
-              canSwipePages ? (_) => _keyGridDragDistance = 0 : null,
-          onHorizontalDragUpdate:
-              canSwipePages ? _updateKeyGridDrag : null,
-          onHorizontalDragEnd: canSwipePages
-              ? (_) => _endKeyGridDrag(pageCount)
-              : null,
-          onHorizontalDragCancel:
-              canSwipePages ? () => _keyGridDragDistance = 0 : null,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-            child: _category == '字母'
-                ? _latinKeys()
-                : Column(
+    final keyGrid = Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+      child: _category == '字母'
+          ? _latinKeys()
+          : Column(
+              children: [
+                for (var row = 0; row < 4; row++)
+                  Row(
                     children: [
-                      for (var row = 0; row < 4; row++)
-                        Row(
-                          children: [
-                            for (var col = 0; col < 6; col++)
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(2),
-                                  child: _key(
-                                    col < 3
-                                        ? (_page * 12 + row * 3 + col <
-                                                keys.length
-                                            ? keys[_page * 12 + row * 3 + col]
-                                            : null)
-                                        : _MathKey(
-                                            _numbers[row * 3 + col - 3],
-                                            _numbers[row * 3 + col - 3],
-                                            command:
-                                                _numbers[row * 3 + col - 3] ==
-                                                        '⌫'
-                                                    ? 'deleteBackward'
-                                                    : null,
-                                          ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                      for (var col = 0; col < 6; col++)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: _key(
+                              col < 3
+                                  ? (_page * 12 + row * 3 + col < keys.length
+                                      ? keys[_page * 12 + row * 3 + col]
+                                      : null)
+                                  : _MathKey(
+                                      _numbers[row * 3 + col - 3],
+                                      _numbers[row * 3 + col - 3],
+                                      command:
+                                          _numbers[row * 3 + col - 3] == '⌫'
+                                              ? 'deleteBackward'
+                                              : null,
+                                    ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
+              ],
+            ),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          container: true,
+          explicitChildNodes: true,
+          label: '符号键盘',
+          value: canSwipePages ? '${_page + 1}/$pageCount' : null,
+          hint: canSwipePages ? '使用增减操作切换符号页' : null,
+          onIncrease: canSwipePages ? () => _changePage(pageCount, 1) : null,
+          onDecrease: canSwipePages ? () => _changePage(pageCount, -1) : null,
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: canSwipePages
+                ? (_, event) => _handleKeyGridKeyEvent(pageCount, event)
+                : null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart:
+                  canSwipePages ? (_) => _keyGridDragDistance = 0 : null,
+              onHorizontalDragUpdate: canSwipePages ? _updateKeyGridDrag : null,
+              onHorizontalDragEnd:
+                  canSwipePages ? (_) => _endKeyGridDrag(pageCount) : null,
+              onHorizontalDragCancel:
+                  canSwipePages ? () => _keyGridDragDistance = 0 : null,
+              child: keyGrid,
+            ),
           ),
         ),
         SizedBox(

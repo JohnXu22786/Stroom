@@ -137,9 +137,12 @@ void main() {
     expect(find.text('希腊大写'), findsNothing);
     expect(find.text('1/2'), findsOneWidget);
     expect(
-        find.ancestor(
-            of: find.text('1/2'), matching: find.byType(TextButton)),
-        findsNothing);
+      find.ancestor(
+        of: find.text('1/2'),
+        matching: find.byType(TextButton),
+      ),
+      findsNothing,
+    );
     await tester.drag(find.byTooltip('Alpha'), const Offset(-100, 0));
     await tester.pumpAndSettle();
     final firstSlot = tester.getRect(find.byTooltip('nu'));
