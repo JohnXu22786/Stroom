@@ -42,7 +42,7 @@ extension _SettingsPageAboutExt on _SettingsPageState {
               ),
               const SizedBox(height: 4),
               Text(
-                '版本 $appVersion',
+                appVersion,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
