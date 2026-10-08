@@ -1,9 +1,9 @@
-# 2D mathematical formula editor
+# Mathematical formula editor
 
-In 2D plotting, click a formula to edit its rendered content. The trailing
+In 2D and 3D plotting, click a formula to edit its rendered content. The trailing
 keyboard button switches the same draft to a system-keyboard LaTeX source field.
 The mathematical-input preference is remembered. Mathematical keys stay disabled
-until the editor finishes loading; the source toggle remains available. 3D continues using source input.
+until the editor finishes loading; the source toggle remains available.
 
 The shared bottom keyboard follows the active formula. Its tabs separate common
 arithmetic, exponents/logarithms, functions, constants, Greek letters/variants,
