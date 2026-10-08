@@ -18,9 +18,8 @@ extension _SettingsPageAboutExt on _SettingsPageState {
   }
 
   Widget _buildAboutHeader(ThemeData theme) {
-    final displayVersion = appVersion.startsWith('v')
-        ? appVersion
-        : 'v$appVersion';
+    final displayVersion =
+        appVersion.startsWith('v') ? appVersion : 'v$appVersion';
     return Card(
       // 整个卡片可点击，点击弹出版本信息面板（卡片保持紧凑尺寸，不带提示行）
       clipBehavior: Clip.antiAlias,
