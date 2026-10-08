@@ -39,7 +39,7 @@ void main() {
   }
 
   group('MathCanvas3D - gesture direction fixes', () {
-    testWidgets('dragging right rotates scene LEFT (theta decreases)',
+    testWidgets('dragging right increases the orbit angle',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -48,11 +48,11 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(100, 0));
       await tester.pump();
 
-      // Theta should DECREASE when dragging right (scene rotates left)
-      expect(state.camera.theta, lessThan(initialTheta));
+      // Theta should increase when dragging right.
+      expect(state.camera.theta, greaterThan(initialTheta));
     });
 
-    testWidgets('dragging up rotates scene DOWN (phi increases)',
+    testWidgets('dragging up decreases the orbit elevation',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
@@ -61,11 +61,11 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(0, -100));
       await tester.pump();
 
-      // When dragging UP, phi should INCREASE (camera moves up, scene tilts down)
-      expect(state.camera.phi, greaterThan(initialPhi));
+      // Phi should decrease when dragging up.
+      expect(state.camera.phi, lessThan(initialPhi));
     });
 
-    testWidgets('dragging down rotates scene UP (phi decreases)',
+    testWidgets('dragging down increases the orbit elevation',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
@@ -74,11 +74,11 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(0, 100));
       await tester.pump();
 
-      // When dragging DOWN, phi should DECREASE (camera moves down, scene tilts up)
-      expect(state.camera.phi, lessThan(initialPhi));
+      // Phi should increase when dragging down.
+      expect(state.camera.phi, greaterThan(initialPhi));
     });
 
-    testWidgets('dragging left rotates scene RIGHT (theta increases)',
+    testWidgets('dragging left decreases the orbit angle',
         (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
@@ -86,8 +86,8 @@ void main() {
       await tester.drag(find.byType(MathCanvas3D), const Offset(-100, 0));
       await tester.pump();
 
-      // Theta should INCREASE when dragging left (scene rotates right)
-      expect(state.camera.theta, greaterThan(initialTheta));
+      // Theta should decrease when dragging left.
+      expect(state.camera.theta, lessThan(initialTheta));
     });
 
     testWidgets('resetView restores default camera after orbit',
@@ -113,7 +113,7 @@ void main() {
       expect(state.camera.target, equals(Point3D.origin));
     });
 
-    testWidgets('right mouse drag always rotates like GeoGebra',
+    testWidgets('right mouse drag increases the orbit angle',
         (tester) async {
       final state = await setupCanvas(tester, tool: ConstructionTool.point);
       final initialTheta = state.camera.theta;
@@ -128,7 +128,7 @@ void main() {
       await pointer.up();
       await tester.pump();
 
-      expect(state.camera.theta, lessThan(initialTheta));
+      expect(state.camera.theta, greaterThan(initialTheta));
     });
 
     testWidgets('Shift plus primary drag pans without orbiting',
