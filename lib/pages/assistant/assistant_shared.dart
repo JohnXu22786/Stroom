@@ -12,11 +12,15 @@ class AssistantCard extends StatelessWidget {
   /// （长按手势已让给拖拽排序，见 AssistantSelectionPage。）
   final VoidCallback onMenu;
 
+  /// 卡片按下时使用的淡色高亮，并由拖拽占位/浮层延续。
+  final Color? pressHighlightColor;
+
   const AssistantCard({
     super.key,
     required this.assistant,
     required this.onTap,
     required this.onMenu,
+    this.pressHighlightColor,
   });
 
   @override
@@ -37,6 +41,7 @@ class AssistantCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        highlightColor: pressHighlightColor,
         child: Stack(
           // Keep the card content bounded by the full card size so the
           // centered column retains the grid cell's vertical constraints.
