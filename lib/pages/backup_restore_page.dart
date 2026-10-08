@@ -624,11 +624,7 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。\n\n'
-                      '文件名格式为 backup_YYYY-MM-DDTHH-MM-SS.zip。Android 备份保存在已授权的系统文件夹中，即使卸载应用或清除应用数据，仍可通过系统文件管理器访问。其他平台的保存位置和文件保留方式因平台而异。'
-                      '${kIsWeb ? '\n\nWeb 版暂不支持任务、Anki 闪卡和内置浏览器 Cookies 的备份。' : '\n\n任务备份包含任务流引用的应用内附件、CatCatch 已完成文件，以及进行中的下载临时文件、分段文件、续传进度和转码中间文件。导入时会重定位 Stroom 数据目录内的任务文件路径；是否能继续下载仍取决于源站资源是否可用。任务引用的图片、音频、视频或文本文件也需同时勾选对应类别。\n\n内置浏览器类别只备份 Cookies，使用原有 ZIP 根目录路径 browser_cookies.json。localStorage、IndexedDB、Service Worker、网页缓存及其他网站存储不在备份中。在不提供全量 Cookies 列表的平台上，会按 Stroom 内置浏览器当前会话访问过的网址查询可读取的 Cookies；若已开启 Cookies 持久化，也会合并此前保留的 Cookies。导入会写入备份里的 Cookies，同域名、名称和路径的条目会更新，目标设备其他 Cookies 保持原样。网站可能会让已迁移的登录状态过期或要求重新验证。若关闭 Cookies 持久化，导入的 Cookies 仅在当前浏览器会话中有效，下次打开内置浏览器时会清除。\n\nAnki 备份会包含 collection.media 目录中的卡片媒体。'}'
-                      '${kIsWeb ? '' : '\n\n音频类别也会包含尚未保存到音频库的录音草稿，导入后可在录音页继续保存。'}'
-                      '${kIsWeb ? '\n\nWeb 版备份包不包含 browser_cookies.json。' : ''}',
+                      '手动导出可按数据类别选择备份内容。导入时，只恢复已勾选且备份包中包含的类别；若备份缺少某类别或其必需文件不完整，该类别会自动跳过并提示，未勾选的类别保持原样。也可直接清除所选类别的数据。',
                     ),
                   ),
                 ],
@@ -637,7 +633,13 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           ),
           const SizedBox(height: 24),
           // === Anki 闪卡 .apkg 导出/导入 ===
-          _buildSectionHeader('Anki闪卡牌组'),
+          _buildSectionHeader(
+            'Anki闪卡牌组',
+            onInfoPressed: () => _showInfoDialog(
+              'Anki 闪卡牌组导入/导出',
+              '只包含卡片信息，不包含媒体内容',
+            ),
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -874,13 +876,16 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
               subtitle: 'Anki 原始数据库',
               icon: Icons.extension,
               iconColor: Colors.green,
+              infoTitle: 'Anki 闪卡数据',
+              infoMessage: '备份和恢复 Anki 闪卡数据时会包含 collection.media 目录中的卡片媒体内容。',
+              infoTooltip: 'Anki 闪卡数据说明',
             ),
             const Divider(height: 1),
             _buildCheckboxItem(
               value: _browserCookies,
               onChanged: (v) => setState(() => _browserCookies = v ?? false),
               title: '内置浏览器数据',
-              subtitle: '备份与恢复 Cookies；清除时同时清理可支持的网站存储',
+              subtitle: '仅备份与恢复 Cookies；清除时同时清理可支持的网站存储',
               icon: Icons.cookie,
               iconColor: Colors.orange,
             ),
@@ -898,10 +903,17 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
     required String subtitle,
     required IconData icon,
     required Color iconColor,
+    String? infoTitle,
+    String? infoMessage,
+    String? infoTooltip,
   }) {
-    return CheckboxListTile(
+    final checkboxTile = CheckboxListTile(
       dense: true,
       visualDensity: VisualDensity.compact,
+      contentPadding: EdgeInsets.only(
+        left: 16,
+        right: infoMessage == null ? 16 : 0,
+      ),
       title: Row(
         children: [
           Icon(icon, size: 18, color: iconColor),
@@ -914,18 +926,62 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       onChanged: onChanged,
       controlAffinity: ListTileControlAffinity.leading,
     );
+
+    if (infoMessage == null) return checkboxTile;
+
+    return Row(
+      children: [
+        Expanded(child: checkboxTile),
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: IconButton(
+            tooltip: infoTooltip ?? '查看说明',
+            icon: const Icon(Icons.info_outline, size: 20),
+            onPressed: () => _showInfoDialog(infoTitle ?? title, infoMessage),
+          ),
+        ),
+      ],
+    );
   }
 
-  Widget _buildSectionHeader(String title) {
+  void _showInfoDialog(String title, String message) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, {VoidCallback? onInfoPressed}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          if (onInfoPressed != null)
+            IconButton(
+              tooltip: 'Anki 牌组导入导出说明',
+              icon: const Icon(Icons.info_outline, size: 20),
+              onPressed: onInfoPressed,
+            ),
+        ],
       ),
     );
   }

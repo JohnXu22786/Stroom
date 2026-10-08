@@ -29,6 +29,8 @@ class AssistantSelectionPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final assistants = ref.watch(assistantProvider);
     final cs = Theme.of(context).colorScheme;
+    final pressHighlightColor = cs.primary.withValues(alpha: 0.02);
+    final dragHighlightColor = cs.primary.withValues(alpha: 0.06);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -81,6 +83,17 @@ class AssistantSelectionPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 与话题页一致的提示文案：新加入的长按拖拽手势需要被发现
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '长按拖拽即可调整助手顺序',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
                   DragSortArea(
                     // 与旧 GridView 相同的几何：
                     // SliverGridDelegateWithMaxCrossAxisExtent(
@@ -91,44 +104,9 @@ class AssistantSelectionPage extends ConsumerWidget {
                     gridCrossAxisSpacing: 12,
                     gridMainAxisSpacing: 12,
                     gridChildAspectRatio: 0.85,
-                    headerBuilder: (context) {
-                      const hint = '长按拖拽即可调整助手顺序';
-                      final hintStyle = TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurface,
-                        fontFamily:
-                            Theme.of(context).textTheme.bodySmall?.fontFamily,
-                      );
-                      final hintPainter = TextPainter(
-                        text: TextSpan(text: hint, style: hintStyle),
-                        textDirection: Directionality.of(context),
-                        textScaler: MediaQuery.textScalerOf(context),
-                        maxLines: 1,
-                      )..layout();
-
-                      Widget buildHint() => Text(
-                            hint,
-                            textAlign: TextAlign.center,
-                            softWrap: false,
-                            textWidthBasis: TextWidthBasis.longestLine,
-                            style: hintStyle,
-                          );
-
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Center(
-                          child: DragSortRowHandle(
-                            index: 0,
-                            child: buildHint(),
-                            feedback: SizedBox(
-                              width: hintPainter.width,
-                              child: buildHint(),
-                            ),
-                            expandFeedback: false,
-                          ),
-                        ),
-                      );
-                    },
+                    dragDelay: const Duration(milliseconds: 800),
+                    dragHighlightColor: dragHighlightColor,
+                    draggedItemOpacity: 0.88,
                     values: [for (final a in assistants) a.id],
                     onReorder: (from, to) =>
                         ref.read(assistantProvider.notifier).reorderAssistant(
@@ -139,6 +117,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                       final assistant = assistants[index];
                       return AssistantCard(
                         assistant: assistant,
+                        pressHighlightColor: pressHighlightColor,
                         onTap: () =>
                             _onAssistantSelected(context, ref, assistant),
                         // 长按已让给拖拽排序，编辑/删除入口移到卡片右上角 ⋮

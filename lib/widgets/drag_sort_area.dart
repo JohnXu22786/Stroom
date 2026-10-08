@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// 长按触发拖拽的延迟（约 280ms，比默认 500ms 跟手）。
+/// 长按触发拖拽的默认延迟（约 280ms，比默认 500ms 跟手）。
 const Duration kDragSortDelay = Duration(milliseconds: 280);
 
 /// 可拖拽排序的胶囊（自动换行）、网格或行（垂直）列表。
@@ -52,6 +52,15 @@ class DragSortArea extends StatefulWidget {
   /// 行布局的行高（不含行间距）。
   final double rowExtent;
 
+  /// 胶囊/网格条目的长按拖拽延迟。
+  final Duration dragDelay;
+
+  /// 可选的网格拖拽高亮颜色；用于拖拽浮层和原位占位，接续按压反馈。
+  final Color? dragHighlightColor;
+
+  /// 拖拽中原位条目的透明度。
+  final double draggedItemOpacity;
+
   /// 胶囊布局：当前是否选中（高亮底色）。
   final bool Function(String value)? selected;
 
@@ -69,11 +78,6 @@ class DragSortArea extends StatefulWidget {
   final Widget Function(BuildContext context, int index, String value)?
       itemBuilder;
 
-  /// Optional content displayed before the sortable items. It is inside the
-  /// drag-sort scope, so a [DragSortRowHandle] can start reordering an item
-  /// from this area.
-  final Widget Function(BuildContext context)? headerBuilder;
-
   /// 排序提交回调：from/to 为「移除 after 插入」索引（与
   /// `ReorderableListView.onReorderItem` 一致）。
   final void Function(int from, int to) onReorder;
@@ -88,12 +92,14 @@ class DragSortArea extends StatefulWidget {
     this.gridMainAxisSpacing = 12,
     this.gridChildAspectRatio = 0.85,
     this.rowExtent = 56,
+    this.dragDelay = kDragSortDelay,
+    this.dragHighlightColor,
+    this.draggedItemOpacity = 0.45,
     this.selected,
     this.deletable,
     this.onTap,
     this.onDelete,
     this.itemBuilder,
-    this.headerBuilder,
     required this.onReorder,
   }) : assert(!(wrap && grid), 'wrap 与 grid 互斥');
 
@@ -101,8 +107,8 @@ class DragSortArea extends StatefulWidget {
   State<DragSortArea> createState() => _DragSortAreaState();
 }
 
-/// 长按 [child] 启动对应条目的拖拽。可放在 [DragSortArea] 的
-/// [headerBuilder] 或行模式的 [itemBuilder] 中。
+/// 行模式下的拖拽把手：长按 [child]（把手图标）启动整行拖拽。
+/// 必须放在 [DragSortArea] 的 [itemBuilder] 返回的行内。
 class DragSortRowHandle extends StatelessWidget {
   final int index;
   final Widget child;
@@ -110,7 +116,6 @@ class DragSortRowHandle extends StatelessWidget {
   /// 拖拽时跟随手指的整行反馈（由调用方构建，通常为整行内容）。
   final Widget feedback;
   final bool enabled;
-  final bool expandFeedback;
   final Duration delay;
 
   const DragSortRowHandle({
@@ -119,7 +124,6 @@ class DragSortRowHandle extends StatelessWidget {
     required this.child,
     required this.feedback,
     this.enabled = true,
-    this.expandFeedback = true,
     this.delay = kDragSortDelay,
   });
 
@@ -139,9 +143,10 @@ class DragSortRowHandle extends StatelessWidget {
       onDraggableCanceled: (velocity, offset) => controller.dragCanceled(),
       // 反馈在 Overlay 上以松散约束布局，必须限定宽度（行内 Expanded
       // 需要有界宽度，否则整行会被撑满屏幕）。
-      feedback: expandFeedback
-          ? SizedBox(width: controller.maxWidth, child: feedback)
-          : feedback,
+      feedback: SizedBox(
+        width: controller.maxWidth,
+        child: feedback,
+      ),
       childWhenDragging: Opacity(opacity: 1.0, child: child),
       child: child,
     );
@@ -170,8 +175,6 @@ const double _kPillHeight = 34;
 const double _kPillDeleteWidth = 24;
 
 class _DragSortAreaState extends State<DragSortArea> {
-  final GlobalKey _itemsKey = GlobalKey();
-
   /// 正在拖拽的条目索引（null = 未拖拽）。
   int? _dragIndex;
 
@@ -228,7 +231,7 @@ class _DragSortAreaState extends State<DragSortArea> {
         height: _gridCellHeight,
       ),
     );
-    final box = _itemsKey.currentContext?.findRenderObject() as RenderBox?;
+    final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     setState(() {
       _insertIndex = _computeInsertIndex(box.globalToLocal(globalPosition), d);
@@ -241,7 +244,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final g = _lastDragGlobal;
     final d = _dragIndex;
     if (g == null || d == null || !mounted) return;
-    final box = _itemsKey.currentContext?.findRenderObject() as RenderBox?;
+    final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     setState(() {
       _insertIndex = _computeInsertIndex(box.globalToLocal(g), d);
@@ -433,11 +436,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   Widget _buildGridItem(int k) {
     final child = widget.itemBuilder!(context, k, widget.values[k]);
     // childWhenDragging 保持原样（opacity 1.0）：拖拽中条目由 build 里的
-    // 外层 Opacity(0.45) 统一变半透明——若内层再叠一层 opacity 透明度会
-    // 变成 ~0.2，与胶囊拖拽的外观不一致。
+    // 外层 Opacity 统一调整透明度，避免重复降低透明度。
     return LongPressDraggable<String>(
       data: 'drag-grid-$k',
-      delay: kDragSortDelay,
+      delay: widget.dragDelay,
       feedbackOffset: Offset(-_gridCellWidth / 2, -_gridCellHeight / 2),
       ignoringFeedbackPointer: true,
       onDragStarted: () => dragStarted(k),
@@ -461,12 +463,34 @@ class _DragSortAreaState extends State<DragSortArea> {
           opacity: 0.95,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: child,
+            child: _withDragHighlight(child),
           ),
         ),
       ),
-      childWhenDragging: Opacity(opacity: 1.0, child: child),
+      childWhenDragging: Opacity(
+        opacity: 1.0,
+        child: _withDragHighlight(child),
+      ),
       child: child,
+    );
+  }
+
+  Widget _withDragHighlight(Widget child) {
+    final color = widget.dragHighlightColor;
+    if (color == null) return child;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          child,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(decoration: BoxDecoration(color: color)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -475,7 +499,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     final pill = _pillVisual(value, cs);
     return LongPressDraggable<String>(
       data: value,
-      delay: kDragSortDelay,
+      delay: widget.dragDelay,
       feedbackOffset: Offset(-_widthOf(k) / 2, -_kPillHeight / 2),
       // 反馈浮层不接收指针：拖拽中误点浮层不应触发勾选/删除
       ignoringFeedbackPointer: true,
@@ -633,7 +657,12 @@ class _DragSortAreaState extends State<DragSortArea> {
             entries.add((
               _keyOf(d),
               rects[t],
-              !widget.wrap ? Opacity(opacity: 0.45, child: _item(d)) : _item(d),
+              !widget.wrap
+                  ? Opacity(
+                      opacity: widget.draggedItemOpacity,
+                      child: _item(d),
+                    )
+                  : _item(d),
             ));
           } else {
             final rects = _layoutRects(
@@ -653,8 +682,7 @@ class _DragSortAreaState extends State<DragSortArea> {
           final totalHeight = entries.isEmpty
               ? 0.0
               : entries.map((e) => e.$2.bottom).reduce(math.max);
-          final items = SizedBox(
-            key: _itemsKey,
+          return SizedBox(
             width: _maxWidth,
             height: totalHeight,
             child: Stack(
@@ -678,12 +706,6 @@ class _DragSortAreaState extends State<DragSortArea> {
                   ),
               ],
             ),
-          );
-          final header = widget.headerBuilder;
-          if (header == null) return items;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [header(context), items],
           );
         },
       ),
