@@ -143,7 +143,7 @@ void main() {
       ),
       findsNothing,
     );
-    await tester.drag(find.byTooltip('Alpha'), const Offset(-100, 0));
+    await tester.drag(find.byTooltip('alpha'), const Offset(-100, 0));
     await tester.pumpAndSettle();
     final firstSlot = tester.getRect(find.byTooltip('nu'));
     const secondPage = [
