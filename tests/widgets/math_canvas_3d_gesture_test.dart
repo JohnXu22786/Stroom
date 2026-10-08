@@ -39,8 +39,7 @@ void main() {
   }
 
   group('MathCanvas3D - gesture direction fixes', () {
-    testWidgets('dragging right increases the orbit angle',
-        (tester) async {
+    testWidgets('dragging right increases the orbit angle', (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
 
@@ -52,8 +51,7 @@ void main() {
       expect(state.camera.theta, greaterThan(initialTheta));
     });
 
-    testWidgets('dragging up decreases the orbit elevation',
-        (tester) async {
+    testWidgets('dragging up decreases the orbit elevation', (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
 
@@ -65,8 +63,7 @@ void main() {
       expect(state.camera.phi, lessThan(initialPhi));
     });
 
-    testWidgets('dragging down increases the orbit elevation',
-        (tester) async {
+    testWidgets('dragging down increases the orbit elevation', (tester) async {
       final state = await setupCanvas(tester);
       final initialPhi = state.camera.phi;
 
@@ -78,8 +75,7 @@ void main() {
       expect(state.camera.phi, greaterThan(initialPhi));
     });
 
-    testWidgets('dragging left decreases the orbit angle',
-        (tester) async {
+    testWidgets('dragging left decreases the orbit angle', (tester) async {
       final state = await setupCanvas(tester);
       final initialTheta = state.camera.theta;
 
@@ -113,8 +109,7 @@ void main() {
       expect(state.camera.target, equals(Point3D.origin));
     });
 
-    testWidgets('right mouse drag increases the orbit angle',
-        (tester) async {
+    testWidgets('right mouse drag increases the orbit angle', (tester) async {
       final state = await setupCanvas(tester, tool: ConstructionTool.point);
       final initialTheta = state.camera.theta;
       final center = tester.getCenter(find.byType(MathCanvas3D));
