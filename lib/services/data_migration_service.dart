@@ -15,6 +15,7 @@ import 'manifest_database.dart';
 import 'provider_model_migration.dart';
 import 'flow_execution_migration.dart';
 import 'snapshot_service.dart';
+import 'startup_preferences.dart';
 
 part 'data_migration_old_configs.dart';
 
@@ -221,13 +222,30 @@ class DataMigrationService {
     return stored;
   }
 
+  /// Reads stored versions without initializing the full preference cache.
+  static Future<Map<String, int>> getStoredPartVersionsForStartup() async {
+    final stored = await _readPartVersionsForStartup();
+    if (stored == null) {
+      return {for (final part in DataParts.all) part: 0};
+    }
+    return stored;
+  }
+
   /// 读取存储的各部分版本（未存储或整体损坏时返回 null）。
   ///
   /// 逐键防御：某个部分的值类型错误（非数字）只将该部分按 0 处理，
   /// 不影响其他部分；整体解析失败才视为未存储（由调用方隔离现场）。
   static Future<Map<String, int>?> _readPartVersions() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kDataFormatVersionsKey);
+    return _parsePartVersions(prefs.getString(_kDataFormatVersionsKey));
+  }
+
+  static Future<Map<String, int>?> _readPartVersionsForStartup() async {
+    final raw = await StartupPreferences.getString(_kDataFormatVersionsKey);
+    return _parsePartVersions(raw);
+  }
+
+  static Map<String, int>? _parsePartVersions(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -301,6 +319,20 @@ class DataMigrationService {
   /// - 如果 [MigrationResult.needsMigration] 为 `true`，调用者应展示迁移对话框。
   /// - 如果 [MigrationResult.restartRequired] 为 `true`，迁移完成后需要重启应用。
   static Future<MigrationResult> checkAndMigrate() async {
+    final existingVersions = await _readPartVersionsForStartup();
+    if (existingVersions != null) {
+      final hasOutdatedPart = DataParts.all.any(
+        (part) =>
+            (existingVersions[part] ?? 0) < DataParts.currentVersions[part]!,
+      );
+      final hasLegacyVersion =
+          await StartupPreferences.containsKey(_kLegacyDataFormatVersionKey);
+      if (!hasOutdatedPart && !hasLegacyVersion) {
+        await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
+        return const MigrationResult(needsMigration: false);
+      }
+    }
+
     final prefs = await SharedPreferences.getInstance();
 
     // 1. 确定各部分当前存储版本（首次进入 per-part 机制时从旧版

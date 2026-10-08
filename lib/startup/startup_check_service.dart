@@ -4,11 +4,11 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/data_migration_service.dart';
 import '../services/data_integrity_json_parser.dart' as json_parser;
 import '../services/startup_data_validation_unavailable.dart';
+import '../services/startup_preferences.dart';
 
 // ====================================================================
 // Startup Issue Severity
@@ -137,7 +137,8 @@ class StartupCheckService {
   /// 而错误回滚。正确行为是拒绝启动，提示用户安装新版本。
   static Future<String?> checkVersionAhead() async {
     try {
-      final stored = await DataMigrationService.getStoredPartVersions();
+      final stored =
+          await DataMigrationService.getStoredPartVersionsForStartup();
       final ahead = DataParts.all
           .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
           .toList();
@@ -195,11 +196,18 @@ class StartupCheckService {
     bool validateProviderEntries = true,
     bool validateConversations = true,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final providerEntriesJson =
-        validateProviderEntries ? prefs.getString('provider_entries') : null;
-    final conversationsJson =
-        validateConversations ? prefs.getString('conversations') : null;
+    final prefsValues = await Future.wait([
+      if (validateProviderEntries)
+        StartupPreferences.getString('provider_entries'),
+      if (validateConversations) StartupPreferences.getString('conversations'),
+    ]);
+    var nextPreferenceIndex = 0;
+    final providerEntriesJson = validateProviderEntries
+        ? prefsValues[nextPreferenceIndex++]
+        : null;
+    final conversationsJson = validateConversations
+        ? prefsValues[nextPreferenceIndex]
+        : null;
 
     if (kIsWeb) {
       try {
@@ -628,8 +636,8 @@ class StartupCheckService {
   /// CPU 密集的 JSON 解析工作在后台 Isolate 中执行，
   /// 避免阻塞主 UI 线程。
   static Future<List<StartupIssue>> checkDataIntegrity() async {
-    final prefs = await SharedPreferences.getInstance();
-    final providerEntriesJson = prefs.getString('provider_entries');
+    final providerEntriesJson =
+        await StartupPreferences.getString('provider_entries');
 
     if (kIsWeb) {
       try {

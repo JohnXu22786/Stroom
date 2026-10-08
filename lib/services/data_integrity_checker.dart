@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
 import 'manifest_database.dart';
 import 'startup_data_validation_unavailable.dart';
+import 'startup_preferences.dart';
 import 'storage_service.dart';
 
 /// 单条完整性校验问题。
@@ -187,21 +187,13 @@ class DataIntegrityChecker {
     List<_JsonIntegrityCheck> checks,
   ) async {
     final keysReadSuccessfully = <String>{};
-    late final SharedPreferences prefs;
-    try {
-      prefs = await SharedPreferences.getInstance();
-    } catch (e) {
-      debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
-      return keysReadSuccessfully;
-    }
-
     for (final key in [
       'conversations',
       'provider_entries',
       'data_format_versions',
     ]) {
       try {
-        final raw = prefs.getString(key);
+        final raw = await StartupPreferences.getString(key);
         keysReadSuccessfully.add(key);
         if (raw == null || raw.isEmpty) continue;
         checks.add(
