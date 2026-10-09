@@ -539,9 +539,8 @@ Future<Object?> _runWorkerDataAtUrl(
         result.completeError(StateError(message));
       }
     });
-    final transferList = hasTransferableManifest
-        ? [(message[1] as Uint8List).buffer]
-        : null;
+    final transferList =
+        hasTransferableManifest ? [(message[1] as Uint8List).buffer] : null;
     // Move the manifest bytes into the worker instead of cloning them on UI.
     activeWorker.postMessage(message, transferList);
     return await result.future;
