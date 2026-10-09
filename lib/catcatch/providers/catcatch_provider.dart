@@ -50,7 +50,6 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   Completer<void>? _removalBarrier;
   List<CatCatchTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
-  int _pendingTaskServiceStarts = 0;
 
   CatCatchNotifier(this.ref) : super([]);
 
@@ -620,6 +619,18 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       startBackgroundService(persistEnabled: false);
 
   @visibleForTesting
+  Future<String?> executeTaskForTask({
+    required CatCatchTask task,
+    required void Function(CatCatchTask updated) onUpdate,
+    required CancelToken cancelToken,
+  }) =>
+      TaskExecutor.executeTask(
+        task: task,
+        onUpdate: onUpdate,
+        cancelToken: cancelToken,
+      );
+
+  @visibleForTesting
   Future<String?> retryFromStepForTask({
     required CatCatchTask task,
     required StepType fromStep,
@@ -639,9 +650,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _cancelTokens[task.id] = cancelToken;
 
     try {
-      if (!_hasRunningTasks()) {
-        await startBackgroundServiceForTask();
-      }
+      // Task status does not indicate whether the background service is alive.
+      await startBackgroundServiceForTask();
       if (!mounted ||
           cancelToken.isCancelled ||
           !identical(_cancelTokens[task.id], cancelToken) ||
@@ -649,7 +659,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         return;
       }
 
-      final result = await TaskExecutor.executeTask(
+      final result = await executeTaskForTask(
         task: task,
         onUpdate: (updated) {
           if (!mounted ||
@@ -724,28 +734,18 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _cancelTokens[task.id] = cancelToken;
 
     try {
-      // A running task may still be waiting on startup, with cleanup queued
-      // ahead of this continuation; queue another start behind that cleanup.
-      final shouldStartService =
-          !_hasRunningTasks() || _pendingTaskServiceStarts > 0;
-      if (shouldStartService) {
-        _pendingTaskServiceStarts++;
-        try {
-          final index = state.indexWhere((current) => current.id == task.id);
-          if (index >= 0 && state[index].status != TaskStatus.running) {
-            state = [
-              for (int i = 0; i < state.length; i++)
-                if (i == index)
-                  state[i].copyWith(status: TaskStatus.running)
-                else
-                  state[i],
-            ];
-          }
-          await startBackgroundServiceForTask();
-        } finally {
-          _pendingTaskServiceStarts--;
-        }
+      // Task status does not indicate whether the background service is alive.
+      final index = state.indexWhere((current) => current.id == task.id);
+      if (index >= 0 && state[index].status != TaskStatus.running) {
+        state = [
+          for (int i = 0; i < state.length; i++)
+            if (i == index)
+              state[i].copyWith(status: TaskStatus.running)
+            else
+              state[i],
+        ];
       }
+      await startBackgroundServiceForTask();
       if (!mounted ||
           cancelToken.isCancelled ||
           !identical(_cancelTokens[task.id], cancelToken) ||
