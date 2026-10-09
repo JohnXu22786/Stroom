@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
+import 'dart:js_util' as js_util;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
@@ -126,6 +128,126 @@ Future<Map<String, Object?>> migrateProviderModelSettingsWeb(String raw) =>
       ['migrateProviderModelSettings', raw],
       'provider model migration',
     );
+
+Future<Map<String, Object?>> migrateWebManifestData(
+  Uint8List raw,
+  List<String> folderTables,
+  bool removeLegacyFolders,
+  bool migrateOldVideos,
+) async {
+  final message = [
+    'migrateWebManifestData',
+    raw,
+    folderTables,
+    removeLegacyFolders,
+    migrateOldVideos,
+  ];
+  Object? primaryError;
+  try {
+    return _decodeWebManifestMigrationResponse(
+      await _runPrimaryValidationWorkerData(message),
+    );
+  } catch (error) {
+    primaryError = error;
+    debugPrint('[DataMigrationService] Web manifest migration worker failed; '
+        'retrying bundled worker: $error');
+  }
+
+  try {
+    final testWorker = debugBundledValidationWorkerForTesting;
+    final response = testWorker == null
+        ? await _runBundledValidationWorkerData(message)
+        : await testWorker(message);
+    return _decodeWebManifestMigrationResponse(response);
+  } catch (bundledError) {
+    throw StartupDataValidationUnavailable(primaryError, bundledError);
+  }
+}
+
+/// Validate the persisted Web media manifest in the worker before startup
+/// migration versions are advanced.
+Future<Map<String, Object?>> validateWebManifestData(Uint8List raw) async {
+  final request = <Object?>['validateWebManifestData', raw];
+  try {
+    return _decodeWebManifestValidationResponse(
+      await _runPrimaryValidationWorker(request),
+    );
+  } catch (primaryError) {
+    debugPrint('[DataMigrationService] Web manifest validation worker failed; '
+        'retrying bundled worker: $primaryError');
+    try {
+      final testWorker = debugBundledValidationWorkerForTesting;
+      final response = testWorker == null
+          ? await _runBundledValidationWorker(request)
+          : await testWorker(request);
+      return _decodeWebManifestValidationResponse(response);
+    } catch (bundledError) {
+      throw StartupDataValidationUnavailable(primaryError, bundledError);
+    }
+  }
+}
+
+Map<String, Object?> _decodeWebManifestValidationResponse(String response) {
+  final decoded = jsonDecode(response);
+  if (decoded is! Map || decoded['status'] is! String) {
+    throw StateError('Invalid Web manifest validation response');
+  }
+  return Map<String, Object?>.from(decoded);
+}
+
+Map<String, Object?> _decodeWebManifestMigrationResponse(Object? response) {
+  if (response is String) {
+    final decoded = _decodeMigrationWorkerResponse(response);
+    final payload = decoded.remove('payload');
+    if (payload is String && payload.isNotEmpty) {
+      // The string response is retained only for older test worker callbacks.
+      // Production workers return transferable UTF-8 bytes.
+      decoded['payloadBytes'] = Uint8List.fromList(utf8.encode(payload));
+    }
+    return decoded;
+  }
+
+  final Object? rawMetadata;
+  final Object? rawPayload;
+  if (response is Map) {
+    rawMetadata = response['metadata'];
+    rawPayload = response['payload'];
+  } else if (response != null) {
+    rawMetadata = js_util.getProperty<Object?>(response, 'metadata');
+    rawPayload = js_util.getProperty<Object?>(response, 'payload');
+  } else {
+    throw StateError('Invalid Web manifest worker response');
+  }
+
+  if (rawMetadata is! String) {
+    throw StateError('Invalid Web manifest worker metadata');
+  }
+  final decodedMetadata = jsonDecode(rawMetadata);
+  if (decodedMetadata is! Map || decodedMetadata['status'] is! String) {
+    throw StateError('Invalid Web manifest worker metadata');
+  }
+  return {
+    ...Map<String, Object?>.from(decodedMetadata),
+    'payloadBytes': rawPayload == null ? null : _workerPayloadBytes(rawPayload),
+  };
+}
+
+Uint8List _workerPayloadBytes(Object payload) {
+  if (payload is Uint8List) return payload;
+  if (payload is ByteBuffer) return Uint8List.view(payload);
+
+  final buffer = js_util.getProperty<Object?>(payload, 'buffer');
+  final byteOffset = js_util.getProperty<Object?>(payload, 'byteOffset');
+  final byteLength = js_util.getProperty<Object?>(payload, 'byteLength');
+  if (buffer is! ByteBuffer || byteOffset is! num || byteLength is! num) {
+    throw StateError('Invalid Web manifest worker payload');
+  }
+  return Uint8List.view(
+    buffer,
+    byteOffset.toInt(),
+    byteLength.toInt(),
+  );
+}
 
 Future<Map<String, Object?>> _runMigrationWorker(
   List<Object?> message,
@@ -300,14 +422,29 @@ Future<String> _runPrimaryValidationWorker(List<Object?> message) {
   return testWorker == null ? _runWorker(message) : testWorker(message);
 }
 
+Future<Object?> _runPrimaryValidationWorkerData(List<Object?> message) {
+  final testWorker = debugPrimaryValidationWorkerForTesting;
+  return testWorker == null ? _runWorkerData(message) : testWorker(message);
+}
+
 Future<String> _runBundledValidationWorker(List<Object?> message) async {
+  final response = await _runBundledValidationWorkerData(message);
+  if (response is! String) {
+    throw StateError('Invalid JSON worker response');
+  }
+  return response;
+}
+
+Future<Object?> _runBundledValidationWorkerData(
+  List<Object?> message,
+) async {
   final source =
       await rootBundle.loadString('web/data_integrity_json_worker.js');
   final workerUrl = html.Url.createObjectUrlFromBlob(
     html.Blob([source], 'application/javascript'),
   );
   try {
-    return await _runWorkerAtUrl(message, workerUrl);
+    return await _runWorkerDataAtUrl(message, workerUrl);
   } finally {
     html.Url.revokeObjectUrl(workerUrl);
   }
@@ -318,7 +455,21 @@ Future<String> _runWorker(List<Object?> message) async {
 }
 
 Future<String> _runWorkerAtUrl(List<Object?> message, String url) async {
-  final result = Completer<String>();
+  final response = await _runWorkerDataAtUrl(message, url);
+  if (response is! String) {
+    throw StateError('Invalid JSON worker response');
+  }
+  return response;
+}
+
+Future<Object?> _runWorkerData(List<Object?> message) =>
+    _runWorkerDataAtUrl(message, _workerUrl());
+
+Future<Object?> _runWorkerDataAtUrl(
+  List<Object?> message,
+  String url,
+) async {
+  final result = Completer<Object?>();
   html.Worker? worker;
   StreamSubscription<html.MessageEvent>? messageSubscription;
   StreamSubscription<html.Event>? errorSubscription;
@@ -326,13 +477,7 @@ Future<String> _runWorkerAtUrl(List<Object?> message, String url) async {
     final activeWorker = html.Worker(url);
     worker = activeWorker;
     messageSubscription = activeWorker.onMessage.listen((event) {
-      if (event.data is! String) {
-        if (!result.isCompleted) {
-          result.completeError(StateError('Invalid JSON worker response'));
-        }
-        return;
-      }
-      if (!result.isCompleted) result.complete(event.data as String);
+      if (!result.isCompleted) result.complete(event.data);
     });
     errorSubscription = activeWorker.onError.listen((event) {
       if (!result.isCompleted) {

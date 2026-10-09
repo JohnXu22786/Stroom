@@ -154,6 +154,30 @@ class ProviderModelMigration {
     if (!await file.exists()) return;
     final encoded = await file.readAsString();
     if (encoded.isEmpty) return;
+    final Map<String, Object?> result;
+    try {
+      result = _isFlutterTest
+          ? _migrateFlowsSync(encoded)
+          : await data_migration_isolate.runInIsolate(
+              () => _migrateFlowsSync(encoded),
+            );
+    } catch (error) {
+      throw StartupDataValidationUnavailable.isolate(error);
+    }
+    if (result['changed'] != true) return;
+    final updated = result['updated'] as String;
+    await AtomicFile.writeString(file, updated);
+    final fileMatches = _isFlutterTest
+        ? await _fileMatchesContent(file.path, updated)
+        : await data_migration_isolate.runInIsolate(
+            () => _fileMatchesContent(file.path, updated),
+          );
+    if (!fileMatches) {
+      throw StateError('任务流模型引用迁移校验失败');
+    }
+  }
+
+  static Map<String, Object?> _migrateFlowsSync(String encoded) {
     final flows = jsonDecode(encoded) as List;
     for (final flow in flows.whereType<Map>()) {
       for (final block in (flow['blocks'] as List? ?? []).whereType<Map>()) {
@@ -170,10 +194,10 @@ class ProviderModelMigration {
       }
     }
     final updated = jsonEncode(flows);
-    if (updated == encoded) return;
-    await AtomicFile.writeString(file, updated);
-    if (await file.readAsString() != updated) {
-      throw StateError('任务流模型引用迁移校验失败');
-    }
+    if (updated == encoded) return {'changed': false};
+    return {'changed': true, 'updated': updated};
   }
 }
+
+Future<bool> _fileMatchesContent(String path, String content) async =>
+    await File(path).readAsString() == content;

@@ -10,6 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'storage_service.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import 'startup_preferences.dart';
+import 'data_migration_isolate_stub.dart'
+    if (dart.library.io) 'data_migration_isolate_io.dart'
+    as data_migration_isolate;
 
 void addStringToArchive(Archive archive, String name, String content) {
   final bytes = utf8.encode(content);
@@ -140,6 +144,53 @@ Future<Set<String>> collectAttachmentPaths() async {
   }
   debugPrint(
       '[BackupServiceShared] collectAttachmentPaths: ${paths.length} paths found');
+  return paths;
+}
+
+/// Collects conversation attachment references for startup orphan cleanup.
+/// A null result means the stored references could not be read or parsed, so
+/// cleanup must abort rather than risk deleting a live attachment.
+Future<Set<String>?> collectAttachmentPathsForSafety() async {
+  try {
+    final json = await StartupPreferences.getString('conversations');
+    if (json == null) return <String>{};
+    if (kIsWeb || _isBackupServiceFlutterTest) {
+      return _collectAttachmentPathsFromJson(json);
+    }
+    return await data_migration_isolate.runInIsolate(
+      () => _collectAttachmentPathsFromJson(json),
+    );
+  } catch (error) {
+    debugPrint('启动时收集附件路径失败，中止孤儿清理: $error');
+    return null;
+  }
+}
+
+bool get _isBackupServiceFlutterTest {
+  try {
+    return Platform.environment['FLUTTER_TEST'] == 'true';
+  } catch (_) {
+    return false;
+  }
+}
+
+Set<String> _collectAttachmentPathsFromJson(String json) {
+  final decoded = jsonDecode(json);
+  if (decoded is! List) {
+    throw const FormatException('conversations must contain a JSON list.');
+  }
+  final paths = <String>{};
+  for (final conv in decoded) {
+    if (conv is! Map<String, dynamic>) continue;
+    final rawMessages = conv['messages'];
+    if (rawMessages is List) {
+      for (final msg in rawMessages) {
+        if (msg is! Map<String, dynamic>) continue;
+        _collectAttachments(msg['attachments'], paths);
+      }
+    }
+    _collectAttachments(conv['draftAttachments'], paths);
+  }
   return paths;
 }
 

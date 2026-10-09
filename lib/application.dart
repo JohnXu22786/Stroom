@@ -275,11 +275,15 @@ class _ApplicationState extends ConsumerState<Application>
 
       // Clear both flags immediately to prevent re-entry
       setPendingRestartInMemory(false);
-      unawaited(clearPendingUpdateRestart().catchError(
-        (Object error, StackTrace stackTrace) {
-          debugPrint('[Application] Failed to clear update restart flag: $error');
-        },
-      ));
+      unawaited(
+        clearPendingUpdateRestart().catchError(
+          (Object error, StackTrace stackTrace) {
+            debugPrint(
+              '[Application] Failed to clear update restart flag: $error',
+            );
+          },
+        ),
+      );
 
       showDialog<void>(
         context: context,

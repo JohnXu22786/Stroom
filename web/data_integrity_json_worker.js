@@ -1,5 +1,5 @@
 self.addEventListener('message', function (event) {
-  const [operation, first, second, third] = event.data;
+  const [operation, first, second, third, fourth] = event.data;
   let result;
   if (operation === 'migrateLegacyConversations') {
     self.postMessage(migrateLegacyConversations(first));
@@ -20,6 +20,23 @@ self.addEventListener('message', function (event) {
     const result = migrateProviderModelSettings(first);
     self.postMessage(migrationResponse(result.metadata, result.payload));
     return;
+  } else if (operation === 'migrateWebManifestData') {
+    const result = migrateWebManifestData(first, second, third, fourth);
+    const payload = result.payload == null
+      ? null
+      : new TextEncoder().encode(result.payload);
+    const response = {
+      metadata: JSON.stringify(result.metadata),
+      payload,
+    };
+    if (payload == null) {
+      self.postMessage(response);
+    } else {
+      self.postMessage(response, [payload.buffer]);
+    }
+    return;
+  } else if (operation === 'validateWebManifestData') {
+    result = validateWebManifestData(first);
   } else if (operation === 'parseJsonBatch') {
     result = first.map(function (content) {
       try {
@@ -43,6 +60,228 @@ self.addEventListener('message', function (event) {
 
 function migrationResponse(metadata, payload) {
   return JSON.stringify(metadata) + '\n' + (payload || '');
+}
+
+function migrateWebManifestData(
+  rawBytes,
+  folderTables,
+  removeLegacyFolders,
+  migrateOldVideos,
+) {
+  let json;
+  try {
+    json = new TextDecoder('utf-8', { fatal: true }).decode(rawBytes);
+  } catch (error) {
+    return { metadata: { status: 'parseError', error: String(error) } };
+  }
+
+  let data;
+  try {
+    data = JSON.parse(json);
+  } catch (error) {
+    return { metadata: { status: 'parseError', error: String(error) } };
+  }
+  if (!isRecord(data)) {
+    return {
+      metadata: { status: 'invalidManifest', error: 'Expected a JSON object.' },
+    };
+  }
+
+  let changed = false;
+  let videoChanged = false;
+  let setVideoFlag = false;
+  if (migrateOldVideos) {
+    const audioValue = data.audio_records;
+    const videoValue = data.video_records;
+    const audioRecords = audioValue == null ? [] : audioValue;
+    const videoRecords = videoValue == null ? [] : videoValue;
+    if (!Array.isArray(audioRecords) || !Array.isArray(videoRecords)) {
+      return {
+        metadata: {
+          status: 'videoError',
+          error: 'Audio/video records must be arrays.',
+        },
+      };
+    }
+    if (videoRecords.length > 0) {
+      setVideoFlag = true;
+    } else {
+      const videoFormats = new Set([
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+        'webm',
+        'flv',
+        'wmv',
+        'm4v',
+        '3gp',
+        'gif',
+      ]);
+      const toMigrate = [];
+      const remaining = [];
+      for (const item of audioRecords) {
+        if (!isRecord(item) ||
+            (item.format != null && typeof item.format !== 'string')) {
+          return {
+            metadata: {
+              status: 'videoError',
+              error: 'Audio record has an invalid shape.',
+            },
+          };
+        }
+        if (videoFormats.has(item.format)) {
+          toMigrate.push(item);
+        } else {
+          remaining.push(item);
+        }
+      }
+      if (toMigrate.length > 0) {
+        data.audio_records = remaining;
+        for (const record of toMigrate) {
+          videoRecords.push({
+            id: record.id,
+            name: record.name,
+            hash: record.hash,
+            format: record.format,
+            createdAt: record.createdAt,
+            size: record.size,
+            folder: record.folder,
+            duration: record.duration,
+          });
+        }
+        data.video_records = videoRecords;
+        changed = true;
+        videoChanged = true;
+      }
+      setVideoFlag = true;
+    }
+  }
+
+  const videoPayload = videoChanged ? JSON.stringify(data) : null;
+  const legacyValue = data.folders;
+  const legacyFolders = legacyValue == null ? [] : legacyValue;
+  if (
+    !Array.isArray(legacyFolders) ||
+    legacyFolders.some((folder) => typeof folder !== 'string')
+  ) {
+    return {
+      metadata: {
+        status: 'folderError',
+        error: 'Legacy folders must be a list of strings.',
+        videoChanged,
+        setVideoFlag,
+      },
+      payload: videoPayload,
+    };
+  }
+
+  let foldersMigrated = false;
+  if (legacyFolders.length > 0) {
+    if (
+      !Array.isArray(folderTables) ||
+      folderTables.some((table) => typeof table !== 'string')
+    ) {
+      return {
+        metadata: {
+          status: 'folderError',
+          error: 'Folder table names are invalid.',
+          videoChanged,
+          setVideoFlag,
+        },
+        payload: videoPayload,
+      };
+    }
+    for (const folderTable of folderTables) {
+      const currentValue = data[folderTable];
+      const existing = currentValue == null ? [] : currentValue;
+      if (
+        !Array.isArray(existing) ||
+        existing.some((folder) => typeof folder !== 'string')
+      ) {
+        return {
+          metadata: {
+            status: 'folderError',
+            error: `Folder table ${folderTable} must be a list of strings.`,
+            videoChanged,
+            setVideoFlag,
+          },
+          payload: videoPayload,
+        };
+      }
+      data[folderTable] = Array.from(new Set([...existing, ...legacyFolders]));
+    }
+    if (removeLegacyFolders) delete data.folders;
+    changed = true;
+    foldersMigrated = true;
+  } else if (removeLegacyFolders && legacyValue != null) {
+    delete data.folders;
+    changed = true;
+  }
+
+  return {
+    metadata: {
+      status: 'ok',
+      changed,
+      foldersMigrated,
+      videoChanged,
+      setVideoFlag,
+    },
+    payload: changed ? JSON.stringify(data) : null,
+  };
+}
+
+function validateWebManifestData(rawBytes) {
+  let data;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(rawBytes);
+    data = JSON.parse(text);
+  } catch (error) {
+    return { status: 'invalidManifest', error: String(error) };
+  }
+  if (!isRecord(data)) {
+    return { status: 'invalidManifest', error: 'Expected a JSON object.' };
+  }
+
+  for (const table of [
+    'image_records',
+    'audio_records',
+    'video_records',
+    'text_records',
+  ]) {
+    const value = data[table];
+    if (
+      value != null &&
+      (!Array.isArray(value) || value.some((item) => !isRecord(item)))
+    ) {
+      return {
+        status: 'invalidManifest',
+        error: `Manifest table ${table} must contain record objects.`,
+      };
+    }
+  }
+
+  for (const table of [
+    'folders',
+    'image_folders',
+    'audio_folders',
+    'video_folders',
+    'text_folders',
+  ]) {
+    const value = data[table];
+    if (
+      value != null &&
+      (!Array.isArray(value) ||
+        value.some((folder) => typeof folder !== 'string'))
+    ) {
+      return {
+        status: 'invalidManifest',
+        error: `Manifest table ${table} must contain strings.`,
+      };
+    }
+  }
+
+  return { status: 'ok' };
 }
 
 function prepareLegacyChatConfigs(json) {
@@ -365,7 +604,15 @@ function asToolCalls(value) {
 }
 
 function normalizeDateTime(value) {
-  const milliseconds = Date.parse(value);
+  // Dart parses a date-only DateTime as local midnight. JavaScript treats
+  // ISO date-only strings as UTC, so add a local time before parsing to keep
+  // the worker conversion equivalent on non-UTC browsers.
+  const dateOnly = value.match(/^(\d{4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/);
+  const parseValue = dateOnly == null
+    ? value
+    : `${dateOnly[1]}-${(dateOnly[2] || '1').padStart(2, '0')}-` +
+      `${(dateOnly[3] || '1').padStart(2, '0')}T00:00:00`;
+  const milliseconds = Date.parse(parseValue);
   if (!Number.isFinite(milliseconds)) return null;
   const date = new Date(milliseconds);
   const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);

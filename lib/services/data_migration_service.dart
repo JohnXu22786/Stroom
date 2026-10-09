@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart' show legacyToBlocks;
@@ -335,7 +336,10 @@ class DataMigrationService {
       final hasLegacyVersion =
           await StartupPreferences.containsKey(_kLegacyDataFormatVersionKey);
       if (!hasOutdatedPart && !hasLegacyVersion) {
-        await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
+        await AppLogService.info(
+          'DataMigrationService',
+          '数据格式版本为最新，无需迁移',
+        );
         return const MigrationResult(needsMigration: false);
       }
     }
@@ -343,7 +347,7 @@ class DataMigrationService {
     final StartupMigrationPreferences prefs;
     try {
       // Legacy migration is gated by targeted startup reads. Linux and Windows
-      // load the required legacy map in a worker isolate when migration is due.
+      // read each required preference through the JSON-file worker isolate.
       prefs = await StartupMigrationPreferences.load();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
@@ -364,7 +368,10 @@ class DataMigrationService {
         .toList();
 
     if (outdatedParts.isEmpty) {
-      await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
+      await AppLogService.info(
+        'DataMigrationService',
+        '数据格式版本为最新，无需迁移',
+      );
       return const MigrationResult(needsMigration: false);
     }
 
@@ -376,9 +383,8 @@ class DataMigrationService {
     try {
       // 创建迁移前快照（私有目录结构化快照，无视 1 小时规则）。
       // 快照失败（或并发快照被取消）时绝不继续迁移：没有安全快照
-      // 的迁移一旦中途失败可能造成数据损坏。返回 needsMigration=false
-      // 保持版本号不变，下次启动自动重试（与旧版 v2→v3 结构性失败
-      // 「版本号永不提升」的哲学一致）。
+      // 的迁移一旦中途失败可能造成数据损坏。以启动安全错误阻断本次
+      // 启动，保持版本号不变并等待后续重试。
       // Web 平台不支持本地快照（createSnapshot 恒返回 null），直接迁移。
       if (!kIsWeb) {
         final snapshot = await SnapshotService.createSnapshot(force: true);
@@ -387,57 +393,79 @@ class DataMigrationService {
               '取消本次迁移（下次启动重试）');
           await AppLogService.error(
               'DataMigrationService', '迁移前快照失败，取消本次迁移（下次启动重试）');
-          return const MigrationResult(needsMigration: false);
+          throw StartupDataValidationUnavailable.migration(
+            StateError('Unable to create the required pre-migration snapshot.'),
+          );
         }
       }
 
       // 执行迁移：只迁移版本落后的部分（顺序见 DataParts.all）
       await _performPartMigrations(stored, prefs: prefs);
 
-      // 更新存储的版本号：只提升实际迁移过的部分。
-      // 其他部分（包括高于当前版本的未来记录）保持原值 —— 绝不
-      // 降级超前版本，否则「未来版本迁移后回滚再升级」会把已迁移
-      // 的数据误判为需要重新迁移。
-      await _recordMigratedParts(prefs, stored, outdatedParts);
-
       debugPrint('[DataMigrationService] Per-part data format migration '
           'completed: $detail');
       await AppLogService.info('DataMigrationService', '数据格式迁移成功: $detail');
 
-      // 迁移完成后立即做完整性校验：迁移代码 bug 可能产出"能写入但
-      // 校验不过"的数据（确定性失败，重试无效）。此时恢复迁移前
-      // 快照（旧格式完整数据）并冻结 —— 当前构建不再尝试迁移，
-      // 数据保持旧格式，用户回退旧版应用仍可正常使用。
-      if (!kIsWeb) {
-        final check = await DataIntegrityChecker.checkCurrentData();
-        if (check.hasCorruption) {
-          debugPrint('[DataMigrationService] 迁移后校验失败（数据损坏），'
-              '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
-          await AppLogService.error('DataMigrationService',
-              '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
-          try {
-            final restored = await DataSafetyManager.restoreLatestSnapshot();
-            if (!restored) {
-              await AppLogService.error(
-                  'DataMigrationService', '恢复迁移前快照失败（无可用快照）');
-            }
-          } catch (e) {
-            debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
-          }
-          await DataSafetyManager.freezeForMigrationFailure(
-            targetFormatVersion: DataParts.all.fold<int>(0, (max, p) {
-              final v = DataParts.currentVersions[p] ?? 0;
-              return v > max ? v : max;
-            }),
-            description: detail,
-          );
-          return const MigrationResult(needsMigration: false);
-        }
+      // 迁移完成后立即校验迁移后的数据，且在提升版本标记之前完成。
+      // Web 另外通过 worker 校验 IndexedDB manifest；原生平台完整性
+      // 损坏时恢复迁移前快照并冻结。
+      if (kIsWeb) {
+        await ManifestDatabase.validateWebManifestForStartup();
       }
-    } catch (e) {
+      final check = await DataIntegrityChecker.checkCurrentData();
+      if (check.hasCorruption) {
+        if (kIsWeb) {
+          final description = check.corruptions
+              .map((issue) => issue.message)
+              .join('; ');
+          throw StartupDataValidationUnavailable.migration(
+            StateError('Post-migration data validation failed: $description'),
+          );
+        }
+        debugPrint('[DataMigrationService] 迁移后校验失败（数据损坏），'
+            '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
+        await AppLogService.error('DataMigrationService',
+            '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
+        try {
+          final restored = await DataSafetyManager.restoreLatestSnapshot();
+          if (!restored) {
+            await AppLogService.error(
+                'DataMigrationService', '恢复迁移前快照失败（无可用快照）');
+          }
+        } catch (e) {
+          debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
+        }
+        await DataSafetyManager.freezeForMigrationFailure(
+          targetFormatVersion: DataParts.all.fold<int>(0, (max, p) {
+            final v = DataParts.currentVersions[p] ?? 0;
+            return v > max ? v : max;
+          }),
+          description: detail,
+        );
+        return const MigrationResult(needsMigration: false);
+      }
+
+      // Commit version markers only after every required post-migration
+      // validation has completed successfully. A worker or preference failure
+      // in that check must leave the old versions in place so startup retries.
+      // Other parts (including future versions) retain their existing values.
+      await _recordMigratedParts(prefs, stored, outdatedParts);
+    } catch (e, stackTrace) {
       debugPrint('[DataMigrationService] Migration failed: $e');
-      await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
-      rethrow;
+      try {
+        await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
+      } catch (logError) {
+        debugPrint('[DataMigrationService] Failed to log migration failure: '
+            '$logError');
+      }
+      if (e is StartupPreferencesUnavailable ||
+          e is StartupDataValidationUnavailable) {
+        Error.throwWithStackTrace(e, stackTrace);
+      }
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(e),
+        stackTrace,
+      );
     }
 
     // 迁移完成后总是需要重启应用，确保所有 provider 和服务
@@ -566,16 +594,31 @@ class DataMigrationService {
   /// - Does NOT clean old backups
   /// - ONLY runs the migration steps and updates the versions
   ///
+  /// When restoring a backup, [restoredPartVersions] can supply the versions
+  /// from the archive without persisting them first. If
+  /// [validateRestoredDataBeforeVersionCommit] is true, integrity validation
+  /// must pass before any restored or migrated versions are written.
+  ///
   /// This is suitable for situations where data has been freshly restored
   /// from a backup and needs to be brought up to date, or when running
   /// migration in contexts where file system backup is not needed.
   static Future<MigrationResult> migrateDataFormatIfNeeded({
     Set<String>? onlyParts,
+    Map<String, int>? restoredPartVersions,
+    bool validateRestoredDataBeforeVersionCommit = false,
   }) async {
     final prefs = await StartupMigrationPreferences.load();
 
     final stored = await _resolvePartVersions(prefs);
     final selectedParts = onlyParts ?? DataParts.all.toSet();
+    if (restoredPartVersions != null) {
+      for (final part in selectedParts) {
+        if (restoredPartVersions.containsKey(part)) {
+          stored[part] = restoredPartVersions[part]!;
+        }
+      }
+    }
+    final preMigrationVersions = Map<String, int>.of(stored);
 
     final outdatedParts = DataParts.all
         .where((p) =>
@@ -583,6 +626,23 @@ class DataMigrationService {
             (stored[p] ?? 0) < DataParts.currentVersions[p]!)
         .toList();
     if (outdatedParts.isEmpty) {
+      if (validateRestoredDataBeforeVersionCommit) {
+        try {
+          await _validateRestoredDataBeforeVersionCommit();
+          if (restoredPartVersions != null) {
+            await _savePartVersions(stored, prefs);
+          }
+        } catch (error, stackTrace) {
+          if (restoredPartVersions != null) {
+            await _persistRestoredVersionsAfterFailure(
+              prefs,
+              preMigrationVersions,
+              cause: error,
+            );
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+      }
       return const MigrationResult(needsMigration: false);
     }
 
@@ -592,14 +652,25 @@ class DataMigrationService {
         prefs: prefs,
         onlyParts: selectedParts,
       );
+      if (validateRestoredDataBeforeVersionCommit) {
+        await _validateRestoredDataBeforeVersionCommit();
+      }
       await _recordMigratedParts(prefs, stored, outdatedParts);
       debugPrint(
         '[DataMigrationService] Per-part data format migration from '
         '$outdatedParts to current versions completed',
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('[DataMigrationService] Data format migration failed: $e');
-      rethrow;
+      if (validateRestoredDataBeforeVersionCommit &&
+          restoredPartVersions != null) {
+        await _persistRestoredVersionsAfterFailure(
+          prefs,
+          preMigrationVersions,
+          cause: e,
+        );
+      }
+      Error.throwWithStackTrace(e, stackTrace);
     }
 
     return const MigrationResult(
@@ -612,11 +683,14 @@ class DataMigrationService {
   ///
   /// 未恢复部分继续使用当前设备的版本标记。缺少版本信息的旧备份按
   /// 初始格式 v0 处理，由后续迁移升级恢复的数据部分。
-  static Future<void> mergeRestoredPartVersions({
+  /// [deferCommit] 为 true 时返回合并后的版本且不写入偏好设置；启动恢复
+  /// 可在数据完整性校验成功后再统一提交。
+  static Future<Map<String, int>?> mergeRestoredPartVersions({
     required Map<String, int>? backupVersions,
     required Set<String> restoredParts,
+    bool deferCommit = false,
   }) async {
-    if (restoredParts.isEmpty) return;
+    if (restoredParts.isEmpty) return null;
 
     final prefs = await StartupMigrationPreferences.load();
     final stored = await _resolvePartVersions(prefs);
@@ -635,7 +709,61 @@ class DataMigrationService {
                 : backupVersion;
       }
     }
-    await _savePartVersions(stored, prefs);
+    if (!deferCommit) {
+      await _savePartVersions(stored, prefs);
+    }
+    return stored;
+  }
+
+  /// Startup snapshot recovery may commit restored part versions only after
+  /// the restored and migrated data has passed the same checks used by startup.
+  static Future<void> _validateRestoredDataBeforeVersionCommit() async {
+    try {
+      if (kIsWeb) {
+        await ManifestDatabase.validateWebManifestForStartup();
+      }
+      final check = await DataIntegrityChecker.checkCurrentData();
+      if (check.hasCorruption) {
+        final description = check.corruptions
+            .map((issue) => issue.message)
+            .join('; ');
+        throw StartupDataValidationUnavailable.migration(
+          StateError('Restored data validation failed: $description'),
+        );
+      }
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable ||
+          error is StartupDataValidationUnavailable) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(error),
+        stackTrace,
+      );
+    }
+  }
+
+  /// Keep startup retryable if a restored-data migration or its validation
+  /// fails. These are the exact merged versions that described the restored
+  /// snapshot before migration began, including untouched parts.
+  static Future<void> _persistRestoredVersionsAfterFailure(
+    StartupMigrationPreferences prefs,
+    Map<String, int> versions, {
+    required Object cause,
+  }) async {
+    try {
+      await _savePartVersions(versions, prefs);
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(
+          StateError(
+            'Migration failed ($cause) and restored part versions could not '
+            'be persisted ($error).',
+          ),
+        ),
+        stackTrace,
+      );
+    }
   }
 
   /// 迁移成功后更新版本记录：只提升实际迁移过的部分。
@@ -701,11 +829,10 @@ class DataMigrationService {
   /// 四个媒体部分共用同一个物理迁移（共享 folders 表属于整体结构），
   /// 任意部分落后时执行一次即可（见 [_performPartMigrations]）。
   ///
-  /// 注意：与 chat/settings 不同，此迁移是 best-effort —— 失败只记录
-  /// 日志不中断迁移（[ManifestDatabase.migrateLegacyFoldersToPerType]
-  /// 内部已吞掉全部错误；SQLite 路径由 DB 初始化时的 onUpgrade 兜底，
-  /// JSON/web 路径无等价兜底）。失败不会重试。此行为延续旧版
-  /// v1→v2 的设计，刻意不改为上抛：folders 结构迁移失败不应阻塞启动。
+  /// Web 的 JSON worker、存储或 targeted preference 错误必须上抛，避免
+  /// 未完成迁移却继续启动；Web 没有与 SQLite 等价的 onUpgrade 兜底。
+  /// SQLite 数据库不可用时仍由 [ManifestDatabase] 的既有逻辑延后处理；
+  /// 已打开数据库后的实际迁移失败则必须上抛，避免错误提升版本号。
   static Future<void> _migrateMediaV0ToV1({
     required Set<String> mediaParts,
     required bool removeLegacyTable,
@@ -723,8 +850,10 @@ class DataMigrationService {
       debugPrint(
           '[DataMigrationService] media v0→v1: Migration completed successfully');
     } catch (e) {
-      // 迁移失败不阻塞启动，记录日志后继续
+      // The database-unavailable case is handled inside ManifestDatabase.
+      // Any actual Web or SQLite migration failure must keep the version old.
       debugPrint('[DataMigrationService] media v0→v1 migration failed: $e');
+      rethrow;
     }
   }
 

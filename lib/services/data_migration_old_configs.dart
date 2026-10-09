@@ -38,10 +38,25 @@ Future<void> _quarantineCorruptData(
 /// 旧 chat_configs 迁移辅助（同库可见，外部仍通过
 /// DataMigrationService 的私有静态委托调用）。
 class DataMigrationOldConfigs {
+  static StartupMigrationPreferences _migrationPreferences(
+    Object preferences,
+  ) {
+    if (preferences is StartupMigrationPreferences) return preferences;
+    if (preferences is SharedPreferences) {
+      return StartupMigrationPreferences.forLegacyPreferences(preferences);
+    }
+    throw ArgumentError.value(
+      preferences,
+      'preferences',
+      'Expected a startup migration preference adapter.',
+    );
+  }
+
   /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
   static Future<void> migrateOldChatConfigs(
-    StartupMigrationPreferences prefs,
+    Object preferences,
   ) async {
+    final prefs = _migrationPreferences(preferences);
     final oldJson = await prefs.getString('chat_configs');
     if (oldJson == null || oldJson.isEmpty) return;
 
@@ -51,14 +66,18 @@ class DataMigrationOldConfigs {
       if (status == 'parseError') {
         debugPrint('[DataMigrationService] Failed to migrate old chat configs: '
             '${prepared['error']}');
-        return;
+        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
+        throw StartupDataValidationUnavailable.migration(
+          FormatException('${prepared['error']}'),
+        );
       }
       if (status == 'notList') {
         debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
-            '跳过旧配置迁移');
-        await prefs.remove('chat_configs');
-        await prefs.remove('chat_selected_config_id');
-        return;
+            '保留现场并阻止迁移');
+        await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
+        throw StartupDataValidationUnavailable.migration(
+          FormatException('Expected chat_configs to contain a JSON list.'),
+        );
       }
       if (status == 'empty') {
         await prefs.remove('chat_configs');
@@ -96,7 +115,8 @@ class DataMigrationOldConfigs {
         }
         await prefs.setString('provider_entries', payload);
         debugPrint(
-            '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries');
+          '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries',
+        );
       } else if (merged['status'] != 'alreadyMigrated') {
         throw StartupDataValidationUnavailable.isolate(
           StateError('Invalid legacy chat config merge result.'),
@@ -120,8 +140,9 @@ class DataMigrationOldConfigs {
   /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
   /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
   static Future<void> fixNullIdsInProviderEntries(
-    StartupMigrationPreferences prefs,
+    Object preferences,
   ) async {
+    final prefs = _migrationPreferences(preferences);
     final json = await prefs.getString('provider_entries');
     if (json == null || json.isEmpty) return;
 
@@ -130,14 +151,18 @@ class DataMigrationOldConfigs {
       if (migrated['status'] == 'parseError') {
         debugPrint('[DataMigrationService] Failed to fix provider entries: '
             '${migrated['error']}');
-        return;
+        await _quarantineCorruptData(prefs, 'provider_entries', json);
+        throw StartupDataValidationUnavailable.migration(
+          FormatException('${migrated['error']}'),
+        );
       }
       if (migrated['status'] == 'notList') {
         debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
-            '已隔离并重置为空列表');
+            '已隔离并阻止迁移');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
-        await prefs.setString('provider_entries', '[]');
-        return;
+        throw StartupDataValidationUnavailable.migration(
+          FormatException('Expected provider_entries to contain a JSON list.'),
+        );
       }
       if (migrated['status'] != 'ok') {
         throw StartupDataValidationUnavailable.isolate(
@@ -241,8 +266,9 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       return <String, dynamic>{
         'name': modelId is String ? modelId : '',
         'modelId': modelId is String ? modelId : '',
-        'supportStream':
-            model['supportStream'] is bool ? model['supportStream'] as bool : true,
+      'supportStream': model['supportStream'] is bool
+          ? model['supportStream'] as bool
+          : true,
         'typeConfig': typeConfig,
       };
     }).toList();
@@ -355,13 +381,4 @@ Map<String, Object?> _fixProviderEntriesSync(String raw) {
     'changed': changed,
     if (changed) 'payload': jsonEncode(list),
   };
-}
-
-  /// v1 → v2: 移除共享 folders 表，完全迁移到每个类型独立的文件夹表。
-  ///
-  /// 迁移步骤：
-  /// 1. 检测并迁移旧版共享 folders 表中的数据到 text/audio/image/video_folders
-  /// 2. 删除旧版共享 folders 表（SQLite）或 key（JSON/web）
-  /// 3. 迁移完成后，只保留每种类型独立的文件夹表
-  ///
 }

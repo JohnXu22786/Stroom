@@ -136,8 +136,7 @@ class StartupCheckService {
   /// 代码可能无法解析，先做校验会把"版本超前"误判为"数据损坏"
   /// 而错误回滚。正确行为是拒绝启动，提示用户安装新版本。
   static Future<String?> checkVersionAhead() async {
-    final stored =
-        await DataMigrationService.getStoredPartVersionsForStartup();
+    final stored = await DataMigrationService.getStoredPartVersionsForStartup();
     final ahead = DataParts.all
         .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
         .toList();

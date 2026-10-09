@@ -90,10 +90,12 @@ class StartupPreferences {
       } else {
         final preferences = _asyncPreferences();
         final entries = await Future.wait<MapEntry<String, Object?>>(
-          logicalKeys.map((key) async => MapEntry<String, Object?>(
-                key,
-                await preferences.getString('$_legacyKeyPrefix$key'),
-              )),
+          logicalKeys.map(
+            (key) async => MapEntry<String, Object?>(
+              key,
+              await preferences.getString('$_legacyKeyPrefix$key'),
+            ),
+          ),
         );
         physicalValues = Map.fromEntries(entries);
       }
@@ -133,6 +135,100 @@ class StartupPreferences {
 
   static Future<String?> getString(String key) async =>
       (await getStrings([key]))[key];
+
+  /// Reads selected values without initializing the legacy SharedPreferences
+  /// cache. Used only to build a required pre-migration snapshot.
+  static Future<Map<String, Object?>> getValues(Iterable<String> keys) async {
+    final logicalKeys = keys.toSet();
+    if (logicalKeys.isEmpty) return const {};
+
+    try {
+      if (_isFlutterTest) {
+        final prefs = await SharedPreferences.getInstance();
+        return {
+          for (final key in logicalKeys)
+            if (prefs.containsKey(key)) key: prefs.get(key),
+        };
+      }
+
+      final physicalKeys = {
+        for (final key in logicalKeys) '$_legacyKeyPrefix$key',
+      };
+      if (_usesJsonFileBackend) {
+        final physicalValues =
+            await startup_preferences_io.readValues(physicalKeys);
+        return {
+          for (final key in logicalKeys)
+            if (physicalValues.containsKey('$_legacyKeyPrefix$key'))
+              key: physicalValues['$_legacyKeyPrefix$key']!,
+        };
+      }
+
+      final preferences = _asyncPreferences();
+      final entries = await Future.wait<MapEntry<String, Object?>>(
+        logicalKeys.map(
+          (key) async => MapEntry<String, Object?>(
+            key,
+            await _readAsyncValue(
+              preferences,
+              '$_legacyKeyPrefix$key',
+            ),
+          ),
+        ),
+      );
+      return {
+        for (final entry in entries)
+          if (entry.value != null) entry.key: entry.value!,
+      };
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable(logicalKeys, error),
+        stackTrace,
+      );
+    }
+  }
+
+  static Future<Object?> _readAsyncValue(
+    SharedPreferencesAsync preferences,
+    String key,
+  ) async {
+    try {
+      final value = await preferences.getString(key);
+      if (value != null) return value;
+    } on TypeError {
+      // Continue with the other supported preference types.
+    }
+    try {
+      final value = await preferences.getBool(key);
+      if (value != null) return value;
+    } on TypeError {
+      // Continue with the other supported preference types.
+    }
+    try {
+      final value = await preferences.getInt(key);
+      if (value != null) return value;
+    } on TypeError {
+      // Continue with the other supported preference types.
+    }
+    try {
+      final value = await preferences.getDouble(key);
+      if (value != null) return value;
+    } on TypeError {
+      // Continue with the other supported preference types.
+    }
+    try {
+      final value = await preferences.getStringList(key);
+      if (value != null) return value;
+    } on TypeError {
+      // Continue with the other supported preference types.
+    }
+
+    if (await preferences.containsKey(key)) {
+      throw FormatException('Unsupported preference value for "$key".');
+    }
+    return null;
+  }
 
   static Future<bool?> getBool(String key) async {
     try {
@@ -186,9 +282,9 @@ class StartupPreferences {
         return (await SharedPreferences.getInstance()).getKeys();
       }
       if (_usesJsonFileBackend) {
-        final values = await startup_preferences_io.readAllValues();
+        final keys = await startup_preferences_io.readKeys();
         return {
-          for (final key in values.keys)
+          for (final key in keys)
             if (key.startsWith(_legacyKeyPrefix))
               key.substring(_legacyKeyPrefix.length),
         };
@@ -239,13 +335,93 @@ class StartupPreferences {
   static Future<void> setString(String key, String value) async {
     try {
       if (_isFlutterTest) {
-        final updated = await (await SharedPreferences.getInstance())
-            .setString(key, value);
+        final prefs = await SharedPreferences.getInstance();
+        final updated = await prefs.setString(key, value);
         if (!updated) throw StateError('Failed to write preference "$key".');
       } else if (_usesJsonFileBackend) {
         await startup_preferences_io.writeValue('$_legacyKeyPrefix$key', value);
       } else {
         await _asyncPreferences().setString('$_legacyKeyPrefix$key', value);
+      }
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  static Future<void> setBool(String key, bool value) async {
+    try {
+      if (_isFlutterTest) {
+        final prefs = await SharedPreferences.getInstance();
+        final updated = await prefs.setBool(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else if (_usesJsonFileBackend) {
+        await startup_preferences_io.writeValue('$_legacyKeyPrefix$key', value);
+      } else {
+        await _asyncPreferences().setBool('$_legacyKeyPrefix$key', value);
+      }
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  static Future<void> setInt(String key, int value) async {
+    try {
+      if (_isFlutterTest) {
+        final prefs = await SharedPreferences.getInstance();
+        final updated = await prefs.setInt(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else if (_usesJsonFileBackend) {
+        await startup_preferences_io.writeValue('$_legacyKeyPrefix$key', value);
+      } else {
+        await _asyncPreferences().setInt('$_legacyKeyPrefix$key', value);
+      }
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  static Future<void> setDouble(String key, double value) async {
+    try {
+      if (_isFlutterTest) {
+        final prefs = await SharedPreferences.getInstance();
+        final updated = await prefs.setDouble(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else if (_usesJsonFileBackend) {
+        await startup_preferences_io.writeValue('$_legacyKeyPrefix$key', value);
+      } else {
+        await _asyncPreferences().setDouble('$_legacyKeyPrefix$key', value);
+      }
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  static Future<void> setStringList(String key, List<String> value) async {
+    try {
+      if (_isFlutterTest) {
+        final prefs = await SharedPreferences.getInstance();
+        final updated = await prefs.setStringList(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else if (_usesJsonFileBackend) {
+        await startup_preferences_io.writeValue('$_legacyKeyPrefix$key', value);
+      } else {
+        await _asyncPreferences().setStringList('$_legacyKeyPrefix$key', value);
       }
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
@@ -276,28 +452,22 @@ class StartupPreferences {
 }
 
 /// Preference adapter used by legacy migration and version-record updates.
-/// Production platforms use targeted key operations; Linux and Windows keep
-/// their JSON-file compatibility path in an isolate.
+/// Production platforms use targeted key operations; Linux and Windows read
+/// selected values through their JSON-file isolate adapter.
 class StartupMigrationPreferences {
   StartupMigrationPreferences._({
     SharedPreferences? legacyPreferences,
-    Map<String, Object?>? desktopValues,
-  })  : _legacyPreferences = legacyPreferences,
-        _desktopValues = desktopValues;
+  }) : _legacyPreferences = legacyPreferences;
 
   final SharedPreferences? _legacyPreferences;
-  final Map<String, Object?>? _desktopValues;
+
+  static StartupMigrationPreferences forLegacyPreferences(
+    SharedPreferences preferences,
+  ) =>
+      StartupMigrationPreferences._(legacyPreferences: preferences);
 
   static Future<StartupMigrationPreferences> load() async {
     try {
-      if (StartupPreferences._usesJsonFileBackend &&
-          !StartupPreferences._isFlutterTest) {
-        return StartupMigrationPreferences._(
-          desktopValues: Map<String, Object?>.of(
-            await startup_preferences_io.readAllValues(),
-          ),
-        );
-      }
       if (StartupPreferences._isFlutterTest) {
         return StartupMigrationPreferences._(
           legacyPreferences: await SharedPreferences.getInstance(),
@@ -315,17 +485,9 @@ class StartupMigrationPreferences {
 
   Future<Set<String>> getKeys() async {
     try {
-      final values = _desktopValues;
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        if (legacyPreferences != null) return legacyPreferences.getKeys();
-        return StartupPreferences.getKeys();
-      }
-      return {
-        for (final key in values.keys)
-          if (key.startsWith(StartupPreferences._legacyKeyPrefix))
-            key.substring(StartupPreferences._legacyKeyPrefix.length),
-      };
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) return legacyPreferences.getKeys();
+      return StartupPreferences.getKeys();
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(
@@ -337,14 +499,10 @@ class StartupMigrationPreferences {
 
   Future<bool> containsKey(String key) async {
     try {
-      final values = _desktopValues;
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        return legacyPreferences != null
-            ? legacyPreferences.containsKey(key)
-            : StartupPreferences.containsKey(key);
-      }
-      return values.containsKey('${StartupPreferences._legacyKeyPrefix}$key');
+      final legacyPreferences = _legacyPreferences;
+      return legacyPreferences != null
+          ? legacyPreferences.containsKey(key)
+          : StartupPreferences.containsKey(key);
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(
@@ -356,21 +514,10 @@ class StartupMigrationPreferences {
 
   Future<String?> getString(String key) async {
     try {
-      final values = _desktopValues;
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        return legacyPreferences != null
-            ? legacyPreferences.getString(key)
-            : StartupPreferences.getString(key);
-      }
-      final value = values['${StartupPreferences._legacyKeyPrefix}$key'];
-      if (value != null && value is! String) {
-        throw StartupPreferencesUnavailable(
-          {key},
-          FormatException('Expected a string preference for "$key".'),
-        );
-      }
-      return value as String?;
+      final legacyPreferences = _legacyPreferences;
+      return legacyPreferences != null
+          ? legacyPreferences.getString(key)
+          : StartupPreferences.getString(key);
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(
@@ -382,21 +529,10 @@ class StartupMigrationPreferences {
 
   Future<int?> getInt(String key) async {
     try {
-      final values = _desktopValues;
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        return legacyPreferences != null
-            ? legacyPreferences.getInt(key)
-            : StartupPreferences.getInt(key);
-      }
-      final value = values['${StartupPreferences._legacyKeyPrefix}$key'];
-      if (value != null && value is! int) {
-        throw StartupPreferencesUnavailable(
-          {key},
-          FormatException('Expected an int preference for "$key".'),
-        );
-      }
-      return value as int?;
+      final legacyPreferences = _legacyPreferences;
+      return legacyPreferences != null
+          ? legacyPreferences.getInt(key)
+          : StartupPreferences.getInt(key);
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(
@@ -407,25 +543,92 @@ class StartupMigrationPreferences {
   }
 
   Future<bool> setString(String key, String value) async {
-    final values = _desktopValues;
     try {
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        if (legacyPreferences != null) {
-          final updated = await legacyPreferences.setString(key, value);
-          if (!updated) {
-            throw StateError('Failed to write preference "$key".');
-          }
-        } else {
-          await StartupPreferences.setString(key, value);
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final updated = await legacyPreferences.setString(key, value);
+        if (!updated) {
+          throw StateError('Failed to write preference "$key".');
         }
-        return true;
+      } else {
+        await StartupPreferences.setString(key, value);
       }
-      await startup_preferences_io.writeValue(
-        '${StartupPreferences._legacyKeyPrefix}$key',
-        value,
+      return true;
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
       );
-      values['${StartupPreferences._legacyKeyPrefix}$key'] = value;
+    }
+  }
+
+  Future<bool> setBool(String key, bool value) async {
+    try {
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final updated = await legacyPreferences.setBool(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else {
+        await StartupPreferences.setBool(key, value);
+      }
+      return true;
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<bool> setInt(String key, int value) async {
+    try {
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final updated = await legacyPreferences.setInt(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else {
+        await StartupPreferences.setInt(key, value);
+      }
+      return true;
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<bool> setDouble(String key, double value) async {
+    try {
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final updated = await legacyPreferences.setDouble(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else {
+        await StartupPreferences.setDouble(key, value);
+      }
+      return true;
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable({key}, error),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<bool> setStringList(String key, List<String> value) async {
+    try {
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final updated = await legacyPreferences.setStringList(key, value);
+        if (!updated) throw StateError('Failed to write preference "$key".');
+      } else {
+        await StartupPreferences.setStringList(key, value);
+      }
       return true;
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
@@ -437,24 +640,16 @@ class StartupMigrationPreferences {
   }
 
   Future<bool> remove(String key) async {
-    final values = _desktopValues;
     try {
-      if (values == null) {
-        final legacyPreferences = _legacyPreferences;
-        if (legacyPreferences != null) {
-          final removed = await legacyPreferences.remove(key);
-          if (!removed) {
-            throw StateError('Failed to remove preference "$key".');
-          }
-        } else {
-          await StartupPreferences.remove(key);
+      final legacyPreferences = _legacyPreferences;
+      if (legacyPreferences != null) {
+        final removed = await legacyPreferences.remove(key);
+        if (!removed) {
+          throw StateError('Failed to remove preference "$key".');
         }
-        return true;
+      } else {
+        await StartupPreferences.remove(key);
       }
-      await startup_preferences_io.removeValue(
-        '${StartupPreferences._legacyKeyPrefix}$key',
-      );
-      values.remove('${StartupPreferences._legacyKeyPrefix}$key');
       return true;
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;

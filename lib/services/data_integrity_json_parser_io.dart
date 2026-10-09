@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 
@@ -75,6 +76,17 @@ Future<Map<String, Object?>> fixProviderEntriesWeb(String raw) async =>
 Future<Map<String, Object?>> migrateProviderModelSettingsWeb(
   String raw,
 ) async =>
+    throw UnsupportedError('Web JSON worker is not available on this platform');
+
+Future<Map<String, Object?>> migrateWebManifestData(
+  Uint8List raw,
+  List<String> folderTables,
+  bool removeLegacyFolders,
+  bool migrateOldVideos,
+) async =>
+    throw UnsupportedError('Web JSON worker is not available on this platform');
+
+Future<Map<String, Object?>> validateWebManifestData(Uint8List raw) async =>
     throw UnsupportedError('Web JSON worker is not available on this platform');
 
 Future<List<Map<String, String?>>> checkDataIntegrityWeb(

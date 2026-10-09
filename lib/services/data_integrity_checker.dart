@@ -311,6 +311,10 @@ class DataIntegrityChecker {
         );
       }
     } catch (e) {
+      if (e is StartupDataValidationUnavailable ||
+          e is StartupPreferencesUnavailable) {
+        rethrow;
+      }
       issues.add(
         DataIntegrityIssue(
           part: 'media',

@@ -15,12 +15,12 @@ Future<Map<String, Object?>> readValues(Set<String> keys) async {
   return Isolate.run(() => _readValuesFromFile(filePath, keys.toList()));
 }
 
-/// Loads every legacy preference for a real migration. The file read and JSON
-/// decode both happen in the worker isolate.
-Future<Map<String, Object?>> readAllValues() async {
+/// Returns preference names for quarantine pruning without transferring their
+/// values out of the worker isolate.
+Future<Set<String>> readKeys() async {
   final directory = await getApplicationSupportDirectory();
   final filePath = p.join(directory.path, _preferencesFileName);
-  return Isolate.run(() => _readAllValuesFromFile(filePath));
+  return Isolate.run(() => _readKeysFromFile(filePath));
 }
 
 /// Writes one legacy preference without decoding the file on the UI isolate.
@@ -64,6 +64,9 @@ Future<Map<String, Object?>> _readAllValuesFromFile(String filePath) async {
 
   return Map<String, Object?>.from(decoded);
 }
+
+Future<Set<String>> _readKeysFromFile(String filePath) async =>
+    (await _readAllValuesFromFile(filePath)).keys.toSet();
 
 Future<void> _writeValueToFile(
   String filePath,
