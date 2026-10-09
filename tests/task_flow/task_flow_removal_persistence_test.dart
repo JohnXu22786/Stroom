@@ -522,10 +522,12 @@ void main() {
         if (!speech.isCompleted) speech.complete(Uint8List(0));
         // Restore through the production parser, including running-task recovery.
         final restored = ProviderContainer();
+        BackgroundTaskNotifier? restoredBackgroundNotifier;
         try {
           late List<String> ids;
           if (kind == 'background') {
             final notifier = restored.read(backgroundTasksProvider.notifier);
+            restoredBackgroundNotifier = notifier;
             await notifier.restoreFromPersistence();
             ids = restored
                 .read(backgroundTasksProvider)
@@ -546,6 +548,9 @@ void main() {
           ids.sort();
           expect(ids, fails ? ['new', 'old'] : ['new']);
         } finally {
+          // Restoring background tasks queues a snapshot write; finish it before
+          // teardown removes this test's temporary storage directory.
+          await restoredBackgroundNotifier?.pendingPersistence;
           restored.dispose();
         }
       });
@@ -689,10 +694,14 @@ void main() {
     await Directory(childFile.path).delete();
     await backup.rename(childFile.path);
     final restored = _Backgrounds();
-    await restored.restoreFromPersistence();
-    expect(restored.tasks.single.id, childId);
-    expect(await restored.removeTasksPersisted(['absent']), isTrue);
-    restored.dispose();
+    try {
+      await restored.restoreFromPersistence();
+      expect(restored.tasks.single.id, childId);
+      expect(await restored.removeTasksPersisted(['absent']), isTrue);
+    } finally {
+      await restored.pendingPersistence;
+      restored.dispose();
+    }
   });
 
   test('retries a child already absent from memory after an older write fails',
