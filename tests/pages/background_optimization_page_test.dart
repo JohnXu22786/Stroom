@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
+import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
@@ -98,6 +99,7 @@ final List<MethodCall> keepAliveCalls = [];
 /// Registers a mock background service platform for testing.
 /// Returns the mock so tests can control its behavior.
 MockBackgroundServicePlatform registerMockPlatform() {
+  resetBackgroundServiceLifecycleStateForTesting();
   keepAliveCalls.clear();
   SharedPreferences.setMockInitialValues({});
   // Set up a mock MethodChannel handler for the keep-alive channel

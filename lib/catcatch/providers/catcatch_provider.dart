@@ -264,7 +264,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         for (final task in removed) {
           unawaited(_cleanupTaskFiles(task));
         }
-        if (!_hasRunningTasks()) await stopBackgroundService();
+        if (!_hasRunningTasks()) await stopBackgroundServiceIfNotUserEnabled();
       }
       if (!mounted) {
         // Deferred ordinary writes own this snapshot after disposal. Only a
@@ -613,8 +613,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 检查是否有运行中的任务
   bool _hasRunningTasks() => state.any((t) => t.status == TaskStatus.running);
 
+  /// Starts a temporary service for CatCatch tasks without changing user intent.
   @visibleForTesting
-  Future<bool> startBackgroundServiceForTask() => startBackgroundService();
+  Future<bool> startBackgroundServiceForTask() =>
+      startBackgroundService(persistEnabled: false);
 
   @visibleForTesting
   Future<String?> retryFromStepForTask({
@@ -811,7 +813,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
     }
     return _writeSnapshot(state).then((_) async {
-      if (mounted && !_hasRunningTasks()) await stopBackgroundService();
+      if (mounted && !_hasRunningTasks()) {
+        await stopBackgroundServiceIfNotUserEnabled();
+      }
     });
   }
 
