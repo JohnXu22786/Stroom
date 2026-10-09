@@ -25,14 +25,15 @@ self.addEventListener('message', function (event) {
     const payload = result.payload == null
       ? null
       : new TextEncoder().encode(result.payload);
-    const response = {
-      metadata: JSON.stringify(result.metadata),
-      payload,
-    };
+    const metadata = JSON.stringify({
+      ...result.metadata,
+      hasPayload: payload != null,
+    });
+    self.postMessage(metadata);
     if (payload == null) {
-      self.postMessage(response);
+      return;
     } else {
-      self.postMessage(response, [payload.buffer]);
+      self.postMessage(payload.buffer, [payload.buffer]);
     }
     return;
   } else if (operation === 'validateWebManifestData') {

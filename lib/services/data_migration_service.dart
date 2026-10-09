@@ -415,9 +415,8 @@ class DataMigrationService {
       final check = await DataIntegrityChecker.checkCurrentData();
       if (check.hasCorruption) {
         if (kIsWeb) {
-          final description = check.corruptions
-              .map((issue) => issue.message)
-              .join('; ');
+          final description =
+              check.corruptions.map((issue) => issue.message).join('; ');
           throw StartupDataValidationUnavailable.migration(
             StateError('Post-migration data validation failed: $description'),
           );
@@ -724,9 +723,8 @@ class DataMigrationService {
       }
       final check = await DataIntegrityChecker.checkCurrentData();
       if (check.hasCorruption) {
-        final description = check.corruptions
-            .map((issue) => issue.message)
-            .join('; ');
+        final description =
+            check.corruptions.map((issue) => issue.message).join('; ');
         throw StartupDataValidationUnavailable.migration(
           StateError('Restored data validation failed: $description'),
         );
@@ -953,15 +951,14 @@ Map<String, Object?> _transformLegacyConversations(String raw) {
       if (existingBlocks is List && existingBlocks.isNotEmpty) continue;
       try {
         final blocks = legacyToBlocks(
-          reasoningSections:
-              (message['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
-                  [],
+          reasoningSections: (message['reasoningSections'] as List<dynamic>?)
+                  ?.cast<String>() ??
+              [],
           textChunks:
-              (message['textSections'] as List<dynamic>?)?.cast<String>() ??
-                  [],
+              (message['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
           toolCalls: ((message['toolCalls'] as List<dynamic>?) ?? [])
-              .map((toolCall) => ToolCallData.fromMap(
-                  Map<String, dynamic>.from(toolCall)))
+              .map((toolCall) =>
+                  ToolCallData.fromMap(Map<String, dynamic>.from(toolCall)))
               .toList(),
           toolCallRoundStarts:
               (message['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??

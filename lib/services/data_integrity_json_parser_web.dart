@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
-import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -207,17 +206,11 @@ Map<String, Object?> _decodeWebManifestMigrationResponse(Object? response) {
     return decoded;
   }
 
-  final Object? rawMetadata;
-  final Object? rawPayload;
-  if (response is Map) {
-    rawMetadata = response['metadata'];
-    rawPayload = response['payload'];
-  } else if (response != null) {
-    rawMetadata = js_util.getProperty<Object?>(response, 'metadata');
-    rawPayload = js_util.getProperty<Object?>(response, 'payload');
-  } else {
+  if (response is! Map) {
     throw StateError('Invalid Web manifest worker response');
   }
+  final rawMetadata = response['metadata'];
+  final rawPayload = response['payload'];
 
   if (rawMetadata is! String) {
     throw StateError('Invalid Web manifest worker metadata');
@@ -225,6 +218,10 @@ Map<String, Object?> _decodeWebManifestMigrationResponse(Object? response) {
   final decodedMetadata = jsonDecode(rawMetadata);
   if (decodedMetadata is! Map || decodedMetadata['status'] is! String) {
     throw StateError('Invalid Web manifest worker metadata');
+  }
+  final hasPayload = decodedMetadata.remove('hasPayload');
+  if (hasPayload is! bool || hasPayload != (rawPayload != null)) {
+    throw StateError('Invalid Web manifest worker payload state');
   }
   return {
     ...Map<String, Object?>.from(decodedMetadata),
@@ -235,18 +232,7 @@ Map<String, Object?> _decodeWebManifestMigrationResponse(Object? response) {
 Uint8List _workerPayloadBytes(Object payload) {
   if (payload is Uint8List) return payload;
   if (payload is ByteBuffer) return Uint8List.view(payload);
-
-  final buffer = js_util.getProperty<Object?>(payload, 'buffer');
-  final byteOffset = js_util.getProperty<Object?>(payload, 'byteOffset');
-  final byteLength = js_util.getProperty<Object?>(payload, 'byteLength');
-  if (buffer is! ByteBuffer || byteOffset is! num || byteLength is! num) {
-    throw StateError('Invalid Web manifest worker payload');
-  }
-  return Uint8List.view(
-    buffer,
-    byteOffset.toInt(),
-    byteLength.toInt(),
-  );
+  throw StateError('Invalid Web manifest worker payload');
 }
 
 Future<Map<String, Object?>> _runMigrationWorker(
@@ -470,6 +456,9 @@ Future<Object?> _runWorkerDataAtUrl(
   String url,
 ) async {
   final result = Completer<Object?>();
+  final isManifestMigration =
+      message.isNotEmpty && message.first == 'migrateWebManifestData';
+  String? manifestMetadata;
   html.Worker? worker;
   StreamSubscription<html.MessageEvent>? messageSubscription;
   StreamSubscription<html.Event>? errorSubscription;
@@ -477,7 +466,46 @@ Future<Object?> _runWorkerDataAtUrl(
     final activeWorker = html.Worker(url);
     worker = activeWorker;
     messageSubscription = activeWorker.onMessage.listen((event) {
-      if (!result.isCompleted) result.complete(event.data);
+      if (result.isCompleted) return;
+      if (!isManifestMigration) {
+        result.complete(event.data);
+        return;
+      }
+
+      if (manifestMetadata == null) {
+        final data = event.data;
+        if (data is! String) {
+          result.completeError(
+            StateError('Invalid Web manifest worker metadata message'),
+          );
+          return;
+        }
+        try {
+          final metadata = jsonDecode(data);
+          if (metadata is! Map ||
+              metadata['status'] is! String ||
+              metadata['hasPayload'] is! bool) {
+            throw StateError('Invalid Web manifest worker metadata');
+          }
+          if (metadata['hasPayload'] as bool) {
+            manifestMetadata = data;
+          } else {
+            result.complete({'metadata': data, 'payload': null});
+          }
+        } catch (error, stackTrace) {
+          result.completeError(error, stackTrace);
+        }
+        return;
+      }
+
+      final data = event.data;
+      if (data is! Uint8List && data is! ByteBuffer) {
+        result.completeError(
+          StateError('Invalid Web manifest worker payload message'),
+        );
+        return;
+      }
+      result.complete({'metadata': manifestMetadata, 'payload': data});
     });
     errorSubscription = activeWorker.onError.listen((event) {
       if (!result.isCompleted) {

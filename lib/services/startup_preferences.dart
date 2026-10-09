@@ -85,8 +85,7 @@ class StartupPreferences {
       };
       final Map<String, Object?> physicalValues;
       if (_usesJsonFileBackend) {
-        physicalValues =
-            await startup_preferences_io.readValues(physicalKeys);
+        physicalValues = await startup_preferences_io.readValues(physicalKeys);
       } else {
         final preferences = _asyncPreferences();
         final entries = await Future.wait<MapEntry<String, Object?>>(
@@ -104,9 +103,7 @@ class StartupPreferences {
           key: _stringValue(
             physicalValues,
             key,
-            physicalKey: _usesJsonFileBackend
-                ? '$_legacyKeyPrefix$key'
-                : key,
+            physicalKey: _usesJsonFileBackend ? '$_legacyKeyPrefix$key' : key,
           ),
       };
     } catch (error, stackTrace) {
@@ -266,7 +263,7 @@ class StartupPreferences {
         return (await startup_preferences_io.readValues({physicalKey}))
             .containsKey(physicalKey);
       }
-      return _asyncPreferences().containsKey(physicalKey);
+      return await _asyncPreferences().containsKey(physicalKey);
     } catch (error, stackTrace) {
       if (error is StartupPreferencesUnavailable) rethrow;
       Error.throwWithStackTrace(

@@ -2253,8 +2253,7 @@ class BackupService {
     if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
       await DataMigrationService.migrateDataFormatIfNeeded(
         onlyParts: restoredPartIds,
-        restoredPartVersions:
-            deferVersionCommit ? restoredPartVersions : null,
+        restoredPartVersions: deferVersionCommit ? restoredPartVersions : null,
         validateRestoredDataBeforeVersionCommit: deferVersionCommit,
       );
     }
@@ -5500,16 +5499,17 @@ Map<String, String> _encodeBackupPreferenceGroups(
   Map<String, Object?> values,
   List<String> chatKeys,
   List<String> settingsKeys,
-) => {
-  'chat_data': jsonEncode({
-    for (final key in chatKeys)
-      if (values.containsKey(key)) key: values[key],
-  }),
-  'settings': jsonEncode({
-    for (final key in settingsKeys)
-      if (values.containsKey(key)) key: values[key],
-  }),
-};
+) =>
+    {
+      'chat_data': jsonEncode({
+        for (final key in chatKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
+      'settings': jsonEncode({
+        for (final key in settingsKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
+    };
 
 /// 备份计划：主 isolate 收集的数据与文件清单。
 ///

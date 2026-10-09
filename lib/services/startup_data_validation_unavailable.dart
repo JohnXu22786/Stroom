@@ -10,7 +10,7 @@ class StartupDataValidationUnavailable implements Exception {
   const StartupDataValidationUnavailable(
     this.primaryWorkerError,
     this.bundledWorkerError,
-  )  : isolateError = null,
+  )   : isolateError = null,
         migrationError = null;
 
   const StartupDataValidationUnavailable.isolate(Object error)

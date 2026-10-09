@@ -266,9 +266,9 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       return <String, dynamic>{
         'name': modelId is String ? modelId : '',
         'modelId': modelId is String ? modelId : '',
-      'supportStream': model['supportStream'] is bool
-          ? model['supportStream'] as bool
-          : true,
+        'supportStream': model['supportStream'] is bool
+            ? model['supportStream'] as bool
+            : true,
         'typeConfig': typeConfig,
       };
     }).toList();
