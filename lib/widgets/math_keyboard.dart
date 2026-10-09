@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../models/math_input_catalog.dart';
@@ -32,6 +33,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
   bool _shifted = false;
   final _categoryScrollController = ScrollController();
   final _keyScrollController = ScrollController();
+  double _keyGridDragDistance = 0;
   final _categoryKeys = {
     for (final category in _groups.keys) category: GlobalKey(),
   };
@@ -65,6 +67,38 @@ class _MathKeyboardState extends State<MathKeyboard> {
     });
   }
 
+  void _changePage(int pageCount, int direction) {
+    if (pageCount < 2) return;
+    setState(() => _page = (_page + direction + pageCount) % pageCount);
+    if (_keyScrollController.hasClients) {
+      _keyScrollController.jumpTo(0);
+    }
+  }
+
+  void _updateKeyGridDrag(DragUpdateDetails details) {
+    _keyGridDragDistance += details.primaryDelta ?? 0;
+  }
+
+  void _endKeyGridDrag(int pageCount) {
+    final distance = _keyGridDragDistance;
+    _keyGridDragDistance = 0;
+    if (distance.abs() < 40) return;
+    _changePage(pageCount, distance < 0 ? 1 : -1);
+  }
+
+  KeyEventResult _handleKeyGridKeyEvent(int pageCount, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.pageUp) {
+      _changePage(pageCount, -1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.pageDown) {
+      _changePage(pageCount, 1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   static const _numbers = [
     '7',
     '8',
@@ -90,9 +124,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isAlphabetCategory = _category == '字母';
     final keys =
         _category == '希腊字母' && _shifted ? _greekUpperKeys : _groups[_category]!;
-    final pageCount = (keys.length / 12).ceil();
+    final pageCount = isAlphabetCategory ? 1 : (keys.length / 12).ceil();
     return Material(
       color: cs.surfaceContainer,
       child: SafeArea(
@@ -255,75 +290,145 @@ class _MathKeyboardState extends State<MathKeyboard> {
     );
   }
 
-  Widget _keyArea(List<_MathKey> keys, int pageCount) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-            child: _category == '字母'
-                ? _latinKeys()
-                : Column(
+  Widget _keyArea(List<_MathKey> keys, int pageCount) {
+    final canSwipePages = pageCount > 1 && _category != '字母';
+    final canNavigate = widget.enabled && _category != '字母';
+    final keyGrid = Padding(
+      padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+      child: _category == '字母'
+          ? _latinKeys()
+          : Column(
+              children: [
+                for (var row = 0; row < 4; row++)
+                  Row(
                     children: [
-                      for (var row = 0; row < 4; row++)
-                        Row(
-                          children: [
-                            for (var col = 0; col < 6; col++)
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(2),
-                                  child: _key(
-                                    col < 3
-                                        ? (_page * 12 + row * 3 + col <
-                                                keys.length
-                                            ? keys[_page * 12 + row * 3 + col]
-                                            : null)
-                                        : _MathKey(
-                                            _numbers[row * 3 + col - 3],
-                                            _numbers[row * 3 + col - 3],
-                                            command:
-                                                _numbers[row * 3 + col - 3] ==
-                                                        '⌫'
-                                                    ? 'deleteBackward'
-                                                    : null,
-                                          ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                      for (var col = 0; col < 6; col++)
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: _key(
+                              col < 3
+                                  ? (_page * 12 + row * 3 + col < keys.length
+                                      ? keys[_page * 12 + row * 3 + col]
+                                      : null)
+                                  : _MathKey(
+                                      _numbers[row * 3 + col - 3],
+                                      _numbers[row * 3 + col - 3],
+                                      command:
+                                          _numbers[row * 3 + col - 3] == '⌫'
+                                              ? 'deleteBackward'
+                                              : null,
+                                    ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
-          ),
-          SizedBox(
-            height: 44,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                TextButton(
-                  onPressed: widget.enabled
-                      ? () => widget.onCommand('previous', '')
-                      : null,
-                  child: const Text('上一项'),
-                ),
-                TextButton(
-                  onPressed: widget.enabled
-                      ? () => widget.onCommand('next', '')
-                      : null,
-                  child: const Text('下一项'),
-                ),
-                if (_category == '希腊字母')
-                  SizedBox(width: 48, child: _shiftKey()),
-                if (pageCount > 1 && _category != '字母')
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _page = (_page + 1) % pageCount),
-                    child: Text('${_page + 1}/$pageCount ▸'),
-                  ),
               ],
             ),
+    );
+    final previousButton = TextButton(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+      ),
+      onPressed: canNavigate ? () => widget.onCommand('previous', '') : null,
+      child: const Text('上一项'),
+    );
+    final nextButton = TextButton(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+      ),
+      onPressed: canNavigate ? () => widget.onCommand('next', '') : null,
+      child: const Text('下一项'),
+    );
+    final isAlphabetCategory = _category == '字母';
+    final currentPage = isAlphabetCategory ? 1 : _page + 1;
+    final pageIndicator = pageCount > 1 || isAlphabetCategory
+        ? IgnorePointer(
+            child: Semantics(
+              label: '第 $currentPage 页，共 $pageCount 页',
+              child: Text('$currentPage/$pageCount'),
+            ),
+          )
+        : null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          container: true,
+          explicitChildNodes: true,
+          label: '符号键盘',
+          value: canSwipePages ? '${_page + 1}/$pageCount' : null,
+          increasedValue: canSwipePages
+              ? '${(_page + 1) % pageCount + 1}/$pageCount'
+              : null,
+          decreasedValue: canSwipePages
+              ? '${(_page - 1 + pageCount) % pageCount + 1}/$pageCount'
+              : null,
+          hint: canSwipePages ? '使用增减操作切换符号页' : null,
+          onIncrease: canSwipePages ? () => _changePage(pageCount, 1) : null,
+          onDecrease: canSwipePages ? () => _changePage(pageCount, -1) : null,
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: canSwipePages
+                ? (_, event) => _handleKeyGridKeyEvent(pageCount, event)
+                : null,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragStart:
+                  canSwipePages ? (_) => _keyGridDragDistance = 0 : null,
+              onHorizontalDragUpdate: canSwipePages ? _updateKeyGridDrag : null,
+              onHorizontalDragEnd:
+                  canSwipePages ? (_) => _endKeyGridDrag(pageCount) : null,
+              onHorizontalDragCancel:
+                  canSwipePages ? () => _keyGridDragDistance = 0 : null,
+              child: keyGrid,
+            ),
           ),
-        ],
-      );
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_category == '希腊字母')
+                SizedBox(
+                  width: constraints.maxWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.start,
+                      spacing: 4,
+                      overflowAlignment: OverflowBarAlignment.start,
+                      overflowDirection: VerticalDirection.down,
+                      children: [
+                        SizedBox(width: 44, child: _shiftKey()),
+                        const Text('大小写'),
+                      ],
+                    ),
+                  ),
+                ),
+              SizedBox(
+                width: constraints.maxWidth,
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.center,
+                  spacing: 8,
+                  overflowAlignment: OverflowBarAlignment.center,
+                  overflowDirection: VerticalDirection.down,
+                  children: [
+                    previousButton,
+                    if (pageIndicator != null) pageIndicator,
+                    nextButton,
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _latinKeys() => Column(
         children: [

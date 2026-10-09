@@ -115,8 +115,6 @@ void main() {
         'insert:M',
         'command:deleteBackward',
         'insert:3',
-        'previous:',
-        'next:',
         'insert:7',
         'insert:Q',
         r'insert:\Alpha',
@@ -129,14 +127,22 @@ void main() {
   }
 
   testWidgets(
-      'Greek second page Shift preserves slots and resets page on category changes',
+      'Greek page swipes preserve Shift slots and reset on category changes',
       (tester) async {
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
     await _selectCategory(tester, '希腊字母');
     expect(find.text('希腊大写'), findsNothing);
-    await tester.tap(find.text('1/2 ▸'));
-    await tester.pump();
+    expect(find.text('1/2'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.text('1/2'),
+        matching: find.byType(TextButton),
+      ),
+      findsNothing,
+    );
+    await tester.drag(find.byTooltip('alpha'), const Offset(-100, 0));
+    await tester.pumpAndSettle();
     final firstSlot = tester.getRect(find.byTooltip('nu'));
     const secondPage = [
       'nu',
@@ -158,7 +164,7 @@ void main() {
     final shift = find.byKey(const ValueKey('math-keyboard-shift'));
     await tester.tap(shift);
     await tester.pump();
-    expect(find.text('2/2 ▸'), findsOneWidget);
+    expect(find.text('2/2'), findsOneWidget);
     expect(tester.getRect(find.byTooltip('Nu')), firstSlot);
     for (final name in secondPage) {
       await tester
@@ -166,7 +172,7 @@ void main() {
     }
     await tester.tap(shift);
     await tester.pump();
-    expect(find.text('2/2 ▸'), findsOneWidget);
+    expect(find.text('2/2'), findsOneWidget);
     expect(tester.getRect(find.byTooltip('nu')), firstSlot);
     await tester.tap(find.byTooltip('nu'));
     expect(commands, [
@@ -180,7 +186,7 @@ void main() {
     await _selectCategory(tester, '希腊变体');
     await tester.tap(find.byTooltip('varkappa'));
     await _selectCategory(tester, '希腊字母');
-    expect(find.text('1/2 ▸'), findsOneWidget);
+    expect(find.text('1/2'), findsOneWidget);
     await tester.tap(find.byTooltip('Alpha'));
     expect(commands.sublist(commands.length - 2),
         [r'insert:\varkappa', r'insert:\Alpha']);

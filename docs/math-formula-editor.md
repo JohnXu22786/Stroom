@@ -14,8 +14,14 @@ Numbers and backspace keep their positions in symbol categories. The Latin
 letter tab has a numeric row above all 26 letters in full-width QWERTY rows,
 with Shift and backspace. Shift toggles Latin and ordinary Greek case and
 keeps the current Greek page; all 24 Greek letters are present in both cases.
-The separate variants tab contains eight additional forms. Use page buttons
-for more symbols.
+The separate variants tab contains eight additional forms. Swipe horizontally
+across the keys, or press Page Up/Page Down while a symbol key is focused, to
+page through more symbols. Screen readers can use the increase/decrease actions
+on the symbol grid; the centered page count is read-only.
+In the Greek tab, Shift has a separate labeled position. Previous, the
+read-only page count, and Next form a centered group that wraps on narrow screens.
+The alphabet tab shows all 26 keys on one page, with a read-only `1/1` indicator
+and disabled Previous and Next controls.
 The logarithm tab offers explicit base-ten, base-two and arbitrary-base templates
 alongside natural ln and powers of e, 2 and 10. Legacy bare log remains natural.
 Templates accept the selected expression; powers can capture the complete item
