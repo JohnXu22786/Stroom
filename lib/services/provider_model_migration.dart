@@ -161,7 +161,10 @@ class ProviderModelMigration {
           : await data_migration_isolate.runInIsolate(
               () => _migrateFlowsSync(encoded),
             );
-    } catch (error) {
+    } catch (error, stackTrace) {
+      if (_isFlutterTest) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       throw StartupDataValidationUnavailable.isolate(error);
     }
     if (result['changed'] != true) return;

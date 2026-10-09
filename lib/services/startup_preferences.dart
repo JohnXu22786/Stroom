@@ -134,7 +134,8 @@ class StartupPreferences {
       (await getStrings([key]))[key];
 
   /// Reads selected values without initializing the legacy SharedPreferences
-  /// cache. Used only to build a required pre-migration snapshot.
+  /// cache. Used for migration snapshots and integrity checks that retain
+  /// malformed stored types for reporting.
   static Future<Map<String, Object?>> getValues(Iterable<String> keys) async {
     final logicalKeys = keys.toSet();
     if (logicalKeys.isEmpty) return const {};

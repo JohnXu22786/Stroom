@@ -134,6 +134,7 @@ Future<Map<String, Object?>> migrateWebManifestData(
   bool removeLegacyFolders,
   bool migrateOldVideos,
 ) async {
+  final rawLength = raw.lengthInBytes;
   final message = [
     'migrateWebManifestData',
     raw,
@@ -148,6 +149,14 @@ Future<Map<String, Object?>> migrateWebManifestData(
     );
   } catch (error) {
     primaryError = error;
+    if (_wasManifestBufferTransferred(raw, rawLength)) {
+      throw StartupDataValidationUnavailable.migration(
+        StateError(
+          'Manifest worker failed after transferring bytes; cannot retry: '
+          '$error',
+        ),
+      );
+    }
     debugPrint('[DataMigrationService] Web manifest migration worker failed; '
         'retrying bundled worker: $error');
   }
@@ -166,12 +175,21 @@ Future<Map<String, Object?>> migrateWebManifestData(
 /// Validate the persisted Web media manifest in the worker before startup
 /// migration versions are advanced.
 Future<Map<String, Object?>> validateWebManifestData(Uint8List raw) async {
+  final rawLength = raw.lengthInBytes;
   final request = <Object?>['validateWebManifestData', raw];
   try {
     return _decodeWebManifestValidationResponse(
       await _runPrimaryValidationWorker(request),
     );
   } catch (primaryError) {
+    if (_wasManifestBufferTransferred(raw, rawLength)) {
+      throw StartupDataValidationUnavailable.migration(
+        StateError(
+          'Manifest validation worker failed after transferring bytes; '
+          'cannot retry: $primaryError',
+        ),
+      );
+    }
     debugPrint('[DataMigrationService] Web manifest validation worker failed; '
         'retrying bundled worker: $primaryError');
     try {
@@ -185,6 +203,9 @@ Future<Map<String, Object?>> validateWebManifestData(Uint8List raw) async {
     }
   }
 }
+
+bool _wasManifestBufferTransferred(Uint8List raw, int originalLength) =>
+    originalLength > 0 && raw.buffer.lengthInBytes == 0;
 
 Map<String, Object?> _decodeWebManifestValidationResponse(String response) {
   final decoded = jsonDecode(response);
@@ -458,6 +479,9 @@ Future<Object?> _runWorkerDataAtUrl(
   final result = Completer<Object?>();
   final isManifestMigration =
       message.isNotEmpty && message.first == 'migrateWebManifestData';
+  final hasTransferableManifest = message.isNotEmpty &&
+      (message.first == 'migrateWebManifestData' ||
+          message.first == 'validateWebManifestData');
   String? manifestMetadata;
   html.Worker? worker;
   StreamSubscription<html.MessageEvent>? messageSubscription;
@@ -515,7 +539,11 @@ Future<Object?> _runWorkerDataAtUrl(
         result.completeError(StateError(message));
       }
     });
-    activeWorker.postMessage(message);
+    final transferList = hasTransferableManifest
+        ? [(message[1] as Uint8List).buffer]
+        : null;
+    // Move the manifest bytes into the worker instead of cloning them on UI.
+    activeWorker.postMessage(message, transferList);
     return await result.future;
   } finally {
     if (messageSubscription != null) await messageSubscription.cancel();

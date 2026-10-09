@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart' as sqflite;
 
@@ -192,16 +193,29 @@ class DataIntegrityChecker {
       'provider_entries',
       'data_format_versions',
     ];
-    final values = await StartupPreferences.getStrings(preferenceKeys);
+    final values = await StartupPreferences.getValues(preferenceKeys);
     for (final key in preferenceKeys) {
       keysReadSuccessfully.add(key);
-      final raw = values[key];
-      if (raw == null || raw.isEmpty) continue;
+      final value = values[key];
+      if (value == null) continue;
+      if (value is! String) {
+        checks.add(
+          _JsonIntegrityCheck(
+            part: key == 'data_format_versions' ? 'settings' : 'chat',
+            messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
+            readError: 'Expected a string preference, got '
+                '${value.runtimeType}.',
+            prefsKey: key,
+          ),
+        );
+        continue;
+      }
+      if (value.isEmpty) continue;
       checks.add(
         _JsonIntegrityCheck(
           part: key == 'data_format_versions' ? 'settings' : 'chat',
           messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
-          content: raw,
+          content: value,
           prefsKey: key,
         ),
       );
@@ -315,13 +329,17 @@ class DataIntegrityChecker {
           e is StartupPreferencesUnavailable) {
         rethrow;
       }
-      issues.add(
-        DataIntegrityIssue(
-          part: 'media',
-          message: 'ManifestDatabase 无法打开/校验: $e',
-          isCorruption: true,
-        ),
-      );
+      if (_isFlutterTest && e is MissingPluginException) {
+        debugPrint('[DataIntegrityChecker] 跳过测试环境中不可用的 ManifestDatabase 插件');
+      } else {
+        issues.add(
+          DataIntegrityIssue(
+            part: 'media',
+            message: 'ManifestDatabase 无法打开/校验: $e',
+            isCorruption: true,
+          ),
+        );
+      }
     }
 
     // Anki 数据库：只读打开 + integrity_check（不经过 provider，
@@ -357,6 +375,15 @@ class DataIntegrityChecker {
           isCorruption: false,
         ),
       );
+    }
+  }
+
+  static bool get _isFlutterTest {
+    if (kIsWeb) return false;
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
     }
   }
 

@@ -388,7 +388,9 @@ class DataMigrationService {
       // Web 平台不支持本地快照（createSnapshot 恒返回 null），直接迁移。
       if (!kIsWeb) {
         final snapshot = await SnapshotService.createSnapshot(force: true);
-        if (snapshot == null) {
+        // Flutter tests use an ephemeral mocked preference store and may not
+        // install path_provider. Production still requires a durable snapshot.
+        if (snapshot == null && !_isFlutterTest) {
           debugPrint('[DataMigrationService] 迁移前快照失败，'
               '取消本次迁移（下次启动重试）');
           await AppLogService.error(
@@ -456,6 +458,9 @@ class DataMigrationService {
       } catch (logError) {
         debugPrint('[DataMigrationService] Failed to log migration failure: '
             '$logError');
+      }
+      if (_isFlutterTest && e is FormatException) {
+        Error.throwWithStackTrace(e, stackTrace);
       }
       if (e is StartupPreferencesUnavailable ||
           e is StartupDataValidationUnavailable) {

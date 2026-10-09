@@ -16,18 +16,74 @@ Future<void> _quarantineCorruptData(
   try {
     final backupKey =
         '${keyPrefix}_corrupt_${DateTime.now().millisecondsSinceEpoch}';
-    await prefs.setString(backupKey, corruptJson);
+    if (!await prefs.setString(backupKey, corruptJson) ||
+        await prefs.getString(backupKey) != corruptJson) {
+      throw StateError('Unable to verify quarantined $keyPrefix data.');
+    }
     // 只保留最近的 N 份
     final keys = (await prefs.getKeys()).toList()
       ..sort()
       ..retainWhere((k) => k.startsWith('${keyPrefix}_corrupt_'));
     while (keys.length > _kMaxCorruptBackups) {
-      await prefs.remove(keys.removeAt(0));
+      final key = keys.removeAt(0);
+      await prefs.remove(key);
+      if (await prefs.containsKey(key)) {
+        throw StateError('Unable to prune quarantined $keyPrefix data.');
+      }
     }
     debugPrint('[DataMigrationService] 已隔离损坏数据到 $backupKey');
-  } catch (e) {
-    if (e is StartupPreferencesUnavailable) rethrow;
-    debugPrint('[DataMigrationService] 隔离损坏数据失败: $e');
+  } catch (error, stackTrace) {
+    if (error is StartupPreferencesUnavailable ||
+        error is StartupDataValidationUnavailable) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    Error.throwWithStackTrace(
+      StartupDataValidationUnavailable.migration(error),
+      stackTrace,
+    );
+  }
+}
+
+Future<void> _removeMigratedPreference(
+  StartupMigrationPreferences prefs,
+  String key,
+) async {
+  try {
+    await prefs.remove(key);
+    if (await prefs.containsKey(key)) {
+      throw StateError('Unable to remove migrated preference "$key".');
+    }
+  } catch (error, stackTrace) {
+    if (error is StartupPreferencesUnavailable ||
+        error is StartupDataValidationUnavailable) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    Error.throwWithStackTrace(
+      StartupDataValidationUnavailable.migration(error),
+      stackTrace,
+    );
+  }
+}
+
+Future<void> _writeMigratedPreference(
+  StartupMigrationPreferences prefs,
+  String key,
+  String value,
+) async {
+  try {
+    if (!await prefs.setString(key, value) ||
+        await prefs.getString(key) != value) {
+      throw StateError('Unable to verify migrated preference "$key".');
+    }
+  } catch (error, stackTrace) {
+    if (error is StartupPreferencesUnavailable ||
+        error is StartupDataValidationUnavailable) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    Error.throwWithStackTrace(
+      StartupDataValidationUnavailable.migration(error),
+      stackTrace,
+    );
   }
 }
 
@@ -67,21 +123,21 @@ class DataMigrationOldConfigs {
         debugPrint('[DataMigrationService] Failed to migrate old chat configs: '
             '${prepared['error']}');
         await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
-        throw StartupDataValidationUnavailable.migration(
-          FormatException('${prepared['error']}'),
-        );
+        await _removeMigratedPreference(prefs, 'chat_selected_config_id');
+        await _removeMigratedPreference(prefs, 'chat_configs');
+        return;
       }
       if (status == 'notList') {
         debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
-            '保留现场并阻止迁移');
+            '隔离后清理旧配置');
         await _quarantineCorruptData(prefs, 'chat_configs', oldJson);
-        throw StartupDataValidationUnavailable.migration(
-          FormatException('Expected chat_configs to contain a JSON list.'),
-        );
+        await _removeMigratedPreference(prefs, 'chat_selected_config_id');
+        await _removeMigratedPreference(prefs, 'chat_configs');
+        return;
       }
       if (status == 'empty') {
-        await prefs.remove('chat_configs');
-        await prefs.remove('chat_selected_config_id');
+        await _removeMigratedPreference(prefs, 'chat_selected_config_id');
+        await _removeMigratedPreference(prefs, 'chat_configs');
         return;
       }
       if (status != 'ready' || prepared['payload'] is! String) {
@@ -113,7 +169,7 @@ class DataMigrationOldConfigs {
             StateError('Missing migrated provider entries.'),
           );
         }
-        await prefs.setString('provider_entries', payload);
+        await _writeMigratedPreference(prefs, 'provider_entries', payload);
         debugPrint(
           '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries',
         );
@@ -123,15 +179,19 @@ class DataMigrationOldConfigs {
         );
       }
 
-      await prefs.remove('chat_configs');
-      await prefs.remove('chat_selected_config_id');
-    } catch (e) {
-      if (e is StartupPreferencesUnavailable ||
-          e is StartupDataValidationUnavailable) {
-        rethrow;
-      }
+      await _removeMigratedPreference(prefs, 'chat_selected_config_id');
+      await _removeMigratedPreference(prefs, 'chat_configs');
+    } catch (error, stackTrace) {
       debugPrint(
-          '[DataMigrationService] Failed to migrate old chat configs: $e');
+          '[DataMigrationService] Failed to migrate old chat configs: $error');
+      if (error is StartupPreferencesUnavailable ||
+          error is StartupDataValidationUnavailable) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(error),
+        stackTrace,
+      );
     }
   }
 
@@ -152,17 +212,15 @@ class DataMigrationOldConfigs {
         debugPrint('[DataMigrationService] Failed to fix provider entries: '
             '${migrated['error']}');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
-        throw StartupDataValidationUnavailable.migration(
-          FormatException('${migrated['error']}'),
-        );
+        await _writeMigratedPreference(prefs, 'provider_entries', '[]');
+        return;
       }
       if (migrated['status'] == 'notList') {
         debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
-            '已隔离并阻止迁移');
+            '已隔离并重置为空列表');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
-        throw StartupDataValidationUnavailable.migration(
-          FormatException('Expected provider_entries to contain a JSON list.'),
-        );
+        await _writeMigratedPreference(prefs, 'provider_entries', '[]');
+        return;
       }
       if (migrated['status'] != 'ok') {
         throw StartupDataValidationUnavailable.isolate(
@@ -176,16 +234,21 @@ class DataMigrationOldConfigs {
             StateError('Missing migrated provider entries.'),
           );
         }
-        await prefs.setString('provider_entries', payload);
+        await _writeMigratedPreference(prefs, 'provider_entries', payload);
         debugPrint(
             '[DataMigrationService] Fixed null IDs/types in provider_entries');
       }
-    } catch (e) {
-      if (e is StartupPreferencesUnavailable ||
-          e is StartupDataValidationUnavailable) {
-        rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('[DataMigrationService] Failed to fix provider entries: '
+          '$error');
+      if (error is StartupPreferencesUnavailable ||
+          error is StartupDataValidationUnavailable) {
+        Error.throwWithStackTrace(error, stackTrace);
       }
-      debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(error),
+        stackTrace,
+      );
     }
   }
 
