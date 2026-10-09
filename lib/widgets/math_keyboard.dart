@@ -325,6 +325,30 @@ class _MathKeyboardState extends State<MathKeyboard> {
               ],
             ),
     );
+    final previousButton = TextButton(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+      ),
+      onPressed:
+          widget.enabled ? () => widget.onCommand('previous', '') : null,
+      child: const Text('上一项'),
+    );
+    final nextButton = TextButton(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+      ),
+      onPressed: widget.enabled ? () => widget.onCommand('next', '') : null,
+      child: const Text('下一项'),
+    );
+    final rightControls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_category == '希腊字母') SizedBox(width: 44, child: _shiftKey()),
+        nextButton,
+      ],
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -364,39 +388,26 @@ class _MathKeyboardState extends State<MathKeyboard> {
           height: 44,
           child: Stack(
             children: [
-              Row(
-                children: [
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, 44),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                    ),
-                    onPressed: widget.enabled
-                        ? () => widget.onCommand('previous', '')
-                        : null,
-                    child: const Text('上一项'),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, 44),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                    ),
-                    onPressed: widget.enabled
-                        ? () => widget.onCommand('next', '')
-                        : null,
-                    child: const Text('下一项'),
-                  ),
-                  if (_category == '希腊字母')
-                    SizedBox(width: 44, child: _shiftKey()),
-                ],
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: previousButton,
+                ),
+              ),
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: rightControls,
+                ),
               ),
               if (pageCount > 1 && _category != '字母')
-                IgnorePointer(
-                  child: Center(
-                    child: Semantics(
-                      label: '第 ${_page + 1} 页，共 $pageCount 页',
-                      child: Text('${_page + 1}/$pageCount'),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Semantics(
+                        label: '第 ${_page + 1} 页，共 $pageCount 页',
+                        child: Text('${_page + 1}/$pageCount'),
+                      ),
                     ),
                   ),
                 ),
