@@ -230,6 +230,33 @@ void main() {
       }
     });
 
+    test('cleanup honors an explicit stop when persisting it fails', () async {
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
+        'flutter.background_service_enabled': true,
+      });
+      try {
+        await preferences.reload();
+        expect(await startBackgroundService(), isTrue);
+        expect(await stopBackgroundService(), isTrue);
+        await preferences.reload();
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+        expect(servicePlatform.running, isFalse);
+
+        expect(await notifier.startBackgroundServiceForTask(), isTrue);
+        notifier.setTasksForTest([task('failed-disable-write')]);
+        expect(
+          await notifier.removeTasksPersisted(['failed-disable-write']),
+          isTrue,
+        );
+
+        expect(servicePlatform.stopCalls, 2);
+        expect(servicePlatform.running, isFalse);
+      } finally {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      }
+    });
+
     test('cleanup does not race a concurrent user-enabled start', () async {
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startEntered = Completer<void>();

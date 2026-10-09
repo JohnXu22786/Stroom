@@ -43,13 +43,15 @@ const _serviceStopWaitTimeout = Duration(seconds: 5);
 const _serviceStopPollInterval = Duration(milliseconds: 50);
 
 Future<void> _serviceLifecycleQueue = Future<void>.value();
-bool _explicitUserEnabledInProcess = false;
+// Null means this process has no explicit service choice; otherwise prefer
+// the user's latest choice over a stale preference value.
+bool? _explicitUserEnabledInProcess;
 bool _serviceStopMayBePending = false;
 
 @visibleForTesting
 void resetBackgroundServiceLifecycleStateForTesting() {
   _serviceLifecycleQueue = Future<void>.value();
-  _explicitUserEnabledInProcess = false;
+  _explicitUserEnabledInProcess = null;
   _serviceStopMayBePending = false;
 }
 
@@ -424,7 +426,8 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
 }
 
 Future<bool> _isBackgroundServiceEnabled() async {
-  if (_explicitUserEnabledInProcess) return true;
+  final inProcessChoice = _explicitUserEnabledInProcess;
+  if (inProcessChoice != null) return inProcessChoice;
   try {
     return (await StartupPreferences.getBool(_backgroundServiceEnabledKey)) ??
         false;
