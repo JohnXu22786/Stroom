@@ -18,6 +18,8 @@ The separate variants tab contains eight additional forms. Swipe horizontally
 across the keys, or press Page Up/Page Down while a symbol key is focused, to
 page through more symbols. Screen readers can use the increase/decrease actions
 on the symbol grid; the centered page count is read-only.
+In the Greek tab, Shift has a separate labeled position. Previous, the
+read-only page count, and Next form a centered group that wraps on narrow screens.
 The logarithm tab offers explicit base-ten, base-two and arbitrary-base templates
 alongside natural ln and powers of e, 2 and 10. Legacy bare log remains natural.
 Templates accept the selected expression; powers can capture the complete item

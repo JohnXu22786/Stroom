@@ -341,20 +341,11 @@ class _MathKeyboardState extends State<MathKeyboard> {
       onPressed: widget.enabled ? () => widget.onCommand('next', '') : null,
       child: const Text('下一项'),
     );
-    final rightControls = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_category == '希腊字母') SizedBox(width: 44, child: _shiftKey()),
-        nextButton,
-      ],
-    );
     final pageIndicator = pageCount > 1 && _category != '字母'
         ? IgnorePointer(
-            child: Center(
-              child: Semantics(
-                label: '第 ${_page + 1} 页，共 $pageCount 页',
-                child: Text('${_page + 1}/$pageCount'),
-              ),
+            child: Semantics(
+              label: '第 ${_page + 1} 页，共 $pageCount 页',
+              child: Text('${_page + 1}/$pageCount'),
             ),
           )
         : null;
@@ -394,73 +385,42 @@ class _MathKeyboardState extends State<MathKeyboard> {
           ),
         ),
         LayoutBuilder(
-          builder: (context, constraints) {
-            final moveGreekShift =
-                _category == '希腊字母' && constraints.maxWidth < 240;
-            final separatePageIndicator = constraints.maxWidth < 128;
-            final separateNavigation = constraints.maxWidth < 96;
-            final rightFooterControls =
-                moveGreekShift ? nextButton : rightControls;
-
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (moveGreekShift)
-                  SizedBox(
-                    height: 44,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: SizedBox(width: 44, child: _shiftKey()),
-                    ),
-                  ),
-                if (separatePageIndicator && pageIndicator != null)
-                  SizedBox(
-                    width: constraints.maxWidth,
-                    height: 44,
-                    child: pageIndicator,
-                  ),
-                if (separateNavigation) ...[
-                  SizedBox(
-                    width: constraints.maxWidth,
-                    height: 44,
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: previousButton,
-                    ),
-                  ),
-                  SizedBox(
-                    width: constraints.maxWidth,
-                    height: 44,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: rightFooterControls,
-                    ),
-                  ),
-                ] else
-                  SizedBox(
-                    height: 44,
-                    child: Stack(
+          builder: (context, constraints) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_category == '希腊字母')
+                SizedBox(
+                  width: constraints.maxWidth,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.start,
+                      spacing: 4,
+                      overflowAlignment: OverflowBarAlignment.start,
+                      overflowDirection: VerticalDirection.down,
                       children: [
-                        Positioned.fill(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: previousButton,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: rightFooterControls,
-                          ),
-                        ),
-                        if (!separatePageIndicator && pageIndicator != null)
-                          Positioned.fill(child: pageIndicator),
+                        SizedBox(width: 44, child: _shiftKey()),
+                        const Text('大小写'),
                       ],
                     ),
                   ),
-              ],
-            );
-          },
+                ),
+              SizedBox(
+                width: constraints.maxWidth,
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.center,
+                  spacing: 8,
+                  overflowAlignment: OverflowBarAlignment.center,
+                  overflowDirection: VerticalDirection.down,
+                  children: [
+                    previousButton,
+                    if (pageIndicator != null) pageIndicator,
+                    nextButton,
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
