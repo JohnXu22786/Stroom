@@ -330,8 +330,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
         minimumSize: const Size(48, 44),
         padding: const EdgeInsets.symmetric(horizontal: 2),
       ),
-      onPressed:
-          widget.enabled ? () => widget.onCommand('previous', '') : null,
+      onPressed: widget.enabled ? () => widget.onCommand('previous', '') : null,
       child: const Text('上一项'),
     );
     final nextButton = TextButton(
@@ -349,6 +348,16 @@ class _MathKeyboardState extends State<MathKeyboard> {
         nextButton,
       ],
     );
+    final pageIndicator = pageCount > 1 && _category != '字母'
+        ? IgnorePointer(
+            child: Center(
+              child: Semantics(
+                label: '第 ${_page + 1} 页，共 $pageCount 页',
+                child: Text('${_page + 1}/$pageCount'),
+              ),
+            ),
+          )
+        : null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -384,35 +393,74 @@ class _MathKeyboardState extends State<MathKeyboard> {
             ),
           ),
         ),
-        SizedBox(
-          height: 44,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: previousButton,
-                ),
-              ),
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: rightControls,
-                ),
-              ),
-              if (pageCount > 1 && _category != '字母')
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Center(
-                      child: Semantics(
-                        label: '第 ${_page + 1} 页，共 $pageCount 页',
-                        child: Text('${_page + 1}/$pageCount'),
-                      ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final moveGreekShift =
+                _category == '希腊字母' && constraints.maxWidth < 240;
+            final separatePageIndicator = constraints.maxWidth < 128;
+            final separateNavigation = constraints.maxWidth < 96;
+            final rightFooterControls =
+                moveGreekShift ? nextButton : rightControls;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (moveGreekShift)
+                  SizedBox(
+                    height: 44,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SizedBox(width: 44, child: _shiftKey()),
                     ),
                   ),
-                ),
-            ],
-          ),
+                if (separatePageIndicator && pageIndicator != null)
+                  SizedBox(
+                    width: constraints.maxWidth,
+                    height: 44,
+                    child: pageIndicator,
+                  ),
+                if (separateNavigation) ...[
+                  SizedBox(
+                    width: constraints.maxWidth,
+                    height: 44,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: previousButton,
+                    ),
+                  ),
+                  SizedBox(
+                    width: constraints.maxWidth,
+                    height: 44,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: rightFooterControls,
+                    ),
+                  ),
+                ] else
+                  SizedBox(
+                    height: 44,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: previousButton,
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: rightFooterControls,
+                          ),
+                        ),
+                        if (!separatePageIndicator && pageIndicator != null)
+                          Positioned.fill(child: pageIndicator),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
