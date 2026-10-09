@@ -115,8 +115,6 @@ void main() {
         'insert:M',
         'command:deleteBackward',
         'insert:3',
-        'previous:',
-        'next:',
         'insert:7',
         'insert:Q',
         r'insert:\Alpha',
