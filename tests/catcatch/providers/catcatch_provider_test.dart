@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
 import 'package:stroom/services/background_service.dart';
@@ -105,6 +106,21 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   List<CatCatchTask> get tasksForTest => state;
 
   @override
+  Future<String?> executeTaskForTask({
+    required CatCatchTask task,
+    required void Function(CatCatchTask updated) onUpdate,
+    required CancelToken cancelToken,
+  }) async {
+    executorStarts++;
+    onUpdate(task.copyWith(status: TaskStatus.running));
+    if (!executorStarted.isCompleted) executorStarted.complete();
+    if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
+      secondExecutorStarted.complete();
+    }
+    return null;
+  }
+
+  @override
   Future<String?> retryFromStepForTask({
     required CatCatchTask task,
     required StepType fromStep,
@@ -169,6 +185,114 @@ void main() {
           status: TaskStatus.paused,
           createdAt: DateTime(2025, 1, 1),
         );
+
+    test('new tasks await temporary service startup before execution',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+
+      try {
+        notifier.addTask('invalid://task-start-guard', 30, taskId: 'new-task');
+        await Future.any([
+          servicePlatform.startEntered!.future,
+          notifier.executorStarted.future,
+        ]).timeout(const Duration(seconds: 2));
+
+        expect(servicePlatform.startEntered!.isCompleted, isTrue);
+        expect(notifier.executorStarts, 0);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+
+        servicePlatform.releaseStart!.complete();
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+      } finally {
+        if (!servicePlatform.releaseStart!.isCompleted) {
+          servicePlatform.releaseStart!.complete();
+        }
+        await notifier.removeTasksPersisted(['new-task']);
+      }
+    });
+
+    test('resumed tasks await temporary service startup before execution',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      final resumed = task('resumed-task').copyWith(
+        steps: StepType.values.map(StepStatus.pending).toList(),
+      );
+      notifier.setTasksForTest([resumed]);
+
+      try {
+        notifier.resumeTask('resumed-task');
+        await Future.any([
+          servicePlatform.startEntered!.future,
+          notifier.executorStarted.future,
+        ]).timeout(const Duration(seconds: 2));
+
+        expect(servicePlatform.startEntered!.isCompleted, isTrue);
+        expect(notifier.executorStarts, 0);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+
+        servicePlatform.releaseStart!.complete();
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+      } finally {
+        if (!servicePlatform.releaseStart!.isCompleted) {
+          servicePlatform.releaseStart!.complete();
+        }
+        await notifier.removeTasksPersisted(['persistence-drain']);
+      }
+    });
+
+    test('media selection awaits temporary service startup before continuing',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      final selecting = task('selected-task').copyWith(
+        steps: StepType.values.map((type) {
+          return type == StepType.userSelecting
+              ? StepStatus.running(type)
+              : StepStatus.pending(type);
+        }).toList(),
+      );
+      notifier.setTasksForTest([selecting]);
+
+      try {
+        notifier.selectMedia(
+          'selected-task',
+          MediaResource(
+            url: 'https://example.com/video.mp4',
+            name: 'video',
+            ext: 'mp4',
+            initiator: 'https://example.com',
+            isPlayable: true,
+          ),
+        );
+        await Future.any([
+          servicePlatform.startEntered!.future,
+          notifier.executorStarted.future,
+        ]).timeout(const Duration(seconds: 2));
+
+        expect(servicePlatform.startEntered!.isCompleted, isTrue);
+        expect(notifier.executorStarts, 0);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+
+        servicePlatform.releaseStart!.complete();
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+      } finally {
+        if (!servicePlatform.releaseStart!.isCompleted) {
+          servicePlatform.releaseStart!.complete();
+        }
+        await notifier.removeTasksPersisted(['persistence-drain']);
+      }
+    });
 
     test('persisted removal preserves a user-enabled service', () async {
       await preferences.setBool('background_service_enabled', true);
