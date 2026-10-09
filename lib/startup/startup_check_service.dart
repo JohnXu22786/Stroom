@@ -136,20 +136,15 @@ class StartupCheckService {
   /// 代码可能无法解析，先做校验会把"版本超前"误判为"数据损坏"
   /// 而错误回滚。正确行为是拒绝启动，提示用户安装新版本。
   static Future<String?> checkVersionAhead() async {
-    try {
-      final stored =
-          await DataMigrationService.getStoredPartVersionsForStartup();
-      final ahead = DataParts.all
-          .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
-          .toList();
-      if (ahead.isEmpty) return null;
-      return ahead
-          .map((p) => '$p v${stored[p]} > v${DataParts.currentVersions[p]}')
-          .join(', ');
-    } catch (e) {
-      debugPrint('[StartupCheckService] 版本哨兵检查失败（放行）: $e');
-      return null;
-    }
+    final stored =
+        await DataMigrationService.getStoredPartVersionsForStartup();
+    final ahead = DataParts.all
+        .where((p) => (stored[p] ?? 0) > (DataParts.currentVersions[p] ?? 0))
+        .toList();
+    if (ahead.isEmpty) return null;
+    return ahead
+        .map((p) => '$p v${stored[p]} > v${DataParts.currentVersions[p]}')
+        .join(', ');
   }
 
   // ================================================================
@@ -196,16 +191,13 @@ class StartupCheckService {
     bool validateProviderEntries = true,
     bool validateConversations = true,
   }) async {
-    final prefsValues = await Future.wait([
-      if (validateProviderEntries)
-        StartupPreferences.getString('provider_entries'),
-      if (validateConversations) StartupPreferences.getString('conversations'),
-    ]);
-    var nextPreferenceIndex = 0;
-    final providerEntriesJson =
-        validateProviderEntries ? prefsValues[nextPreferenceIndex++] : null;
-    final conversationsJson =
-        validateConversations ? prefsValues[nextPreferenceIndex] : null;
+    final preferenceKeys = [
+      if (validateProviderEntries) 'provider_entries',
+      if (validateConversations) 'conversations',
+    ];
+    final prefsValues = await StartupPreferences.getStrings(preferenceKeys);
+    final providerEntriesJson = prefsValues['provider_entries'];
+    final conversationsJson = prefsValues['conversations'];
 
     if (kIsWeb) {
       try {

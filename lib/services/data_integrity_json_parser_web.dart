@@ -74,6 +74,126 @@ Future<Map<String, Object?>> validateJsonBatchAndDataFormatsWeb(
   }
 }
 
+/// Runs the legacy conversation block conversion in the Web worker and returns
+/// the resulting JSON text without parsing that large payload on the UI thread.
+Future<Map<String, Object?>> migrateLegacyConversationsWeb(String raw) async {
+  final message = ['migrateLegacyConversations', raw];
+  Object? primaryError;
+  try {
+    return _decodeLegacyMigrationResponse(
+      await _runPrimaryValidationWorker(message),
+    );
+  } catch (error) {
+    primaryError = error;
+    debugPrint('[DataMigrationService] Conversation migration worker failed; '
+        'retrying bundled worker: $error');
+  }
+
+  try {
+    final testWorker = debugBundledValidationWorkerForTesting;
+    final response = testWorker == null
+        ? await _runBundledValidationWorker(message)
+        : await testWorker(message);
+    return _decodeLegacyMigrationResponse(response);
+  } catch (bundledError) {
+    throw StartupDataValidationUnavailable(primaryError, bundledError);
+  }
+}
+
+Future<Map<String, Object?>> prepareLegacyChatConfigsWeb(String raw) =>
+    _runMigrationWorker(
+      ['prepareLegacyChatConfigs', raw],
+      'legacy chat configuration preparation',
+    );
+
+Future<Map<String, Object?>> mergeLegacyChatConfigsWeb(
+  String migratedConfigs,
+  String? existingEntries,
+) =>
+    _runMigrationWorker(
+      ['mergeLegacyChatConfigs', migratedConfigs, existingEntries],
+      'legacy chat configuration merge',
+    );
+
+Future<Map<String, Object?>> fixProviderEntriesWeb(String raw) =>
+    _runMigrationWorker(
+      ['fixProviderEntries', raw],
+      'provider entry migration',
+    );
+
+Future<Map<String, Object?>> migrateProviderModelSettingsWeb(String raw) =>
+    _runMigrationWorker(
+      ['migrateProviderModelSettings', raw],
+      'provider model migration',
+    );
+
+Future<Map<String, Object?>> _runMigrationWorker(
+  List<Object?> message,
+  String operationName,
+) async {
+  Object? primaryError;
+  try {
+    return _decodeMigrationWorkerResponse(
+      await _runPrimaryValidationWorker(message),
+    );
+  } catch (error) {
+    primaryError = error;
+    debugPrint('[DataMigrationService] $operationName worker failed; '
+        'retrying bundled worker: $error');
+  }
+
+  try {
+    final testWorker = debugBundledValidationWorkerForTesting;
+    final response = testWorker == null
+        ? await _runBundledValidationWorker(message)
+        : await testWorker(message);
+    return _decodeMigrationWorkerResponse(response);
+  } catch (bundledError) {
+    throw StartupDataValidationUnavailable(primaryError, bundledError);
+  }
+}
+
+Map<String, Object?> _decodeMigrationWorkerResponse(String response) {
+  final headerEnd = response.indexOf('\n');
+  if (headerEnd < 0) throw StateError('Invalid migration worker response');
+  final decoded = jsonDecode(response.substring(0, headerEnd));
+  if (decoded is! Map || decoded['status'] is! String) {
+    throw StateError('Invalid migration worker response');
+  }
+  return {
+    ...Map<String, Object?>.from(decoded),
+    'payload': response.substring(headerEnd + 1),
+  };
+}
+
+Map<String, Object?> _decodeLegacyMigrationResponse(String response) {
+  if (response == 'not-list') return {'isList': false};
+  if (response.startsWith('parse-error\n')) {
+    final message = jsonDecode(response.substring('parse-error\n'.length));
+    if (message is! String) {
+      throw StateError('Invalid conversation worker response');
+    }
+    return {'parseError': message};
+  }
+  final headerEnd = response.indexOf('\n');
+  if (headerEnd < 0) throw StateError('Invalid conversation worker response');
+
+  final header = response.substring(0, headerEnd).split(':');
+  if (header.length != 3 ||
+      header[0] != 'ok' ||
+      int.tryParse(header[1]) == null ||
+      int.tryParse(header[2]) == null) {
+    throw StateError('Invalid conversation worker response');
+  }
+
+  return {
+    'isList': true,
+    'migrated': int.parse(header[1]),
+    'skipped': int.parse(header[2]),
+    'encoded': response.substring(headerEnd + 1),
+  };
+}
+
 Map<String, Object?> _decodeJsonBatchAndValidation(
   String response,
   int expectedLength,

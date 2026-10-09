@@ -187,26 +187,24 @@ class DataIntegrityChecker {
     List<_JsonIntegrityCheck> checks,
   ) async {
     final keysReadSuccessfully = <String>{};
-    for (final key in [
+    const preferenceKeys = [
       'conversations',
       'provider_entries',
       'data_format_versions',
-    ]) {
-      try {
-        final raw = await StartupPreferences.getString(key);
-        keysReadSuccessfully.add(key);
-        if (raw == null || raw.isEmpty) continue;
-        checks.add(
-          _JsonIntegrityCheck(
-            part: key == 'data_format_versions' ? 'settings' : 'chat',
-            messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
-            content: raw,
-            prefsKey: key,
-          ),
-        );
-      } catch (e) {
-        debugPrint('[DataIntegrityChecker] prefs 键 $key 检查失败: $e');
-      }
+    ];
+    final values = await StartupPreferences.getStrings(preferenceKeys);
+    for (final key in preferenceKeys) {
+      keysReadSuccessfully.add(key);
+      final raw = values[key];
+      if (raw == null || raw.isEmpty) continue;
+      checks.add(
+        _JsonIntegrityCheck(
+          part: key == 'data_format_versions' ? 'settings' : 'chat',
+          messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
+          content: raw,
+          prefsKey: key,
+        ),
+      );
     }
     return keysReadSuccessfully;
   }
@@ -392,7 +390,10 @@ class DataIntegrityChecker {
         }
       }
     } catch (e) {
-      if (e is StartupDataValidationUnavailable) rethrow;
+      if (e is StartupDataValidationUnavailable ||
+          e is StartupPreferencesUnavailable) {
+        rethrow;
+      }
       debugPrint('[DataIntegrityChecker] 语义校验失败: $e');
     }
   }

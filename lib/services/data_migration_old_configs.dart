@@ -9,7 +9,7 @@ const int _kMaxCorruptBackups = 3;
 /// 使用时间戳而非固定 key：固定 key 会被下一次隔离事件覆盖，丢失
 /// 前一份损坏证据（例如备份恢复重新引入损坏数据时）。
 Future<void> _quarantineCorruptData(
-  SharedPreferences prefs,
+  StartupMigrationPreferences prefs,
   String keyPrefix,
   String corruptJson,
 ) async {
@@ -18,7 +18,7 @@ Future<void> _quarantineCorruptData(
         '${keyPrefix}_corrupt_${DateTime.now().millisecondsSinceEpoch}';
     await prefs.setString(backupKey, corruptJson);
     // 只保留最近的 N 份
-    final keys = prefs.getKeys().toList()
+    final keys = (await prefs.getKeys()).toList()
       ..sort()
       ..retainWhere((k) => k.startsWith('${keyPrefix}_corrupt_'));
     while (keys.length > _kMaxCorruptBackups) {
@@ -26,6 +26,7 @@ Future<void> _quarantineCorruptData(
     }
     debugPrint('[DataMigrationService] 已隔离损坏数据到 $backupKey');
   } catch (e) {
+    if (e is StartupPreferencesUnavailable) rethrow;
     debugPrint('[DataMigrationService] 隔离损坏数据失败: $e');
   }
 }
@@ -38,127 +39,77 @@ Future<void> _quarantineCorruptData(
 /// DataMigrationService 的私有静态委托调用）。
 class DataMigrationOldConfigs {
   /// 迁移旧版 chat_configs（被重构删除的格式）到 provider_entries。
-  static Future<void> migrateOldChatConfigs(SharedPreferences prefs) async {
-    final oldJson = prefs.getString('chat_configs');
+  static Future<void> migrateOldChatConfigs(
+    StartupMigrationPreferences prefs,
+  ) async {
+    final oldJson = await prefs.getString('chat_configs');
     if (oldJson == null || oldJson.isEmpty) return;
 
     try {
-      // 顶层也需防御：chat_configs 整体不是数组（对象/标量）时，
-      // `as List?` 强转抛 TypeError 会静默中断迁移（版本号仍被提升）。
-      final decoded = jsonDecode(oldJson);
-      if (decoded is! List) {
+      final prepared = await _prepareLegacyChatConfigs(oldJson);
+      final status = prepared['status'];
+      if (status == 'parseError') {
+        debugPrint('[DataMigrationService] Failed to migrate old chat configs: '
+            '${prepared['error']}');
+        return;
+      }
+      if (status == 'notList') {
         debugPrint('[DataMigrationService] chat_configs 不是合法数组，'
             '跳过旧配置迁移');
         await prefs.remove('chat_configs');
         await prefs.remove('chat_selected_config_id');
         return;
       }
-      // 兜底：使用 whereType 安全过滤非 Map 条目
-      final oldList = decoded.whereType<Map<String, dynamic>>().toList();
-      if (oldList.isEmpty) {
-        // 空/全损坏的旧数据：清理残留 key，避免每次启动重复解析。
+      if (status == 'empty') {
         await prefs.remove('chat_configs');
         await prefs.remove('chat_selected_config_id');
         return;
       }
-
-      final migratedConfigs = <Map<String, dynamic>>[];
-      for (final oldItem in oldList) {
-        // 兜底：安全过滤 models 中的非 Map 条目。
-        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
-        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
-        // 会中断整个迁移，版本号仍会被提升，损坏数据永远无法修复）。
-        final rawModels = oldItem['models'];
-        final oldModels = rawModels is List
-            ? rawModels.whereType<Map<String, dynamic>>().toList()
-            : <Map<String, dynamic>>[];
-
-        final models = oldModels.map((m) {
-          final typeConfig = <String, dynamic>{};
-          final temperature = m['temperature'];
-          if (temperature != null) typeConfig['temperature'] = temperature;
-          // 恢复 v0→v1 的 per-model context 迁移（origin/main 原有，
-          // 重构时被误删）：旧数据把 context/maxTokens 挂在 model 上。
-          // 不迁移则老用户的压缩功能读取 typeConfig['context'] 为 null
-          // → effectiveCompactionThreshold 返回 null → 自动压缩静默失效。
-          final context = m['maxTokens'] ?? m['context'];
-          if (context != null) typeConfig['context'] = context;
-
-          // `is! String` 而非 `as String?`：损坏数据中字段值可能
-          // 是任意类型，强转会中断整个迁移。
-          final modelId = m['modelId'];
-          return <String, dynamic>{
-            'name': modelId is String ? modelId : '',
-            'modelId': modelId is String ? modelId : '',
-            'supportStream':
-                m['supportStream'] is bool ? m['supportStream'] as bool : true,
-            'typeConfig': typeConfig,
-          };
-        }).toList();
-
-        migratedConfigs.add(<String, dynamic>{
-          'providerName':
-              oldItem['providerName'] is String ? oldItem['providerName'] : '',
-          'host': oldItem['host'] is String ? oldItem['host'] : '',
-          'key': oldItem['key'] is String ? oldItem['key'] : '',
-          'models': models,
-        });
+      if (status != 'ready' || prepared['payload'] is! String) {
+        throw StartupDataValidationUnavailable.isolate(
+          StateError('Invalid legacy chat config migration result.'),
+        );
       }
 
-      if (migratedConfigs.isEmpty) return;
-
-      // 读取或初始化当前 provider_entries
       String? existingJson;
       try {
-        existingJson = prefs.getString('provider_entries');
-      } catch (_) {}
+        existingJson = await prefs.getString('provider_entries');
+      } catch (error) {
+        if (error is StartupPreferencesUnavailable) rethrow;
+      }
 
-      List<Map<String, dynamic>> existingEntries = [];
-      if (existingJson != null && existingJson.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(existingJson);
-          if (decoded is! List) {
-            // 现有 provider_entries 整体损坏（非数组）：
-            // 必须先隔离原始数据再覆盖 —— 否则这里的写入会永久销毁
-            // 损坏现场（后面 fixNullIdsInProviderEntries 的隔离逻辑
-            // 就再也触发不到）。
-            debugPrint('[DataMigrationService] 现有 provider_entries 不是'
-                '合法数组，开始隔离');
-            await _quarantineCorruptData(
-                prefs, 'provider_entries', existingJson);
-            existingEntries = [];
-          } else {
-            // 兜底：使用 whereType 安全过滤非 Map 条目
-            existingEntries =
-                decoded.whereType<Map<String, dynamic>>().toList();
-          }
-        } catch (_) {
-          // JSON 无法解析：同样隔离（现有数据损坏，用空列表重新开始）
-          await _quarantineCorruptData(prefs, 'provider_entries', existingJson);
-          existingEntries = [];
+      final merged = await _mergeLegacyChatConfigs(
+        prepared['payload']! as String,
+        existingJson,
+      );
+      if (merged['corruptExisting'] == true) {
+        debugPrint('[DataMigrationService] 现有 provider_entries 不是'
+            '合法数组，开始隔离');
+        await _quarantineCorruptData(prefs, 'provider_entries', existingJson!);
+      }
+      if (merged['status'] == 'write') {
+        final payload = merged['payload'];
+        if (payload is! String) {
+          throw StartupDataValidationUnavailable.isolate(
+            StateError('Missing migrated provider entries.'),
+          );
         }
-      }
-
-      // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry = existingEntries
-          .any((e) => e['type'] == 'llm' && e['id'] != 'builtin_llm');
-      if (!hasLlmEntry) {
-        existingEntries.add({
-          'id': 'migrated_llm',
-          'type': 'llm',
-          'name': 'LLM供应商',
-          'configs': migratedConfigs,
-        });
-
-        await prefs.setString('provider_entries', jsonEncode(existingEntries));
+        await prefs.setString('provider_entries', payload);
         debugPrint(
-            '[DataMigrationService] Migrated ${oldList.length} old chat config(s) to provider_entries');
+            '[DataMigrationService] Migrated ${prepared['legacyConfigCount']} old chat config(s) to provider_entries');
+      } else if (merged['status'] != 'alreadyMigrated') {
+        throw StartupDataValidationUnavailable.isolate(
+          StateError('Invalid legacy chat config merge result.'),
+        );
       }
 
-      // 删除旧数据，防止 provider 级别重复迁移
       await prefs.remove('chat_configs');
       await prefs.remove('chat_selected_config_id');
     } catch (e) {
+      if (e is StartupPreferencesUnavailable ||
+          e is StartupDataValidationUnavailable) {
+        rethrow;
+      }
       debugPrint(
           '[DataMigrationService] Failed to migrate old chat configs: $e');
     }
@@ -169,91 +120,242 @@ class DataMigrationOldConfigs {
   /// 旧版数据中某些条目的 id 可能为 null，导致 ProviderEntry.fromMap()
   /// 在 `map['id'] as String` 处抛出 TypeError，进而引发闪退。
   static Future<void> fixNullIdsInProviderEntries(
-      SharedPreferences prefs) async {
-    final json = prefs.getString('provider_entries');
+    StartupMigrationPreferences prefs,
+  ) async {
+    final json = await prefs.getString('provider_entries');
     if (json == null || json.isEmpty) return;
 
     try {
-      // 顶层也需防御：provider_entries 整体不是数组时，`as List` 强转
-      // 抛 TypeError 会静默中断修复（版本号仍被提升，而 ProviderEntry
-      // 解析继续闪退，错误边界的「重试」永远无法成功）。
-      final decoded = jsonDecode(json);
-      if (decoded is! List) {
-        // 隔离损坏数据到带时间戳的 key，置空列表让应用可以正常启动；
-        // 原始数据保留，用户可通过备份恢复功能找回。
+      final migrated = await _fixProviderEntries(json);
+      if (migrated['status'] == 'parseError') {
+        debugPrint('[DataMigrationService] Failed to fix provider entries: '
+            '${migrated['error']}');
+        return;
+      }
+      if (migrated['status'] == 'notList') {
         debugPrint('[DataMigrationService] provider_entries 不是合法数组，'
             '已隔离并重置为空列表');
         await _quarantineCorruptData(prefs, 'provider_entries', json);
         await prefs.setString('provider_entries', '[]');
         return;
       }
-      // 兜底：使用 whereType 安全过滤非 Map 条目
-      final list = decoded.whereType<Map<String, dynamic>>().toList();
-      bool changed = false;
-
-      for (int i = 0; i < list.length; i++) {
-        final entry = list[i];
-        // `is! String` 而非 `as String?`：损坏数据中字段值可能
-        // 是任意类型，强转会中断整个修复循环（版本号仍被提升，
-        // 损坏数据永远无法修复）。
-        final id = entry['id'];
-        if (id is! String || id.isEmpty) {
-          // 为无效 id 的条目生成一个唯一 ID
-          final type = entry['type'];
-          final typeName = type is String ? type : 'unknown';
-          entry['id'] = 'migrated_${typeName}_$i';
-          changed = true;
-          debugPrint(
-              '[DataMigrationService] Fixed null id for provider entry at index $i (type: $typeName)');
-        }
-
-        // 修复自定义参数中缺少 type 字段的旧格式
-        final rawConfigs = entry['configs'];
-        if (rawConfigs is List) {
-          for (final config in rawConfigs) {
-            // 兜底：跳过非 Map 的 config 条目
-            if (config is! Map<String, dynamic>) continue;
-            final configMap = config;
-            final rawModels = configMap['models'];
-            if (rawModels is! List) continue;
-            for (final model in rawModels) {
-              // 兜底：跳过非 Map 的 model 条目
-              if (model is! Map<String, dynamic>) continue;
-              final modelMap = model;
-              final rawCustomParams = modelMap['customParams'];
-              if (rawCustomParams is! List) continue;
-              for (final param in rawCustomParams) {
-                // 兜底：跳过非 Map 的 param 条目
-                if (param is! Map<String, dynamic>) continue;
-                final paramMap = param;
-                if (paramMap['type'] == null) {
-                  paramMap['type'] = 'string';
-                  changed = true;
-                }
-              }
-            }
-          }
-        }
-
-        // 确保每条记录都有 type 字段（旧版可能缺失）
-        final entryType = entry['type'];
-        if (entryType is! String || entryType.isEmpty) {
-          entry['type'] = 'tts';
-          changed = true;
-          debugPrint(
-              '[DataMigrationService] Fixed null type for provider entry at index $i');
-        }
+      if (migrated['status'] != 'ok') {
+        throw StartupDataValidationUnavailable.isolate(
+          StateError('Invalid provider entry migration result.'),
+        );
       }
-
-      if (changed) {
-        await prefs.setString('provider_entries', jsonEncode(list));
+      if (migrated['changed'] == true) {
+        final payload = migrated['payload'];
+        if (payload is! String) {
+          throw StartupDataValidationUnavailable.isolate(
+            StateError('Missing migrated provider entries.'),
+          );
+        }
+        await prefs.setString('provider_entries', payload);
         debugPrint(
             '[DataMigrationService] Fixed null IDs/types in provider_entries');
       }
     } catch (e) {
+      if (e is StartupPreferencesUnavailable ||
+          e is StartupDataValidationUnavailable) {
+        rethrow;
+      }
       debugPrint('[DataMigrationService] Failed to fix provider entries: $e');
     }
   }
+
+  static Future<Map<String, Object?>> _prepareLegacyChatConfigs(
+    String raw,
+  ) async {
+    if (kIsWeb) return json_parser.prepareLegacyChatConfigsWeb(raw);
+    if (_isFlutterTest) return _prepareLegacyChatConfigsSync(raw);
+    try {
+      return await data_migration_isolate.runInIsolate(
+        () => _prepareLegacyChatConfigsSync(raw),
+      );
+    } catch (error) {
+      throw StartupDataValidationUnavailable.isolate(error);
+    }
+  }
+
+  static Future<Map<String, Object?>> _mergeLegacyChatConfigs(
+    String migratedConfigs,
+    String? existingEntries,
+  ) async {
+    if (kIsWeb) {
+      return json_parser.mergeLegacyChatConfigsWeb(
+        migratedConfigs,
+        existingEntries,
+      );
+    }
+    if (_isFlutterTest) {
+      return _mergeLegacyChatConfigsSync(migratedConfigs, existingEntries);
+    }
+    try {
+      return await data_migration_isolate.runInIsolate(
+        () => _mergeLegacyChatConfigsSync(migratedConfigs, existingEntries),
+      );
+    } catch (error) {
+      throw StartupDataValidationUnavailable.isolate(error);
+    }
+  }
+
+  static Future<Map<String, Object?>> _fixProviderEntries(String raw) async {
+    if (kIsWeb) return json_parser.fixProviderEntriesWeb(raw);
+    if (_isFlutterTest) return _fixProviderEntriesSync(raw);
+    try {
+      return await data_migration_isolate.runInIsolate(
+        () => _fixProviderEntriesSync(raw),
+      );
+    } catch (error) {
+      throw StartupDataValidationUnavailable.isolate(error);
+    }
+  }
+}
+
+Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } catch (error) {
+    return {'status': 'parseError', 'error': error.toString()};
+  }
+  if (decoded is! List) return {'status': 'notList'};
+
+  final oldList = decoded.whereType<Map<String, dynamic>>().toList();
+  if (oldList.isEmpty) return {'status': 'empty'};
+
+  final migratedConfigs = <Map<String, dynamic>>[];
+  for (final oldItem in oldList) {
+    final rawModels = oldItem['models'];
+    final oldModels = rawModels is List
+        ? rawModels.whereType<Map<String, dynamic>>().toList()
+        : <Map<String, dynamic>>[];
+    final models = oldModels.map((model) {
+      final typeConfig = <String, dynamic>{};
+      final temperature = model['temperature'];
+      if (temperature != null) typeConfig['temperature'] = temperature;
+      final context = model['maxTokens'] ?? model['context'];
+      if (context != null) typeConfig['context'] = context;
+      final modelId = model['modelId'];
+      return <String, dynamic>{
+        'name': modelId is String ? modelId : '',
+        'modelId': modelId is String ? modelId : '',
+        'supportStream':
+            model['supportStream'] is bool ? model['supportStream'] as bool : true,
+        'typeConfig': typeConfig,
+      };
+    }).toList();
+    migratedConfigs.add(<String, dynamic>{
+      'providerName':
+          oldItem['providerName'] is String ? oldItem['providerName'] : '',
+      'host': oldItem['host'] is String ? oldItem['host'] : '',
+      'key': oldItem['key'] is String ? oldItem['key'] : '',
+      'models': models,
+    });
+  }
+
+  return {
+    'status': 'ready',
+    'legacyConfigCount': oldList.length,
+    'payload': jsonEncode(migratedConfigs),
+  };
+}
+
+Map<String, Object?> _mergeLegacyChatConfigsSync(
+  String migratedConfigsJson,
+  String? existingJson,
+) {
+  final migratedConfigs = jsonDecode(migratedConfigsJson) as List;
+  List<Map<String, dynamic>> existingEntries = [];
+  var corruptExisting = false;
+  if (existingJson != null && existingJson.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(existingJson);
+      if (decoded is! List) {
+        corruptExisting = true;
+      } else {
+        existingEntries = decoded.whereType<Map<String, dynamic>>().toList();
+      }
+    } catch (_) {
+      corruptExisting = true;
+    }
+  }
+
+  final hasLlmEntry = existingEntries
+      .any((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm');
+  if (hasLlmEntry) {
+    return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+  }
+
+  existingEntries.add({
+    'id': 'migrated_llm',
+    'type': 'llm',
+    'name': 'LLM供应商',
+    'configs': migratedConfigs,
+  });
+  return {
+    'status': 'write',
+    'corruptExisting': corruptExisting,
+    'payload': jsonEncode(existingEntries),
+  };
+}
+
+Map<String, Object?> _fixProviderEntriesSync(String raw) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } catch (error) {
+    return {'status': 'parseError', 'error': error.toString()};
+  }
+  if (decoded is! List) return {'status': 'notList'};
+
+  final list = decoded.whereType<Map<String, dynamic>>().toList();
+  var changed = false;
+  for (var index = 0; index < list.length; index++) {
+    final entry = list[index];
+    final id = entry['id'];
+    if (id is! String || id.isEmpty) {
+      final type = entry['type'];
+      final typeName = type is String ? type : 'unknown';
+      entry['id'] = 'migrated_${typeName}_$index';
+      changed = true;
+    }
+
+    final rawConfigs = entry['configs'];
+    if (rawConfigs is List) {
+      for (final config in rawConfigs) {
+        if (config is! Map<String, dynamic>) continue;
+        final rawModels = config['models'];
+        if (rawModels is! List) continue;
+        for (final model in rawModels) {
+          if (model is! Map<String, dynamic>) continue;
+          final rawCustomParams = model['customParams'];
+          if (rawCustomParams is! List) continue;
+          for (final param in rawCustomParams) {
+            if (param is! Map<String, dynamic>) continue;
+            if (param['type'] == null) {
+              param['type'] = 'string';
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+
+    final entryType = entry['type'];
+    if (entryType is! String || entryType.isEmpty) {
+      entry['type'] = 'tts';
+      changed = true;
+    }
+  }
+
+  return {
+    'status': 'ok',
+    'changed': changed,
+    if (changed) 'payload': jsonEncode(list),
+  };
+}
 
   /// v1 → v2: 移除共享 folders 表，完全迁移到每个类型独立的文件夹表。
   ///

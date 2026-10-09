@@ -3,19 +3,23 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tool_call.dart';
 import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
 import 'backup_location_manager.dart';
 import 'data_integrity_checker.dart';
+import 'data_integrity_json_parser.dart' as json_parser;
 import 'data_safety_manager.dart';
 import 'manifest_database.dart';
 import 'provider_model_migration.dart';
 import 'flow_execution_migration.dart';
 import 'snapshot_service.dart';
 import 'startup_preferences.dart';
+import 'startup_data_validation_unavailable.dart';
+import 'data_migration_isolate_stub.dart'
+    if (dart.library.io) 'data_migration_isolate_io.dart'
+    as data_migration_isolate;
 
 part 'data_migration_old_configs.dart';
 
@@ -206,8 +210,8 @@ class DataMigrationService {
   /// 如果从未存储过，返回 0。仅用于识别旧版应用留下的数据；
   /// 新机制下版本记录在 [getStoredPartVersions]。
   static Future<int> getStoredFormatVersion() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_kLegacyDataFormatVersionKey) ?? 0;
+    final prefs = await StartupMigrationPreferences.load();
+    return (await prefs.getInt(_kLegacyDataFormatVersionKey)) ?? 0;
   }
 
   /// 获取各部分存储的数据格式版本。
@@ -236,8 +240,8 @@ class DataMigrationService {
   /// 逐键防御：某个部分的值类型错误（非数字）只将该部分按 0 处理，
   /// 不影响其他部分；整体解析失败才视为未存储（由调用方隔离现场）。
   static Future<Map<String, int>?> _readPartVersions() async {
-    final prefs = await SharedPreferences.getInstance();
-    return _parsePartVersions(prefs.getString(_kDataFormatVersionsKey));
+    final prefs = await StartupMigrationPreferences.load();
+    return _parsePartVersions(await prefs.getString(_kDataFormatVersionsKey));
   }
 
   static Future<Map<String, int>?> _readPartVersionsForStartup() async {
@@ -268,8 +272,11 @@ class DataMigrationService {
   /// 注意：记录按已知部分白名单（[DataParts.all]）重建 —— 未来版本
   /// 新增的第 10 个部分在回滚到本构建并发生写入时会丢失其记录
   ///（下次启动按 0 处理）。所有迁移步骤幂等，实际数据风险可忽略。
-  static Future<void> _savePartVersions(Map<String, int> versions) async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<void> _savePartVersions(
+    Map<String, int> versions, [
+    StartupMigrationPreferences? prefs,
+  ]) async {
+    prefs ??= await StartupMigrationPreferences.load();
     await prefs.setString(_kDataFormatVersionsKey, jsonEncode(versions));
   }
 
@@ -284,24 +291,24 @@ class DataMigrationService {
   /// 的约定保留损坏现场（带时间戳的隔离 key），再从旧全局版本或
   /// v0 展开重建 —— 迁移步骤全部幂等，重跑无害，但损坏证据不丢失。
   static Future<Map<String, int>> _resolvePartVersions(
-      SharedPreferences prefs) async {
-    final stored = await _readPartVersions();
+      StartupMigrationPreferences prefs) async {
+    final raw = await prefs.getString(_kDataFormatVersionsKey);
+    final stored = _parsePartVersions(raw);
     if (stored != null) {
-      if (prefs.containsKey(_kLegacyDataFormatVersionKey)) {
+      if (await prefs.containsKey(_kLegacyDataFormatVersionKey)) {
         await prefs.remove(_kLegacyDataFormatVersionKey);
       }
       return stored;
     }
-    final raw = prefs.getString(_kDataFormatVersionsKey);
     if (raw != null && raw.isNotEmpty) {
       await _quarantineCorruptData(prefs, 'data_format_versions', raw);
     }
-    final legacy = prefs.getInt(_kLegacyDataFormatVersionKey) ?? 0;
+    final legacy = (await prefs.getInt(_kLegacyDataFormatVersionKey)) ?? 0;
     final expanded = _expandFromLegacyGlobal(legacy);
-    await _savePartVersions(expanded);
+    await _savePartVersions(expanded, prefs);
     // 展开完成即接管版本管理：旧全局 key 退役（即使后续某部分迁移
     // 失败也不回退，per-part 记录是唯一事实来源）。
-    if (prefs.containsKey(_kLegacyDataFormatVersionKey)) {
+    if (await prefs.containsKey(_kLegacyDataFormatVersionKey)) {
       await prefs.remove(_kLegacyDataFormatVersionKey);
     }
     debugPrint('[DataMigrationService] 已从旧全局版本 v$legacy '
@@ -333,7 +340,20 @@ class DataMigrationService {
       }
     }
 
-    final prefs = await SharedPreferences.getInstance();
+    final StartupMigrationPreferences prefs;
+    try {
+      // Legacy migration is gated by targeted startup reads. Linux and Windows
+      // load the required legacy map in a worker isolate when migration is due.
+      prefs = await StartupMigrationPreferences.load();
+    } catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        StartupPreferencesUnavailable(
+          const {_kDataFormatVersionsKey, _kLegacyDataFormatVersionKey},
+          error,
+        ),
+        stackTrace,
+      );
+    }
 
     // 1. 确定各部分当前存储版本（首次进入 per-part 机制时从旧版
     // 全局版本号展开，见 _resolvePartVersions）。
@@ -372,7 +392,7 @@ class DataMigrationService {
       }
 
       // 执行迁移：只迁移版本落后的部分（顺序见 DataParts.all）
-      await _performPartMigrations(stored);
+      await _performPartMigrations(stored, prefs: prefs);
 
       // 更新存储的版本号：只提升实际迁移过的部分。
       // 其他部分（包括高于当前版本的未来记录）保持原值 —— 绝不
@@ -462,6 +482,7 @@ class DataMigrationService {
   /// 都达到当前版本，防止部分恢复时修改未选中的类别。
   static Future<void> _performPartMigrations(
     Map<String, int> stored, {
+    required StartupMigrationPreferences prefs,
     Set<String>? onlyParts,
   }) async {
     final selectedParts = onlyParts ?? DataParts.all.toSet();
@@ -490,7 +511,7 @@ class DataMigrationService {
       final to = DataParts.currentVersions[part]!;
       if (from >= to) continue;
       for (int v = from; v < to; v++) {
-        await _migratePartFrom(part, v);
+        await _migratePartFrom(part, v, prefs);
       }
     }
   }
@@ -508,13 +529,17 @@ class DataMigrationService {
   /// 每个 case 对应一个部分的版本迁移逻辑。版本以递增方式添加：
   /// 例如 chat 部分从 v0 迁移到 v1 会执行 v0→v1 的步骤。
   /// 媒体四部分的迁移由 [_performPartMigrations] 统一执行。
-  static Future<void> _migratePartFrom(String part, int version) async {
+  static Future<void> _migratePartFrom(
+    String part,
+    int version,
+    StartupMigrationPreferences prefs,
+  ) async {
     switch (part) {
       case DataParts.settings:
         if (version == 0) {
-          await _migrateSettingsV0ToV1();
+          await _migrateSettingsV0ToV1(prefs);
         } else if (version == 1) {
-          await ProviderModelMigration.migrateSettings();
+          await ProviderModelMigration.migrateSettings(prefs);
         }
         break;
       case DataParts.tasks:
@@ -523,7 +548,7 @@ class DataMigrationService {
         break;
       case DataParts.chat:
         if (version == 0) {
-          await _migrateChatV0ToV1();
+          await _migrateChatV0ToV1(prefs);
         }
         break;
       default:
@@ -547,7 +572,7 @@ class DataMigrationService {
   static Future<MigrationResult> migrateDataFormatIfNeeded({
     Set<String>? onlyParts,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await StartupMigrationPreferences.load();
 
     final stored = await _resolvePartVersions(prefs);
     final selectedParts = onlyParts ?? DataParts.all.toSet();
@@ -562,7 +587,11 @@ class DataMigrationService {
     }
 
     try {
-      await _performPartMigrations(stored, onlyParts: selectedParts);
+      await _performPartMigrations(
+        stored,
+        prefs: prefs,
+        onlyParts: selectedParts,
+      );
       await _recordMigratedParts(prefs, stored, outdatedParts);
       debugPrint(
         '[DataMigrationService] Per-part data format migration from '
@@ -589,7 +618,7 @@ class DataMigrationService {
   }) async {
     if (restoredParts.isEmpty) return;
 
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await StartupMigrationPreferences.load();
     final stored = await _resolvePartVersions(prefs);
 
     for (final part in restoredParts) {
@@ -606,7 +635,7 @@ class DataMigrationService {
                 : backupVersion;
       }
     }
-    await _savePartVersions(stored);
+    await _savePartVersions(stored, prefs);
   }
 
   /// 迁移成功后更新版本记录：只提升实际迁移过的部分。
@@ -615,7 +644,7 @@ class DataMigrationService {
   /// 超前版本（见 [checkAndMigrate] 的说明）。同时移除旧全局 key，
   /// 避免双源版本记录。
   static Future<void> _recordMigratedParts(
-    SharedPreferences prefs,
+    StartupMigrationPreferences prefs,
     Map<String, int> stored,
     List<String> outdatedParts,
   ) async {
@@ -623,8 +652,8 @@ class DataMigrationService {
     for (final part in outdatedParts) {
       updated[part] = DataParts.currentVersions[part]!;
     }
-    await _savePartVersions(updated);
-    if (prefs.containsKey(_kLegacyDataFormatVersionKey)) {
+    await _savePartVersions(updated, prefs);
+    if (await prefs.containsKey(_kLegacyDataFormatVersionKey)) {
       await prefs.remove(_kLegacyDataFormatVersionKey);
     }
   }
@@ -634,8 +663,9 @@ class DataMigrationService {
   /// 将旧版数据格式统一迁移到新版格式，确保所有 provider 在迁移完成
   /// 后的首次初始化时读取到的数据已是正确格式，避免因格式不兼容
   /// 导致的重复闪退（keeps stopping）问题。
-  static Future<void> _migrateSettingsV0ToV1() async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<void> _migrateSettingsV0ToV1(
+    StartupMigrationPreferences prefs,
+  ) async {
     debugPrint(
         '[DataMigrationService] settings v0→v1: Starting data format migration');
 
@@ -655,11 +685,13 @@ class DataMigrationService {
 
   /// 迁移旧 chat_configs 到 provider_entries（委托 [DataMigrationOldConfigs]，
   /// 实现见 data_migration_old_configs.dart）。
-  static Future<void> _migrateOldChatConfigs(SharedPreferences prefs) =>
+  static Future<void> _migrateOldChatConfigs(
+          StartupMigrationPreferences prefs) =>
       DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
   /// 修复 provider_entries 中 id 为 null 的条目（委托 [DataMigrationOldConfigs]）。
-  static Future<void> _fixNullIdsInProviderEntries(SharedPreferences prefs) =>
+  static Future<void> _fixNullIdsInProviderEntries(
+          StartupMigrationPreferences prefs) =>
       DataMigrationOldConfigs.fixNullIdsInProviderEntries(prefs);
 
   /// pictures/audio/videos/texts v0 → v1: 移除共享 folders 表，
@@ -712,76 +744,43 @@ class DataMigrationService {
   }
 
   /// chat v0 → v1: Convert old assistant messages to unified block format.
-  static Future<void> _migrateChatV0ToV1() async {
+  static Future<void> _migrateChatV0ToV1(
+    StartupMigrationPreferences prefs,
+  ) async {
     debugPrint('[DataMigrationService] chat v0→v1: Starting block migration');
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('conversations');
+    final raw = await prefs.getString('conversations');
     if (raw == null || raw.isEmpty) return;
 
     try {
-      // 顶层也需防御：conversations 是可解析但不是数组（对象/标量）时，
-      // `as List` 强转抛 TypeError 被误判为「结构性错误」上抛，导致
-      // 版本号永不提升、每次启动都重复迁移与备份。这类数据属于损坏
-      // 数据而非解码失败：隔离原始数据并重置为空列表。
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) {
+      final Map<String, Object?> migratedData;
+      if (kIsWeb) {
+        migratedData = await json_parser.migrateLegacyConversationsWeb(raw);
+      } else if (_isFlutterTest) {
+        migratedData = _transformLegacyConversations(raw);
+      } else {
+        try {
+          migratedData = await data_migration_isolate.runInIsolate(
+            () => _transformLegacyConversations(raw),
+          );
+        } catch (error) {
+          throw StartupDataValidationUnavailable.isolate(error);
+        }
+      }
+      final parseError = migratedData['parseError'];
+      if (parseError is String) throw FormatException(parseError);
+      if (migratedData['isList'] != true) {
         debugPrint('[DataMigrationService] conversations 不是合法数组，'
             '已隔离并重置为空列表');
         await _quarantineCorruptData(prefs, 'conversations', raw);
         await prefs.setString('conversations', '[]');
         return;
       }
-      final list = decoded;
-      var migrated = 0;
-      var skipped = 0;
-      for (final c in list) {
-        // 非 Map 对话条目属于损坏数据：跳过（结构性错误才会 rethrow）
-        if (c is! Map) {
-          skipped++;
-          continue;
-        }
-        final messagesRaw = c['messages'];
-        final messages = messagesRaw is List ? messagesRaw : <dynamic>[];
-        for (final m in messages) {
-          // 非 Map 消息属于损坏数据：跳过而不是当作结构性错误
-          // （结构性错误会 rethrow 导致版本号永不提升、每次启动
-          // 都重复迁移与备份）。
-          if (m is! Map) {
-            skipped++;
-            continue;
-          }
-          if (m['role'] != 'assistant') continue;
-          final blocksRaw = m['blocks'];
-          if (blocksRaw is List && blocksRaw.isNotEmpty) continue;
-          try {
-            final blocks = legacyToBlocks(
-              reasoningSections:
-                  (m['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
-                      [],
-              textChunks:
-                  (m['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
-              toolCalls: ((m['toolCalls'] as List<dynamic>?) ?? [])
-                  .map((tc) =>
-                      ToolCallData.fromMap(Map<String, dynamic>.from(tc)))
-                  .toList(),
-              toolCallRoundStarts:
-                  (m['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??
-                      [],
-            );
-            if (blocks.isNotEmpty) {
-              m['blocks'] = blocks.map((b) => b.toMap()).toList();
-              migrated++;
-            }
-          } catch (e) {
-            // 单条消息数据损坏（如 toolCalls 非 Map）：跳过该条，
-            // 不中断整批迁移（fromMap 层同样防御，缺 blocks 可容忍）。
-            // 仅当结构性错误（jsonDecode 失败等）才整体上抛。
-            skipped++;
-            debugPrint('[DataMigrationService] chat v0→v1: 跳过损坏消息: $e');
-          }
-        }
-      }
-      await prefs.setString('conversations', jsonEncode(list));
+      await prefs.setString(
+        'conversations',
+        migratedData['encoded']! as String,
+      );
+      final migrated = migratedData['migrated']! as int;
+      final skipped = migratedData['skipped']! as int;
       debugPrint(
           '[DataMigrationService] chat v0→v1: Migrated $migrated messages'
           '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}');
@@ -789,9 +788,79 @@ class DataMigrationService {
       // 结构性迁移失败（jsonDecode 失败等）必须上抛：否则
       // checkAndMigrate 会把该部分版本升到当前值，数据永久停留在
       // "假成功"状态且永远不会重试。上抛后版本不提升，下次启动自动
-      // 重试（startup 层会捕获并继续启动）。
+      // 重试；本次启动会记录错误并继续到后续格式校验。
       debugPrint('[DataMigrationService] chat v0→v1 migration failed: $e');
       rethrow;
     }
+  }
+}
+
+Map<String, Object?> _transformLegacyConversations(String raw) {
+  // Parsing, migration, and encoding happen together off the UI isolate.
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } catch (error) {
+    return {'parseError': error.toString()};
+  }
+  if (decoded is! List) return {'isList': false};
+
+  var migrated = 0;
+  var skipped = 0;
+  for (final conversation in decoded) {
+    if (conversation is! Map) {
+      skipped++;
+      continue;
+    }
+    final rawMessages = conversation['messages'];
+    final messages = rawMessages is List ? rawMessages : <dynamic>[];
+    for (final message in messages) {
+      if (message is! Map) {
+        skipped++;
+        continue;
+      }
+      if (message['role'] != 'assistant') continue;
+      final existingBlocks = message['blocks'];
+      if (existingBlocks is List && existingBlocks.isNotEmpty) continue;
+      try {
+        final blocks = legacyToBlocks(
+          reasoningSections:
+              (message['reasoningSections'] as List<dynamic>?)?.cast<String>() ??
+                  [],
+          textChunks:
+              (message['textSections'] as List<dynamic>?)?.cast<String>() ??
+                  [],
+          toolCalls: ((message['toolCalls'] as List<dynamic>?) ?? [])
+              .map((toolCall) => ToolCallData.fromMap(
+                  Map<String, dynamic>.from(toolCall)))
+              .toList(),
+          toolCallRoundStarts:
+              (message['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??
+                  [],
+        );
+        if (blocks.isNotEmpty) {
+          message['blocks'] = blocks.map((block) => block.toMap()).toList();
+          migrated++;
+        }
+      } catch (_) {
+        // A damaged message does not prevent migration of its siblings.
+        skipped++;
+      }
+    }
+  }
+
+  return {
+    'isList': true,
+    'encoded': jsonEncode(decoded),
+    'migrated': migrated,
+    'skipped': skipped,
+  };
+}
+
+bool get _isFlutterTest {
+  try {
+    return Platform.environment['FLUTTER_TEST'] == 'true';
+  } catch (_) {
+    return false;
   }
 }

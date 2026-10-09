@@ -261,7 +261,7 @@ class _ApplicationState extends ConsumerState<Application>
 
     // Check SharedPreferences flag to confirm it's a real update scenario
     // (not a stale in-memory flag from a previous failed install).
-    hasPendingUpdateRestart().then((bool hasPrefsFlag) {
+    hasPendingUpdateRestart().then<void>((bool hasPrefsFlag) {
       if (!hasPrefsFlag) {
         // SharedPreferences flag cleared externally（例如 Kotlin 侧已处理）：
         // 同步清除内存标记，避免每次 resume 都重复读取 prefs。
@@ -275,7 +275,11 @@ class _ApplicationState extends ConsumerState<Application>
 
       // Clear both flags immediately to prevent re-entry
       setPendingRestartInMemory(false);
-      clearPendingUpdateRestart();
+      unawaited(clearPendingUpdateRestart().catchError(
+        (Object error, StackTrace stackTrace) {
+          debugPrint('[Application] Failed to clear update restart flag: $error');
+        },
+      ));
 
       showDialog<void>(
         context: context,
@@ -310,6 +314,8 @@ class _ApplicationState extends ConsumerState<Application>
           ],
         ),
       );
+    }).catchError((Object error, StackTrace stackTrace) {
+      debugPrint('[Application] Failed to read update restart flag: $error');
     });
   }
 
