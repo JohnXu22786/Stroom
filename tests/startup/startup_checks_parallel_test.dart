@@ -18,7 +18,7 @@ void main() {
     test('sequential checks do not interfere with each other', () async {
       // Set up data with format issues
       SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
+        'data_format_versions': jsonEncode(DataParts.currentVersions),
         'provider_entries': jsonEncode([
           {
             'id': '', // Empty id → error
