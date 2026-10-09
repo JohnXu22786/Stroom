@@ -388,6 +388,28 @@ void main() {
           reason: '冷启动恢复是补武装场景，不得清零失败计数');
     });
 
+    test('cold-start restore re-arms the watchdog when service startup throws',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      mock.setThrowOnStart(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(
+        keepAliveCalls.any((c) => c.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'a failed restore must still schedule the watchdog retry',
+      );
+      expect(prefs.getBool('background_service_enabled'), isTrue,
+          reason: 'a failed automatic restore must preserve the user choice');
+    });
+
     test('cold-start restore skips the watchdog when its toggle is disabled',
         () async {
       final mock = registerMockPlatform();

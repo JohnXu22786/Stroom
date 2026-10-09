@@ -397,16 +397,19 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
             false;
     if (!wasEnabled) return;
 
-    final service = FlutterBackgroundService();
-    if (!await service.isRunning()) {
-      await AppLogService.info('BackgroundService', '检测到后台服务之前已启用，正在恢复...');
-      await service.startService();
-      await AppLogService.info('BackgroundService', '后台服务已恢复');
+    try {
+      final service = FlutterBackgroundService();
+      if (!await service.isRunning()) {
+        await AppLogService.info('BackgroundService', '检测到后台服务之前已启用，正在恢复...');
+        await service.startService();
+        await AppLogService.info('BackgroundService', '后台服务已恢复');
+      }
+    } finally {
+      // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
+      // 即使冷启动恢复服务失败，也必须同步重新调度，否则看门狗会永久失效。
+      // 注意：恢复场景不清零失败计数（见 _rearmKeepAlive 注释）。
+      await _rearmKeepAlive();
     }
-    // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
-    // 冷启动恢复服务时必须同步重新调度，否则看门狗会永久失效。
-    // 注意：恢复场景不清零失败计数（见 _rearmKeepAlive 注释）。
-    await _rearmKeepAlive();
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restore background service: $e');
     await AppLogService.error('BackgroundService', '恢复后台服务失败', e);
