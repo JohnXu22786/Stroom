@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,7 +96,29 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
 class _CleanupCatCatchNotifier extends CatCatchNotifier {
   _CleanupCatCatchNotifier(super.ref);
 
+  final executorStarted = Completer<void>();
+  final secondExecutorStarted = Completer<void>();
+  int executorStarts = 0;
+
   void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
+
+  List<CatCatchTask> get tasksForTest => state;
+
+  @override
+  Future<String?> retryFromStepForTask({
+    required CatCatchTask task,
+    required StepType fromStep,
+    required void Function(CatCatchTask updated) onUpdate,
+    required CancelToken cancelToken,
+  }) async {
+    executorStarts++;
+    onUpdate(task.copyWith(status: TaskStatus.running));
+    if (!executorStarted.isCompleted) executorStarted.complete();
+    if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
+      secondExecutorStarted.complete();
+    }
+    return null;
+  }
 }
 
 void main() {
@@ -202,6 +225,85 @@ void main() {
 
       expect(servicePlatform.stopCalls, 1);
       expect(servicePlatform.running, isFalse);
+      expect(preferences.getBool('background_service_enabled'), isFalse);
+    });
+
+    test('cleanup queued during confirm-and-continue startup keeps service',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      const startingTaskId = 'confirm-start';
+      const cleanupTaskId = 'cleanup-during-start';
+      notifier.setTasksForTest([task(startingTaskId), task(cleanupTaskId)]);
+
+      addTearDown(() {
+        final release = servicePlatform.releaseStart;
+        if (release != null && !release.isCompleted) release.complete();
+      });
+
+      final removedTask = Completer<void>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          if (!tasks.any((current) => current.id == cleanupTaskId) &&
+              !removedTask.isCompleted) {
+            removedTask.complete();
+          }
+        },
+      );
+      addTearDown(subscription.close);
+
+      notifier.confirmAndContinue(startingTaskId);
+      await servicePlatform.startEntered!.future.timeout(
+        const Duration(seconds: 2),
+      );
+      final statusWhileStarting = notifier.tasksForTest
+          .singleWhere((current) => current.id == startingTaskId)
+          .status;
+
+      final cleanup = notifier.removeTasksPersisted([cleanupTaskId]);
+      await removedTask.future.timeout(const Duration(seconds: 2));
+      servicePlatform.releaseStart!.complete();
+
+      expect(await cleanup, isTrue);
+      await notifier.executorStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      // Absent IDs still persist, which drains the executor's fire-and-forget
+      // snapshot before tearDown removes its documents directory.
+      await notifier.removeTasksPersisted(['persistence-drain']);
+
+      expect(statusWhileStarting, TaskStatus.running);
+      expect(notifier.executorStarts, 1);
+      expect(servicePlatform.stopCalls, 0);
+      expect(servicePlatform.running, isTrue);
+      expect(preferences.getBool('background_service_enabled'), isFalse);
+    });
+
+    test('concurrent confirms wait for an in-flight service start', () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      notifier.setTasksForTest([task('first-confirm'), task('second-confirm')]);
+
+      notifier.confirmAndContinue('first-confirm');
+      await servicePlatform.startEntered!.future.timeout(
+        const Duration(seconds: 2),
+      );
+      notifier.confirmAndContinue('second-confirm');
+      final executorStartsBeforeServiceReady = notifier.executorStarts;
+
+      servicePlatform.releaseStart!.complete();
+      await notifier.secondExecutorStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      await notifier.removeTasksPersisted(['persistence-drain']);
+
+      expect(executorStartsBeforeServiceReady, 0);
+      expect(notifier.executorStarts, 2);
+      expect(servicePlatform.stopCalls, 0);
+      expect(servicePlatform.running, isTrue);
       expect(preferences.getBool('background_service_enabled'), isFalse);
     });
 
