@@ -93,6 +93,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       metadata: metadata,
     );
     state = [...state, task];
+    unawaited(_persistTasks());
 
     // 异步开始执行
     _executeTask(task);
