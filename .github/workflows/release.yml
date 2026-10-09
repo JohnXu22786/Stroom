@@ -23,9 +23,7 @@ jobs:
       - id: extract-version
         run: |
           TAG="${{ env.TAG }}"
-          # Strip leading 'v' if present: v1.2.3 -> 1.2.3
-          VERSION="${TAG#v}"
-          echo "app_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "app_version=$TAG" >> "$GITHUB_OUTPUT"
 
       # 构建信息：发布时间 + 更新内容，写入应用「版本信息」面板。
       # - release 事件：取自 GitHub Release 的发布时间与 Release 说明。
