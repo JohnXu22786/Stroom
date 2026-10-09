@@ -100,19 +100,36 @@ class _StartupPageState extends State<StartupPage>
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: _buildMintHero(),
-                      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final hero = Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _buildMintHero(),
                     ),
-                  ),
-                  _buildLoadingSection(),
-                  const SizedBox(height: 24),
-                ],
+                  );
+
+                  // Keep the redesigned card compact on short screens.
+                  if (constraints.maxHeight < 520) {
+                    return Column(
+                      children: [
+                        Expanded(child: hero),
+                        _buildLoadingSection(),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      const Spacer(flex: 2),
+                      hero,
+                      const Spacer(flex: 1),
+                      _buildLoadingSection(),
+                      const Spacer(flex: 2),
+                    ],
+                  );
+                },
               ),
             ),
           ),
