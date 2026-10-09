@@ -5,6 +5,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../utils/atomic_file.dart';
 import '../utils/web_file_store.dart';
+import 'data_migration_isolate_stub.dart'
+    if (dart.library.io) 'data_migration_isolate_io.dart'
+    as data_migration_isolate;
+import 'startup_data_validation_unavailable.dart';
 import 'storage_service.dart';
 
 /// Normalize execution histories during the existing startup migration and
@@ -17,6 +21,32 @@ class FlowExecutionMigration {
     if (!await file.exists()) return;
     final encoded = await file.readAsString();
     if (encoded.isEmpty) return;
+    final Map<String, Object?> result;
+    if (_isFlutterTest) {
+      result = _migrateExecutionsSync(encoded);
+    } else {
+      try {
+        result = await data_migration_isolate.runInIsolate(
+          () => _migrateExecutionsSync(encoded),
+        );
+      } catch (error) {
+        throw StartupDataValidationUnavailable.isolate(error);
+      }
+    }
+    if (result['changed'] != true) return;
+    final updated = result['updated'] as String;
+    await AtomicFile.writeString(file, updated);
+    final fileMatches = _isFlutterTest
+        ? await _fileMatchesContent(file.path, updated)
+        : await data_migration_isolate.runInIsolate(
+            () => _fileMatchesContent(file.path, updated),
+          );
+    if (!fileMatches) {
+      throw StateError('任务流执行记录迁移校验失败');
+    }
+  }
+
+  static Map<String, Object?> _migrateExecutionsSync(String encoded) {
     final executions = jsonDecode(encoded) as List;
     for (final execution in executions.whereType<Map>()) {
       final rawSteps = execution['subTasks'];
@@ -47,8 +77,18 @@ class FlowExecutionMigration {
       }
     }
     final updated = jsonEncode(executions);
-    if (updated == encoded) return;
-    await AtomicFile.writeString(file, updated);
-    if (await file.readAsString() != updated) throw StateError('任务流执行记录迁移校验失败');
+    if (updated == encoded) return {'changed': false};
+    return {'changed': true, 'updated': updated};
+  }
+
+  static bool get _isFlutterTest {
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
+    }
   }
 }
+
+Future<bool> _fileMatchesContent(String path, String content) async =>
+    await File(path).readAsString() == content;

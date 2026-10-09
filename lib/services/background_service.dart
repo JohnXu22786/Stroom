@@ -6,6 +6,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_log_service.dart';
+import 'startup_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 const _serviceName = 'com.johntsui.stroom.background_service';
@@ -314,8 +315,9 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!await isColdStartRestoreEnabled()) return;
 
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final wasEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
+    final wasEnabled =
+        (await StartupPreferences.getBool(_backgroundServiceEnabledKey)) ??
+            false;
     if (!wasEnabled) return;
 
     final service = FlutterBackgroundService();
@@ -351,8 +353,7 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
 /// Defaults to `true`.
 Future<bool> isWatchdogEnabled() async {
   try {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_watchdogEnabledKey) ?? true;
+    return (await StartupPreferences.getBool(_watchdogEnabledKey)) ?? true;
   } catch (_) {
     return true;
   }
@@ -370,8 +371,8 @@ Future<void> setWatchdogEnabled(bool enabled) async {
 /// Defaults to `true`.
 Future<bool> isColdStartRestoreEnabled() async {
   try {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_coldStartRestoreEnabledKey) ?? true;
+    return (await StartupPreferences.getBool(_coldStartRestoreEnabledKey)) ??
+        true;
   } catch (_) {
     return true;
   }

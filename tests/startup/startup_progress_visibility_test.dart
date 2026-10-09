@@ -26,7 +26,7 @@ void main() {
       // be purely cosmetic — they must not affect data or state.
 
       SharedPreferences.setMockInitialValues({
-        'data_format_version': DataMigrationService.currentFormatVersion,
+        'data_format_versions': jsonEncode(DataParts.currentVersions),
         'provider_entries': jsonEncode([
           {
             'id': 'test_provider',

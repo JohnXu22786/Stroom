@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path/path.dart' as p;
 
@@ -9,7 +8,7 @@ import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
 import 'app_log_service.dart';
 import 'backup_service.dart';
-import 'backup_service_shared.dart' show collectAttachmentPaths;
+import 'backup_service_shared.dart' show collectAttachmentPathsForSafety;
 import 'data_integrity_checker.dart';
 import 'manifest_database.dart';
 import 'snapshot_service.dart';
@@ -256,8 +255,8 @@ class DataSafetyManager {
           debugPrint('[DataSafetyManager] 快照缺失，跳过: ${entry.file}');
           continue;
         }
-        final bytes = await file.readAsBytes();
-        if (sha256.convert(bytes).toString() != entry.sha256) {
+        if (await SnapshotService.computeSha256ForFile(file.path) !=
+            entry.sha256) {
           debugPrint('[DataSafetyManager] 快照校验失败（SHA 不符），'
               '跳过: ${entry.file}');
           continue;
@@ -267,6 +266,7 @@ class DataSafetyManager {
           selection: BackupSelection.structuredOnly,
           skipMissingCategories: true,
           trustEmptyLegacyTaskPayloads: true,
+          useStartupPreferenceAdapter: true,
         );
         final check = await DataIntegrityChecker.checkCurrentData();
         if (!check.hasCorruption) {
@@ -305,8 +305,8 @@ class DataSafetyManager {
         debugPrint('[DataSafetyManager] 最近快照缺失: ${entry.file}');
         return false;
       }
-      final bytes = await file.readAsBytes();
-      if (sha256.convert(bytes).toString() != entry.sha256) {
+      if (await SnapshotService.computeSha256ForFile(file.path) !=
+          entry.sha256) {
         debugPrint('[DataSafetyManager] 最近快照校验失败（SHA 不符）');
         return false;
       }
@@ -316,6 +316,7 @@ class DataSafetyManager {
         skipPostRestoreMigration: true,
         skipMissingCategories: true,
         trustEmptyLegacyTaskPayloads: true,
+        useStartupPreferenceAdapter: true,
       );
       return true;
     } catch (e) {
@@ -344,7 +345,13 @@ class DataSafetyManager {
       // 导致附件引用无法完整读取）。
       final referenced = <String>{};
       try {
-        final attachments = await collectAttachmentPaths();
+        final attachments = await collectAttachmentPathsForSafety();
+        if (attachments == null) {
+          debugPrint(
+            '[DataSafetyManager] 收集会话附件引用失败，中止孤儿清理',
+          );
+          return;
+        }
         for (final storagePath in attachments) {
           referenced.add(p.basename(storagePath));
         }

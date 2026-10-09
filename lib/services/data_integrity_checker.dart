@@ -1,14 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
 import 'manifest_database.dart';
 import 'startup_data_validation_unavailable.dart';
+import 'startup_preferences.dart';
 import 'storage_service.dart';
 
 /// 单条完整性校验问题。
@@ -187,34 +188,37 @@ class DataIntegrityChecker {
     List<_JsonIntegrityCheck> checks,
   ) async {
     final keysReadSuccessfully = <String>{};
-    late final SharedPreferences prefs;
-    try {
-      prefs = await SharedPreferences.getInstance();
-    } catch (e) {
-      debugPrint('[DataIntegrityChecker] prefs 检查失败: $e');
-      return keysReadSuccessfully;
-    }
-
-    for (final key in [
+    const preferenceKeys = [
       'conversations',
       'provider_entries',
       'data_format_versions',
-    ]) {
-      try {
-        final raw = prefs.getString(key);
-        keysReadSuccessfully.add(key);
-        if (raw == null || raw.isEmpty) continue;
+    ];
+    final values = await StartupPreferences.getValues(preferenceKeys);
+    for (final key in preferenceKeys) {
+      keysReadSuccessfully.add(key);
+      final value = values[key];
+      if (value == null) continue;
+      if (value is! String) {
         checks.add(
           _JsonIntegrityCheck(
             part: key == 'data_format_versions' ? 'settings' : 'chat',
             messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
-            content: raw,
+            readError: 'Expected a string preference, got '
+                '${value.runtimeType}.',
             prefsKey: key,
           ),
         );
-      } catch (e) {
-        debugPrint('[DataIntegrityChecker] prefs 键 $key 检查失败: $e');
+        continue;
       }
+      if (value.isEmpty) continue;
+      checks.add(
+        _JsonIntegrityCheck(
+          part: key == 'data_format_versions' ? 'settings' : 'chat',
+          messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
+          content: value,
+          prefsKey: key,
+        ),
+      );
     }
     return keysReadSuccessfully;
   }
@@ -321,13 +325,21 @@ class DataIntegrityChecker {
         );
       }
     } catch (e) {
-      issues.add(
-        DataIntegrityIssue(
-          part: 'media',
-          message: 'ManifestDatabase 无法打开/校验: $e',
-          isCorruption: true,
-        ),
-      );
+      if (e is StartupDataValidationUnavailable ||
+          e is StartupPreferencesUnavailable) {
+        rethrow;
+      }
+      if (_isFlutterTest && e is MissingPluginException) {
+        debugPrint('[DataIntegrityChecker] 跳过测试环境中不可用的 ManifestDatabase 插件');
+      } else {
+        issues.add(
+          DataIntegrityIssue(
+            part: 'media',
+            message: 'ManifestDatabase 无法打开/校验: $e',
+            isCorruption: true,
+          ),
+        );
+      }
     }
 
     // Anki 数据库：只读打开 + integrity_check（不经过 provider，
@@ -366,6 +378,15 @@ class DataIntegrityChecker {
     }
   }
 
+  static bool get _isFlutterTest {
+    if (kIsWeb) return false;
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 只读打开 SQLite 数据库执行完整性检查。
   ///
   /// 使用 sqflite 的 openReadOnly；失败（如文件被其他连接独占）返回 null。
@@ -400,7 +421,10 @@ class DataIntegrityChecker {
         }
       }
     } catch (e) {
-      if (e is StartupDataValidationUnavailable) rethrow;
+      if (e is StartupDataValidationUnavailable ||
+          e is StartupPreferencesUnavailable) {
+        rethrow;
+      }
       debugPrint('[DataIntegrityChecker] 语义校验失败: $e');
     }
   }

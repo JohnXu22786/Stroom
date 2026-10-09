@@ -18,6 +18,7 @@ import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
 import 'manifest_database.dart';
+import 'startup_preferences.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
@@ -209,6 +210,7 @@ class BackupService {
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     await AppLogService.info(
       'BackupService',
@@ -229,6 +231,7 @@ class BackupService {
       onProgress: onProgress,
       isCancelled: isCancelled,
       selection: selection,
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
     );
     await AppLogService.info('BackupService', 'createBackup: success');
     return outputPath;
@@ -241,6 +244,7 @@ class BackupService {
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
     bool trustEmptyLegacyTaskPayloads = false,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     await AppLogService.info(
       'BackupService',
@@ -260,6 +264,7 @@ class BackupService {
       skipPostRestoreMigration: skipPostRestoreMigration,
       skipMissingCategories: skipMissingCategories,
       trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
     );
   }
 
@@ -289,6 +294,7 @@ class BackupService {
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     void checkCancelled() {
       if (isCancelled != null && isCancelled()) {
@@ -307,6 +313,7 @@ class BackupService {
       selection: selection,
       checkCancelled: checkCancelled,
       onProgress: onProgress,
+      useStartupPreferenceAdapter: useStartupPreferenceAdapter,
     );
 
     // ------------------------------------------------------------
@@ -360,6 +367,7 @@ class BackupService {
     required BackupSelection selection,
     required void Function() checkCancelled,
     void Function(double progress)? onProgress,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     final jsonFiles = <String, String>{};
     final memoryFiles = <String, Uint8List>{};
@@ -394,31 +402,68 @@ class BackupService {
     // 2. SharedPreferences — 拆分聊天记录和设置
     if (selection.chatRecordsAndAttachments || selection.settings) {
       debugPrint('[BackupService] streaming: reading preferences');
-      final prefs = await SharedPreferences.getInstance();
-      final chatData = <String, dynamic>{};
-      final settingsData = <String, dynamic>{};
-      for (final key in prefs.getKeys()) {
-        if (key.startsWith('flutter.') ||
-            DataMigrationService.isFormatMetadataKey(key) ||
-            _isDeviceLocalPreferenceKey(key) ||
-            (key == _browserCookieRetentionKey && !selection.browserCookies)) {
-          continue;
-        }
-        if (_isChatPrefKey(key)) {
-          if (selection.chatRecordsAndAttachments) {
-            chatData[key] = prefs.get(key);
+      if (useStartupPreferenceAdapter) {
+        final chatKeys = <String>[];
+        final settingsKeys = <String>[];
+        for (final key in await StartupPreferences.getKeys()) {
+          if (key.startsWith('flutter.') ||
+              DataMigrationService.isFormatMetadataKey(key) ||
+              _isDeviceLocalPreferenceKey(key) ||
+              (key == _browserCookieRetentionKey &&
+                  !selection.browserCookies)) {
+            continue;
           }
-        } else {
-          if (selection.settings) {
+          if (_isChatPrefKey(key)) {
+            if (selection.chatRecordsAndAttachments) chatKeys.add(key);
+          } else if (selection.settings) {
+            settingsKeys.add(key);
+          }
+        }
+
+        final values = await StartupPreferences.getValues(
+          {...chatKeys, ...settingsKeys},
+        );
+        final encoded = _isBackupFlutterTest
+            ? _encodeBackupPreferenceGroups(values, chatKeys, settingsKeys)
+            : await Isolate.run(
+                () => _encodeBackupPreferenceGroups(
+                  values,
+                  chatKeys,
+                  settingsKeys,
+                ),
+              );
+        if (selection.chatRecordsAndAttachments) {
+          jsonFiles['chat_data.json'] = encoded['chat_data']!;
+        }
+        if (selection.settings) {
+          jsonFiles['settings.json'] = encoded['settings']!;
+        }
+      } else {
+        final prefs = await SharedPreferences.getInstance();
+        final chatData = <String, dynamic>{};
+        final settingsData = <String, dynamic>{};
+        for (final key in prefs.getKeys()) {
+          if (key.startsWith('flutter.') ||
+              DataMigrationService.isFormatMetadataKey(key) ||
+              _isDeviceLocalPreferenceKey(key) ||
+              (key == _browserCookieRetentionKey &&
+                  !selection.browserCookies)) {
+            continue;
+          }
+          if (_isChatPrefKey(key)) {
+            if (selection.chatRecordsAndAttachments) {
+              chatData[key] = prefs.get(key);
+            }
+          } else if (selection.settings) {
             settingsData[key] = prefs.get(key);
           }
         }
-      }
-      if (selection.chatRecordsAndAttachments) {
-        jsonFiles['chat_data.json'] = jsonEncode(chatData);
-      }
-      if (selection.settings) {
-        jsonFiles['settings.json'] = jsonEncode(settingsData);
+        if (selection.chatRecordsAndAttachments) {
+          jsonFiles['chat_data.json'] = jsonEncode(chatData);
+        }
+        if (selection.settings) {
+          jsonFiles['settings.json'] = jsonEncode(settingsData);
+        }
       }
     }
     onProgress?.call(0.15);
@@ -763,7 +808,7 @@ class BackupService {
 
     // 5. stroom_manifest.json
     debugPrint('[BackupService] streaming: writing manifest');
-    jsonFiles['stroom_manifest.json'] = jsonEncode({
+    final mediaManifest = {
       'image_records': manifestImageRecords ?? <Map<String, dynamic>>[],
       'audio_records': manifestAudioRecords ?? <Map<String, dynamic>>[],
       'video_records': manifestVideoRecords ?? <Map<String, dynamic>>[],
@@ -773,7 +818,11 @@ class BackupService {
       ManifestTables.audioFolders: manifestAudioFolders ?? <String>[],
       ManifestTables.imageFolders: manifestImageFolders ?? <String>[],
       ManifestTables.videoFolders: manifestVideoFolders ?? <String>[],
-    });
+    };
+    jsonFiles['stroom_manifest.json'] =
+        useStartupPreferenceAdapter && !_isBackupFlutterTest
+            ? await Isolate.run(() => jsonEncode(mediaManifest))
+            : jsonEncode(mediaManifest);
 
     final plannedArchivePaths = {
       ...jsonFiles.keys,
@@ -2193,13 +2242,19 @@ class BackupService {
     // 需要迁移到当前数据格式才能正常使用。
     // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
     final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-    await DataMigrationService.mergeRestoredPartVersions(
+    final deferVersionCommit =
+        !skipPostRestoreMigration && !_isBackupFlutterTest;
+    final restoredPartVersions =
+        await DataMigrationService.mergeRestoredPartVersions(
       backupVersions: metadata.dataPartVersions,
       restoredParts: restoredPartIds,
+      deferCommit: deferVersionCommit,
     );
     if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
       await DataMigrationService.migrateDataFormatIfNeeded(
         onlyParts: restoredPartIds,
+        restoredPartVersions: deferVersionCommit ? restoredPartVersions : null,
+        validateRestoredDataBeforeVersionCommit: deferVersionCommit,
       );
     }
     await _restoreBrowserCookiesAfterDataRestore(
@@ -2231,6 +2286,7 @@ class BackupService {
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
     bool trustEmptyLegacyTaskPayloads = false,
+    bool useStartupPreferenceAdapter = false,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2313,7 +2369,11 @@ class BackupService {
 
       // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
       debugPrint('[BackupService] _restoreFromZipFile: restoring database');
-      await _restoreRecordsAndPrefs(metadata, restoreSelection);
+      await _restoreRecordsAndPrefs(
+        metadata,
+        restoreSelection,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      );
       onProgress?.call(0.55);
       await _yieldToEventLoop();
 
@@ -2346,13 +2406,20 @@ class BackupService {
       // 数据迁移：确保恢复后的数据格式是最新的
       // （迁移失败回退场景传 skipPostRestoreMigration=true，保持旧格式。）
       final restoredPartIds = _restoredPartIds(metadata, restoreSelection);
-      await DataMigrationService.mergeRestoredPartVersions(
+      final deferVersionCommit =
+          !skipPostRestoreMigration && !_isBackupFlutterTest;
+      final restoredPartVersions =
+          await DataMigrationService.mergeRestoredPartVersions(
         backupVersions: metadata.dataPartVersions,
         restoredParts: restoredPartIds,
+        deferCommit: deferVersionCommit,
       );
       if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
         await DataMigrationService.migrateDataFormatIfNeeded(
           onlyParts: restoredPartIds,
+          restoredPartVersions:
+              deferVersionCommit ? restoredPartVersions : null,
+          validateRestoredDataBeforeVersionCommit: deferVersionCommit,
         );
       }
       await _restoreBrowserCookiesAfterDataRestore(
@@ -3988,8 +4055,9 @@ class BackupService {
   /// 分两次调用会导致先恢复的数据被后一次清除。
   static Future<void> _restoreRecordsAndPrefs(
     _RestoreMetadata metadata,
-    BackupSelection selection,
-  ) async {
+    BackupSelection selection, {
+    bool useStartupPreferenceAdapter = false,
+  }) async {
     // 恢复数据库记录（使用已解析校验的数据）
     if (metadata.dbData != null) {
       await _restoreDatabaseFromJson(metadata.dbData!, selection: selection);
@@ -4055,6 +4123,7 @@ class BackupService {
         await _restorePreferencesFromJson(
           restorePrefs,
           selection: preferenceSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
         );
       }
     } else {
@@ -4080,6 +4149,7 @@ class BackupService {
         await _restorePreferencesFromJson(
           mergedPrefs,
           selection: preferenceSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
         );
       }
     }
@@ -4445,13 +4515,27 @@ class BackupService {
   static Future<void> _restorePreferencesFromJson(
     Map<String, dynamic> backupPrefs, {
     required BackupSelection selection,
+    bool useStartupPreferenceAdapter = false,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final SharedPreferences? prefs;
+    final StartupMigrationPreferences? startupPrefs;
+    if (useStartupPreferenceAdapter) {
+      prefs = null;
+      startupPrefs = await StartupMigrationPreferences.load();
+    } else {
+      prefs = await SharedPreferences.getInstance();
+      startupPrefs = null;
+    }
 
+    final keys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
     final keysToRemove =
-        prefs.getKeys().where((k) => _isKeyInSelection(k, selection)).toList();
+        keys.where((k) => _isKeyInSelection(k, selection)).toList();
     for (final key in keysToRemove) {
-      await prefs.remove(key);
+      if (prefs != null) {
+        await prefs.remove(key);
+      } else {
+        await startupPrefs!.remove(key);
+      }
     }
 
     for (final entry in backupPrefs.entries) {
@@ -4459,18 +4543,40 @@ class BackupService {
       final v = entry.value;
       try {
         if (v is String) {
-          await prefs.setString(entry.key, v);
+          if (prefs != null) {
+            await prefs.setString(entry.key, v);
+          } else {
+            await startupPrefs!.setString(entry.key, v);
+          }
         } else if (v is bool) {
-          await prefs.setBool(entry.key, v);
+          if (prefs != null) {
+            await prefs.setBool(entry.key, v);
+          } else {
+            await startupPrefs!.setBool(entry.key, v);
+          }
         } else if (v is int) {
-          await prefs.setInt(entry.key, v);
+          if (prefs != null) {
+            await prefs.setInt(entry.key, v);
+          } else {
+            await startupPrefs!.setInt(entry.key, v);
+          }
         } else if (v is double) {
-          await prefs.setDouble(entry.key, v);
+          if (prefs != null) {
+            await prefs.setDouble(entry.key, v);
+          } else {
+            await startupPrefs!.setDouble(entry.key, v);
+          }
         } else if (v is List) {
-          await prefs.setStringList(entry.key, v.cast<String>());
+          final stringList = v.cast<String>();
+          if (prefs != null) {
+            await prefs.setStringList(entry.key, stringList);
+          } else {
+            await startupPrefs!.setStringList(entry.key, stringList);
+          }
         }
       } catch (e) {
         debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
+        if (useStartupPreferenceAdapter) rethrow;
       }
     }
     await AppLogService.info(
@@ -4812,63 +4918,10 @@ class BackupService {
   static Future<Set<String>?> _collectTaskFlowAttachmentKeys(
     Set<String> taskFlowFilesToPreserve,
   ) async {
-    final preservedKeys = <String>{};
     try {
       final isWebStore = kIsWeb || WebFileStore.isTestMode;
       final appDir = isWebStore ? null : await AppStorage.directory;
-      final attachmentDir =
-          appDir == null ? null : p.normalize(p.join(appDir, 'attachments'));
-
-      void preserveReference(String reference) {
-        final slashPath = reference.replaceAll('\\', '/');
-        final webPath = p.posix.normalize(slashPath);
-        if (p.posix.isWithin('attachments', webPath)) {
-          preservedKeys.add(webPath);
-          return;
-        }
-        if (p.posix.isWithin('temp_edited', webPath)) {
-          preservedKeys.add(webPath);
-          preservedKeys.add(
-            p.posix.join('attachments', p.posix.basename(webPath)),
-          );
-          return;
-        }
-        if (isWebStore) return;
-
-        final normalized = p.normalize(reference);
-        String? relativePath;
-        if (p.isAbsolute(normalized) &&
-            p.isWithin(attachmentDir!, normalized)) {
-          relativePath = p.relative(normalized, from: attachmentDir);
-        } else if (!p.isAbsolute(normalized) &&
-            normalized.split(p.separator).first == 'attachments') {
-          relativePath = normalized.split(p.separator).skip(1).join('/');
-        }
-        if (relativePath == null || relativePath.isEmpty) return;
-        final normalizedRelative = p.posix.normalize(
-          relativePath.split(p.separator).join('/'),
-        );
-        if (normalizedRelative == '..' ||
-            normalizedRelative.startsWith('../')) {
-          return;
-        }
-        preservedKeys.add(p.posix.join('attachments', normalizedRelative));
-      }
-
-      void collectReferences(Object? value) {
-        if (value is String) {
-          preserveReference(value);
-        } else if (value is Map) {
-          for (final child in value.values) {
-            collectReferences(child);
-          }
-        } else if (value is Iterable) {
-          for (final child in value) {
-            collectReferences(child);
-          }
-        }
-      }
-
+      final taskFlowData = <Uint8List>[];
       for (final taskFlowFile in taskFlowFilesToPreserve) {
         final fileName = p.posix.basename(taskFlowFile);
         Uint8List? data;
@@ -4881,13 +4934,97 @@ class BackupService {
           data = await file.readAsBytes();
         }
         if (data == null) return null;
-        collectReferences(jsonDecode(utf8.decode(data)));
+        taskFlowData.add(data);
       }
-      return preservedKeys;
+      if (kIsWeb || WebFileStore.isTestMode || _isBackupFlutterTest) {
+        return _collectTaskFlowAttachmentKeysSync(
+          taskFlowData,
+          appDir,
+          isWebStore,
+        );
+      }
+      return await Isolate.run(
+        () => _collectTaskFlowAttachmentKeysSync(
+          taskFlowData,
+          appDir,
+          isWebStore,
+        ),
+      );
     } catch (e) {
       debugPrint('读取任务流附件引用失败，保留附件以避免误删: $e');
       return null;
     }
+  }
+
+  static bool get _isBackupFlutterTest {
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Set<String> _collectTaskFlowAttachmentKeysSync(
+    List<Uint8List> taskFlowData,
+    String? appDir,
+    bool isWebStore,
+  ) {
+    final preservedKeys = <String>{};
+    final attachmentDir =
+        appDir == null ? null : p.normalize(p.join(appDir, 'attachments'));
+
+    void preserveReference(String reference) {
+      final slashPath = reference.replaceAll('\\', '/');
+      final webPath = p.posix.normalize(slashPath);
+      if (p.posix.isWithin('attachments', webPath)) {
+        preservedKeys.add(webPath);
+        return;
+      }
+      if (p.posix.isWithin('temp_edited', webPath)) {
+        preservedKeys.add(webPath);
+        preservedKeys.add(
+          p.posix.join('attachments', p.posix.basename(webPath)),
+        );
+        return;
+      }
+      if (isWebStore) return;
+
+      final normalized = p.normalize(reference);
+      String? relativePath;
+      if (p.isAbsolute(normalized) && p.isWithin(attachmentDir!, normalized)) {
+        relativePath = p.relative(normalized, from: attachmentDir);
+      } else if (!p.isAbsolute(normalized) &&
+          normalized.split(p.separator).first == 'attachments') {
+        relativePath = normalized.split(p.separator).skip(1).join('/');
+      }
+      if (relativePath == null || relativePath.isEmpty) return;
+      final normalizedRelative = p.posix.normalize(
+        relativePath.split(p.separator).join('/'),
+      );
+      if (normalizedRelative == '..' || normalizedRelative.startsWith('../')) {
+        return;
+      }
+      preservedKeys.add(p.posix.join('attachments', normalizedRelative));
+    }
+
+    void collectReferences(Object? value) {
+      if (value is String) {
+        preserveReference(value);
+      } else if (value is Map) {
+        for (final child in value.values) {
+          collectReferences(child);
+        }
+      } else if (value is Iterable) {
+        for (final child in value) {
+          collectReferences(child);
+        }
+      }
+    }
+
+    for (final data in taskFlowData) {
+      collectReferences(jsonDecode(utf8.decode(data)));
+    }
+    return preservedKeys;
   }
 
   /// Returns task-flow attachment keys for the orphan cleanup pass.
@@ -5357,6 +5494,22 @@ class BackupService {
 // ====================================================================
 // 备份计划 — 主 isolate 收集，后台 isolate 执行
 // ====================================================================
+
+Map<String, String> _encodeBackupPreferenceGroups(
+  Map<String, Object?> values,
+  List<String> chatKeys,
+  List<String> settingsKeys,
+) =>
+    {
+      'chat_data': jsonEncode({
+        for (final key in chatKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
+      'settings': jsonEncode({
+        for (final key in settingsKeys)
+          if (values.containsKey(key)) key: values[key],
+      }),
+    };
 
 /// 备份计划：主 isolate 收集的数据与文件清单。
 ///

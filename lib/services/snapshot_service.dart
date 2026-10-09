@@ -11,6 +11,9 @@ import 'backup_service.dart';
 import 'data_migration_service.dart';
 import 'storage_service.dart';
 import '../utils/atomic_file.dart';
+import 'data_migration_isolate_stub.dart'
+    if (dart.library.io) 'data_migration_isolate_io.dart'
+    as data_migration_isolate;
 
 /// 私有目录结构化快照清单条目。
 class SnapshotEntry {
@@ -82,6 +85,23 @@ class SnapshotService {
 
   static DateTime _now() => debugNow?.call() ?? DateTime.now();
 
+  /// Hash a snapshot without reading the complete archive or spending its
+  /// digest CPU time on the UI isolate.
+  static Future<String> computeSha256ForFile(String path) {
+    if (_isFlutterTest) return _computeSha256ForFile(path);
+    return data_migration_isolate.runInIsolate(
+      () => _computeSha256ForFile(path),
+    );
+  }
+
+  static bool get _isFlutterTest {
+    try {
+      return Platform.environment['FLUTTER_TEST'] == 'true';
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 快照目录（私有数据目录下；测试环境为 per-isolate 唯一目录）。
   static Future<Directory> get snapshotsDir async {
     String basePath;
@@ -150,8 +170,7 @@ class SnapshotService {
         final ts = _extractTimestamp(name);
         if (ts == null) continue;
         try {
-          final bytes = await f.readAsBytes();
-          final sha = sha256.convert(bytes).toString();
+          final sha = await computeSha256ForFile(f.path);
           final partVersions =
               await DataMigrationService.getStoredPartVersions();
           entries.add(SnapshotEntry(
@@ -208,11 +227,11 @@ class SnapshotService {
       await BackupService.createBackup(
         outputPath: tmpPath,
         selection: BackupSelection.structuredOnly,
+        useStartupPreferenceAdapter: true,
       );
 
       final file = File(tmpPath);
-      final bytes = await file.readAsBytes();
-      final sha = sha256.convert(bytes).toString();
+      final sha = await computeSha256ForFile(file.path);
       await file.rename(zipPath);
 
       final partVersions = await DataMigrationService.getStoredPartVersions();
@@ -389,6 +408,9 @@ class SnapshotService {
 
   static String _pad(int v) => v.toString().padLeft(2, '0');
 }
+
+Future<String> _computeSha256ForFile(String path) async =>
+    (await sha256.bind(File(path).openRead()).first).toString();
 
 class _SnapshotInfo {
   final String path;

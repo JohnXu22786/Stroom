@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/application.dart';
 import 'package:stroom/startup/startup_app.dart';
@@ -12,10 +14,26 @@ import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 
+class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory temporaryDirectory;
+  late PathProviderPlatform originalPathProvider;
 
   setUp(() async {
+    temporaryDirectory =
+        await Directory.systemTemp.createTemp('startup_app_test_');
+    originalPathProvider = PathProviderPlatform.instance;
+    PathProviderPlatform.instance =
+        _DocumentsDirectory(temporaryDirectory.path);
     SharedPreferences.setMockInitialValues({});
     AppStorage.resetCache();
     // 迁移前备份需要可用的存储（JSON 测试模式）：
@@ -26,6 +44,12 @@ void main() {
     resetPostStartupTasksFlag();
     // StartupApp 会在渐出时置位；先复位避免跨用例泄漏。
     startupReadyNotifier.value = false;
+  });
+
+  tearDown(() async {
+    PathProviderPlatform.instance = originalPathProvider;
+    AppStorage.resetCache();
+    await temporaryDirectory.delete(recursive: true);
   });
 
   group('StartupApp - startup checks integration', () {

@@ -1,15 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import 'data_integrity_json_parser.dart' as json_parser;
 import 'manifest_database_shared.dart';
+import 'startup_data_validation_unavailable.dart';
+import 'startup_preferences.dart';
 export 'manifest_database_shared.dart';
 
 // ====================================================================
@@ -289,65 +293,71 @@ class ManifestDatabase {
   }
 
   static Future<void> _migrateOldVideoRecords(Database db) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('migrated_video_records') == true) {
-      return;
-    }
-    final videoFormats = [
-      'mp4',
-      'mov',
-      'avi',
-      'mkv',
-      'webm',
-      'flv',
-      'wmv',
-      'm4v',
-      '3gp',
-      'gif'
-    ];
-    final placeholders = videoFormats.map((_) => '?').join(',');
-    final rows = await db.query(
-      ManifestTables.audioRecords,
-      where: 'format IN ($placeholders)',
-      whereArgs: videoFormats,
-    );
-    if (rows.isEmpty) {
-      await prefs.setBool('migrated_video_records', true);
-      return;
-    }
-    final batch = db.batch();
-    for (final row in rows) {
-      batch.insert(
-        ManifestTables.videoRecords,
-        {
-          'id': row['id'],
-          'name': row['name'],
-          'hash': row['hash'],
-          'format': row['format'],
-          'created_at': row['created_at'],
-          // 旧音频记录在 v5 回填后 modified_at == created_at；
-          // 列缺失时（极端场景）同样回退为 created_at，避免读到
-          // 列默认值 0（1970-01-01）
-          'modified_at': row['modified_at'] ?? row['created_at'],
-          'size': row['size'],
-          'folder': row['folder'],
-          'duration': row['duration'],
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      batch.delete(
+    try {
+      if (await StartupPreferences.getBool('migrated_video_records') == true) {
+        return;
+      }
+      final videoFormats = [
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+        'webm',
+        'flv',
+        'wmv',
+        'm4v',
+        '3gp',
+        'gif'
+      ];
+      final placeholders = videoFormats.map((_) => '?').join(',');
+      final rows = await db.query(
         ManifestTables.audioRecords,
-        where: 'id = ?',
-        whereArgs: [row['id']],
+        where: 'format IN ($placeholders)',
+        whereArgs: videoFormats,
+      );
+      if (rows.isEmpty) {
+        await StartupPreferences.setBool('migrated_video_records', true);
+        return;
+      }
+      final batch = db.batch();
+      for (final row in rows) {
+        batch.insert(
+          ManifestTables.videoRecords,
+          {
+            'id': row['id'],
+            'name': row['name'],
+            'hash': row['hash'],
+            'format': row['format'],
+            'created_at': row['created_at'],
+            // 旧音频记录在 v5 回填后 modified_at == created_at；
+            // 列缺失时（极端场景）同样回退为 created_at，避免读到
+            // 列默认值 0（1970-01-01）
+            'modified_at': row['modified_at'] ?? row['created_at'],
+            'size': row['size'],
+            'folder': row['folder'],
+            'duration': row['duration'],
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        batch.delete(
+          ManifestTables.audioRecords,
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+      await batch.commit(noResult: true);
+      await StartupPreferences.setBool('migrated_video_records', true);
+    } catch (error, stackTrace) {
+      if (error is StartupPreferencesUnavailable) rethrow;
+      Error.throwWithStackTrace(
+        StartupDataValidationUnavailable.migration(error),
+        stackTrace,
       );
     }
-    await batch.commit(noResult: true);
-    await prefs.setBool('migrated_video_records', true);
   }
 
   static Future<void> _migrateOldVideoRecordsJson() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('migrated_video_records') == true) {
+    if (await StartupPreferences.getBool('migrated_video_records') == true) {
       return;
     }
     final audioList =
@@ -355,7 +365,7 @@ class ManifestDatabase {
     final videoList =
         _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
     if (videoList.isNotEmpty) {
-      await prefs.setBool('migrated_video_records', true);
+      await StartupPreferences.setBool('migrated_video_records', true);
       return;
     }
     final videoFormats = {
@@ -381,7 +391,7 @@ class ManifestDatabase {
       }
     }
     if (toMigrate.isEmpty) {
-      await prefs.setBool('migrated_video_records', true);
+      await StartupPreferences.setBool('migrated_video_records', true);
       return;
     }
     for (final record in toMigrate) {
@@ -400,7 +410,7 @@ class ManifestDatabase {
     _webData![ManifestTables.audioRecords] = remaining;
     _webData![ManifestTables.videoRecords] = videoList;
     await _saveWebData();
-    await prefs.setBool('migrated_video_records', true);
+    await StartupPreferences.setBool('migrated_video_records', true);
   }
 
   /// Migrate legacy shared folders into the requested per-type tables.
@@ -421,6 +431,13 @@ class ManifestDatabase {
         )
         .toList();
     if (_useJsonStore) {
+      if (kIsWeb && _webData == null) {
+        await _migrateLegacyFoldersWeb(
+          folderTables: targetFolderTables,
+          removeLegacyTable: removeLegacyTable,
+        );
+        return;
+      }
       await _loadWebData();
       await _migrateLegacyFoldersJsonV2(
         folderTables: targetFolderTables,
@@ -435,7 +452,7 @@ class ManifestDatabase {
     Database? db;
     try {
       db = await database;
-    } catch (e) {
+    } on MissingPluginException catch (e) {
       // Database not available (e.g. in test mode without enableTestMode).
       // The migration will be handled by onUpgrade when the DB is
       // actually initialized.
@@ -473,6 +490,114 @@ class ManifestDatabase {
           'ManifestDatabase', 'migrateLegacyFoldersToPerType SQLite error: $e');
       debugPrint(
           '[ManifestDatabase] migrateLegacyFoldersToPerType SQLite error: $e');
+      rethrow;
+    }
+  }
+
+  /// Validate the persisted Web manifest after startup migration without
+  /// decoding its full payload on the UI isolate.
+  static Future<void> validateWebManifestForStartup() async {
+    if (!kIsWeb) return;
+    final Uint8List? raw;
+    try {
+      raw = await WebFileStore.read(_webStoreKey);
+    } catch (error) {
+      throw StartupDataValidationUnavailable.migration(error);
+    }
+    if (raw == null || raw.isEmpty) return;
+
+    final result = await json_parser.validateWebManifestData(raw);
+    if (result['status'] != 'ok') {
+      throw StartupDataValidationUnavailable.migration(
+        FormatException('Invalid Web manifest: ${result['error']}'),
+      );
+    }
+  }
+
+  static Future<void> _migrateLegacyFoldersWeb({
+    required List<String> folderTables,
+    required bool removeLegacyTable,
+  }) async {
+    final Uint8List? raw;
+    try {
+      raw = await WebFileStore.read(_webStoreKey);
+    } catch (error) {
+      throw StartupDataValidationUnavailable.migration(error);
+    }
+    if (raw == null || raw.isEmpty) {
+      _webData = emptyWebData();
+      await _migrateOldVideoRecordsJson();
+      await _migrateLegacyFoldersJsonV2(
+        folderTables: folderTables,
+        removeLegacyTable: removeLegacyTable,
+      );
+      return;
+    }
+
+    final migrateOldVideos =
+        await StartupPreferences.getBool('migrated_video_records') != true;
+    final result = await json_parser.migrateWebManifestData(
+      raw,
+      folderTables,
+      removeLegacyTable,
+      migrateOldVideos,
+    );
+    final status = result['status'];
+    if (status == 'parseError' || status == 'invalidManifest') {
+      throw StartupDataValidationUnavailable.migration(
+        FormatException('${result['error']}'),
+      );
+    }
+
+    if (status == 'videoError' || status == 'folderError') {
+      if (result['videoChanged'] == true) {
+        final payload = result['payloadBytes'];
+        if (payload is! Uint8List || payload.isEmpty) {
+          throw StartupDataValidationUnavailable.migration(
+            StateError('Missing partially migrated web manifest.'),
+          );
+        }
+        await _writeWebMigrationData(payload);
+      }
+      if (result['setVideoFlag'] == true) {
+        await StartupPreferences.setBool('migrated_video_records', true);
+      }
+      throw StartupDataValidationUnavailable.migration(
+        StateError('${result['error']}'),
+      );
+    }
+
+    if (status != 'ok') {
+      throw StartupDataValidationUnavailable.migration(
+        StateError('Invalid web manifest migration result.'),
+      );
+    }
+    if (result['changed'] == true) {
+      final payload = result['payloadBytes'];
+      if (payload is! Uint8List || payload.isEmpty) {
+        throw StartupDataValidationUnavailable.migration(
+          StateError('Missing migrated web manifest.'),
+        );
+      }
+      await _writeWebMigrationData(payload);
+    }
+    if (result['setVideoFlag'] == true) {
+      await StartupPreferences.setBool('migrated_video_records', true);
+    }
+    _webData = null;
+    if (result['foldersMigrated'] == true) {
+      debugPrint(
+        '[ManifestDatabase] Migrated legacy folders to ${folderTables.length} '
+        'per-type table(s) (JSON)',
+      );
+    }
+  }
+
+  static Future<void> _writeWebMigrationData(Uint8List encoded) async {
+    try {
+      await WebFileStore.write(_webStoreKey, encoded);
+    } catch (error) {
+      throw StartupDataValidationUnavailable.migration(error);
     }
   }
 

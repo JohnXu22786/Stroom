@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/startup_preferences.dart';
 import '../utils/app_version.dart';
 import 'update_provider_shared.dart';
 export 'update_provider_shared.dart';
@@ -145,22 +146,14 @@ String get downloadFilePathKey => _kDownloadedFilePathKey;
 /// 1. [StartupApp._runStartupSequence] — on cold start, checks and clears it.
 /// 2. [Application] lifecycle listener — on warm resume from installer.
 Future<bool> hasPendingUpdateRestart() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_kPendingUpdateRestartKey) ?? false;
-  } catch (_) {
-    return false;
-  }
+  return await StartupPreferences.getBool(_kPendingUpdateRestartKey) ?? false;
 }
 
 /// Clears the pending-update-restart flag from SharedPreferences.
 ///
 /// Called after the flag has been handled on either cold start or warm resume.
 Future<void> clearPendingUpdateRestart() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kPendingUpdateRestartKey);
-  } catch (_) {}
+  await StartupPreferences.remove(_kPendingUpdateRestartKey);
 }
 
 /// Returns the current value of the in-memory pending-restart flag.
