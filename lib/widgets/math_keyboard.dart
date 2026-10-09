@@ -124,9 +124,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isAlphabetCategory = _category == '字母';
     final keys =
         _category == '希腊字母' && _shifted ? _greekUpperKeys : _groups[_category]!;
-    final pageCount = (keys.length / 12).ceil();
+    final pageCount = isAlphabetCategory ? 1 : (keys.length / 12).ceil();
     return Material(
       color: cs.surfaceContainer,
       child: SafeArea(
@@ -291,6 +292,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
 
   Widget _keyArea(List<_MathKey> keys, int pageCount) {
     final canSwipePages = pageCount > 1 && _category != '字母';
+    final canNavigate = widget.enabled && _category != '字母';
     final keyGrid = Padding(
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
       child: _category == '字母'
@@ -330,7 +332,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
         minimumSize: const Size(48, 44),
         padding: const EdgeInsets.symmetric(horizontal: 2),
       ),
-      onPressed: widget.enabled ? () => widget.onCommand('previous', '') : null,
+      onPressed: canNavigate ? () => widget.onCommand('previous', '') : null,
       child: const Text('上一项'),
     );
     final nextButton = TextButton(
@@ -338,14 +340,16 @@ class _MathKeyboardState extends State<MathKeyboard> {
         minimumSize: const Size(48, 44),
         padding: const EdgeInsets.symmetric(horizontal: 2),
       ),
-      onPressed: widget.enabled ? () => widget.onCommand('next', '') : null,
+      onPressed: canNavigate ? () => widget.onCommand('next', '') : null,
       child: const Text('下一项'),
     );
-    final pageIndicator = pageCount > 1 && _category != '字母'
+    final isAlphabetCategory = _category == '字母';
+    final currentPage = isAlphabetCategory ? 1 : _page + 1;
+    final pageIndicator = pageCount > 1 || isAlphabetCategory
         ? IgnorePointer(
             child: Semantics(
-              label: '第 ${_page + 1} 页，共 $pageCount 页',
-              child: Text('${_page + 1}/$pageCount'),
+              label: '第 $currentPage 页，共 $pageCount 页',
+              child: Text('$currentPage/$pageCount'),
             ),
           )
         : null;
