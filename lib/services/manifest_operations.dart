@@ -1,7 +1,8 @@
 import '../utils/atomic_file.dart';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../utils/file_record.dart';
@@ -54,6 +55,11 @@ class ManifestOperations<T extends FileRecord> {
   List<T>? _cache;
   bool _dirty = false;
   Set<String> _folderCache = {};
+  int _recordRegistrationRevision = 0;
+
+  /// Pauses a forced refresh between reading records and reading folders.
+  @visibleForTesting
+  Future<void> Function()? beforeFolderLoadForTesting;
 
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
@@ -177,26 +183,32 @@ class ManifestOperations<T extends FileRecord> {
   }) async {
     if (_cache != null && !_dirty && !forceRefresh) return _cache!;
 
+    final revision = _recordRegistrationRevision;
     try {
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
+      await beforeFolderLoadForTesting?.call();
       final folders =
           (await ManifestDatabase.getAllFolders(recordTable: tableName))
               .toSet();
-      _cache = records;
-      _folderCache = folders;
-      _dirty = false;
+      if (_recordRegistrationRevision == revision) {
+        _cache = records;
+        _folderCache = folders;
+        _dirty = false;
+      }
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'loadRecords failed', e);
       if (throwOnError) {
-        _dirty = true;
+        if (_recordRegistrationRevision == revision) _dirty = true;
         rethrow;
       }
-      _cache = [];
-      _folderCache = {};
-      _dirty = false;
+      if (_recordRegistrationRevision == revision) {
+        _cache = [];
+        _folderCache = {};
+        _dirty = false;
+      }
     }
     return _cache!;
   }
@@ -216,6 +228,7 @@ class ManifestOperations<T extends FileRecord> {
       );
       _cache!.add(record);
       _folderCache.addAll(folders);
+      _recordRegistrationRevision++;
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
