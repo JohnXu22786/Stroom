@@ -205,6 +205,15 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
     _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '启动后台服务');
       try {
+        if (!isBackgroundServiceSupported()) return false;
+        // Persist explicit user intent before starting the service. Otherwise
+        // a successful start could depend only on process memory if this write
+        // fails, and neither cold-start restore nor the native watchdog could
+        // recover it after process death.
+        if (persistEnabled) {
+          if (!await _setServiceEnabledPreference(true)) return false;
+          _explicitUserEnabledInProcess = true;
+        }
         // Android 13+ 上通知权限决定前台服务通知是否可见。
         // 权限被拒绝时服务仍能启动（仅通知不可见），因此请求失败不阻塞。
         await _requestNotificationPermissionIfNeeded();
@@ -221,13 +230,6 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
             await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
             return false;
           }
-        }
-        // A temporary task-owned start must not opt into cold-start restoration.
-        if (persistEnabled) {
-          // Preserve explicit user intent during this process even if storage
-          // cannot persist it. Automatic task cleanup must still respect it.
-          _explicitUserEnabledInProcess = true;
-          await _setServiceEnabledPreference(true);
         }
         // Activate the native AlarmManager keep-alive watchdog (only if
         // the user has the watchdog toggle enabled).
@@ -341,6 +343,13 @@ Future<void> _waitForServiceToStop(FlutterBackgroundService service) async {
 Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '重新启动后台服务');
       try {
+        if (!isBackgroundServiceSupported()) return false;
+        // Record the user's choice before stopping the current instance so a
+        // failed preference write cannot turn a running service into a
+        // process-only start.
+        if (!await _setServiceEnabledPreference(true)) return false;
+        _explicitUserEnabledInProcess = true;
+
         final service = FlutterBackgroundService();
         await _requestServiceStopAndWait(service);
         final started = await service.startService();
@@ -348,10 +357,6 @@ Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
           await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
           return false;
         }
-        // 重启后保持持久化状态与看门狗一致，防止重启过程中
-        // 系统杀进程导致状态漂移（例如 enabled 标记丢失）。
-        _explicitUserEnabledInProcess = true;
-        await _setServiceEnabledPreference(true);
         await _enableKeepAlive();
         await AppLogService.info('BackgroundService', '后台服务已重新启动');
         return true;
@@ -417,14 +422,16 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
 }
 
 /// Persists the background service enabled state to SharedPreferences.
-Future<void> _setServiceEnabledPreference(bool enabled) async {
+Future<bool> _setServiceEnabledPreference(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setBool(_backgroundServiceEnabledKey, enabled);
     if (!saved) throw StateError('SharedPreferences rejected service state.');
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to save service enabled state: $e');
     await AppLogService.error('BackgroundService', '保存后台服务启用状态失败', e);
+    return false;
   }
 }
 
