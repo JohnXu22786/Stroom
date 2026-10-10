@@ -775,7 +775,7 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isFalse);
     });
 
-    test('cleanup preserves user intent when persisting it fails', () async {
+    test('rejected user start preference write does not start service', () async {
       await preferences.setBool('background_service_enabled', false);
       final originalStore = SharedPreferencesStorePlatform.instance;
       SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
@@ -783,7 +783,7 @@ void main() {
       });
       try {
         await preferences.reload();
-        expect(await startBackgroundService(), isTrue);
+        expect(await startBackgroundService(), isFalse);
         await preferences.reload();
         expect(preferences.getBool('background_service_enabled'), isFalse);
 
@@ -793,21 +793,24 @@ void main() {
           isTrue,
         );
 
+        expect(servicePlatform.startCalls, 0);
         expect(servicePlatform.stopCalls, 0);
-        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.running, isFalse);
       } finally {
         SharedPreferencesStorePlatform.instance = originalStore;
       }
     });
 
     test('cleanup honors an explicit stop when persisting it fails', () async {
+      await preferences.setBool('background_service_enabled', true);
+      expect(await startBackgroundService(), isTrue);
+
       final originalStore = SharedPreferencesStorePlatform.instance;
       SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
         'flutter.background_service_enabled': true,
       });
       try {
         await preferences.reload();
-        expect(await startBackgroundService(), isTrue);
         expect(await stopBackgroundService(), isTrue);
         await preferences.reload();
         expect(preferences.getBool('background_service_enabled'), isTrue);

@@ -205,7 +205,6 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
     _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '启动后台服务');
       try {
-        if (!isBackgroundServiceSupported()) return false;
         // Persist explicit user intent before starting the service. Otherwise
         // a successful start could depend only on process memory if this write
         // fails, and neither cold-start restore nor the native watchdog could
@@ -343,7 +342,6 @@ Future<void> _waitForServiceToStop(FlutterBackgroundService service) async {
 Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '重新启动后台服务');
       try {
-        if (!isBackgroundServiceSupported()) return false;
         // Record the user's choice before stopping the current instance so a
         // failed preference write cannot turn a running service into a
         // process-only start.
