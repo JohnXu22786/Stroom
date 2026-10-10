@@ -199,9 +199,8 @@ Future<T> _withAudioRecordNameAllocationLock<T>(
 }) async {
   final previous = _audioRecordNameAllocationTails[folder];
   final release = Completer<void>();
-  final tail = previous == null
-      ? release.future
-      : previous.then((_) => release.future);
+  final tail =
+      previous == null ? release.future : previous.then((_) => release.future);
   _audioRecordNameAllocationTails[folder] = tail;
   var previousFinished = previous == null;
 
