@@ -792,9 +792,8 @@ class AsrService {
             startSeconds: word.startSeconds == null
                 ? null
                 : word.startSeconds! + chunkOffset,
-            endSeconds: word.endSeconds == null
-                ? null
-                : word.endSeconds! + chunkOffset,
+            endSeconds:
+                word.endSeconds == null ? null : word.endSeconds! + chunkOffset,
             text: word.text,
           ));
         }
@@ -849,8 +848,7 @@ class AsrService {
         final timestampGranularities =
             multipartParams.remove('timestamp_granularities');
         if (timestampGranularities is List) {
-          multipartParams['timestamp_granularities[]'] =
-              timestampGranularities;
+          multipartParams['timestamp_granularities[]'] = timestampGranularities;
         }
         for (final name in jsonCustomParamNames) {
           if (multipartParams.containsKey(name)) {

@@ -121,12 +121,12 @@ void main() {
 
     test('subtitle records use their selected extension for stored files', () {
       TextRecord subtitle(String format) => TextRecord(
-        name: 'transcript',
-        hash: 'h_subtitle',
-        format: format,
-        createdAt: DateTime(2026),
-        size: 10,
-      );
+            name: 'transcript',
+            hash: 'h_subtitle',
+            format: format,
+            createdAt: DateTime(2026),
+            size: 10,
+          );
 
       expect(subtitle('txt').storagePath, 'h_subtitle.txt');
       expect(subtitle('srt').storagePath, 'h_subtitle.srt');

@@ -53,7 +53,7 @@ class _ProtocolAdapter implements HttpClientAdapter {
 }
 
 Future<({AsrResult result, AsrService service, _ProtocolAdapter adapter})>
-_transcribe({
+    _transcribe({
   required String responseBody,
   String responseContentType = Headers.jsonContentType,
   String responseFormat = 'json',
@@ -156,8 +156,7 @@ void main() {
     });
 
     test('keeps SRT cues while exposing plain transcript text', () async {
-      const srt =
-          '1\n'
+      const srt = '1\n'
           '00:00:00,000 --> 00:00:01,200\n'
           'Hello\n\n'
           '2\n'
@@ -179,8 +178,7 @@ void main() {
     });
 
     test('keeps VTT cues while exposing plain transcript text', () async {
-      const vtt =
-          'WEBVTT\n\n'
+      const vtt = 'WEBVTT\n\n'
           '00:00:00.000 --> 00:00:01.500 align:start\n'
           'Welcome to Stroom.';
       final call = await _transcribe(
@@ -200,8 +198,7 @@ void main() {
     test(
       'rebases SRT timestamps when a recording is transcribed in chunks',
       () async {
-        String cue(String text) =>
-            '1\n'
+        String cue(String text) => '1\n'
             '00:00:00,000 --> 00:00:00,001\n'
             '$text';
         final call = await _transcribe(
@@ -320,9 +317,8 @@ void main() {
           ],
         );
 
-        final body =
-            jsonDecode(utf8.decode(call.adapter.requestBody!))
-                as Map<String, dynamic>;
+        final body = jsonDecode(utf8.decode(call.adapter.requestBody!))
+            as Map<String, dynamic>;
         expect(body['metadata'], {
           'enabled': true,
           'labels': ['a', 2],

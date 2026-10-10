@@ -51,6 +51,7 @@ class TextRecord
     final extension = format == 'srt' || format == 'vtt' ? format : 'txt';
     return '$hash.$extension';
   }
+
   @override
   String get storagePath => storageFileName;
 
@@ -221,6 +222,7 @@ class TextManifest {
     final legacyFileName = '${fileName.substring(0, extensionIndex)}.txt';
     return _ops.readFile(legacyFileName);
   }
+
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
