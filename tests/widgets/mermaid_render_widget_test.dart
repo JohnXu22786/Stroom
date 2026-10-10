@@ -929,6 +929,54 @@ void main() {
       skip: kIsWeb,
     );
 
+    testWidgets(
+      'empty-code remount reports a failed WebView creation',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final firstWebView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        expect(find.byType(InAppWebView), findsNothing);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        final remountedWebView = platform.webView!;
+        expect(remountedWebView, isNot(same(firstWebView)));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        // Simulate a platform view that mounts but never calls
+        // onWebViewCreated after the previous controller was retained.
+        await tester.pump(const Duration(seconds: 12));
+
+        expect(find.text('图表渲染引擎初始化失败，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
@@ -1354,6 +1402,18 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   @override
   Future<void> loadUrl({
     required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  Future<void> loadData({
+    required String data,
+    String mimeType = 'text/html',
+    String encoding = 'utf8',
+    WebUri? baseUrl,
+    Uri? androidHistoryUrl,
+    WebUri? historyUrl,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
   }) async {}

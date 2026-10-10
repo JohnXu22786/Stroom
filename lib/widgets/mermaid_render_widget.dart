@@ -799,6 +799,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _zoomLevel = 1.0;
       _panX = 0;
       _panY = 0;
+      if (oldWidget.mermaidCode.trim().isEmpty &&
+          widget.mermaidCode.trim().isNotEmpty) {
+        // The empty-code placeholder unmounts the WebView. Drop its stale
+        // controller and give the remounted platform view a fresh creation
+        // deadline, so a failed remount still reaches the error state.
+        _webViewController = null;
+        _armWebViewCreationFallback();
+      }
       _loadMermaidCode();
     }
   }
