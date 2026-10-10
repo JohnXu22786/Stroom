@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart'
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/tool_call.dart';
+import '../models/message_block.dart';
+import '../models/message_block_conversion.dart' show assistantBlocks;
 import '../pages/chat/chat_types.dart' show legacyToBlocks;
 import 'app_log_service.dart';
 import 'backup_location_manager.dart';
@@ -125,6 +127,7 @@ abstract final class DataParts {
   /// - chat v1: 引入统一 blocks 格式（旧全局 v2→v3 迁移：
   ///   assistant 消息的 reasoningSections/textSections/toolCalls
   ///   转为统一的 blocks 数组）
+  /// - chat v2: all assistant replies have canonical blocks, including partial saves.
   /// - settings v1: 引入 provider_entries（旧全局 v0→v1 迁移：
   ///   old chat_configs → provider_entries + 修复 null id/type）
   /// - pictures/audio/videos/texts v1: 移除共享 folders 表，
@@ -135,7 +138,7 @@ abstract final class DataParts {
   /// - anki/browserCookies: 无迁移历史，当前版本 0（机制就位，
   ///   未来各自格式变更时从 1 开始递增）
   static const Map<String, int> currentVersions = {
-    chat: 1,
+    chat: 2,
     settings: 2,
     pictures: 1,
     audio: 1,
@@ -581,6 +584,23 @@ class DataMigrationService {
       case DataParts.chat:
         if (version == 0) {
           await _migrateChatV0ToV1(prefs);
+        } else if (version == 1) {
+          final raw = await prefs.getString('conversations');
+          if (raw != null && raw.isNotEmpty) {
+            final transformed = kIsWeb
+                ? await json_parser.migrateLegacyConversationsWeb(raw,
+                    canonical: true)
+                : await data_migration_isolate
+                    .runInIsolate(() => _canonicalizeConversations(raw));
+            if (transformed['parseError'] != null) {
+              throw FormatException(transformed['parseError'] as String);
+            }
+            if (transformed['isList'] != true) {
+              throw const FormatException('conversations must be an array');
+            }
+            await prefs.setString(
+                'conversations', transformed['encoded'] as String);
+          }
         }
         break;
       default:
@@ -926,6 +946,104 @@ class DataMigrationService {
     }
   }
 }
+
+Map<String, Object?> _canonicalizeConversations(String raw) {
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return {'isList': false};
+    for (final conversation in decoded) {
+      if (conversation is! Map || conversation['messages'] is! List) continue;
+      for (final message in conversation['messages'] as List) {
+        if (message is! Map || message['role'] != 'assistant') continue;
+        final sections = _canonicalStrings(message['reasoningSections']);
+        final existing = message['blocks'];
+        // v1 omitted empty reasoning slots in some tool rounds. Repair them
+        // proactively so reasoning buttons keep their section ordinals.
+        final needsRepair = message['toolCallRoundStarts'] is List &&
+            sections != null &&
+            existing is List &&
+            existing.where((b) => b is Map && b['type'] == 'reasoning').length <
+                sections.length;
+        if (existing is List && existing.isNotEmpty && !needsRepair) {
+          if (!existing.any((b) =>
+                  b is Map && (b['type'] == 'text' || b['type'] == 'error')) &&
+              message['content'] is String &&
+              (message['content'] as String).isNotEmpty) {
+            existing.add(TextBlock(text: message['content'] as String).toMap());
+          }
+          if (!existing.any((b) => b is Map && b['type'] == 'reasoning') &&
+              message['reasoningContent'] is String &&
+              (message['reasoningContent'] as String).isNotEmpty) {
+            existing.insert(
+                0,
+                ReasoningBlock(
+                        text: message['reasoningContent'] as String,
+                        isComplete: true)
+                    .toMap());
+          }
+          _preserveStoredErrorText(message, existing);
+          continue;
+        }
+        final tools = <ToolCallData>[];
+        for (final rawTool in message['toolCalls'] is List
+            ? message['toolCalls'] as List
+            : []) {
+          try {
+            tools.add(ToolCallData.fromMap(Map<String, dynamic>.from(rawTool)));
+          } catch (_) {
+            tools.add(ToolCallData(
+                id: 'corrupt-${tools.length}',
+                name: '损坏的工具记录',
+                arguments: {},
+                status: ToolCallStatus.error,
+                result: '无法读取原工具记录'));
+          }
+        }
+        final blocks = assistantBlocks(
+          content:
+              message['content'] is String ? message['content'] as String : '',
+          reasoningContent: message['reasoningContent'] is String
+              ? message['reasoningContent'] as String
+              : null,
+          reasoningSections: sections,
+          textSections: _canonicalStrings(message['textSections']),
+          toolCalls: tools,
+          toolCallRoundStarts: message['toolCallRoundStarts'] is List
+              ? (message['toolCallRoundStarts'] as List)
+                  .whereType<int>()
+                  .where((index) => index >= 0 && index <= tools.length)
+                  .toList()
+              : null,
+        );
+        final encoded = blocks.map((b) => b.toMap()).toList();
+        _preserveStoredErrorText(message, encoded);
+        message['blocks'] = encoded;
+      }
+    }
+    return {'isList': true, 'encoded': jsonEncode(decoded)};
+  } catch (error) {
+    // Keep both the original data and old version on failure; retry next boot.
+    return {'parseError': error.toString()};
+  }
+}
+
+void _preserveStoredErrorText(Map message, List blocks) {
+  if (message['isError'] != true ||
+      message['content'] is! String ||
+      blocks.any((b) => b is Map && b['type'] == 'error')) return;
+  final errorText = (message['content'] as String).split('\n\n---\n').first;
+  if (errorText.isNotEmpty &&
+      !blocks.any((b) =>
+          b is Map &&
+          b['type'] == 'text' &&
+          b['text'] is String &&
+          (b['text'] as String).startsWith(errorText))) {
+    blocks.insert(0, TextBlock(text: errorText).toMap());
+  }
+}
+
+List<String>? _canonicalStrings(Object? value) =>
+    value is List ? value.whereType<String>().toList() : null;
 
 Map<String, Object?> _transformLegacyConversations(String raw) {
   // Parsing, migration, and encoding happen together off the UI isolate.

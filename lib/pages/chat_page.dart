@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -16,6 +17,11 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/markdown_extensions.dart';
+import '../widgets/code_block_source_widget.dart';
+import 'chat/message_view/dsh_message_view.dart';
+import 'chat/message_view/message_code_fence.dart';
+import 'chat/dialogs/html_preview_dialog.dart';
+import 'chat/dialogs/mermaid_preview_dialog.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/transform_stretch_overscroll.dart';
@@ -26,6 +32,7 @@ import '../utils/text_manifest.dart';
 
 import '../models/chat_event.dart';
 import '../models/chat_message.dart';
+import '../models/message_block.dart';
 import '../models/tool_call.dart' show ToolCallData;
 import '../models/assistant.dart' show Assistant;
 import '../services/app_log_service.dart';
@@ -81,6 +88,7 @@ part 'chat_page_ui.dart';
 part 'chat_page_listeners.dart';
 part 'chat_page_builders.dart';
 part 'chat_page_bubbles.dart';
+part 'chat_page_web_messages.dart';
 
 /// Scroll controller for the chat list that can swallow library-initiated
 /// scrolls while a keyboard session is open.
@@ -119,7 +127,15 @@ class ChatPage extends ConsumerStatefulWidget {
   /// pre-filled and matching text highlighted. Used by [MessageSearchPage].
   final String? initialSearchQuery;
 
-  const ChatPage({super.key, this.initialSearchQuery});
+  @visibleForTesting
+  final Widget Function(
+    String,
+    ValueNotifier<Map<String, dynamic>?>,
+    void Function(Map<String, dynamic>),
+  )?
+  messageHostBuilder;
+
+  const ChatPage({super.key, this.initialSearchQuery, this.messageHostBuilder});
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -151,6 +167,13 @@ List<ChatMessage> mergeStreamingHistory(
 
 class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
+  bool get _useWebMessages =>
+      widget.messageHostBuilder != null ||
+      !const bool.fromEnvironment('STROOM_NATIVE_MESSAGES');
+  final _webMessageKey = GlobalKey<DshMessageViewState>();
+  final Map<String, String> _messageThumbnails = {};
+  final Set<String> _loadingMessageThumbnails = {};
+
   InMemoryChatController? _controller;
   late final User _currentUser;
   late final User _aiUser;
@@ -351,8 +374,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Minimum display duration of the top load-more indicator. The spinner
   /// must stay up for at least this long even when the page loads
   /// instantly, otherwise it flashes for a single frame.
-  static const Duration _loadMoreMinDisplayDuration =
-      Duration(milliseconds: 500);
+  static const Duration _loadMoreMinDisplayDuration = Duration(
+    milliseconds: 500,
+  );
 
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from
@@ -476,10 +500,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply =
-        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
-    final streamingMsgId =
-        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
+    final streamingFullReply = activeId != null
+        ? ref.watch(streamingFullReplyProvider(activeId))
+        : '';
+    final streamingMsgId = activeId != null
+        ? ref.watch(streamingMsgIdProvider(activeId))
+        : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
@@ -552,7 +578,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         // kept mounted and laid out (message positions are
                         // measured from render boxes) but hidden, so the
                         // pass itself is never visible to the user.
-                        visible: !_pendingInitialScrollAdjustment,
+                        visible:
+                            _useWebMessages || !_pendingInitialScrollAdjustment,
                         maintainState: true,
                         // The message list is part of the composer's tap
                         // region group ([chatComposerTapRegionGroupId]): with
@@ -565,14 +592,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           groupId: chatComposerTapRegionGroupId,
                           child: Stack(
                             children: [
-                              _buildChatWidget(
-                                isDark: isDark,
-                                isStreaming: isStreaming,
-                                streamingFullReply: streamingFullReply,
-                                streamingMsgId: streamingMsgId,
-                                activeId: activeId,
-                                controller: controller,
-                              ),
+                              if (_useWebMessages)
+                                _buildWebMessages(activeId, isDark)
+                              else
+                                _buildChatWidget(
+                                  isDark: isDark,
+                                  isStreaming: isStreaming,
+                                  streamingFullReply: streamingFullReply,
+                                  streamingMsgId: streamingMsgId,
+                                  activeId: activeId,
+                                  controller: controller,
+                                ),
                               // ── Overlay buttons (scroll-to-bottom +
                               // keyboard-dismiss) ──
                               // A self-contained widget: it owns BOTH

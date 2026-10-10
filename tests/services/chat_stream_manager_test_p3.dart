@@ -1,6 +1,37 @@
 part of 'chat_stream_manager_test.dart';
 
 void chatStreamManagerGroup3() {
+  test('periodic persistence saves the same canonical blocks as finalization',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer(overrides: [
+      conversationsProvider.overrideWith((ref) {
+        final notifier = ConversationsNotifier(ref);
+        notifier.state = [Conversation(id: 'partial', title: 'test')];
+        return notifier;
+      }),
+    ]);
+    final manager = container.read(chatStreamManagerProvider);
+    final provider = _PausedReplyProvider();
+    manager.adapter.forceService(_makeChatService(provider));
+    final result = manager.startStreaming(
+        text: '问题', convId: 'partial', history: [_userMsg('问题', 'u1')]);
+    await provider.replySent.future.timeout(const Duration(seconds: 10));
+    await Future<void>.delayed(const Duration(seconds: 6));
+    final partial = container.read(conversationsProvider).single.messages.last;
+    expect(partial.role, 'assistant');
+    expect(partial.blocks!.map((b) => b.toMap()), [
+      {'type': 'reasoning', 'text': '想法', 'isComplete': true},
+      {'type': 'text', 'text': '部分回复'},
+    ]);
+    provider.finish.complete();
+    final finalMessage = (await result).assistantMessage!;
+    expect(partial.blocks!.map((b) => b.toMap()),
+        finalMessage.blocks!.map((b) => b.toMap()));
+    manager.dispose();
+    container.dispose();
+  });
+
   group('ChatStreamManager - reasoning + toolCalls propagation', () {
     test('reasoning sections and toolCalls appear in StreamResult', () async {
       SharedPreferences.setMockInitialValues({});

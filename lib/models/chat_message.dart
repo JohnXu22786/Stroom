@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../utils/data_sanitizer.dart';
 import 'message_block.dart';
+import 'message_block_conversion.dart';
 import 'tool_call.dart';
 
 /// 简化的聊天消息模型，仅用于持久化到 SharedPreferences
@@ -194,8 +195,19 @@ class ChatMessage {
     this.reasoningSections,
     this.textSections,
     this.toolCallRoundStarts,
-    this.blocks,
-  })  : id = id ?? const Uuid().v4(),
+    List<MessageBlock>? blocks,
+  })  : blocks = blocks ??
+            (role == 'assistant'
+                ? assistantBlocks(
+                    content: content,
+                    reasoningContent: reasoningContent,
+                    reasoningSections: reasoningSections,
+                    textSections: textSections,
+                    toolCalls: toolCalls,
+                    toolCallRoundStarts: toolCallRoundStarts,
+                  )
+                : null),
+        id = id ?? const Uuid().v4(),
         createdAt = createdAt ?? DateTime.now(),
         attachments = attachments ?? [];
 
@@ -315,7 +327,7 @@ class ChatMessage {
         // Persist round boundary indices for multi-tool grouping.
         if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
           'toolCallRoundStarts': toolCallRoundStarts!.toList(),
-        if (blocks != null && blocks!.isNotEmpty)
+        if (blocks != null)
           'blocks': blocks!.map((b) => b.toMap()).toList(),
       };
 

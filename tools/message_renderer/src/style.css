@@ -1,0 +1,348 @@
+:root {
+  color-scheme: light;
+  --message-size: 16px;
+  --foreground: #24252a;
+  --secondary: #747680;
+  --surface: #fff;
+  --subtle: #f6f7f9;
+  --border: #e6e7eb;
+  --accent: #576bdb;
+  --dsw-font-markdown-base: 400 var(--message-size)/1.7 system-ui, sans-serif;
+  --dsw-font-markdown-base-strong:
+    600 var(--message-size)/1.7 system-ui, sans-serif;
+  --dsw-font-markdown-small: 400 13px/1.5 system-ui, sans-serif;
+  --dsw-font-markdown-h1: 600 1.7em/1.3 system-ui, sans-serif;
+  --dsw-font-markdown-h2: 600 1.4em/1.4 system-ui, sans-serif;
+  --dsw-font-markdown-h3: 600 1.2em/1.4 system-ui, sans-serif;
+  --dsw-font-markdown-h4: 600 1.05em/1.5 system-ui, sans-serif;
+  --dsw-alias-label-primary: var(--foreground);
+  --dsw-alias-label-secondary: var(--secondary);
+  --dsw-alias-label-tertiary: var(--secondary);
+  --dsw-alias-border-primary: var(--border);
+  --dsw-alias-fill-primary: var(--subtle);
+  --dsw-alias-fill-secondary: var(--subtle);
+  --dsw-alias-background-primary: var(--surface);
+  --dsw-font-family-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --shiki-foreground: var(--foreground);
+  --shiki-background: var(--subtle);
+  --shiki-token-keyword: #b45ba9;
+  --shiki-token-string: #408753;
+  --shiki-token-function: #4a79bd;
+  --shiki-token-constant: #b76c35;
+  --shiki-token-comment: #858992;
+  --shiki-token-punctuation: var(--secondary);
+  --shiki-token-parameter: var(--foreground);
+  --dsw-alias-link-primary: var(--accent);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --foreground: #e4e5ea;
+  --secondary: #a1a3af;
+  --surface: #1c1d22;
+  --subtle: #25262d;
+  --border: #383a44;
+  --accent: #a3adff;
+  --shiki-token-keyword: #d59cca;
+  --shiki-token-string: #9ccba7;
+  --shiki-token-function: #9abce7;
+  --shiki-token-constant: #e5bb90;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: system-ui, sans-serif;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  border-radius: 7px;
+  min-height: 32px;
+  min-width: 32px;
+}
+button:hover {
+  background: var(--border);
+}
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+#transcript {
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-width: thin;
+}
+.messages {
+  max-width: 860px;
+  margin: auto;
+  padding: 24px 24px 64px;
+}
+.message {
+  margin: 0 0 32px;
+  min-width: 0;
+}
+.message.user {
+  margin-left: 15%;
+}
+.user-text {
+  background: var(--subtle);
+  border-radius: 16px;
+  padding: 12px 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--message-size);
+  line-height: 1.65;
+}
+.message footer {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+  color: var(--secondary);
+  font-size: 17px;
+  align-items: center;
+}
+.message footer button {
+  width: 34px;
+  height: 34px;
+}
+.reasoning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--secondary);
+  margin: 8px 0;
+  padding: 4px 8px;
+}
+.tool {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 10px 0;
+  font-size: 13px;
+  overflow: hidden;
+}
+.tool summary {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  background: var(--subtle);
+  list-style: none;
+}
+.tool summary:after {
+  content: "⌄";
+}
+.tool-status {
+  margin-left: auto;
+  color: var(--secondary);
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+.completed .status-dot {
+  background: #53a076;
+}
+.running .status-dot {
+  background: var(--accent);
+  animation: pulse 1.2s infinite;
+}
+.error .status-dot {
+  background: #d66565;
+}
+.tool-detail {
+  padding: 0 14px 14px;
+  max-height: 420px;
+  overflow: auto;
+}
+.tool-detail pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.6 var(--dsw-font-family-mono);
+}
+.tool-detail h4 {
+  color: var(--secondary);
+  font-weight: 500;
+}
+.code-card {
+  --dsl-code-block-line-white-space: pre;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 12px 0;
+  overflow: hidden;
+  background: var(--subtle);
+}
+.code-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--secondary);
+  border-bottom: 1px solid var(--border);
+}
+.code-card header > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.code-card header > div {
+  display: flex;
+  flex-shrink: 0;
+}
+.code-card pre {
+  white-space: pre;
+  max-height: 360px;
+  overflow: auto;
+  font-size: 13px;
+}
+.code-card.wrap {
+  --dsl-code-block-line-white-space: pre-wrap;
+}
+.code-card.wrap pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.html-card {
+  padding: 20px;
+}
+.html-card p {
+  font-size: 13px;
+  color: var(--secondary);
+}
+.html-card button {
+  background: var(--surface);
+  padding: 4px 12px;
+}
+.diagram {
+  padding: 12px;
+}
+.diagram-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 12px;
+}
+.diagram-pan {
+  overflow: auto;
+  min-height: 100px;
+  max-height: 420px;
+  padding: 8px;
+}
+.diagram svg {
+  max-width: none;
+  min-width: 100%;
+  height: auto;
+}
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.attachment {
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  max-width: 250px;
+  font-size: 13px;
+}
+.attachment img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.attachment span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.error-block {
+  color: #cf5a5a;
+  white-space: pre-wrap;
+}
+.load-older {
+  display: block;
+  margin: 0 auto 20px;
+  color: var(--secondary);
+  font-size: 13px;
+}
+.to-bottom {
+  position: fixed;
+  bottom: 16px;
+  /* Reserve the rightmost position for Flutter's keyboard dismiss button. */
+  right: 76px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 3px 12px #0002;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 20px;
+}
+mark {
+  background: #f8e3a0;
+  color: #303039;
+}
+mark.current {
+  background: #fac95b;
+}
+.pulse {
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (max-width: 600px) {
+  .messages {
+    padding: 16px 14px 56px;
+  }
+  .message.user {
+    margin-left: 8%;
+  }
+  .code-card header {
+    padding: 4px 8px;
+  }
+}
+
+.tool > div > div:first-child {
+  padding: 10px;
+  background: var(--subtle);
+}
+.tool button[title^="复制"] {
+  display: none;
+}
+.message footer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.code-card header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

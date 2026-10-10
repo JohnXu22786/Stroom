@@ -33,7 +33,8 @@ Future<Map<String, Object?>> validateJsonBatchAndDataFormatsWeb(
 }) async =>
     throw UnsupportedError('Web JSON worker is not available on this platform');
 
-Future<Map<String, Object?>> migrateLegacyConversationsWeb(String raw) async =>
+Future<Map<String, Object?>> migrateLegacyConversationsWeb(String raw,
+        {bool canonical = false}) async =>
     throw UnsupportedError('Web JSON worker is not available on this platform');
 
 Future<Map<String, Object?>> prepareLegacyChatConfigsWeb(String raw) async =>

@@ -7,6 +7,17 @@ part of 'chat_page.dart';
 
 extension _ChatPageSearchExt on _ChatPageState {
   void _performSearch(String query) {
+    if (_useWebMessages) {
+      setState(() {
+        _searchQuery = query;
+        _searchMatches.clear();
+        _currentMatchIndex = 0;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchWebMessages();
+      });
+      return;
+    }
     setState(() {
       _searchQuery = query;
       _searchMatches.clear();
@@ -43,6 +54,10 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   Future<void> _scrollToCurrentMatch() async {
+    if (_useWebMessages) {
+      _searchWebMessages(locate: true);
+      return;
+    }
     // Serialize navigations: a rapid second tap must wait for the first
     // one's pagination loads instead of racing them (load-more refuses
     // concurrent runs, which would silently drop the newer navigation).
@@ -185,6 +200,8 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   void _closeSearch() {
+    if (_useWebMessages)
+      _webMessageKey.currentState?.send({'type': 'search', 'query': ''});
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;

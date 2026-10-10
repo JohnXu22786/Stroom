@@ -8,6 +8,7 @@ environment:
   flutter: ">=3.38.0"
 
 dependencies:
+  web: ^1.1.1
   flutter:
     sdk: flutter
 
@@ -50,7 +51,7 @@ dependencies:
   markdown_widget: ^2.3.2+8
   flutter_highlight: ^0.7.0
 
-  flutter_inappwebview: ^6.1.5
+  flutter_inappwebview: 6.2.0-beta.3
 
   # Image Editor
   pro_image_editor: ^13.0.0
@@ -113,6 +114,9 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/vendor/dsh_message_view/index.html
+    - assets/vendor/dsh_message_view/DSH-LICENSE.txt
+    - assets/vendor/dsh_message_view/THIRD-PARTY-NOTICES.txt
     - assets/images/
     - assets/vendor/
     - assets/vendor/mathlive/

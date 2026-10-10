@@ -1,7 +1,10 @@
 self.addEventListener('message', function (event) {
   const [operation, first, second, third, fourth] = event.data;
   let result;
-  if (operation === 'migrateLegacyConversations') {
+  if (operation === 'canonicalizeConversations') {
+    self.postMessage(canonicalizeConversations(first));
+    return;
+  } else if (operation === 'migrateLegacyConversations') {
     self.postMessage(migrateLegacyConversations(first));
     return;
   } else if (operation === 'prepareLegacyChatConfigs') {
@@ -498,6 +501,56 @@ function newUuidV4() {
   return `${hex.slice(0, 4).join('')}-${hex.slice(4, 6).join('')}-` +
     `${hex.slice(6, 8).join('')}-${hex.slice(8, 10).join('')}-` +
     hex.slice(10, 16).join('');
+}
+
+function canonicalizeConversations(json) {
+  try {
+    const conversations = JSON.parse(json);
+    if (!Array.isArray(conversations)) return 'not-list';
+    for (const conversation of conversations) {
+      if (!isRecord(conversation) || !Array.isArray(conversation.messages)) continue;
+      for (const message of conversation.messages) {
+        if (!isRecord(message) || message.role !== 'assistant') continue;
+        const sections = Array.isArray(message.reasoningSections) ? message.reasoningSections.filter(v => typeof v === 'string') : null;
+        const existing = message.blocks;
+        const needsRepair = Array.isArray(message.toolCallRoundStarts) && sections !== null &&
+          Array.isArray(existing) && existing.filter(b => isRecord(b) && b.type === 'reasoning').length < sections.length;
+        if (Array.isArray(existing) && existing.length && !needsRepair) {
+          if (!existing.some(b => isRecord(b) && (b.type === 'text' || b.type === 'error')) &&
+              typeof message.content === 'string' && message.content.length) {
+            existing.push({type:'text',text:message.content});
+          }
+          if (!existing.some(b => isRecord(b) && b.type === 'reasoning') &&
+              typeof message.reasoningContent === 'string' && message.reasoningContent.length) {
+            existing.unshift({type:'reasoning',text:message.reasoningContent,isComplete:true});
+          }
+          preserveStoredErrorText(message, existing);
+          continue;
+        }
+        const tools = (Array.isArray(message.toolCalls) ? message.toolCalls : []).map((rawTool, index) => {
+          try {return asToolCalls([rawTool])[0];}
+          catch (_) {return {id:'corrupt-'+index,name:'损坏的工具记录',arguments:{},status:'error',result:'无法读取原工具记录'};}
+        });
+        const blocks = legacyToBlocks(sections && sections.length ? sections :
+          (typeof message.reasoningContent === 'string' && message.reasoningContent ? [message.reasoningContent] : []),
+          Array.isArray(message.textSections) ? message.textSections.filter(v => typeof v === 'string') : [], tools, Array.isArray(message.toolCallRoundStarts) ? message.toolCallRoundStarts.filter(v => Number.isInteger(v) && v >= 0 && v <= tools.length) : []);
+        if (!blocks.some(b => b.type === 'text') && typeof message.content === 'string' && message.content) blocks.push({type:'text',text:message.content});
+        preserveStoredErrorText(message, blocks);
+        message.blocks = blocks;
+      }
+    }
+    return 'ok:0:0\n' + JSON.stringify(conversations);
+  } catch (error) {return 'parse-error\n' + JSON.stringify(String(error));}
+}
+
+function preserveStoredErrorText(message, blocks) {
+  if (message.isError !== true || typeof message.content !== 'string' ||
+      blocks.some(b => isRecord(b) && b.type === 'error')) return;
+  const errorText = message.content.split('\n\n---\n')[0];
+  if (errorText && !blocks.some(b => isRecord(b) && b.type === 'text' &&
+      typeof b.text === 'string' && b.text.startsWith(errorText))) {
+    blocks.unshift({type:'text',text:errorText});
+  }
 }
 
 function migrateLegacyConversations(json) {

@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ai_stream_event.dart';
 import 'package:stroom/models/chat_message.dart';
+import 'package:stroom/models/message_block.dart';
 import 'package:stroom/providers/chat_api_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/providers/conversation_provider.dart';
+import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 part 'chat_stream_manager_test_p1.dart';
@@ -83,6 +87,31 @@ class _MockProvider extends BaseChatProvider {
         'max_tokens': 4096,
         'temperature': 0.7,
       };
+}
+
+class _PausedReplyProvider extends _MockProvider {
+  final replySent = Completer<void>();
+  final finish = Completer<void>();
+  _PausedReplyProvider() : super([]);
+
+  @override
+  Stream<AIStreamEvent> chatStream(
+    List<Map<String, dynamic>> messages, {
+    String? model,
+    int? maxTokens,
+    double? temperature,
+    bool reasoning = false,
+    String reasoningEffort = 'medium',
+    List<Map<String, dynamic>>? tools,
+    Map<String, dynamic>? extraParams,
+    CancelToken? cancelToken,
+    String? system,
+  }) async* {
+    yield AIStreamEvent('想法', isReasoning: true);
+    yield AIStreamEvent('部分回复');
+    replySent.complete();
+    await finish.future;
+  }
 }
 
 // ============================================================================
