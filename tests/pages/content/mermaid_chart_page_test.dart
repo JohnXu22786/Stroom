@@ -140,8 +140,7 @@ void main() {
       expect(find.text('添加请求'), findsOneWidget);
     });
 
-    testWidgets(
-        'frontmatter sequenceDiagram selects snippets and save label',
+    testWidgets('frontmatter sequenceDiagram selects snippets and save label',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
