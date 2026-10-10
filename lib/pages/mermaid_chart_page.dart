@@ -138,6 +138,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   }
 
   void _onCodeChanged() {
+    final detectedTypeId = _detectTypeFromCode(_codeController.text);
+    if (detectedTypeId != _selectedTypeId) {
+      setState(() {
+        _selectedTypeId = detectedTypeId;
+      });
+    }
     _schedulePreviewUpdate();
   }
 

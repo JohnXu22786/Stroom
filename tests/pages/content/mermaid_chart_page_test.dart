@@ -121,6 +121,54 @@ void main() {
       expect(textField.controller?.text, contains('Test'));
     });
 
+    testWidgets('manually editing the header updates snippet buttons',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      expect(find.text('添加节点'), findsOneWidget);
+      expect(find.text('添加参与者'), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'sequenceDiagram\n  A->>B: Hello',
+      );
+      await tester.pump();
+
+      expect(find.text('添加节点'), findsNothing);
+      expect(find.text('添加参与者'), findsOneWidget);
+      expect(find.text('添加请求'), findsOneWidget);
+    });
+
+    testWidgets('saving after editing the header uses the edited type label',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'sequenceDiagram\n  A->>B: Hello',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      final savedRecord = records.lastWhere((record) => record.format == 'mmd');
+      expect(savedRecord.name, '我的图表-时序图');
+    });
+
     // ═══════════════════════════════════════════════════
     // Layout tests (edit mode only — no InAppWebView)
     // ═══════════════════════════════════════════════════
