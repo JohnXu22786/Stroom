@@ -311,7 +311,7 @@ void main() {
 
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.result, 'partial OCR text');
-    expect(background.state.single.steps.single.status, BgStepStatus.failed);
+    expect(background.state.single.steps.first.status, BgStepStatus.failed);
     expect(executions.execution(execId)?.subTasks.single.status,
         TaskStatus.failed);
     expect(await TextManifest.loadRecords(), isEmpty);
