@@ -1,9 +1,9 @@
 package com.johntsui.stroom
 
 internal fun scheduleWithActiveIntent(
-    persistActiveIntent: () -> Unit,
+    persistActiveIntent: () -> Boolean,
     schedule: () -> Boolean,
 ): Boolean {
-    persistActiveIntent()
+    if (!persistActiveIntent()) return false
     return schedule()
 }

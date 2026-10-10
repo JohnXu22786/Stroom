@@ -13,7 +13,10 @@ class KeepAliveReceiverTest {
         val watchdogEnabled = true
 
         val scheduleSucceeded = scheduleWithActiveIntent(
-            persistActiveIntent = { watchdogActive = true },
+            persistActiveIntent = {
+                watchdogActive = true
+                true
+            },
             schedule = {
                 scheduleSawActiveIntent = watchdogActive
                 false
@@ -23,5 +26,21 @@ class KeepAliveReceiverTest {
         assertFalse(scheduleSucceeded)
         assertTrue(scheduleSawActiveIntent)
         assertTrue(watchdogActive && serviceEnabled && watchdogEnabled)
+    }
+
+    @Test
+    fun failedActiveIntentPersistencePreventsSchedulingAndReturnsFailure() {
+        var scheduleAttempted = false
+
+        val scheduleSucceeded = scheduleWithActiveIntent(
+            persistActiveIntent = { false },
+            schedule = {
+                scheduleAttempted = true
+                true
+            },
+        )
+
+        assertFalse(scheduleSucceeded)
+        assertFalse(scheduleAttempted)
     }
 }

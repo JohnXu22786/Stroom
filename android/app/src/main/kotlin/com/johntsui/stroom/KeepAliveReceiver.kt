@@ -211,12 +211,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 .apply()
         }
 
-        private fun markActive(context: Context, active: Boolean) {
+        private fun markActive(context: Context, active: Boolean): Boolean =
             context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_KEEP_ALIVE_ACTIVE, active)
-                .apply()
-        }
+                .commit()
 
         private fun createPendingIntent(context: Context, extraFlags: Int): PendingIntent {
             val intent = Intent(context, KeepAliveReceiver::class.java).apply {
