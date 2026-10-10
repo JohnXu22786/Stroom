@@ -37,7 +37,7 @@ Stroom 的 Mermaid、HTML 预览、公式、化学公式、换行与下划线等
 ### 开发和平台配置
 
 - 前端源码与锁定依赖：`tools/message_renderer/`。运行 `npm ci`，然后 `npm test` 会重新打包资源并执行行为检查。应用构建直接使用已提交的资源，不需要启动 Node 服务。
-- WebView 固定为官方 `flutter_inappwebview 6.2.0-beta.3`，该预发布版本新增 Linux 实现；Linux 使用 WPE WebKit。Linux CI 与发行包构建固定到 Ubuntu 22.04，使用其官方 FDO API 包；Ubuntu 24.04 官方仓库没有 WPE WebKit。Ubuntu 22.04 构建依赖为 `libwpewebkit-1.0-dev`、`libwpebackend-fdo-1.0-dev`、`libepoxy-dev`、`libsecret-1-dev`，发布和夜间构建工作流已补齐。分发 Linux bundle 时需安装相应 WPE WebKit/FDO 运行库。
+- WebView 固定为官方 `flutter_inappwebview 6.2.0-beta.3`，该预发布版本新增 Linux 实现；Linux 要求 WPE WebKit **2.0 API，版本至少 2.40**。Ubuntu 22.04 的 1.0 API 包无法编译此插件，Ubuntu 24.04 官方仓库没有 WPE。Linux CI、发布和夜间构建使用 Debian 13（trixie）官方容器与 `libwpewebkit-2.0-dev`、`libwpebackend-fdo-1.0-dev`、`libepoxy-dev`、`libsecret-1-dev`。预编译 Linux 包的系统基线因此为 Debian 13；没有声称兼容旧 Ubuntu。WPE 动态库、子进程和资源保持使用系统包，不复制不完整的 WebKit 库到应用 bundle。运行前在 Debian 13 安装 `libwpewebkit-2.0-1`、`libwpebackend-fdo-1.0-1`、`libepoxy0`、`libsecret-1-0`（以及应用原有 GTK、mpv、托盘依赖）。其他发行版需要匹配 API 的 WPE 运行库，并在自身环境重新编译。
 - 默认使用新的 Web 消息区。`--dart-define=STROOM_NATIVE_MESSAGES=true` 可临时回到原 Flutter 消息显示；数据仍使用 v2。已有 Flutter 气泡组件回归测试通过这个显式构建参数运行，新消息区另有直接测试打包 HTML 的 JS 检查和 Flutter 桥接检查。
 - CI 增加 DSH 前端行为、资源重建一致性、Linux 与 Web 构建检查。其他平台沿用现有原生构建配置。
 

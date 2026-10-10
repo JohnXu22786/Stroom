@@ -53,6 +53,8 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+# The beta plugin falls back to old headers that cannot compile its API calls.
+pkg_check_modules(STROOM_WPE REQUIRED wpe-webkit-2.0>=2.40)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
@@ -74,15 +76,9 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-# The beta WPE plugin adds a Clang 18 warning switch. Older distro Clang
-# versions report it as unknown; keep that diagnostic as a warning for this
-# plugin while retaining errors for its other warnings.
-if(TARGET flutter_inappwebview_linux_plugin AND
-   CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  target_compile_options(flutter_inappwebview_linux_plugin PRIVATE
-    -Wno-error=unknown-warning-option)
-endif()
-
+# Keep WPE and its subprocesses together in the system packages. The plugin's
+# library-only bundle would omit WebKit processes and resources.
+list(REMOVE_ITEM PLUGIN_BUNDLED_LIBRARIES ${FLUTTER_INAPPWEBVIEW_WPE_LIBS})
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
