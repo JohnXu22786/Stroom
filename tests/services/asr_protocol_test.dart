@@ -203,28 +203,61 @@ void main() {
     });
 
     test(
-      'rebases SRT timestamps when a recording is transcribed in chunks',
+      'rebases SRT and VTT cue timestamps when transcribed in chunks',
       () async {
-        String cue(String text) => '1\n'
-            '00:00:00,000 --> 00:00:00,001\n'
-            '$text';
-        final call = await _transcribe(
-          responseBody: cue('first'),
-          responseBodies: [cue('first'), cue('second'), cue('third')],
-          responseContentType: 'text/plain; charset=utf-8',
-          responseFormat: 'srt',
-          audioBytes: _testWav(140),
-          maxFileSizeBytes: 100,
-          chunking: 'fixedSize',
-          fallbackMethod: 'generic',
-        );
+        for (final format in ['srt', 'vtt']) {
+          String cue(String text) {
+            final timeSeparator = format == 'srt' ? ',' : '.';
+            final prefix = format == 'srt' ? '1\n' : '';
+            return '$prefix'
+                '00:00:00${timeSeparator}000 --> '
+                '00:00:00${timeSeparator}001\n'
+                '$text';
+          }
 
-        expect(call.result.text, 'first second third');
-        expect(call.result.outputFormat, 'srt');
-        expect(call.result.segments, hasLength(3));
-        expect(call.result.segments![1].startSeconds, closeTo(0.0035, 0.0001));
-        expect(call.result.subtitle, contains('00:00:00,004 --> 00:00:00,005'));
-        expect(call.result.subtitle, contains('00:00:00,007 --> 00:00:00,008'));
+          final call = await _transcribe(
+            responseBody: cue('first'),
+            responseBodies: [cue('first'), cue('second'), cue('third')],
+            responseContentType: format == 'srt'
+                ? 'text/plain; charset=utf-8'
+                : 'text/vtt; charset=utf-8',
+            responseFormat: format,
+            audioBytes: _testWav(140),
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+          );
+
+          expect(call.result.text, 'first second third');
+          expect(call.result.outputFormat, format);
+          expect(call.result.segments, hasLength(3));
+          expect(
+            call.result.segments![1].startSeconds,
+            closeTo(0.0035, 0.0001),
+          );
+          final subtitle = call.result.subtitle!;
+          final firstCue = format == 'srt'
+              ? '00:00:00,000 --> 00:00:00,001'
+              : '00:00:00.000 --> 00:00:00.001';
+          final secondCue = format == 'srt'
+              ? '00:00:00,004 --> 00:00:00,005'
+              : '00:00:00.004 --> 00:00:00.005';
+          final thirdCue = format == 'srt'
+              ? '00:00:00,007 --> 00:00:00,008'
+              : '00:00:00.007 --> 00:00:00.008';
+          expect(subtitle, contains(firstCue));
+          expect(subtitle, contains(secondCue));
+          expect(subtitle, contains(thirdCue));
+          expect(
+            subtitle.indexOf('first'),
+            lessThan(subtitle.indexOf('second')),
+          );
+          expect(
+            subtitle.indexOf('second'),
+            lessThan(subtitle.indexOf('third')),
+          );
+          if (format == 'vtt') expect(subtitle, startsWith('WEBVTT'));
+        }
       },
     );
 
@@ -343,48 +376,93 @@ void main() {
       );
     });
 
-    test('empty subtitle chunks succeed while malformed subtitles fail',
-        () async {
-      final empty = await _transcribe(
-        responseBody: '',
-        responseBodies: ['', '', ''],
-        responseContentType: 'text/plain; charset=utf-8',
-        responseFormat: 'srt',
-        audioBytes: _testWav(140),
-        maxFileSizeBytes: 100,
-        chunking: 'fixedSize',
-        fallbackMethod: 'generic',
-      );
-      expect(empty.result.text, isEmpty);
-      expect(
-        empty.result.chunks!.every((c) => c.status == AsrChunkStatus.succeeded),
-        isTrue,
-      );
+    test(
+      'empty subtitle chunks succeed while malformed subtitles fail',
+      () async {
+        for (final format in ['srt', 'vtt']) {
+          final empty = await _transcribe(
+            responseBody: format == 'srt'
+                ? ''
+                : '\uFEFFWEBVTT\nKind: captions\nLanguage: en\n'
+                    'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
+            responseBodies: List.filled(
+              3,
+              format == 'srt'
+                  ? ''
+                  : '\uFEFFWEBVTT\nKind: captions\nLanguage: en\n'
+                      'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
+            ),
+            responseContentType: format == 'srt'
+                ? 'text/plain; charset=utf-8'
+                : 'text/vtt; charset=utf-8',
+            responseFormat: format,
+            audioBytes: _testWav(140),
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+          );
+          expect(empty.result.text, isEmpty);
+          expect(
+            empty.result.chunks!.every(
+              (c) => c.status == AsrChunkStatus.succeeded,
+            ),
+            isTrue,
+          );
+          expect(empty.result.subtitle, format == 'srt' ? isEmpty : 'WEBVTT');
+          expect(empty.result.outputFormat, format);
+        }
 
-      final malformed = _transcribe(
-        responseBody: 'not a subtitle',
-        responseBodies: ['not a subtitle', 'not a subtitle', 'not a subtitle'],
-        responseContentType: 'text/plain; charset=utf-8',
-        responseFormat: 'srt',
-        audioBytes: _testWav(140),
-        maxFileSizeBytes: 100,
-        chunking: 'fixedSize',
-        fallbackMethod: 'generic',
-      );
-      await expectLater(
-        malformed,
-        throwsA(
-          isA<AsrChunkedTranscriptionException>()
-              .having((e) => e.isPartial, 'isPartial', isFalse)
-              .having((e) => e.partialText, 'partialText', isEmpty)
-              .having(
-                (e) => e.chunks.every((c) => c.status == AsrChunkStatus.failed),
-                'all chunks failed',
-                isTrue,
-              ),
-        ),
-      );
-    });
+        final malformed = _transcribe(
+          responseBody: 'not a subtitle',
+          responseBodies: [
+            'not a subtitle',
+            'not a subtitle',
+            'not a subtitle',
+          ],
+          responseContentType: 'text/plain; charset=utf-8',
+          responseFormat: 'srt',
+          audioBytes: _testWav(140),
+          maxFileSizeBytes: 100,
+          chunking: 'fixedSize',
+          fallbackMethod: 'generic',
+        );
+        await expectLater(
+          malformed,
+          throwsA(
+            isA<AsrChunkedTranscriptionException>()
+                .having((e) => e.isPartial, 'isPartial', isFalse)
+                .having((e) => e.partialText, 'partialText', isEmpty)
+                .having(
+                  (e) =>
+                      e.chunks.every((c) => c.status == AsrChunkStatus.failed),
+                  'all chunks failed',
+                  isTrue,
+                ),
+          ),
+        );
+
+        final malformedVtt = _transcribe(
+          responseBody: 'WEBVTT\nnot metadata or a cue',
+          responseBodies: List.filled(3, 'WEBVTT\nnot metadata or a cue'),
+          responseContentType: 'text/vtt; charset=utf-8',
+          responseFormat: 'vtt',
+          audioBytes: _testWav(140),
+          maxFileSizeBytes: 100,
+          chunking: 'fixedSize',
+          fallbackMethod: 'generic',
+        );
+        await expectLater(
+          malformedVtt,
+          throwsA(
+            isA<AsrChunkedTranscriptionException>().having(
+              (e) => e.chunks.every((c) => c.status == AsrChunkStatus.failed),
+              'all VTT chunks failed',
+              isTrue,
+            ),
+          ),
+        );
+      },
+    );
 
     test(
       'successful chunk concatenation retains repeated boundary words',
@@ -753,48 +831,13 @@ void main() {
       },
     );
 
-    test('chunk prompt carryover accepts structured JSON custom prompts',
-        () async {
-      final call = await _transcribe(
-        responseBody: '{"text":"first chunk"}',
-        responseBodies: [
-          '{"text":"first chunk"}',
-          '{"text":"second chunk"}',
-        ],
-        audioBytes: _testWav(100),
-        maxFileSizeBytes: 100,
-        chunking: 'fixedSize',
-        fallbackMethod: 'generic',
-        customParams: [
-          CustomParam(
-            paramName: 'prompt',
-            type: 'json',
-            defaultValue: '{"vocabulary":["Stroom"]}',
-          ),
-        ],
-      );
-
-      expect(call.result.text, 'first chunk second chunk');
-      expect(
-        _multipartField(call.adapter.requestBodies[1], 'prompt'),
-        '{"vocabulary":["Stroom"]}\nfirst chunk',
-      );
-    });
-
-    test('failed chunk does not lose structured prompt encoding metadata',
-        () async {
-      final adapter = _ProtocolAdapter(
-        responseBody: '',
-        responseBodies: [
-          '{"text":"first chunk"}',
-          '{"error":{"message":"middle failed"}}',
-          '{"text":"last chunk"}',
-        ],
-      );
-      final service = AsrService(
-        config: AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com/audio/transcriptions',
+    test(
+      'chunk prompt carryover accepts structured JSON custom prompts',
+      () async {
+        final call = await _transcribe(
+          responseBody: '{"text":"first chunk"}',
+          responseBodies: ['{"text":"first chunk"}', '{"text":"second chunk"}'],
+          audioBytes: _testWav(100),
           maxFileSizeBytes: 100,
           chunking: 'fixedSize',
           fallbackMethod: 'generic',
@@ -805,25 +848,61 @@ void main() {
               defaultValue: '{"vocabulary":["Stroom"]}',
             ),
           ],
-        ),
-        dio: Dio()..httpClientAdapter = adapter,
-      );
+        );
 
-      await expectLater(
-        service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
-        throwsA(
-          isA<AsrChunkedTranscriptionException>().having(
-            (error) => error.chunks[1].status,
-            'middle chunk status',
-            AsrChunkStatus.failed,
+        expect(call.result.text, 'first chunk second chunk');
+        expect(
+          _multipartField(call.adapter.requestBodies[1], 'prompt'),
+          '{"vocabulary":["Stroom"]}\nfirst chunk',
+        );
+      },
+    );
+
+    test(
+      'failed chunk does not lose structured prompt encoding metadata',
+      () async {
+        final adapter = _ProtocolAdapter(
+          responseBody: '',
+          responseBodies: [
+            '{"text":"first chunk"}',
+            '{"error":{"message":"middle failed"}}',
+            '{"text":"last chunk"}',
+          ],
+        );
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+            customParams: [
+              CustomParam(
+                paramName: 'prompt',
+                type: 'json',
+                defaultValue: '{"vocabulary":["Stroom"]}',
+              ),
+            ],
           ),
-        ),
-      );
-      expect(adapter.requestBodies, hasLength(3));
-      expect(
-        _multipartField(adapter.requestBodies[2], 'prompt'),
-        '{"vocabulary":["Stroom"]}',
-      );
-    });
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
+          throwsA(
+            isA<AsrChunkedTranscriptionException>().having(
+              (error) => error.chunks[1].status,
+              'middle chunk status',
+              AsrChunkStatus.failed,
+            ),
+          ),
+        );
+        expect(adapter.requestBodies, hasLength(3));
+        expect(
+          _multipartField(adapter.requestBodies[2], 'prompt'),
+          '{"vocabulary":["Stroom"]}',
+        );
+      },
+    );
   });
 }

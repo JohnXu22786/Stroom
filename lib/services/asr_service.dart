@@ -1008,14 +1008,17 @@ class AsrService {
       throw AsrChunkedTranscriptionException(chunkResults);
     }
 
-    final subtitle = _responseFormat == 'srt' || _responseFormat == 'vtt'
-        ? _formatSubtitle(segments, _responseFormat)
+    final isSubtitleFormat =
+        _responseFormat == 'srt' || _responseFormat == 'vtt';
+    final subtitle = isSubtitleFormat
+        ? _formatSubtitle(segments, _responseFormat) ??
+            (_responseFormat == 'vtt' ? 'WEBVTT' : '')
         : null;
     return AsrResult(
       text: texts.join(' '),
       processingTimeMs: 0,
       subtitle: subtitle,
-      outputFormat: subtitle == null ? 'txt' : _responseFormat,
+      outputFormat: isSubtitleFormat ? _responseFormat : 'txt',
       segments: segments.isEmpty ? null : List.unmodifiable(segments),
       words: words.isEmpty ? null : List.unmodifiable(words),
       chunks: List.unmodifiable(chunkResults),
@@ -1171,6 +1174,16 @@ class AsrService {
       }
       final segments = _parseSubtitleSegments(subtitle);
       if (segments.isEmpty) {
+        if (allowEmptyText &&
+            format == 'vtt' &&
+            _isHeaderOnlyWebVtt(subtitle)) {
+          return AsrResult(
+            text: '',
+            subtitle: subtitle,
+            outputFormat: format,
+            segments: const [],
+          );
+        }
         throw Exception('解析音频转写结果失败: 字幕格式异常');
       }
       return AsrResult(
@@ -1308,6 +1321,22 @@ class AsrService {
       cueNumber++;
     }
     return lines.join('\n').trimRight();
+  }
+
+  bool _isHeaderOnlyWebVtt(String subtitle) {
+    var normalized = subtitle.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    if (normalized.startsWith('\uFEFF')) {
+      normalized = normalized.substring(1);
+    }
+    final lines = normalized.trim().split('\n');
+    if (lines.isEmpty ||
+        !RegExp(r'^WEBVTT(?:[ \t]+[^\r\n]*)?$').hasMatch(lines.first)) {
+      return false;
+    }
+    final metadataLine = RegExp(
+      r'^(?:[A-Za-z][A-Za-z0-9_-]*:[ \t]*[^\r\n]*|X-TIMESTAMP-MAP=[^\r\n]*)$',
+    );
+    return lines.skip(1).every(metadataLine.hasMatch);
   }
 
   String _formatSubtitleTime(double seconds, String format) {
