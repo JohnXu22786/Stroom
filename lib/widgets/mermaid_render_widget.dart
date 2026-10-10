@@ -369,24 +369,25 @@ class MermaidRenderWidget extends StatefulWidget {
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
   /// [MermaidRenderWidget] instance and the preview dialog.
-  static String? _cachedInlineMermaidJs;
-  static bool _bundledJsResolved = false;
+  static Future<String?>? _bundledMermaidJsLoad;
 
-  /// Loads the bundled mermaid.js source (cached after the first load).
+  /// Loads the bundled mermaid.js source once, sharing an in-flight load.
   /// Returns null if the asset cannot be loaded — the caller then lets the
   /// template fall back to its CDN loader.
-  static Future<String?> loadBundledMermaidJs() async {
-    if (_bundledJsResolved) return _cachedInlineMermaidJs;
-    _bundledJsResolved = true;
+  static Future<String?> loadBundledMermaidJs() {
+    return _bundledMermaidJsLoad ??= _loadBundledMermaidJs();
+  }
+
+  static Future<String?> _loadBundledMermaidJs() async {
     try {
-      _cachedInlineMermaidJs =
-          await rootBundle.loadString(bundledMermaidJsAsset);
+      return await rootBundle.loadString(bundledMermaidJsAsset);
     } catch (e) {
-      debugPrint('[MermaidRenderWidget] Failed to load bundled mermaid.js '
-          '($bundledMermaidJsAsset), falling back to CDN: $e');
-      _cachedInlineMermaidJs = null;
+      debugPrint(
+        '[MermaidRenderWidget] Failed to load bundled mermaid.js '
+        '($bundledMermaidJsAsset), falling back to CDN: $e',
+      );
+      return null;
     }
-    return _cachedInlineMermaidJs;
   }
 
   /// Core HTML/CSS/JS template. [GESTURE_SCRIPT_PLACEHOLDER] is replaced
