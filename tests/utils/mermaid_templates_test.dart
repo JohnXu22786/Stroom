@@ -40,4 +40,26 @@ void main() {
       },
     );
   });
+
+  group('MermaidTemplates - mindmap snippets', () {
+    test(
+      'adds a topic under the existing root without adding another root',
+      () {
+        final template = MermaidTemplates.getTemplate('mindmap');
+        final addTopicSnippet = MermaidTemplates.getSnippets(
+          'mindmap',
+        ).singleWhere((snippet) => snippet.$1 == '添加主题').$2;
+        final insertedCode = MermaidTemplates.insertSnippet(
+          template,
+          addTopicSnippet,
+        );
+        final rootDeclarations = insertedCode
+            .split('\n')
+            .where((line) => RegExp(r'^\s*root\(').hasMatch(line));
+
+        expect(rootDeclarations, hasLength(1));
+        expect(insertedCode, endsWith('\n    新主题'));
+      },
+    );
+  });
 }
