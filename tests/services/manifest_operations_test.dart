@@ -16,6 +16,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeFolderInsertForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
@@ -629,6 +631,116 @@ void main() {
   // ====================================================================
 
   group('folder tracking', () {
+    testWidgets(
+        'text addRecord rolls back record and folders when canceled during persistence',
+        (WidgetTester t) async {
+      var cancelled = false;
+      final cancellation = StateError('cancelled during manifest persistence');
+      ManifestDatabase.beforeWebDataSaveForTesting = () {
+        cancelled = true;
+      };
+
+      await expectLater(
+        TextManifest.addRecord(
+          TextRecord(
+            id: 'text_cancel_folder_save',
+            name: 'cancelled',
+            hash: 'hash_cancel_folder_save',
+            createdAt: DateTime(2024),
+            size: 4,
+            folder: 'cancelled/child',
+          ),
+          beforeCommit: () {
+            if (cancelled) throw cancellation;
+          },
+        ),
+        throwsA(same(cancellation)),
+      );
+
+      expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.textRecords),
+          isEmpty);
+      expect(await TextManifest.loadRecords(), isEmpty);
+    });
+
+    testWidgets(
+        'addRecord rolls back folder persistence failure and retry completes it',
+        (WidgetTester t) async {
+      final existingRecord = AudioRecord(
+        id: 'audio_existing_folder_retry',
+        name: 'existing',
+        hash: 'hash_existing_folder_retry',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(existingRecord);
+      await FileManifest.addFolder('existing');
+      final record = AudioRecord(
+        id: 'audio_folder_retry',
+        name: 'tts',
+        hash: 'hash_folder_retry',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'existing/child/grandchild',
+      );
+      final failure = StateError('injected folder persistence failure');
+      var shouldFail = true;
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (shouldFail && path == 'existing/child') {
+          shouldFail = false;
+          throw failure;
+        }
+      };
+
+      await expectLater(FileManifest.addRecord(record), throwsA(same(failure)));
+
+      expect(
+          (await FileManifest.loadRecords()).map((row) => row.id),
+          equals([existingRecord.id]),
+          reason: 'a failed add must not remain visible through the record cache');
+      final failedRows = await ManifestDatabase.getAllAudioRecords();
+      expect(failedRows.any((row) => row['id'] == record.id), isFalse,
+          reason: 'a failed add must not remain persisted as a record');
+      expect(failedRows.map((row) => row['id']), equals([existingRecord.id]),
+          reason: 'a failed add must preserve pre-existing records');
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          equals(['existing']),
+          reason: 'a failed add must retain pre-existing folders only');
+
+      await FileManifest.addRecord(record);
+
+      expect(
+          (await ManifestDatabase.getAllAudioRecords())
+              .any((row) => row['id'] == record.id),
+          isTrue,
+          reason: 'retry must persist the audio record');
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          containsAll([
+            'existing',
+            'existing/child',
+            'existing/child/grandchild',
+          ]),
+          reason: 'retry must persist the complete folder path');
+    });
+
+    testWidgets('ordinary audio folder registration persists the folder',
+        (WidgetTester t) async {
+      await FileManifest.addFolder('ordinary/audio');
+
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          contains('ordinary/audio'));
+    });
+
     testWidgets('addRecord tracks folder and all ancestors',
         (WidgetTester t) async {
       await VideoManifest.addRecord(VideoRecord(

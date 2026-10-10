@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
@@ -33,6 +34,14 @@ class ManifestDatabase {
   /// Test mode: use JSON/in-memory storage instead of SQLite.
   /// Enables unit testing without sqflite native bindings.
   static bool _useInMemoryStorage = false;
+
+  /// Injects a folder persistence failure in manifest operation tests.
+  @visibleForTesting
+  static void Function(String path)? beforeFolderInsertForTesting;
+
+  /// Runs immediately before JSON manifest data is written in tests.
+  @visibleForTesting
+  static void Function()? beforeWebDataSaveForTesting;
 
   /// Enable test mode — all operations use in-memory JSON storage
   /// (same code path as web), avoiding sqflite native dependencies.
@@ -654,15 +663,93 @@ class ManifestDatabase {
     return _webData!;
   }
 
-  static Future<void> _saveWebData() async {
+  static Future<void> _saveWebData({bool rethrowOnError = false}) async {
     if (_webData == null) return;
     try {
       final json = jsonEncode(_webData);
+      beforeWebDataSaveForTesting?.call();
       await WebFileStore.write(_webStoreKey, utf8Encode(json));
     } catch (e, st) {
       debugPrint('ManifestDatabase._saveWebData error: $e');
       await AppLogService.error(
           'ManifestDatabase', '_saveWebData failed', e, st);
+      if (rethrowOnError) rethrow;
+    }
+  }
+
+  /// Inserts a record and its folder path in one persistence operation.
+  /// Folder entries are kept after their records are deleted, so they must be
+  /// rolled back with the record if an ancestor cannot be persisted.
+  static Future<void> insertRecordWithFolders({
+    required String recordTable,
+    required Map<String, dynamic> record,
+    required Iterable<String> folderPaths,
+    void Function()? beforeCommit,
+  }) async {
+    try {
+      final folderTable = ManifestTables.folderTableFor(recordTable);
+      final isTextRecord = recordTable == ManifestTables.textRecords;
+
+      if (_useJsonStore) {
+        final data = await _loadWebData();
+        final records = data[recordTable] as List<dynamic>? ?? <dynamic>[];
+        final folders = data[folderTable] as List<dynamic>? ?? <dynamic>[];
+        data[recordTable] = records;
+        data[folderTable] = folders;
+        final insertedFolders = <String>[];
+        var writeAttempted = false;
+
+        if (isTextRecord) beforeCommit?.call();
+        records.add(record);
+        try {
+          for (final path in folderPaths) {
+            if (folders.contains(path)) continue;
+            beforeFolderInsertForTesting?.call(path);
+            folders.add(path);
+            insertedFolders.add(path);
+          }
+          writeAttempted = true;
+          await _saveWebData(rethrowOnError: true);
+          if (isTextRecord) beforeCommit?.call();
+        } catch (error, stackTrace) {
+          records.remove(record);
+          for (final path in insertedFolders) {
+            folders.remove(path);
+          }
+          if (writeAttempted) {
+            try {
+              await _saveWebData(rethrowOnError: true);
+            } catch (_) {
+              // Keep the cancellation or original write error as the failure.
+            }
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        return;
+      }
+
+      final db = await database;
+      await db.transaction((txn) async {
+        if (isTextRecord) beforeCommit?.call();
+        await txn.insert(
+          recordTable,
+          recordToDbRow(record),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        for (final path in folderPaths) {
+          beforeFolderInsertForTesting?.call(path);
+          await txn.insert(
+            folderTable,
+            {'path': path},
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        if (isTextRecord) beforeCommit?.call();
+      });
+    } catch (e, stackTrace) {
+      await AppLogService.error(
+          'ManifestDatabase', 'insertRecordWithFolders failed', e, stackTrace);
+      rethrow;
     }
   }
 
@@ -1231,12 +1318,14 @@ class ManifestDatabase {
         final data = await _loadWebData();
         final list = data[folderTable] as List<dynamic>? ?? [];
         if (!list.contains(path)) {
+          beforeFolderInsertForTesting?.call(path);
           list.add(path);
           await _saveWebData();
         }
         return;
       }
       final db = await database;
+      beforeFolderInsertForTesting?.call(path);
       await db.insert(
         folderTable,
         {'path': path},

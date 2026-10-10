@@ -98,20 +98,6 @@ class ManifestOperations<T extends FileRecord> {
     return ManifestDatabase.getAllAudioRecords();
   }
 
-  Future<void> _dbInsertRecord(Map<String, dynamic> record,
-      {void Function()? beforeCommit}) async {
-    if (_isImageTable) {
-      await ManifestDatabase.insertImageRecord(record);
-    } else if (_isVideoTable) {
-      await ManifestDatabase.insertVideoRecord(record);
-    } else if (_isTextTable) {
-      await ManifestDatabase.insertTextRecord(record,
-          beforeCommit: beforeCommit);
-    } else {
-      await ManifestDatabase.insertAudioRecord(record);
-    }
-  }
-
   Future<void> _dbUpdateRecord(String id, Map<String, dynamic> updates) async {
     if (_isImageTable) {
       await ManifestDatabase.updateImageRecord(id, updates);
@@ -221,9 +207,15 @@ class ManifestOperations<T extends FileRecord> {
     try {
       await loadRecords();
       beforeCommit?.call();
-      await _dbInsertRecord(toMap(record), beforeCommit: beforeCommit);
+      final folders = _folderPathAndAncestors(folderOf(record));
+      await ManifestDatabase.insertRecordWithFolders(
+        recordTable: tableName,
+        record: toMap(record),
+        folderPaths: folders,
+        beforeCommit: beforeCommit,
+      );
       _cache!.add(record);
-      await _ensureFolderPathTracked(folderOf(record));
+      _folderCache.addAll(folders);
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
@@ -676,19 +668,22 @@ class ManifestOperations<T extends FileRecord> {
   /// Ensure a folder path (and all its ancestors) is tracked in [_folderCache]
   /// and the database, so the folder won't disappear when all records are removed.
   Future<void> _ensureFolderPathTracked(String folderPath) async {
-    if (folderPath.isEmpty) return;
-    final pathsToAdd = <String>[folderPath];
-    var parent = FolderPathUtils.getParentFolderPath(folderPath);
-    while (parent.isNotEmpty) {
-      pathsToAdd.add(parent);
-      parent = FolderPathUtils.getParentFolderPath(parent);
-    }
-    for (final p in pathsToAdd) {
+    for (final p in _folderPathAndAncestors(folderPath)) {
       if (!_folderCache.contains(p)) {
         _folderCache.add(p);
         await ManifestDatabase.insertFolder(p, recordTable: tableName);
       }
     }
+  }
+
+  List<String> _folderPathAndAncestors(String folderPath) {
+    final paths = <String>[];
+    var path = folderPath;
+    while (path.isNotEmpty) {
+      paths.add(path);
+      path = FolderPathUtils.getParentFolderPath(path);
+    }
+    return paths;
   }
 
   // _cleanEmptyFoldersFromCache was intentionally removed.
