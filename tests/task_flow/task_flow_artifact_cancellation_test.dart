@@ -28,6 +28,7 @@ import 'package:stroom/utils/web_file_store.dart';
 
 class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
   void Function()? onCompletedStep;
+  void Function()? onRunningStep;
 
   @override
   void updateStep(
@@ -49,6 +50,7 @@ class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
       error: error,
     );
     if (index == 1 && completed == true) onCompletedStep?.call();
+    if (index == 1 && running == true) onRunningStep?.call();
   }
 }
 
@@ -368,6 +370,155 @@ void main() {
 
     expect(await WebFileStore.read(outputPath), isNotEmpty);
     expect(await FileManifest.loadRecords(), hasLength(1));
+  });
+
+  test('does not start a WebFileStore read after cancellation during yield',
+      () async {
+    const key = 'videos/cancel_before_read.mp4';
+    await WebFileStore.write(key, Uint8List.fromList([1]));
+    var readCalls = 0;
+
+    final pending = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      readWebFileBytes: (_) {
+        readCalls++;
+        return Future.value(Uint8List.fromList([1]));
+      },
+    );
+    // The executor is suspended at its first frame yield, immediately before
+    // it checks the WebFileStore key and starts reading the input.
+    executions.cancelExecution(execId);
+
+    await expectLater(pending, throwsA(isA<BlockExecutionException>()));
+
+    expect(readCalls, 0);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+  });
+
+  test('active flow still reads and separates a WebFileStore input', () async {
+    const key = 'videos/active_read.mp4';
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
+    await WebFileStore.write(key, video);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    var readCalls = 0;
+
+    final outputPath = await executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      readWebFileBytes: (path) {
+        readCalls++;
+        expect(path, key);
+        return WebFileStore.read(path);
+      },
+      extractAudio: (path, format) {
+        expect(path, key);
+        expect(format, 'mp4');
+        return Future.value(extracted);
+      },
+    );
+
+    expect(readCalls, 1);
+    expect(outputPath, 'tts_audio/${computeAudioHash(extracted)}.wav');
+    expect(await WebFileStore.read(outputPath), extracted);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.running,
+    );
+  });
+
+  test('does not start metadata hashing after cancellation during yield',
+      () async {
+    final source = await File('${directory.path}/cancel_before_hash.mp4')
+        .writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final cancellationScheduled = Completer<void>();
+    background.dispose();
+    final cancellingBackground = _CancelOnCompletedStepBackground();
+    background = cancellingBackground;
+    cancellingBackground.onRunningStep = () {
+      scheduleMicrotask(() {
+        executions.cancelExecution(execId);
+        cancellationScheduled.complete();
+      });
+    };
+    final pendingMetadata = Completer<(String, String)>();
+    var metadataCalls = 0;
+
+    final pending = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) => Future.value(extracted),
+      computeAudioMeta: (_) {
+        metadataCalls++;
+        return pendingMetadata.future;
+      },
+    );
+
+    await expectLater(
+      pending.timeout(const Duration(seconds: 2)),
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await cancellationScheduled.future;
+    pendingMetadata.complete((computeAudioHash(extracted), 'wav'));
+
+    expect(metadataCalls, 0);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
+
+  test('active flow still hashes and persists separated audio', () async {
+    final source =
+        await File('${directory.path}/active_metadata.mp4').writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    var metadataCalls = 0;
+
+    final outputPath = await executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) => Future.value(extracted),
+      computeAudioMeta: (audioBytes) {
+        metadataCalls++;
+        return computeAudioMetaWithEventLoopYield(audioBytes);
+      },
+    );
+
+    expect(metadataCalls, 1);
+    expect(outputPath, 'tts_audio/${computeAudioHash(extracted)}.wav');
+    expect(await WebFileStore.read(outputPath), extracted);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.running,
+    );
   });
 
   test('cancellation releases a pending WebFileStore read', () async {
