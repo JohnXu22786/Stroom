@@ -15,6 +15,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  final Set<int> _throwOnCheckCalls = {};
+  int _serviceRunningCheckCount = 0;
 
   /// The last AndroidConfiguration passed to [configure], captured so tests
   /// can assert the foreground service type wiring.
@@ -40,6 +42,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
     _throwOnCheck = shouldThrow;
   }
 
+  void setThrowOnCheckCalls(Set<int> calls) {
+    _throwOnCheckCalls.addAll(calls);
+  }
+
   @override
   Future<bool> configure({
     required IosConfiguration iosConfiguration,
@@ -60,7 +66,9 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   @override
   Future<bool> isServiceRunning() async {
-    if (_throwOnCheck) {
+    _serviceRunningCheckCount++;
+    if (_throwOnCheck ||
+        _throwOnCheckCalls.contains(_serviceRunningCheckCount)) {
       throw 'Simulated check error';
     }
     return _isRunning;
@@ -541,6 +549,49 @@ void main() {
       );
     });
 
+    test(
+        'persistent running check exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      registerMockPlatform()..setThrowOnCheck(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason:
+            'a persistent running check exception must leave a watchdog retry',
+      );
+    });
+
+    test(
+        'pending stop running check exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2, 3});
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason:
+            'a pending-stop running check exception must leave a watchdog retry',
+      );
+    });
+
     test('failed temporary start does not arm the watchdog', () async {
       final mock = registerMockPlatform()..setStartResult(false);
 
@@ -558,8 +609,38 @@ void main() {
       );
     });
 
+    test('successful temporary start does not arm the watchdog', () async {
+      registerMockPlatform();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
     test('temporary start exception does not arm the watchdog', () async {
       final mock = registerMockPlatform()..setThrowOnStart(true);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('temporary running check exception does not arm the watchdog',
+        () async {
+      registerMockPlatform()..setThrowOnCheck(true);
 
       await withAndroidPlatform(() async {
         expect(

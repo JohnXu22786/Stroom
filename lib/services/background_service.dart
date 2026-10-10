@@ -220,10 +220,19 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
         await _requestNotificationPermissionIfNeeded();
 
         final service = FlutterBackgroundService();
-        if (_serviceStopMayBePending) {
-          await _requestServiceStopAndWait(service);
+        bool serviceRunning;
+        try {
+          if (_serviceStopMayBePending) {
+            await _requestServiceStopAndWait(service);
+          }
+          serviceRunning = await service.isRunning();
+        } catch (_) {
+          // Preserve recovery for an explicitly enabled service even when its
+          // current running state cannot be checked or reconciled.
+          if (persistEnabled) await _enableKeepAlive();
+          rethrow;
         }
-        if (!await service.isRunning()) {
+        if (!serviceRunning) {
           bool started;
           try {
             started = await service.startService();
@@ -241,10 +250,12 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
             return false;
           }
         }
-        // Activate the native AlarmManager keep-alive watchdog (only if
-        // the user has the watchdog toggle enabled).
-        final keepAliveScheduled = await _enableKeepAlive();
-        if (persistEnabled && !keepAliveScheduled) return false;
+        // Activate the native AlarmManager keep-alive watchdog for persistent
+        // starts (only if the user has the watchdog toggle enabled).
+        if (persistEnabled) {
+          final keepAliveScheduled = await _enableKeepAlive();
+          if (!keepAliveScheduled) return false;
+        }
         return true;
       } catch (e) {
         debugPrint(
