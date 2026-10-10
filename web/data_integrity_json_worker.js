@@ -516,7 +516,7 @@ function canonicalizeConversations(json) {
         const needsRepair = Array.isArray(message.toolCallRoundStarts) && sections !== null &&
           Array.isArray(existing) && existing.filter(b => isRecord(b) && b.type === 'reasoning').length < sections.length;
         if (Array.isArray(existing) && existing.length && !needsRepair) {
-          if (!existing.some(b => isRecord(b) && (b.type === 'text' || b.type === 'error')) &&
+          if (!existing.some(b => isRecord(b) && b.type === 'text') &&
               typeof message.content === 'string' && message.content.length) {
             existing.push({type:'text',text:message.content});
           }

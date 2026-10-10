@@ -78,6 +78,11 @@ test("Web startup migration matches canonical ordering and retries malformed dat
       toolCallRoundStarts: [0, "bad"],
     },
     { role: "assistant", content: "sibling" },
+    {
+      role: "assistant",
+      content: "正文旁边的错误",
+      blocks: [{ type: "error", message: "tool failed" }],
+    },
   );
   listener({
     data: [
@@ -113,6 +118,10 @@ test("Web startup migration matches canonical ordering and retries malformed dat
     { type: "text", text: "fallback" },
   ]);
   assert.deepEqual(migrated[6].blocks, [{ type: "text", text: "sibling" }]);
+  assert.deepEqual(migrated[7].blocks, [
+    { type: "error", message: "tool failed" },
+    { type: "text", text: "正文旁边的错误" },
+  ]);
   const saved = result.slice(result.indexOf("\n") + 1);
   listener({ data: ["canonicalizeConversations", saved] });
   assert.equal(result.slice(result.indexOf("\n") + 1), saved);

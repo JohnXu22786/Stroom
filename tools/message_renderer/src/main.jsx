@@ -215,12 +215,29 @@ function applySearch(emit = true) {
           previousOwner = owner;
         }
       }
+      const foldedText = text.toLowerCase();
+      const foldedStartOffsets = [];
+      const foldedEndOffsets = [];
+      let originalOffset = 0;
+      for (const character of text) {
+        const foldedLength = character.toLowerCase().length;
+        for (let i = 0; i < foldedLength; i++) {
+          foldedStartOffsets.push(originalOffset);
+          foldedEndOffsets.push(originalOffset + character.length);
+        }
+        originalOffset += character.length;
+      }
       const query = search.query.toLowerCase();
       let start = 0,
         occurrence = 0;
       const ranges = [];
-      while ((start = text.toLowerCase().indexOf(query, start)) >= 0) {
-        ranges.push({ start, end: start + query.length, occurrence });
+      while ((start = foldedText.indexOf(query, start)) >= 0) {
+        const end = start + query.length;
+        ranges.push({
+          start: foldedStartOffsets[start],
+          end: foldedEndOffsets[end - 1],
+          occurrence,
+        });
         matches.push({
           messageId: article.dataset.messageId,
           occurrence: occurrence++,

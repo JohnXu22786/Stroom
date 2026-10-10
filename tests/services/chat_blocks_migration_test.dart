@@ -94,7 +94,10 @@ void main() {
     expect(blocks[3]['text'], '');
     expect(blocks[2]['compactedAt'], '2026-10-01T00:00:00.000Z');
     expect(migrated[1]['rawResponse'], '保留');
-    expect(migrated[2]['blocks'], messages[2]['blocks']);
+    expect(migrated[2]['blocks'], [
+      {'type': 'error', 'message': '错误'},
+      {'type': 'text', 'text': '内容'},
+    ]);
     expect(migrated[3], messages[3]);
     expect(migrated[4]['blocks'], [
       {'type': 'text', 'text': '错误: 连接中断'},

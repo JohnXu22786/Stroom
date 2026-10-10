@@ -479,6 +479,27 @@ test("search preserves paragraph and message-block boundaries and joins inline t
   }
 });
 
+test("search highlights original offsets after Unicode lowercase expansion", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("unicode", [{ type: "text", text: "İfoo" }]),
+      ]),
+    );
+    await wait();
+    v.receive({ type: "search", session: "a", query: "foo" });
+    await wait();
+
+    assert.equal(
+      v.dom.window.document.querySelector("mark")?.textContent,
+      "foo",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});
+
 test("preview readiness follows each fence, accepting case variants and settled tails", async () => {
   const v = await view();
   try {

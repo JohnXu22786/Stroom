@@ -967,8 +967,7 @@ Map<String, Object?> _canonicalizeConversations(String raw) {
             existing.where((b) => b is Map && b['type'] == 'reasoning').length <
                 sections.length;
         if (existing is List && existing.isNotEmpty && !needsRepair) {
-          if (!existing.any((b) =>
-                  b is Map && (b['type'] == 'text' || b['type'] == 'error')) &&
+          if (!existing.any((b) => b is Map && b['type'] == 'text') &&
               message['content'] is String &&
               (message['content'] as String).isNotEmpty) {
             existing.add(TextBlock(text: message['content'] as String).toMap());
