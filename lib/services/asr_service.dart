@@ -208,6 +208,7 @@ class AsrResult {
   final String outputFormat;
   final List<AsrTranscriptSegment>? segments;
   final List<AsrTranscriptSegment>? words;
+  final List<AsrChunkResult>? chunks;
 
   const AsrResult({
     required this.text,
@@ -216,7 +217,63 @@ class AsrResult {
     this.outputFormat = 'txt',
     this.segments,
     this.words,
+    this.chunks,
   });
+}
+
+enum AsrChunkStatus { succeeded, failed }
+
+/// The outcome for one non-overlapping audio chunk.
+class AsrChunkResult {
+  final int index;
+  final double startSeconds;
+  final double endSeconds;
+  final AsrChunkStatus status;
+  final String? text;
+  final String? error;
+
+  const AsrChunkResult({
+    required this.index,
+    required this.startSeconds,
+    required this.endSeconds,
+    required this.status,
+    this.text,
+    this.error,
+  });
+}
+
+/// A chunked transcription that could not produce a complete transcript.
+class AsrChunkedTranscriptionException implements Exception {
+  final List<AsrChunkResult> chunks;
+
+  AsrChunkedTranscriptionException(Iterable<AsrChunkResult> chunks)
+      : chunks = List.unmodifiable(chunks);
+
+  bool get isPartial =>
+      chunks.any((chunk) => chunk.status == AsrChunkStatus.succeeded);
+
+  String get partialText => chunks
+      .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
+      .map((chunk) => chunk.text ?? '')
+      .where((text) => text.isNotEmpty)
+      .join(' ');
+
+  @override
+  String toString() {
+    final succeededCount = chunks
+        .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
+        .length;
+    final details = chunks.map((chunk) {
+      final state = chunk.status == AsrChunkStatus.succeeded
+          ? '成功: ${chunk.text ?? ''}'
+          : '失败: ${chunk.error}';
+      return '片段 ${chunk.index + 1} (${chunk.startSeconds.toStringAsFixed(3)}–${chunk.endSeconds.toStringAsFixed(3)}s) $state';
+    }).join('; ');
+    final summary = succeededCount == 0
+        ? '切块转写全部失败（${chunks.length} 个片段均未成功）'
+        : '切块转写不完整（$succeededCount/${chunks.length} 个片段成功）';
+    return '$summary: $details';
+  }
 }
 
 // ============================================================================
@@ -808,7 +865,9 @@ class AsrService {
       '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)',
     );
 
+    final chunkResults = <AsrChunkResult>[];
     final texts = <String>[];
+    var previousChunkText = '';
     final segments = <AsrTranscriptSegment>[];
     final words = <AsrTranscriptSegment>[];
     var chunkOffsetSeconds = 0.0;
@@ -826,18 +885,32 @@ class AsrService {
     for (int i = 0; i < chunks.length; i++) {
       final chunk = chunks[i];
       final chunkOffset = chunkOffsetSeconds;
-      chunkOffsetSeconds += parseWavHeader(chunk).durationSeconds;
+      final chunkDurationSeconds = parseWavHeader(chunk).durationSeconds;
+      final chunkEndSeconds = chunkOffset + chunkDurationSeconds;
+      chunkOffsetSeconds = chunkEndSeconds;
 
       // ── Prompt carrying: pass previous chunk's text as prompt ──
       final chunkParams = Map<String, dynamic>.from(sharedParams);
-      if (i > 0 && texts.isNotEmpty) {
-        // Use last ~100 chars of previous chunk's text as prompt for continuity
-        final prevText = texts.last;
-        final promptSuffix = prevText.length > 100
-            ? prevText.substring(prevText.length - 100)
-            : prevText;
-        chunkParams['prompt'] = promptSuffix;
-        jsonCustomParamNames.remove('prompt');
+      final chunkCustomParamNames = Set<String>.from(jsonCustomParamNames);
+      if (i > 0 && previousChunkText.isNotEmpty) {
+        final previousText = previousChunkText;
+        final previousRunes = previousText.runes.toList();
+        final promptSuffix = String.fromCharCodes(
+          previousRunes.skip(
+            previousRunes.length > 100 ? previousRunes.length - 100 : 0,
+          ),
+        );
+        final configuredPromptValue = sharedParams['prompt'];
+        final configuredPrompt = configuredPromptValue is String
+            ? configuredPromptValue
+            : configuredPromptValue == null
+                ? null
+                : jsonEncode(configuredPromptValue);
+        chunkParams['prompt'] =
+            configuredPrompt == null || configuredPrompt.isEmpty
+                ? promptSuffix
+                : '$configuredPrompt\n$promptSuffix';
+        chunkCustomParamNames.remove('prompt');
       }
 
       try {
@@ -846,13 +919,24 @@ class AsrService {
           audioBytes: chunk,
           fileName: fileName,
           mimeType: mimeType,
-          jsonCustomParamNames: jsonCustomParamNames,
+          jsonCustomParamNames: chunkCustomParamNames,
           cancelToken: cancelToken,
         );
         _captureResponseDiagnostics(response);
-        final result = _parseResponse(response.data);
-        if (result.text.isNotEmpty) {
-          texts.add(result.text);
+        final result = _parseResponse(response.data, allowEmptyText: true);
+        final chunkText = result.text.trim().isEmpty ? '' : result.text;
+        previousChunkText = chunkText;
+        chunkResults.add(
+          AsrChunkResult(
+            index: i,
+            startSeconds: chunkOffset,
+            endSeconds: chunkEndSeconds,
+            status: AsrChunkStatus.succeeded,
+            text: chunkText,
+          ),
+        );
+        if (chunkText.isNotEmpty) {
+          texts.add(chunkText);
         }
         for (final segment in result.segments ?? const []) {
           segments.add(
@@ -883,15 +967,35 @@ class AsrService {
         await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) rethrow;
+        previousChunkText = '';
         _captureDioExceptionDiagnostics(e);
         await AppLogService.warning(
           'AsrService',
           '切块 $i/${chunks.length} 转写失败: $e',
         );
+        chunkResults.add(
+          AsrChunkResult(
+            index: i,
+            startSeconds: chunkOffset,
+            endSeconds: chunkEndSeconds,
+            status: AsrChunkStatus.failed,
+            error: e.message ?? e.toString(),
+          ),
+        );
       } on Exception catch (e) {
+        previousChunkText = '';
         await AppLogService.warning(
           'AsrService',
           '切块 $i/${chunks.length} 转写失败: $e',
+        );
+        chunkResults.add(
+          AsrChunkResult(
+            index: i,
+            startSeconds: chunkOffset,
+            endSeconds: chunkEndSeconds,
+            status: AsrChunkStatus.failed,
+            error: e.toString(),
+          ),
         );
       }
     }
@@ -900,20 +1004,24 @@ class AsrService {
     // are concatenated directly. Overlap dedup would be wrong here: for
     // non-overlapping audio it can remove legitimate repeated text at
     // chunk boundaries.
-    if (texts.isEmpty) {
-      throw Exception('切块转写全部失败（${chunks.length} 个片段均未成功），请检查网络或 API 配置后重试');
+    if (chunkResults.any((chunk) => chunk.status == AsrChunkStatus.failed)) {
+      throw AsrChunkedTranscriptionException(chunkResults);
     }
 
-    final subtitle = _responseFormat == 'srt' || _responseFormat == 'vtt'
-        ? _formatSubtitle(segments, _responseFormat)
+    final isSubtitleFormat =
+        _responseFormat == 'srt' || _responseFormat == 'vtt';
+    final subtitle = isSubtitleFormat
+        ? _formatSubtitle(segments, _responseFormat) ??
+            (_responseFormat == 'vtt' ? 'WEBVTT' : '')
         : null;
     return AsrResult(
       text: texts.join(' '),
       processingTimeMs: 0,
       subtitle: subtitle,
-      outputFormat: subtitle == null ? 'txt' : _responseFormat,
+      outputFormat: isSubtitleFormat ? _responseFormat : 'txt',
       segments: segments.isEmpty ? null : List.unmodifiable(segments),
       words: words.isEmpty ? null : List.unmodifiable(words),
+      chunks: List.unmodifiable(chunkResults),
     );
   }
 
@@ -1040,21 +1148,42 @@ class AsrService {
   }
 
   /// Parse the response shapes supported by the OpenAI transcription API.
-  AsrResult _parseResponse(dynamic responseData) {
+  AsrResult _parseResponse(
+    dynamic responseData, {
+    bool allowEmptyText = false,
+  }) {
     final format = _responseFormat;
 
     if (format == 'text' && responseData is String) {
-      _requireText(responseData);
+      if (!allowEmptyText) _requireText(responseData);
       return AsrResult(text: responseData);
     }
 
     if ((format == 'srt' || format == 'vtt') && responseData is String) {
       final subtitle = responseData;
       if (subtitle.trim().isEmpty) {
+        if (allowEmptyText) {
+          return AsrResult(
+            text: '',
+            subtitle: subtitle,
+            outputFormat: format,
+            segments: const [],
+          );
+        }
         throw Exception('音频转写返回了空的文本');
       }
       final segments = _parseSubtitleSegments(subtitle);
       if (segments.isEmpty) {
+        if (allowEmptyText &&
+            format == 'vtt' &&
+            _isHeaderOnlyWebVtt(subtitle)) {
+          return AsrResult(
+            text: '',
+            subtitle: subtitle,
+            outputFormat: format,
+            segments: const [],
+          );
+        }
         throw Exception('解析音频转写结果失败: 字幕格式异常');
       }
       return AsrResult(
@@ -1085,7 +1214,13 @@ class AsrService {
     }
 
     final text = response['text'];
-    _requireText(text);
+    if (allowEmptyText) {
+      if (text is! String) {
+        throw Exception('音频转写返回了无效的文本');
+      }
+    } else {
+      _requireText(text);
+    }
     final segments = _parseTimedSegments(response['segments']);
     final words = _parseTimedSegments(response['words']);
     return AsrResult(
@@ -1186,6 +1321,39 @@ class AsrService {
       cueNumber++;
     }
     return lines.join('\n').trimRight();
+  }
+
+  bool _isHeaderOnlyWebVtt(String subtitle) {
+    var normalized = subtitle.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    if (normalized.startsWith('\uFEFF')) {
+      normalized = normalized.substring(1);
+    }
+    final lines = normalized.trim().split('\n');
+    if (lines.isEmpty ||
+        !RegExp(r'^WEBVTT(?:[ \t]+[^\r\n]*)?$').hasMatch(lines.first)) {
+      return false;
+    }
+    return lines.skip(1).every(_isVttHeaderMetadataLine);
+  }
+
+  bool _isVttHeaderMetadataLine(String line) {
+    if (RegExp(r'^[A-Za-z][A-Za-z0-9_-]*:[ \t]*[^\r\n]*$').hasMatch(line)) {
+      return true;
+    }
+    final timestampMap = RegExp(
+      r'^X-TIMESTAMP-MAP=LOCAL:(\d{2,}:\d{2}:\d{2}\.\d{3}|'
+      r'\d{2,}:\d{2}\.\d{3}),MPEGTS:(\d+)$',
+    ).firstMatch(line);
+    if (timestampMap == null) return false;
+
+    final localParts = timestampMap.group(1)!.split(':');
+    final hasHours = localParts.length == 3;
+    final minute = int.parse(localParts[hasHours ? 1 : 0]);
+    final second = int.parse(localParts[hasHours ? 2 : 1].split('.').first);
+    if (minute > 59 || second > 59) return false;
+
+    final mpegts = BigInt.parse(timestampMap.group(2)!);
+    return mpegts <= BigInt.from(8589934591);
   }
 
   String _formatSubtitleTime(double seconds, String format) {
