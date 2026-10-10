@@ -25,4 +25,19 @@ void main() {
       );
     });
   });
+
+  group('MermaidTemplates - Gantt dependencies', () {
+    test(
+      'dependency task snippet references a task defined in the template',
+      () {
+        final template = MermaidTemplates.getTemplate('gantt');
+        final dependencySnippet = MermaidTemplates.getSnippets('gantt')
+            .singleWhere((snippet) => snippet.$1 == '添加依赖任务')
+            .$2;
+
+        expect(template, contains(':a1,'));
+        expect(dependencySnippet, contains('after a1,'));
+      },
+    );
+  });
 }
