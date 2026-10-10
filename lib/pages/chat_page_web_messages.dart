@@ -1,8 +1,24 @@
 part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
+const _externalMessageLinkSchemes = {
+  'http',
+  'https',
+  'mailto',
+};
+
 extension _ChatPageWebMessagesExt on _ChatPageState {
   List<Map<String, dynamic>> _webMessageData() {
+    if (_loadedConversationId != ref.read(activeConversationIdProvider)) {
+      _messageThumbnails.clear();
+    } else {
+      final retainedAttachmentIds = _history
+          .expand((message) => message.attachments)
+          .map((attachment) => attachment.id)
+          .toSet();
+      _messageThumbnails.removeWhere(
+          (id, _) => !retainedAttachmentIds.contains(id));
+    }
     final messages = <Map<String, dynamic>>[];
     final start = _isSearching ? 0 : _loadedUpToIndex.clamp(0, _history.length);
     final history = _history.skip(start).toList();
@@ -83,7 +99,7 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       hasOlder: !_isSearching && _hasMoreMessages,
       theme: {
         'dark': isDark,
-        'fontSize': 16 * MediaQuery.textScalerOf(context).scale(1),
+        'fontSize': MediaQuery.textScalerOf(context).scale(16),
         'colors': {
           '--surface': css(colors.surface),
           '--foreground': css(colors.onSurface),
@@ -152,7 +168,8 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
     }
     if (type == 'link' && event['uri'] is String) {
       final uri = Uri.tryParse(event['uri'] as String);
-      if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http')) {
+      if (uri != null &&
+          _externalMessageLinkSchemes.contains(uri.scheme.toLowerCase())) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
       return;
@@ -174,13 +191,17 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
         _showAttachmentPreview(attachment);
         return;
       }
+      final conversationId = _loadedConversationId;
+      if (conversationId == null) return;
+      final thumbnailLoadKey = (conversationId, attachment.id);
       if (attachment.fileType != 'image' ||
           _messageThumbnails.containsKey(attachment.id) ||
-          !_loadingMessageThumbnails.add(attachment.id)) return;
-      final conversationId = _loadedConversationId;
+          !_loadingMessageThumbnails.add(thumbnailLoadKey)) return;
       try {
-        final bytes = await AttachmentStorage.readFile(
-            attachment.thumbnailPath ?? attachment.storagePath);
+        final path = attachment.thumbnailPath ?? attachment.storagePath;
+        final bytes = await (widget.thumbnailBytesReader == null
+            ? AttachmentStorage.readFile(path)
+            : widget.thumbnailBytesReader!(path));
         if (bytes == null ||
             !mounted ||
             conversationId != _loadedConversationId) return;
@@ -190,14 +211,20 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
             await frame.image.toByteData(format: ui.ImageByteFormat.png);
         frame.image.dispose();
         codec.dispose();
-        if (png != null && mounted && conversationId == _loadedConversationId) {
+        final stillAttached = _history.any((currentMessage) =>
+            currentMessage.attachments.any((a) => a.id == attachment.id));
+        if (png != null &&
+            mounted &&
+            conversationId == _loadedConversationId &&
+            conversationId == ref.read(activeConversationIdProvider) &&
+            stillAttached) {
           setState(() => _messageThumbnails[attachment.id] =
               'data:image/png;base64,${base64Encode(png.buffer.asUint8List())}');
         }
       } catch (error) {
         debugPrint('[MessageThumbnail] $error');
       } finally {
-        _loadingMessageThumbnails.remove(attachment.id);
+        _loadingMessageThumbnails.remove(thumbnailLoadKey);
       }
       return;
     }

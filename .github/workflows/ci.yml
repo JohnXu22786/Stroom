@@ -2,7 +2,7 @@ name: CI Checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'v*', 'release/*']
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
@@ -227,4 +227,4 @@ jobs:
           pub-cache: true
       - run: flutter pub get
       - name: Run ${{ matrix.label }} tests
-        run: flutter test --dart-define=STROOM_NATIVE_MESSAGES=true ${{ matrix.pattern }}
+        run: flutter test ${{ matrix.pattern }}

@@ -182,6 +182,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final oldCtrl = _controller;
     _controller = InMemoryChatController();
     _history.clear();
+    _messageThumbnails.clear();
     _chatSegments.clear();
     _reasoningContents.clear();
     _finalizedMessages.clear();

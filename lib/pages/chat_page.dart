@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
@@ -134,7 +135,15 @@ class ChatPage extends ConsumerStatefulWidget {
     void Function(Map<String, dynamic>),
   )? messageHostBuilder;
 
-  const ChatPage({super.key, this.initialSearchQuery, this.messageHostBuilder});
+  @visibleForTesting
+  final Future<Uint8List?> Function(String path)? thumbnailBytesReader;
+
+  const ChatPage({
+    super.key,
+    this.initialSearchQuery,
+    this.messageHostBuilder,
+    this.thumbnailBytesReader,
+  });
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -171,7 +180,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       !const bool.fromEnvironment('STROOM_NATIVE_MESSAGES');
   final _webMessageKey = GlobalKey<DshMessageViewState>();
   final Map<String, String> _messageThumbnails = {};
-  final Set<String> _loadingMessageThumbnails = {};
+  final Set<(String, String)> _loadingMessageThumbnails = {};
 
   InMemoryChatController? _controller;
   late final User _currentUser;

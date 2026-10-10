@@ -157,6 +157,63 @@ test("DSH Markdown preserves safe extensions, tools and incomplete streaming fen
   v.dom.window.close();
 });
 
+test("Markdown links open supported schemes and preserve local anchors", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("links", [
+      message("m", [
+        {
+          type: "text",
+          text: "[web](https://example.com) [mail](mailto:a@example.com) [note](#footnote)",
+        },
+      ]),
+    ]),
+  );
+  await wait();
+  const doc = v.dom.window.document;
+  const links = [...doc.querySelectorAll("a")];
+  assert.equal(links.length, 2);
+
+  const localAnchor = doc.createElement("a");
+  localAnchor.href = "#footnote";
+  localAnchor.textContent = "note";
+  doc.querySelector("[data-message-id='m']").append(localAnchor);
+
+  const anchorClick = new v.dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+  });
+  localAnchor.dispatchEvent(anchorClick);
+  assert.equal(anchorClick.defaultPrevented, false);
+  assert.deepEqual(v.events.filter((event) => event.type === "link"), []);
+
+  const modifiedClick = new v.dom.window.MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    ctrlKey: true,
+  });
+  links[0].dispatchEvent(modifiedClick);
+  assert.equal(modifiedClick.defaultPrevented, false);
+  assert.deepEqual(v.events.filter((event) => event.type === "link"), []);
+
+  for (const link of links) {
+    const click = new v.dom.window.MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+    });
+    link.dispatchEvent(click);
+    assert.equal(click.defaultPrevented, true);
+  }
+  assert.deepEqual(
+    v.events.filter((event) => event.type === "link").map((event) => event.uri),
+    [
+      "https://example.com",
+      "mailto:a@example.com",
+    ],
+  );
+  v.dom.window.close();
+});
+
 test("session replacement invalidates old updates and actions contain stable targets", async () => {
   const v = await view();
   v.receive(snapshot("a", [message("old", [{ type: "text", text: "旧" }])]));

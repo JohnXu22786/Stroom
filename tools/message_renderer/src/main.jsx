@@ -10,6 +10,7 @@ import {
   IconEditOutlineRegular,
   IconCodeOutlineRegular,
   IconTrashOutlineRegular,
+  MarkdownDelegateProvider,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import "katex/contrib/mhchem/mhchem.js";
 import { MessageContext } from "./code.jsx";
@@ -447,16 +448,26 @@ function receive(command) {
 engineReady
   .then(() => {
     flushSync(() =>
-      createRoot(document.getElementById("root")).render(<View />),
+      createRoot(document.getElementById("root")).render(
+        <MarkdownDelegateProvider
+          openExternalLink={(uri) =>
+            send({ type: "link", session: current.session, uri })
+          }
+        >
+          <View />
+        </MarkdownDelegateProvider>,
+      ),
     );
     window.StroomMessageView = { receive };
     document.addEventListener("click", (event) => {
       const link = event.target.closest("a");
-      if (link) {
+      if (!link) return;
+      const uri = link.getAttribute("href");
+      if (!uri || uri.startsWith("#")) return;
+      const scheme = /^([a-z][a-z\d+.-]*):/i.exec(uri)?.[1].toLowerCase();
+      if (scheme === "mailto") {
         event.preventDefault();
-        const uri = link.getAttribute("href");
-        if (/^https?:\/\//i.test(uri))
-          send({ type: "link", session: current.session, uri });
+        send({ type: "link", session: current.session, uri });
       }
     });
     window.addEventListener("message", (event) => {
