@@ -262,8 +262,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   Future<void> _saveChart() async {
-    final content = _codeController.text.trim();
-    if (content.isEmpty) {
+    final content = _codeController.text;
+    if (content.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('图表内容为空，无法保存')),
       );
@@ -322,9 +322,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
       // Use user-provided filename (without extension for storage consistency)
       final baseName = userFileName;
-      final saveName = existingRecord == null
-          ? '$baseName-$typeLabel'
-          : baseName;
+      final saveName =
+          existingRecord == null ? '$baseName-$typeLabel' : baseName;
       final records = await TextManifest.loadRecords();
       String finalName = saveName;
       int counter = 2;

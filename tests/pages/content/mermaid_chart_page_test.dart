@@ -450,8 +450,8 @@ void main() {
 
     testWidgets('saving an edited chart updates its existing record in place',
         (tester) async {
-      const originalContent = 'graph TD\n  A-->B';
-      const editedContent = 'graph TD\n  A-->C';
+      const originalContent = ' \ngraph TD\n  A-->B\n ';
+      const editedContent = ' \ngraph TD\n  A-->C\n ';
       final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
       final originalRecord = TextRecord(
         id: 'existing-chart-id',
@@ -508,15 +508,14 @@ void main() {
 
       final records = await TextManifest.loadRecords();
       expect(records, hasLength(2));
-      final savedRecord =
-          records.singleWhere((r) => r.id == originalRecord.id);
+      final savedRecord = records.singleWhere((r) => r.id == originalRecord.id);
       expect(savedRecord.id, originalRecord.id);
       expect(savedRecord.name, originalRecord.name);
       expect(savedRecord.hash,
           computeTextHash(Uint8List.fromList(utf8.encode(editedContent))));
       expect(savedRecord.modifiedAt.isAfter(originalRecord.modifiedAt), isTrue);
-      expect(await TextManifest.readText(savedRecord.storagePath),
-          editedContent);
+      expect(
+          await TextManifest.readText(savedRecord.storagePath), editedContent);
 
       final preservedRecord =
           records.singleWhere((r) => r.id == sameNameInAnotherFolder.id);
