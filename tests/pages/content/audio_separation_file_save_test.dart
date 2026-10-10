@@ -15,7 +15,8 @@ void main() {
     FileManifest.invalidateCache();
   });
 
-  test('removes written audio when record registration fails without references',
+  test(
+      'removes written audio when record registration fails without references',
       () async {
     const hash = 'audio_register_failure';
     const storageName = '$hash.wav';
