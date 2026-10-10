@@ -101,9 +101,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   @override
   void initState() {
     super.initState();
-    _editorMode = widget.initialShowPreview
-        ? EditorMode.split
-        : EditorMode.edit;
+    _editorMode =
+        widget.initialShowPreview ? EditorMode.split : EditorMode.edit;
     if (widget.initialCode != null) {
       _codeController.text = widget.initialCode!;
       _selectedTypeId = _detectTypeFromCode(widget.initialCode!);
@@ -333,9 +332,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
       // Use user-provided filename (without extension for storage consistency)
       final baseName = userFileName;
-      final saveName = existingRecord == null
-          ? '$baseName-$typeLabel'
-          : baseName;
+      final saveName =
+          existingRecord == null ? '$baseName-$typeLabel' : baseName;
       final records = await TextManifest.loadRecords();
       String finalName = saveName;
       int counter = 2;
@@ -569,9 +567,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         }
 
         // Vertical layout for narrow split mode, edit mode, or preview mode
-        final editorHeight = isSplitMode
-            ? availableHeight * _splitEditorHeightRatio
-            : 0.0;
+        final editorHeight =
+            isSplitMode ? availableHeight * _splitEditorHeightRatio : 0.0;
 
         return Stack(
           children: [

@@ -87,9 +87,8 @@ class MermaidTemplates {
       }
     }
 
-    final dependencyId = taskIds.isNotEmpty
-        ? taskIds.last
-        : _nextGanttTaskId(code);
+    final dependencyId =
+        taskIds.isNotEmpty ? taskIds.last : _nextGanttTaskId(code);
     if (taskIds.isEmpty && lastRootTaskIndex >= 0) {
       lines[lastRootTaskIndex] = _addGanttTaskId(
         lines[lastRootTaskIndex],
@@ -111,9 +110,8 @@ class MermaidTemplates {
 
   static List<String>? _ganttTaskAttributes(String line, String dateFormat) {
     final commentIndex = line.indexOf('%%');
-    final taskLine = commentIndex < 0
-        ? line
-        : line.substring(0, commentIndex).trimRight();
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
     final trimmedLine = taskLine.trim();
     if (trimmedLine.isEmpty ||
         trimmedLine.startsWith('%%') ||
@@ -161,16 +159,15 @@ class MermaidTemplates {
   }
 
   static bool _isGanttTaskTag(String attribute) => const {
-    'active',
-    'done',
-    'crit',
-    'milestone',
-  }.contains(attribute.toLowerCase());
+        'active',
+        'done',
+        'crit',
+        'milestone',
+      }.contains(attribute.toLowerCase());
 
   static List<String> _ganttTaskIds(List<String> attributes) {
-    final values = attributes
-        .where((attribute) => !_isGanttTaskTag(attribute))
-        .toList();
+    final values =
+        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
     if (values.length < 3 || !_isGanttTaskId(values.first)) {
       return const [];
     }
@@ -184,28 +181,27 @@ class MermaidTemplates {
       !_isGanttDependency(attribute);
 
   static bool _isGanttDuration(String attribute) => RegExp(
-    r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
-    caseSensitive: false,
-  ).hasMatch(attribute);
+        r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
+        caseSensitive: false,
+      ).hasMatch(attribute);
 
   static bool _isGanttDependency(String attribute) => RegExp(
-    r'^(?:after|until)\s+\S+',
-    caseSensitive: false,
-  ).hasMatch(attribute);
+        r'^(?:after|until)\s+\S+',
+        caseSensitive: false,
+      ).hasMatch(attribute);
 
   static bool _isGanttDirective(String line) => RegExp(
-    r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
-    r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
-    caseSensitive: false,
-  ).hasMatch(line);
+        r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
+        r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
+        caseSensitive: false,
+      ).hasMatch(line);
 
   static bool _isGanttExplicitDateRange(
     List<String> attributes,
     String dateFormat,
   ) {
-    final values = attributes
-        .where((attribute) => !_isGanttTaskTag(attribute))
-        .toList();
+    final values =
+        attributes.where((attribute) => !_isGanttTaskTag(attribute)).toList();
     return values.length == 2 &&
         values.every((value) => _isGanttDate(value, dateFormat));
   }
@@ -276,9 +272,8 @@ class MermaidTemplates {
 
   static String _addGanttTaskId(String line, String taskId) {
     final commentIndex = line.indexOf('%%');
-    final taskLine = commentIndex < 0
-        ? line
-        : line.substring(0, commentIndex).trimRight();
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
     final separatorIndex = taskLine.indexOf(':');
     var fieldStart = separatorIndex + 1;
     var insertionIndex = taskLine.length;
@@ -294,8 +289,7 @@ class MermaidTemplates {
       fieldStart = commaIndex + 1;
     }
 
-    final updatedTaskLine =
-        '${taskLine.substring(0, insertionIndex)}$taskId, '
+    final updatedTaskLine = '${taskLine.substring(0, insertionIndex)}$taskId, '
         '${taskLine.substring(insertionIndex)}';
     if (commentIndex < 0) return updatedTaskLine;
 
@@ -312,13 +306,13 @@ class MermaidTemplates {
     final timezoneOffset = now.timeZoneOffset.inMinutes;
     final timezoneSign = timezoneOffset < 0 ? '-' : '+';
     final timezoneHours = (timezoneOffset.abs() ~/ 60).toString().padLeft(
-      2,
-      '0',
-    );
+          2,
+          '0',
+        );
     final timezoneMinutes = (timezoneOffset.abs() % 60).toString().padLeft(
-      2,
-      '0',
-    );
+          2,
+          '0',
+        );
     const shortMonthNames = [
       'Jan',
       'Feb',

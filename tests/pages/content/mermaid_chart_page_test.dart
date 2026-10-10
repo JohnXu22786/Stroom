@@ -256,8 +256,7 @@ void main() {
 
         for (final dateFormatCase in dateFormatCases) {
           await tester.pumpWidget(const SizedBox.shrink());
-          final initialCode =
-              '''gantt
+          final initialCode = '''gantt
   dateFormat  ${dateFormatCase[0]}
   section Existing
   Prepare release :${dateFormatCase[1]}''';
@@ -349,8 +348,7 @@ void main() {
 
         for (final dateFormatCase in dateFormatCases) {
           await tester.pumpWidget(const SizedBox.shrink());
-          final initialCode =
-              '''gantt
+          final initialCode = '''gantt
   dateFormat  ${dateFormatCase[0]}
   title Empty Project''';
           await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
