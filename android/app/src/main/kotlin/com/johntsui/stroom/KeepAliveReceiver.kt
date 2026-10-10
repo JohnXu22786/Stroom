@@ -7,6 +7,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import id.flutter.flutter_background_service.BackgroundService
@@ -65,6 +67,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "KeepAliveReceiver"
         private const val ALARM_REQUEST_CODE = 2001
+        private const val SCHEDULE_RETRY_DELAY_MS = 1_000L
 
         // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
         const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
@@ -266,7 +269,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     } else {
                         KEEP_ALIVE_INTERVAL_MS
                     }
-                    scheduleAlarm(context, interval)
+                    scheduleReceiverAlarm(context, interval)
                 }
             }
 
@@ -310,7 +313,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 if (startSucceeded) {
                     // 成功（服务已在运行或已启动）：重置连续失败计数。
                     prefs.edit().putInt(KEY_KEEP_ALIVE_FAILURES, 0).apply()
-                    scheduleAlarm(context)
+                    scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
                 } else {
                     // 连续失败达到阈值后进入退避周期，避免看门狗持续
                     // 唤醒设备做无效尝试。计数封顶，避免无限增长。
@@ -323,13 +326,59 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             "Keep-alive start failed $failures times consecutively — " +
                                 "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
                         )
-                        scheduleAlarm(context, FAILURE_BACKOFF_INTERVAL_MS)
+                        scheduleReceiverAlarm(context, FAILURE_BACKOFF_INTERVAL_MS)
                     } else {
-                        scheduleAlarm(context)
+                        scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
                     }
                 }
             }
         }
+    }
+
+    /** Retry a failed receiver-driven rearm once after a short delay. */
+    private fun scheduleReceiverAlarm(context: Context, intervalMs: Long) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        fun currentInterval(): Long = if (
+            prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0) >= MAX_CONSECUTIVE_FAILURES
+        ) {
+            FAILURE_BACKOFF_INTERVAL_MS
+        } else {
+            KEEP_ALIVE_INTERVAL_MS
+        }
+        val scheduleAtInterval: (Long) -> Boolean = { interval ->
+            val scheduled = scheduleAlarm(context, interval)
+            if (!scheduled) {
+                Log.w(TAG, "Keep-alive receiver scheduling failed")
+            }
+            scheduled
+        }
+
+        scheduleReceiverAlarmWithRetry(
+            schedule = { scheduleAtInterval(intervalMs) },
+            retrySchedule = { scheduleAtInterval(currentInterval()) },
+            isStillActive = {
+                prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                    prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+            },
+            retryLater = { retry ->
+                val pendingResult = goAsync()
+                val retryPosted = Handler(Looper.getMainLooper()).postDelayed(
+                    {
+                        try {
+                            retry()
+                        } finally {
+                            pendingResult.finish()
+                        }
+                    },
+                    SCHEDULE_RETRY_DELAY_MS,
+                )
+                if (!retryPosted) {
+                    Log.w(TAG, "Could not queue keep-alive receiver scheduling retry")
+                    pendingResult.finish()
+                }
+            },
+        )
     }
 
     /// 检查插件的前台服务当前是否在运行。
