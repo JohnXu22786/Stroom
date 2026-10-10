@@ -56,6 +56,7 @@ jobs:
         run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
       - name: Run integration tests
+        shell: bash
         run: |
           mkdir -p test-reports
           xvfb-run flutter test -d linux integration_test/ --reporter expanded 2>&1 | tee test-reports/integration-test.log
