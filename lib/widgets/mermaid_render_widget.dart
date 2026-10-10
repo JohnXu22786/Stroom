@@ -1426,7 +1426,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 // so the widget is immediately ready and no fallback timer
                 // is armed — the diagram appears the moment it is rendered.
                 if (kIsWeb) {
-                  _isReady = true;
+                  if (mounted && !_isReady) {
+                    setState(() => _isReady = true);
+                  }
                   _loadMermaidCode();
                 } else {
                   // The initial page (initialData) loads outside
