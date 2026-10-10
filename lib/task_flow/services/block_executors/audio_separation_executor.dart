@@ -265,6 +265,13 @@ Future<String> executeAudioSeparationBlock({
     }
 
     await _yieldFrame();
+    if (!isFlowExecutionActive(execNotifier, execId)) {
+      throw BlockExecutionException(
+        '任务流已结束或删除',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
     bgNotifier.updateStep(taskId, 0, running: true);
 
     // Extraction cannot be interrupted, so poll while it runs to release
