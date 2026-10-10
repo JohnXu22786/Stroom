@@ -223,11 +223,11 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: start requested from Dart")
-                    KeepAliveReceiver.scheduleAlarm(this)
+                    val scheduled = KeepAliveReceiver.scheduleAlarm(this)
                     // 用户显式启动看门狗：清零连续失败计数，
                     // 恢复正常的 5 分钟调度间隔。
                     KeepAliveReceiver.resetFailureCount(this)
-                    result.success(true)
+                    result.success(scheduled)
                 }
                 "rearmKeepAlive" -> {
                     // 冷启动恢复 / 回到前台补武装：只重新调度闹钟，
@@ -245,8 +245,7 @@ class MainActivity : FlutterActivity() {
                     } else {
                         KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS
                     }
-                    KeepAliveReceiver.scheduleAlarm(this, interval)
-                    result.success(true)
+                    result.success(KeepAliveReceiver.scheduleAlarm(this, interval))
                 }
                 "stopKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: stop requested from Dart")
