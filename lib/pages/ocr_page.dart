@@ -16,6 +16,7 @@ import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
 import '../services/ocr_task_runner.dart';
 import '../utils/data_sanitizer.dart';
+import '../utils/ocr_image_payload.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 import '../widgets/folder_picker_dialog.dart';
@@ -136,12 +137,24 @@ class OcrPage extends ConsumerStatefulWidget {
       this.testImages,
       this.retryData,
       this.testCameraPicker,
-      this.testGalleryPicker});
+      this.testGalleryPicker,
+      this.testImagePayloadPreparer});
 
   @visibleForTesting
-  final Future<XFile?> Function()? testCameraPicker;
+  final Future<XFile?> Function({
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+  })? testCameraPicker;
   @visibleForTesting
-  final Future<List<XFile>> Function()? testGalleryPicker;
+  final Future<List<XFile>> Function({
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+  })? testGalleryPicker;
+  @visibleForTesting
+  final Future<OcrImagePayload> Function(Uint8List bytes)?
+      testImagePayloadPreparer;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -157,6 +170,7 @@ class OcrPage extends ConsumerStatefulWidget {
 class _OcrPageState extends ConsumerState<OcrPage> {
   final List<SelectedImage> _selectedImages = [];
   bool _isProcessing = false;
+  bool _useOriginalImageQuality = false;
   String? _errorMessage;
   int _selectedModelIndex = 0;
   String? _selectedConfigId;
@@ -182,8 +196,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// blocks a second tap from starting a duplicate OCR during that gap.
   bool _ocrStarting = false;
 
+  Future<OcrImagePayload> _prepareImagePayload(Uint8List bytes) =>
+      widget.testImagePayloadPreparer?.call(bytes) ??
+      prepareOcrImagePayload(bytes);
+
+  OcrImageImportMode get _imageImportMode => _useOriginalImageQuality
+      ? OcrImageImportMode.original
+      : OcrImageImportMode.standard;
+
   /// Whether reorder mode is active
   bool _reorderMode = false;
+
+  /// Invalidates app-album batches after a clear or a newer import.
+  int _appAlbumImportGeneration = 0;
 
   /// Index of the image currently being long-press-dragged in grid, or null.
   int? _dragIndex;
@@ -693,42 +718,72 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Widget _buildPhotoSourceBar(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _showCameraChoicePanel,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing ? null : _showCameraChoicePanel,
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.camera_alt_outlined, size: 20),
+                    label: const Text(
+                      '拍照识别',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                label: const Text(
-                  '拍照识别',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _showAlbumChoicePanel,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _isProcessing ? null : _showAlbumChoicePanel,
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.photo_library_outlined, size: 20),
+                    label: const Text(
+                      '相册选择',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
-                icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text(
-                  '相册选择',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                ),
+              ),
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Tooltip(
+              message: '开启后，系统相机会和相册不限制图片尺寸或 JPEG 质量；应用相册使用原始文件。',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _useOriginalImageQuality ? '原图 / 高细节' : '标准画质',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                  ),
+                  Switch(
+                    key: const Key('ocr_high_detail_switch'),
+                    value: _useOriginalImageQuality,
+                    onChanged: _isProcessing
+                        ? null
+                        : (value) => setState(
+                              () => _useOriginalImageQuality = value,
+                            ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1379,23 +1434,29 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _takePhotoWithSystemCamera() async {
     try {
       final picker = ImagePicker();
-      final file = await (widget.testCameraPicker?.call() ??
+      final mode = _imageImportMode;
+      final file = await (widget.testCameraPicker?.call(
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
+          ) ??
           picker.pickImage(
             source: ImageSource.camera,
-            maxWidth: 2048,
-            maxHeight: 2048,
-            imageQuality: 90,
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
           ));
       if (!mounted || file == null) return;
 
       final bytes = await file.readAsBytes();
       if (!mounted) return;
+      final payload = await _prepareImagePayload(bytes);
+      if (!mounted) return;
 
       setState(() {
         _selectedImages.add(
-          SelectedImage(
-            bytes: bytes,
-            format: _detectFormat(file.path),
+          SelectedImage.fromPayload(
+            payload: payload,
             // Camera: temp file, no source name
           ),
         );
@@ -1404,7 +1465,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('拍照失败: $e')));
+        ).showSnackBar(SnackBar(
+          content: Text(
+            e is FormatException ? e.message : '拍照失败: $e',
+          ),
+        ));
       }
     }
   }
@@ -1412,35 +1477,57 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
+      final mode = _imageImportMode;
       // 移动端直接通过 image_picker 打开系统相册，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await (widget.testGalleryPicker?.call() ??
+      final files = await (widget.testGalleryPicker?.call(
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
+          ) ??
           pickGalleryMedia(
             GalleryMediaKind.image,
-            imageQuality: 90,
-            maxWidth: 2048,
-            maxHeight: 2048,
+            imageQuality: mode.imageQuality,
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
           ));
       if (!mounted || files.isEmpty) return;
 
       final newImages = <SelectedImage>[];
+      String? firstError;
       for (final file in files) {
-        final bytes = await file.readAsBytes();
+        try {
+          final bytes = await file.readAsBytes();
+          var payload = await _prepareImagePayload(bytes);
+          if (!SystemPickDirectories.isMobile &&
+              mode == OcrImageImportMode.standard) {
+            payload = await applyOcrImageImportQuality(
+              payload,
+              maxWidth: mode.maxWidth,
+              maxHeight: mode.maxHeight,
+              imageQuality: mode.imageQuality,
+            );
+          }
+          newImages.add(SelectedImage.fromPayload(
+            payload: payload,
+            sourceName: file.name,
+          ));
+        } on FormatException catch (error) {
+          firstError ??= error.message;
+        }
         if (!mounted) return;
-        if (bytes.isEmpty) continue; // 读取失败的文件跳过（与相册路径一致）
-        newImages.add(
-          SelectedImage(
-            bytes: bytes,
-            format: _detectFormat(file.path),
-            sourceName: file.name, // System file has original name
-          ),
-        );
       }
 
       if (!mounted) return;
       setState(() {
         _selectedImages.addAll(newImages);
+        _errorMessage = firstError;
       });
+      if (firstError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(firstError)),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1452,22 +1539,38 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Pick images from the app's album.
   Future<void> _pickFromAppAlbum() async {
+    final importGeneration = ++_appAlbumImportGeneration;
     try {
       final result = await showAppAlbumPickerDialog(context);
-      if (!mounted || result == null || result.isEmpty) return;
-      for (final entry in result) {
-        await _handleSelectedImage(entry.key, entry.value);
+      if (!mounted ||
+          result == null ||
+          result.isEmpty ||
+          importGeneration != _appAlbumImportGeneration) {
+        return;
       }
-      if (mounted) {
+      var loadedCount = 0;
+      for (final entry in result) {
+        if (!mounted || importGeneration != _appAlbumImportGeneration) return;
+        if (await _handleSelectedImage(
+          entry.key,
+          entry.value,
+          importGeneration: importGeneration,
+        )) {
+          loadedCount++;
+        }
+      }
+      if (mounted &&
+          importGeneration == _appAlbumImportGeneration &&
+          loadedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已加载 ${result.length} 张图片'),
+            content: Text('已加载 $loadedCount 张图片'),
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && importGeneration == _appAlbumImportGeneration) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
@@ -1476,27 +1579,34 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   /// Handle a selected image from the album picker.
-  Future<void> _handleSelectedImage(String fileName, Uint8List data) async {
-    if (!mounted) return;
+  Future<bool> _handleSelectedImage(
+    String fileName,
+    Uint8List data, {
+    required int importGeneration,
+  }) async {
+    if (!mounted || importGeneration != _appAlbumImportGeneration) return false;
     try {
-      final format = fileName.contains('.')
-          ? fileName.split('.').last.toLowerCase()
-          : 'png';
+      final payload = await _prepareImagePayload(data);
+      if (!mounted || importGeneration != _appAlbumImportGeneration) {
+        return false;
+      }
       setState(() {
         _selectedImages.add(
-          SelectedImage(
-            bytes: data,
-            format: format,
+          SelectedImage.fromPayload(
+            payload: payload,
             sourceName: fileName, // App album file has original name
           ),
         );
       });
+      return true;
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('处理图片失败: $e')));
+      if (mounted && importGeneration == _appAlbumImportGeneration) {
+        final message = e is FormatException ? e.message : '处理图片失败: $e';
+        setState(() => _errorMessage = message);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
+      return false;
     }
   }
 
@@ -1566,28 +1676,35 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
 
     if (editedBytes == null || !mounted) return;
-    _applyEditedImage(editedIndex, currentImage, editedBytes);
+    await _applyEditedImage(currentImage, editedBytes);
   }
 
-  /// Applies [editedBytes] to the in-memory selected image, guarding
-  /// against the image at [index] having changed since the editor opened.
-  void _applyEditedImage(
-    int index,
+  /// Applies [editedBytes] to the same selected image, even if it was moved
+  /// while the edited payload was being validated.
+  Future<void> _applyEditedImage(
     SelectedImage currentImage,
     Uint8List editedBytes,
-  ) {
-    if (!mounted) return;
-    if (index >= _selectedImages.length) return;
-    // Verify the image at this index is still the same one
-    if (_selectedImages[index].bytes != currentImage.bytes) return;
+  ) async {
+    if (!mounted ||
+        !_selectedImages.any((image) => identical(image, currentImage))) {
+      return;
+    }
 
-    // Update the selected image with edited bytes (in-memory only)
-    setState(() {
-      _selectedImages[index] = SelectedImage(
-        bytes: editedBytes,
-        format: currentImage.format,
-      );
-    });
+    try {
+      final payload = await _prepareImagePayload(editedBytes);
+      if (!mounted) return;
+      final currentIndex =
+          _selectedImages.indexWhere((image) => identical(image, currentImage));
+      if (currentIndex < 0) return;
+      setState(() {
+        _selectedImages[currentIndex] = currentImage.withEditedPayload(payload);
+      });
+    } on FormatException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
   }
 
   void _removeImage(int index) {
@@ -1597,6 +1714,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   void _clearAll() {
+    _appAlbumImportGeneration++;
     setState(() {
       _selectedImages.clear();
       _errorMessage = null;
@@ -1634,13 +1752,45 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
 
     _ocrStarting = true;
-    final images = _selectedImages
-        .map((image) => SelectedImage(
-              bytes: Uint8List.fromList(image.bytes),
-              format: image.format,
-              sourceName: image.sourceName,
-            ))
-        .toList();
+    final sourceImages = List<SelectedImage>.of(_selectedImages);
+    final images = <SelectedImage>[];
+    try {
+      for (final image in sourceImages) {
+        if (image.isPrepared) {
+          images.add(image);
+        } else {
+          images.add(SelectedImage.fromPayload(
+            payload: await _prepareImagePayload(image.bytes),
+            sourceName: image.sourceName,
+          ));
+        }
+      }
+    } on FormatException catch (error) {
+      _ocrStarting = false;
+      if (mounted) setState(() => _errorMessage = error.message);
+      return;
+    }
+    if (!mounted) return;
+    var selectionChanged = _selectedImages.length != sourceImages.length;
+    if (!selectionChanged) {
+      for (var index = 0; index < sourceImages.length; index++) {
+        if (!identical(_selectedImages[index], sourceImages[index])) {
+          selectionChanged = true;
+          break;
+        }
+      }
+    }
+    if (selectionChanged) {
+      _ocrStarting = false;
+      setState(() => _errorMessage = '图片列表已变化，请重新开始识别。');
+      return;
+    }
+    setState(() {
+      _selectedImages
+        ..clear()
+        ..addAll(images);
+      _errorMessage = null;
+    });
     final folder = _saveFolder;
 
     // Build config from the selected model's own source config,
@@ -1936,15 +2086,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
   // Helpers
   // ==================================================================
-
-  String _detectFormat(String? path) {
-    if (path == null) return 'jpeg';
-    final lower = path.toLowerCase();
-    if (lower.endsWith('.png')) return 'png';
-    if (lower.endsWith('.gif')) return 'gif';
-    if (lower.endsWith('.webp')) return 'webp';
-    return 'jpeg';
-  }
 
   String _pad(int n) => n.toString().padLeft(2, '0');
 }

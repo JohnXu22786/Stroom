@@ -11,6 +11,7 @@ import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../services/ocr_service.dart';
 import '../../../utils/http_timeout.dart';
+import '../../../utils/ocr_image_payload.dart';
 import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
@@ -77,22 +78,6 @@ Future<String> executeOcrBlock({
       );
     }
     imageBytes = await file.readAsBytes();
-    imageFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
-    if (imageBytes.isEmpty) {
-      failSubTask(
-        bgNotifier,
-        taskId,
-        execNotifier,
-        execId,
-        flowSubTask.id,
-        '输入文件为空',
-      );
-      throw BlockExecutionException(
-        '输入文件为空',
-        blockType: def.typeKey.name,
-        blockTitle: def.label,
-      );
-    }
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
     failSubTask(
@@ -109,6 +94,27 @@ Future<String> executeOcrBlock({
       blockTitle: def.label,
     );
   }
+
+  late final OcrImagePayload payload;
+  try {
+    payload = await prepareOcrImagePayload(imageBytes);
+  } on FormatException catch (error) {
+    failSubTask(
+      bgNotifier,
+      taskId,
+      execNotifier,
+      execId,
+      flowSubTask.id,
+      error.message,
+    );
+    throw BlockExecutionException(
+      error.message,
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+  imageBytes = payload.bytes;
+  imageFormat = payload.format;
 
   // Model-level selection, same granularity as the OCR page: the shared
   // flattened list (configs without host/key are excluded).
