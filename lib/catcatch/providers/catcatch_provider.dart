@@ -47,6 +47,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   final Map<String, CancelToken> _cancelTokens = {};
 
   Future<void>? _pendingWrite;
+  int _serviceCleanupGeneration = 0;
   Completer<void>? _removalBarrier;
   List<CatCatchTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
@@ -246,6 +247,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     while (_removalBarrier != null) {
       await _removalBarrier!.future;
     }
+    final cleanupGeneration = _serviceCleanupGeneration;
     if (!mounted) return false;
     final removedIds = ids.toSet();
     if (removedIds.isEmpty) return true;
@@ -265,7 +267,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         for (final task in removed) {
           unawaited(_cleanupTaskFiles(task));
         }
-        if (!_hasRunningTasks()) await stopBackgroundServiceIfNotUserEnabled();
+        if (!_hasRunningTasks() &&
+            cleanupGeneration == _serviceCleanupGeneration) {
+          await stopBackgroundServiceIfNotUserEnabled();
+        }
       }
       if (!mounted) {
         // Deferred ordinary writes own this snapshot after disposal. Only a
@@ -645,6 +650,24 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         cancelToken: cancelToken,
       );
 
+  void _markTaskFailedAfterBackgroundServiceStartup(String taskId) {
+    final index = state.indexWhere((current) => current.id == taskId);
+    if (index < 0) return;
+
+    _serviceCleanupGeneration++;
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index)
+          state[i].copyWith(
+            status: TaskStatus.failed,
+            error: '后台服务启动失败，任务未执行',
+          )
+        else
+          state[i],
+    ];
+    _persistTasks(stopServiceWhenIdle: false);
+  }
+
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
     final cancelToken = CancelToken();
@@ -652,11 +675,15 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     try {
       // Task status does not indicate whether the background service is alive.
-      await startBackgroundServiceForTask();
+      final serviceStarted = await startBackgroundServiceForTask();
       if (!mounted ||
           cancelToken.isCancelled ||
           !identical(_cancelTokens[task.id], cancelToken) ||
           !state.any((current) => current.id == task.id)) {
+        return;
+      }
+      if (isBackgroundServiceSupported() && !serviceStarted) {
+        _markTaskFailedAfterBackgroundServiceStartup(task.id);
         return;
       }
 
@@ -746,11 +773,15 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               state[i],
         ];
       }
-      await startBackgroundServiceForTask();
+      final serviceStarted = await startBackgroundServiceForTask();
       if (!mounted ||
           cancelToken.isCancelled ||
           !identical(_cancelTokens[task.id], cancelToken) ||
           !state.any((current) => current.id == task.id)) {
+        return;
+      }
+      if (isBackgroundServiceSupported() && !serviceStarted) {
+        _markTaskFailedAfterBackgroundServiceStartup(task.id);
         return;
       }
 
@@ -825,16 +856,34 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   // ===========================================================================
 
   /// 保存任务列表到本地文件
-  Future<void> _persistTasks() {
+  Future<void> _persistTasks({
+    bool stopServiceWhenIdle = true,
+    int? cleanupGeneration,
+  }) {
+    final generation = cleanupGeneration ?? _serviceCleanupGeneration;
     final barrier = _removalBarrier;
-    if (barrier != null) return barrier.future.then((_) => _persistTasks());
+    if (barrier != null) {
+      return barrier.future.then(
+        (_) => _persistTasks(
+          stopServiceWhenIdle: stopServiceWhenIdle,
+          cleanupGeneration: generation,
+        ),
+      );
+    }
     if (!mounted) {
       final snapshot = _disposedSnapshot;
       if (snapshot == null) return Future<void>.value();
       return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
     }
-    return _writeSnapshot(state).then((_) async {
-      if (mounted && !_hasRunningTasks()) {
+    final snapshot = state;
+    return _writeSnapshot(snapshot).then((_) async {
+      // A write queued while a task was running must not stop the service if
+      // that task failed before the write completed.
+      if (stopServiceWhenIdle &&
+          mounted &&
+          generation == _serviceCleanupGeneration &&
+          !snapshot.any((task) => task.status == TaskStatus.running) &&
+          !_hasRunningTasks()) {
         await stopBackgroundServiceIfNotUserEnabled();
       }
     });
