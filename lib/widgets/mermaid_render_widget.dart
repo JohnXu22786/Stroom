@@ -952,6 +952,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
     if (!ctrlOrMeta) return;
 
+    // Resolve the wheel event here before ancestor Scrollables can claim it.
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      _handleCtrlWheelZoom,
+    );
+  }
+
+  void _handleCtrlWheelZoom(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+
     // Compute zoom center relative to this widget's render box
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
