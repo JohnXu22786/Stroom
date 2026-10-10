@@ -8,4 +8,21 @@ void main() {
       expect(template, isEmpty);
     });
   });
+
+  group('MermaidTemplates - requirement diagram relationships', () {
+    test('uses direction arrows in the template and relationship snippets', () {
+      final template = MermaidTemplates.getTemplate('requirement');
+      expect(template, contains('用户登录 - satisfies -> 登录页面'));
+      expect(template, contains('用户登录 - verifiedBy -> 认证服务'));
+
+      final snippets = MermaidTemplates.getSnippets('requirement');
+      expect(
+        snippets.map((snippet) => snippet.$2),
+        containsAll([
+          '  需求A - satisfies -> 元素B',
+          '  需求A - verifiedBy -> 元素B',
+        ]),
+      );
+    });
+  });
 }
