@@ -131,7 +131,7 @@ jobs:
       - name: Set Flutter SDK path for Gradle
         run: echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")" > android/local.properties
       - name: Run watchdog scheduling regression test
-        run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest.failedSchedulingKeepsWatchdogEligibleForRecoveryAndReturnsFailure
+        run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
 
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
