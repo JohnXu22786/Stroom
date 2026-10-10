@@ -8,10 +8,72 @@ const dartSource = fs.readFileSync(
   path.resolve(__dirname, '../../lib/widgets/mermaid_render_widget.dart'),
   'utf8',
 );
+const webTemplateSource = fs.readFileSync(
+  path.resolve(__dirname, '../../assets/vendor/mermaid_render.html'),
+  'utf8',
+);
 const fitFunction = dartSource.match(
   /window\.fitToViewport\s*=\s*function\(\)\s*\{([\s\S]*?)^    \};/m,
 );
 assert.ok(fitFunction, 'Could not find the native fitToViewport function');
+
+const reportErrorTargets = [
+  ['native', dartSource],
+  ['web', webTemplateSource],
+];
+
+for (const [templateName, templateSource] of reportErrorTargets) {
+  const reportErrorFunction = templateSource.match(
+    /function reportError\(msg\)\s*\{([\s\S]*?)^    \}/m,
+  );
+  assert.ok(
+    reportErrorFunction,
+    `Could not find reportError in the ${templateName} template`,
+  );
+
+  test(`${templateName} render errors display diagnostic text literally`, () => {
+    const htmlAssignments = [];
+    const errorElements = [];
+    const bridgeCalls = [];
+    const viewport = {
+      children: [],
+      set innerHTML(value) { htmlAssignments.push(value); },
+      set textContent(value) { this.children = []; },
+      appendChild(element) { this.children.push(element); },
+    };
+    const context = {
+      document: {
+        getElementById: (id) => id === 'viewport' ? viewport : null,
+        createElement: (tagName) => {
+          const element = {tagName, className: '', textContent: ''};
+          errorElements.push(element);
+          return element;
+        },
+      },
+      window: {
+        flutter_inappwebview: {
+          callHandler: (...args) => bridgeCalls.push(args),
+        },
+      },
+    };
+    const reportError = vm.runInNewContext(
+      `(function reportError(msg) {${reportErrorFunction[1]}\n})`,
+      context,
+    );
+    const diagnostic =
+      'Mermaid render error: unexpected token <img src=x onerror="attack()">';
+
+    reportError(diagnostic);
+
+    assert.deepEqual(htmlAssignments, [], 'diagnostic text must not use innerHTML');
+    assert.equal(errorElements.length, 1);
+    assert.equal(errorElements[0].tagName, 'div');
+    assert.equal(errorElements[0].className, 'error-message');
+    assert.equal(errorElements[0].textContent, diagnostic);
+    assert.deepEqual(viewport.children, [errorElements[0]]);
+    assert.deepEqual(bridgeCalls, [['onMermaidError', diagnostic]]);
+  });
+}
 
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
   const viewport = {clientWidth: 0, clientHeight: 0};
