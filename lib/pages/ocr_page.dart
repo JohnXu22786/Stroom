@@ -24,6 +24,7 @@ import 'extended_image_editor_page.dart';
 import 'image_editor_page.dart';
 import 'ocr/ocr_instruction_dialog.dart';
 import 'ocr/ocr_shared.dart';
+import 'ocr/ocr_retry_snapshot.dart';
 import 'provider_config_page.dart';
 export 'ocr/ocr_shared.dart';
 
@@ -35,10 +36,13 @@ export 'ocr/ocr_shared.dart';
 /// request building.
 class _ModelOption {
   final ModelConfig model;
+  final String configId;
+  final String modelRecordId;
   final String providerName;
   final String host;
   final String apiKey;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey);
+  const _ModelOption(this.model, this.configId, this.modelRecordId,
+      this.providerName, this.host, this.apiKey);
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -50,6 +54,8 @@ List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
     for (final e in flattenProviderModels(state, 'ocr'))
       _ModelOption(
         e.model,
+        e.config.id,
+        e.model.id,
         e.config.providerName,
         e.config.host,
         e.config.key,
@@ -66,6 +72,31 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
     }
   }
   return null;
+}
+
+Map<String, dynamic> _buildOcrRetryData({
+  required List<Uint8List> imageBytesList,
+  required List<String> imageFormatList,
+  required List<String?> imageNameList,
+  required String configId,
+  required String modelId,
+  required String? instructionContent,
+  required String saveFolder,
+}) {
+  return OcrRetrySnapshot.capture(
+    configId: configId,
+    modelId: modelId,
+    images: [
+      for (var i = 0; i < imageBytesList.length; i++)
+        OcrRetryImage(
+          bytes: imageBytesList[i],
+          format: imageFormatList[i],
+          name: imageNameList[i],
+        ),
+    ],
+    instructionContent: instructionContent,
+    saveFolder: saveFolder,
+  ).toMap();
 }
 
 /// Writes the content of the generic instruction at [instructionIndex] into
@@ -128,6 +159,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _isProcessing = false;
   String? _errorMessage;
   int _selectedModelIndex = 0;
+  String? _selectedConfigId;
+  String? _selectedModelRecordId;
+  bool _modelSelectionNeedsReselection = false;
+  bool _legacyModelConfirmationPending = false;
 
   /// Index into the generic user instructions, or -1 for the default
   /// behavior (images only, no instruction).
@@ -139,11 +174,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// index would be clamped to the default before the list arrives.
   int? _pendingRetryInstructionIndex;
 
-  /// Content of the retry's selected instruction (new retryData format).
-  /// When present, the restore matches by content — robust against the
-  /// list changing between the task failure and the retry, where an
-  /// index-based restore could land on a different instruction.
-  String? _pendingRetryInstructionContent;
+  /// Exact instruction captured for this retry. It stays authoritative even
+  /// when the generic list is later edited or the entry is deleted.
+  String? _retryInstructionSnapshot;
 
   /// Whether [_startOcr] is inside its retry-instruction resolve await —
   /// blocks a second tap from starting a duplicate OCR during that gap.
@@ -180,61 +213,50 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   void _applyRetryData() {
     final data = widget.retryData;
     if (data == null) return;
+    final snapshot = OcrRetrySnapshot.fromMap(data);
+    _selectedImages.addAll(snapshot.images.map((image) => SelectedImage(
+          bytes: image.bytes,
+          format: image.format,
+          sourceName: image.name,
+        )));
+    _saveFolder = snapshot.saveFolder;
 
-    final imagesData = data['images'] as List<dynamic>?;
-    if (imagesData != null) {
-      for (final imgData in imagesData) {
-        if (imgData is Map) {
-          final bytesStr = imgData['bytes'] as String?;
-          if (bytesStr != null) {
-            try {
-              final bytes = base64Decode(bytesStr);
-              _selectedImages.add(SelectedImage(
-                bytes: bytes,
-                format: imgData['format'] as String? ?? 'jpeg',
-                sourceName: imgData['name'] as String?,
-              ));
-            } catch (e) {
-              debugPrint('Failed to decode retry image: $e');
-            }
-          }
-        }
-      }
+    if (snapshot.version == OcrRetrySnapshot.currentVersion) {
+      _selectedConfigId = snapshot.configId;
+      _selectedModelRecordId = snapshot.modelId;
+      _modelSelectionNeedsReselection =
+          snapshot.configId == null || snapshot.modelId == null;
+      if (_modelSelectionNeedsReselection) _selectedModelIndex = -1;
+    } else if (snapshot.isLegacy) {
+      _selectedModelIndex = snapshot.legacyModelIndex ?? -1;
+      _modelSelectionNeedsReselection = snapshot.legacyModelIndex == null;
+      _legacyModelConfirmationPending = snapshot.legacyModelIndex != null;
+    } else {
+      // Unknown future versions are never interpreted as an old index.
+      _selectedModelIndex = -1;
+      _modelSelectionNeedsReselection = true;
     }
-    if (data['modelIndex'] is int) {
-      _selectedModelIndex = data['modelIndex'] as int;
-    }
-    if (data['instructionIndex'] is int) {
-      _pendingRetryInstructionIndex = data['instructionIndex'] as int;
-      final content = data['instructionContent'] as String?;
-      _pendingRetryInstructionContent =
-          (content != null && content.trim().isNotEmpty)
-              ? content.trim()
-              : null;
+
+    if (snapshot.instructionContent != null) {
+      _retryInstructionSnapshot = snapshot.instructionContent;
+    } else if (snapshot.legacyInstructionIndex != null) {
+      _pendingRetryInstructionIndex = snapshot.legacyInstructionIndex;
       unawaited(_resolvePendingRetryInstruction());
     }
   }
 
   /// Applies the retry instruction once the generic instruction list has
-  /// been loaded, falling back to the default (-1) when it cannot be
-  /// resolved. New retry data matches by content; pre-upgrade retry data
-  /// (index only) falls back to the index — resolved to the default when
-  /// out of range, never to a different instruction.
+  /// been loaded. Captured content remains the request input even when there
+  /// is no matching generic entry; index-only legacy data keeps its old
+  /// position-based behavior.
   Future<void> _resolvePendingRetryInstruction() async {
     final pending = _pendingRetryInstructionIndex;
     if (pending == null) return;
     await ref.read(ocrInstructionsProvider.notifier).load();
     if (!mounted || _pendingRetryInstructionIndex == null) return;
     _pendingRetryInstructionIndex = null;
-    final content = _pendingRetryInstructionContent;
-    _pendingRetryInstructionContent = null;
     final instructions = ref.read(ocrInstructionsProvider);
-    final int idx;
-    if (content != null) {
-      idx = instructions.indexWhere((i) => i.content == content);
-    } else {
-      idx = (pending >= 0 && pending < instructions.length) ? pending : -1;
-    }
+    final idx = (pending >= 0 && pending < instructions.length) ? pending : -1;
     // Always rebuild: while the restore was pending, the dropdown may be
     // displaying the pending-derived value — it must reflect the resolved
     // index even when it equals the current selection.
@@ -243,6 +265,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(providerEntriesProvider);
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -306,6 +329,51 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
   // Model Selector — nicely styled, pill-shaped dropdown
   // ==================================================================
+
+  int? _selectedModelOptionIndex(List<_ModelOption> modelOptions) {
+    if (_selectedConfigId != null || _selectedModelRecordId != null) {
+      if (_selectedConfigId == null || _selectedModelRecordId == null) {
+        return null;
+      }
+      final matches = <int>[];
+      for (var index = 0; index < modelOptions.length; index++) {
+        final option = modelOptions[index];
+        if (option.configId == _selectedConfigId &&
+            option.modelRecordId == _selectedModelRecordId) {
+          matches.add(index);
+        }
+      }
+      return matches.length == 1 ? matches.single : null;
+    }
+    if (_modelSelectionNeedsReselection ||
+        _selectedModelIndex < 0 ||
+        _selectedModelIndex >= modelOptions.length) {
+      return null;
+    }
+    return _selectedModelIndex;
+  }
+
+  String? _modelSelectionMessage(int? selectedIndex) {
+    if (_legacyModelConfirmationPending) {
+      return selectedIndex == null
+          ? '旧重试记录中的模型位置无效，请重新选择'
+          : '旧重试记录只保存了模型位置，请确认当前模型后继续。';
+    }
+    if (_modelSelectionNeedsReselection ||
+        (_selectedConfigId != null && selectedIndex == null) ||
+        (_selectedModelRecordId != null && selectedIndex == null)) {
+      return '原 OCR 供应商或模型已不存在，请重新选择';
+    }
+    return null;
+  }
+
+  void _selectModelOption(_ModelOption option, int index) {
+    _selectedModelIndex = index;
+    _selectedConfigId = option.configId;
+    _selectedModelRecordId = option.modelRecordId;
+    _modelSelectionNeedsReselection = false;
+    _legacyModelConfirmationPending = false;
+  }
 
   Widget _buildModelSelector(ColorScheme cs) {
     final modelOptions = _getOcrModelOptions(ref);
@@ -373,16 +441,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
     }
 
-    final clampedIndex = _selectedModelIndex.clamp(0, modelOptions.length - 1);
-    if (clampedIndex != _selectedModelIndex) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _selectedModelIndex = clampedIndex;
-          });
-        }
-      });
-    }
+    final selectedIndex = _selectedModelOptionIndex(modelOptions);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -429,7 +488,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
-                    value: clampedIndex,
+                    value: selectedIndex,
+                    hint: selectedIndex == null
+                        ? Text(_modelSelectionMessage(selectedIndex) ?? '请选择模型')
+                        : null,
                     isDense: true,
                     isExpanded: true,
                     icon: Icon(
@@ -445,7 +507,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     onChanged: (idx) {
                       if (idx == null || idx >= modelOptions.length) return;
                       setState(() {
-                        _selectedModelIndex = idx;
+                        _selectModelOption(modelOptions[idx], idx);
+                        _errorMessage = null;
                       });
                     },
                     items: List.generate(modelOptions.length, (i) {
@@ -484,16 +547,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     final instructions = ref.watch(ocrInstructionsProvider);
 
-    // Out-of-range selection (e.g. restored retry data whose instruction
-    // list changed) falls back to the default (images only) — never to a
-    // different instruction. While a retry restore is pending (the list
-    // may still be loading), only the display is adjusted — the pending
-    // index itself is kept until [_resolvePendingRetryInstruction] lands.
+    // A captured instruction stays selected even when it no longer exists in
+    // the editable generic list. Legacy index-only restore waits for the list
+    // to load before resolving its position.
     final pending = _pendingRetryInstructionIndex;
-    final rawIndex = pending ?? _selectedInstructionIndex;
-    final clamped =
-        (rawIndex >= 0 && rawIndex < instructions.length) ? rawIndex : -1;
-    if (pending == null && clamped != _selectedInstructionIndex) {
+    final rawIndex = _retryInstructionSnapshot != null
+        ? -2
+        : (pending ?? _selectedInstructionIndex);
+    final clamped = rawIndex == -2
+        ? -2
+        : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
+    if (pending == null &&
+        _retryInstructionSnapshot == null &&
+        clamped != _selectedInstructionIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _selectedInstructionIndex = clamped);
       });
@@ -559,6 +625,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       if (idx == null) return;
                       setState(() {
                         _selectedInstructionIndex = idx;
+                        if (idx != -2) _retryInstructionSnapshot = null;
                         // An explicit user choice wins over a pending
                         // retry restore.
                         _pendingRetryInstructionIndex = null;
@@ -572,6 +639,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (_retryInstructionSnapshot != null)
+                        const DropdownMenuItem<int>(
+                          value: -2,
+                          child: Text(
+                            '已保存的指令快照',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ...List.generate(instructions.length, (i) {
                         return DropdownMenuItem<int>(
                           value: i,
@@ -1085,6 +1160,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Widget _buildBottomBar(ColorScheme cs) {
+    final modelOptions = _getOcrModelOptions(ref);
+    final selectedModelIndex = _selectedModelOptionIndex(modelOptions);
     return SafeArea(
       top: false,
       child: Container(
@@ -1099,6 +1176,33 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           children: [
             // Save-to folder selector (above start button)
             _buildSaveToSelector(cs),
+            if (_legacyModelConfirmationPending && selectedModelIndex != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '旧重试记录只保存了模型位置，请确认当前模型后继续。',
+                        style: TextStyle(fontSize: 12, color: cs.error),
+                      ),
+                    ),
+                    TextButton(
+                      key: const Key('ocr_confirm_legacy_model'),
+                      onPressed: () {
+                        setState(() {
+                          _selectModelOption(
+                            modelOptions[selectedModelIndex],
+                            selectedModelIndex,
+                          );
+                          _errorMessage = null;
+                        });
+                      },
+                      child: const Text('确认此模型'),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             if (_selectedImages.isNotEmpty)
               Padding(
@@ -1508,9 +1612,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (_selectedImages.isEmpty) return;
 
     final modelOptions = _getOcrModelOptions(ref);
-    if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
+    if (modelOptions.isEmpty) {
       setState(() {
         _errorMessage = '请先在设置中配置 OCR 供应商和模型';
+      });
+      return;
+    }
+    final modelIndex = _selectedModelOptionIndex(modelOptions);
+    if (modelIndex == null) {
+      setState(() {
+        _errorMessage =
+            _modelSelectionMessage(modelIndex) ?? '请重新选择 OCR 供应商和模型';
+      });
+      return;
+    }
+    if (_legacyModelConfirmationPending) {
+      setState(() {
+        _errorMessage = '请先确认旧重试记录中的 OCR 模型';
       });
       return;
     }
@@ -1524,13 +1642,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             ))
         .toList();
     final folder = _saveFolder;
-    final modelIndex = _selectedModelIndex;
 
     // Build config from the selected model's own source config,
     // ensuring host/API key match the model's provider.
     // Also passes through the model's typeConfig and customParams
     // for built-in OCR parameters and custom parameters.
-    final selectedOption = modelOptions[_selectedModelIndex];
+    final selectedOption = modelOptions[modelIndex];
+    _selectedModelIndex = modelIndex;
+    _selectedConfigId = selectedOption.configId;
+    _selectedModelRecordId = selectedOption.modelRecordId;
     final effectiveConfig = OcrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
@@ -1560,11 +1680,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Inject the selected generic instruction into the request (service
     // reads typeConfig['userInstruction']); unselected = images-only.
     final instructions = ref.read(ocrInstructionsProvider);
-    applySelectedOcrInstruction(
-      effectiveConfig.typeConfig,
-      instructions,
-      _selectedInstructionIndex,
-    );
+    if (_retryInstructionSnapshot != null) {
+      final content = _retryInstructionSnapshot!.trim();
+      if (content.isEmpty) {
+        effectiveConfig.typeConfig.remove('userInstruction');
+      } else {
+        effectiveConfig.typeConfig['userInstruction'] = content;
+      }
+    } else {
+      applySelectedOcrInstruction(
+        effectiveConfig.typeConfig,
+        instructions,
+        _selectedInstructionIndex,
+      );
+    }
 
     // Capture every provider and input before navigation. The runner owns
     // copies and never reads this page or WidgetRef after it is removed.
@@ -1594,21 +1723,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     );
 
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
-    // Carries the selected instruction's content so the retry restore can
-    // match by content — an index could land on a different instruction
-    // if the generic list changed between the failure and the retry.
-    final instructionContent = (_selectedInstructionIndex >= 0 &&
-            _selectedInstructionIndex < instructions.length)
-        ? instructions[_selectedInstructionIndex].content
-        : null;
+    // Save the exact instruction and destination along with the stable model
+    // reference so later list edits cannot change this retry's request.
+    final instructionContent = _retryInstructionSnapshot ??
+        ((_selectedInstructionIndex >= 0 &&
+                _selectedInstructionIndex < instructions.length)
+            ? instructions[_selectedInstructionIndex].content
+            : null);
     unawaited(_computeOcrRetryData(
         taskId,
         imageBytesList,
         imageFormatList,
         imageNameList,
-        modelIndex,
-        _selectedInstructionIndex,
+        selectedOption.configId,
+        selectedOption.modelRecordId,
         instructionContent,
+        folder,
         bgNotifier));
 
     _isProcessing = true;
@@ -1623,30 +1753,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     List<Uint8List> imageBytesList,
     List<String> imageFormatList,
     List<String?> imageNameList,
-    int modelIndex,
-    int instructionIndex,
+    String configId,
+    String modelId,
     String? instructionContent,
+    String saveFolder,
     BackgroundTaskNotifier bgNotifier,
   ) async {
     try {
-      final retryData = await Isolate.run(() {
-        final images = <Map<String, dynamic>>[];
-        for (int i = 0; i < imageBytesList.length; i++) {
-          images.add(<String, dynamic>{
-            'bytes': base64Encode(imageBytesList[i]),
-            'format': imageFormatList[i],
-            'name': imageNameList[i],
-          });
-        }
-        return <String, dynamic>{
-          'type': 'ocr',
-          'images': images,
-          'modelIndex': modelIndex,
-          'instructionIndex': instructionIndex,
-          if (instructionContent != null)
-            'instructionContent': instructionContent,
-        };
-      });
+      final retryData = await Isolate.run(() => _buildOcrRetryData(
+            imageBytesList: imageBytesList,
+            imageFormatList: imageFormatList,
+            imageNameList: imageNameList,
+            configId: configId,
+            modelId: modelId,
+            instructionContent: instructionContent,
+            saveFolder: saveFolder,
+          ));
       if (bgNotifier.mounted &&
           bgNotifier.state.any((task) => task.id == taskId)) {
         bgNotifier.setRetryData(taskId, retryData);
@@ -1654,22 +1776,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     } catch (e) {
       debugPrint('[OCR] Isolate.run failed, falling back to main thread: $e');
       try {
-        final images = <Map<String, dynamic>>[];
-        for (int i = 0; i < imageBytesList.length; i++) {
-          images.add(<String, dynamic>{
-            'bytes': base64Encode(imageBytesList[i]),
-            'format': imageFormatList[i],
-            'name': imageNameList[i],
-          });
-        }
-        final retryData = <String, dynamic>{
-          'type': 'ocr',
-          'images': images,
-          'modelIndex': modelIndex,
-          'instructionIndex': instructionIndex,
-          if (instructionContent != null)
-            'instructionContent': instructionContent,
-        };
+        final retryData = _buildOcrRetryData(
+          imageBytesList: imageBytesList,
+          imageFormatList: imageFormatList,
+          imageNameList: imageNameList,
+          configId: configId,
+          modelId: modelId,
+          instructionContent: instructionContent,
+          saveFolder: saveFolder,
+        );
         if (bgNotifier.mounted &&
             bgNotifier.state.any((task) => task.id == taskId)) {
           bgNotifier.setRetryData(taskId, retryData);
