@@ -68,8 +68,10 @@ class MermaidTemplates {
         if (directiveLine.contains('}')) inAccDescrBlock = false;
         continue;
       }
-      if (RegExp(r'^\s*accDescr\s*\{', caseSensitive: false)
-          .hasMatch(directiveLine)) {
+      if (RegExp(
+        r'^\s*accDescr\s*\{',
+        caseSensitive: false,
+      ).hasMatch(directiveLine)) {
         inAccDescrBlock = !directiveLine.contains('}');
         continue;
       }
@@ -104,19 +106,14 @@ class MermaidTemplates {
       );
     }
 
-    return insertSnippet(
-      updatedCode,
-      '  后续任务 :after $dependencyId, 5d',
-    );
+    return insertSnippet(updatedCode, '  后续任务 :after $dependencyId, 5d');
   }
 
-  static List<String>? _ganttTaskAttributes(
-    String line,
-    String dateFormat,
-  ) {
+  static List<String>? _ganttTaskAttributes(String line, String dateFormat) {
     final commentIndex = line.indexOf('%%');
-    final taskLine =
-        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final taskLine = commentIndex < 0
+        ? line
+        : line.substring(0, commentIndex).trimRight();
     final trimmedLine = taskLine.trim();
     if (trimmedLine.isEmpty ||
         trimmedLine.startsWith('%%') ||
@@ -163,9 +160,12 @@ class MermaidTemplates {
     return merged;
   }
 
-  static bool _isGanttTaskTag(String attribute) =>
-      const {'active', 'done', 'crit', 'milestone'}
-          .contains(attribute.toLowerCase());
+  static bool _isGanttTaskTag(String attribute) => const {
+    'active',
+    'done',
+    'crit',
+    'milestone',
+  }.contains(attribute.toLowerCase());
 
   static List<String> _ganttTaskIds(List<String> attributes) {
     final values = attributes
@@ -183,20 +183,21 @@ class MermaidTemplates {
       !_isGanttDuration(attribute) &&
       !_isGanttDependency(attribute);
 
-  static bool _isGanttDuration(String attribute) =>
-      RegExp(r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$', caseSensitive: false)
-          .hasMatch(attribute);
+  static bool _isGanttDuration(String attribute) => RegExp(
+    r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$',
+    caseSensitive: false,
+  ).hasMatch(attribute);
 
-  static bool _isGanttDependency(String attribute) =>
-      RegExp(r'^(?:after|until)\s+\S+', caseSensitive: false)
-          .hasMatch(attribute);
+  static bool _isGanttDependency(String attribute) => RegExp(
+    r'^(?:after|until)\s+\S+',
+    caseSensitive: false,
+  ).hasMatch(attribute);
 
-  static bool _isGanttDirective(String line) =>
-      RegExp(
-        r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
-        r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
-        caseSensitive: false,
-      ).hasMatch(line);
+  static bool _isGanttDirective(String line) => RegExp(
+    r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
+    r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
+    caseSensitive: false,
+  ).hasMatch(line);
 
   static bool _isGanttExplicitDateRange(
     List<String> attributes,
@@ -275,8 +276,9 @@ class MermaidTemplates {
 
   static String _addGanttTaskId(String line, String taskId) {
     final commentIndex = line.indexOf('%%');
-    final taskLine =
-        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final taskLine = commentIndex < 0
+        ? line
+        : line.substring(0, commentIndex).trimRight();
     final separatorIndex = taskLine.indexOf(':');
     var fieldStart = separatorIndex + 1;
     var insertionIndex = taskLine.length;
@@ -297,8 +299,10 @@ class MermaidTemplates {
         '${taskLine.substring(insertionIndex)}';
     if (commentIndex < 0) return updatedTaskLine;
 
-    final commentSpacing = line.substring(taskLine.trimRight().length,
-        commentIndex);
+    final commentSpacing = line.substring(
+      taskLine.trimRight().length,
+      commentIndex,
+    );
     return '$updatedTaskLine$commentSpacing${line.substring(commentIndex)}';
   }
 
@@ -307,23 +311,52 @@ class MermaidTemplates {
     final now = DateTime.now();
     final timezoneOffset = now.timeZoneOffset.inMinutes;
     final timezoneSign = timezoneOffset < 0 ? '-' : '+';
-    final timezoneHours =
-        (timezoneOffset.abs() ~/ 60).toString().padLeft(2, '0');
-    final timezoneMinutes =
-        (timezoneOffset.abs() % 60).toString().padLeft(2, '0');
+    final timezoneHours = (timezoneOffset.abs() ~/ 60).toString().padLeft(
+      2,
+      '0',
+    );
+    final timezoneMinutes = (timezoneOffset.abs() % 60).toString().padLeft(
+      2,
+      '0',
+    );
     const shortMonthNames = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     const longMonthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     const shortDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const minDayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
     const longDayNames = [
-      'Sunday', 'Monday', 'Tuesday', 'Wednesday',
-      'Thursday', 'Friday', 'Saturday',
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
     ];
     final dayOfWeek = now.weekday % 7;
     final hour12 = now.hour % 12 == 0 ? 12 : now.hour % 12;
@@ -378,10 +411,14 @@ class MermaidTemplates {
   }
 
   static String _ganttDateFormat(String code) {
-    final dateFormatPattern =
-        RegExp(r'^\s*dateFormat\s+(.+?)\s*$', caseSensitive: false);
-    final accDescrBlockPattern =
-        RegExp(r'^\s*accDescr\s*\{', caseSensitive: false);
+    final dateFormatPattern = RegExp(
+      r'^\s*dateFormat\s+(.+?)\s*$',
+      caseSensitive: false,
+    );
+    final accDescrBlockPattern = RegExp(
+      r'^\s*accDescr\s*\{',
+      caseSensitive: false,
+    );
     var inAccDescrBlock = false;
 
     for (final line in code.split('\n')) {
@@ -759,10 +796,7 @@ class MermaidTemplates {
           ('添加里程碑', '  里程碑 :milestone, 2024-01-15, 0d'),
         ];
       case 'pie':
-        return [
-          ('添加类别', '  "新类别" : 30'),
-          ('添加标题', 'title 饼图标题'),
-        ];
+        return [('添加类别', '  "新类别" : 30'), ('添加标题', 'title 饼图标题')];
       case 'journey':
         return [
           ('添加阶段', '  section 新阶段'),
@@ -784,10 +818,7 @@ class MermaidTemplates {
           ('添加主题', '    新主题'),
         ];
       case 'timeline':
-        return [
-          ('添加时间段', '  2024-Q1 : 事件1 : 事件2'),
-          ('添加标题', 'title 时间线标题'),
-        ];
+        return [('添加时间段', '  2024-Q1 : 事件1 : 事件2'), ('添加标题', 'title 时间线标题')];
       case 'block':
         return [
           ('添加块', '  NewBlock["新块"]'),
@@ -800,10 +831,7 @@ class MermaidTemplates {
           ('添加需求', '  requirement 新需求 {\n    id: 1\n    text: 需求描述\n  }'),
           ('添加元素', '  element 新元素 {\n    type: UI\n  }'),
           ('添加关联', '  需求A - satisfies -> 元素B'),
-          (
-            '添加验证',
-            '  需求A - verifiedBy -> 元素B',
-          ),
+          ('添加验证', '  需求A - verifiedBy -> 元素B'),
         ];
       default:
         return [];
