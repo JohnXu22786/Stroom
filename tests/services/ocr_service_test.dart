@@ -110,34 +110,34 @@ void main() {
     });
 
     group('OcrService', () {
-      test('Dio has no sendTimeout (no timeout)', () {
+      test('Dio has upload timeout base', () {
         const config = OcrConfig(
           model: 'gpt-4o',
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = OcrService(config: config);
-        expect(service.sendTimeout, isNull);
+        expect(service.sendTimeout, const Duration(minutes: 1));
       });
 
-      test('Dio has no connectTimeout (no timeout)', () {
+      test('Dio has connection timeout', () {
         const config = OcrConfig(
           model: 'gpt-4o',
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = OcrService(config: config);
-        expect(service.connectTimeout, isNull);
+        expect(service.connectTimeout, const Duration(seconds: 30));
       });
 
-      test('Dio has no receiveTimeout (no timeout)', () {
+      test('Dio has long response fallback', () {
         const config = OcrConfig(
           model: 'gpt-4o',
           apiKey: 'test-key',
           host: 'https://api.openai.com/v1',
         );
         final service = OcrService(config: config);
-        expect(service.receiveTimeout, isNull);
+        expect(service.receiveTimeout, const Duration(minutes: 60));
       });
 
       test('recognize throws on empty host', () async {

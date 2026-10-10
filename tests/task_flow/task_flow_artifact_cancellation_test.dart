@@ -39,6 +39,7 @@ class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
     bool? failed,
     bool? skipped,
     String? error,
+    String? label,
   }) {
     super.updateStep(
       taskId,
@@ -48,6 +49,7 @@ class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
       failed: failed,
       skipped: skipped,
       error: error,
+      label: label,
     );
     if (index == 1 && completed == true) onCompletedStep?.call();
     if (index == 1 && running == true) onRunningStep?.call();

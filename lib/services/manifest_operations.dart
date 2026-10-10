@@ -1,3 +1,4 @@
+import '../utils/atomic_file.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -97,13 +98,15 @@ class ManifestOperations<T extends FileRecord> {
     return ManifestDatabase.getAllAudioRecords();
   }
 
-  Future<void> _dbInsertRecord(Map<String, dynamic> record) async {
+  Future<void> _dbInsertRecord(Map<String, dynamic> record,
+      {void Function()? beforeCommit}) async {
     if (_isImageTable) {
       await ManifestDatabase.insertImageRecord(record);
     } else if (_isVideoTable) {
       await ManifestDatabase.insertVideoRecord(record);
     } else if (_isTextTable) {
-      await ManifestDatabase.insertTextRecord(record);
+      await ManifestDatabase.insertTextRecord(record,
+          beforeCommit: beforeCommit);
     } else {
       await ManifestDatabase.insertAudioRecord(record);
     }
@@ -178,6 +181,10 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- Load / Persist ---------------------------------------------------
 
+  /// Read authoritative rows without replacing shared record/folder caches.
+  Future<List<T>> loadRecordsUncached() async =>
+      (await _dbGetAllRecords()).map(fromMap).toList();
+
   Future<List<T>> loadRecords({
     bool forceRefresh = false,
     bool throwOnError = false,
@@ -210,10 +217,11 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- CRUD -------------------------------------------------------------
 
-  Future<void> addRecord(T record) async {
+  Future<void> addRecord(T record, {void Function()? beforeCommit}) async {
     try {
       await loadRecords();
-      await _dbInsertRecord(toMap(record));
+      beforeCommit?.call();
+      await _dbInsertRecord(toMap(record), beforeCommit: beforeCommit);
       _cache!.add(record);
       await _ensureFolderPathTracked(folderOf(record));
     } catch (e, st) {
@@ -397,15 +405,22 @@ class ManifestOperations<T extends FileRecord> {
   /// 是否应使用 WebFileStore（包括纯内存测试模式）
   bool get _useWebFileStore => kIsWeb || WebFileStore.isTestMode;
 
-  Future<String> writeFile(String fileName, Uint8List data) async {
+  Future<String> writeFile(String fileName, Uint8List data,
+      {void Function()? beforeCommit}) async {
     try {
       if (_useWebFileStore) {
-        await WebFileStore.write(_webKey(fileName), data);
+        await WebFileStore.write(_webKey(fileName), data,
+            beforeCommit: beforeCommit);
         return fileName;
       }
       final dir = await _storageDir;
       final filePath = p.join(dir, fileName);
-      await File(filePath).writeAsBytes(data);
+      if (beforeCommit == null) {
+        await File(filePath).writeAsBytes(data);
+      } else {
+        await AtomicFile.writeBytes(File(filePath), data,
+            beforeCommit: beforeCommit);
+      }
       return filePath;
     } catch (e, st) {
       debugPrint('ManifestOperations($manifestKey).writeFile error: $e');
