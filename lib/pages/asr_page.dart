@@ -99,11 +99,19 @@ class SelectedAudio {
 /// in-app recordings (multi-select), then performing speech-to-text
 /// transcription and saving results to text storage.
 class AsrPage extends ConsumerStatefulWidget {
-  const AsrPage({super.key, this.retryData, this.asrServiceFactory});
+  const AsrPage({
+    super.key,
+    this.retryData,
+    this.asrServiceFactory,
+    this.onNavigateBack,
+  });
 
   /// Retry data to pre-populate the form (audio files, model, etc.).
   final Map<String, dynamic>? retryData;
   final AsrService Function(AsrConfig config)? asrServiceFactory;
+
+  /// Optional navigation hook for hosts that manage this page lifecycle.
+  final VoidCallback? onNavigateBack;
 
   @override
   ConsumerState<AsrPage> createState() => _AsrPageState();
@@ -1155,7 +1163,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Step 1: Pop back to home page immediately — matching the original
     // working flow. This avoids any Riverpod rebuild delay from addTask().
     if (mounted) {
-      Navigator.pop(context);
+      final onNavigateBack = widget.onNavigateBack;
+      if (onNavigateBack != null) {
+        onNavigateBack();
+      } else {
+        Navigator.pop(context);
+      }
     }
     // Yield to the event loop so the pop transition renders.
     await Future<void>.delayed(Duration.zero);

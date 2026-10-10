@@ -446,6 +446,7 @@ void main() {
                       },
                       asrServiceFactory: (config) =>
                           AsrService(config: config, dio: dio),
+                      onNavigateBack: () {},
                     ),
                   ),
                 ),
@@ -459,9 +460,7 @@ void main() {
     await tester.tap(find.text('open ASR'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始识别'));
-    // Let the button callback continue past its zero-delay yield without
-    // settling the route's pop animation before it creates the background task.
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     await tester.runAsync(() async {
       final deadline = DateTime.now().add(const Duration(seconds: 10));
