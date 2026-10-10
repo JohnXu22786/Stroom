@@ -7,3 +7,16 @@ internal fun scheduleWithActiveIntent(
     if (!persistActiveIntent()) return false
     return schedule()
 }
+
+internal fun scheduleReceiverAlarmWithRetry(
+    schedule: () -> Boolean,
+    retrySchedule: () -> Boolean,
+    isStillActive: () -> Boolean,
+    retryLater: (() -> Unit) -> Unit,
+): Boolean {
+    if (schedule()) return true
+    retryLater {
+        if (isStillActive()) retrySchedule()
+    }
+    return false
+}
