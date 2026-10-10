@@ -556,6 +556,57 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets(
+        'toolbar zoom continues from the JS-fitted zoom without a transform handler',
+        (tester) async {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      // The web template's fitToViewport changes zoom in JavaScript. The
+      // unavailable addJavaScriptHandler leaves Flutter's zoom at 1.0.
+      webView.controller.simulateJsFitToViewport(0.45);
+
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      expect(webView.controller.zoomLevel, closeTo(0.55, 0.0001));
+      expect(html, contains('var zoomLevel = 1;'));
+      expect(
+        webView.controller.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.setZoom(window.zoomLevel + 0.1'))),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('Ctrl+wheel zoom does not scroll the parent scroll view',
         (tester) async {
       final previousPlatform = InAppWebViewPlatform.instance;
@@ -1056,6 +1107,11 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
+  double zoomLevel = 1.0;
+
+  void simulateJsFitToViewport(double fittedZoom) {
+    zoomLevel = fittedZoom;
+  }
 
   _MermaidWebViewController()
       : super.implementation(
@@ -1072,7 +1128,8 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   void addJavaScriptHandler({
     required String handlerName,
     required JavaScriptHandlerCallback callback,
-  }) {}
+  }) =>
+      throw UnimplementedError('JavaScript handlers are unavailable on web');
 
   @override
   Future<dynamic> evaluateJavascript({
@@ -1080,6 +1137,22 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final relativeZoom = RegExp(
+      r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
+    ).firstMatch(source);
+    if (relativeZoom != null) {
+      zoomLevel = (zoomLevel + double.parse(relativeZoom.group(1)!))
+          .clamp(0.1, 10.0)
+          .toDouble();
+      return;
+    }
+
+    final absoluteZoom =
+        RegExp(r'window\.setZoom\((-?\d+(?:\.\d+)?),').firstMatch(source);
+    if (absoluteZoom != null) {
+      zoomLevel =
+          double.parse(absoluteZoom.group(1)!).clamp(0.1, 10.0).toDouble();
+    }
   }
 
   @override

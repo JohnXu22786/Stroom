@@ -1134,14 +1134,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   Future<void> _zoomIn() async {
-    await _zoomAroundCenter(_zoomLevel + 0.1);
+    await _zoomAroundCenter(0.1);
   }
 
   Future<void> _zoomOut() async {
-    await _zoomAroundCenter(_zoomLevel - 0.1);
+    await _zoomAroundCenter(-0.1);
   }
 
-  /// Zooms to [newZoom] anchored at the CENTER of the preview area, so the
+  /// Changes the zoom by [delta] at the CENTER of the preview area, so the
   /// diagram zooms towards the middle instead of the top-left corner.
   ///
   /// The center is computed IN JS (`viewport.clientWidth/2`) so the anchor
@@ -1149,16 +1149,22 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// The anchor math runs in JS (`window.setZoom` with a center point),
   /// which keeps the JS-owned pan state untouched — Flutter never pushes
   /// its own (possibly stale) pan here.
-  Future<void> _zoomAroundCenter(double newZoom) async {
+  Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
-    final target = newZoom.clamp(0.1, 10.0);
-    if (target == _zoomLevel) return;
-    // Optimistic local update so rapid clicks accumulate; the JS handler
-    // round-trip (onTransformChanged) confirms the same value.
-    _zoomLevel = target;
+
+    // Keep native-side state current for Flutter gesture handling, but let
+    // JavaScript apply the toolbar delta to its live zoom. The web platform
+    // has no JS handler bridge, so Flutter's cached level may not reflect
+    // auto-fit or JS gesture changes.
+    if (!kIsWeb) {
+      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
+      if (target == _zoomLevel) return;
+      _zoomLevel = target;
+    }
+
     await ctrl.evaluateJavascript(
-      source: 'window.setZoom($target, '
+      source: 'window.setZoom(window.zoomLevel + $delta, '
           "document.getElementById('viewport').clientWidth / 2, "
           "document.getElementById('viewport').clientHeight / 2)",
     );
