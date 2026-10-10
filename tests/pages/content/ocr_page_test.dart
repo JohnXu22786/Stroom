@@ -9,6 +9,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
@@ -18,6 +19,7 @@ import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_manifest.dart';
+import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 /// Creates a small valid PNG (8x8) via the real engine, tinted [color]
@@ -70,6 +72,12 @@ Widget _buildTestApp({
   Map<String, dynamic>? retryData,
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
+  Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
+  Future<List<XFile>> Function({
+    double? maxWidth,
+    double? maxHeight,
+    int? imageQuality,
+  })? testGalleryPicker,
 }) {
   return ProviderScope(
     overrides: [
@@ -88,7 +96,12 @@ Widget _buildTestApp({
       }),
     ],
     child: MaterialApp(
-      home: OcrPage(testImages: testImages, retryData: retryData),
+      home: OcrPage(
+        testImages: testImages,
+        retryData: retryData,
+        testGalleryPicker: testGalleryPicker,
+        testImagePayloadPreparer: testImagePayloadPreparer,
+      ),
       localizationsDelegates: const [
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
@@ -181,6 +194,28 @@ SelectedImage _createTestImage({int seed = 1}) {
   );
 }
 
+SelectedImage _createValidOcrTestImage() => SelectedImage.fromPayload(
+      payload: prepareOcrImagePayloadSync(
+        img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
+      ),
+    );
+
+Future<void> _storeAppAlbumImage({
+  required String name,
+  required String hash,
+  required Uint8List bytes,
+}) async {
+  final record = ImageRecord(
+    name: name,
+    hash: hash,
+    format: 'png',
+    createdAt: DateTime.now(),
+    size: bytes.length,
+  );
+  await ImageManifest.writeFile(record.storagePath, bytes);
+  await ImageManifest.addRecord(record);
+}
+
 Map<String, dynamic> _createVersionedRetryData({
   required String configId,
   required String modelId,
@@ -232,8 +267,10 @@ void main() {
       await tester.pumpWidget(ProviderScope(
           child: MaterialApp(
               home: OcrPage(
-        testCameraPicker: () => camera.future,
-        testGalleryPicker: () => images.future,
+        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            camera.future,
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+            images.future,
       ))));
       await tester.pumpAndSettle();
       await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
@@ -817,7 +854,7 @@ void main() {
                       context,
                       MaterialPageRoute(
                         builder: (_) => OcrPage(
-                          testImages: [_createTestImage()],
+                          testImages: [_createValidOcrTestImage()],
                           retryData: {
                             'type': 'ocr',
                             'images': <Map<String, dynamic>>[],
@@ -1112,6 +1149,161 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('选择图片来源'), findsOneWidget);
+    });
+  });
+
+  group('OcrPage - image import quality', () {
+    testWidgets('standard keeps 2048/q90 and original mode removes limits', (
+      tester,
+    ) async {
+      final calls = <({double? maxWidth, double? maxHeight, int? quality})>[];
+      await tester.pumpWidget(_buildTestApp(
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
+          calls.add((
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+            quality: imageQuality,
+          ));
+          return [];
+        },
+      ));
+      await tester.pumpAndSettle();
+
+      Future<void> pickFromSystemGallery() async {
+        await tester.tap(find.text('相册选择'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('从系统相册选择'));
+        await tester.pumpAndSettle();
+      }
+
+      await pickFromSystemGallery();
+      expect(calls.single, (maxWidth: 2048, maxHeight: 2048, quality: 90));
+
+      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
+      await tester.pumpAndSettle();
+      await pickFromSystemGallery();
+      expect(calls.last, (maxWidth: null, maxHeight: null, quality: null));
+
+      final denseTextImage =
+          img.encodePng(img.Image(width: 3000, height: 2200));
+      final prepared = prepareOcrImagePayloadSync(denseTextImage);
+      expect(prepared.width, 3000);
+      expect(prepared.height, 2200);
+      expect(prepared.bytes, denseTextImage);
+    });
+  });
+
+  group('OcrPage - async image validation races', () {
+    testWidgets('does not restore a selection cleared during OCR startup', (
+      tester,
+    ) async {
+      final validationStarted = Completer<void>();
+      final finishValidation = Completer<void>();
+      final validPayload = prepareOcrImagePayloadSync(
+        img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
+      );
+
+      Future<OcrImagePayload> delayedValidation(Uint8List _) async {
+        if (!validationStarted.isCompleted) validationStarted.complete();
+        await finishValidation.future;
+        return validPayload;
+      }
+
+      await tester.pumpWidget(_buildTestApp(
+        entries: [_createOcrEntry()],
+        testImages: [_createTestImage(), _createTestImage(seed: 2)],
+        testImagePayloadPreparer: delayedValidation,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      await validationStarted.future;
+
+      await tester.tap(find.text('清空'));
+      await tester.pump();
+      finishValidation.complete();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('已选 2 张图片'), findsNothing);
+      expect(find.text('图片列表已变化，请重新开始识别。'), findsOneWidget);
+      expect(find.text('开始识别'), findsOneWidget);
+    });
+
+    testWidgets('applies an edit to the same image after it is reordered', (
+      tester,
+    ) async {
+      final imageA = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFF00FF00)),
+      );
+      final imageB = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFFFF0000)),
+      );
+      final validationStarted = Completer<void>();
+      final finishValidation = Completer<void>();
+      Uint8List? editedBytes;
+
+      Future<OcrImagePayload> delayedValidation(Uint8List bytes) async {
+        editedBytes = bytes;
+        validationStarted.complete();
+        await finishValidation.future;
+        return prepareOcrImagePayloadSync(bytes);
+      }
+
+      await tester.pumpWidget(_buildTestApp(
+        testImages: [
+          SelectedImage(bytes: imageA!, format: 'png'),
+          SelectedImage(bytes: imageB!, format: 'png'),
+        ],
+        testImagePayloadPreparer: delayedValidation,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('保存'));
+      await _pumpUntil(
+        tester,
+        () =>
+            validationStarted.isCompleted &&
+            find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_sort_btn')));
+      await tester.pumpAndSettle();
+      tester
+          .widget<ReorderableListView>(find.byType(ReorderableListView))
+          .onReorderItem!
+          .call(0, 1);
+      await tester.pumpAndSettle();
+      finishValidation.complete();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_sort_btn')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_grid_item_1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+      );
+
+      final editor = tester.widget<ExtendedImageEditorPage>(
+        find.byType(ExtendedImageEditorPage),
+      );
+      expect(editor.imageBytes, editedBytes);
     });
   });
 
@@ -1463,6 +1655,111 @@ void main() {
   // ====================================================================
 
   group('OcrPage - in-app album picker dialog', () {
+    testWidgets('clearing selection cancels a pending app album import', (
+      tester,
+    ) async {
+      final validPng = img.encodePng(img.Image(width: 2, height: 2));
+      await tester.runAsync(() => _storeAppAlbumImage(
+            name: 'A_valid',
+            hash: 'app_album_pending_valid',
+            bytes: validPng,
+          ));
+      final validationStarted = Completer<void>();
+      final finishValidation = Completer<void>();
+      Future<OcrImagePayload> delayedValidation(Uint8List bytes) async {
+        validationStarted.complete();
+        await finishValidation.future;
+        return prepareOcrImagePayloadSync(bytes);
+      }
+
+      await tester.pumpWidget(_buildTestApp(
+        testImages: [_createTestImage()],
+        testImagePayloadPreparer: delayedValidation,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await _pumpUntil(
+        tester,
+        () => find.text('A_valid.png').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('A_valid.png'));
+      await _pumpUntil(
+        tester,
+        () => find.text('确定 (1)').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+      await validationStarted.future;
+
+      await tester.tap(find.text('清空'));
+      await tester.pump();
+      finishValidation.complete();
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsNothing);
+      expect(find.text('已加载 1 张图片'), findsNothing);
+    });
+
+    testWidgets('success count includes only valid app album images', (
+      tester,
+    ) async {
+      final validPng = img.encodePng(img.Image(width: 2, height: 2));
+      await tester.runAsync(() => _storeAppAlbumImage(
+            name: 'A_valid',
+            hash: 'app_album_mixed_valid',
+            bytes: validPng,
+          ));
+      await tester.runAsync(() => _storeAppAlbumImage(
+            name: 'B_corrupt',
+            hash: 'app_album_mixed_corrupt',
+            bytes: Uint8List.fromList([0x01, 0x02, 0x03]),
+          ));
+      Future<OcrImagePayload> validate(Uint8List bytes) async =>
+          prepareOcrImagePayloadSync(bytes);
+
+      await tester.pumpWidget(_buildTestApp(
+        testImagePayloadPreparer: validate,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('从应用相册选择'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await _pumpUntil(
+        tester,
+        () =>
+            find.text('A_valid.png').evaluate().isNotEmpty &&
+            find.text('B_corrupt.png').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('A_valid.png'));
+      await _pumpUntil(
+        tester,
+        () => find.text('确定 (1)').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('B_corrupt.png'));
+      await _pumpUntil(
+        tester,
+        () => find.text('确定 (2)').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('已加载 1 张图片'), findsOneWidget);
+      expect(find.text('已加载 2 张图片'), findsNothing);
+      expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+    });
+
     testWidgets('tapping 从应用相册选择 opens in-app album picker dialog', (
       tester,
     ) async {

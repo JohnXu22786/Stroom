@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -25,6 +26,8 @@ import 'package:stroom/utils/audio_utils.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
 
 class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
   void Function()? onCompletedStep;
@@ -139,9 +142,8 @@ void main() {
       final isAsr = type == BlockType.asr;
       final source =
           await File('${directory.path}/input.${isAsr ? 'wav' : 'png'}')
-              .writeAsBytes(isAsr
-                  ? pcmToWav(Uint8List.fromList([0, 0]))
-                  : [0x89, 0x50, 0x4e, 0x47]);
+              .writeAsBytes(
+                  isAsr ? pcmToWav(Uint8List.fromList([0, 0])) : _validPng());
       final pending = isAsr
           ? executeAsrBlock(
               block: blockFor(type),
@@ -166,7 +168,8 @@ void main() {
               flowSubTask: subTask,
               bgNotifier: background,
               providerEntries: providerFor('ocr'),
-              requestOcr: (_, __) {
+              requestOcr: (_, format) {
+                expect(format, 'png');
                 arrived.complete();
                 return release.future;
               },
@@ -195,9 +198,8 @@ void main() {
       final isAsr = type == BlockType.asr;
       final source =
           await File('${directory.path}/active.${isAsr ? 'wav' : 'png'}')
-              .writeAsBytes(isAsr
-                  ? pcmToWav(Uint8List.fromList([0, 0]))
-                  : [0x89, 0x50, 0x4e, 0x47]);
+              .writeAsBytes(
+                  isAsr ? pcmToWav(Uint8List.fromList([0, 0])) : _validPng());
       final result = await (isAsr
           ? executeAsrBlock(
               block: blockFor(type),
@@ -219,7 +221,10 @@ void main() {
               flowSubTask: subTask,
               bgNotifier: background,
               providerEntries: providerFor('ocr'),
-              requestOcr: (_, __) async => 'active result',
+              requestOcr: (_, format) async {
+                expect(format, 'png');
+                return 'active result';
+              },
             ));
       expect(result, 'active result');
       final records = await TextManifest.loadRecords();
@@ -234,7 +239,7 @@ void main() {
 
   test('OCR shares options and fails truncated output', () async {
     final source = await File('${directory.path}/ocr_contract.png')
-        .writeAsBytes([0x89, 0x50, 0x4e, 0x47]);
+        .writeAsBytes(_validPng());
     final providers = providerFor(
       'ocr',
       host: 'https://example.invalid/v1/chat/completions/',

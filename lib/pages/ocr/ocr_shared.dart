@@ -3,14 +3,30 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 
+import '../../utils/ocr_image_payload.dart';
+
 // ============================================================================
 // SelectedImage Model
 // ============================================================================
+
+/// Import quality for images sent to OCR.
+enum OcrImageImportMode {
+  /// Keep the existing 2048-pixel, quality-90 import defaults.
+  standard,
+
+  /// Ask the picker for original dimensions and quality.
+  original;
+
+  double? get maxWidth => this == OcrImageImportMode.standard ? 2048 : null;
+  double? get maxHeight => this == OcrImageImportMode.standard ? 2048 : null;
+  int? get imageQuality => this == OcrImageImportMode.standard ? 90 : null;
+}
 
 /// Represents a single selected image for OCR processing.
 class SelectedImage {
   final Uint8List bytes;
   final String format;
+  final bool isPrepared;
 
   /// Original source name if imported from system/album, null if temp (camera).
   final String? sourceName;
@@ -19,7 +35,19 @@ class SelectedImage {
     required this.bytes,
     this.format = 'jpeg',
     this.sourceName,
-  });
+  }) : isPrepared = false;
+
+  SelectedImage.fromPayload({
+    required OcrImagePayload payload,
+    this.sourceName,
+  })  : bytes = payload.bytes,
+        format = payload.format,
+        isPrepared = true;
+
+  /// Creates an edited image with MIME derived from its output bytes while
+  /// retaining the imported filename for display and retry metadata.
+  SelectedImage withEditedPayload(OcrImagePayload payload) =>
+      SelectedImage.fromPayload(payload: payload, sourceName: sourceName);
 }
 
 // ============================================================================
