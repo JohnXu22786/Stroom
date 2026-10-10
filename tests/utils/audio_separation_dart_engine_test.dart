@@ -502,6 +502,38 @@ void main() {
       return bytes.toBytes();
     }
 
+    Uint8List buildNonFaststartMp4WithExtendedMdat({
+      required Uint8List audioData,
+    }) {
+      final faststart = buildMinimalMp4WithPcmAudio(
+        pcmFrames: audioData.length ~/ 2,
+        dataPattern: audioData,
+      );
+      final moovStart = _findFourCc(faststart, 'moov') - 4;
+      final moovSize = _readUint32BE(faststart, moovStart);
+      final ftyp = faststart.sublist(0, moovStart);
+      final moov = Uint8List.fromList(
+        faststart.sublist(moovStart, moovStart + moovSize),
+      );
+      final mdatStart = moovStart + moovSize;
+      final mdatPayload = faststart.sublist(mdatStart + 8);
+      final audioDataOffset = ftyp.length + 16;
+      final stcoTypeOffset = _findFourCc(moov, 'stco');
+      moov.setRange(
+        stcoTypeOffset + 12,
+        stcoTypeOffset + 16,
+        _u32be(audioDataOffset),
+      );
+      final extendedMdat = Uint8List.fromList([
+        ..._u32be(1),
+        ..._fourCc('mdat'),
+        ..._u64be(16 + mdatPayload.length),
+        ...mdatPayload,
+      ]);
+
+      return Uint8List.fromList([...ftyp, ...extendedMdat, ...moov]);
+    }
+
     Uint8List buildMinimalMp4WithTwoPcmAudioTracks() {
       final firstAudio = Uint8List.fromList([0x11, 0x22, 0x33, 0x44]);
       final secondAudio = Uint8List.fromList([0xA1, 0xB2, 0xC3, 0xD4]);
@@ -1052,6 +1084,22 @@ void main() {
 
       // Verify the returned format is WAV
       expect(detectAudioFormat(result), equals('wav'));
+    });
+
+    test(
+        'extractAudio reads audio after extended-size mdat before trailing moov',
+        () async {
+      final audioData = Uint8List.fromList([0x11, 0x22, 0x33, 0x44]);
+      final mp4Bytes = buildNonFaststartMp4WithExtendedMdat(
+        audioData: audioData,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      expect(extractPcmFromWav(result), audioData);
     });
 
     test('extractAudio preserves original PCM audio data in WAV output',
