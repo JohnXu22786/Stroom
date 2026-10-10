@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +9,49 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('MermaidRenderWidget - bundled JavaScript loading', () {
+    test('concurrent callers await the shared bundled asset load', () async {
+      final assetBytes = await rootBundle.load(
+        MermaidRenderWidget.bundledMermaidJsAsset,
+      );
+      final assetLoad = Completer<ByteData>();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var assetLoadCount = 0;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final assetKey = utf8.decode(
+          message!.buffer.asUint8List(
+            message.offsetInBytes,
+            message.lengthInBytes,
+          ),
+        );
+        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+          return null;
+        }
+        assetLoadCount++;
+        return assetLoad.future;
+      });
+      addTearDown(() {
+        messenger.setMockMessageHandler('flutter/assets', null);
+      });
+
+      final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
+      final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
+      await Future<void>.delayed(Duration.zero);
+      assetLoad.complete(assetBytes);
+
+      final loadedSources = await Future.wait([firstLoad, secondLoad]);
+      expect(loadedSources, hasLength(2));
+      expect(loadedSources.first, isNotNull);
+      expect(
+        identical(loadedSources.last, loadedSources.first),
+        isTrue,
+        reason: 'concurrent callers should receive the shared loaded source',
+      );
+      expect(assetLoadCount, 1);
+    });
+  });
 
   group('MermaidRenderWidget - buildMermaidHtml', () {
     test('replaces MERMAID_CODE_PLACEHOLDER with escaped code', () {
