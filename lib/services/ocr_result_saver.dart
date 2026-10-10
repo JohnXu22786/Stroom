@@ -8,15 +8,14 @@ import '../providers/background_task_provider.dart';
 import '../providers/task_provider.dart';
 import '../utils/text_manifest.dart';
 
-typedef OcrTextWriter =
-    Future<String> Function(
-      String fileName,
-      String text, {
-      void Function()? beforeCommit,
-    });
+typedef OcrTextWriter = Future<String> Function(
+  String fileName,
+  String text, {
+  void Function()? beforeCommit,
+});
 
-typedef OcrTextRecordWriter =
-    Future<void> Function(TextRecord record, {void Function()? beforeCommit});
+typedef OcrTextRecordWriter = Future<void> Function(TextRecord record,
+    {void Function()? beforeCommit});
 
 /// Publishes an OCR result and its manifest record as one cancellable save.
 /// The OCR runner and the task-list save-only retry share this implementation.
@@ -39,9 +38,9 @@ class OcrResultSaver {
     CancelToken? cancelToken,
     OcrTextWriter? writeText,
     OcrTextRecordWriter? addRecord,
-  }) : _cancelToken = cancelToken ?? CancelToken(),
-       _writeText = writeText ?? TextManifest.writeText,
-       _addRecord = addRecord ?? TextManifest.addRecord;
+  })  : _cancelToken = cancelToken ?? CancelToken(),
+        _writeText = writeText ?? TextManifest.writeText,
+        _addRecord = addRecord ?? TextManifest.addRecord;
 
   void cancel() => _cancelToken.cancel('已取消');
 
@@ -80,9 +79,8 @@ class OcrResultSaver {
       );
     } catch (error) {
       if (!_cancelToken.isCancelled && notifier.mounted) {
-        final current = notifier.state
-            .where((task) => task.id == taskId)
-            .firstOrNull;
+        final current =
+            notifier.state.where((task) => task.id == taskId).firstOrNull;
         if (current != null) {
           for (var i = 0; i < current.steps.length; i++) {
             if (current.steps[i].running) {

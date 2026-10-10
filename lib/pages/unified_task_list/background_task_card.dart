@@ -472,8 +472,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             label: task.resultIsComplete
                 ? '仅重试保存'
                 : task.partialSaveRequested
-                  ? '仅重试保存部分结果'
-                  : '保存部分结果',
+                    ? '仅重试保存部分结果'
+                    : '保存部分结果',
             color: Colors.blue,
             onPressed: () => _retryOcrSave(task, ref),
           ),
