@@ -690,6 +690,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
   bool _shouldCreateWebView = false;
+  Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
 
   /// Whether the source code view is shown instead of the rendered diagram.
@@ -891,13 +892,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _retry() {
+    final webViewWasNeverCreated = _webViewController == null;
     setState(() {
       _errorMessage = null;
       _isReady = false;
+      if (webViewWasNeverCreated) {
+        _webViewKey = UniqueKey();
+      }
     });
-    if (_webViewController == null) {
+    if (webViewWasNeverCreated) {
       // The WebView was never created; re-arm the creation fallback for
-      // the retry attempt so a repeated failure cannot spin forever.
+      // the retry attempt and remount its platform view so creation is
+      // attempted again. Re-arming also reports another failed mount.
       _armWebViewCreationFallback();
     }
     _loadMermaidCode();
@@ -1438,7 +1444,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // pan/zoom, kept alive once created.
           _buildGestureWrapper(
             InAppWebView(
-              key: const Key('mermaid_render_webview'),
+              key: _webViewKey,
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 transparentBackground: true,
