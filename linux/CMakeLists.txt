@@ -74,6 +74,15 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# The beta WPE plugin adds a Clang 18 warning switch. Older distro Clang
+# versions report it as unknown; keep that diagnostic as a warning for this
+# plugin while retaining errors for its other warnings.
+if(TARGET flutter_inappwebview_linux_plugin AND
+   CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  target_compile_options(flutter_inappwebview_linux_plugin PRIVATE
+    -Wno-error=unknown-warning-option)
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build
