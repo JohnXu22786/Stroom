@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/ocr_result_saver.dart';
 import 'package:stroom/services/ocr_service.dart';
 import 'package:stroom/services/ocr_task_runner.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -30,12 +31,13 @@ class _ControlledAdapter implements HttpClientAdapter {
     return response.future;
   }
 
-  void succeed() => response.complete(ResponseBody.fromString(
+  void succeed({String finishReason = 'stop'}) =>
+      response.complete(ResponseBody.fromString(
         jsonEncode({
           'choices': [
             {
               'message': {'content': 'owned text'},
-              'finish_reason': 'stop'
+              'finish_reason': finishReason
             }
           ]
         }),
@@ -60,6 +62,7 @@ void main() {
   late Map<String, dynamic> typeConfig;
   int saves = 0;
   Completer<void>? writeGate;
+  bool failNextFileWrite = false;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -72,6 +75,7 @@ void main() {
     adapter = _ControlledAdapter();
     saves = 0;
     writeGate = null;
+    failNextFileWrite = false;
     input = Uint8List.fromList([1, 2, 3]);
     typeConfig = {'userInstruction': 'original'};
     runner = OcrTaskRunner(
@@ -88,14 +92,19 @@ void main() {
       writeText: (name, text, {beforeCommit}) async {
         saves++;
         await writeGate?.future;
+        if (failNextFileWrite) {
+          failNextFileWrite = false;
+          throw const FileSystemException('injected text write failure');
+        }
         beforeCommit?.call();
-        return '/texts/$name';
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
       },
       onSaved: () {},
     );
   });
 
   tearDown(() async {
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     if (notifier.mounted) notifier.dispose();
     await notifier.pendingPersistence;
     BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
@@ -120,6 +129,203 @@ void main() {
     expect(notifier.state.single.status, TaskStatus.completed);
     expect((await TextManifest.loadRecords()).single.folder, 'captured folder');
     expect(adapter.closed, isTrue);
+  });
+
+  test('text file write failure keeps the result and does not report success',
+      () async {
+    failNextFileWrite = true;
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.result, 'owned text');
+    expect(await TextManifest.loadRecords(), isEmpty);
+    expect(task.downloadedFilePath, isNull);
+    expect(adapter.calls, 1);
+  });
+
+  test('a returned file path without published text cannot complete the task',
+      () async {
+    final noPublishRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [(input, 'png')],
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: (name, text, {beforeCommit}) async {
+        beforeCommit?.call();
+        return '/texts/$name';
+      },
+    );
+    final running = noPublishRunner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.result, 'owned text');
+    expect(notifier.state.single.downloadedFilePath, isNull);
+    expect(await TextManifest.loadRecords(), isEmpty);
+  });
+
+  test('manifest failure can be retried without another OCR request', () async {
+    var failManifestWrite = true;
+    ManifestDatabase.beforeWebDataSaveForTesting = () async {
+      if (failManifestWrite) {
+        failManifestWrite = false;
+        throw StateError('injected manifest write failure');
+      }
+    };
+
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.result, 'owned text');
+    expect(await TextManifest.loadRecords(), isEmpty);
+    final fileName =
+        '${computeTextHash(Uint8List.fromList(utf8.encode('owned text')))}.txt';
+    expect(await TextManifest.readText(fileName), isNull);
+
+    final task = notifier.state.single;
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: task.title,
+      folder: task.resultFolder,
+      onSaved: () {},
+    );
+    await saver.retryTaskResult();
+
+    expect(adapter.calls, 1);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect((await TextManifest.loadRecords()).single.name, 'owned');
+    expect(await TextManifest.readText(fileName), 'owned text');
+  });
+
+  test('truncated OCR result requires explicit partial save and is marked',
+      () async {
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed(finishReason: 'length');
+    await running;
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.result, 'owned text');
+    expect(notifier.state.single.resultIsComplete, isFalse);
+    expect(notifier.state.single.partialSaveRequested, isFalse);
+    expect(notifier.state.single.steps[3].completed, isTrue);
+    expect(notifier.state.single.steps[4].skipped, isTrue);
+    expect(await TextManifest.loadRecords(), isEmpty);
+
+    final task = notifier.state.single;
+    var failFirstPartialWrite = true;
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: task.title,
+      folder: task.resultFolder,
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        if (failFirstPartialWrite) {
+          failFirstPartialWrite = false;
+          throw const FileSystemException('injected partial write failure');
+        }
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+      },
+    );
+    await expectLater(saver.retryTaskResult(), throwsStateError);
+    await expectLater(
+      saver.retryTaskResult(allowPartial: true),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.partialSaveRequested, isTrue);
+    await saver.retryTaskResult();
+
+    expect(adapter.calls, 1);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(notifier.state.single.partialSaveRequested, isTrue);
+    expect(notifier.state.single.resultSavedAsPartial, isTrue);
+    final record = (await TextManifest.loadRecords()).single;
+    expect(record.name, 'owned（部分结果）');
+    expect(await TextManifest.readText(record.storageFileName), 'owned text');
+  });
+
+  test('cancelling save-only retry preserves an existing shared text file',
+      () async {
+    final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
+    await TextManifest.writeText('$hash.txt', 'owned text');
+    await TextManifest.addRecord(TextRecord(
+      name: 'existing',
+      hash: hash,
+      createdAt: DateTime.now(),
+      size: 10,
+    ));
+    notifier.setResult(id, 'owned text');
+    notifier.failTask(id, error: 'previous save failed');
+
+    final published = Completer<void>();
+    final release = Completer<void>();
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: '',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        final path = await TextManifest.writeText(name, text,
+            beforeCommit: beforeCommit);
+        published.complete();
+        await release.future;
+        return path;
+      },
+    );
+    final retry = saver.retryTaskResult();
+    await published.future;
+    notifier.cancelTask(id);
+    release.complete();
+    await expectLater(retry, throwsA(anything));
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(await TextManifest.readText('$hash.txt'), 'owned text');
+    expect((await TextManifest.loadRecords()).map((record) => record.name),
+        ['existing']);
+  });
+
+  test('cancelling after manifest insertion rolls back its new record and file',
+      () async {
+    notifier.setResult(id, 'owned text');
+    notifier.failTask(id, error: 'previous save failed');
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: '',
+      onSaved: () {},
+      addRecord: (record, {beforeCommit}) async {
+        await TextManifest.addRecord(record, beforeCommit: beforeCommit);
+        notifier.cancelTask(id);
+      },
+    );
+
+    await expectLater(saver.retryTaskResult(), throwsA(anything));
+
+    final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(await TextManifest.loadRecords(), isEmpty);
+    expect(await TextManifest.readText('$hash.txt'), isNull);
   });
 
   test('delete aborts request and a late response cannot save', () async {

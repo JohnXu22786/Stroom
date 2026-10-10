@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
+import '../../providers/text_provider.dart';
+import '../../services/ocr_result_saver.dart';
 import '../chat/dialogs/error_detail_dialog.dart';
 import '../asr_page.dart';
 import '../ocr_page.dart';
@@ -211,6 +215,15 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             Icons.check_circle_outline,
             '完成时间',
             formatRelativeTime(task.completedAt!),
+          ),
+        ],
+        if (task.resultSavedAsPartial) ...[
+          const SizedBox(height: 4),
+          buildInfoRow(
+            cs,
+            Icons.warning_amber_outlined,
+            '结果状态',
+            '部分结果，内容可能不完整',
           ),
         ],
 
@@ -449,7 +462,22 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             color: Colors.green,
             onPressed: () => openFile(task.downloadedFilePath!, context),
           ),
-        // Retry button for failed tasks
+        // A retained OCR result can be saved without repeating its API call.
+        if (hasRetryPage &&
+            task.type == BackgroundTaskType.ocr &&
+            task.status == TaskStatus.failed &&
+            task.result != null)
+          _actionButton(
+            icon: Icons.save_outlined,
+            label: task.resultIsComplete
+                ? '仅重试保存'
+                : task.partialSaveRequested
+                  ? '仅重试保存部分结果'
+                  : '保存部分结果',
+            color: Colors.blue,
+            onPressed: () => _retryOcrSave(task, ref),
+          ),
+        // OCR can still be rerun when the user prefers a fresh recognition.
         if (hasRetryPage && task.status == TaskStatus.failed)
           _actionButton(
             icon: Icons.refresh,
@@ -483,6 +511,22 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             ),
           ),
       ],
+    );
+  }
+
+  void _retryOcrSave(BackgroundTask task, WidgetRef ref) {
+    final textNotifier = ref.read(textRecordsProvider.notifier);
+    final saver = OcrResultSaver(
+      taskId: task.id,
+      notifier: ref.read(backgroundTasksProvider.notifier),
+      title: task.title,
+      folder: task.resultFolder,
+      onSaved: () => unawaited(textNotifier.loadRecords().catchError((_) {})),
+    );
+    unawaited(
+      saver
+          .retryTaskResult(allowPartial: !task.resultIsComplete)
+          .catchError((_) {}),
     );
   }
 

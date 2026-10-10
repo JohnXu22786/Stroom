@@ -121,6 +121,10 @@ class BackgroundTask {
   final TaskStatus status;
   final String?
       result; // The text result (OCR extracted text, ASR transcription) — kept internally for saving
+  final bool resultIsComplete;
+  final String resultFolder;
+  final bool partialSaveRequested;
+  final bool resultSavedAsPartial;
   final String? error;
   final DateTime createdAt;
   final DateTime? completedAt;
@@ -141,6 +145,10 @@ class BackgroundTask {
     required this.title,
     this.status = TaskStatus.running,
     this.result,
+    this.resultIsComplete = true,
+    this.resultFolder = '',
+    this.partialSaveRequested = false,
+    this.resultSavedAsPartial = false,
     this.error,
     DateTime? createdAt,
     this.completedAt,
@@ -155,6 +163,10 @@ class BackgroundTask {
   BackgroundTask copyWith({
     TaskStatus? status,
     String? result,
+    bool? resultIsComplete,
+    String? resultFolder,
+    bool? partialSaveRequested,
+    bool? resultSavedAsPartial,
     String? error,
     DateTime? completedAt,
     DateTime? statusChangedAt,
@@ -164,6 +176,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawResponse,
     Map<String, dynamic>? retryData,
     bool clearError = false,
+    bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
     bool clearRawRequest = false,
     bool clearRawResponse = false,
@@ -180,9 +193,13 @@ class BackgroundTask {
       title: title,
       status: newStatus,
       result: result ?? this.result,
+      resultIsComplete: resultIsComplete ?? this.resultIsComplete,
+      resultFolder: resultFolder ?? this.resultFolder,
+      partialSaveRequested: partialSaveRequested ?? this.partialSaveRequested,
+      resultSavedAsPartial: resultSavedAsPartial ?? this.resultSavedAsPartial,
       error: clearError ? null : (error ?? this.error),
       createdAt: createdAt,
-      completedAt: completedAt ?? this.completedAt,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       statusChangedAt: newStatusChangedAt,
       steps: steps ?? this.steps,
       downloadedFilePath: clearDownloadedFilePath
@@ -200,6 +217,10 @@ class BackgroundTask {
         'title': title,
         'status': status.name,
         if (result != null) 'result': result,
+        'resultIsComplete': resultIsComplete,
+        if (resultFolder.isNotEmpty) 'resultFolder': resultFolder,
+        'partialSaveRequested': partialSaveRequested,
+        'resultSavedAsPartial': resultSavedAsPartial,
         'error': error,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
@@ -218,6 +239,11 @@ class BackgroundTask {
         title: map['title'] as String,
         status: TaskStatus.values.byName(map['status'] as String),
         result: map['result'] as String?,
+        resultIsComplete: map['resultIsComplete'] as bool? ??
+            !((map['error'] as String? ?? '').contains('finish_reason=length')),
+        resultFolder: map['resultFolder'] as String? ?? '',
+        partialSaveRequested: map['partialSaveRequested'] as bool? ?? false,
+        resultSavedAsPartial: map['resultSavedAsPartial'] as bool? ?? false,
         error: map['error'] as String?,
         createdAt: DateTime.parse(map['createdAt'] as String),
         completedAt: map['completedAt'] != null
@@ -352,11 +378,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Mark a task as completed and keep it in the list (visible to user).
   /// Optionally provide [downloadedFilePath] for the "open file" button.
-  void completeTask(String taskId, {String? downloadedFilePath}) {
+  void completeTask(String taskId,
+      {String? downloadedFilePath, bool resultSavedAsPartial = false}) {
     _updateTask(
       taskId,
       TaskStatus.completed,
       downloadedFilePath: downloadedFilePath,
+      resultSavedAsPartial: resultSavedAsPartial,
     );
   }
 
@@ -372,12 +400,60 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).
   /// Can be called multiple times to update partial/intermediate results.
   /// The result is kept internally for file saving but NOT displayed in the card UI.
-  void setResult(String taskId, String result) {
+  void setResult(
+    String taskId,
+    String result, {
+    bool isComplete = true,
+    String? folder,
+  }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      return t.copyWith(result: result, error: t.error);
+      return t.copyWith(
+        result: result,
+        resultIsComplete: isComplete,
+        resultFolder: folder,
+        error: t.error,
+      );
     }).toList();
     _persistTasks();
+  }
+
+  /// Persist the explicit user choice to save an incomplete OCR result.
+  void markPartialResultSaveRequested(String taskId) {
+    state = state
+        .map((task) => task.id == taskId
+            ? task.copyWith(partialSaveRequested: true)
+            : task)
+        .toList();
+    _persistTasks();
+  }
+
+  /// Reopen the save step for a failed OCR task whose result is still present.
+  void startSaveRetry(String taskId) {
+    state = state.map((task) {
+      if (task.id != taskId ||
+          task.type != BackgroundTaskType.ocr ||
+          task.status != TaskStatus.failed ||
+          task.result == null) {
+        return task;
+      }
+      final steps = [...task.steps];
+      if (steps.length > 4) {
+        steps[4] = steps[4].copyWith(
+          status: BgStepStatus.running,
+          clearError: true,
+        );
+      }
+      return task.copyWith(
+        status: TaskStatus.running,
+        clearError: true,
+        clearCompletedAt: true,
+        statusChangedAt: DateTime.now(),
+        steps: steps,
+      );
+    }).toList();
+    _persistTasks();
+    _syncIosContinuedTask();
   }
 
   /// Set the full step chain for a task.
@@ -499,6 +575,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     TaskStatus status, {
     String? error,
     String? downloadedFilePath,
+    bool? resultSavedAsPartial,
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
   }) {
@@ -512,6 +589,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: error,
         clearError: shouldClearError,
         downloadedFilePath: downloadedFilePath,
+        resultSavedAsPartial: resultSavedAsPartial,
         rawRequest: rawRequest,
         rawResponse: rawResponse,
         completedAt:

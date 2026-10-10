@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import '../providers/background_task_provider.dart';
 import '../utils/text_manifest.dart';
+import 'ocr_result_saver.dart';
 import 'ocr_service.dart';
 
 /// Owns one OCR submission, including its inputs, client and save destination.
@@ -21,6 +22,15 @@ class OcrTaskRunner {
   final Future<String> Function(String, String, {void Function()? beforeCommit})
       _writeText;
   final CancelToken _cancelToken = CancelToken();
+  late final OcrResultSaver _resultSaver = OcrResultSaver(
+    taskId: taskId,
+    notifier: notifier,
+    title: title,
+    folder: folder,
+    onSaved: onSaved,
+    cancelToken: _cancelToken,
+    writeText: _writeText,
+  );
   OcrService? _service;
   Future<void>? _running;
   int _stage = -1;
@@ -95,47 +105,6 @@ class OcrTaskRunner {
     notifier.updateStep(taskId, 1, running: true, label: '上传图片 $percent%');
   }
 
-  Future<String> _save(String text) async {
-    final bytes = Uint8List.fromList(utf8.encode(text));
-    final hash = computeTextHash(bytes);
-    return TextManifest.withSaveLock(hash, () async {
-      final name = '$hash.txt';
-      final record = TextRecord(
-          name: title,
-          hash: hash,
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: folder,
-          textLength: text.length);
-      var existed = true; // Until existence is known, never delete shared data.
-      try {
-        _checkActive();
-        existed = await TextManifest.readFilePath(name) != null;
-        _checkActive();
-        final path = await _writeText(name, text, beforeCommit: _checkActive);
-        _checkActive();
-        await TextManifest.addRecord(record, beforeCommit: _checkActive);
-        _checkActive();
-        return path;
-      } catch (_) {
-        if (_cancelToken.isCancelled) {
-          // Cancellation may arrive after file publication or DB insertion.
-          // Remove only this record, then only newly created unreferenced data.
-          final records = await TextManifest.loadRecordsUncached();
-          if (records.any((item) => item.id == record.id)) {
-            await TextManifest.deleteRecord(record.id, preserveFiles: true);
-          }
-          if (!existed &&
-              !(await TextManifest.loadRecordsUncached())
-                  .any((item) => item.hash == hash)) {
-            await TextManifest.deleteFile(name);
-          }
-        }
-        rethrow;
-      }
-    });
-  }
-
   Future<void> _run() async {
     notifier.registerCancellation(taskId, cancel);
     try {
@@ -157,16 +126,21 @@ class OcrTaskRunner {
               onStage: _requestStage,
             );
       _checkActive();
-      notifier.setResult(taskId, result.text);
+      notifier.setResult(
+        taskId,
+        result.text,
+        isComplete: result.isComplete,
+        folder: folder,
+      );
       if (!result.isComplete) {
+        notifier.updateStep(taskId, 3, completed: true);
         throw Exception('OCR 返回了不完整结果（finish_reason=${result.finishReason}）');
       }
       _advance(4);
-      final filePath = await _save(result.text);
-      _checkActive();
-      notifier.updateStep(taskId, 4, completed: true);
-      notifier.completeTask(taskId, downloadedFilePath: filePath);
-      onSaved();
+      await _resultSaver.saveResult(
+        result.text,
+        isComplete: result.isComplete,
+      );
     } catch (error) {
       // A removed/disposed task must never be recreated by late callbacks.
       if (!_cancelToken.isCancelled && notifier.mounted) {
@@ -181,8 +155,14 @@ class OcrTaskRunner {
             }
           }
           final service = _service;
+          final result = task.result;
+          final errorMessage = result == null
+              ? 'OCR识别失败: $error'
+              : task.resultIsComplete
+                  ? 'OCR结果保存失败: $error'
+                  : 'OCR结果不完整: $error';
           notifier.failTask(taskId,
-              error: 'OCR识别失败: $error',
+              error: errorMessage,
               rawRequest: service == null
                   ? null
                   : {
