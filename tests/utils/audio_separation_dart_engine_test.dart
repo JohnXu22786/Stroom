@@ -1,5 +1,7 @@
+import 'dart:isolate' show Isolate, ReceivePort, SendPort;
 import 'dart:math' show pi, sin;
 import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/audio_separation.dart'
     show AudioSeparationEngine, extractAudioSync;
@@ -109,6 +111,16 @@ Uint8List _u48be(int v) {
 Uint8List _f64be(double v) {
   final data = ByteData(8)..setFloat64(0, v, Endian.big);
   return data.buffer.asUint8List();
+}
+
+void _extractAudioInIsolateForTesting(List<Object?> args) {
+  final response = args[0] as SendPort;
+  try {
+    extractAudioSync(videoBytes: args[1] as Uint8List, videoFormat: 'mp4');
+    response.send('returned');
+  } catch (error) {
+    response.send(error.toString());
+  }
 }
 
 /// Helper: write a 64-bit big-endian integer to 8 bytes.
@@ -778,6 +790,39 @@ void main() {
         ..add(mdat);
       return result.toBytes();
     }
+
+    test(
+      'rejects a truncated trailing moov with oversized stbl without hanging',
+      () async {
+        final valid = buildMinimalMp4WithPcmAudio(pcmFrames: 2);
+        final moovStart = _findFourCc(valid, 'moov') - 4;
+        final moovSize = _readUint32BE(valid, moovStart);
+        final mdatStart = moovStart + moovSize;
+        final malformed = Uint8List.fromList([
+          ...valid.sublist(0, moovStart),
+          ...valid.sublist(mdatStart),
+          ...valid.sublist(moovStart, mdatStart),
+        ]);
+        final moovHeader = _findFourCc(malformed, 'moov') - 4;
+        malformed.setRange(moovHeader, moovHeader + 4, _u32be(0x7FFFFFFF));
+        final stblHeader = _findFourCc(malformed, 'stbl') - 4;
+        malformed.setRange(stblHeader, stblHeader + 4, _u32be(0x7FFFFFFF));
+
+        final response = ReceivePort();
+        final isolate = await Isolate.spawn(_extractAudioInIsolateForTesting, [
+          response.sendPort,
+          malformed,
+        ]);
+        final result = await response.first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => 'timed-out',
+        );
+        isolate.kill(priority: Isolate.immediate);
+        response.close();
+
+        expect(result, equals('Exception: No audio track found in video'));
+      },
+    );
 
     test('preserves HE-AAC/SBR config and output frame timing', () async {
       // Cover AOT 5 and the backward-compatible AOT 2 + sync-extension form.
