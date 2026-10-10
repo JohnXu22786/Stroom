@@ -218,6 +218,13 @@ class TextManifest {
         () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
   }
 
+  /// Rollback already knows the record hash, so it can remove metadata without
+  /// first reading the manifest again when that lookup is the failing step.
+  static Future<void> deleteRecordWithKnownHash(String id, String hash,
+          {bool preserveFiles = false}) =>
+      withSaveLock(
+          hash, () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+
   static Future<void> deleteRecords(List<String> ids) async {
     final idSet = ids.toSet();
     final records = await loadRecordsUncached();

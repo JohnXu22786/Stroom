@@ -328,6 +328,38 @@ void main() {
     expect(await TextManifest.readText('$hash.txt'), isNull);
   });
 
+  test('rollback removes its known row when the first reference read fails',
+      () async {
+    notifier.setResult(id, 'owned text');
+    notifier.failTask(id, error: 'previous save failed');
+    var failReferenceRead = true;
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: '',
+      onSaved: () {},
+      loadRecordsUncached: () async {
+        if (failReferenceRead) {
+          failReferenceRead = false;
+          throw StateError('injected reference read failure');
+        }
+        return TextManifest.loadRecordsUncached();
+      },
+      addRecord: (record, {beforeCommit}) async {
+        await TextManifest.addRecord(record, beforeCommit: beforeCommit);
+        notifier.cancelTask(id);
+      },
+    );
+
+    await expectLater(saver.retryTaskResult(), throwsA(anything));
+
+    final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(await TextManifest.loadRecordsUncached(), isEmpty);
+    expect(await TextManifest.readText('$hash.txt'), isNull);
+  });
+
   test('delete aborts request and a late response cannot save', () async {
     final running = runner.run();
     final request = await adapter.requested.future;

@@ -16,6 +16,7 @@ typedef OcrTextWriter = Future<String> Function(
 
 typedef OcrTextRecordWriter = Future<void> Function(TextRecord record,
     {void Function()? beforeCommit});
+typedef OcrTextRecordsLoader = Future<List<TextRecord>> Function();
 
 /// Publishes an OCR result and its manifest record as one cancellable save.
 /// The OCR runner and the task-list save-only retry share this implementation.
@@ -28,6 +29,7 @@ class OcrResultSaver {
   final CancelToken _cancelToken;
   final OcrTextWriter _writeText;
   final OcrTextRecordWriter _addRecord;
+  final OcrTextRecordsLoader _loadRecordsUncached;
 
   OcrResultSaver({
     required this.taskId,
@@ -38,9 +40,12 @@ class OcrResultSaver {
     CancelToken? cancelToken,
     OcrTextWriter? writeText,
     OcrTextRecordWriter? addRecord,
+    OcrTextRecordsLoader? loadRecordsUncached,
   })  : _cancelToken = cancelToken ?? CancelToken(),
         _writeText = writeText ?? TextManifest.writeText,
-        _addRecord = addRecord ?? TextManifest.addRecord;
+        _addRecord = addRecord ?? TextManifest.addRecord,
+        _loadRecordsUncached =
+            loadRecordsUncached ?? TextManifest.loadRecordsUncached;
 
   void cancel() => _cancelToken.cancel('已取消');
 
@@ -137,7 +142,7 @@ class OcrResultSaver {
 
         await _addRecord(record, beforeCommit: _checkActive);
         _checkActive();
-        final records = await TextManifest.loadRecordsUncached();
+        final records = await _loadRecordsUncached();
         if (!records.any((item) => item.id == record.id && item.hash == hash)) {
           throw StateError('OCR文本清单记录写入未确认');
         }
@@ -169,18 +174,33 @@ class OcrResultSaver {
     required bool existed,
   }) async {
     try {
-      var records = await TextManifest.loadRecordsUncached();
+      var records = await _loadRecordsUncached();
       if (records.any((item) => item.id == record.id)) {
         await TextManifest.deleteRecord(record.id, preserveFiles: true);
-        records = await TextManifest.loadRecordsUncached();
+        records = await _loadRecordsUncached();
         if (records.any((item) => item.id == record.id)) return;
       }
       if (!existed && !records.any((item) => item.hash == hash)) {
         await TextManifest.deleteFile(fileName);
       }
     } catch (error) {
-      // A failed reference lookup is not evidence that deleting a file is safe.
-      debugPrint('[OcrResultSaver] Rollback could not be confirmed: $error');
+      debugPrint('[OcrResultSaver] Rollback lookup failed: $error');
+      try {
+        await TextManifest.deleteRecordWithKnownHash(
+          record.id,
+          hash,
+          preserveFiles: true,
+        );
+        final records = await _loadRecordsUncached();
+        if (records.any((item) => item.id == record.id)) return;
+        if (!existed && !records.any((item) => item.hash == hash)) {
+          await TextManifest.deleteFile(fileName);
+        }
+      } catch (cleanupError) {
+        // Without a confirmed reference list, preserve the content-addressed file.
+        debugPrint(
+            '[OcrResultSaver] Rollback cleanup could not be confirmed: $cleanupError');
+      }
     }
   }
 }
