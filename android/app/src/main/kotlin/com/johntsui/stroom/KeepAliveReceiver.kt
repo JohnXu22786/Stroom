@@ -49,8 +49,8 @@ import id.flutter.flutter_background_service.BackgroundService
  *
  * Lifecycle:
  * 1. [scheduleAlarm] — called from Dart via MethodChannel when the
- *    background service is started. Schedules the next alarm and persists
- *    that the watchdog is active.
+ *    background service is started. Persists that the watchdog is requested,
+ *    schedules the next alarm, and reports whether scheduling succeeded.
  * 2. [cancelAlarm] — called when the background service is stopped.
  * 3. On [Intent.ACTION_BOOT_COMPLETED] / [Intent.ACTION_MY_PACKAGE_REPLACED]
  *    / QUICKBOOT_POWERON / SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED the
@@ -112,14 +112,19 @@ class KeepAliveReceiver : BroadcastReceiver() {
          *    requestIgnoreBatteryOptimizations).
          * 3. Older versions: [AlarmManager.setInexactRepeating].
          */
-        fun scheduleAlarm(context: Context, intervalMs: Long = KEEP_ALIVE_INTERVAL_MS) {
+        fun scheduleAlarm(context: Context, intervalMs: Long = KEEP_ALIVE_INTERVAL_MS): Boolean =
+            scheduleWithActiveIntent(
+                persistActiveIntent = { markActive(context, true) },
+                schedule = { scheduleAlarmNow(context, intervalMs) },
+            )
+
+        private fun scheduleAlarmNow(context: Context, intervalMs: Long): Boolean {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
             val triggerAt = SystemClock.elapsedRealtime() + intervalMs
 
-            // 先调度、成功后再持久化「闹钟已激活」标记：
-            // 若所有调度分支都失败（如权限竞态、系统异常），active 标记
-            // 保持旧值/清除，避免设备重启后重新武装一个不存在的闹钟。
+            // The watchdog intent is persisted before this attempt. Keep it
+            // active on failure so boot/package-replacement recovery can retry.
             var scheduled = false
 
             // Prefer exact alarms: on Android 12+ an exact alarm is an
@@ -170,7 +175,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     Log.e(TAG, "Failed to schedule keep-alive alarm", e)
                 }
             }
-            markActive(context, scheduled)
+            return scheduled
         }
 
         /**
