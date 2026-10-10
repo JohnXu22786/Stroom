@@ -45,13 +45,15 @@ jobs:
       - name: Install Linux dependencies
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git unzip xz-utils xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
           pub-cache: true
+      - name: Trust the restored Flutter SDK in the container
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
       - name: Run integration tests
         run: |
@@ -74,14 +76,15 @@ jobs:
       - name: Install Linux dependencies
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git unzip xz-utils clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
           pub-cache: true
-      - run: flutter create --platforms=linux .
+      - name: Trust the restored Flutter SDK in the container
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
       - run: flutter build linux --release
 
