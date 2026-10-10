@@ -701,8 +701,12 @@ class _Mp4Demuxer {
         final boxStart = _offset;
         if (_offset + 8 > _data.length) break;
 
-        final boxSize = _readUint32();
+        var boxSize = _readUint32();
         final boxType = _readString(4);
+        if (boxSize == 1) {
+          if (_offset + 8 > _data.length) break;
+          boxSize = _readUint64();
+        }
 
         if (boxType == 'moov') {
           moovOffset = boxStart;
@@ -1164,6 +1168,12 @@ class _Mp4Demuxer {
         _data[_offset + 3];
     _offset += 4;
     return value;
+  }
+
+  int _readUint64() {
+    final high = _readUint32();
+    final low = _readUint32();
+    return high * 0x100000000 + low;
   }
 
   int _readUint16() {
