@@ -506,6 +506,20 @@ test("preview readiness follows each fence, accepting case variants and settled 
       false,
       "quoted closed fence ready",
     );
+    update("123. > ```HTML\n     > <h1>listed</h1>\n     > ```\n\nmore", true);
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector('[data-action="html"]').disabled,
+      false,
+      "quoted list fence ready",
+    );
+    update("- ```html\n\t<p>x</p>\n\t```\n\nmore", true);
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector('[data-action="html"]').disabled,
+      false,
+      "tab-indented list fence ready",
+    );
     update("```html\n<h1>tail</h1>", true);
     await wait();
     assert.equal(

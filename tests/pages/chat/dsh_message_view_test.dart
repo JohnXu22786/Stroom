@@ -100,4 +100,32 @@ void main() {
             .complete,
         isFalse);
   });
+
+  test('quoted list code keeps its body indentation in native actions', () {
+    for (final source in [
+      '- > ```python\n  >   value\n  > ```',
+      '123. > ```python\n     >   value\n     > ```',
+      '> - ```python\n>     value\n>   ```',
+    ]) {
+      final fence =
+          messageCodeFence(source, source.indexOf('```'), source.length)!;
+      expect(fence.code, '  value');
+      expect(fence.complete, isTrue);
+    }
+  });
+
+  test('code containers consume tab columns without copying closing fences',
+      () {
+    for (final entry in {
+      '- ```html\n\t<p>x</p>\n\t```': '  <p>x</p>',
+      '-\t```html\n\t<p>x</p>\n\t```': '<p>x</p>',
+      '>\t```html\n>\t<p>x</p>\n>\t```': '<p>x</p>',
+      '123. >\t```html\n     >\t<p>x</p>\n     >\t```': '<p>x</p>',
+    }.entries) {
+      final fence = messageCodeFence(
+          entry.key, entry.key.indexOf('```'), entry.key.length)!;
+      expect(fence.code, entry.value);
+      expect(fence.complete, isTrue);
+    }
+  });
 }

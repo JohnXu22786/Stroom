@@ -695,11 +695,13 @@ void main() {
       expect(restoredPrefs.getString('provider_entries'), isNotNull,
           reason: 'Settings key should be restored from v1 backup');
       final restored =
-          (jsonDecode(restoredPrefs.getString('conversations')!) as List).single;
+          (jsonDecode(restoredPrefs.getString('conversations')!) as List)
+              .single;
       expect(restored['messages'].single['blocks'], [
         {'type': 'text', 'text': 'Restored reply'}
       ]);
-      expect((await DataMigrationService.getStoredPartVersions())[DataParts.chat],
+      expect(
+          (await DataMigrationService.getStoredPartVersions())[DataParts.chat],
           DataParts.currentVersions[DataParts.chat]);
     });
 

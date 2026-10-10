@@ -56,9 +56,11 @@ void main() {
         render('**native smoke**\n\n```dart\nfinal value = 1;\n```'));
     await waitFor(() => events.any((e) => e['type'] == 'ready'),
         'The bundled document must initialize its real WebView bridge');
+    debugPrint('DSH native smoke: document ready');
     final matches = await search('native smoke');
     expect(matches, hasLength(1));
     expect(matches.single['messageId'], 'assistant-1');
+    debugPrint('DSH native smoke: initial Markdown search passed');
 
     await tester.pumpWidget(render('**updated smoke**'));
     await tester.pump();
@@ -66,7 +68,10 @@ void main() {
     final updated = await search('updated smoke');
     expect(updated, hasLength(1));
     expect(updated.single['messageId'], 'assistant-1');
+    debugPrint('DSH native smoke: message patch search passed');
     expect(tester.takeException(), isNull);
+    debugPrint('DSH native smoke: disposing document');
     await tester.pumpWidget(const SizedBox());
+    debugPrint('DSH native smoke: document disposed');
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

@@ -11,16 +11,31 @@
   final lineStart = start == 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
   final prefix = text.substring(lineStart, start);
   final quotes = '>'.allMatches(prefix).length;
-  final indent = prefix.replaceAll(RegExp(r' {0,3}> ?'), '').length;
+  // Removing a quote also consumes any outer list indentation. Only the
+  // container prefix after the last quote remains to be stripped.
+  final quoteEnd = prefix.lastIndexOf('>') + 1;
+  final quoteColumn = _codeColumns(prefix.substring(0, quoteEnd));
+  final tail = prefix.substring(quoteEnd);
+  final optionalSpace = tail.startsWith(' ') || tail.startsWith('\t') ? 1 : 0;
+  final indent = quotes == 0
+      ? _codeColumns(prefix)
+      : _codeColumns(_stripCodeIndent(tail, optionalSpace, quoteColumn),
+          quoteColumn + optionalSpace);
   final lines = source.split('\n');
   for (var i = 1; i < lines.length; i++) {
     var line = lines[i];
+    var column = 0;
     for (var q = 0; q < quotes; q++) {
-      line = line.replaceFirst(RegExp(r'^ {0,3}> ?'), '');
+      final quote = RegExp(r'^[ \t]*>').firstMatch(line);
+      if (quote == null) break;
+      column += _codeColumns(quote.group(0)!, column);
+      line = line.substring(quote.end);
+      if (line.startsWith(' ') || line.startsWith('\t')) {
+        line = _stripCodeIndent(line, 1, column);
+        column++;
+      }
     }
-    if (indent > 0 && line.startsWith(' ' * indent))
-      line = line.substring(indent);
-    lines[i] = line;
+    lines[i] = _stripCodeIndent(line, indent, column);
   }
   source = lines.join('\n');
   final opening = RegExp(r'^ {0,3}(`{3,}|~{3,})([^\n]*)\n').firstMatch(source);
@@ -50,4 +65,27 @@
     complete: closing != null,
     generating: streaming && closing == null
   );
+}
+
+int _codeColumns(String text, [int column = 0]) {
+  final start = column;
+  for (final unit in text.codeUnits) {
+    column += unit == 9 ? 4 - column % 4 : 1;
+  }
+  return column - start;
+}
+
+String _stripCodeIndent(String line, int width, [int column = 0]) {
+  var consumed = 0;
+  var offset = 0;
+  while (offset < line.length && consumed < width) {
+    final unit = line.codeUnitAt(offset);
+    if (unit != 32 && unit != 9) break;
+    final step = unit == 9 ? 4 - (column + consumed) % 4 : 1;
+    consumed += step;
+    offset++;
+  }
+  // A tab can cross the container boundary; keep its remaining code columns.
+  final remainder = consumed > width ? ' ' * (consumed - width) : '';
+  return remainder + line.substring(offset);
 }
