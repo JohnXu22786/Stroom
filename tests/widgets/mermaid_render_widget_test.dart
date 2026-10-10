@@ -736,6 +736,57 @@ void main() {
       skip: !kIsWeb,
     );
 
+    testWidgets(
+      'retry after WebView creation timeout mounts a fresh platform view',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+        final failedWebViewElement = tester.element(find.byType(InAppWebView));
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+
+        expect(
+          tester.element(find.byType(InAppWebView)),
+          isNot(same(failedWebViewElement)),
+          reason: 'Retry must create a new platform view when the controller '
+              'was never created',
+        );
+        expect(find.text(creationError), findsNothing);
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'the creation fallback must report a repeated mount failure',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
