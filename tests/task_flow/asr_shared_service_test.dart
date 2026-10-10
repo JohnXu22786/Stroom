@@ -401,31 +401,17 @@ void main() {
   testWidgets('standalone partial results are marked incomplete', (
     tester,
   ) async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    var requestIndex = 0;
-    final serverDone = server.listen((request) async {
-      await request.drain<void>();
-      final index = requestIndex++;
-      request.response.headers.contentType = ContentType.json;
-      request.response.statusCode = 200;
-      request.response.write(
-        index == 1
-            ? '{"error":{"message":"middle failed"}}'
-            : index == 0
-                ? '{"text":"first chunk"}'
-                : '{"text":"last chunk"}',
-      );
-      await request.response.close();
-    });
-    addTearDown(() async {
-      await server.close(force: true);
-      await serverDone.cancel();
-    });
-
-    final file = await audioFile('standalone-partial.wav', dataBytes: 140);
+    final adapter = _AsrAdapter(
+      responseBody: '',
+      responseBodies: [
+        '{"text":"first chunk"}',
+        '{"error":{"message":"middle failed"}}',
+        '{"text":"last chunk"}',
+      ],
+    );
+    final dio = Dio()..httpClientAdapter = adapter;
+    addTearDown(dio.close);
     final entries = providers(
-      host:
-          'http://${server.address.address}:${server.port}/audio/transcriptions',
       providerTypeConfig: {
         'maxFileSizeMb': 0.0001,
         'chunking': 'fixedSize',
@@ -433,7 +419,7 @@ void main() {
       },
     );
     final providerNotifier = ProviderEntriesNotifier()..state = entries;
-    final encodedAudio = base64Encode(await file.readAsBytes());
+    final encodedAudio = base64Encode(pcmToWav(Uint8List(140)));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -458,6 +444,8 @@ void main() {
                           },
                         ],
                       },
+                      asrServiceFactory: (config) =>
+                          AsrService(config: config, dio: dio),
                     ),
                   ),
                 ),
@@ -486,6 +474,7 @@ void main() {
     expect(background.state.single.result, 'first chunk last chunk');
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.resultIsComplete, isFalse);
+    expect(adapter.requests, hasLength(3));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
