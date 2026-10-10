@@ -728,7 +728,19 @@ Future<bool> isDesktopCloseMinimizeEnabled() async {
 Future<bool> setDesktopCloseMinimizeEnabled(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    return await prefs.setBool(_desktopCloseMinimizeKey, enabled);
+    final previousValue = prefs.getBool(_desktopCloseMinimizeKey) ?? true;
+    var saved = false;
+    try {
+      saved = await prefs.setBool(_desktopCloseMinimizeKey, enabled);
+    } catch (_) {}
+    if (!saved) {
+      // SharedPreferences updates its in-memory cache before the store
+      // confirms the write. Restore the saved choice so close handling sees it.
+      try {
+        await prefs.setBool(_desktopCloseMinimizeKey, previousValue);
+      } catch (_) {}
+    }
+    return saved;
   } catch (_) {
     return false;
   }
