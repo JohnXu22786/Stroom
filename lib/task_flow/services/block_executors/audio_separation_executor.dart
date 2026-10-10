@@ -1,16 +1,24 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show Digest, md5;
+import 'package:flutter/foundation.dart'
+    show compute, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/task_provider_shared.dart';
 import '../../../utils/audio_separation.dart';
+import '../../../utils/audio_separation_web_audio_stub.dart'
+    if (dart.library.js_interop) '../../../utils/audio_separation_web_audio.dart'
+    as webAudio;
 import '../../../utils/audio_utils.dart';
 import '../../../utils/file_manifest.dart';
+import '../../../utils/web_file_store.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -20,10 +28,9 @@ import 'shared_helpers.dart';
 
 /// Runs [work] while polling whether the flow execution is still active.
 ///
-/// The separation isolates cannot be aborted, but the flow's global run
-/// lock must free promptly when the flow ends mid-extraction —
-/// otherwise a new flow cannot start for the whole duration of the
-/// (possibly minutes-long) isolate work.
+/// The underlying read or extraction cannot be aborted, but the flow's
+/// global run lock must free promptly when the flow ends mid-operation —
+/// otherwise a new flow cannot start for the whole duration of the work.
 Future<T> _awaitWhileFlowActive<T>(
   Future<T> work,
   TaskFlowExecutionNotifier execNotifier,
@@ -78,18 +85,52 @@ Future<Uint8List> _readAndExtractInIsolate(
   });
 }
 
-/// Computes the audio hash and detects the format in a background isolate.
-/// Both operations are CPU-bound (MD5 over raw PCM, magic-byte scanning)
-/// and would freeze the GUI if run on the main isolate.
-Future<(String, String)> _computeAudioMetaInIsolate(Uint8List audioBytes) {
-  return Isolate.run(() {
-    final hash = computeAudioHash(audioBytes);
-    final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
-    return (
-      hash,
-      format,
-    ); // positional record — avoids destructuring issues in CI
-  });
+Uint8List _extractVideoBytes((Uint8List, String) input) {
+  return extractAudioSync(videoBytes: input.$1, videoFormat: input.$2);
+}
+
+/// Uses an isolate on native platforms and the current event loop on Web.
+Future<Uint8List> _extractVideoBytesInBackground(
+  Uint8List videoBytes,
+  String videoFormat,
+) {
+  if (kIsWeb) return webAudio.extractAudioFromWebBytes(videoBytes, videoFormat);
+  return compute(_extractVideoBytes, (videoBytes, videoFormat));
+}
+
+(String, String) _computeAudioMeta(Uint8List audioBytes) {
+  final hash = computeAudioHash(audioBytes);
+  final format = normalizeAudioFormat(detectAudioFormat(audioBytes));
+  return (hash, format);
+}
+
+/// Uses an isolate on native platforms and the current event loop on Web.
+Future<(String, String)> _computeAudioMetaInBackground(Uint8List audioBytes) {
+  if (kIsWeb) return computeAudioMetaWithEventLoopYield(audioBytes);
+  return compute(_computeAudioMeta, audioBytes);
+}
+
+/// Hashes web audio in small chunks so large files do not monopolize the UI.
+@visibleForTesting
+Future<(String, String)> computeAudioMetaWithEventLoopYield(
+  Uint8List audioBytes,
+) async {
+  var hash = '';
+  final chunked = md5.startChunkedConversion(
+    ChunkedConversionSink<Digest>.withCallback((digests) {
+      if (digests.isNotEmpty) hash = digests.last.toString();
+    }),
+  );
+  const chunkSize = 64 * 1024;
+  for (var offset = 0; offset < audioBytes.length; offset += chunkSize) {
+    final end = offset + chunkSize < audioBytes.length
+        ? offset + chunkSize
+        : audioBytes.length;
+    chunked.add(Uint8List.sublistView(audioBytes, offset, end));
+    if (end < audioBytes.length) await Future<void>.delayed(Duration.zero);
+  }
+  chunked.close();
+  return (hash, normalizeAudioFormat(detectAudioFormat(audioBytes)));
 }
 
 /// Yields to the event loop so the Flutter framework can render a frame
@@ -107,6 +148,9 @@ Future<String> executeAudioSeparationBlock({
 
   /// Allows the extraction wait to be controlled in cancellation tests.
   Future<Uint8List> Function(String, String)? extractAudio,
+
+  /// Allows the WebFileStore read wait to be controlled in cancellation tests.
+  Future<Uint8List?> Function(String)? readWebFileBytes,
 }) async {
   final inputBasename = p.basename(input);
   final inputFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
@@ -124,8 +168,23 @@ Future<String> executeAudioSeparationBlock({
 
   Uint8List audioBytes;
   try {
-    final file = File(input);
-    if (!await file.exists()) {
+    final usesWebFileStore =
+        kIsWeb || (WebFileStore.isTestMode && await WebFileStore.exists(input));
+    Uint8List? webVideoBytes;
+    final bool inputExists;
+    if (usesWebFileStore) {
+      final readWebFile = readWebFileBytes ?? WebFileStore.read;
+      webVideoBytes = await _awaitWhileFlowActive(
+        readWebFile(input),
+        execNotifier,
+        execId,
+        def,
+      );
+      inputExists = webVideoBytes != null;
+    } else {
+      inputExists = await File(input).exists();
+    }
+    if (!inputExists) {
       failSubTask(
         bgNotifier,
         taskId,
@@ -144,11 +203,18 @@ Future<String> executeAudioSeparationBlock({
     await _yieldFrame();
     bgNotifier.updateStep(taskId, 0, running: true);
 
-    // The separation isolate cannot be aborted, but the flow's run lock
-    // must free promptly when the flow ends mid-extraction — poll while
-    // the isolate runs.
+    // Extraction cannot be interrupted, so poll while it runs to release
+    // the flow's run lock promptly if the execution ends.
+    final Future<Uint8List> extraction;
+    if (extractAudio != null) {
+      extraction = extractAudio(input, inputFormat);
+    } else if (usesWebFileStore) {
+      extraction = _extractVideoBytesInBackground(webVideoBytes!, inputFormat);
+    } else {
+      extraction = _readAndExtractInIsolate(input, inputFormat);
+    }
     audioBytes = await _awaitWhileFlowActive(
-      (extractAudio ?? _readAndExtractInIsolate)(input, inputFormat),
+      extraction,
       execNotifier,
       execId,
       def,
@@ -195,7 +261,7 @@ Future<String> executeAudioSeparationBlock({
 
     await _yieldFrame();
     final meta = await _awaitWhileFlowActive(
-      _computeAudioMetaInIsolate(audioBytes),
+      _computeAudioMetaInBackground(audioBytes),
       execNotifier,
       execId,
       def,

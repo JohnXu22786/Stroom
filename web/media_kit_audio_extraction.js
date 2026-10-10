@@ -32,7 +32,7 @@
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
       // Convert AudioBuffer to WAV format
-      const wavBuffer = audioBufferToWav(audioBuffer);
+      const wavBuffer = await audioBufferToWav(audioBuffer);
       return new Uint8Array(wavBuffer);
     } finally {
       URL.revokeObjectURL(url);
@@ -42,7 +42,7 @@
   /**
    * Convert AudioBuffer to WAV format bytes.
    */
-  function audioBufferToWav(buffer) {
+  async function audioBufferToWav(buffer) {
     const numChannels = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
     const format = 1; // PCM
@@ -82,12 +82,19 @@
       channelData.push(buffer.getChannelData(c));
     }
 
-    for (let s = 0; s < numSamples; s++) {
-      for (let c = 0; c < numChannels; c++) {
-        const sample = Math.max(-1, Math.min(1, channelData[c][s]));
-        const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-        view.setInt16(offset, int16, true);
-        offset += 2;
+    const samplesPerChunk = 16384;
+    for (let start = 0; start < numSamples; start += samplesPerChunk) {
+      const end = Math.min(start + samplesPerChunk, numSamples);
+      for (let s = start; s < end; s++) {
+        for (let c = 0; c < numChannels; c++) {
+          const sample = Math.max(-1, Math.min(1, channelData[c][s]));
+          const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+          view.setInt16(offset, int16, true);
+          offset += 2;
+        }
+      }
+      if (end < numSamples) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
     }
 
