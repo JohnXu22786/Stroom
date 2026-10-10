@@ -962,6 +962,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void _handleCtrlWheelZoom(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
 
+    final verticalDelta = event.scrollDelta.dy;
+    if (verticalDelta == 0) return;
+
     // Compute zoom center relative to this widget's render box
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
@@ -969,7 +972,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final centerX = localPos.dx.clamp(0.0, renderBox.size.width);
     final centerY = localPos.dy.clamp(0.0, renderBox.size.height);
 
-    final delta = event.scrollDelta.dy > 0 ? -0.1 : 0.1;
+    final delta = verticalDelta > 0 ? -0.1 : 0.1;
     final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
     if (newZoom != _zoomLevel) {
       _zoomLevel = newZoom;
