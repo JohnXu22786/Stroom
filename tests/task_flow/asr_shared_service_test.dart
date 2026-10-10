@@ -26,14 +26,17 @@ import 'package:stroom/utils/text_manifest.dart';
 class _AsrAdapter implements HttpClientAdapter {
   _AsrAdapter({
     required this.responseBody,
+    this.responseStatusCode = 200,
     this.responseContentType = Headers.jsonContentType,
     this.holdResponse = false,
   });
 
   final String responseBody;
+  final int responseStatusCode;
   final String responseContentType;
   final bool holdResponse;
   final requests = <({RequestOptions options, Uint8List body})>[];
+  int closeCalls = 0;
   final requestStarted = Completer<void>();
   final cancelObserved = Completer<void>();
   final releaseResponse = Completer<void>();
@@ -78,7 +81,7 @@ class _AsrAdapter implements HttpClientAdapter {
     }
     return ResponseBody.fromString(
       responseBody,
-      200,
+      responseStatusCode,
       headers: {
         Headers.contentTypeHeader: [responseContentType],
       },
@@ -86,7 +89,7 @@ class _AsrAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close({bool force = false}) {}
+  void close({bool force = false}) => closeCalls++;
 }
 
 void main() {
@@ -175,6 +178,56 @@ void main() {
   Future<File> audioFile(String name, {int dataBytes = 2}) async {
     final file = File('${directory.path}/$name');
     return file.writeAsBytes(pcmToWav(Uint8List(dataBytes)));
+  }
+
+  Future<_AsrAdapter> executeWithOwnedService({
+    required String audioFileName,
+    int responseStatusCode = 200,
+    bool holdResponse = false,
+    bool cancelRequest = false,
+  }) async {
+    final adapter = _AsrAdapter(
+      responseBody: '{"text":"recognized"}',
+      responseStatusCode: responseStatusCode,
+      holdResponse: holdResponse,
+    );
+    final file = await audioFile(audioFileName);
+    final cancelToken = cancelRequest ? CancelToken() : null;
+    final request = executeAsrBlock(
+      block: asrBlock(),
+      def: BlockTypeDefinition.asr,
+      input: file.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providers(),
+      cancelToken: cancelToken,
+      asrServiceFactory: (config) {
+        final dynamic service = AsrService(config: config);
+        service.dioForTesting.httpClientAdapter = adapter;
+        return service as AsrService;
+      },
+    );
+
+    if (cancelRequest) {
+      final assertion = expectLater(
+        request,
+        throwsA(isA<BlockExecutionException>()),
+      );
+      await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
+      cancelToken!.cancel('test cancellation');
+      await adapter.cancelObserved.future.timeout(const Duration(seconds: 5));
+      await assertion;
+    } else if (responseStatusCode >= 400) {
+      await expectLater(
+        request,
+        throwsA(isA<BlockExecutionException>()),
+      );
+    } else {
+      expect(await request, 'recognized');
+    }
+    return adapter;
   }
 
   test('maps provider and model ASR settings into one shared config', () {
@@ -281,6 +334,55 @@ void main() {
       expect(body['metadata'], {'speaker': 'A'});
     },
   );
+
+  test('task-flow closes its owned Dio after successful recognition', () async {
+    final adapter = await executeWithOwnedService(
+      audioFileName: 'owned-success.wav',
+    );
+
+    expect(adapter.closeCalls, 1);
+  });
+
+  test('task-flow closes its owned Dio after a request failure', () async {
+    final adapter = await executeWithOwnedService(
+      audioFileName: 'owned-failure.wav',
+      responseStatusCode: 500,
+    );
+
+    expect(adapter.closeCalls, 1);
+  });
+
+  test('task-flow closes its owned Dio after cancellation', () async {
+    final adapter = await executeWithOwnedService(
+      audioFileName: 'owned-cancel.wav',
+      holdResponse: true,
+      cancelRequest: true,
+    );
+
+    expect(adapter.closeCalls, 1);
+  });
+
+  test('task-flow leaves an injected Dio open after recognition', () async {
+    final adapter = _AsrAdapter(responseBody: '{"text":"recognized"}');
+    final dio = Dio()..httpClientAdapter = adapter;
+    final file = await audioFile('injected-dio.wav');
+
+    final result = await executeAsrBlock(
+      block: asrBlock(),
+      def: BlockTypeDefinition.asr,
+      input: file.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providers(),
+      asrServiceFactory: (config) => AsrService(config: config, dio: dio),
+    );
+
+    expect(result, 'recognized');
+    expect(adapter.closeCalls, 0);
+    dio.close();
+  });
 
   test(
     'URL-only provider rejects a local input before reading or requesting',

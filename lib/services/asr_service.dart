@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/audio_codecs.dart';
@@ -236,6 +237,7 @@ class AsrResult {
 /// `{ "text": "transcribed text" }`.
 class AsrService {
   final AsrConfig config;
+  final bool _ownsDio;
   final Dio _dio;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
@@ -266,7 +268,8 @@ class AsrService {
   }
 
   AsrService({required this.config, Dio? dio})
-      : _dio = dio ??
+      : _ownsDio = dio == null,
+        _dio = dio ??
             Dio(
               BaseOptions(
                 headers: {
@@ -280,6 +283,17 @@ class AsrService {
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
+
+  /// The HTTP client, exposed so tests can verify owned-client cleanup.
+  @visibleForTesting
+  Dio get dioForTesting => _dio;
+
+  /// Close the HTTP client when this service created it.
+  ///
+  /// An injected [Dio] remains owned by its caller.
+  void close({bool force = false}) {
+    if (_ownsDio) _dio.close(force: force);
+  }
 
   /// Dio send timeout, exposed for diagnostic and testing.
   Duration? get sendTimeout => _dio.options.sendTimeout;

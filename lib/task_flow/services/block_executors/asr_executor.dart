@@ -195,12 +195,16 @@ Future<String> executeAsrBlock({
     } else {
       final service =
           asrServiceFactory?.call(config) ?? AsrService(config: config);
-      result = (await service.transcribe(
-        audioBytes: audioBytes,
-        audioFormat: audioFormat,
-        cancelToken: cancelToken,
-      ))
-          .text;
+      try {
+        result = (await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: audioFormat,
+          cancelToken: cancelToken,
+        ))
+            .text;
+      } finally {
+        service.close();
+      }
     }
     // The flow may have ended while the request was in flight — don't
     // save an orphaned text record.
