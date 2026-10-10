@@ -807,7 +807,7 @@ void main() {
     );
 
     testWidgets(
-      'web view creation removes the Flutter loading overlay without onLoadStop',
+      'web main-frame navigation errors show retry after creation hides loading',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
         final platform = _MermaidWebViewPlatform();
@@ -835,6 +835,43 @@ void main() {
         // must be removed as soon as the WebView is created. This deliberately
         // does not send onLoadStop.
         expect(find.text('加载渲染引擎...'), findsNothing);
+
+        const errorMessage = '页面加载失败: Could not connect to host';
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/mermaid.min.js'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        // Subresource failures stay inside the web renderer so the iframe's
+        // loading hint and error handling remain visible.
+        expect(find.text(errorMessage), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+            ),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

@@ -1568,7 +1568,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               },
               onReceivedError: (controller, request, error) {
                 _readyFallbackTimer?.cancel();
-                if (mounted && !_isReady) {
+                // WebView creation ends the Flutter loading overlay before
+                // the asset URL finishes navigating. Surface main-frame
+                // failures even after that, but leave web subresource errors
+                // to the iframe's own loading/error UI. Native behavior still
+                // only reports load errors while its initial page is pending.
+                final shouldShowError =
+                    kIsWeb ? request.isForMainFrame == true : !_isReady;
+                if (mounted && shouldShowError) {
                   setState(() {
                     _isReady = true;
                     _errorMessage = '页面加载失败: ${error.description}';
