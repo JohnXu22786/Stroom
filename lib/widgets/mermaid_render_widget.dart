@@ -981,6 +981,35 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
+  /// Forwards an unmoved tap from the Flutter overlay to the DOM element at
+  /// the same WebView viewport position. Mermaid's own SVG click handlers
+  /// then process callbacks and links as usual.
+  void _onDiagramTap(TapUpDetails details) {
+    final controller = _webViewController;
+    if (controller == null) return;
+
+    final position = details.localPosition;
+    controller.evaluateJavascript(
+      source: '''
+        (() => {
+          const target = document.elementFromPoint(
+            ${position.dx},
+            ${position.dy}
+          );
+          if (target) {
+            target.dispatchEvent(new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: ${position.dx},
+              clientY: ${position.dy}
+            }));
+          }
+        })();
+      ''',
+    );
+  }
+
   void _handleCtrlWheelZoom(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
 
@@ -1049,7 +1078,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// platform view.
   ///
   /// The overlay uses [RawGestureDetector] with a [GestureArenaTeam]
-  /// containing two recognizers:
+  /// containing two recognizers, plus a separate [TapGestureRecognizer]:
   ///
   /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena on the very
   ///    first [PointerMoveEvent] in ANY direction, before the parent
@@ -1060,7 +1089,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   ///    pinch zoom (two-finger pinch), communicating with the WebView via
   ///    [evaluateJavascript].
   ///
-  /// Both recognizers are in the same [GestureArenaTeam] so that when the
+  /// The scale and immediate recognizers share a [GestureArenaTeam] so that when the
   /// [ImmediateMermaidGestureRecognizer] wins the arena, the
   /// [ScaleGestureRecognizer] also accepts, capturing the gesture for
   /// the diagram regardless of drag direction.
@@ -1069,15 +1098,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Mermaid diagram area, preventing the parent chat scroll view from
   /// scrolling while the user pans or zooms the diagram.
   ///
-  /// Taps (clicks without movement) produce no [PointerMoveEvent], so the
-  /// [ImmediateMermaidGestureRecognizer] never resolves, and toolbar button
-  /// taps and other click handlers work normally above the overlay.
+  /// Taps without movement are recognized separately and forwarded to the
+  /// WebView as a click on the DOM element at the tap position. The tap
+  /// recognizer stays outside the pan/zoom team so a tap does not start a
+  /// scale gesture. Moving beyond tap slop rejects it, leaving the immediate
+  /// recognizer to claim the gesture for pan/zoom. Flutter toolbar controls
+  /// are above this overlay and keep their normal tap behavior.
   ///
   /// The [Listener] on the overlay with [onPointerSignal] handles
   /// Ctrl/MouseWheel zoom on desktop.
   ///
   /// All gestures are communicated to the WebView via [evaluateJavascript]
-  /// calls (see [_onScaleUpdate], [_onPointerSignal] and
+  /// calls (see [_onDiagramTap], [_onScaleUpdate], [_onPointerSignal] and
   /// [_zoomAroundCenter]), so the inline widget owns pan/zoom state and
   /// sends it to the page via `window.setPanZoom`.
   ///
@@ -1112,6 +1144,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               onPointerSignal: _onPointerSignal,
               child: RawGestureDetector(
                 gestures: <Type, GestureRecognizerFactory>{
+                  // Forward stationary taps to Mermaid's existing DOM click
+                  // handlers. This recognizer is deliberately not on [team]:
+                  // a tap must not accept the scale team's pan recognizer.
+                  TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      TapGestureRecognizer>(
+                    TapGestureRecognizer.new,
+                    (instance) => instance.onTapUp = _onDiagramTap,
+                  ),
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
