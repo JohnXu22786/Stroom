@@ -297,7 +297,7 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       // The fit must be wired into the mermaid.run success path.
       final runIdx = html.indexOf('mermaid.run');
-      final fitCallIdx = html.indexOf('fitToViewport()');
+      final fitCallIdx = html.indexOf('window.fitToViewport();', runIdx);
       expect(runIdx, greaterThanOrEqualTo(0));
       expect(fitCallIdx, greaterThan(runIdx),
           reason: 'fitToViewport() must be invoked after mermaid.run finishes');
