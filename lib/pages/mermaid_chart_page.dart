@@ -178,8 +178,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     final currentCode = _codeController.text;
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
-      _codeController.text =
-          '${currentCode.substring(0, insertionPoint)}\n$snippet\n';
+      final codeToPreserve = currentCode.endsWith('\n')
+          ? currentCode.substring(0, insertionPoint)
+          : currentCode;
+      _codeController.text = '$codeToPreserve\n$snippet\n';
     } else {
       _codeController.text = MermaidTemplates.insertSnippet(
         currentCode,
