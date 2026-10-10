@@ -401,6 +401,7 @@ void main() {
   testWidgets('standalone partial results are marked incomplete', (
     tester,
   ) async {
+    final standaloneBackground = BackgroundTaskNotifier();
     final adapter = _AsrAdapter(
       responseBody: '',
       responseBodies: [
@@ -425,7 +426,7 @@ void main() {
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith((ref) => providerNotifier),
-          backgroundTasksProvider.overrideWith((ref) => background),
+          backgroundTasksProvider.overrideWith((ref) => standaloneBackground),
           audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
         ],
         child: MaterialApp(
@@ -464,8 +465,8 @@ void main() {
 
     await tester.runAsync(() async {
       final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (background.state.isEmpty ||
-          background.state.single.status != TaskStatus.failed) {
+      while (standaloneBackground.state.isEmpty ||
+          standaloneBackground.state.single.status != TaskStatus.failed) {
         if (DateTime.now().isAfter(deadline)) {
           fail('standalone ASR task did not fail after the chunk error');
         }
@@ -473,9 +474,9 @@ void main() {
       }
     });
 
-    expect(background.state.single.result, 'first chunk last chunk');
-    expect(background.state.single.status, TaskStatus.failed);
-    expect(background.state.single.resultIsComplete, isFalse);
+    expect(standaloneBackground.state.single.result, 'first chunk last chunk');
+    expect(standaloneBackground.state.single.status, TaskStatus.failed);
+    expect(standaloneBackground.state.single.resultIsComplete, isFalse);
     expect(adapter.requests, hasLength(3));
     await tester.pumpWidget(const SizedBox.shrink());
   });
