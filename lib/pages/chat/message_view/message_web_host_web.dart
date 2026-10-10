@@ -70,7 +70,7 @@ class _MessageWebHostState extends State<MessageWebHost> {
           frame.title = '对话消息';
           // Opaque origin: HTML in another preview cannot inspect this document.
           frame.setAttribute('sandbox', 'allow-scripts');
-          frame.srcdoc = widget.html;
+          frame.srcdoc = widget.html.toJS;
         },
       );
 }

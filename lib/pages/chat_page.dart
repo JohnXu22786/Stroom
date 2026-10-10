@@ -132,8 +132,7 @@ class ChatPage extends ConsumerStatefulWidget {
     String,
     ValueNotifier<Map<String, dynamic>?>,
     void Function(Map<String, dynamic>),
-  )?
-  messageHostBuilder;
+  )? messageHostBuilder;
 
   const ChatPage({super.key, this.initialSearchQuery, this.messageHostBuilder});
 
@@ -500,12 +499,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply = activeId != null
-        ? ref.watch(streamingFullReplyProvider(activeId))
-        : '';
-    final streamingMsgId = activeId != null
-        ? ref.watch(streamingMsgIdProvider(activeId))
-        : null;
+    final streamingFullReply =
+        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
+    final streamingMsgId =
+        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the

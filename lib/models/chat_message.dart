@@ -327,8 +327,7 @@ class ChatMessage {
         // Persist round boundary indices for multi-tool grouping.
         if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
           'toolCallRoundStarts': toolCallRoundStarts!.toList(),
-        if (blocks != null)
-          'blocks': blocks!.map((b) => b.toMap()).toList(),
+        if (blocks != null) 'blocks': blocks!.map((b) => b.toMap()).toList(),
       };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
