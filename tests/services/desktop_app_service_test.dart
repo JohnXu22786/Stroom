@@ -58,6 +58,18 @@ bool _calledWith(List<MethodCall> calls, String method) {
   return calls.any((c) => c.method == method);
 }
 
+Future<void> _emitWindowClose() async {
+  const codec = StandardMethodCodec();
+  await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .handlePlatformMessage(
+    'window_manager',
+    codec.encodeMethodCall(
+      const MethodCall('onEvent', {'eventName': 'close'}),
+    ),
+    (_) {},
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -121,6 +133,57 @@ void main() {
           .where((c) => c.method == 'ensureInitialized')
           .length;
       expect(ensureCount, 1);
+    });
+
+    test('initialize intercepts close before tray setup during startup',
+        () async {
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        // main() awaits initialize() before runApp(), while tray setup is
+        // deferred until Application's first post-frame callback.
+        await DesktopAppService.instance.initialize();
+
+        final windowCalls = mocks['window_manager']!.calls;
+        expect(
+          windowCalls.any((call) =>
+              call.method == 'setPreventClose' &&
+              (call.arguments as Map)['isPreventClose'] == true),
+          isTrue,
+          reason: 'the native close guard must be armed before the first frame',
+        );
+        expect(
+          windowManager.listeners.contains(DesktopAppService.instance),
+          isTrue,
+        );
+        expect(mocks['tray_manager']!.calls, isEmpty,
+            reason: 'tray setup has not started before the first frame');
+
+        // A native close in this interval is intercepted but must leave the
+        // startup window visible until a tray is available.
+        await _emitWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          windowCalls.where((call) => call.method == 'hide'),
+          isEmpty,
+          reason: 'the startup window cannot hide before a tray is ready',
+        );
+        expect(exitCodes, isEmpty);
+
+        // Once the tray is ready, the saved minimize preference applies to
+        // the close request received during startup.
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      expect(
+        mocks['window_manager']!.calls.where((call) => call.method == 'hide'),
+        hasLength(1),
+      );
+      expect(exitCodes, isEmpty);
     });
   });
 
