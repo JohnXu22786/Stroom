@@ -392,9 +392,9 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!await isColdStartRestoreEnabled()) return;
 
   try {
-    final wasEnabled =
-        (await StartupPreferences.getBool(_backgroundServiceEnabledKey)) ??
-            false;
+    final wasEnabled = await _isBackgroundServiceEnabled(
+      assumeEnabledOnReadError: false,
+    );
     if (!wasEnabled) return;
 
     try {
@@ -428,7 +428,9 @@ Future<void> _setServiceEnabledPreference(bool enabled) async {
   }
 }
 
-Future<bool> _isBackgroundServiceEnabled() async {
+Future<bool> _isBackgroundServiceEnabled({
+  bool assumeEnabledOnReadError = true,
+}) async {
   final inProcessChoice = _explicitUserEnabledInProcess;
   if (inProcessChoice != null) return inProcessChoice;
   try {
@@ -437,7 +439,7 @@ Future<bool> _isBackgroundServiceEnabled() async {
   } catch (_) {
     // Automatic task cleanup must not stop a service if the user's preference
     // could not be read.
-    return true;
+    return assumeEnabledOnReadError;
   }
 }
 
@@ -645,9 +647,9 @@ Future<void> requestScheduleExactAlarm() async {
 Future<void> rearmKeepAliveOnResume() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
-    if (!serviceEnabled) return;
+    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: false)) {
+      return;
+    }
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
     // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
     // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部

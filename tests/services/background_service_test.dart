@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart';
 
 /// A mock implementation of FlutterBackgroundServicePlatform for testing
@@ -78,6 +79,29 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   }
 }
 
+class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingEnabledPreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.background_service_enabled') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
+    SharedPreferences preferences) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
+    'flutter.background_service_enabled': false,
+  });
+  await preferences.reload();
+  return originalStore;
+}
+
 /// Records method calls made on the keep-alive method channel.
 final List<MethodCall> keepAliveCalls = [];
 
@@ -102,6 +126,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    // The in-process user choice must not leak between test cases.
+    resetBackgroundServiceLifecycleStateForTesting();
     SharedPreferences.setMockInitialValues({});
     keepAliveCalls.clear();
     // Set up a mock MethodChannel handler for the keep-alive channel
@@ -204,6 +230,32 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+    });
+
+    test(
+        'cold-start restore honors an in-process start when enabled write is rejected',
+        () async {
+      final mock = registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isTrue);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+
+        mock.setServiceRunning(false);
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+      );
     });
 
     test('restoreBackgroundServiceOnColdStart does nothing when pref is false',
@@ -478,6 +530,58 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test(
+        'resume re-arms watchdog after explicit start preference write is rejected',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isTrue);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isTrue,
+      );
+    });
+
+    test('resume does not re-arm after explicit stop despite rejected writes',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isTrue);
+        expect(await stopBackgroundService(), isTrue);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isTrue,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
     });
 
     test(
