@@ -519,6 +519,62 @@ void main() {
     expect((await TextManifest.loadRecords()).single.name, 'competing');
   });
 
+  for (final batch in [false, true]) {
+    test(
+        'same-hash ${batch ? 'batch ' : 'single '}deletion waits for save before removing shared text',
+        () async {
+      final hash =
+          computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
+      await TextManifest.writeText('$hash.txt', 'owned text');
+      final existing = TextRecord(
+        name: 'existing',
+        hash: hash,
+        createdAt: DateTime.now(),
+        size: 10,
+      );
+      await TextManifest.addRecord(existing);
+
+      final recordStarted = Completer<void>();
+      final continueRecord = Completer<void>();
+      var deletionFinished = false;
+      final saver = OcrResultSaver(
+        taskId: id,
+        notifier: notifier,
+        title: 'new result',
+        folder: '',
+        onSaved: () {},
+        addRecord: (record, {beforeCommit}) async {
+          recordStarted.complete();
+          await continueRecord.future;
+          await TextManifest.addRecord(record, beforeCommit: beforeCommit);
+        },
+      );
+
+      final saving = saver.saveResult('owned text', isComplete: true);
+      await recordStarted.future;
+      final deletion = batch
+          ? TextManifest.deleteRecords([existing.id])
+          : TextManifest.deleteRecord(existing.id);
+      final deleting = deletion.then((_) {
+        deletionFinished = true;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(deletionFinished, isFalse,
+          reason: 'same-hash deletion must wait for the result record commit');
+
+      continueRecord.complete();
+      final savedPath = await saving;
+      await deleting;
+
+      expect(notifier.state.single.status, TaskStatus.completed);
+      expect(await TextManifest.readText('$hash.txt'), 'owned text');
+      expect(savedPath, isNotEmpty);
+      final records = await TextManifest.loadRecordsUncached();
+      expect(records.map((record) => record.name), contains('new result'));
+      expect(records.any((record) => record.id == existing.id), isFalse);
+    });
+  }
+
   test('cancel rollback does not invalidate another hash during record commit',
       () async {
     final published = Completer<void>();
