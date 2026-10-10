@@ -119,6 +119,20 @@ void main() {
       expect(restored.textLength, equals(88));
     });
 
+    test('subtitle records use their selected extension for stored files', () {
+      TextRecord subtitle(String format) => TextRecord(
+        name: 'transcript',
+        hash: 'h_subtitle',
+        format: format,
+        createdAt: DateTime(2026),
+        size: 10,
+      );
+
+      expect(subtitle('txt').storagePath, 'h_subtitle.txt');
+      expect(subtitle('srt').storagePath, 'h_subtitle.srt');
+      expect(subtitle('vtt').storageFileName, 'h_subtitle.vtt');
+    });
+
     test('旧数据缺失 modifiedAt 时回退为 createdAt（向后兼容）', () {
       // 模拟升级前持久化的记录：只有 createdAt 没有 modifiedAt
       final legacyAudio = AudioRecord.fromMap({

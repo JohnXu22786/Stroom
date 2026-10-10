@@ -1333,8 +1333,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         bgNotifier.updateStep(taskId, 3, completed: true);
         bgNotifier.updateStep(taskId, 4, running: true);
 
-        final filePath =
-            await _saveTranscriptionResult(result.text, title: entry.title);
+        final filePath = await _saveTranscriptionResult(
+          result.subtitle ?? result.text,
+          title: entry.title,
+          format: result.outputFormat,
+        );
 
         bgNotifier.updateStep(taskId, 4, completed: true);
         bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
@@ -1367,27 +1370,28 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Save the transcription result as a text record, named by the task title.
-  /// Returns the file path of the saved text file for the "open file" button.
-  Future<String> _saveTranscriptionResult(String text, {String? title}) async {
+  /// Returns the saved result path for the "open file" button.
+  Future<String> _saveTranscriptionResult(
+    String text, {
+    String? title,
+    String format = 'txt',
+  }) async {
     final now = DateTime.now();
 
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = computeTextHash(bytes);
-    final storageFileName = '$hash.txt';
-
-    final filePath = await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(
-      TextRecord(
-        name: title ??
-            'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
-        hash: hash,
-        format: 'txt',
-        createdAt: now,
-        size: bytes.length,
-        folder: _saveFolder,
-        textLength: text.length,
-      ),
+    final record = TextRecord(
+      name: title ??
+          'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
+      hash: hash,
+      format: format,
+      createdAt: now,
+      size: bytes.length,
+      folder: _saveFolder,
+      textLength: text.length,
     );
+    final filePath = await TextManifest.writeText(record.storageFileName, text);
+    await TextManifest.addRecord(record);
     return filePath;
   }
 

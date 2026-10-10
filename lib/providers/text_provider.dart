@@ -95,9 +95,23 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
       final index = records.indexWhere((r) => r.id == id);
       if (index != -1) {
         final r = records[index];
-        await TextManifest.updateRecord(
-          r.copyWithName(newName).copyWithFormat(format),
-        );
+        final updated = r.copyWithName(newName).copyWithFormat(format);
+        final oldStoragePath = r.storageFileName;
+        final newStoragePath = updated.storageFileName;
+        final content = oldStoragePath == newStoragePath
+            ? null
+            : await TextManifest.readFile(oldStoragePath);
+        if (content != null) {
+          await TextManifest.writeFile(newStoragePath, content);
+        }
+        await TextManifest.updateRecord(updated);
+        if (content != null &&
+            !records.any(
+              (record) =>
+                  record.id != id && record.storageFileName == oldStoragePath,
+            )) {
+          await TextManifest.deleteFile(oldStoragePath);
+        }
       }
     }
     await loadRecords();

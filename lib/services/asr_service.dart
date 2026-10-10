@@ -184,11 +184,38 @@ class AsrConfig {
 // ============================================================================
 
 /// The result of an ASR transcription operation.
+class AsrTranscriptSegment {
+  /// Segment start time in seconds, when supplied by the API.
+  final double? startSeconds;
+
+  /// Segment end time in seconds, when supplied by the API.
+  final double? endSeconds;
+
+  final String text;
+
+  const AsrTranscriptSegment({
+    this.startSeconds,
+    this.endSeconds,
+    required this.text,
+  });
+}
+
 class AsrResult {
   final String text;
   final int processingTimeMs;
+  final String? subtitle;
+  final String outputFormat;
+  final List<AsrTranscriptSegment>? segments;
+  final List<AsrTranscriptSegment>? words;
 
-  const AsrResult({required this.text, this.processingTimeMs = 0});
+  const AsrResult({
+    required this.text,
+    this.processingTimeMs = 0,
+    this.subtitle,
+    this.outputFormat = 'txt',
+    this.segments,
+    this.words,
+  });
 }
 
 // ============================================================================
@@ -494,7 +521,10 @@ class AsrService {
         ? DioMediaType.parse(mimeTypeString)
         : null;
     final fileName = 'audio.$fmt';
-    final sharedParams = _buildSharedParams();
+    final jsonCustomParamNames = <String>{};
+    final sharedParams = _buildSharedParams(
+      jsonCustomParamNames: jsonCustomParamNames,
+    );
 
     try {
       final response = await _sendTranscriptionRequest(
@@ -502,18 +532,23 @@ class AsrService {
         audioBytes: bytes,
         fileName: fileName,
         mimeType: mimeType,
+        jsonCustomParamNames: jsonCustomParamNames,
         method: method,
       );
 
       stopwatch.stop();
       _captureResponseDiagnostics(response);
-      final text = _extractText(response.data);
+      final parsed = _parseResponse(response.data);
 
       await AppLogService.info('AsrService',
-          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
       return AsrResult(
-        text: text,
+        text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
+        subtitle: parsed.subtitle,
+        outputFormat: parsed.outputFormat,
+        segments: parsed.segments,
+        words: parsed.words,
       );
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
@@ -566,13 +601,17 @@ class AsrService {
 
       stopwatch.stop();
       _captureResponseDiagnostics(response);
-      final text = _extractText(response.data);
+      final parsed = _parseResponse(response.data);
 
       await AppLogService.info('AsrService',
-          '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+          '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
       return AsrResult(
-        text: text,
+        text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
+        subtitle: parsed.subtitle,
+        outputFormat: parsed.outputFormat,
+        segments: parsed.segments,
+        words: parsed.words,
       );
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
@@ -582,9 +621,20 @@ class AsrService {
 
   // ── Internal ─────────────────────────────────────────────────────
 
+  String get _responseFormat {
+    final typeConfig = config.typeConfig;
+    if (typeConfig['enableResponseFormat'] == true &&
+        typeConfig['responseFormat'] is String) {
+      return typeConfig['responseFormat'] as String;
+    }
+    return 'json';
+  }
+
   /// Build the shared request parameters (model, language, response_format,
   /// temperature, etc.) as a JSON-compatible map.
-  Map<String, dynamic> _buildSharedParams() {
+  Map<String, dynamic> _buildSharedParams({
+    Set<String>? jsonCustomParamNames,
+  }) {
     final params = <String, dynamic>{
       'model': config.model,
     };
@@ -592,12 +642,7 @@ class AsrService {
     final tc = config.typeConfig;
 
     // response_format
-    if (tc['enableResponseFormat'] == true &&
-        tc.containsKey('responseFormat')) {
-      params['response_format'] = tc['responseFormat'] as String;
-    } else {
-      params['response_format'] = 'json';
-    }
+    params['response_format'] = _responseFormat;
 
     // language
     final effectiveLang = config.effectiveLanguage;
@@ -610,11 +655,19 @@ class AsrService {
       params['temperature'] = (tc['temperature'] as num).toDouble();
     }
 
-    // timestamp_granularities (only for verbose_json)
-    if (tc['enableTimestampGranularities'] == true &&
+    // timestamp_granularities is an array and only applies to verbose_json.
+    if (_responseFormat == 'verbose_json' &&
+        tc['enableTimestampGranularities'] == true &&
         tc.containsKey('timestampGranularities')) {
-      params['timestamp_granularities'] =
-          tc['timestampGranularities'] as String;
+      final rawGranularities = tc['timestampGranularities'];
+      final granularities = rawGranularities is List
+          ? rawGranularities.whereType<String>().toList()
+          : rawGranularities is String && rawGranularities.isNotEmpty
+              ? [rawGranularities]
+              : <String>[];
+      if (granularities.isNotEmpty) {
+        params['timestamp_granularities'] = granularities;
+      }
     }
 
     // prompt
@@ -625,14 +678,26 @@ class AsrService {
       }
     }
 
-    // Custom parameters
+    // Custom parameters extend configured fields but cannot replace required
+    // transport fields or the explicitly configured response format.
+    const reservedParams = {
+      'file',
+      'model',
+      'response_format',
+      'timestamp_granularities',
+      'timestamp_granularities[]',
+    };
     for (final param in config.customParams) {
       final name = param.paramName.trim();
-      if (name.isEmpty) continue;
+      if (name.isEmpty ||
+          reservedParams.contains(name) ||
+          params.containsKey(name)) {
+        continue;
+      }
       final value = param.defaultValue.trim();
       if (value.isEmpty) continue;
-      final parsed = _parseParamValue(value, param.type);
-      params[name] = parsed is String ? parsed : parsed.toString();
+      params[name] = _parseParamValue(value, param.type);
+      if (param.type == 'json') jsonCustomParamNames?.add(name);
     }
 
     return params;
@@ -667,16 +732,24 @@ class AsrService {
         'AsrService', '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)');
 
     final texts = <String>[];
+    final segments = <AsrTranscriptSegment>[];
+    final words = <AsrTranscriptSegment>[];
+    var chunkOffsetSeconds = 0.0;
     final fmt = audioFormat; // 'wav'
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
         ? DioMediaType.parse(mimeTypeString)
         : null;
     final fileName = 'audio.$fmt';
-    final sharedParams = _buildSharedParams();
+    final jsonCustomParamNames = <String>{};
+    final sharedParams = _buildSharedParams(
+      jsonCustomParamNames: jsonCustomParamNames,
+    );
 
     for (int i = 0; i < chunks.length; i++) {
       final chunk = chunks[i];
+      final chunkOffset = chunkOffsetSeconds;
+      chunkOffsetSeconds += parseWavHeader(chunk).durationSeconds;
 
       // ── Prompt carrying: pass previous chunk's text as prompt ──
       final chunkParams = Map<String, dynamic>.from(sharedParams);
@@ -687,6 +760,7 @@ class AsrService {
             ? prevText.substring(prevText.length - 100)
             : prevText;
         chunkParams['prompt'] = promptSuffix;
+        jsonCustomParamNames.remove('prompt');
       }
 
       try {
@@ -695,11 +769,34 @@ class AsrService {
           audioBytes: chunk,
           fileName: fileName,
           mimeType: mimeType,
+          jsonCustomParamNames: jsonCustomParamNames,
         );
         _captureResponseDiagnostics(response);
-        final text = _extractText(response.data);
-        if (text.isNotEmpty) {
-          texts.add(text);
+        final result = _parseResponse(response.data);
+        if (result.text.isNotEmpty) {
+          texts.add(result.text);
+        }
+        for (final segment in result.segments ?? const []) {
+          segments.add(AsrTranscriptSegment(
+            startSeconds: segment.startSeconds == null
+                ? null
+                : segment.startSeconds! + chunkOffset,
+            endSeconds: segment.endSeconds == null
+                ? null
+                : segment.endSeconds! + chunkOffset,
+            text: segment.text,
+          ));
+        }
+        for (final word in result.words ?? const []) {
+          words.add(AsrTranscriptSegment(
+            startSeconds: word.startSeconds == null
+                ? null
+                : word.startSeconds! + chunkOffset,
+            endSeconds: word.endSeconds == null
+                ? null
+                : word.endSeconds! + chunkOffset,
+            text: word.text,
+          ));
         }
         await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
       } on Exception catch (e) {
@@ -721,9 +818,16 @@ class AsrService {
       throw Exception('切块转写全部失败（${chunks.length} 个片段均未成功），请检查网络或 API 配置后重试');
     }
 
+    final subtitle = _responseFormat == 'srt' || _responseFormat == 'vtt'
+        ? _formatSubtitle(segments, _responseFormat)
+        : null;
     return AsrResult(
       text: texts.join(' '),
       processingTimeMs: 0,
+      subtitle: subtitle,
+      outputFormat: subtitle == null ? 'txt' : _responseFormat,
+      segments: segments.isEmpty ? null : List.unmodifiable(segments),
+      words: words.isEmpty ? null : List.unmodifiable(words),
     );
   }
 
@@ -733,6 +837,7 @@ class AsrService {
     required Uint8List audioBytes,
     required String fileName,
     required DioMediaType? mimeType,
+    required Set<String> jsonCustomParamNames,
     AudioUploadMethod? method,
   }) async {
     final effectiveMethod = method ?? config.uploadMethod;
@@ -740,13 +845,25 @@ class AsrService {
 
     switch (effectiveMethod) {
       case AudioUploadMethod.multipart:
+        final multipartParams = Map<String, dynamic>.from(sharedParams);
+        final timestampGranularities =
+            multipartParams.remove('timestamp_granularities');
+        if (timestampGranularities is List) {
+          multipartParams['timestamp_granularities[]'] =
+              timestampGranularities;
+        }
+        for (final name in jsonCustomParamNames) {
+          if (multipartParams.containsKey(name)) {
+            multipartParams[name] = jsonEncode(multipartParams[name]);
+          }
+        }
         final formData = FormData.fromMap({
+          ...multipartParams,
           'file': MultipartFile.fromBytes(
             audioBytes,
             filename: fileName,
             contentType: mimeType,
           ),
-          ...sharedParams,
         });
         diagnosticFields['file'] =
             '$fileName (${audioBytes.length} bytes, ${mimeType?.mimeType ?? 'unknown'})';
@@ -796,7 +913,7 @@ class AsrService {
     lastResponseStatusCode = response.statusCode;
     lastResponseData = response.data is Map
         ? Map<String, dynamic>.from(response.data as Map)
-        : <String, dynamic>{'raw': '$response.data'};
+        : <String, dynamic>{'raw': '${response.data}'};
     lastResponseHeaders = response.headers.map;
   }
 
@@ -835,20 +952,163 @@ class AsrService {
     }
   }
 
-  /// Extract text from the standard OpenAI transcription response.
-  String _extractText(dynamic responseData) {
-    try {
-      if (responseData is! Map<String, dynamic>) {
-        throw Exception('API 返回格式异常');
-      }
-      final text = responseData['text'];
-      if (text is! String || text.trim().isEmpty) {
+  /// Parse the response shapes supported by the OpenAI transcription API.
+  AsrResult _parseResponse(dynamic responseData) {
+    final format = _responseFormat;
+
+    if (format == 'text' && responseData is String) {
+      _requireText(responseData);
+      return AsrResult(text: responseData);
+    }
+
+    if ((format == 'srt' || format == 'vtt') && responseData is String) {
+      final subtitle = responseData;
+      if (subtitle.trim().isEmpty) {
         throw Exception('音频转写返回了空的文本');
       }
-      return text;
-    } catch (e) {
-      throw Exception('解析音频转写结果失败: $e');
+      final segments = _parseSubtitleSegments(subtitle);
+      if (segments.isEmpty) {
+        throw Exception('解析音频转写结果失败: 字幕格式异常');
+      }
+      return AsrResult(
+        text: segments.map((segment) => segment.text).join(' '),
+        subtitle: subtitle,
+        outputFormat: format,
+        segments: List.unmodifiable(segments),
+      );
     }
+
+    dynamic decoded = responseData;
+    if (decoded is String) {
+      try {
+        decoded = jsonDecode(decoded);
+      } on FormatException catch (e) {
+        throw Exception('解析音频转写结果失败: JSON 格式异常: $e');
+      }
+    }
+    if (decoded is! Map) {
+      throw Exception('解析音频转写结果失败: API 返回格式异常');
+    }
+
+    final response = Map<String, dynamic>.from(decoded);
+    if (response['error'] != null) {
+      final error = response['error'];
+      final detail = error is Map ? error['message'] ?? error : error;
+      throw Exception('音频转写 API 返回错误: $detail');
+    }
+
+    final text = response['text'];
+    _requireText(text);
+    final segments = _parseTimedSegments(response['segments']);
+    final words = _parseTimedSegments(response['words']);
+    return AsrResult(
+      text: text as String,
+      segments: segments.isEmpty ? null : List.unmodifiable(segments),
+      words: words.isEmpty ? null : List.unmodifiable(words),
+    );
+  }
+
+  void _requireText(dynamic text) {
+    if (text is! String || text.trim().isEmpty) {
+      throw Exception('音频转写返回了空的文本');
+    }
+  }
+
+  List<AsrTranscriptSegment> _parseTimedSegments(dynamic rawSegments) {
+    if (rawSegments is! List) return const [];
+    final segments = <AsrTranscriptSegment>[];
+    for (final raw in rawSegments) {
+      if (raw is! Map) continue;
+      final segment = Map<String, dynamic>.from(raw);
+      final text = segment['text'] ?? segment['word'];
+      if (text is! String || text.trim().isEmpty) continue;
+      final start = segment['start'];
+      final end = segment['end'];
+      segments.add(AsrTranscriptSegment(
+        startSeconds: start is num ? start.toDouble() : null,
+        endSeconds: end is num ? end.toDouble() : null,
+        text: text,
+      ));
+    }
+    return segments;
+  }
+
+  List<AsrTranscriptSegment> _parseSubtitleSegments(String subtitle) {
+    final normalized = subtitle.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final blocks = normalized.split(RegExp(r'\n\s*\n'));
+    final segments = <AsrTranscriptSegment>[];
+    final timecode = RegExp(
+      r'^\s*((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})\s+-->\s+'
+      r'((?:\d+:)?\d{2}:\d{2}[,.]\d{1,3})(?:\s+.*)?\s*$',
+    );
+
+    for (final block in blocks) {
+      final lines = block.split('\n');
+      final timecodeIndex = lines.indexWhere((line) => timecode.hasMatch(line));
+      if (timecodeIndex < 0) continue;
+      final match = timecode.firstMatch(lines[timecodeIndex])!;
+      final text = lines
+          .skip(timecodeIndex + 1)
+          .join(' ')
+          .replaceAll(RegExp(r'<[^>]*>'), '')
+          .trim();
+      if (text.isEmpty) continue;
+      segments.add(AsrTranscriptSegment(
+        startSeconds: _parseSubtitleTime(match.group(1)!),
+        endSeconds: _parseSubtitleTime(match.group(2)!),
+        text: text,
+      ));
+    }
+    return segments;
+  }
+
+  double _parseSubtitleTime(String value) {
+    final parts = value.replaceAll(',', '.').split(':');
+    final seconds = double.parse(parts.last);
+    final minutes = int.parse(parts[parts.length - 2]);
+    final hours = parts.length == 3 ? int.parse(parts.first) : 0;
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  String? _formatSubtitle(
+    List<AsrTranscriptSegment> segments,
+    String format,
+  ) {
+    final timedSegments = segments
+        .where((segment) =>
+            segment.startSeconds != null && segment.endSeconds != null)
+        .toList();
+    if (timedSegments.isEmpty) return null;
+
+    final lines = <String>[];
+    if (format == 'vtt') {
+      lines.addAll(['WEBVTT', '']);
+    }
+    var cueNumber = 1;
+    for (final segment in timedSegments) {
+      if (format == 'srt') lines.add('$cueNumber');
+      lines.add(
+        '${_formatSubtitleTime(segment.startSeconds!, format)} --> '
+        '${_formatSubtitleTime(segment.endSeconds!, format)}',
+      );
+      lines.add(segment.text);
+      lines.add('');
+      cueNumber++;
+    }
+    return lines.join('\n').trimRight();
+  }
+
+  String _formatSubtitleTime(double seconds, String format) {
+    final totalMilliseconds = (seconds * 1000).round();
+    final hours = totalMilliseconds ~/ 3600000;
+    final minutes = (totalMilliseconds ~/ 60000) % 60;
+    final wholeSeconds = (totalMilliseconds ~/ 1000) % 60;
+    final milliseconds = totalMilliseconds % 1000;
+    final separator = format == 'srt' ? ',' : '.';
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}:'
+        '${wholeSeconds.toString().padLeft(2, '0')}'
+        '$separator${milliseconds.toString().padLeft(3, '0')}';
   }
 }
 

@@ -251,6 +251,39 @@ void main() {
     });
   });
 
+  group('TextManifest legacy subtitle storage compatibility', () {
+    test('reads legacy TXT files through SRT and VTT record paths', () async {
+      const content = 'legacy subtitle transcript';
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      final hash = computeTextHash(bytes);
+      final legacyFileName = '$hash.txt';
+      final subtitleFileNames = ['$hash.srt', '$hash.vtt'];
+      for (final fileName in subtitleFileNames) {
+        await TextManifest.deleteFile(fileName);
+      }
+      await TextManifest.writeText(legacyFileName, content);
+
+      try {
+        for (final format in ['srt', 'vtt']) {
+          final record = TextRecord(
+            name: 'legacy subtitle',
+            hash: hash,
+            format: format,
+            createdAt: DateTime(2024),
+            size: bytes.length,
+          );
+
+          expect(await TextManifest.readText(record.storageFileName), content);
+        }
+      } finally {
+        for (final fileName in subtitleFileNames) {
+          await TextManifest.deleteFile(fileName);
+        }
+        await TextManifest.deleteFile(legacyFileName);
+      }
+    });
+  });
+
   // ====== writeText returns file path (used by ASR/OCR open file button) ======
 
   group('TextManifest writeText returns file path', () {

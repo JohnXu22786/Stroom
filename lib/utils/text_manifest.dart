@@ -22,7 +22,7 @@ class TextRecord
   @override
   final String hash; // 文本内容的 MD5 哈希值
   @override
-  final String format; // 文件格式（txt）
+  final String format; // 文件格式（txt/srt/vtt 等）
   @override
   final DateTime createdAt;
   @override
@@ -47,9 +47,12 @@ class TextRecord
         id = id ?? 'txt_${const Uuid().v4()}';
 
   /// 实体文件存储名
-  String get storageFileName => '$hash.txt';
+  String get storageFileName {
+    final extension = format == 'srt' || format == 'vtt' ? format : 'txt';
+    return '$hash.$extension';
+  }
   @override
-  String get storagePath => '$hash.txt';
+  String get storagePath => storageFileName;
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -207,8 +210,17 @@ class TextManifest {
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
-  static Future<Uint8List?> readFile(String fileName) =>
-      _ops.readFile(fileName);
+  static Future<Uint8List?> readFile(String fileName) async {
+    final bytes = await _ops.readFile(fileName);
+    if (bytes != null ||
+        (!fileName.endsWith('.srt') && !fileName.endsWith('.vtt'))) {
+      return bytes;
+    }
+
+    final extensionIndex = fileName.lastIndexOf('.');
+    final legacyFileName = '${fileName.substring(0, extensionIndex)}.txt';
+    return _ops.readFile(legacyFileName);
+  }
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
