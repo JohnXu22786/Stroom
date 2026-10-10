@@ -13,9 +13,12 @@ This note does not duplicate or claim to enumerate that graph.
 `fvp` 0.37.3's package archive includes a BSD-3-Clause license. The package is
 based on libmdk, whose upstream terms allow Flutter/fvp users to use a bundled
 key without charge, including in commercial software; the runtime is not under
-a standard OSI-approved open-source license. This is conditionally unsuitable
-if Stroom's distribution policy requires every runtime component to use an
-OSI-approved license. The package license and runtime terms are separate.
+a standard OSI-approved open-source license. This describes only the upstream
+MDK component terms; they do not change Stroom's AGPL-3.0 obligations and must
+not be read as permission to distribute Stroom as closed-source commercial
+software. This is conditionally unsuitable if Stroom's distribution policy
+requires every runtime component to use an OSI-approved license. The package
+license and runtime terms are separate.
 
 ## CatCatch behavior reference
 
@@ -40,11 +43,12 @@ license grant, and this note does not determine whether any code was copied.
 
 - **MathLive 0.111.0** is bundled under `assets/vendor/mathlive`; its MIT
   license is retained at `assets/vendor/mathlive/LICENSE.txt` and registered
-  with Flutter's license page. The bundled `fonts/KaTeX_*.woff2` files have
-  no separate license file in this checkout, and the available package-level
-  MIT evidence does not establish whether it covers those font binaries. Their
-  license coverage remains unverified; the package MIT entry is not a separate
-  font-license determination.
+  with Flutter's license page. The 20 bundled `fonts/KaTeX_*.woff2` files
+  match byte-for-byte the font files in the official npm tarballs for
+  `mathlive@0.111.0` and `katex@0.16.22`. Both package releases declare MIT.
+  The KaTeX copyright and MIT permission notice from `katex@0.16.22` is retained
+  at `assets/vendor/mathlive/fonts/LICENSE.txt` and registered as a separate
+  entry on Flutter's license page.
 - **Mermaid 11.16.1** is MIT-licensed. The license from its
   [`mermaid@11.16.1` release](https://github.com/mermaid-js/mermaid/blob/mermaid%4011.16.1/LICENSE)
   is retained at `assets/vendor/mermaid/LICENSE.txt`. The license page also
