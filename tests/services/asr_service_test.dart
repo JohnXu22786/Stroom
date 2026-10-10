@@ -499,6 +499,8 @@ void main() {
           apiKey: 'test-key',
           host: 'https://api.test.com',
           typeConfig: {
+            'enableResponseFormat': true,
+            'responseFormat': 'verbose_json',
             'enableTimestampGranularities': true,
             'timestampGranularities': 'word',
           },
@@ -514,12 +516,13 @@ void main() {
         expect(bodyBytes, isNotNull);
         expect(
           _multipartFieldContains(
-              bodyBytes!, 'timestamp_granularities', 'word'),
+              bodyBytes!, 'timestamp_granularities[]', 'word'),
           isTrue,
-          reason: 'Multipart body should contain timestamp_granularities=word',
+          reason:
+              'Multipart body should contain timestamp_granularities[]=word',
         );
         expect(service.lastRequestBody!['timestamp_granularities'],
-            equals('word'));
+            equals(['word']));
       });
 
       test('request includes prompt from typeConfig', () async {

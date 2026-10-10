@@ -423,6 +423,94 @@ void main() {
       expect(savedContent, equals(newContent));
     });
 
+    testWidgets(
+      'saving an SRT record preserves its subtitle storage extension',
+      (tester) async {
+        const originalContent = '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+        final subtitleFile = TextRecord(
+          id: 'txt_srt_edit',
+          name: 'subtitle',
+          hash: computeTextHash(originalBytes),
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: originalBytes.length,
+        );
+        await TextManifest.writeFile(
+          subtitleFile.storageFileName,
+          originalBytes,
+        );
+        await TextManifest.addRecord(subtitleFile);
+        await enterEditMode(
+          tester,
+          file: subtitleFile,
+          content: originalContent,
+        );
+
+        const editedContent = '1\n00:00:00,000 --> 00:00:01,000\nUpdated';
+        tester.widget<TextField>(find.byType(TextField)).controller?.text =
+            editedContent;
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final updated = (await TextManifest.loadRecords()).firstWhere(
+          (record) => record.id == subtitleFile.id,
+        );
+        expect(updated.storageFileName, endsWith('.srt'));
+        expect(
+          await TextManifest.readText(updated.storageFileName),
+          editedContent,
+        );
+        expect(
+          await TextManifest.readText(subtitleFile.storageFileName),
+          isNull,
+        );
+      },
+    );
+
+    testWidgets('saving one subtitle preserves a shared source file', (
+      tester,
+    ) async {
+      const originalContent = '1\n00:00:00,000 --> 00:00:01,000\nHello';
+      final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+      final firstRecord = TextRecord(
+        id: 'txt_srt_shared_1',
+        name: 'subtitle one',
+        hash: computeTextHash(originalBytes),
+        format: 'srt',
+        createdAt: DateTime.now(),
+        size: originalBytes.length,
+      );
+      final secondRecord = TextRecord(
+        id: 'txt_srt_shared_2',
+        name: 'subtitle two',
+        hash: firstRecord.hash,
+        format: 'srt',
+        createdAt: DateTime.now(),
+        size: originalBytes.length,
+      );
+      await TextManifest.writeFile(firstRecord.storageFileName, originalBytes);
+      await TextManifest.addRecord(firstRecord);
+      await TextManifest.addRecord(secondRecord);
+      await enterEditMode(tester, file: firstRecord, content: originalContent);
+
+      const editedContent = '1\n00:00:00,000 --> 00:00:01,000\nUpdated';
+      tester.widget<TextField>(find.byType(TextField)).controller?.text =
+          editedContent;
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final second = (await TextManifest.loadRecords()).firstWhere(
+        (record) => record.id == secondRecord.id,
+      );
+      expect(
+        await TextManifest.readText(second.storageFileName),
+        originalContent,
+      );
+    });
+
     testWidgets('save with Chinese text preserves content correctly',
         (tester) async {
       await enterEditMode(tester);

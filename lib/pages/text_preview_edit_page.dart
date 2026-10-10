@@ -286,17 +286,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       final bytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(bytes);
       final oldStorageFileName = _currentFile.storageFileName;
-      final newStorageFileName = '$newHash.txt';
-
-      // 写入新内容到新的存储文件（基于新 hash 的文件名）
-      await TextManifest.writeText(newStorageFileName, newContent);
-
-      // 删除旧的存储文件
-      await TextManifest.deleteFile(oldStorageFileName);
-
-      // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
-      // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateRecord(TextRecord(
+      final updatedRecord = TextRecord(
         id: _currentFile.id,
         name: _currentFile.name,
         hash: newHash,
@@ -308,7 +298,28 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
         size: bytes.length,
         folder: _currentFile.folder,
         textLength: newContent.length,
-      ));
+      );
+      final newStorageFileName = updatedRecord.storageFileName;
+
+      // 写入新内容到新的存储文件（基于新 hash 的文件名）
+      await TextManifest.writeText(newStorageFileName, newContent);
+
+      // 删除旧的存储文件
+      if (oldStorageFileName != newStorageFileName) {
+        final records = await TextManifest.loadRecords();
+        final oldPathIsShared = records.any(
+          (record) =>
+              record.id != _currentFile.id &&
+              record.storageFileName == oldStorageFileName,
+        );
+        if (!oldPathIsShared) {
+          await TextManifest.deleteFile(oldStorageFileName);
+        }
+      }
+
+      // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
+      // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
+      await TextManifest.updateRecord(updatedRecord);
 
       if (mounted) {
         setState(() => _isSaving = false);
