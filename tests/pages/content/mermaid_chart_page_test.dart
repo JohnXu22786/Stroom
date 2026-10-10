@@ -129,6 +129,258 @@ void main() {
       expect(textField.controller?.text, contains('Test'));
     });
 
+    testWidgets('Gantt dependency snippet uses an existing task ID',
+        (tester) async {
+      const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD
+  section Existing
+  Prepare release :releasePrep, 2026-10-01, 3d''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(
+        textField.controller?.text,
+        contains('后续任务 :after releasePrep, 5d'),
+      );
+      expect(textField.controller?.text, isNot(contains('after a1')));
+    });
+
+    testWidgets(
+        'Gantt dependency snippet ignores titles that contain colon-separated words',
+        (tester) async {
+      const initialCode = '''gantt
+  title Status: plan, build, ship
+  accDescr {
+    Plan: design, build, ship
+  }''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller?.text ?? '';
+      expect(code, contains('title Status: plan, build, ship'));
+      expect(code, contains('Plan: design, build, ship'));
+      expect(
+        code.contains(
+          RegExp(
+            r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2}, 1d\n'
+            r'  后续任务 :after dependencyTask1, 5d',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets(
+        'Gantt dependency snippet adds an ID when existing tasks lack one',
+        (tester) async {
+      const initialCode = '''gantt
+  dateFormat  DD MMM YYYY
+  section Existing
+  Prepare release :1 Oct 2026, 3d %% kickoff task''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(
+        textField.controller?.text,
+        contains(
+          'Prepare release :dependencyTask1, 1 Oct 2026, 3d %% kickoff task',
+        ),
+      );
+      expect(
+        textField.controller?.text,
+        contains('后续任务 :after dependencyTask1, 5d'),
+      );
+    });
+
+    testWidgets(
+        'Gantt dependency snippet adds an ID to tasks with explicit end dates',
+        (tester) async {
+      const initialCode = '''gantt
+  accDescr {
+    dateFormat YYYY-MM-DD
+  }
+  dateFormat  dddd Do MMM YYYY [at] h:mm:ss.SSS a
+  section Existing
+  Prepare release :Thursday 1st Oct 2026 at 9:00:12.345 am, Saturday 3rd Oct 2026 at 3:30:56.789 pm''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(
+        textField.controller?.text,
+        contains(
+          'Prepare release :dependencyTask1, '
+          'Thursday 1st Oct 2026 at 9:00:12.345 am, '
+          'Saturday 3rd Oct 2026 at 3:30:56.789 pm',
+        ),
+      );
+      expect(
+        textField.controller?.text,
+        contains('后续任务 :after dependencyTask1, 5d'),
+      );
+    });
+
+    testWidgets(
+        'Gantt dependency snippet recognizes dates with comma literals',
+        (tester) async {
+      const dateFormatCases = [
+        ['MMMM D,YYYY', 'October 1,2026, October 3,2026'],
+        ['MMMM D[,]YYYY', 'October 1,2026, October 3,2026'],
+      ];
+
+      for (final dateFormatCase in dateFormatCases) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        final initialCode = '''gantt
+  dateFormat  ${dateFormatCase[0]}
+  section Existing
+  Prepare release :${dateFormatCase[1]}''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller?.text ?? '';
+        expect(
+          code,
+          contains('Prepare release :dependencyTask1, ${dateFormatCase[1]}'),
+          reason: '${dateFormatCase[0]} generated $code',
+        );
+        expect(code, contains('后续任务 :after dependencyTask1, 5d'));
+        expect(code, isNot(contains('依赖基准任务 :')));
+      }
+    });
+
+    testWidgets(
+        'Gantt dependency snippet adds tasks when the chart has no tasks',
+        (tester) async {
+      const initialCode = '''gantt
+  dateFormat  dddd ddd dd d MMMM Do YYYY %% dates are localized
+  title Empty Project''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller?.text ?? '';
+      expect(
+        code.contains(
+          RegExp(
+            r'依赖基准任务 :dependencyTask1, '
+            r'[A-Z][a-z]+ [A-Z][a-z]{2} [A-Z][a-z] [0-6] '
+            r'[A-Z][a-z]+ \d{1,2}(?:st|nd|rd|th) \d{4}, 1d\n'
+            r'  后续任务 :after dependencyTask1, 5d',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets(
+        'Gantt dependency snippet respects time-based date formats',
+        (tester) async {
+      const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD HH:mm:ss.SSS Z ZZ
+  title Empty Project''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller?.text ?? '';
+      expect(
+        code.contains(
+          RegExp(
+            r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} '
+            r'\d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} '
+            r'[+-]\d{4}, 1d\n'
+            r'  后续任务 :after dependencyTask1, 5d',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets(
+        'Gantt dependency snippet supports 12-hour date format tokens',
+        (tester) async {
+      const dateFormatCases = [
+        ['YYYY-MM-DD h:mm a', r'\d{1,2}:\d{2} (?:am|pm)'],
+        ['YYYY-MM-DD hh:mm A', r'\d{2}:\d{2} (?:AM|PM)'],
+      ];
+
+      for (final dateFormatCase in dateFormatCases) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        final initialCode = '''gantt
+  dateFormat  ${dateFormatCase[0]}
+  title Empty Project''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller?.text ?? '';
+        final pattern = RegExp([
+          r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} ',
+          dateFormatCase[1],
+          r', 1d\n  后续任务 :after dependencyTask1, 5d',
+        ].join());
+        expect(
+          code.contains(pattern),
+          isTrue,
+          reason: '${dateFormatCase[0]} generated $code',
+        );
+      }
+    });
+
+    testWidgets(
+        'Gantt dependency snippet unwraps bracket-escaped date literals',
+        (tester) async {
+      const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD [at] h:mm a
+  title Empty Project''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller?.text ?? '';
+      expect(
+        code.contains(
+          RegExp(
+            r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} '
+            r'at \d{1,2}:\d{2} (?:am|pm), 1d\n'
+            r'  后续任务 :after dependencyTask1, 5d',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
     testWidgets('manually editing the header updates snippet buttons',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));

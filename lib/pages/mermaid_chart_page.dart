@@ -219,6 +219,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     );
   }
 
+  void _insertGanttDependencyTask() {
+    final updatedCode = MermaidTemplates.insertGanttDependencyTask(
+      _codeController.text,
+    );
+    _codeController.value = TextEditingValue(
+      text: updatedCode,
+      selection: TextSelection.collapsed(offset: updatedCode.length),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Editor mode popup
   // ---------------------------------------------------------------------------
@@ -496,7 +506,14 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           label,
                           style: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () => _insertSnippet(snippet),
+                        onPressed: () {
+                          if (_selectedTypeId == 'gantt' &&
+                              label == '添加依赖任务') {
+                            _insertGanttDependencyTask();
+                          } else {
+                            _insertSnippet(snippet);
+                          }
+                        },
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),

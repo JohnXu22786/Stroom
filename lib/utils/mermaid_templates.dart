@@ -51,6 +51,357 @@ class MermaidTemplates {
     return buf.toString();
   }
 
+  /// Adds a Gantt task that depends on the last task ID in [code].
+  ///
+  /// If the chart has tasks but none has an ID, one is assigned to the last
+  /// task that does not itself depend on another task.
+  static String insertGanttDependencyTask(String code) {
+    final lines = code.split('\n');
+    final dateFormat = _ganttDateFormat(code);
+    final taskIds = <String>[];
+    var lastRootTaskIndex = -1;
+    var inAccDescrBlock = false;
+
+    for (var index = 0; index < lines.length; index++) {
+      final directiveLine = lines[index].split('%%').first;
+      if (inAccDescrBlock) {
+        if (directiveLine.contains('}')) inAccDescrBlock = false;
+        continue;
+      }
+      if (RegExp(r'^\s*accDescr\s*\{', caseSensitive: false)
+          .hasMatch(directiveLine)) {
+        inAccDescrBlock = !directiveLine.contains('}');
+        continue;
+      }
+
+      final attributes = _ganttTaskAttributes(lines[index], dateFormat);
+      if (attributes == null) continue;
+
+      taskIds.addAll(_ganttTaskIds(attributes));
+      if (!attributes.any(_isGanttDependency) &&
+          (attributes.any(_isGanttDuration) ||
+              _isGanttExplicitDateRange(attributes, dateFormat))) {
+        lastRootTaskIndex = index;
+      }
+    }
+
+    final dependencyId = taskIds.isNotEmpty
+        ? taskIds.last
+        : _nextGanttTaskId(code);
+    if (taskIds.isEmpty && lastRootTaskIndex >= 0) {
+      lines[lastRootTaskIndex] = _addGanttTaskId(
+        lines[lastRootTaskIndex],
+        dependencyId,
+      );
+    }
+
+    var updatedCode = lines.join('\n');
+    if (taskIds.isEmpty && lastRootTaskIndex < 0) {
+      final startDate = _ganttStartDate(code);
+      updatedCode = insertSnippet(
+        updatedCode,
+        '  依赖基准任务 :$dependencyId, $startDate, 1d',
+      );
+    }
+
+    return insertSnippet(
+      updatedCode,
+      '  后续任务 :after $dependencyId, 5d',
+    );
+  }
+
+  static List<String>? _ganttTaskAttributes(
+    String line,
+    String dateFormat,
+  ) {
+    final commentIndex = line.indexOf('%%');
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final trimmedLine = taskLine.trim();
+    if (trimmedLine.isEmpty ||
+        trimmedLine.startsWith('%%') ||
+        trimmedLine.startsWith('section ') ||
+        _isGanttDirective(trimmedLine)) {
+      return null;
+    }
+
+    final separatorIndex = taskLine.indexOf(':');
+    if (separatorIndex <= 0) return null;
+
+    final attributes = taskLine
+        .substring(separatorIndex + 1)
+        .split(',')
+        .map((attribute) => attribute.trim())
+        .toList();
+    return _mergeGanttDateFields(attributes, dateFormat);
+  }
+
+  static List<String> _mergeGanttDateFields(
+    List<String> attributes,
+    String dateFormat,
+  ) {
+    final merged = <String>[];
+    var index = 0;
+    while (index < attributes.length) {
+      var dateEnd = -1;
+      for (var end = index; end < attributes.length; end++) {
+        final candidate = attributes.sublist(index, end + 1).join(', ');
+        if (_isGanttDate(candidate, dateFormat)) {
+          dateEnd = end;
+          break;
+        }
+      }
+
+      if (dateEnd < index) {
+        merged.add(attributes[index]);
+        index++;
+      } else {
+        merged.add(attributes.sublist(index, dateEnd + 1).join(', '));
+        index = dateEnd + 1;
+      }
+    }
+    return merged;
+  }
+
+  static bool _isGanttTaskTag(String attribute) =>
+      const {'active', 'done', 'crit', 'milestone'}
+          .contains(attribute.toLowerCase());
+
+  static List<String> _ganttTaskIds(List<String> attributes) {
+    final values = attributes
+        .where((attribute) => !_isGanttTaskTag(attribute))
+        .toList();
+    if (values.length < 3 || !_isGanttTaskId(values.first)) {
+      return const [];
+    }
+    return [values.first];
+  }
+
+  static bool _isGanttTaskId(String attribute) =>
+      RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_-]*$').hasMatch(attribute) &&
+      !_isGanttTaskTag(attribute) &&
+      !_isGanttDuration(attribute) &&
+      !_isGanttDependency(attribute);
+
+  static bool _isGanttDuration(String attribute) =>
+      RegExp(r'^\d+(?:\.\d+)?\s*(?:ms|[smhdwy])$', caseSensitive: false)
+          .hasMatch(attribute);
+
+  static bool _isGanttDependency(String attribute) =>
+      RegExp(r'^(?:after|until)\s+\S+', caseSensitive: false)
+          .hasMatch(attribute);
+
+  static bool _isGanttDirective(String line) =>
+      RegExp(
+        r'^(?:title|dateFormat|axisFormat|tickInterval|excludes|includes|'
+        r'todayMarker|weekday|weekend|accTitle|accDescr)\b',
+        caseSensitive: false,
+      ).hasMatch(line);
+
+  static bool _isGanttExplicitDateRange(
+    List<String> attributes,
+    String dateFormat,
+  ) {
+    final values = attributes
+        .where((attribute) => !_isGanttTaskTag(attribute))
+        .toList();
+    return values.length == 2 &&
+        values.every((value) => _isGanttDate(value, dateFormat));
+  }
+
+  static bool _isGanttDate(String value, String dateFormat) {
+    const dateTokens = {
+      'dddd': r'[A-Za-z]+',
+      'ddd': r'[A-Za-z]{3}',
+      'dd': r'[A-Za-z]{2}',
+      'd': r'[0-6]',
+      'YYYY': r'\d{4}',
+      'YY': r'\d{2}',
+      'MMMM': r'[A-Za-z]+',
+      'MMM': r'[A-Za-z]{3}',
+      'MM': r'\d{2}',
+      'M': r'\d{1,2}',
+      'Do': r'\d{1,2}(?:st|nd|rd|th)',
+      'DD': r'\d{2}',
+      'D': r'\d{1,2}',
+      'HH': r'\d{2}',
+      'H': r'\d{1,2}',
+      'hh': r'\d{2}',
+      'h': r'\d{1,2}',
+      'mm': r'\d{2}',
+      'm': r'\d{1,2}',
+      'ss': r'\d{2}',
+      's': r'\d{1,2}',
+      'a': r'(?:am|pm)',
+      'A': r'(?:AM|PM)',
+      'SSS': r'\d{3}',
+      'ZZ': r'[+-]\d{4}',
+      'Z': r'[+-]\d{2}:\d{2}',
+    };
+    final tokenPattern = RegExp(
+      r'\[[^\]]*\]|dddd|ddd|dd|d|'
+      r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+      r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
+    );
+    final pattern = StringBuffer('^');
+    var formatOffset = 0;
+    for (final match in tokenPattern.allMatches(dateFormat)) {
+      pattern.write(
+        _ganttLiteralPattern(dateFormat.substring(formatOffset, match.start)),
+      );
+      final token = match.group(0)!;
+      pattern.write(
+        token.startsWith('[')
+            ? _ganttLiteralPattern(token.substring(1, token.length - 1))
+            : dateTokens[token]!,
+      );
+      formatOffset = match.end;
+    }
+    pattern.write(_ganttLiteralPattern(dateFormat.substring(formatOffset)));
+    pattern.write(r'$');
+    return RegExp(pattern.toString(), caseSensitive: false).hasMatch(value);
+  }
+
+  static String _ganttLiteralPattern(String literal) =>
+      RegExp.escape(literal).replaceAll(',', r',\s*');
+
+  static String _nextGanttTaskId(String code) {
+    var suffix = 1;
+    while (code.contains('dependencyTask$suffix')) {
+      suffix++;
+    }
+    return 'dependencyTask$suffix';
+  }
+
+  static String _addGanttTaskId(String line, String taskId) {
+    final commentIndex = line.indexOf('%%');
+    final taskLine =
+        commentIndex < 0 ? line : line.substring(0, commentIndex).trimRight();
+    final separatorIndex = taskLine.indexOf(':');
+    var fieldStart = separatorIndex + 1;
+    var insertionIndex = taskLine.length;
+    while (fieldStart <= taskLine.length) {
+      final commaIndex = taskLine.indexOf(',', fieldStart);
+      final fieldEnd = commaIndex < 0 ? taskLine.length : commaIndex;
+      final field = taskLine.substring(fieldStart, fieldEnd);
+      if (!_isGanttTaskTag(field.trim())) {
+        insertionIndex = fieldStart + RegExp(r'^\s*').firstMatch(field)!.end;
+        break;
+      }
+      if (commaIndex < 0) break;
+      fieldStart = commaIndex + 1;
+    }
+
+    final updatedTaskLine =
+        '${taskLine.substring(0, insertionIndex)}$taskId, '
+        '${taskLine.substring(insertionIndex)}';
+    if (commentIndex < 0) return updatedTaskLine;
+
+    final commentSpacing = line.substring(taskLine.trimRight().length,
+        commentIndex);
+    return '$updatedTaskLine$commentSpacing${line.substring(commentIndex)}';
+  }
+
+  static String _ganttStartDate(String code) {
+    final dateFormat = _ganttDateFormat(code);
+    final now = DateTime.now();
+    final timezoneOffset = now.timeZoneOffset.inMinutes;
+    final timezoneSign = timezoneOffset < 0 ? '-' : '+';
+    final timezoneHours =
+        (timezoneOffset.abs() ~/ 60).toString().padLeft(2, '0');
+    final timezoneMinutes =
+        (timezoneOffset.abs() % 60).toString().padLeft(2, '0');
+    const shortMonthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    const longMonthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const shortDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const minDayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const longDayNames = [
+      'Sunday', 'Monday', 'Tuesday', 'Wednesday',
+      'Thursday', 'Friday', 'Saturday',
+    ];
+    final dayOfWeek = now.weekday % 7;
+    final hour12 = now.hour % 12 == 0 ? 12 : now.hour % 12;
+    final replacements = {
+      'dddd': longDayNames[dayOfWeek],
+      'ddd': shortDayNames[dayOfWeek],
+      'dd': minDayNames[dayOfWeek],
+      'd': dayOfWeek.toString(),
+      'YYYY': now.year.toString(),
+      'YY': (now.year % 100).toString().padLeft(2, '0'),
+      'MMMM': longMonthNames[now.month - 1],
+      'MMM': shortMonthNames[now.month - 1],
+      'MM': now.month.toString().padLeft(2, '0'),
+      'M': now.month.toString(),
+      'Do': _ganttOrdinalDay(now.day),
+      'DD': now.day.toString().padLeft(2, '0'),
+      'D': now.day.toString(),
+      'HH': now.hour.toString().padLeft(2, '0'),
+      'H': now.hour.toString(),
+      'hh': hour12.toString().padLeft(2, '0'),
+      'h': hour12.toString(),
+      'mm': now.minute.toString().padLeft(2, '0'),
+      'm': now.minute.toString(),
+      'ss': now.second.toString().padLeft(2, '0'),
+      's': now.second.toString(),
+      'SSS': now.millisecond.toString().padLeft(3, '0'),
+      'ZZ': '$timezoneSign$timezoneHours$timezoneMinutes',
+      'Z': '$timezoneSign$timezoneHours:$timezoneMinutes',
+      'a': now.hour < 12 ? 'am' : 'pm',
+      'A': now.hour < 12 ? 'AM' : 'PM',
+    };
+    return dateFormat.replaceAllMapped(
+      RegExp(
+        r'\[[^\]]*\]|dddd|ddd|dd|d|'
+        r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+        r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
+      ),
+      (match) {
+        final token = match.group(0)!;
+        return token.startsWith('[')
+            ? token.substring(1, token.length - 1)
+            : replacements[token]!;
+      },
+    );
+  }
+
+  static String _ganttOrdinalDay(int day) {
+    final suffix = day % 100 >= 11 && day % 100 <= 13
+        ? 'th'
+        : const {1: 'st', 2: 'nd', 3: 'rd'}[day % 10] ?? 'th';
+    return '$day$suffix';
+  }
+
+  static String _ganttDateFormat(String code) {
+    final dateFormatPattern =
+        RegExp(r'^\s*dateFormat\s+(.+?)\s*$', caseSensitive: false);
+    final accDescrBlockPattern =
+        RegExp(r'^\s*accDescr\s*\{', caseSensitive: false);
+    var inAccDescrBlock = false;
+
+    for (final line in code.split('\n')) {
+      final directiveLine = line.split('%%').first;
+      if (inAccDescrBlock) {
+        if (directiveLine.contains('}')) inAccDescrBlock = false;
+        continue;
+      }
+      if (accDescrBlockPattern.hasMatch(directiveLine)) {
+        inAccDescrBlock = !directiveLine.contains('}');
+        continue;
+      }
+
+      final dateFormatMatch = dateFormatPattern.firstMatch(directiveLine);
+      if (dateFormatMatch != null) return dateFormatMatch.group(1)!.trim();
+    }
+
+    return 'YYYY-MM-DD';
+  }
+
   // ---------------------------------------------------------------------------
   // Diagram type metadata
   // ---------------------------------------------------------------------------
