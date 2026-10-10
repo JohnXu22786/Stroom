@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -555,6 +556,80 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets('Ctrl+wheel zoom does not scroll the parent scroll view',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      final scrollController = ScrollController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                children: [
+                  const SizedBox(height: 100),
+                  const MermaidRenderWidget(
+                    mermaidCode: 'graph TD\nA-->B',
+                    height: 200,
+                    showToolbar: false,
+                  ),
+                  const SizedBox(height: 1000),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Let the widget's asset-load continuation run outside fake test time.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+      final webView = platform.webView!;
+      final fakeController = webView.controller;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        fakeController,
+      );
+      webView.params.onWebViewCreated!(controller);
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(find.byType(MermaidRenderWidget)),
+          kind: PointerDeviceKind.mouse,
+          scrollDelta: const Offset(0, 20),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      expect(
+        fakeController.evaluatedScripts,
+        contains(
+            predicate<String>((script) => script.contains('window.setZoom'))),
+        reason: 'Ctrl+wheel should still zoom the Mermaid diagram',
+      );
+      expect(
+        scrollController.offset,
+        closeTo(0, 0.1),
+        reason: 'the same Ctrl+wheel event must not scroll the parent',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      scrollController.dispose();
+    });
+
     testWidgets(
       'web view creation removes the Flutter loading overlay without onLoadStop',
       (tester) async {
@@ -980,6 +1055,8 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 }
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+
   _MermaidWebViewController()
       : super.implementation(
             const PlatformInAppWebViewControllerCreationParams(id: 0));
@@ -996,6 +1073,14 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     required String handlerName,
     required JavaScriptHandlerCallback callback,
   }) {}
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {
+    evaluatedScripts.add(source);
+  }
 
   @override
   void dispose({bool isKeepAlive = false}) {}
