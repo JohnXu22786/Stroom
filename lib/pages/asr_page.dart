@@ -1328,7 +1328,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         unawaited(textNotifier.loadRecords());
       } catch (e) {
         if (e is AsrChunkedTranscriptionException && e.partialText.isNotEmpty) {
-          bgNotifier.setResult(taskId, e.partialText);
+          bgNotifier.setResult(taskId, e.partialText, isComplete: false);
         }
         // Capture raw request/response diagnostics from AsrService
         final rawRequest = <String, dynamic>{

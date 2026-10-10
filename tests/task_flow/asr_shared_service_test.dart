@@ -6,11 +6,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/pages/asr_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
+import 'package:stroom/providers/tts_state_provider.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
@@ -381,6 +385,7 @@ void main() {
       expect(adapter.requests, hasLength(3));
       expect(background.state.single.status, TaskStatus.failed);
       expect(background.state.single.result, 'first chunk last chunk');
+      expect(background.state.single.resultIsComplete, isFalse);
       expect(background.state.single.error, contains('middle failed'));
       expect(background.state.single.error, contains('片段 2'));
       expect(background.state.single.error, contains('成功: first chunk'));
@@ -392,6 +397,96 @@ void main() {
       expect(await TextManifest.loadRecords(), isEmpty);
     },
   );
+
+  testWidgets('standalone partial results are marked incomplete', (
+    tester,
+  ) async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var requestIndex = 0;
+    final serverDone = server.listen((request) async {
+      await request.drain<void>();
+      final index = requestIndex++;
+      request.response.headers.contentType = ContentType.json;
+      request.response.statusCode = 200;
+      request.response.write(
+        index == 1
+            ? '{"error":{"message":"middle failed"}}'
+            : index == 0
+            ? '{"text":"first chunk"}'
+            : '{"text":"last chunk"}',
+      );
+      await request.response.close();
+    });
+    addTearDown(() async {
+      await server.close(force: true);
+      await serverDone.cancel();
+    });
+
+    final file = await audioFile('standalone-partial.wav', dataBytes: 140);
+    final entries = providers(
+      host: 'http://${server.address.address}:${server.port}/audio/transcriptions',
+      providerTypeConfig: {
+        'maxFileSizeMb': 0.0001,
+        'chunking': 'fixedSize',
+        'fallbackMethod': 'generic',
+      },
+    );
+    final providerNotifier = ProviderEntriesNotifier()..state = entries;
+    final encodedAudio = base64Encode(await file.readAsBytes());
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          providerEntriesProvider.overrideWith((ref) => providerNotifier),
+          backgroundTasksProvider.overrideWith((ref) => background),
+          audioRecordsProvider.overrideWith((ref) => AudioRecordsNotifier()),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => AsrPage(
+                      retryData: {
+                        'audios': [
+                          {
+                            'bytes': encodedAudio,
+                            'name': 'standalone-partial.wav',
+                            'format': 'wav',
+                          },
+                        ],
+                      },
+                    ),
+                  ),
+                ),
+                child: const Text('open ASR'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open ASR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始识别'));
+
+    await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (background.state.isEmpty ||
+          background.state.single.status != TaskStatus.failed) {
+        if (DateTime.now().isAfter(deadline)) {
+          fail('standalone ASR task did not fail after the chunk error');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+
+    expect(background.state.single.result, 'first chunk last chunk');
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.resultIsComplete, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   test('task-flow closes its owned Dio after a request failure', () async {
     final adapter = await executeWithOwnedService(
