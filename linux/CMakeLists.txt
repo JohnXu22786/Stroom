@@ -83,6 +83,13 @@ if(TARGET flutter_inappwebview_linux_plugin)
     "-include${CMAKE_CURRENT_SOURCE_DIR}/wpe_compat.h")
 endif()
 
+# Debian 13 marks the older tray plugin's still-supported indicator API as
+# deprecated. Retain its diagnostic without treating it as a build failure.
+if(TARGET tray_manager_plugin)
+  target_compile_options(tray_manager_plugin PRIVATE
+    -Wno-error=deprecated-declarations)
+endif()
+
 # Keep WPE and its subprocesses together in the system packages. The plugin's
 # library-only bundle would omit WebKit processes and resources.
 list(REMOVE_ITEM PLUGIN_BUNDLED_LIBRARIES ${FLUTTER_INAPPWEBVIEW_WPE_LIBS})
