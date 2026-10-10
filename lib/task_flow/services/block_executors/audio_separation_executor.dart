@@ -335,7 +335,6 @@ Future<String> executeAudioSeparationBlock({
     return await FileManifest.withStorageFileSaveLock(
       '$hash.$format',
       () async {
-
         // The flow may have ended while the separation isolate ran — don't
         // write an orphaned audio file + gallery record.
         if (!isFlowExecutionActive(execNotifier, execId)) {
@@ -389,7 +388,8 @@ Future<String> executeAudioSeparationBlock({
           );
         }
         try {
-          await (addAudioRecord?.call(record) ?? FileManifest.addRecord(record));
+          await (addAudioRecord?.call(record) ??
+              FileManifest.addRecord(record));
         } catch (_) {
           await _deleteAudioFileIfUnreferenced(
             record.storageFileName,

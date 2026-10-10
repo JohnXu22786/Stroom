@@ -168,7 +168,8 @@ class FileManifest {
   static final Map<String, Future<void>> _storageFileSaveTails = {};
   static final Object _storageFileSaveZoneKey = Object();
   static Future<void> _folderRemovalTail = Future<void>.value();
-  static Completer<void> _folderRemovalsFinished = Completer<void>()..complete();
+  static Completer<void> _folderRemovalsFinished = Completer<void>()
+    ..complete();
   static int _pendingFolderRemovals = 0;
 
   static final _ops = ManifestOperations<AudioRecord>(
@@ -202,8 +203,8 @@ class FileManifest {
     void Function()? onQueued,
   }) async {
     final currentContext = Zone.current[_storageFileSaveZoneKey];
-    final isNestedSave = currentContext is _StorageFileSaveContext &&
-        currentContext.active;
+    final isNestedSave =
+        currentContext is _StorageFileSaveContext && currentContext.active;
     if (currentContext is _StorageFileSaveContext &&
         currentContext.active &&
         currentContext.storageName == storageName) {
@@ -326,8 +327,9 @@ class FileManifest {
       () => _ops.addRecord(record),
     );
   }
-  static Future<void> deleteRecord(String id, {bool preserveFiles = false})
-      async {
+
+  static Future<void> deleteRecord(String id,
+      {bool preserveFiles = false}) async {
     final records = await _ops.loadRecords();
     AudioRecord? record;
     for (final candidate in records) {
@@ -369,6 +371,7 @@ class FileManifest {
 
     await deleteWithLocks(0);
   }
+
   static Future<void> updateRecord(AudioRecord updated) =>
       _ops.updateRecord(updated);
   static Future<void> renameRecord(String id, String newName) =>
