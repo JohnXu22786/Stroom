@@ -93,7 +93,8 @@ Future<void> _runAudioSeparation({
         title: title,
         retryData: null,
       );
-      throttler.updateStep(taskId, 0, running: true);
+      var activeStepIndex = 0;
+      throttler.updateStep(taskId, activeStepIndex, running: true);
 
       try {
         final retryData = await _computeAudioSeparationRetryData(video);
@@ -101,8 +102,9 @@ Future<void> _runAudioSeparation({
 
         final result = await _workerExtract(video.bytes, video.format);
 
-        throttler.updateStep(taskId, 0, completed: true);
-        throttler.updateStep(taskId, 1, running: true);
+        throttler.updateStep(taskId, activeStepIndex, completed: true);
+        activeStepIndex = 1;
+        throttler.updateStep(taskId, activeStepIndex, running: true);
 
         final filePath = await saveAudioSeparationFile(
           result.audioBytes,
@@ -116,6 +118,7 @@ Future<void> _runAudioSeparation({
         throttler.updateStep(taskId, 1, completed: true);
         throttler.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
+        throttler.updateStep(taskId, activeStepIndex, failed: true);
         throttler.failTask(taskId, error: '音频提取失败: $e');
       }
     }

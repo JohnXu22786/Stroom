@@ -19,7 +19,7 @@ void main() {
     VideoManifest.invalidateCache();
   });
 
-  testWidgets('starting separation stores its selected video for retry', (
+  testWidgets('separation failure marks its active step failed', (
     tester,
   ) async {
     final notifier = BackgroundTaskNotifier();
@@ -69,7 +69,10 @@ void main() {
     }
 
     expect(notifier.state, hasLength(1));
-    expect(notifier.state.single.status, TaskStatus.failed);
-    expect(notifier.state.single.retryData, retryData);
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.retryData, retryData);
+    expect(task.steps.where((step) => step.failed), hasLength(1));
+    expect(task.steps.where((step) => step.running), isEmpty);
   });
 }
