@@ -24,20 +24,23 @@ import 'shared_helpers.dart';
 ///
 /// In-app audio (TTS synthesis / audio separation products) is stored
 /// under a hash filename (`<hash>.<format>`), so the raw basename would
-/// surface as a meaningless hex string. When the input matches an
-/// [AudioRecord], the record's human-readable name is used instead —
+/// surface as a meaningless hex string. When the input hash matches one
+/// distinct non-empty [AudioRecord] name, that human-readable name is used —
 /// for TTS products that is the source text's first 20 chars, so a
 /// chat → tts → asr flow names its result after the text it came from.
-/// Falls back to the file basename when the input is not a known
-/// in-app audio (user files keep their own name).
+/// Matching records with different names cannot identify the source record,
+/// so those inputs use the neutral hash-based title.
 @visibleForTesting
 String asrOutputTitleFromRecords(String input, List<AudioRecord> records) {
   final inputBasename = p.basename(input);
   final inputHash = p.basenameWithoutExtension(inputBasename);
-  for (final r in records) {
-    if (r.hash == inputHash && r.name.trim().isNotEmpty) {
-      return '语音识别_${r.name.trim()}';
-    }
+  final matchingNames = records
+      .where((record) => record.hash == inputHash)
+      .map((record) => record.name.trim())
+      .where((name) => name.isNotEmpty)
+      .toSet();
+  if (matchingNames.length == 1) {
+    return '语音识别_${matchingNames.single}';
   }
   return '语音识别_$inputHash';
 }

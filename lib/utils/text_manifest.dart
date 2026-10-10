@@ -161,8 +161,8 @@ class TextManifest {
   static final Map<String, Future<void>> _pendingSaves = {};
   static final Object _saveLockZoneKey = Object();
 
-  /// OCR owns publication and rollback together. Ordinary text writers use
-  /// the same key, so they cannot publish into an in-flight OCR rollback.
+  /// Serialize file and record mutations by content hash so a deletion cannot
+  /// remove text while OCR is publishing a new reference to it.
   static Future<T> withSaveLock<T>(
       String hash, Future<T> Function() action) async {
     final held = Zone.current[_saveLockZoneKey] as Set<String>? ?? const {};
@@ -182,6 +182,17 @@ class TextManifest {
     }
   }
 
+  static Future<T> _withSaveLocks<T>(
+      Iterable<String> hashes, Future<T> Function() action) {
+    final ordered = hashes.toSet().toList()..sort();
+    Future<T> acquire(int index) {
+      if (index == ordered.length) return action();
+      return withSaveLock(ordered[index], () => acquire(index + 1));
+    }
+
+    return acquire(0);
+  }
+
   static final _ops = ManifestOperations<TextRecord>(
     manifestKey: 'text_manifest',
     storageDirName: 'texts',
@@ -198,10 +209,31 @@ class TextManifest {
           {void Function()? beforeCommit}) =>
       withSaveLock(record.hash,
           () => _ops.addRecord(record, beforeCommit: beforeCommit));
-  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
-      _ops.deleteRecord(id, preserveFiles: preserveFiles);
-  static Future<void> deleteRecords(List<String> ids) =>
-      _ops.deleteRecords(ids);
+  static Future<void> deleteRecord(String id,
+      {bool preserveFiles = false}) async {
+    final records = await loadRecordsUncached();
+    final index = records.indexWhere((record) => record.id == id);
+    if (index == -1) return;
+    await withSaveLock(records[index].hash,
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+  }
+
+  /// Rollback already knows the record hash, so it can remove metadata without
+  /// first reading the manifest again when that lookup is the failing step.
+  static Future<void> deleteRecordWithKnownHash(String id, String hash,
+          {bool preserveFiles = false}) =>
+      withSaveLock(
+          hash, () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+
+  static Future<void> deleteRecords(List<String> ids) async {
+    final idSet = ids.toSet();
+    final records = await loadRecordsUncached();
+    final hashes = records
+        .where((record) => idSet.contains(record.id))
+        .map((record) => record.hash);
+    await _withSaveLocks(hashes, () => _ops.deleteRecords(ids));
+  }
+
   static Future<void> updateRecord(TextRecord updated) =>
       withSaveLock(updated.hash, () => _ops.updateRecord(updated));
   static Future<void> renameRecord(String id, String newName) =>
