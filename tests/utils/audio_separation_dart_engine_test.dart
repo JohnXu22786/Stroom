@@ -1,7 +1,8 @@
 import 'dart:math' show pi, sin;
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_separation.dart' show AudioSeparationEngine;
+import 'package:stroom/utils/audio_separation.dart'
+    show AudioSeparationEngine, extractAudioSync;
 import 'package:stroom/utils/audio_utils.dart';
 
 /// Helper: read a little-endian 32-bit int from bytes at offset.
@@ -499,6 +500,53 @@ void main() {
       bytes.add(audioData);
 
       return bytes.toBytes();
+    }
+
+    Uint8List buildMinimalMp4WithTwoPcmAudioTracks() {
+      final firstAudio = Uint8List.fromList([0x11, 0x22, 0x33, 0x44]);
+      final secondAudio = Uint8List.fromList([0xA1, 0xB2, 0xC3, 0xD4]);
+      final firstFixture = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 2,
+        dataPattern: firstAudio,
+      );
+      final secondFixture = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 2,
+        dataPattern: secondAudio,
+      );
+
+      Uint8List trackFrom(Uint8List fixture) {
+        final moovStart = _findFourCc(fixture, 'moov') - 4;
+        final trackStart = moovStart + 8;
+        final trackSize = _readUint32BE(fixture, trackStart);
+        return Uint8List.fromList(
+          fixture.sublist(trackStart, trackStart + trackSize),
+        );
+      }
+
+      Uint8List withChunkOffset(Uint8List track, int offset) {
+        final copy = Uint8List.fromList(track);
+        final stcoTypeOffset = _findFourCc(copy, 'stco');
+        copy.setRange(
+          stcoTypeOffset + 12,
+          stcoTypeOffset + 16,
+          _u32be(offset),
+        );
+        return copy;
+      }
+
+      final firstTrack = trackFrom(firstFixture);
+      final secondTrack = trackFrom(secondFixture);
+      final ftypEnd = _findFourCc(firstFixture, 'moov') - 4;
+      final ftyp = firstFixture.sublist(0, ftypEnd);
+      final moovSize = 8 + firstTrack.length + secondTrack.length;
+      final firstAudioOffset = ftyp.length + moovSize + 8;
+      final moov = _buildBox('moov', [
+        ...withChunkOffset(firstTrack, firstAudioOffset),
+        ...withChunkOffset(secondTrack, firstAudioOffset + firstAudio.length),
+      ]);
+      final mdat = _buildBox('mdat', [...firstAudio, ...secondAudio]);
+
+      return Uint8List.fromList([...ftyp, ...moov, ...mdat]);
     }
 
     Uint8List buildMinimalMp4WithAacAudio({
@@ -1012,6 +1060,17 @@ void main() {
       expect(foundPattern, isTrue,
           reason: 'Extracted audio data does not contain original pattern - '
               'data is corrupted or silent!');
+    });
+
+    test('extractAudioSync selects the first supported audio track', () {
+      final mp4Bytes = buildMinimalMp4WithTwoPcmAudioTracks();
+
+      final result = extractAudioSync(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      expect(extractPcmFromWav(result), [0x11, 0x22, 0x33, 0x44]);
     });
 
     test('extractAudio packages twos MOV PCM as WAV and swaps byte order',
