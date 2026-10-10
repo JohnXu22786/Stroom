@@ -702,6 +702,112 @@ void main() {
     });
 
     testWidgets(
+      'a stationary native diagram tap forwards one WebView click',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final hitPoint = tester.getCenter(find.byType(InAppWebView));
+
+        await tester.tapAt(hitPoint);
+        await tester.pump();
+
+        final clickScripts = webView.controller.evaluatedScripts.where(
+          (script) =>
+              script.contains('document.elementFromPoint') &&
+              script.contains(
+                  "target.dispatchEvent(new MouseEvent('click', {"),
+        );
+        expect(
+          clickScripts,
+          hasLength(1),
+          reason: 'a tap on the native gesture overlay must invoke the page '
+              'click target exactly once',
+        );
+        expect(clickScripts.single, contains('bubbles: true'));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'diagram drags pan without forwarding clicks or scrolling parent',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final scrollController = ScrollController();
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              children: [
+                const SizedBox(height: 100),
+                const MermaidRenderWidget(
+                  mermaidCode: 'graph TD\nA-->B',
+                  height: 200,
+                  showToolbar: false,
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        );
+
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(0, -40),
+        );
+        await tester.pump();
+        expect(scrollController.offset, closeTo(0, 0.1));
+
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(60, 0),
+        );
+        await tester.pump();
+
+        expect(scrollController.offset, closeTo(0, 0.1));
+        expect(
+          webView.controller.evaluatedScripts,
+          contains(predicate<String>(
+              (script) => script.contains('window.setPanZoom('))),
+        );
+        expect(
+          webView.controller.evaluatedScripts.where(
+            (script) =>
+                script.contains('document.elementFromPoint') &&
+                script.contains(
+                    "target.dispatchEvent(new MouseEvent('click', {"),
+          ),
+          isEmpty,
+          reason: 'dragging the diagram must never fire a Mermaid click target',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        scrollController.dispose();
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'web view creation removes the Flutter loading overlay without onLoadStop',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -1149,6 +1255,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+Future<_MermaidWebView> _mountReadyMermaidWidget(
+    WidgetTester tester,
+    _MermaidWebViewPlatform platform,
+    Widget body) async {
+  await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+  await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  });
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump();
+
+  final webView = platform.webView!;
+  final controller = webView.controllerFromPlatform<InAppWebViewController>(
+    webView.controller,
+  );
+  webView.params.onWebViewCreated!(controller);
+  webView.params.onLoadStop?.call(controller, null);
+  await tester.pump();
+  return webView;
 }
 
 class _MermaidWebViewPlatform extends InAppWebViewPlatform {
