@@ -37,8 +37,13 @@ class _ModelOption {
   final String host;
   final String apiKey;
   final Map<String, dynamic> providerTypeConfig;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey,
-      this.providerTypeConfig);
+  const _ModelOption(
+    this.model,
+    this.providerName,
+    this.host,
+    this.apiKey,
+    this.providerTypeConfig,
+  );
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -137,22 +142,22 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         // URL-mode entry: restore the link (no bytes).
         final url = audioData['url'];
         if (url is String && url.isNotEmpty) {
-          _selectedAudios.add(SelectedAudio(
-            bytes: Uint8List(0),
-            name: url,
-            format: 'url',
-          ));
+          _selectedAudios.add(
+            SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+          );
           continue;
         }
         final bytesStr = audioData['bytes'] as String?;
         if (bytesStr != null) {
           try {
             final bytes = base64Decode(bytesStr);
-            _selectedAudios.add(SelectedAudio(
-              bytes: bytes,
-              name: audioData['name'] as String? ?? 'audio',
-              format: audioData['format'] as String? ?? 'wav',
-            ));
+            _selectedAudios.add(
+              SelectedAudio(
+                bytes: bytes,
+                name: audioData['name'] as String? ?? 'audio',
+                format: audioData['format'] as String? ?? 'wav',
+              ),
+            );
           } catch (e) {
             debugPrint('Failed to decode retry audio: $e');
           }
@@ -231,9 +236,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -274,10 +277,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -311,8 +311,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -841,22 +844,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Audio Source Methods
   // ==================================================================
 
-  /// Parse the upload method from a provider typeConfig (defaults to multipart).
-  static AudioUploadMethod _uploadMethodFor(Map<String, dynamic> typeConfig) {
-    final str = typeConfig['uploadMethod'] as String?;
-    if (str == null) return AudioUploadMethod.multipart;
-    return AudioUploadMethod.values.firstWhere(
-      (m) => m.name == str,
-      orElse: () => AudioUploadMethod.multipart,
-    );
-  }
-
   /// The upload method of the currently selected ASR provider.
   AudioUploadMethod _getCurrentUploadMethod() {
     final modelOptions = _getAsrModelOptions(ref);
     if (modelOptions.isEmpty) return AudioUploadMethod.multipart;
     final idx = _selectedModelIndex.clamp(0, modelOptions.length - 1);
-    return _uploadMethodFor(modelOptions[idx].providerTypeConfig);
+    return asrUploadMethodFromProviderTypeConfig(
+      modelOptions[idx].providerTypeConfig,
+    );
   }
 
   /// A short display name for a URL entry (last path segment, else host),
@@ -886,19 +881,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // duplicate text records).
     if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('该链接已在列表中')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
       }
       return;
     }
     if (mounted) {
       setState(() {
-        _selectedAudios.add(SelectedAudio(
-          bytes: Uint8List(0),
-          name: url,
-          format: 'url',
-        ));
+        _selectedAudios.add(
+          SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+        );
         _errorMessage = null;
         _transcriptionResult = null;
       });
@@ -1127,33 +1120,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Also passes through the model's typeConfig and customParams
     // for built-in ASR parameters and custom parameters.
     final selectedOption = modelOptions[_selectedModelIndex];
-    final tc = Map<String, dynamic>.from(selectedOption.model.typeConfig);
-
     // Upload settings come from provider typeConfig, not model typeConfig
     final ptc = selectedOption.providerTypeConfig;
-    final uploadMethod = _uploadMethodFor(ptc);
-    final maxFileSizeMb = ptc['maxFileSizeMb'] as num?;
-    final maxFileSizeBytes = maxFileSizeMb != null
-        ? (maxFileSizeMb * 1024 * 1024).toInt()
-        : AsrConfig.defaultMaxAudioFileSizeBytes;
-    final preprocessing = ptc['preprocessing'] as String? ?? 'none';
-    final chunking = ptc['chunking'] as String? ?? 'none';
-    final compression = ptc['compression'] as String? ?? 'none';
-    final fallbackMethod = ptc['fallbackMethod'] as String? ?? 'none';
-
-    final effectiveConfig = AsrConfig(
+    final uploadMethod = asrUploadMethodFromProviderTypeConfig(ptc);
+    final effectiveConfig = createAsrConfigFromProviderModel(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
-      model: selectedOption.model.modelId,
-      typeConfig: tc,
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
-      uploadMethod: uploadMethod,
-      maxFileSizeBytes: maxFileSizeBytes,
-      preprocessing: preprocessing,
-      chunking: chunking,
-      compression: compression,
-      fallbackMethod: fallbackMethod,
+      model: selectedOption.model,
+      providerTypeConfig: ptc,
     );
 
     // Validate that the selected entries match the provider's upload method.
@@ -1211,13 +1185,18 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final saveFolder = _saveFolder;
     for (final entry in taskEntries) {
       unawaited(
-          _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier));
+        _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier),
+      );
     }
 
     // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately.
     try {
       await _executeTaskChain(
-          taskEntries, effectiveConfig, bgNotifier, textNotifier);
+        taskEntries,
+        effectiveConfig,
+        bgNotifier,
+        textNotifier,
+      );
     } catch (e) {
       debugPrint('[ASR] _executeTaskChain failed: $e');
       for (final entry in taskEntries) {
@@ -1279,8 +1258,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       // Fall back to main-thread computation.
       debugPrint('[ASR] Isolate.run failed, falling back to main thread: $e');
       try {
-        final retryData =
-            _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
+        final retryData = _buildAsrRetryData(
+          entry.audio,
+          modelIndex,
+          saveFolder,
+        );
         bgNotifier.setRetryData(entry.taskId, retryData);
       } catch (retryError) {
         debugPrint('[ASR] Failed to compute retryData: $retryError');
@@ -1360,10 +1342,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           if (service.lastResponseData != null)
             'data': service.lastResponseData,
         };
-        bgNotifier.failTask(taskId,
-            error: '音频转写失败: $e',
-            rawRequest: rawRequest,
-            rawResponse: rawResponse);
+        bgNotifier.failTask(
+          taskId,
+          error: '音频转写失败: $e',
+          rawRequest: rawRequest,
+          rawResponse: rawResponse,
+        );
       }
       // Continue to next task in the for loop regardless of success/failure
     }
@@ -1626,10 +1610,7 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('添加'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('添加')),
       ],
     );
   }

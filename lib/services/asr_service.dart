@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/audio_codecs.dart';
@@ -236,6 +237,7 @@ class AsrResult {
 /// `{ "text": "transcribed text" }`.
 class AsrService {
   final AsrConfig config;
+  final bool _ownsDio;
   final Dio _dio;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
@@ -266,7 +268,8 @@ class AsrService {
   }
 
   AsrService({required this.config, Dio? dio})
-      : _dio = dio ??
+      : _ownsDio = dio == null,
+        _dio = dio ??
             Dio(
               BaseOptions(
                 headers: {
@@ -280,6 +283,17 @@ class AsrService {
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
+
+  /// The HTTP client, exposed so tests can verify owned-client cleanup.
+  @visibleForTesting
+  Dio get dioForTesting => _dio;
+
+  /// Close the HTTP client when this service created it.
+  ///
+  /// An injected [Dio] remains owned by its caller.
+  void close({bool force = false}) {
+    if (_ownsDio) _dio.close(force: force);
+  }
 
   /// Dio send timeout, exposed for diagnostic and testing.
   Duration? get sendTimeout => _dio.options.sendTimeout;
@@ -300,9 +314,12 @@ class AsrService {
   Future<AsrResult> transcribe({
     required Uint8List audioBytes,
     String audioFormat = 'wav',
+    CancelToken? cancelToken,
   }) async {
-    await AppLogService.info('AsrService',
-        '开始转写: 格式=$audioFormat, 方式=${config.uploadMethod.name}, 大小=${audioBytes.length} 字节');
+    await AppLogService.info(
+      'AsrService',
+      '开始转写: 格式=$audioFormat, 方式=${config.uploadMethod.name}, 大小=${audioBytes.length} 字节',
+    );
     if (config.host.isEmpty) {
       throw Exception('API 地址未配置');
     }
@@ -326,8 +343,10 @@ class AsrService {
       try {
         final preprocessor = WavPreprocessor();
         workingBytes = preprocessor.process(workingBytes);
-        await AppLogService.info('AsrService',
-            '预处理完成: ${audioBytes.length} → ${workingBytes.length} 字节');
+        await AppLogService.info(
+          'AsrService',
+          '预处理完成: ${audioBytes.length} → ${workingBytes.length} 字节',
+        );
       } catch (e) {
         await AppLogService.warning('AsrService', '预处理失败: $e');
       }
@@ -339,12 +358,18 @@ class AsrService {
 
     if (!exceedsLimit) {
       // ── File fits — send via primary method ───────────────────────
-      return _applyCompressionAndSend(workingBytes, fmt);
+      return _applyCompressionAndSend(
+        workingBytes,
+        fmt,
+        cancelToken: cancelToken,
+      );
     }
 
     // ── File exceeds limit — apply fallback strategy ────────────────
-    await AppLogService.info('AsrService',
-        '文件超限 (${formatFileSize(workingBytes.length)} > ${formatFileSize(config.maxFileSizeBytes)})，尝试兜底策略: ${config.fallbackMethod}');
+    await AppLogService.info(
+      'AsrService',
+      '文件超限 (${formatFileSize(workingBytes.length)} > ${formatFileSize(config.maxFileSizeBytes)})，尝试兜底策略: ${config.fallbackMethod}',
+    );
 
     final fallback = config.fallbackMethod;
 
@@ -353,20 +378,28 @@ class AsrService {
       final specificMethod = _getSpecificFallback(config.uploadMethod);
       if (specificMethod == null) {
         await AppLogService.info(
-            'AsrService',
-            '当前上传方式 (${config.uploadMethod.name}) 没有可用的特定兜底'
-                '（URL 需要公网链接，multipart 不缓解超限）');
+          'AsrService',
+          '当前上传方式 (${config.uploadMethod.name}) 没有可用的特定兜底'
+              '（URL 需要公网链接，multipart 不缓解超限）',
+        );
       } else {
         try {
           if (specificMethod == AudioUploadMethod.base64Json) {
             // NOTE: must await, not `return` — a bare `return future` would
             // deliver the error to the caller without entering this catch,
             // aborting the whole fallback chain.
-            return await _sendViaBase64(workingBytes, fmt);
+            return await _sendViaBase64(
+              workingBytes,
+              fmt,
+              cancelToken: cancelToken,
+            );
           }
         } catch (e) {
+          if (e is DioException && CancelToken.isCancel(e)) rethrow;
           await AppLogService.warning(
-              'AsrService', '特定兜底 (${specificMethod.name}) 失败: $e');
+            'AsrService',
+            '特定兜底 (${specificMethod.name}) 失败: $e',
+          );
         }
       }
     }
@@ -393,7 +426,11 @@ class AsrService {
         try {
           // await required: a bare `return future` would deliver the error to
           // the caller without entering this catch.
-          return await _transcribeChunked(workingBytes, actualFmt);
+          return await _transcribeChunked(
+            workingBytes,
+            actualFmt,
+            cancelToken: cancelToken,
+          );
         } on FormatException catch (e) {
           // Malformed/unparseable WAV — fall through to the rejection below.
           // Other failures (e.g. '切块转写全部失败') propagate as-is.
@@ -403,7 +440,12 @@ class AsrService {
 
       // If compression/chunking brought it under limit, send via primary
       if (workingBytes.length <= config.maxFileSizeBytes) {
-        return _sendViaMethod(workingBytes, actualFmt, config.uploadMethod);
+        return _sendViaMethod(
+          workingBytes,
+          actualFmt,
+          config.uploadMethod,
+          cancelToken: cancelToken,
+        );
       }
     }
 
@@ -438,8 +480,12 @@ class AsrService {
       return (workingBytes, fmt);
     }
     if (config.compression != 'adpcm' && config.compression != 'flac') {
-      unawaited(AppLogService.warning(
-          'AsrService', '不支持的压缩方式: ${config.compression}，跳过压缩'));
+      unawaited(
+        AppLogService.warning(
+          'AsrService',
+          '不支持的压缩方式: ${config.compression}，跳过压缩',
+        ),
+      );
       return (workingBytes, fmt);
     }
     try {
@@ -479,14 +525,22 @@ class AsrService {
 
   /// Apply compression and send via primary method (for files within limit).
   Future<AsrResult> _applyCompressionAndSend(
-      Uint8List workingBytes, String fmt) async {
+    Uint8List workingBytes,
+    String fmt, {
+    CancelToken? cancelToken,
+  }) async {
     var actualFmt = fmt;
     if (config.compression != 'none' && fmt == 'wav') {
       final result = _applyCompression(workingBytes, fmt);
       workingBytes = result.$1;
       actualFmt = result.$2;
     }
-    return _sendViaMethod(workingBytes, actualFmt, config.uploadMethod);
+    return _sendViaMethod(
+      workingBytes,
+      actualFmt,
+      config.uploadMethod,
+      cancelToken: cancelToken,
+    );
   }
 
   /// Get the specific fallback method that differs from primary.
@@ -508,13 +562,26 @@ class AsrService {
   }
 
   /// Send via base64 JSON method.
-  Future<AsrResult> _sendViaBase64(Uint8List bytes, String fmt) async {
-    return _sendViaMethod(bytes, fmt, AudioUploadMethod.base64Json);
+  Future<AsrResult> _sendViaBase64(
+    Uint8List bytes,
+    String fmt, {
+    CancelToken? cancelToken,
+  }) async {
+    return _sendViaMethod(
+      bytes,
+      fmt,
+      AudioUploadMethod.base64Json,
+      cancelToken: cancelToken,
+    );
   }
 
   /// Send audio via the specified upload method.
   Future<AsrResult> _sendViaMethod(
-      Uint8List bytes, String fmt, AudioUploadMethod method) async {
+    Uint8List bytes,
+    String fmt,
+    AudioUploadMethod method, {
+    CancelToken? cancelToken,
+  }) async {
     final stopwatch = Stopwatch()..start();
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
@@ -534,14 +601,17 @@ class AsrService {
         mimeType: mimeType,
         jsonCustomParamNames: jsonCustomParamNames,
         method: method,
+        cancelToken: cancelToken,
       );
 
       stopwatch.stop();
       _captureResponseDiagnostics(response);
       final parsed = _parseResponse(response.data);
 
-      await AppLogService.info('AsrService',
-          '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
+      await AppLogService.info(
+        'AsrService',
+        '转写完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
+      );
       return AsrResult(
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -552,6 +622,7 @@ class AsrService {
       );
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
+      if (CancelToken.isCancel(e)) rethrow;
       throwWrappedDioException(e);
     }
   }
@@ -561,7 +632,10 @@ class AsrService {
   /// The provider downloads the audio server-side, avoiding client-side
   /// file size limits entirely. Supported by Together AI (up to 1 GB),
   /// Groq (up to 100 MB), xAI (up to 500 MB), etc.
-  Future<AsrResult> transcribeFromUrl(String audioUrl) async {
+  Future<AsrResult> transcribeFromUrl(
+    String audioUrl, {
+    CancelToken? cancelToken,
+  }) async {
     await AppLogService.info('AsrService', '开始转写 (URL): $audioUrl');
 
     if (config.host.isEmpty) {
@@ -594,17 +668,18 @@ class AsrService {
       final response = await _dio.post(
         config.transcribeUrl,
         data: jsonEncode(sharedParams),
-        options: Options(
-          headers: {'Content-Type': 'application/json'},
-        ),
+        options: Options(headers: {'Content-Type': 'application/json'}),
+        cancelToken: cancelToken,
       );
 
       stopwatch.stop();
       _captureResponseDiagnostics(response);
       final parsed = _parseResponse(response.data);
 
-      await AppLogService.info('AsrService',
-          '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
+      await AppLogService.info(
+        'AsrService',
+        '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
+      );
       return AsrResult(
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -615,6 +690,7 @@ class AsrService {
       );
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
+      if (CancelToken.isCancel(e)) rethrow;
       throwWrappedDioException(e);
     }
   }
@@ -632,12 +708,8 @@ class AsrService {
 
   /// Build the shared request parameters (model, language, response_format,
   /// temperature, etc.) as a JSON-compatible map.
-  Map<String, dynamic> _buildSharedParams({
-    Set<String>? jsonCustomParamNames,
-  }) {
-    final params = <String, dynamic>{
-      'model': config.model,
-    };
+  Map<String, dynamic> _buildSharedParams({Set<String>? jsonCustomParamNames}) {
+    final params = <String, dynamic>{'model': config.model};
 
     final tc = config.typeConfig;
 
@@ -706,7 +778,10 @@ class AsrService {
   /// Transcribe a large WAV file by chunking, transcribing each chunk,
   /// and concatenating results.
   Future<AsrResult> _transcribeChunked(
-      Uint8List wavBytes, String audioFormat) async {
+    Uint8List wavBytes,
+    String audioFormat, {
+    CancelToken? cancelToken,
+  }) async {
     // Map chunking config string to enum
     final chunkMethod = switch (config.chunking) {
       'silence' => AudioChunkMethod.silence,
@@ -729,7 +804,9 @@ class AsrService {
     final chunks = chunker.chunk(wavBytes, chunkMethod);
 
     await AppLogService.info(
-        'AsrService', '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)');
+      'AsrService',
+      '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)',
+    );
 
     final texts = <String>[];
     final segments = <AsrTranscriptSegment>[];
@@ -770,6 +847,7 @@ class AsrService {
           fileName: fileName,
           mimeType: mimeType,
           jsonCustomParamNames: jsonCustomParamNames,
+          cancelToken: cancelToken,
         );
         _captureResponseDiagnostics(response);
         final result = _parseResponse(response.data);
@@ -777,35 +855,44 @@ class AsrService {
           texts.add(result.text);
         }
         for (final segment in result.segments ?? const []) {
-          segments.add(AsrTranscriptSegment(
-            startSeconds: segment.startSeconds == null
-                ? null
-                : segment.startSeconds! + chunkOffset,
-            endSeconds: segment.endSeconds == null
-                ? null
-                : segment.endSeconds! + chunkOffset,
-            text: segment.text,
-          ));
+          segments.add(
+            AsrTranscriptSegment(
+              startSeconds: segment.startSeconds == null
+                  ? null
+                  : segment.startSeconds! + chunkOffset,
+              endSeconds: segment.endSeconds == null
+                  ? null
+                  : segment.endSeconds! + chunkOffset,
+              text: segment.text,
+            ),
+          );
         }
         for (final word in result.words ?? const []) {
-          words.add(AsrTranscriptSegment(
-            startSeconds: word.startSeconds == null
-                ? null
-                : word.startSeconds! + chunkOffset,
-            endSeconds:
-                word.endSeconds == null ? null : word.endSeconds! + chunkOffset,
-            text: word.text,
-          ));
+          words.add(
+            AsrTranscriptSegment(
+              startSeconds: word.startSeconds == null
+                  ? null
+                  : word.startSeconds! + chunkOffset,
+              endSeconds: word.endSeconds == null
+                  ? null
+                  : word.endSeconds! + chunkOffset,
+              text: word.text,
+            ),
+          );
         }
         await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
-      } on Exception catch (e) {
-        // Keep response diagnostics for the last failed chunk so the error
-        // detail dialog shows the actual API response.
-        if (e is DioException) {
-          _captureDioExceptionDiagnostics(e);
-        }
+      } on DioException catch (e) {
+        if (CancelToken.isCancel(e)) rethrow;
+        _captureDioExceptionDiagnostics(e);
         await AppLogService.warning(
-            'AsrService', '切块 $i/${chunks.length} 转写失败: $e');
+          'AsrService',
+          '切块 $i/${chunks.length} 转写失败: $e',
+        );
+      } on Exception catch (e) {
+        await AppLogService.warning(
+          'AsrService',
+          '切块 $i/${chunks.length} 转写失败: $e',
+        );
       }
     }
 
@@ -838,6 +925,7 @@ class AsrService {
     required DioMediaType? mimeType,
     required Set<String> jsonCustomParamNames,
     AudioUploadMethod? method,
+    CancelToken? cancelToken,
   }) async {
     final effectiveMethod = method ?? config.uploadMethod;
     final diagnosticFields = Map<String, dynamic>.from(sharedParams);
@@ -845,8 +933,9 @@ class AsrService {
     switch (effectiveMethod) {
       case AudioUploadMethod.multipart:
         final multipartParams = Map<String, dynamic>.from(sharedParams);
-        final timestampGranularities =
-            multipartParams.remove('timestamp_granularities');
+        final timestampGranularities = multipartParams.remove(
+          'timestamp_granularities',
+        );
         if (timestampGranularities is List) {
           multipartParams['timestamp_granularities[]'] = timestampGranularities;
         }
@@ -871,6 +960,7 @@ class AsrService {
         return _dio.post(
           config.transcribeUrl,
           data: formData,
+          cancelToken: cancelToken,
         );
 
       case AudioUploadMethod.base64Json:
@@ -884,9 +974,8 @@ class AsrService {
         return _dio.post(
           config.transcribeUrl,
           data: jsonEncode(sharedParams),
-          options: Options(
-            headers: {'Content-Type': 'application/json'},
-          ),
+          options: Options(headers: {'Content-Type': 'application/json'}),
+          cancelToken: cancelToken,
         );
 
       case AudioUploadMethod.url:
@@ -1022,11 +1111,13 @@ class AsrService {
       if (text is! String || text.trim().isEmpty) continue;
       final start = segment['start'];
       final end = segment['end'];
-      segments.add(AsrTranscriptSegment(
-        startSeconds: start is num ? start.toDouble() : null,
-        endSeconds: end is num ? end.toDouble() : null,
-        text: text,
-      ));
+      segments.add(
+        AsrTranscriptSegment(
+          startSeconds: start is num ? start.toDouble() : null,
+          endSeconds: end is num ? end.toDouble() : null,
+          text: text,
+        ),
+      );
     }
     return segments;
   }
@@ -1051,11 +1142,13 @@ class AsrService {
           .replaceAll(RegExp(r'<[^>]*>'), '')
           .trim();
       if (text.isEmpty) continue;
-      segments.add(AsrTranscriptSegment(
-        startSeconds: _parseSubtitleTime(match.group(1)!),
-        endSeconds: _parseSubtitleTime(match.group(2)!),
-        text: text,
-      ));
+      segments.add(
+        AsrTranscriptSegment(
+          startSeconds: _parseSubtitleTime(match.group(1)!),
+          endSeconds: _parseSubtitleTime(match.group(2)!),
+          text: text,
+        ),
+      );
     }
     return segments;
   }
@@ -1068,13 +1161,12 @@ class AsrService {
     return hours * 3600 + minutes * 60 + seconds;
   }
 
-  String? _formatSubtitle(
-    List<AsrTranscriptSegment> segments,
-    String format,
-  ) {
+  String? _formatSubtitle(List<AsrTranscriptSegment> segments, String format) {
     final timedSegments = segments
-        .where((segment) =>
-            segment.startSeconds != null && segment.endSeconds != null)
+        .where(
+          (segment) =>
+              segment.startSeconds != null && segment.endSeconds != null,
+        )
         .toList();
     if (timedSegments.isEmpty) return null;
 
@@ -1113,6 +1205,46 @@ class AsrService {
 // ============================================================================
 // Factory Functions
 // ============================================================================
+
+/// Resolve the provider-level upload mode used by standalone and task-flow ASR.
+AudioUploadMethod asrUploadMethodFromProviderTypeConfig(
+  Map<String, dynamic> providerTypeConfig,
+) {
+  final value = providerTypeConfig['uploadMethod'];
+  return AudioUploadMethod.values.firstWhere(
+    (method) => method.name == value,
+    orElse: () => AudioUploadMethod.multipart,
+  );
+}
+
+/// Build the ASR service config from the selected model and its provider.
+///
+/// Request options belong to the model, while upload and audio processing
+/// options belong to the provider. Both the standalone ASR page and task-flow
+/// use this mapping so identical selections produce identical requests.
+AsrConfig createAsrConfigFromProviderModel({
+  required String host,
+  required String apiKey,
+  required ModelConfig model,
+  required Map<String, dynamic> providerTypeConfig,
+}) {
+  final maxFileSizeMb = providerTypeConfig['maxFileSizeMb'];
+  return AsrConfig(
+    host: host,
+    apiKey: apiKey,
+    model: model.modelId,
+    typeConfig: Map<String, dynamic>.from(model.typeConfig),
+    customParams: model.customParams.map((param) => param.copy()).toList(),
+    uploadMethod: asrUploadMethodFromProviderTypeConfig(providerTypeConfig),
+    maxFileSizeBytes: maxFileSizeMb is num
+        ? (maxFileSizeMb * 1024 * 1024).toInt()
+        : AsrConfig.defaultMaxAudioFileSizeBytes,
+    preprocessing: providerTypeConfig['preprocessing'] as String? ?? 'none',
+    compression: providerTypeConfig['compression'] as String? ?? 'none',
+    chunking: providerTypeConfig['chunking'] as String? ?? 'none',
+    fallbackMethod: providerTypeConfig['fallbackMethod'] as String? ?? 'none',
+  );
+}
 
 /// Create an [AsrService] from provider configuration fields.
 AsrService createAsrServiceFromConfig({
