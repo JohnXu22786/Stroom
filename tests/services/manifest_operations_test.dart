@@ -698,10 +698,10 @@ void main() {
 
       await expectLater(FileManifest.addRecord(record), throwsA(same(failure)));
 
-      expect(
-          (await FileManifest.loadRecords()).map((row) => row.id),
+      expect((await FileManifest.loadRecords()).map((row) => row.id),
           equals([existingRecord.id]),
-          reason: 'a failed add must not remain visible through the record cache');
+          reason:
+              'a failed add must not remain visible through the record cache');
       final failedRows = await ManifestDatabase.getAllAudioRecords();
       expect(failedRows.any((row) => row['id'] == record.id), isFalse,
           reason: 'a failed add must not remain persisted as a record');
