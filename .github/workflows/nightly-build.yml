@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p test-reports
-          xvfb-run flutter test -d linux integration_test/ --reporter expanded 2>&1 | tee test-reports/integration-test.log
+          xvfb-run flutter test -d linux integration_test/ --reporter expanded --verbose 2>&1 | tee test-reports/integration-test.log
       - name: Upload integration test reports
         if: always()
         uses: actions/upload-artifact@v4

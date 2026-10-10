@@ -590,8 +590,10 @@ class DataMigrationService {
             final transformed = kIsWeb
                 ? await json_parser.migrateLegacyConversationsWeb(raw,
                     canonical: true)
-                : await data_migration_isolate
-                    .runInIsolate(() => _canonicalizeConversations(raw));
+                : _isFlutterTest
+                    ? _canonicalizeConversations(raw)
+                    : await data_migration_isolate
+                        .runInIsolate(() => _canonicalizeConversations(raw));
             if (transformed['parseError'] != null) {
               throw FormatException(transformed['parseError'] as String);
             }

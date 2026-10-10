@@ -44,16 +44,16 @@ void main() {
       events.clear();
       key.currentState!.send({'type': 'search', 'query': query});
       await waitFor(
-          () => events.any((e) =>
-              e['type'] == 'searchResults' && e['query'] == query),
+          () => events
+              .any((e) => e['type'] == 'searchResults' && e['query'] == query),
           'The native document must return search results for $query');
       return events.lastWhere((e) =>
-          e['type'] == 'searchResults' && e['query'] == query)['matches']
+              e['type'] == 'searchResults' && e['query'] == query)['matches']
           as List<dynamic>;
     }
 
-    await tester.pumpWidget(render(
-        '**native smoke**\n\n```dart\nfinal value = 1;\n```'));
+    await tester.pumpWidget(
+        render('**native smoke**\n\n```dart\nfinal value = 1;\n```'));
     await waitFor(() => events.any((e) => e['type'] == 'ready'),
         'The bundled document must initialize its real WebView bridge');
     final matches = await search('native smoke');

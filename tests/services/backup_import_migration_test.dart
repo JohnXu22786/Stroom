@@ -384,13 +384,16 @@ void main() {
       });
       await BackupService.restoreFromBytesForTest(backupBytes);
 
-      // Should not throw and per-part versions should remain current
+      // Missing chat data leaves its legacy version unchanged. Only restored
+      // categories advance to the current version.
       final prefs = await SharedPreferences.getInstance();
       final stored = await DataMigrationService.getStoredPartVersions();
       for (final entry in DataMigrationService.currentPartVersions.entries) {
+        if (entry.key == DataMigrationService.partChat) continue;
         expect(stored[entry.key], equals(entry.value),
             reason: 'part ${entry.key}');
       }
+      expect(stored[DataMigrationService.partChat], equals(1));
       expect(prefs.containsKey('data_format_version'), isFalse,
           reason: '旧全局 key 迁移后退役');
     });
