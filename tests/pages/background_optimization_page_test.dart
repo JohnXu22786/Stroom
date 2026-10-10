@@ -963,11 +963,14 @@ void main() {
     });
 
     testWidgets(
-        'keeps desktop close-minimize switch at the saved value when persistence fails',
+        'keeps saved close behavior when the desktop preference write fails',
         (tester) async {
       registerMockPlatform();
       DesktopAppService.instance.resetForTesting();
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      final originalExitApp = DesktopAppService.exitApp;
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
       try {
         final prefs = await SharedPreferences.getInstance();
         final originalStore = SharedPreferencesStorePlatform.instance;
@@ -987,6 +990,23 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
+        final windowCalls = <MethodCall>[];
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('window_manager'),
+          (MethodCall call) async {
+            windowCalls.add(call);
+            return true;
+          },
+        );
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('tray_manager'),
+          (MethodCall call) async => true,
+        );
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        expect(DesktopAppService.instance.isTrayReady, isTrue);
+
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
@@ -996,9 +1016,24 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
-        await prefs.reload();
+
+        // A close must use the same live SharedPreferences cache as the
+        // failed write; reloading here would mask a stale cached false value.
+        DesktopAppService.instance.onWindowClose();
+        await tester.pump(const Duration(milliseconds: 20));
+
+        expect(
+          windowCalls.where((call) => call.method == 'hide'),
+          hasLength(1),
+        );
+        expect(
+          windowCalls.where((call) => call.method == 'destroy'),
+          isEmpty,
+        );
+        expect(exitCodes, isEmpty);
         expect(prefs.getBool('desktop_close_minimize'), isTrue);
       } finally {
+        DesktopAppService.exitApp = originalExitApp;
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.instance.resetForTesting();
       }
