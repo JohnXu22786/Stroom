@@ -1,10 +1,60 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('MermaidRenderWidget - bundled JavaScript loading', () {
+    test('concurrent callers await the shared bundled asset load', () async {
+      final assetBytes = await rootBundle.load(
+        MermaidRenderWidget.bundledMermaidJsAsset,
+      );
+      final assetLoad = Completer<ByteData>();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var assetLoadCount = 0;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final assetKey = utf8.decode(
+          message!.buffer.asUint8List(
+            message.offsetInBytes,
+            message.lengthInBytes,
+          ),
+        );
+        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+          return null;
+        }
+        assetLoadCount++;
+        return assetLoad.future;
+      });
+      addTearDown(() {
+        messenger.setMockMessageHandler('flutter/assets', null);
+      });
+
+      final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
+      final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
+      await Future<void>.delayed(Duration.zero);
+      assetLoad.complete(assetBytes);
+
+      final loadedSources = await Future.wait([firstLoad, secondLoad]);
+      expect(loadedSources, hasLength(2));
+      expect(loadedSources.first, isNotNull);
+      expect(
+        identical(loadedSources.last, loadedSources.first),
+        isTrue,
+        reason: 'concurrent callers should receive the shared loaded source',
+      );
+      expect(assetLoadCount, 1);
+    });
+  });
 
   group('MermaidRenderWidget - buildMermaidHtml', () {
     test('replaces MERMAID_CODE_PLACEHOLDER with escaped code', () {
@@ -506,6 +556,186 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets(
+        'toolbar zoom continues from the JS-fitted zoom without a transform handler',
+        (tester) async {
+      final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      // The web template's fitToViewport changes zoom in JavaScript. The
+      // unavailable addJavaScriptHandler leaves Flutter's zoom at 1.0.
+      webView.controller.simulateJsFitToViewport(0.45);
+
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      expect(webView.controller.zoomLevel, closeTo(0.55, 0.0001));
+      expect(html, contains('var zoomLevel = 1;'));
+      expect(
+        webView.controller.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.setZoom(window.zoomLevel + 0.1'))),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'Ctrl+wheel zoom requires vertical input and does not scroll parent',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      final scrollController = ScrollController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                children: [
+                  const SizedBox(height: 100),
+                  const MermaidRenderWidget(
+                    mermaidCode: 'graph TD\nA-->B',
+                    height: 200,
+                    showToolbar: false,
+                  ),
+                  const SizedBox(height: 1000),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Let the widget's asset-load continuation run outside fake test time.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+      final webView = platform.webView!;
+      final fakeController = webView.controller;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        fakeController,
+      );
+      webView.params.onWebViewCreated!(controller);
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      int zoomCallCount() => fakeController.evaluatedScripts
+          .where((script) => script.contains('window.setZoom'))
+          .length;
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(find.byType(MermaidRenderWidget)),
+          kind: PointerDeviceKind.mouse,
+          scrollDelta: const Offset(20, 0),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        zoomCallCount(),
+        0,
+        reason:
+            'Ctrl+horizontal-only wheel should not zoom the Mermaid diagram',
+      );
+
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(find.byType(MermaidRenderWidget)),
+          kind: PointerDeviceKind.mouse,
+          scrollDelta: const Offset(0, 20),
+        ),
+      );
+      await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      expect(
+        zoomCallCount(),
+        1,
+        reason: 'Ctrl+wheel should still zoom the Mermaid diagram',
+      );
+      expect(
+        scrollController.offset,
+        closeTo(0, 0.1),
+        reason: 'the same Ctrl+wheel event must not scroll the parent',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      scrollController.dispose();
+    });
+
+    testWidgets(
+      'web view creation removes the Flutter loading overlay without onLoadStop',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 400));
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        // The iframe manages its own render progress, so the Flutter overlay
+        // must be removed as soon as the WebView is created. This deliberately
+        // does not send onLoadStop.
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
@@ -868,4 +1098,83 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+class _MermaidWebViewPlatform extends InAppWebViewPlatform {
+  _MermaidWebView? webView;
+
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+          PlatformInAppWebViewWidgetCreationParams params) =>
+      webView = _MermaidWebView(params);
+}
+
+class _MermaidWebView extends PlatformInAppWebViewWidget {
+  final controller = _MermaidWebViewController();
+
+  _MermaidWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
+}
+
+class _MermaidWebViewController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+  double zoomLevel = 1.0;
+
+  void simulateJsFitToViewport(double fittedZoom) {
+    zoomLevel = fittedZoom;
+  }
+
+  _MermaidWebViewController()
+      : super.implementation(
+            const PlatformInAppWebViewControllerCreationParams(id: 0));
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  void addJavaScriptHandler({
+    required String handlerName,
+    required JavaScriptHandlerCallback callback,
+  }) =>
+      throw UnimplementedError('JavaScript handlers are unavailable on web');
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {
+    evaluatedScripts.add(source);
+    final relativeZoom = RegExp(
+      r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
+    ).firstMatch(source);
+    if (relativeZoom != null) {
+      zoomLevel = (zoomLevel + double.parse(relativeZoom.group(1)!))
+          .clamp(0.1, 10.0)
+          .toDouble();
+      return;
+    }
+
+    final absoluteZoom =
+        RegExp(r'window\.setZoom\((-?\d+(?:\.\d+)?),').firstMatch(source);
+    if (absoluteZoom != null) {
+      zoomLevel =
+          double.parse(absoluteZoom.group(1)!).clamp(0.1, 10.0).toDouble();
+    }
+  }
+
+  @override
+  void dispose({bool isKeepAlive = false}) {}
 }

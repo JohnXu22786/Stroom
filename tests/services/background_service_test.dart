@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart';
 
 /// A mock implementation of FlutterBackgroundServicePlatform for testing
@@ -14,6 +15,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  bool _deferStopCompletion = false;
+  bool _stopRequested = false;
+  final Set<int> _throwOnCheckCalls = {};
+  int _serviceRunningCheckCount = 0;
 
   /// The last AndroidConfiguration passed to [configure], captured so tests
   /// can assert the foreground service type wiring.
@@ -39,6 +44,21 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
     _throwOnCheck = shouldThrow;
   }
 
+  void deferStopCompletion() {
+    _deferStopCompletion = true;
+  }
+
+  void completeDelayedStop() {
+    if (!_stopRequested) {
+      throw StateError('No stop request is pending.');
+    }
+    _isRunning = false;
+  }
+
+  void setThrowOnCheckCalls(Set<int> calls) {
+    _throwOnCheckCalls.addAll(calls);
+  }
+
   @override
   Future<bool> configure({
     required IosConfiguration iosConfiguration,
@@ -59,7 +79,9 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   @override
   Future<bool> isServiceRunning() async {
-    if (_throwOnCheck) {
+    _serviceRunningCheckCount++;
+    if (_throwOnCheck ||
+        _throwOnCheckCalls.contains(_serviceRunningCheckCount)) {
       throw 'Simulated check error';
     }
     return _isRunning;
@@ -68,7 +90,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   @override
   void invoke(String method, [Map<String, dynamic>? args]) {
     if (method == 'stopService') {
-      _isRunning = false;
+      _stopRequested = true;
+      if (!_deferStopCompletion) _isRunning = false;
     }
   }
 
@@ -78,8 +101,58 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   }
 }
 
+class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingEnabledPreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.background_service_enabled') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _FailingDesktopCloseMinimizePreferenceStore
+    extends InMemorySharedPreferencesStore {
+  _FailingDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.desktop_close_minimize') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
+    SharedPreferences preferences) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
+    'flutter.background_service_enabled': false,
+  });
+  await preferences.reload();
+  return originalStore;
+}
+
+Future<SharedPreferencesStorePlatform>
+    _rejectDesktopCloseMinimizePreferenceWrites(
+        SharedPreferences preferences) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance =
+      _FailingDesktopCloseMinimizePreferenceStore({
+    'flutter.desktop_close_minimize': true,
+  });
+  await preferences.reload();
+  return originalStore;
+}
+
 /// Records method calls made on the keep-alive method channel.
 final List<MethodCall> keepAliveCalls = [];
+bool keepAliveSchedulingResult = true;
 
 /// Registers a mock background service platform for testing and returns it.
 MockBackgroundServicePlatform registerMockPlatform() {
@@ -102,17 +175,19 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    // The in-process user choice must not leak between test cases.
+    resetBackgroundServiceLifecycleStateForTesting();
     SharedPreferences.setMockInitialValues({});
     keepAliveCalls.clear();
-    // Set up a mock MethodChannel handler for the keep-alive channel
-    // so that fire-and-forget invokeMethod calls don't create pending
-    // platform channel calls that fail the test after completion.
+    keepAliveSchedulingResult = true;
+    // Set up a mock MethodChannel handler so keep-alive calls complete with
+    // the result selected by each test.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.johntsui.stroom/keepalive'),
       (MethodCall methodCall) async {
         keepAliveCalls.add(methodCall);
-        return true;
+        return keepAliveSchedulingResult;
       },
     );
   });
@@ -206,6 +281,41 @@ void main() {
       }
     });
 
+    test(
+        'failed persistent start cannot rely on in-process intent after process death',
+        () async {
+      final mock = registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+
+        // A process-only explicit choice must not be what makes this look
+        // recoverable after a cold start.
+        resetBackgroundServiceLifecycleStateForTesting();
+        mock.setServiceRunning(false);
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'a failed persistent start must not arm a watchdog behind a '
+            'false enabled preference',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
+    });
+
     test('restoreBackgroundServiceOnColdStart does nothing when pref is false',
         () async {
       final mock = registerMockPlatform();
@@ -290,8 +400,28 @@ void main() {
     test('desktop close-minimize toggle defaults to enabled and persists',
         () async {
       expect(await isDesktopCloseMinimizeEnabled(), isTrue);
-      await setDesktopCloseMinimizeEnabled(false);
+      await expectLater(
+        setDesktopCloseMinimizeEnabled(false),
+        completion(isTrue),
+      );
       expect(await isDesktopCloseMinimizeEnabled(), isFalse);
+    });
+
+    test('desktop close-minimize reports a rejected preference write',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore =
+          await _rejectDesktopCloseMinimizePreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await expectLater(
+        setDesktopCloseMinimizeEnabled(false),
+        completion(isFalse),
+      );
+      await prefs.reload();
+      expect(prefs.getBool('desktop_close_minimize'), isTrue);
     });
 
     test('isDesktopPlatform reflects the target platform', () {
@@ -325,6 +455,53 @@ void main() {
       // later process death still triggers cold-start restore.
       expect(prefs.getBool('background_service_enabled'), isTrue);
     });
+
+    test('restart timeout arms watchdog when the stop request completes late',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..deferStopCompletion();
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        mock.completeDelayedStop();
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'the late stop must not leave a persistently enabled service '
+            'without watchdog recovery armed',
+      );
+    });
+
+    test(
+        'restartBackgroundService preserves a running service when enabled write is rejected',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
   });
 
   group('BackgroundService - keep-alive watchdog wiring', () {
@@ -347,6 +524,263 @@ void main() {
         keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
         isTrue,
         reason: 'starting the service must arm the native keep-alive alarm',
+      );
+    });
+
+    test(
+        'startBackgroundService reports watchdog scheduling failure without disabling the service',
+        () async {
+      final mock = registerMockPlatform();
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isTrue,
+      );
+    });
+
+    test(
+        'failed persistent start schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a failed persistent start must leave a later watchdog retry',
+      );
+    });
+
+    test(
+        'persistent start exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setThrowOnStart(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a persistent start exception must leave a watchdog retry',
+      );
+    });
+
+    test(
+        'persistent running check exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      registerMockPlatform()..setThrowOnCheck(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason:
+            'a persistent running check exception must leave a watchdog retry',
+      );
+    });
+
+    test(
+        'pending stop running check exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2, 3});
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason:
+            'a pending-stop running check exception must leave a watchdog retry',
+      );
+    });
+
+    test('failed temporary start does not arm the watchdog', () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('successful temporary start does not arm the watchdog', () async {
+      registerMockPlatform();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('temporary start exception does not arm the watchdog', () async {
+      final mock = registerMockPlatform()..setThrowOnStart(true);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('temporary running check exception does not arm the watchdog',
+        () async {
+      registerMockPlatform()..setThrowOnCheck(true);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('failed persistent start respects a disabled watchdog', () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', false);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
+        'failed persistent start does not call the watchdog channel off Android',
+        () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
+        'restartBackgroundService reports watchdog scheduling failure while preserving enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+
+    test('failed restart schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a failed restart must leave a later watchdog retry',
+      );
+    });
+
+    test(
+        'restart exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnStart(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a restart exception must leave a watchdog retry',
       );
     });
 
@@ -478,6 +912,86 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume reports watchdog scheduling failure',
+        () async {
+      registerMockPlatform();
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
+      final loggedMessages = <String>[];
+      final originalDebugPrint = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) loggedMessages.add(message);
+      };
+
+      try {
+        await withAndroidPlatform(() async {
+          await rearmKeepAliveOnResume();
+        });
+      } finally {
+        debugPrint = originalDebugPrint;
+      }
+
+      expect(
+        loggedMessages,
+        contains(
+            '[BackgroundService] Android did not schedule the keep-alive alarm.'),
+      );
+    });
+
+    test(
+        'resume does not re-arm watchdog after persistent start write is rejected',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('resume does not re-arm after explicit stop despite rejected writes',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        expect(await stopBackgroundService(), isTrue);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isTrue,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
     });
 
     test(

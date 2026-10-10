@@ -43,6 +43,7 @@ const _serviceStopWaitTimeout = Duration(seconds: 5);
 const _serviceStopPollInterval = Duration(milliseconds: 50);
 
 Future<void> _serviceLifecycleQueue = Future<void>.value();
+Completer<void>? _desktopCloseMinimizeWriteQueue;
 // Null means this process has no explicit service choice; otherwise prefer
 // the user's latest choice over a stale preference value.
 bool? _explicitUserEnabledInProcess;
@@ -198,40 +199,64 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 /// 启动后台服务。
 ///
-/// 返回 `true` 表示服务已启动（或已在运行），`false` 表示启动失败。
+/// 返回 `true` 表示服务已启动（或已在运行），且持久启动所需的看门狗已调度。
+/// 持久启动时若 Android 看门狗调度失败，返回 `false`，但保留已运行的
+/// 服务和持久启用状态，以便后续恢复事件再次尝试调度。
 /// [persistEnabled] controls whether this start records a persistent user choice.
 /// 失败原因已记录日志。
 Future<bool> startBackgroundService({bool persistEnabled = true}) =>
     _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '启动后台服务');
       try {
+        // Persist explicit user intent before starting the service. Otherwise
+        // a successful start could depend only on process memory if this write
+        // fails, and neither cold-start restore nor the native watchdog could
+        // recover it after process death.
+        if (persistEnabled) {
+          if (!await _setServiceEnabledPreference(true)) return false;
+          _explicitUserEnabledInProcess = true;
+        }
         // Android 13+ 上通知权限决定前台服务通知是否可见。
         // 权限被拒绝时服务仍能启动（仅通知不可见），因此请求失败不阻塞。
         await _requestNotificationPermissionIfNeeded();
 
         final service = FlutterBackgroundService();
-        if (_serviceStopMayBePending) {
-          await _requestServiceStopAndWait(service);
+        bool serviceRunning;
+        try {
+          if (_serviceStopMayBePending) {
+            await _requestServiceStopAndWait(service);
+          }
+          serviceRunning = await service.isRunning();
+        } catch (_) {
+          // Preserve recovery for an explicitly enabled service even when its
+          // current running state cannot be checked or reconciled.
+          if (persistEnabled) await _enableKeepAlive();
+          rethrow;
         }
-        if (!await service.isRunning()) {
-          final started = await service.startService();
+        if (!serviceRunning) {
+          bool started;
+          try {
+            started = await service.startService();
+          } catch (_) {
+            if (persistEnabled) await _enableKeepAlive();
+            rethrow;
+          }
           if (started) {
             await AppLogService.info('BackgroundService', '后台服务已启动');
           } else {
             await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
+            // Preserve a recovery path for persistent user intent even when
+            // this start failed. Temporary starts must not create a watchdog.
+            if (persistEnabled) await _enableKeepAlive();
             return false;
           }
         }
-        // A temporary task-owned start must not opt into cold-start restoration.
+        // Activate the native AlarmManager keep-alive watchdog for persistent
+        // starts (only if the user has the watchdog toggle enabled).
         if (persistEnabled) {
-          // Preserve explicit user intent during this process even if storage
-          // cannot persist it. Automatic task cleanup must still respect it.
-          _explicitUserEnabledInProcess = true;
-          await _setServiceEnabledPreference(true);
+          final keepAliveScheduled = await _enableKeepAlive();
+          if (!keepAliveScheduled) return false;
         }
-        // Activate the native AlarmManager keep-alive watchdog (only if
-        // the user has the watchdog toggle enabled).
-        await _enableKeepAlive();
         return true;
       } catch (e) {
         debugPrint(
@@ -337,22 +362,41 @@ Future<void> _waitForServiceToStop(FlutterBackgroundService service) async {
 
 /// 重新启动后台服务。
 ///
-/// 返回 `true` 表示重启成功，`false` 表示启动失败。
+/// 返回 `false` 表示服务未能启动或必要的 Android 看门狗未能调度。
+/// 看门狗调度失败时，服务和持久启用状态仍保持开启。
 Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '重新启动后台服务');
       try {
+        // Record the user's choice before stopping the current instance so a
+        // failed preference write cannot turn a running service into a
+        // process-only start.
+        if (!await _setServiceEnabledPreference(true)) return false;
+        _explicitUserEnabledInProcess = true;
+
         final service = FlutterBackgroundService();
-        await _requestServiceStopAndWait(service);
-        final started = await service.startService();
+        try {
+          await _requestServiceStopAndWait(service);
+        } catch (_) {
+          // stopService is fire-and-forget, so a timeout can precede a late
+          // stop. Keep recovery armed for the persisted enabled intent.
+          await _enableKeepAlive();
+          rethrow;
+        }
+        bool started;
+        try {
+          started = await service.startService();
+        } catch (_) {
+          await _enableKeepAlive();
+          rethrow;
+        }
         if (!started) {
           await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
+          // The enabled preference is already saved, so leave the watchdog
+          // armed to retry recovery after this failed restart.
+          await _enableKeepAlive();
           return false;
         }
-        // 重启后保持持久化状态与看门狗一致，防止重启过程中
-        // 系统杀进程导致状态漂移（例如 enabled 标记丢失）。
-        _explicitUserEnabledInProcess = true;
-        await _setServiceEnabledPreference(true);
-        await _enableKeepAlive();
+        if (!await _enableKeepAlive()) return false;
         await AppLogService.info('BackgroundService', '后台服务已重新启动');
         return true;
       } catch (e) {
@@ -392,9 +436,9 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!await isColdStartRestoreEnabled()) return;
 
   try {
-    final wasEnabled =
-        (await StartupPreferences.getBool(_backgroundServiceEnabledKey)) ??
-            false;
+    final wasEnabled = await _isBackgroundServiceEnabled(
+      assumeEnabledOnReadError: false,
+    );
     if (!wasEnabled) return;
 
     try {
@@ -417,18 +461,22 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
 }
 
 /// Persists the background service enabled state to SharedPreferences.
-Future<void> _setServiceEnabledPreference(bool enabled) async {
+Future<bool> _setServiceEnabledPreference(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setBool(_backgroundServiceEnabledKey, enabled);
     if (!saved) throw StateError('SharedPreferences rejected service state.');
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to save service enabled state: $e');
     await AppLogService.error('BackgroundService', '保存后台服务启用状态失败', e);
+    return false;
   }
 }
 
-Future<bool> _isBackgroundServiceEnabled() async {
+Future<bool> _isBackgroundServiceEnabled({
+  bool assumeEnabledOnReadError = true,
+}) async {
   final inProcessChoice = _explicitUserEnabledInProcess;
   if (inProcessChoice != null) return inProcessChoice;
   try {
@@ -437,7 +485,7 @@ Future<bool> _isBackgroundServiceEnabled() async {
   } catch (_) {
     // Automatic task cleanup must not stop a service if the user's preference
     // could not be read.
-    return true;
+    return assumeEnabledOnReadError;
   }
 }
 
@@ -516,20 +564,27 @@ Future<void> setBatteryReminderEnabled(bool enabled) async {
 /// deep Doze), otherwise it degrades to setAndAllowWhileIdle /
 /// setInexactRepeating.
 ///
-/// This is a fire-and-forget call — failures are logged but not
-/// propagated since keep-alive is a best-effort enhancement.
-Future<void> _enableKeepAlive() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  if (!await isWatchdogEnabled()) return;
+/// Returns `false` when Android does not confirm that the alarm was scheduled.
+/// Non-Android platforms and a disabled watchdog do not require an alarm.
+Future<bool> _enableKeepAlive() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  if (!await isWatchdogEnabled()) return true;
   try {
     // await：invokeMethod 的失败是异步抛出的，不 await 会变成
     // 未处理的异步异常（每次冷启动/恢复前台都会触发）。
     // 超时保护：平台通道卡死时不能阻塞启动/恢复流程。
-    await _keepAliveChannel
-        .invokeMethod('startKeepAlive')
+    final scheduled = await _keepAliveChannel
+        .invokeMethod<bool>('startKeepAlive')
         .timeout(_keepAliveChannelTimeout);
+    if (scheduled != true) {
+      debugPrint(
+          '[BackgroundService] Android did not schedule the keep-alive alarm.');
+      return false;
+    }
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
+    return false;
   }
 }
 
@@ -542,9 +597,13 @@ Future<void> _rearmKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   if (!await isWatchdogEnabled()) return;
   try {
-    await _keepAliveChannel
-        .invokeMethod('rearmKeepAlive')
+    final scheduled = await _keepAliveChannel
+        .invokeMethod<bool>('rearmKeepAlive')
         .timeout(_keepAliveChannelTimeout);
+    if (scheduled != true) {
+      debugPrint(
+          '[BackgroundService] Android did not schedule the keep-alive alarm.');
+    }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive alarm: $e');
   }
@@ -645,9 +704,9 @@ Future<void> requestScheduleExactAlarm() async {
 Future<void> rearmKeepAliveOnResume() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final serviceEnabled = prefs.getBool(_backgroundServiceEnabledKey) ?? false;
-    if (!serviceEnabled) return;
+    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: false)) {
+      return;
+    }
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
     // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
     // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部
@@ -678,6 +737,14 @@ bool isDesktopPlatform() {
 Future<bool> isDesktopCloseMinimizeEnabled() async {
   try {
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences changes its cache before the backing-store write
+    // completes. Close handling must wait for any in-flight update (including
+    // its failure rollback) before choosing whether to quit or minimize.
+    while (true) {
+      final pendingWrite = _desktopCloseMinimizeWriteQueue;
+      if (pendingWrite == null) break;
+      await pendingWrite.future;
+    }
     return prefs.getBool(_desktopCloseMinimizeKey) ?? true;
   } catch (_) {
     return true;
@@ -685,9 +752,32 @@ Future<bool> isDesktopCloseMinimizeEnabled() async {
 }
 
 /// Enables or disables the desktop "minimize on close" behavior.
-Future<void> setDesktopCloseMinimizeEnabled(bool enabled) async {
+Future<bool> setDesktopCloseMinimizeEnabled(bool enabled) async {
+  final previousWrite = _desktopCloseMinimizeWriteQueue?.future;
+  final writeComplete = Completer<void>();
+  _desktopCloseMinimizeWriteQueue = writeComplete;
   try {
+    if (previousWrite != null) await previousWrite;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_desktopCloseMinimizeKey, enabled);
-  } catch (_) {}
+    final previousValue = prefs.getBool(_desktopCloseMinimizeKey) ?? true;
+    var saved = false;
+    try {
+      saved = await prefs.setBool(_desktopCloseMinimizeKey, enabled);
+    } catch (_) {}
+    if (!saved) {
+      // SharedPreferences updates its in-memory cache before the store
+      // confirms the write. Restore the saved choice so close handling sees it.
+      try {
+        await prefs.setBool(_desktopCloseMinimizeKey, previousValue);
+      } catch (_) {}
+    }
+    return saved;
+  } catch (_) {
+    return false;
+  } finally {
+    writeComplete.complete();
+    if (identical(_desktopCloseMinimizeWriteQueue, writeComplete)) {
+      _desktopCloseMinimizeWriteQueue = null;
+    }
+  }
 }

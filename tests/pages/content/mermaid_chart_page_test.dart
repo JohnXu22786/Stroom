@@ -121,6 +121,57 @@ void main() {
       expect(textField.controller?.text, contains('Test'));
     });
 
+    testWidgets('manually editing the header updates snippet buttons',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      expect(find.text('添加节点'), findsOneWidget);
+      expect(find.text('添加参与者'), findsNothing);
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'sequenceDiagram\n  A->>B: Hello',
+      );
+      await tester.pump();
+
+      expect(find.text('添加节点'), findsNothing);
+      expect(find.text('添加参与者'), findsOneWidget);
+      expect(find.text('添加请求'), findsOneWidget);
+    });
+
+    testWidgets('frontmatter sequenceDiagram selects snippets and save label',
+        (tester) async {
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        '---\ntitle: Test\n---\nsequenceDiagram\n  A->>B: Hello',
+      );
+      await tester.pump();
+
+      expect(find.text('添加参与者'), findsOneWidget);
+      expect(find.text('添加节点'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      final savedRecord = records.lastWhere((record) => record.format == 'mmd');
+      expect(savedRecord.name, '我的图表-时序图');
+    });
+
     // ═══════════════════════════════════════════════════
     // Layout tests (edit mode only — no InAppWebView)
     // ═══════════════════════════════════════════════════
@@ -550,6 +601,24 @@ void main() {
       // The code should now contain the new node snippet
       final controller = tester.widget<TextField>(textField).controller;
       expect(controller?.text, contains('NewNode'));
+    });
+
+    testWidgets(
+        'snippet insertion preserves final line without trailing newline',
+        (tester) async {
+      const initialCode = 'graph TD\n  A[Start] --> B[End]';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = find.byType(TextField).first;
+      final controller = tester.widget<TextField>(textField).controller;
+      expect(
+        controller?.text,
+        'graph TD\n  A[Start] --> B[End]\n  NewNode[新节点]\n',
+      );
     });
 
     // ═══════════════════════════════════════════════════

@@ -156,6 +156,29 @@ jobs:
             echo "Some changed files lack dedicated test files. Add them or verify coverage via existing tests."
           fi
 
+  android-unit:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
+      - run: flutter pub get
+      - name: Set Flutter SDK path for Gradle
+        run: echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")" > android/local.properties
+      - name: Run watchdog scheduling regression test
+        run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
+
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
     name: Tests (${{ matrix.label }})

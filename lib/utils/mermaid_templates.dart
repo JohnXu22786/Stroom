@@ -353,8 +353,8 @@ class MermaidTemplates {
   element 认证服务 {
     type: Service
   }
-  用户登录 - satisfies - 登录页面
-  用户登录 - verifiedBy - 认证服务''';
+  用户登录 - satisfies -> 登录页面
+  用户登录 - verifiedBy -> 认证服务''';
   }
 
   // ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ class MermaidTemplates {
         return [
           ('添加阶段', '  section 新阶段'),
           ('添加任务', '  新任务 :2024-01-01, 7d'),
-          ('添加依赖任务', '  后续任务 :after 前序任务, 5d'),
+          ('添加依赖任务', '  后续任务 :after a1, 5d'),
           ('添加里程碑', '  里程碑 :milestone, 2024-01-15, 0d'),
         ];
       case 'pie':
@@ -448,10 +448,10 @@ class MermaidTemplates {
         return [
           ('添加需求', '  requirement 新需求 {\n    id: 1\n    text: 需求描述\n  }'),
           ('添加元素', '  element 新元素 {\n    type: UI\n  }'),
-          ('添加关联', '  需求A - satisfies - 元素B'),
+          ('添加关联', '  需求A - satisfies -> 元素B'),
           (
             '添加验证',
-            '  需求A - verifiedBy - 元素B',
+            '  需求A - verifiedBy -> 元素B',
           ),
         ];
       default:

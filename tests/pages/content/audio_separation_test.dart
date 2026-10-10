@@ -26,6 +26,29 @@ Widget _buildTestApp() {
   );
 }
 
+Widget _buildPageLauncher(BuildContext context) {
+  return Scaffold(
+    body: Center(
+      child: TextButton(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const AudioSeparationPage(
+                retryData: {
+                  'videos': [
+                    {'bytes': 'AQID', 'name': 'sample.avi', 'format': 'avi'},
+                  ],
+                },
+              ),
+            ),
+          );
+        },
+        child: const Text('Open audio separation'),
+      ),
+    ),
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -334,6 +357,30 @@ void main() {
     });
   });
 
+  group('AudioSeparationPage - supported input validation', () {
+    testWidgets('rejects unsupported formats before starting extraction', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Builder(
+              builder: _buildPageLauncher,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open audio separation'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('提取音频'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('暂不支持 AVI 格式'), findsOneWidget);
+      expect(find.text('视频音频分离'), findsOneWidget);
+    });
+  });
+
   group('AudioSeparationPage - unified order (app first, system second)', () {
     testWidgets(
       'video source panel shows app album BEFORE system album (Y-coordinate)',
@@ -454,7 +501,8 @@ void main() {
       expect(detectFormat('video.flv'), 'flv');
       expect(detectFormat('video.m4v'), 'm4v');
       expect(detectFormat('video.3gp'), '3gp');
-      expect(detectFormat('video.unknown'), 'mp4');
+      expect(detectFormat('video.unknown'), 'unknown');
+      expect(detectFormat('video'), '');
       expect(detectFormat(null), 'mp4');
     });
 

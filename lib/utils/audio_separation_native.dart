@@ -111,19 +111,45 @@ class AudioSeparationEngine {
   }
 
   /// Package audio frames into a playable format.
-  /// For raw PCM, wrap in WAV. For AAC, wrap in a valid M4A (MP4 container).
+  /// For PCM, wrap in WAV. For AAC, wrap in a valid M4A (MP4 container).
   Uint8List _packageFrames(List<_AudioFrame> frames, _AudioTrackInfo track) {
-    if (track.codec == 'raw ') {
+    if (track.codec == 'raw ' ||
+        track.codec == 'twos' ||
+        track.codec == 'sowt') {
       // PCM audio — concatenate frames and wrap in WAV
       final concatenated = BytesBuilder();
       for (final frame in frames) {
         concatenated.add(frame.data);
       }
+      final pcmBytes = concatenated.toBytes();
+      final bitsPerSample = track.bitsPerSample > 0 ? track.bitsPerSample : 16;
+      if (bitsPerSample == 8 &&
+          (track.codec == 'twos' || track.codec == 'sowt')) {
+        // QuickTime stores these PCM samples as signed; 8-bit WAV PCM is
+        // unsigned, so shift the sample range before writing the WAV.
+        for (var i = 0; i < pcmBytes.length; i++) {
+          pcmBytes[i] = pcmBytes[i] ^ 0x80;
+        }
+      } else if (track.codec == 'twos') {
+        // QuickTime 'twos' PCM stores each sample big-endian; WAV PCM is
+        // little-endian, so reverse the bytes within each sample.
+        final bytesPerSample = (bitsPerSample + 7) ~/ 8;
+        for (var sampleOffset = 0;
+            sampleOffset + bytesPerSample <= pcmBytes.length;
+            sampleOffset += bytesPerSample) {
+          for (var left = 0; left < bytesPerSample ~/ 2; left++) {
+            final right = bytesPerSample - 1 - left;
+            final tmp = pcmBytes[sampleOffset + left];
+            pcmBytes[sampleOffset + left] = pcmBytes[sampleOffset + right];
+            pcmBytes[sampleOffset + right] = tmp;
+          }
+        }
+      }
       final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
       return pcmToWav(
-        concatenated.toBytes(),
+        pcmBytes,
         sampleRate: sampleRate,
-        bitsPerSample: track.bitsPerSample > 0 ? track.bitsPerSample : 16,
+        bitsPerSample: bitsPerSample,
         numChannels: track.channels > 0 ? track.channels : 2,
       );
     }
@@ -168,11 +194,13 @@ class AudioSeparationEngine {
     final chanCfg = channels > 6 ? 6 : channels;
     const audioObjectType = 2; // AAC-LC
 
-    // AudioSpecificConfig (2 bytes): objectType(5) + freqIdx(4) + chanCfg(4)
-    final asc = Uint8List.fromList([
-      (audioObjectType << 3) | (freqIdx >> 1),
-      ((freqIdx & 1) << 7) | (chanCfg << 3),
-    ]);
+    // Prefer the source configuration so profiles such as HE-AAC/SBR and
+    // non-default AAC frame lengths survive the remux.
+    final asc = track.audioSpecificConfig ??
+        Uint8List.fromList([
+          (audioObjectType << 3) | (freqIdx >> 1),
+          ((freqIdx & 1) << 7) | (chanCfg << 3),
+        ]);
 
     // ---------- Compute frame info ----------
     int totalDataSize = 0;
@@ -184,8 +212,7 @@ class AudioSeparationEngine {
     }
 
     // ---------- Pre-compute box sizes ----------
-    // AAC frames have 1024 samples per frame in MP4 timing.
-    const samplesPerFrame = 1024;
+    final samplesPerFrame = _samplesPerAacFrame(asc, sampleRate);
     final duration = sampleCount * samplesPerFrame;
 
     // stsd entry size: mp4a base (36) + esds box
@@ -391,19 +418,20 @@ class AudioSeparationEngine {
 
   /// Compute the total size of an esds box containing the given ASC.
   static int _esdsBoxSize(Uint8List asc) {
-    // DecoderSpecificInfo: tag(1) + length(1) + asc(N)
-    final dsiTotal = 2 + asc.length;
+    // DecoderSpecificInfo: tag(1) + length + asc(N)
+    final dsiTotal = 1 + _descriptorLengthSize(asc.length) + asc.length;
     // DecoderConfigDescriptor body: objType(1) + streamType(1) + bufSize(3) +
     //   maxBR(4) + avgBR(4) + DSI_total
     final decConfigBody = 13 + dsiTotal;
-    // DecoderConfigDescriptor total: tag(1) + length(1) + body
-    final decConfigTotal = 2 + decConfigBody;
+    // DecoderConfigDescriptor total: tag(1) + length + body
+    final decConfigTotal =
+        1 + _descriptorLengthSize(decConfigBody) + decConfigBody;
     // SLConfigDescriptor total: tag(1) + length(1) + predef(1)
     const slConfigTotal = 3;
     // ES_Descriptor body: ES_ID(2) + flags(1) + DecConfig + SLConfig
     final esBody = 3 + decConfigTotal + slConfigTotal;
-    // esds box: header(8) + ver/flags(4) + ES_tag(1) + ES_length(1) + esBody
-    return 14 + esBody;
+    // esds box: header(8) + ver/flags(4) + ES tag and variable length + body
+    return 12 + 1 + _descriptorLengthSize(esBody) + esBody;
   }
 
   /// Write a complete esds box with AudioSpecificConfig.
@@ -420,7 +448,8 @@ class AudioSeparationEngine {
 
     // DecoderConfigDescriptor (tag 0x04)
     buf.addByte(0x04);
-    final decConfigBody = 13 + (2 + asc.length);
+    final dsiTotal = 1 + _descriptorLengthSize(asc.length) + asc.length;
+    final decConfigBody = 13 + dsiTotal;
     _writeDescLength(buf, decConfigBody);
     buf.addByte(0x40); // objectTypeIndication (Audio ISO/IEC 14496-3)
     buf.addByte(0x15); // streamType (Audio) + bufferSizeDB flag
@@ -441,8 +470,10 @@ class AudioSeparationEngine {
 
   /// Compute the length of the ES_Descriptor body (for the length field).
   static int _esdsDescriptorBodyLength(Uint8List asc) {
-    final decConfigBody = 13 + (2 + asc.length);
-    final decConfigTotal = 2 + decConfigBody;
+    final dsiTotal = 1 + _descriptorLengthSize(asc.length) + asc.length;
+    final decConfigBody = 13 + dsiTotal;
+    final decConfigTotal =
+        1 + _descriptorLengthSize(decConfigBody) + decConfigBody;
     return 3 + decConfigTotal + 3;
   }
 
@@ -480,11 +511,26 @@ class AudioSeparationEngine {
     buf.add(Uint8List.fromList(bytes));
   }
 
-  /// Write an MP4 descriptor length (compact form: 1 byte, MSB=0 means end).
+  /// Number of bytes used by an MPEG-4 descriptor's 7-bit length field.
+  static int _descriptorLengthSize(int length) {
+    if (length < 0 || length > 0x0FFFFFFF) {
+      throw RangeError('MPEG-4 descriptor length is outside its 28-bit range.');
+    }
+    var size = 1;
+    while (length > 0x7F) {
+      size++;
+      length >>= 7;
+    }
+    return size;
+  }
+
+  /// Write an MPEG-4 descriptor length as big-endian 7-bit groups.
   static void _writeDescLength(BytesBuilder buf, int length) {
-    // For lengths < 128, use single byte (MSB=0).
-    // This is sufficient for our esds boxes since they're always < 128 bytes.
-    buf.addByte(length & 0x7F);
+    final size = _descriptorLengthSize(length);
+    for (var index = size - 1; index >= 0; index--) {
+      final byte = (length >> (index * 7)) & 0x7F;
+      buf.addByte(byte | (index > 0 ? 0x80 : 0));
+    }
   }
 
   // ==================================================================
@@ -566,6 +612,7 @@ class _AudioTrackInfo {
   final int sampleRate;
   final int channels;
   final int bitsPerSample;
+  final Uint8List? audioSpecificConfig;
   final int sampleCount;
   final List<int> sampleSizes; // size of each sample
   final List<int>
@@ -578,6 +625,7 @@ class _AudioTrackInfo {
     required this.sampleRate,
     required this.channels,
     required this.bitsPerSample,
+    required this.audioSpecificConfig,
     required this.sampleCount,
     required this.sampleSizes,
     required this.chunkOffsets,
@@ -586,7 +634,40 @@ class _AudioTrackInfo {
 }
 
 /// Type for an stsc entry: (firstChunk, samplesPerChunk)
-typedef _StscEntry = (int, int);
+typedef _StscEntry = (int, int, int);
+
+class _AudioSampleDescription {
+  final String codec;
+  final int sampleRate;
+  final int channels;
+  final int bitsPerSample;
+  final Uint8List? audioSpecificConfig;
+
+  const _AudioSampleDescription({
+    required this.codec,
+    required this.sampleRate,
+    required this.channels,
+    required this.bitsPerSample,
+    required this.audioSpecificConfig,
+  });
+
+  bool hasSameOutputFormat(_AudioSampleDescription other) {
+    if (codec != other.codec ||
+        sampleRate != other.sampleRate ||
+        channels != other.channels ||
+        bitsPerSample != other.bitsPerSample) {
+      return false;
+    }
+    final asc = audioSpecificConfig;
+    final otherAsc = other.audioSpecificConfig;
+    if (asc == null || otherAsc == null) return asc == otherAsc;
+    if (asc.length != otherAsc.length) return false;
+    for (var i = 0; i < asc.length; i++) {
+      if (asc[i] != otherAsc[i]) return false;
+    }
+    return true;
+  }
+}
 
 /// Pure-Dart MP4/ISOBMFF container parser.
 class _Mp4Demuxer {
@@ -641,7 +722,7 @@ class _Mp4Demuxer {
                 trackInfo.codec == 'raw ' ||
                 trackInfo.codec == 'twos' ||
                 trackInfo.codec == 'sowt') {
-              audioTrack = trackInfo;
+              audioTrack ??= trackInfo;
             }
           }
           _offset = childStart + _boxSizeAt(childStart);
@@ -669,6 +750,8 @@ class _Mp4Demuxer {
     int sampleRate = 0;
     int channels = 0;
     int bitsPerSample = 16;
+    Uint8List? audioSpecificConfig;
+    final sampleDescriptions = <_AudioSampleDescription?>[];
     int sampleCount = 0;
     List<int> sampleSizes = [];
     List<int> chunkOffsets = [];
@@ -721,16 +804,55 @@ class _Mp4Demuxer {
                     final entryCount = _readUint32();
                     for (var i = 0; i < entryCount; i++) {
                       final es = _offset;
-                      _readUint32(); // entrySize
-                      codec = _readString(4);
+                      final entrySize = _readUint32();
+                      final entryCodec = _readString(4);
                       _offset += 6; // reserved
                       _offset += 2; // data reference index
-                      if (codec == 'mp4a' || codec == 'raw ') {
-                        _offset += 8; // reserved
-                        channels = _readUint16();
-                        bitsPerSample = _readUint16();
+                      if (entryCodec == 'mp4a' ||
+                          entryCodec == 'raw ' ||
+                          entryCodec == 'twos' ||
+                          entryCodec == 'sowt') {
+                        final audioSampleEntryVersion = _readUint16();
+                        _offset += 2; // revision level
+                        _offset += 4; // vendor
+                        var entryChannels = _readUint16();
+                        final entryBitsPerSample = _readUint16();
                         _offset += 4; // pre-defined + reserved
-                        sampleRate = _readUint32() >> 16;
+                        var entrySampleRate = _readUint32() >> 16;
+                        Uint8List? entryAudioSpecificConfig;
+                        if (entryCodec == 'mp4a') {
+                          if (audioSampleEntryVersion == 2 &&
+                              entrySize >= 72 &&
+                              es + 72 <= _data.length) {
+                            final sampleEntryData = ByteData.sublistView(_data);
+                            final version2SampleRate =
+                                sampleEntryData.getFloat64(es + 40, Endian.big);
+                            final version2Channels = _uint32At(es + 48);
+                            if (version2SampleRate.isFinite &&
+                                version2SampleRate > 0) {
+                              entrySampleRate = version2SampleRate.round();
+                            }
+                            if (version2Channels > 0) {
+                              entryChannels = version2Channels;
+                            }
+                          }
+                          entryAudioSpecificConfig = _readAudioSpecificConfig(
+                            es,
+                            entrySize,
+                            audioSampleEntryVersion,
+                          );
+                        }
+                        sampleDescriptions.add(
+                          _AudioSampleDescription(
+                            codec: entryCodec,
+                            sampleRate: entrySampleRate,
+                            channels: entryChannels,
+                            bitsPerSample: entryBitsPerSample,
+                            audioSpecificConfig: entryAudioSpecificConfig,
+                          ),
+                        );
+                      } else {
+                        sampleDescriptions.add(null);
                       }
                       _offset = es + _boxSizeAt(es);
                     }
@@ -749,8 +871,9 @@ class _Mp4Demuxer {
                     for (var i = 0; i < entryCount; i++) {
                       final firstChunk = _readUint32();
                       final spc = _readUint32();
-                      _readUint32(); // sample description index
-                      stscEntries.add((firstChunk, spc));
+                      final sampleDescriptionIndex = _readUint32();
+                      stscEntries
+                          .add((firstChunk, spc, sampleDescriptionIndex));
                     }
                   } else if (scType == 'stsz') {
                     _offset += 4; // version + flags
@@ -794,16 +917,18 @@ class _Mp4Demuxer {
       }
     }
 
-    if (handlerType != 'soun' || codec == null) return null;
+    if (handlerType != 'soun') return null;
     if (sampleSizes.isEmpty || chunkOffsets.isEmpty) return null;
 
     // Build per-chunk samples-per-chunk map from stsc entries.
-    // Each stsc entry specifies: firstChunk (1-based), samplesPerChunk.
+    // Each stsc entry specifies: firstChunk (1-based), samplesPerChunk, and
+    // the sample-description index used by those chunks.
     // The entry applies from firstChunk to the next entry's firstChunk - 1.
     final sampleToChunk = List.filled(chunkOffsets.length, 1);
+    final sampleDescriptionForChunk = List.filled(chunkOffsets.length, 1);
     if (stscEntries.isNotEmpty) {
       for (var i = 0; i < stscEntries.length; i++) {
-        final (firstChunk, spc) = stscEntries[i];
+        final (firstChunk, spc, sampleDescriptionIndex) = stscEntries[i];
         final endChunk = (i + 1 < stscEntries.length)
             ? stscEntries[i + 1].$1 - 1
             : chunkOffsets.length;
@@ -811,9 +936,37 @@ class _Mp4Demuxer {
             c < endChunk && c < chunkOffsets.length;
             c++) {
           sampleToChunk[c] = spc;
+          sampleDescriptionForChunk[c] = sampleDescriptionIndex;
         }
       }
     }
+
+    final usedDescriptionIndices = <int>{};
+    for (var i = 0; i < sampleToChunk.length; i++) {
+      if (sampleToChunk[i] > 0) {
+        usedDescriptionIndices.add(sampleDescriptionForChunk[i]);
+      }
+    }
+    if (usedDescriptionIndices.isEmpty) return null;
+    final activeDescriptions = <_AudioSampleDescription>[];
+    for (final index in usedDescriptionIndices) {
+      if (index < 1 || index > sampleDescriptions.length) return null;
+      final description = sampleDescriptions[index - 1];
+      if (description == null) return null;
+      activeDescriptions.add(description);
+    }
+    final selectedDescription = activeDescriptions.first;
+    if (activeDescriptions.skip(1).any((description) =>
+        !selectedDescription.hasSameOutputFormat(description))) {
+      // The output muxer emits one sample description, so it cannot represent
+      // chunks that use incompatible source audio descriptions.
+      return null;
+    }
+    codec = selectedDescription.codec;
+    sampleRate = selectedDescription.sampleRate;
+    channels = selectedDescription.channels;
+    bitsPerSample = selectedDescription.bitsPerSample;
+    audioSpecificConfig = selectedDescription.audioSpecificConfig;
 
     return _AudioTrackInfo(
       trackId: trackId,
@@ -821,12 +974,110 @@ class _Mp4Demuxer {
       sampleRate: sampleRate,
       channels: channels,
       bitsPerSample: bitsPerSample,
+      audioSpecificConfig: audioSpecificConfig,
       sampleCount: sampleCount,
       sampleSizes: sampleSizes,
       chunkOffsets: chunkOffsets,
       sampleToChunkMap: sampleToChunk,
     );
   }
+
+  Uint8List? _readAudioSpecificConfig(
+      int entryStart, int entrySize, int audioSampleEntryVersion) {
+    if (entrySize < 36 || entryStart + entrySize > _data.length) return null;
+    final entryEnd = entryStart + entrySize;
+    final childOffset = switch (audioSampleEntryVersion) {
+      0 => 36,
+      1 => 52,
+      2 => entrySize >= 72 ? _uint32At(entryStart + 36) : 0,
+      _ => 0,
+    };
+    if (childOffset < 36 || childOffset > entrySize) return null;
+    if (audioSampleEntryVersion == 2 && childOffset < 72) return null;
+    var childStart = entryStart + childOffset;
+
+    while (childStart + 8 <= entryEnd && childStart + 8 <= _data.length) {
+      final childSize = _uint32At(childStart);
+      if (childSize < 8 || childStart + childSize > entryEnd) return null;
+      final childType = String.fromCharCodes(
+        _data.sublist(childStart + 4, childStart + 8),
+      );
+      if (childType == 'esds' && childSize >= 12) {
+        return _findAudioSpecificConfig(
+            childStart + 12, childStart + childSize);
+      }
+      childStart += childSize;
+    }
+    return null;
+  }
+
+  Uint8List? _findAudioSpecificConfig(int start, int end) {
+    final esDescriptor = _readDescriptor(start, end);
+    if (esDescriptor == null || esDescriptor.$1 != 0x03) return null;
+
+    var cursor = esDescriptor.$2;
+    final descriptorEnd = esDescriptor.$3;
+    if (cursor + 3 > descriptorEnd) return null;
+    final flags = _data[cursor + 2];
+    cursor += 3; // ES_ID and flags
+    if ((flags & 0x80) != 0) cursor += 2; // dependsOn_ES_ID
+    if ((flags & 0x40) != 0) {
+      if (cursor >= descriptorEnd) return null;
+      cursor += 1 + _data[cursor]; // URL length and URL string
+    }
+    if ((flags & 0x20) != 0) cursor += 2; // OCR_ES_ID
+    if (cursor > descriptorEnd) return null;
+
+    while (cursor < descriptorEnd) {
+      final descriptor = _readDescriptor(cursor, descriptorEnd);
+      if (descriptor == null) return null;
+      final (tag, bodyStart, bodyEnd) = descriptor;
+      if (tag == 0x04) {
+        // DecoderConfigDescriptor's fixed fields precede its child descriptors.
+        final configChildren = bodyStart + 13;
+        if (configChildren > bodyEnd) return null;
+        var child = configChildren;
+        while (child < bodyEnd) {
+          final config = _readDescriptor(child, bodyEnd);
+          if (config == null) return null;
+          final (configTag, configStart, configEnd) = config;
+          if (configTag == 0x05) {
+            if (configStart == configEnd) return null;
+            return Uint8List.fromList(_data.sublist(configStart, configEnd));
+          }
+          child = configEnd;
+        }
+      }
+      cursor = bodyEnd;
+    }
+    return null;
+  }
+
+  (int, int, int)? _readDescriptor(int start, int end) {
+    if (start >= end) return null;
+    final tag = _data[start];
+    var cursor = start + 1;
+    var length = 0;
+    var lengthComplete = false;
+    for (var i = 0; i < 4; i++) {
+      if (cursor >= end) return null;
+      final byte = _data[cursor++];
+      length = (length << 7) | (byte & 0x7F);
+      if ((byte & 0x80) == 0) {
+        lengthComplete = true;
+        break;
+      }
+    }
+    final bodyEnd = cursor + length;
+    if (!lengthComplete || bodyEnd > end) return null;
+    return (tag, cursor, bodyEnd);
+  }
+
+  int _uint32At(int offset) =>
+      (_data[offset] << 24) |
+      (_data[offset + 1] << 16) |
+      (_data[offset + 2] << 8) |
+      _data[offset + 3];
 
   /// Extract audio frames from mdat box using sample table metadata.
   /// Returns individual frames with their raw data.
@@ -905,6 +1156,175 @@ class _Mp4Demuxer {
         (_data[offset + 1] << 16) |
         (_data[offset + 2] << 8) |
         _data[offset + 3];
+  }
+}
+
+int _samplesPerAacFrame(Uint8List asc, int outputSampleRate) {
+  var bitOffset = 0;
+
+  int readBits(int count) {
+    if (count < 0 || bitOffset + count > asc.length * 8) {
+      throw const FormatException('Truncated AudioSpecificConfig');
+    }
+    var value = 0;
+    for (var i = 0; i < count; i++) {
+      final byte = asc[bitOffset >> 3];
+      final bit = (byte >> (7 - (bitOffset & 7))) & 1;
+      value = (value << 1) | bit;
+      bitOffset++;
+    }
+    return value;
+  }
+
+  int readAudioObjectType() {
+    final objectType = readBits(5);
+    return objectType == 31 ? 32 + readBits(6) : objectType;
+  }
+
+  int readSampleRate() {
+    const sampleRates = [
+      96000,
+      88200,
+      64000,
+      48000,
+      44100,
+      32000,
+      24000,
+      22050,
+      16000,
+      12000,
+      11025,
+      8000,
+      7350,
+    ];
+    final index = readBits(4);
+    if (index == 15) return readBits(24);
+    return index < sampleRates.length ? sampleRates[index] : 0;
+  }
+
+  void skipProgramConfigElement() {
+    readBits(4); // element_instance_tag
+    readBits(2); // object_type
+    readBits(4); // sampling_frequency_index
+    final frontElements = readBits(4);
+    final sideElements = readBits(4);
+    final backElements = readBits(4);
+    final lfeElements = readBits(2);
+    final assocDataElements = readBits(3);
+    final validCcElements = readBits(4);
+
+    if (readBits(1) == 1) readBits(4); // mono_mixdown_element_number
+    if (readBits(1) == 1) readBits(4); // stereo_mixdown_element_number
+    if (readBits(1) == 1) readBits(3); // matrix_mixdown fields
+
+    for (var i = 0; i < frontElements + sideElements + backElements; i++) {
+      readBits(5); // is_cpe and element tag select
+    }
+    for (var i = 0; i < lfeElements + assocDataElements; i++) {
+      readBits(4); // element tag select
+    }
+    for (var i = 0; i < validCcElements; i++) {
+      readBits(5); // is_ind_sw and valid_cc_element tag select
+    }
+
+    final alignmentBits = (8 - (bitOffset & 7)) & 7;
+    if (alignmentBits > 0) readBits(alignmentBits);
+    final commentBytes = readBits(8);
+    readBits(commentBytes * 8);
+  }
+
+  try {
+    var objectType = readAudioObjectType();
+    final coreSampleRate = readSampleRate();
+    final channelConfiguration = readBits(4);
+    var outputRateFromConfig = coreSampleRate;
+    var hasSbr = false;
+
+    if (objectType == 5 || objectType == 29) {
+      hasSbr = true;
+      outputRateFromConfig = readSampleRate();
+      objectType = readAudioObjectType();
+      if (objectType == 22) readBits(4); // extensionChannelConfiguration
+    }
+
+    if (objectType == 39) {
+      // AAC-ELD uses ELDSpecificConfig rather than GASpecificConfig.
+      final frameLengthFlag = readBits(1);
+      readBits(3); // AAC resilience flags
+      final hasEldSbr = readBits(1) == 1;
+      var eldOutputRate = coreSampleRate;
+      if (hasEldSbr) {
+        final sbrSamplingRate = readBits(1);
+        readBits(1); // sbrCrcFlag
+        eldOutputRate = coreSampleRate * (sbrSamplingRate + 1);
+      }
+
+      final coreSamplesPerFrame = frameLengthFlag == 1 ? 480 : 512;
+      if (!hasEldSbr) return coreSamplesPerFrame;
+      final outputRate =
+          outputSampleRate > 0 ? outputSampleRate : eldOutputRate;
+      if (coreSampleRate <= 0 || outputRate <= 0) return coreSamplesPerFrame;
+      final outputSamples = coreSamplesPerFrame * outputRate / coreSampleRate;
+      if (outputSamples != outputSamples.roundToDouble()) {
+        return coreSamplesPerFrame;
+      }
+      return outputSamples.round();
+    }
+
+    const gaSpecificObjectTypes = {
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      17,
+      19,
+      20,
+      21,
+      22,
+      23,
+    };
+    if (!gaSpecificObjectTypes.contains(objectType)) {
+      return 1024;
+    }
+
+    final frameLengthFlag = readBits(1);
+    final dependsOnCoreCoder = readBits(1);
+    if (dependsOnCoreCoder == 1) readBits(14);
+    final extensionFlag = readBits(1);
+    if (channelConfiguration == 0) skipProgramConfigElement();
+    final coreSamplesPerFrame = objectType == 23
+        ? (frameLengthFlag == 1 ? 480 : 512)
+        : (frameLengthFlag == 1 ? 960 : 1024);
+
+    // Backward-compatible HE-AAC signals SBR with a sync extension after
+    // the AAC-LC GASpecificConfig rather than using AudioObjectType 5 upfront.
+    if (!hasSbr &&
+        objectType == 2 &&
+        dependsOnCoreCoder == 0 &&
+        extensionFlag == 0 &&
+        bitOffset + 11 <= asc.length * 8 &&
+        readBits(11) == 0x2B7) {
+      if (readAudioObjectType() == 5 && readBits(1) == 1) {
+        hasSbr = true;
+        outputRateFromConfig = readSampleRate();
+      }
+    }
+
+    if (!hasSbr) return coreSamplesPerFrame;
+
+    final coreRate = coreSampleRate;
+    final outputRate =
+        outputSampleRate > 0 ? outputSampleRate : outputRateFromConfig;
+    if (coreRate <= 0 || outputRate <= 0) return 1024;
+    final outputSamples = coreSamplesPerFrame * outputRate / coreRate;
+    if (outputSamples != outputSamples.roundToDouble()) return 1024;
+    return outputSamples.round();
+  } on FormatException {
+    return 1024;
+  } on RangeError {
+    return 1024;
   }
 }
 

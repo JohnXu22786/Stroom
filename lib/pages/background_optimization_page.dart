@@ -858,11 +858,12 @@ class _BackgroundOptimizationPageState
                   '需要真正退出时，点击下方「完全退出应用」按钮。'
                   '\n\n适用场景：所有桌面用户都建议开启。',
               value: _closeMinimizeEnabled,
-              onChanged: (v) {
-                setState(() => _closeMinimizeEnabled = v);
-                setDesktopCloseMinimizeEnabled(v);
+              onChanged: (v) async {
                 // 拦截保持开启（关闭行为由 Application 层决策）。
                 _ensureWindowCloseIntercepted();
+                final saved = await setDesktopCloseMinimizeEnabled(v);
+                if (!saved || !mounted) return;
+                setState(() => _closeMinimizeEnabled = v);
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),

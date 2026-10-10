@@ -95,6 +95,9 @@ Future<void> _runAudioSeparation({
       throttler.updateStep(taskId, 0, running: true);
 
       try {
+        final retryData = await _computeAudioSeparationRetryData(video);
+        bgNotifier.setRetryData(taskId, retryData);
+
         final result = await _workerExtract(video.bytes, video.format);
 
         throttler.updateStep(taskId, 0, completed: true);
@@ -119,6 +122,29 @@ Future<void> _runAudioSeparation({
     throttler.dispose(); // flush any remaining queued ops
   }
 }
+
+Future<Map<String, dynamic>> _computeAudioSeparationRetryData(
+    SelectedVideo video) async {
+  try {
+    return await Isolate.run(() => _serializeAudioSeparationRetryData(video));
+  } catch (e) {
+    // Isolate may be unavailable on some Flutter platforms.
+    debugPrint(
+        '[AudioSeparation] Retry-data isolate failed, falling back to main thread: $e');
+    return _serializeAudioSeparationRetryData(video);
+  }
+}
+
+Map<String, dynamic> _serializeAudioSeparationRetryData(SelectedVideo video) =>
+    <String, dynamic>{
+      'videos': [
+        <String, dynamic>{
+          'bytes': base64Encode(video.bytes),
+          'name': video.name,
+          'format': video.format,
+        },
+      ],
+    };
 
 /// Throttles [BackgroundTaskNotifier] mutations so that multiple
 /// rapid updates (e.g. several updateStep calls in quick succession)
@@ -516,7 +542,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持 mp4、mov、avi、mkv 等常见视频格式',
+            '支持 mp4、mov、m4v、3gp 格式',
             style: TextStyle(
               fontSize: 13,
               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -862,6 +888,21 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   Future<void> _startSeparation() async {
     if (_selectedVideos.isEmpty) return;
     if (_isProcessing) return; // already started — guard against double-tap
+
+    final unsupportedFormats = _selectedVideos
+        .where((video) => !_engine.canHandleVideoFormat(video.format))
+        .map((video) => video.format.trim().isEmpty
+            ? '未知'
+            : video.format.trim().toUpperCase())
+        .toSet();
+    if (unsupportedFormats.isNotEmpty) {
+      setState(() {
+        _hasError = true;
+        _errorMessage =
+            '暂不支持 ${unsupportedFormats.join('、')} 格式，仅支持 MP4、MOV、M4V、3GP。';
+      });
+      return;
+    }
 
     if (!_engineAvailable) {
       setState(() {

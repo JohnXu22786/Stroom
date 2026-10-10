@@ -119,6 +119,7 @@ flutter:
     - assets/vendor/dsh_message_view/THIRD-PARTY-NOTICES.txt
     - assets/images/
     - assets/vendor/
+    - assets/vendor/mermaid/
     - assets/vendor/mathlive/
     - assets/vendor/mathlive/fonts/
     - web/data_integrity_json_worker.js

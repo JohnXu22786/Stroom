@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:tray_manager/tray_manager.dart' show trayManager;
 import 'package:window_manager/window_manager.dart' show windowManager;
@@ -18,6 +20,26 @@ class RecordingChannelMock {
     calls.add(call);
     if (throwError != null) throw throwError!;
     return true;
+  }
+}
+
+class _PendingFailedDesktopCloseMinimizePreferenceStore
+    extends InMemorySharedPreferencesStore {
+  _PendingFailedDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  final writeStarted = Completer<void>();
+  final writeResult = Completer<bool>();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' &&
+        key == 'flutter.desktop_close_minimize' &&
+        value == false) {
+      if (!writeStarted.isCompleted) writeStarted.complete();
+      return writeResult.future;
+    }
+    return super.setValue(valueType, key, value);
   }
 }
 
@@ -56,6 +78,18 @@ Future<void> withDesktopPlatform(
 
 bool _calledWith(List<MethodCall> calls, String method) {
   return calls.any((c) => c.method == method);
+}
+
+Future<void> _emitWindowClose() async {
+  const codec = StandardMethodCodec();
+  await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .handlePlatformMessage(
+    'window_manager',
+    codec.encodeMethodCall(
+      const MethodCall('onEvent', {'eventName': 'close'}),
+    ),
+    (_) {},
+  );
 }
 
 void main() {
@@ -121,6 +155,57 @@ void main() {
           .where((c) => c.method == 'ensureInitialized')
           .length;
       expect(ensureCount, 1);
+    });
+
+    test('initialize intercepts close before tray setup during startup',
+        () async {
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        // main() awaits initialize() before runApp(), while tray setup is
+        // deferred until Application's first post-frame callback.
+        await DesktopAppService.instance.initialize();
+
+        final windowCalls = mocks['window_manager']!.calls;
+        expect(
+          windowCalls.any((call) =>
+              call.method == 'setPreventClose' &&
+              (call.arguments as Map)['isPreventClose'] == true),
+          isTrue,
+          reason: 'the native close guard must be armed before the first frame',
+        );
+        expect(
+          windowManager.listeners.contains(DesktopAppService.instance),
+          isTrue,
+        );
+        expect(mocks['tray_manager']!.calls, isEmpty,
+            reason: 'tray setup has not started before the first frame');
+
+        // A native close in this interval is intercepted but must leave the
+        // startup window visible until a tray is available.
+        await _emitWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(
+          windowCalls.where((call) => call.method == 'hide'),
+          isEmpty,
+          reason: 'the startup window cannot hide before a tray is ready',
+        );
+        expect(exitCodes, isEmpty);
+
+        // Once the tray is ready, the saved minimize preference applies to
+        // the close request received during startup.
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      expect(
+        mocks['window_manager']!.calls.where((call) => call.method == 'hide'),
+        hasLength(1),
+      );
+      expect(exitCodes, isEmpty);
     });
   });
 
@@ -239,6 +324,69 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       });
       expect(_calledWith(mocks['window_manager']!.calls, 'hide'), isTrue);
+    });
+
+    test(
+        'close during a pending failed minimize-pref write honors the saved value',
+        () async {
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _PendingFailedDesktopCloseMinimizePreferenceStore({
+        'flutter.desktop_close_minimize': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      var confirmationCalls = 0;
+
+      try {
+        await withDesktopPlatform(TargetPlatform.windows, () async {
+          await DesktopAppService.instance.setupTrayAndCloseBehavior();
+          DesktopAppService.instance.onQuitConfirmation = () async {
+            confirmationCalls++;
+            return false;
+          };
+
+          final save = background_service.setDesktopCloseMinimizeEnabled(false);
+          await store.writeStarted.future;
+          expect(prefs.getBool('desktop_close_minimize'), isFalse,
+              reason:
+                  'SharedPreferences exposes the pending value in its cache');
+
+          DesktopAppService.instance.onWindowClose();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          expect(confirmationCalls, 0,
+              reason: 'close must wait for the pending write outcome');
+          expect(
+            mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
+            isEmpty,
+          );
+
+          store.writeResult.complete(false);
+          expect(await save, isFalse);
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+
+        expect(
+          mocks['window_manager']!.calls.where((c) => c.method == 'hide'),
+          hasLength(1),
+        );
+        expect(
+          mocks['window_manager']!.calls.where((c) => c.method == 'destroy'),
+          isEmpty,
+        );
+        expect(confirmationCalls, 0);
+        expect(exitCodes, isEmpty);
+        expect(prefs.getBool('desktop_close_minimize'), isTrue);
+      } finally {
+        if (!store.writeResult.isCompleted) store.writeResult.complete(false);
+        SharedPreferencesStorePlatform.instance = originalStore;
+        DesktopAppService.instance.onQuitConfirmation = null;
+      }
     });
 
     test('clicking the tray icon restores and focuses the window', () async {

@@ -8,7 +8,9 @@ import 'dart_flv_remuxer.dart';
 //
 // EV1 是部分中文视频站点使用的混淆格式：本质是标准 FLV，
 // 但文件开头 100 字节被逐字节 XOR 0xFF 加密
-// （参考 https://github.com/Phantom1003/ev1-decoder 的 ev1-dec.py）。
+// （算法参考 https://github.com/Phantom1003/ev1-decoder 的 ev1-dec.py）。
+// 本次审核时，该仓库没有可见的 LICENSE 文件或 GitHub 许可元数据；
+// 此引用不表示该仓库授予了许可。详情见 docs/third-party-notices.md。
 //
 // 解码流程：
 //   1. 校验文件头（前 3 字节应为 "FLV" XOR 0xFF = 0xB9 0xB3 0xA9）

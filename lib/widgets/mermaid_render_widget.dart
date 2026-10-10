@@ -369,24 +369,25 @@ class MermaidRenderWidget extends StatefulWidget {
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
   /// [MermaidRenderWidget] instance and the preview dialog.
-  static String? _cachedInlineMermaidJs;
-  static bool _bundledJsResolved = false;
+  static Future<String?>? _bundledMermaidJsLoad;
 
-  /// Loads the bundled mermaid.js source (cached after the first load).
+  /// Loads the bundled mermaid.js source once, sharing an in-flight load.
   /// Returns null if the asset cannot be loaded — the caller then lets the
   /// template fall back to its CDN loader.
-  static Future<String?> loadBundledMermaidJs() async {
-    if (_bundledJsResolved) return _cachedInlineMermaidJs;
-    _bundledJsResolved = true;
+  static Future<String?> loadBundledMermaidJs() {
+    return _bundledMermaidJsLoad ??= _loadBundledMermaidJs();
+  }
+
+  static Future<String?> _loadBundledMermaidJs() async {
     try {
-      _cachedInlineMermaidJs =
-          await rootBundle.loadString(bundledMermaidJsAsset);
+      return await rootBundle.loadString(bundledMermaidJsAsset);
     } catch (e) {
-      debugPrint('[MermaidRenderWidget] Failed to load bundled mermaid.js '
-          '($bundledMermaidJsAsset), falling back to CDN: $e');
-      _cachedInlineMermaidJs = null;
+      debugPrint(
+        '[MermaidRenderWidget] Failed to load bundled mermaid.js '
+        '($bundledMermaidJsAsset), falling back to CDN: $e',
+      );
+      return null;
     }
-    return _cachedInlineMermaidJs;
   }
 
   /// Core HTML/CSS/JS template. [GESTURE_SCRIPT_PLACEHOLDER] is replaced
@@ -951,6 +952,19 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
     if (!ctrlOrMeta) return;
 
+    // Resolve the wheel event here before ancestor Scrollables can claim it.
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      _handleCtrlWheelZoom,
+    );
+  }
+
+  void _handleCtrlWheelZoom(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+
+    final verticalDelta = event.scrollDelta.dy;
+    if (verticalDelta == 0) return;
+
     // Compute zoom center relative to this widget's render box
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
@@ -958,7 +972,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final centerX = localPos.dx.clamp(0.0, renderBox.size.width);
     final centerY = localPos.dy.clamp(0.0, renderBox.size.height);
 
-    final delta = event.scrollDelta.dy > 0 ? -0.1 : 0.1;
+    final delta = verticalDelta > 0 ? -0.1 : 0.1;
     final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
     if (newZoom != _zoomLevel) {
       _zoomLevel = newZoom;
@@ -1123,14 +1137,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   Future<void> _zoomIn() async {
-    await _zoomAroundCenter(_zoomLevel + 0.1);
+    await _zoomAroundCenter(0.1);
   }
 
   Future<void> _zoomOut() async {
-    await _zoomAroundCenter(_zoomLevel - 0.1);
+    await _zoomAroundCenter(-0.1);
   }
 
-  /// Zooms to [newZoom] anchored at the CENTER of the preview area, so the
+  /// Changes the zoom by [delta] at the CENTER of the preview area, so the
   /// diagram zooms towards the middle instead of the top-left corner.
   ///
   /// The center is computed IN JS (`viewport.clientWidth/2`) so the anchor
@@ -1138,16 +1152,22 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// The anchor math runs in JS (`window.setZoom` with a center point),
   /// which keeps the JS-owned pan state untouched — Flutter never pushes
   /// its own (possibly stale) pan here.
-  Future<void> _zoomAroundCenter(double newZoom) async {
+  Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
-    final target = newZoom.clamp(0.1, 10.0);
-    if (target == _zoomLevel) return;
-    // Optimistic local update so rapid clicks accumulate; the JS handler
-    // round-trip (onTransformChanged) confirms the same value.
-    _zoomLevel = target;
+
+    // Keep native-side state current for Flutter gesture handling, but let
+    // JavaScript apply the toolbar delta to its live zoom. The web platform
+    // has no JS handler bridge, so Flutter's cached level may not reflect
+    // auto-fit or JS gesture changes.
+    if (!kIsWeb) {
+      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
+      if (target == _zoomLevel) return;
+      _zoomLevel = target;
+    }
+
     await ctrl.evaluateJavascript(
-      source: 'window.setZoom($target, '
+      source: 'window.setZoom(window.zoomLevel + $delta, '
           "document.getElementById('viewport').clientWidth / 2, "
           "document.getElementById('viewport').clientHeight / 2)",
     );
@@ -1425,7 +1445,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 // so the widget is immediately ready and no fallback timer
                 // is armed — the diagram appears the moment it is rendered.
                 if (kIsWeb) {
-                  _isReady = true;
+                  if (mounted && !_isReady) {
+                    setState(() => _isReady = true);
+                  }
                   _loadMermaidCode();
                 } else {
                   // The initial page (initialData) loads outside

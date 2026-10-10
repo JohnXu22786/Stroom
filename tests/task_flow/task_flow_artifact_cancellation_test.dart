@@ -214,6 +214,98 @@ void main() {
     });
   }
 
+  Future<String> separateVideo(String input) => executeAudioSeparationBlock(
+        def: BlockTypeDefinition.audioSeparation,
+        block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+        input: input,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+      );
+
+  test('web audio metadata yields while hashing large output', () async {
+    final bytes = Uint8List(2 * 1024 * 1024);
+    for (var index = 0; index < bytes.length; index++) {
+      bytes[index] = (index * 17) & 0xff;
+    }
+    var hashingFinished = false;
+    final metadata = computeAudioMetaWithEventLoopYield(bytes).then((value) {
+      hashingFinished = true;
+      return value;
+    });
+
+    await Future<void>.delayed(Duration.zero);
+
+    expect(hashingFinished, isFalse);
+    final result = await metadata;
+    expect(result.$1, computeAudioHash(bytes));
+    expect(result.$2, 'pcm');
+  });
+
+  test('separates a video stored behind a WebFileStore key', () async {
+    const key = 'videos/library_clip.mp4';
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
+    await WebFileStore.write(key, video);
+
+    final outputPath = await separateVideo(key);
+
+    expect(await WebFileStore.read(outputPath), isNotEmpty);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+  });
+
+  test('separates a video from a native file path', () async {
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
+    final inputFile =
+        await File('${directory.path}/native_clip.mp4').writeAsBytes(video);
+
+    final outputPath = await separateVideo(inputFile.path);
+
+    expect(await WebFileStore.read(outputPath), isNotEmpty);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+  });
+
+  test('cancellation releases a pending WebFileStore read', () async {
+    const key = 'videos/pending_clip.mp4';
+    await WebFileStore.write(key, Uint8List.fromList([1]));
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<Uint8List?>();
+    var extractionStarted = false;
+    final pending = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      readWebFileBytes: (_) {
+        readStarted.complete();
+        return releaseRead.future;
+      },
+      extractAudio: (_, __) {
+        extractionStarted = true;
+        return Future.value(pcmToWav(Uint8List.fromList([0, 0])));
+      },
+    );
+    final assertion = expectLater(
+      pending.timeout(const Duration(seconds: 2)),
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await readStarted.future.timeout(const Duration(seconds: 5));
+    executions.cancelExecution(execId);
+    try {
+      await assertion;
+    } finally {
+      releaseRead.complete(Uint8List.fromList([1]));
+    }
+
+    expect(extractionStarted, isFalse);
+    expect(executions.execution(execId)?.status, FlowExecutionStatus.cancelled);
+  });
+
   test('cancellation releases an active separation wait before work finishes',
       () async {
     final source = await File('${directory.path}/input.mp4').writeAsBytes([1]);
