@@ -503,6 +503,112 @@ void main() {
     });
 
     test(
+        'failed persistent start schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a failed persistent start must leave a later watchdog retry',
+      );
+    });
+
+    test(
+        'persistent start exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setThrowOnStart(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a persistent start exception must leave a watchdog retry',
+      );
+    });
+
+    test('failed temporary start does not arm the watchdog', () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('temporary start exception does not arm the watchdog', () async {
+      final mock = registerMockPlatform()..setThrowOnStart(true);
+
+      await withAndroidPlatform(() async {
+        expect(
+          await startBackgroundService(persistEnabled: false),
+          isFalse,
+        );
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+    });
+
+    test('failed persistent start respects a disabled watchdog', () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', false);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
+        'failed persistent start does not call the watchdog channel off Android',
+        () async {
+      final mock = registerMockPlatform()..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
         'restartBackgroundService reports watchdog scheduling failure while preserving enabled intent',
         () async {
       final mock = registerMockPlatform()..setServiceRunning(true);
@@ -516,6 +622,48 @@ void main() {
 
       expect(mock._isRunning, isTrue);
       expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+
+    test('failed restart schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setStartResult(false);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a failed restart must leave a later watchdog retry',
+      );
+    });
+
+    test(
+        'restart exception schedules watchdog retry and preserves enabled intent',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnStart(true);
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'a restart exception must leave a watchdog retry',
+      );
     });
 
     test('stopBackgroundService disarms the AlarmManager watchdog', () async {
