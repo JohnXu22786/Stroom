@@ -297,20 +297,20 @@ class _AudioRecordingPageState extends ConsumerState<AudioRecordingPage> {
       // 计算 hash 并保存
       final hash = computeAudioHash(bytes);
       const format = 'm4a';
-      await FileManifest.writeFile('$hash.$format', bytes);
-
       final now = DateTime.now();
       final defaultName = '录音_${now.month}${now.day}_${now.hour}${now.minute}';
-
-      await FileManifest.addRecord(AudioRecord(
-        name: defaultName,
-        hash: hash,
-        format: format,
-        createdAt: now,
-        size: bytes.length,
-        folder: '',
-        duration: _recordDurationSeconds,
-      ));
+      await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+        await FileManifest.writeFile('$hash.$format', bytes);
+        await FileManifest.addRecord(AudioRecord(
+          name: defaultName,
+          hash: hash,
+          format: format,
+          createdAt: now,
+          size: bytes.length,
+          folder: '',
+          duration: _recordDurationSeconds,
+        ));
+      });
 
       // 删除临时文件
       try {

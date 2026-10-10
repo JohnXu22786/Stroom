@@ -345,6 +345,403 @@ void main() {
     expect(executions.execution(execId)?.status, FlowExecutionStatus.cancelled);
   });
 
+  test('cancellation after audio write removes unreferenced output', () async {
+    final source = await File(
+      '${directory.path}/written.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+    var canceledAfterWrite = false;
+
+    await expectLater(
+      executeAudioSeparationBlock(
+        def: BlockTypeDefinition.audioSeparation,
+        block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        extractAudio: (_, __) async => extracted,
+        onAudioFileWritten: () async {
+          expect(await WebFileStore.exists('tts_audio/$storageName'), isTrue);
+          expect(await FileManifest.loadRecords(), isEmpty);
+          canceledAfterWrite = true;
+          executions.cancelExecution(execId);
+        },
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(canceledAfterWrite, isTrue);
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('tts_audio/$storageName'), isFalse);
+  });
+
+  test(
+    'cancellation after audio write keeps output referenced by a record',
+    () async {
+      final source = await File(
+        '${directory.path}/shared.mp4',
+      ).writeAsBytes([1]);
+      final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+      final storageName = '${computeAudioHash(extracted)}.wav';
+      final existingRecord = AudioRecord(
+        name: 'Existing audio',
+        hash: computeAudioHash(extracted),
+        format: 'wav',
+        createdAt: DateTime.now(),
+        size: extracted.length,
+      );
+      await FileManifest.writeFile(storageName, extracted);
+      await FileManifest.addRecord(existingRecord);
+
+      await expectLater(
+        executeAudioSeparationBlock(
+          def: BlockTypeDefinition.audioSeparation,
+          block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+          input: source.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          extractAudio: (_, __) async => extracted,
+          onAudioFileWritten: () async => executions.cancelExecution(execId),
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      final records = await FileManifest.loadRecords();
+      expect(records, hasLength(1));
+      expect(records.single.id, existingRecord.id);
+      expect(await WebFileStore.read('tts_audio/$storageName'), extracted);
+    },
+  );
+
+  test('cancellation keeps output when checking manifest references fails',
+      () async {
+    final source = await File(
+      '${directory.path}/unknown_references.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+
+    await expectLater(
+      executeAudioSeparationBlock(
+        def: BlockTypeDefinition.audioSeparation,
+        block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        extractAudio: (_, __) async => extracted,
+        onAudioFileWritten: () async => executions.cancelExecution(execId),
+        loadAudioRecordsForCleanup: () async =>
+            throw StateError('manifest unavailable'),
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('tts_audio/$storageName'), isTrue);
+  });
+
+  test('record insertion failure removes the unreferenced output', () async {
+    final source = await File(
+      '${directory.path}/failed_record_insert.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+
+    await expectLater(
+      executeAudioSeparationBlock(
+        def: BlockTypeDefinition.audioSeparation,
+        block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        extractAudio: (_, __) async => extracted,
+        addAudioRecord: (_) async => throw StateError('insert failed'),
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('tts_audio/$storageName'), isFalse);
+  });
+
+  test('folder removal waits for a same-hash save before deleting bytes',
+      () async {
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final hash = computeAudioHash(extracted);
+    final storageName = '$hash.wav';
+    final removableRecord = AudioRecord(
+      name: 'Removable audio',
+      hash: hash,
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: extracted.length,
+      folder: 'to_remove',
+    );
+    await FileManifest.writeFile(storageName, extracted);
+    await FileManifest.addRecord(removableRecord);
+
+    final writeStarted = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final activeRecord = AudioRecord(
+      name: 'Active audio',
+      hash: hash,
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: extracted.length,
+      folder: 'keep',
+    );
+    final activeSave = FileManifest.withStorageFileSaveLock(
+      storageName,
+      () async {
+        await FileManifest.writeFile(storageName, extracted);
+        writeStarted.complete();
+        await releaseWrite.future;
+        await FileManifest.addRecord(activeRecord);
+      },
+    );
+    await writeStarted.future;
+
+    final removalWaiting = Completer<void>();
+    final removal = FileManifest.removeFolder(
+      'to_remove',
+      onWaitingForSaves: () => removalWaiting.complete(),
+    );
+    await removalWaiting.future.timeout(const Duration(seconds: 5));
+    var removedBeforeSaveFinished = false;
+    unawaited(removal.then((_) => removedBeforeSaveFinished = true));
+    await Future<void>.delayed(Duration.zero);
+    expect(removedBeforeSaveFinished, isFalse);
+    releaseWrite.complete();
+    await activeSave;
+    await removal;
+
+    final records = await FileManifest.loadRecords();
+    expect(records.map((record) => record.id), [activeRecord.id]);
+    expect(await WebFileStore.read('tts_audio/$storageName'), extracted);
+  });
+
+  test('canceled separation waits for a concurrent same-hash save', () async {
+    final firstSource = await File(
+      '${directory.path}/first_shared.mp4',
+    ).writeAsBytes([1]);
+    final secondSource = await File(
+      '${directory.path}/second_shared.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+    final firstWriteFinished = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final secondWriteFinished = Completer<void>();
+    final secondExecId = executions.addExecution(
+      flowId: 'second_flow',
+      flowName: 'Second Flow',
+    );
+    final secondSubTask = FlowSubTask(
+      blockTypeKey: 'audio_separation',
+      blockLabel: 'Audio Separation',
+      subTaskId: 'pending_audio_1',
+      subTaskType: 'background',
+    );
+    executions.addSubTask(secondExecId, secondSubTask);
+
+    final first = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: firstSource.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) async => extracted,
+      onAudioFileWritten: () async {
+        expect(await WebFileStore.exists('tts_audio/$storageName'), isTrue);
+        firstWriteFinished.complete();
+        await releaseFirstWrite.future;
+      },
+    );
+    final firstAssertion = expectLater(
+      first,
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await firstWriteFinished.future;
+
+    final second = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: secondSource.path,
+      execId: secondExecId,
+      execNotifier: executions,
+      flowSubTask: secondSubTask,
+      bgNotifier: background,
+      extractAudio: (_, __) async => extracted,
+      onAudioFileWritten: () async => secondWriteFinished.complete(),
+    );
+    final secondAssertion = expectLater(second, completes);
+
+    final secondWroteBeforeFirstReleased = await secondWriteFinished.future
+        .then((_) => true)
+        .timeout(const Duration(seconds: 1), onTimeout: () => false);
+    expect(secondWroteBeforeFirstReleased, isFalse);
+
+    executions.cancelExecution(execId);
+    releaseFirstWrite.complete();
+    await firstAssertion;
+    await secondWriteFinished.future.timeout(const Duration(seconds: 5));
+    await secondAssertion;
+
+    final records = await FileManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.hash, computeAudioHash(extracted));
+    expect(await WebFileStore.read('tts_audio/$storageName'), extracted);
+  });
+
+  test('canceled separation preserves a queued external audio save', () async {
+    final source = await File(
+      '${directory.path}/external_shared.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+    final writeFinished = Completer<void>();
+    final releaseWrite = Completer<void>();
+    final externalSaveQueued = Completer<void>();
+
+    final taskFlowSave = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) async => extracted,
+      onAudioFileWritten: () async {
+        writeFinished.complete();
+        await releaseWrite.future;
+      },
+    );
+    final taskFlowAssertion = expectLater(
+      taskFlowSave,
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await writeFinished.future;
+
+    final externalRecord = AudioRecord(
+      name: 'External audio save',
+      hash: computeAudioHash(extracted),
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: extracted.length,
+    );
+    final externalSave = FileManifest.withStorageFileSaveLock(
+      storageName,
+      () async {
+        await FileManifest.writeFile(storageName, extracted);
+        await FileManifest.addRecord(externalRecord);
+      },
+      onQueued: () => externalSaveQueued.complete(),
+    );
+    await externalSaveQueued.future.timeout(const Duration(seconds: 5));
+
+    executions.cancelExecution(execId);
+    releaseWrite.complete();
+    await taskFlowAssertion;
+    await externalSave;
+
+    final records = await FileManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.id, externalRecord.id);
+    expect(await WebFileStore.read('tts_audio/$storageName'), extracted);
+  });
+
+  test('canceled separation exits while queued on a same-hash save', () async {
+    final firstSource = await File(
+      '${directory.path}/queued_first.mp4',
+    ).writeAsBytes([1]);
+    final secondSource = await File(
+      '${directory.path}/queued_second.mp4',
+    ).writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final storageName = '${computeAudioHash(extracted)}.wav';
+    final firstWriteFinished = Completer<void>();
+    final releaseFirstWrite = Completer<void>();
+    final secondSaveQueued = Completer<void>();
+    final secondExecId = executions.addExecution(
+      flowId: 'queued_flow',
+      flowName: 'Queued Flow',
+    );
+    final secondSubTask = FlowSubTask(
+      blockTypeKey: 'audio_separation',
+      blockLabel: 'Audio Separation',
+      subTaskId: 'pending_audio_queued',
+      subTaskType: 'background',
+    );
+    executions.addSubTask(secondExecId, secondSubTask);
+
+    final first = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: firstSource.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) async => extracted,
+      onAudioFileWritten: () async {
+        firstWriteFinished.complete();
+        await releaseFirstWrite.future;
+      },
+    );
+    final firstAssertion = expectLater(
+      first,
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await firstWriteFinished.future;
+
+    final second = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: secondSource.path,
+      execId: secondExecId,
+      execNotifier: executions,
+      flowSubTask: secondSubTask,
+      bgNotifier: background,
+      extractAudio: (_, __) async => extracted,
+      onAudioFileSaveQueued: () => secondSaveQueued.complete(),
+    );
+    final secondAssertion = expectLater(
+      second,
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await secondSaveQueued.future.timeout(const Duration(seconds: 5));
+
+    executions.cancelExecution(secondExecId);
+    var secondExitedBeforeFirstRelease = false;
+    try {
+      await secondAssertion.timeout(const Duration(seconds: 2));
+      secondExitedBeforeFirstRelease = true;
+      expect(await WebFileStore.read('tts_audio/$storageName'), extracted);
+    } on TimeoutException {
+      // The assertion below reports the stalled queued cancellation.
+    } finally {
+      executions.cancelExecution(execId);
+      releaseFirstWrite.complete();
+      await firstAssertion;
+    }
+    await secondAssertion;
+    expect(secondExitedBeforeFirstRelease, isTrue);
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(await WebFileStore.exists('tts_audio/$storageName'), isFalse);
+  });
+
   test('separation removes its committed record if cancellation lands next',
       () async {
     background.dispose();
