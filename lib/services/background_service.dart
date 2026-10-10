@@ -224,11 +224,20 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
           await _requestServiceStopAndWait(service);
         }
         if (!await service.isRunning()) {
-          final started = await service.startService();
+          bool started;
+          try {
+            started = await service.startService();
+          } catch (_) {
+            if (persistEnabled) await _enableKeepAlive();
+            rethrow;
+          }
           if (started) {
             await AppLogService.info('BackgroundService', '后台服务已启动');
           } else {
             await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
+            // Preserve a recovery path for persistent user intent even when
+            // this start failed. Temporary starts must not create a watchdog.
+            if (persistEnabled) await _enableKeepAlive();
             return false;
           }
         }
@@ -354,9 +363,18 @@ Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
 
         final service = FlutterBackgroundService();
         await _requestServiceStopAndWait(service);
-        final started = await service.startService();
+        bool started;
+        try {
+          started = await service.startService();
+        } catch (_) {
+          await _enableKeepAlive();
+          rethrow;
+        }
         if (!started) {
           await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
+          // The enabled preference is already saved, so leave the watchdog
+          // armed to retry recovery after this failed restart.
+          await _enableKeepAlive();
           return false;
         }
         if (!await _enableKeepAlive()) return false;
