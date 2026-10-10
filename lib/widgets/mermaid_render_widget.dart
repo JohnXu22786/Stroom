@@ -526,7 +526,18 @@ MERMAID_CODE_PLACEHOLDER
       if (!svg) return;
       var vw = viewport.clientWidth;
       var vh = viewport.clientHeight;
-      if (vw <= 0 || vh <= 0) return;
+      if (vw <= 0 || vh <= 0) {
+        // The WebView can finish rendering before it receives its initial
+        // layout. Retry once its viewport has a non-zero size instead of
+        // leaving the diagram at the default transform.
+        window.addEventListener('resize', function onFitRetry() {
+          if (viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+            window.removeEventListener('resize', onFitRetry);
+            window.fitToViewport();
+          }
+        });
+        return;
+      }
       var sw = 0, sh = 0;
       try {
         var bbox = svg.getBBox();

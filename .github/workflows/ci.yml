@@ -42,6 +42,16 @@ jobs:
       - run: npm ci --prefix tools/math_editor_test
       - run: npm test --prefix tools/math_editor_test
 
+  mermaid-fit-retry:
+    name: Mermaid fit retry behavior
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
+
   # ── Format Check ──────────────────────────────────────────────────────────
   format:
     name: Format Check
