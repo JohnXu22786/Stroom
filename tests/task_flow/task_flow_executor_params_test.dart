@@ -145,6 +145,65 @@ void main() {
       );
     });
 
+    test('distinct matching names fall back regardless of record order', () {
+      final ambiguousRecords = [
+        AudioRecord(
+          name: 'First source',
+          hash: 'd41d8cd98f00b204e9800998ecf8427e',
+          format: 'mp3',
+          createdAt: DateTime(2024),
+          size: 10,
+        ),
+        AudioRecord(
+          name: 'Second source',
+          hash: 'd41d8cd98f00b204e9800998ecf8427e',
+          format: 'mp3',
+          createdAt: DateTime(2024),
+          size: 10,
+        ),
+      ];
+      const input = '/storage/audio/d41d8cd98f00b204e9800998ecf8427e.mp3';
+      const fallback = '语音识别_d41d8cd98f00b204e9800998ecf8427e';
+
+      final forward = asrOutputTitleFromRecords(input, ambiguousRecords);
+      final reverse = asrOutputTitleFromRecords(
+        input,
+        ambiguousRecords.reversed.toList(),
+      );
+
+      expect(forward, fallback);
+      expect(reverse, fallback);
+      expect(forward, isNot(contains('First source')));
+      expect(forward, isNot(contains('Second source')));
+    });
+
+    test('same-name aliases preserve their shared trimmed title', () {
+      final aliases = [
+        AudioRecord(
+          name: ' Shared source ',
+          hash: 'd41d8cd98f00b204e9800998ecf8427e',
+          format: 'mp3',
+          createdAt: DateTime(2024),
+          size: 10,
+        ),
+        AudioRecord(
+          name: 'Shared source',
+          hash: 'd41d8cd98f00b204e9800998ecf8427e',
+          format: 'mp3',
+          createdAt: DateTime(2024),
+          size: 10,
+        ),
+      ];
+
+      expect(
+        asrOutputTitleFromRecords(
+          '/storage/audio/d41d8cd98f00b204e9800998ecf8427e.mp3',
+          aliases,
+        ),
+        '语音识别_Shared source',
+      );
+    });
+
     test('record with an empty name falls back to the hash basename', () {
       expect(
         asrOutputTitleFromRecords(
