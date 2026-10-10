@@ -70,6 +70,8 @@
     var zoomLevel = 1;
     var panX = 0;
     var panY = 0;
+    var fitComplete = false;
+    var pendingZoomDeltas = [];
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -125,6 +127,22 @@
       updateTransform();
     };
 
+    window.applyZoomDeltasAfterFit = function(deltas) {
+      if (!Array.isArray(deltas)) return;
+      if (!fitComplete) {
+        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+        return;
+      }
+      var viewport = document.getElementById('viewport');
+      for (var i = 0; i < deltas.length; i++) {
+        window.setZoom(
+          zoomLevel + deltas[i],
+          viewport.clientWidth / 2,
+          viewport.clientHeight / 2
+        );
+      }
+    };
+
     // Fits the rendered diagram into the viewport: zooms so that the WHOLE
     // diagram is visible (contain, NOT cover) at the maximum zoom, then
     // centers it. Called automatically once rendering completes.
@@ -176,6 +194,10 @@
       panY = (vh - sh * zoomLevel) / 2;
       updateTransform();
       notifyTransform();
+      fitComplete = true;
+      var deltas = pendingZoomDeltas;
+      pendingZoomDeltas = [];
+      window.applyZoomDeltasAfterFit(deltas);
     };
 
 
