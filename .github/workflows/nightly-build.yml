@@ -45,7 +45,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           apt-get update -y
-          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb strace clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
@@ -59,7 +59,19 @@ jobs:
         shell: bash
         run: |
           mkdir -p test-reports
-          xvfb-run flutter test -d linux integration_test/ --reporter expanded --verbose 2>&1 | tee test-reports/integration-test.log
+          # A desktop Device closes its log reader when its first app exits.
+          # Use a fresh Flutter invocation for each integration entrypoint.
+          for test_file in integration_test/*_test.dart; do
+            if ! xvfb-run flutter test -d linux "$test_file" --reporter expanded --verbose 2>&1 | tee -a test-reports/integration-test.log; then
+              # The integration runner does not forward native stderr. Retry
+              # only the failed entrypoint with a trace, retaining the failure.
+              report="test-reports/$(basename "$test_file" .dart)"
+              strace -f -e trace=process,signal,write -e trace-fds=2 -s 512 -o "$report-native.log" \
+                xvfb-run flutter test -d linux "$test_file" --reporter expanded --verbose > "$report-retry.log" 2>&1 || true
+              tail -n 160 "$report-native.log" "$report-retry.log"
+              exit 1
+            fi
+          done
       - name: Upload integration test reports
         if: always()
         uses: actions/upload-artifact@v4
