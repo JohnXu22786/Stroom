@@ -151,7 +151,7 @@ jobs:
       - run: flutter pub get
       - name: Expose test fixtures to Flutter Web's test server
         run: ln -s tests test
-      - name: Run startup test in Chrome
+      - name: Run Web startup checks in Chrome
         run: flutter test --platform chrome test/startup/startup_check_service_web.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
