@@ -18,10 +18,9 @@ import 'background_service.dart' as background_service;
 //
 // 实现：
 // 1. [initialize] 在 runApp 之前调用（window_manager 要求在 Flutter
-//    UI 启动前完成初始化）。
-// 2. [setupTrayAndCloseBehavior] 在首帧后调用：设置 setPreventClose(true)
-//    使点击关闭按钮时窗口不销毁（window_manager 拦截 WM_CLOSE /
-//    delete-event / windowShouldClose），并注册托盘图标与右键菜单。
+//    UI 启动前完成初始化），并立即拦截原生关闭事件，保护启动窗口。
+// 2. [setupTrayAndCloseBehavior] 在首帧后调用：注册托盘图标与右键菜单。
+//    托盘就绪前到达的关闭事件会暂缓处理，期间窗口保持可见。
 // 3. 关闭窗口 → [onWindowClose]：按用户设置决策 ——
 //    - 「关闭时最小化」（默认）：隐藏窗口到托盘；
 //    - 「关闭时退出」：先通过 [onQuitConfirmation] 确认（有任务运行时
@@ -56,6 +55,8 @@ class DesktopAppService extends WindowListener with TrayListener {
   static const _menuQuitKey = 'quit';
 
   bool _initialized = false;
+  bool _windowCloseListenerRegistered = false;
+  bool _pendingCloseBeforeTrayReady = false;
   bool _trayReady = false;
   bool _quitRequested = false;
   Menu? _menu;
@@ -86,6 +87,8 @@ class DesktopAppService extends WindowListener with TrayListener {
     windowManager.removeListener(this);
     trayManager.removeListener(this);
     _initialized = false;
+    _windowCloseListenerRegistered = false;
+    _pendingCloseBeforeTrayReady = false;
     _trayReady = false;
     _quitRequested = false;
     _confirmInProgress = false;
@@ -95,12 +98,14 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   /// 在 runApp 之前调用，初始化窗口管理器。
   ///
-  /// 非桌面平台为安全的 no-op。
+  /// 非桌面平台为安全的 no-op。桌面端会立即武装关闭拦截，避免
+  /// 启动页首帧前的原生关闭事件直接退出进程。
   Future<void> initialize() async {
     if (!isDesktopPlatform || _initialized) return;
     try {
       await windowManager.ensureInitialized();
       _initialized = true;
+      await _armWindowCloseInterception();
       debugPrint('[DesktopAppService] Window manager initialized');
     } catch (e) {
       debugPrint('[DesktopAppService] Window manager init failed: $e');
@@ -114,11 +119,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 任何失败都会被捕获并记录，不会导致应用崩溃。
   ///
   /// 安全顺序：
-  /// 1. 先 setPreventClose(true) 拦截关闭事件；
+  /// 1. initialize() 在启动前设置 setPreventClose(true) 并注册窗口监听；
   /// 2. 注册托盘（带超时，防止 Linux DBus/appindicator 挂起）；
-  /// 3. 托盘就绪后才注册事件监听 —— 若托盘失败回滚为「关闭即退出」，
-  ///    期间到达的关闭事件只会让窗口保持打开（尚未隐藏），不会出现
-  ///    「窗口已隐藏但无托盘可恢复」的幽灵进程。
+  /// 3. 窗口监听在托盘就绪前暂缓处理关闭事件。若托盘失败则撤销拦截并移除
+  ///    监听，避免出现「窗口已隐藏但无托盘可恢复」的幽灵进程。
   Future<void> setupTrayAndCloseBehavior() async {
     if (!isDesktopPlatform || _quitRequested || _trayReady) return;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
@@ -128,8 +132,9 @@ class DesktopAppService extends WindowListener with TrayListener {
       await initialize();
       if (!_initialized) return; // 初始化失败，保持默认关闭行为
 
-      // 1. 先拦截窗口关闭事件。
-      await windowManager.setPreventClose(true);
+      // 1. 确保窗口关闭事件已被拦截。initialize() 通常已在 runApp
+      //    之前完成这一步；失败时在这里重试。
+      await _armWindowCloseInterception();
 
       // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
       //    避免窗口隐藏后应用无法找回。
@@ -169,12 +174,18 @@ class DesktopAppService extends WindowListener with TrayListener {
         try {
           await windowManager.setPreventClose(false).timeout(_trayTimeout);
         } catch (_) {}
+        windowManager.removeListener(this);
+        _windowCloseListenerRegistered = false;
+        _pendingCloseBeforeTrayReady = false;
         return;
       }
 
-      // 3. 托盘就绪后注册事件监听。
-      windowManager.addListener(this);
+      // 3. 窗口关闭监听已在启动时注册；托盘就绪后注册托盘事件监听。
       trayManager.addListener(this);
+      if (_pendingCloseBeforeTrayReady) {
+        _pendingCloseBeforeTrayReady = false;
+        unawaited(_handleWindowClose());
+      }
     } catch (e) {
       debugPrint('[DesktopAppService] Tray setup failed: $e');
       await AppLogService.error('DesktopAppService', '托盘设置失败', e);
@@ -196,6 +207,13 @@ class DesktopAppService extends WindowListener with TrayListener {
 
   // ── 窗口事件 ──────────────────────────────────────────────────────
 
+  Future<void> _armWindowCloseInterception() async {
+    if (_windowCloseListenerRegistered) return;
+    await windowManager.setPreventClose(true);
+    windowManager.addListener(this);
+    _windowCloseListenerRegistered = true;
+  }
+
   /// 用户点击窗口关闭按钮：按用户设置最小化到托盘，或确认后退出。
   ///
   /// 每次读取最新的用户设置（而不是启动时缓存的标志）：
@@ -203,6 +221,12 @@ class DesktopAppService extends WindowListener with TrayListener {
   @override
   void onWindowClose() {
     debugPrint('[DesktopAppService] Window close intercepted');
+    // 在托盘注册完成前只阻止原生默认关闭，保持启动窗口可见；隐藏
+    // 前必须确保用户已有可用的托盘入口，避免产生无法恢复的幽灵进程。
+    if (!_trayReady) {
+      _pendingCloseBeforeTrayReady = true;
+      return;
+    }
     unawaited(_handleWindowClose());
   }
 
