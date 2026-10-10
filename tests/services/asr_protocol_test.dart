@@ -441,26 +441,33 @@ void main() {
           ),
         );
 
-        final malformedVtt = _transcribe(
-          responseBody: 'WEBVTT\nnot metadata or a cue',
-          responseBodies: List.filled(3, 'WEBVTT\nnot metadata or a cue'),
-          responseContentType: 'text/vtt; charset=utf-8',
-          responseFormat: 'vtt',
-          audioBytes: _testWav(140),
-          maxFileSizeBytes: 100,
-          chunking: 'fixedSize',
-          fallbackMethod: 'generic',
-        );
-        await expectLater(
-          malformedVtt,
-          throwsA(
-            isA<AsrChunkedTranscriptionException>().having(
-              (e) => e.chunks.every((c) => c.status == AsrChunkStatus.failed),
-              'all VTT chunks failed',
-              isTrue,
+        for (final invalidMap in [
+          'LOCAL:00:99:99.000,MPEGTS:999999999999999999999',
+          'LOCAL:99:00.000,MPEGTS:0',
+          'LOCAL:00:00:00.000,MPEGTS:8589934592',
+        ]) {
+          final malformedVttBody = 'WEBVTT\nX-TIMESTAMP-MAP=$invalidMap';
+          final malformedVtt = _transcribe(
+            responseBody: malformedVttBody,
+            responseBodies: List.filled(3, malformedVttBody),
+            responseContentType: 'text/vtt; charset=utf-8',
+            responseFormat: 'vtt',
+            audioBytes: _testWav(140),
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+          );
+          await expectLater(
+            malformedVtt,
+            throwsA(
+              isA<AsrChunkedTranscriptionException>().having(
+                (e) => e.chunks.every((c) => c.status == AsrChunkStatus.failed),
+                'all VTT chunks failed',
+                isTrue,
+              ),
             ),
-          ),
-        );
+          );
+        }
       },
     );
 

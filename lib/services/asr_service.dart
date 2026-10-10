@@ -1333,10 +1333,27 @@ class AsrService {
         !RegExp(r'^WEBVTT(?:[ \t]+[^\r\n]*)?$').hasMatch(lines.first)) {
       return false;
     }
-    final metadataLine = RegExp(
-      r'^(?:[A-Za-z][A-Za-z0-9_-]*:[ \t]*[^\r\n]*|X-TIMESTAMP-MAP=[^\r\n]*)$',
-    );
-    return lines.skip(1).every(metadataLine.hasMatch);
+    return lines.skip(1).every(_isVttHeaderMetadataLine);
+  }
+
+  bool _isVttHeaderMetadataLine(String line) {
+    if (RegExp(r'^[A-Za-z][A-Za-z0-9_-]*:[ \t]*[^\r\n]*$').hasMatch(line)) {
+      return true;
+    }
+    final timestampMap = RegExp(
+      r'^X-TIMESTAMP-MAP=LOCAL:(\d{2,}:\d{2}:\d{2}\.\d{3}|'
+      r'\d{2,}:\d{2}\.\d{3}),MPEGTS:(\d+)$',
+    ).firstMatch(line);
+    if (timestampMap == null) return false;
+
+    final localParts = timestampMap.group(1)!.split(':');
+    final hasHours = localParts.length == 3;
+    final minute = int.parse(localParts[hasHours ? 1 : 0]);
+    final second = int.parse(localParts[hasHours ? 2 : 1].split('.').first);
+    if (minute > 59 || second > 59) return false;
+
+    final mpegts = BigInt.parse(timestampMap.group(2)!);
+    return mpegts <= BigInt.from(8589934591);
   }
 
   String _formatSubtitleTime(double seconds, String format) {
