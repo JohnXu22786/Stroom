@@ -707,9 +707,11 @@ Future<bool> isDesktopCloseMinimizeEnabled() async {
 }
 
 /// Enables or disables the desktop "minimize on close" behavior.
-Future<void> setDesktopCloseMinimizeEnabled(bool enabled) async {
+Future<bool> setDesktopCloseMinimizeEnabled(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_desktopCloseMinimizeKey, enabled);
-  } catch (_) {}
+    return await prefs.setBool(_desktopCloseMinimizeKey, enabled);
+  } catch (_) {
+    return false;
+  }
 }
