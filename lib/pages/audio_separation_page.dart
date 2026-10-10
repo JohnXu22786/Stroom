@@ -95,6 +95,9 @@ Future<void> _runAudioSeparation({
       throttler.updateStep(taskId, 0, running: true);
 
       try {
+        final retryData = await _computeAudioSeparationRetryData(video);
+        bgNotifier.setRetryData(taskId, retryData);
+
         final result = await _workerExtract(video.bytes, video.format);
 
         throttler.updateStep(taskId, 0, completed: true);
@@ -119,6 +122,29 @@ Future<void> _runAudioSeparation({
     throttler.dispose(); // flush any remaining queued ops
   }
 }
+
+Future<Map<String, dynamic>> _computeAudioSeparationRetryData(
+    SelectedVideo video) async {
+  try {
+    return await Isolate.run(() => _serializeAudioSeparationRetryData(video));
+  } catch (e) {
+    // Isolate may be unavailable on some Flutter platforms.
+    debugPrint(
+        '[AudioSeparation] Retry-data isolate failed, falling back to main thread: $e');
+    return _serializeAudioSeparationRetryData(video);
+  }
+}
+
+Map<String, dynamic> _serializeAudioSeparationRetryData(SelectedVideo video) =>
+    <String, dynamic>{
+      'videos': [
+        <String, dynamic>{
+          'bytes': base64Encode(video.bytes),
+          'name': video.name,
+          'format': video.format,
+        },
+      ],
+    };
 
 /// Throttles [BackgroundTaskNotifier] mutations so that multiple
 /// rapid updates (e.g. several updateStep calls in quick succession)
