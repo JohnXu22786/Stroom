@@ -412,8 +412,8 @@ void main() {
         index == 1
             ? '{"error":{"message":"middle failed"}}'
             : index == 0
-            ? '{"text":"first chunk"}'
-            : '{"text":"last chunk"}',
+                ? '{"text":"first chunk"}'
+                : '{"text":"last chunk"}',
       );
       await request.response.close();
     });
@@ -424,7 +424,8 @@ void main() {
 
     final file = await audioFile('standalone-partial.wav', dataBytes: 140);
     final entries = providers(
-      host: 'http://${server.address.address}:${server.port}/audio/transcriptions',
+      host:
+          'http://${server.address.address}:${server.port}/audio/transcriptions',
       providerTypeConfig: {
         'maxFileSizeMb': 0.0001,
         'chunking': 'fixedSize',
