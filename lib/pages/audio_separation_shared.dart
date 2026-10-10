@@ -10,7 +10,9 @@ String detectFormat(String? name) {
   if (lower.endsWith('.flv')) return 'flv';
   if (lower.endsWith('.m4v')) return 'm4v';
   if (lower.endsWith('.3gp')) return '3gp';
-  return 'mp4';
+  final extensionIndex = lower.lastIndexOf('.');
+  if (extensionIndex < 0 || extensionIndex == lower.length - 1) return '';
+  return lower.substring(extensionIndex + 1);
 }
 
 String formatFileSize(int bytes) {

@@ -516,7 +516,7 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '支持 mp4、mov、avi、mkv 等常见视频格式',
+            '支持 mp4、mov、m4v、3gp 格式',
             style: TextStyle(
               fontSize: 13,
               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -862,6 +862,21 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
   Future<void> _startSeparation() async {
     if (_selectedVideos.isEmpty) return;
     if (_isProcessing) return; // already started — guard against double-tap
+
+    final unsupportedFormats = _selectedVideos
+        .where((video) => !_engine.canHandleVideoFormat(video.format))
+        .map((video) => video.format.trim().isEmpty
+            ? '未知'
+            : video.format.trim().toUpperCase())
+        .toSet();
+    if (unsupportedFormats.isNotEmpty) {
+      setState(() {
+        _hasError = true;
+        _errorMessage =
+            '暂不支持 ${unsupportedFormats.join('、')} 格式，仅支持 MP4、MOV、M4V、3GP。';
+      });
+      return;
+    }
 
     if (!_engineAvailable) {
       setState(() {
