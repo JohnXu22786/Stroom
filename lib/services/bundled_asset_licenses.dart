@@ -11,6 +11,11 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const ['KaTeX fonts (katex 0.16.22)'],
+      await rootBundle.loadString('assets/vendor/mathlive/fonts/LICENSE.txt'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const ['Mermaid 11.16.1'],
       await rootBundle.loadString('assets/vendor/mermaid/LICENSE.txt'),
     );
