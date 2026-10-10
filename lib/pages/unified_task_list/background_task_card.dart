@@ -457,6 +457,16 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
             color: Colors.blue,
             onPressed: () => _navigateToTaskPage(context, task),
           ),
+        if (!widget.isFlowManaged &&
+            task.type == BackgroundTaskType.ocr &&
+            task.status == TaskStatus.running)
+          _actionButton(
+            icon: Icons.stop_circle_outlined,
+            label: '取消',
+            color: Colors.red,
+            onPressed: () =>
+                ref.read(backgroundTasksProvider.notifier).cancelTask(task.id),
+          ),
         // Delete button
         if (!widget.isFlowManaged)
           TextButton.icon(

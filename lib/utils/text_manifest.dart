@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
@@ -153,6 +154,30 @@ String computeTextHash(Uint8List data) {
 
 /// Text file manifest — delegates to [ManifestOperations].
 class TextManifest {
+  static final Map<String, Future<void>> _pendingSaves = {};
+  static final Object _saveLockZoneKey = Object();
+
+  /// OCR owns publication and rollback together. Ordinary text writers use
+  /// the same key, so they cannot publish into an in-flight OCR rollback.
+  static Future<T> withSaveLock<T>(
+      String hash, Future<T> Function() action) async {
+    final held = Zone.current[_saveLockZoneKey] as Set<String>? ?? const {};
+    if (held.contains(hash)) return action();
+    final previous = _pendingSaves[hash] ?? Future<void>.value();
+    final release = Completer<void>();
+    final pending = previous.then((_) => release.future);
+    _pendingSaves[hash] = pending;
+    await previous;
+    try {
+      return await runZoned(action, zoneValues: {
+        _saveLockZoneKey: {...held, hash}
+      });
+    } finally {
+      release.complete();
+      if (identical(_pendingSaves[hash], pending)) _pendingSaves.remove(hash);
+    }
+  }
+
   static final _ops = ManifestOperations<TextRecord>(
     manifestKey: 'text_manifest',
     storageDirName: 'texts',
@@ -163,12 +188,18 @@ class TextManifest {
   );
 
   static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
-  static Future<void> addRecord(TextRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
+  static Future<List<TextRecord>> loadRecordsUncached() =>
+      _ops.loadRecordsUncached();
+  static Future<void> addRecord(TextRecord record,
+          {void Function()? beforeCommit}) =>
+      withSaveLock(record.hash,
+          () => _ops.addRecord(record, beforeCommit: beforeCommit));
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
+      _ops.deleteRecord(id, preserveFiles: preserveFiles);
   static Future<void> deleteRecords(List<String> ids) =>
       _ops.deleteRecords(ids);
   static Future<void> updateRecord(TextRecord updated) =>
-      _ops.updateRecord(updated);
+      withSaveLock(updated.hash, () => _ops.updateRecord(updated));
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
   static Future<void> moveRecord(String id, String targetFolder) =>
@@ -178,12 +209,19 @@ class TextManifest {
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
+  static Future<String?> readFilePath(String fileName) =>
+      _ops.readFilePath(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
 
   /// 写入文本内容到文件
-  static Future<String> writeText(String fileName, String text) async {
+  static Future<String> writeText(String fileName, String text,
+      {void Function()? beforeCommit}) async {
     final bytes = Uint8List.fromList(utf8.encode(text));
-    return writeFile(fileName, bytes);
+    final hash = fileName.endsWith('.txt')
+        ? fileName.substring(0, fileName.length - 4)
+        : fileName;
+    return withSaveLock(hash,
+        () => _ops.writeFile(fileName, bytes, beforeCommit: beforeCommit));
   }
 
   /// 读取文本内容从文件

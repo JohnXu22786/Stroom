@@ -1052,21 +1052,44 @@ class ManifestDatabase {
   }
 
   /// 插入一条文本记录
-  static Future<void> insertTextRecord(Map<String, dynamic> record) async {
+  static Future<void> insertTextRecord(Map<String, dynamic> record,
+      {void Function()? beforeCommit}) async {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+        beforeCommit?.call();
         list.add(record);
         await _saveWebData();
+        try {
+          beforeCommit?.call();
+        } catch (_) {
+          list.remove(record);
+          await _saveWebData();
+          rethrow;
+        }
         return;
       }
       final db = await database;
-      await db.insert(
-        ManifestTables.textRecords,
-        recordToDbRow(record),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      if (beforeCommit == null) {
+        await db.insert(
+          ManifestTables.textRecords,
+          recordToDbRow(record),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        // Cancellation while waiting for the database/transaction or insert
+        // rolls back this record. The final guard is the commit boundary.
+        await db.transaction((txn) async {
+          beforeCommit();
+          await txn.insert(
+            ManifestTables.textRecords,
+            recordToDbRow(record),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          beforeCommit();
+        });
+      }
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertTextRecord failed', e, stackTrace);

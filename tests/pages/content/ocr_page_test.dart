@@ -1,5 +1,7 @@
 // Merged from: ocr_page_test.dart, ocr_page_preview_edit_test.dart
 import 'dart:typed_data';
+import 'dart:async';
+import 'package:image_picker/image_picker.dart';
 import 'dart:ui' as ui;
 
 import 'package:extended_image/extended_image.dart';
@@ -170,6 +172,17 @@ SelectedImage _createTestImage({int seed = 1}) {
   );
 }
 
+class _UnreadPickerFile extends XFile {
+  int reads = 0;
+  _UnreadPickerFile() : super('disposed.png');
+
+  @override
+  Future<Uint8List> readAsBytes() async {
+    reads++;
+    return Uint8List.fromList([1]);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -179,6 +192,39 @@ void main() {
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
   });
+
+  for (final gallery in [false, true]) {
+    testWidgets(
+        'late ${gallery ? "gallery" : "camera"} picker ignores disposed page',
+        (tester) async {
+      final file = _UnreadPickerFile();
+      final camera = Completer<XFile?>();
+      final images = Completer<List<XFile>>();
+      await tester.pumpWidget(ProviderScope(
+          child: MaterialApp(
+              home: OcrPage(
+        testCameraPicker: () => camera.future,
+        testGalleryPicker: () => images.future,
+      ))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
+      await tester.pumpAndSettle();
+      if (gallery) {
+        await tester.tap(find.text('从系统相册选择'));
+        await tester.pumpAndSettle();
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      if (gallery) {
+        images.complete([file]);
+      } else {
+        camera.complete(file);
+      }
+      await tester.pump();
+      expect(file.reads, 0,
+          reason: 'disposed picker must stop before file I/O');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (

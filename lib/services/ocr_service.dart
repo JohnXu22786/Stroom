@@ -6,6 +6,7 @@ import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 
 import '../utils/http_utils.dart';
+import '../utils/http_timeout.dart';
 import 'app_log_service.dart';
 
 // ============================================================================
@@ -108,9 +109,12 @@ class OcrResult {
 /// - A user message with the image(s) encoded as base64 data URIs
 ///
 /// The response follows the standard OpenAI chat completion format.
+enum OcrRequestStage { uploading, waiting, parsing }
+
 class OcrService {
   final OcrConfig config;
   final Dio _dio;
+  final Duration? _sendTimeoutOverride;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -145,7 +149,8 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
-  }) : _dio = dio ??
+  })  : _sendTimeoutOverride = sendTimeout,
+        _dio = dio ??
             Dio(BaseOptions(
               headers: {
                 'Content-Type': 'application/json',
@@ -153,11 +158,15 @@ class OcrService {
                   'Authorization': 'Bearer ${config.apiKey}',
                 ...openRouterAppHeaders,
               },
-              connectTimeout: connectTimeout,
-              sendTimeout: sendTimeout,
-              receiveTimeout: receiveTimeout,
-              // No timeouts — OCR tasks may take a long time
-            ));
+              connectTimeout: connectTimeout ?? connectTimeoutDefault,
+              sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+              receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+            )) {
+    _dio.options.connectTimeout =
+        connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
+    _dio.options.receiveTimeout =
+        receiveTimeout ?? _dio.options.receiveTimeout ?? receiveTimeoutFallback;
+  }
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
@@ -188,6 +197,8 @@ class OcrService {
     required Uint8List imageBytes,
     String imageFormat = 'jpeg',
     CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    void Function(OcrRequestStage)? onStage,
   }) async {
     await AppLogService.info(
         'OcrService', '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节');
@@ -224,7 +235,9 @@ class OcrService {
       final response = await _dio.post(
         _chatUrl,
         data: body,
+        options: _requestOptions(body),
         cancelToken: cancelToken,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
 
       stopwatch.stop();
@@ -236,6 +249,8 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
+      cancelToken?.throwIfCancellationRequested();
+      onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
       await AppLogService.info('OcrService',
@@ -260,6 +275,9 @@ class OcrService {
   /// Returns [OcrResult] with combined extracted text.
   Future<OcrResult> recognizeBatch({
     required List<(Uint8List bytes, String format)> imageBytesList,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    void Function(OcrRequestStage)? onStage,
   }) async {
     await AppLogService.info(
         'OcrService', '开始批量 OCR 识别: ${imageBytesList.length} 张图片');
@@ -298,6 +316,9 @@ class OcrService {
       final response = await _dio.post(
         _chatUrl,
         data: body,
+        options: _requestOptions(body),
+        cancelToken: cancelToken,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
 
       stopwatch.stop();
@@ -309,6 +330,8 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
+      cancelToken?.throwIfCancellationRequested();
+      onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
       await AppLogService.info('OcrService',
@@ -326,6 +349,22 @@ class OcrService {
       throwWrappedDioException(e);
     }
   }
+
+  Options _requestOptions(Map<String, dynamic> body) => Options(
+        sendTimeout: _sendTimeoutOverride ??
+            sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
+        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+      );
+
+  ProgressCallback _uploadProgress(
+          ProgressCallback? progress, void Function(OcrRequestStage)? stage) =>
+      (sent, total) {
+        stage?.call(OcrRequestStage.uploading);
+        progress?.call(sent, total);
+        if (total > 0 && sent >= total) {
+          stage?.call(OcrRequestStage.waiting);
+        }
+      };
 
   /// Capture response-level diagnostic fields from a [DioException].
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].

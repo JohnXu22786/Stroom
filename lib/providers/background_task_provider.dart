@@ -42,7 +42,7 @@ enum BackgroundTaskType {
     switch (this) {
       case BackgroundTaskType.ocr:
         // OCR: single request with all images
-        return ['连接服务器', '上传图片', '识别中', '接收结果', '保存文件'];
+        return ['连接服务器', '上传图片', '等待识别结果', '解析结果', '保存文件'];
       case BackgroundTaskType.asr:
         // ASR: one request per file, each file is a separate task
         return ['连接服务器', '上传音频', '转写中', '接收结果', '保存文件'];
@@ -85,9 +85,10 @@ class BgTaskStep {
     BgStepStatus? status,
     String? error,
     bool clearError = false,
+    String? label,
   }) =>
       BgTaskStep(
-        label: label,
+        label: label ?? this.label,
         status: status ?? this.status,
         error: clearError ? null : (error ?? this.error),
       );
@@ -248,6 +249,39 @@ final backgroundTasksProvider =
 
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
+  final Map<String, void Function()> _cancellations = {};
+
+  /// Only live owned operations register callbacks; restored records do not.
+  void registerCancellation(String taskId, void Function() cancel) {
+    if (!mounted || !state.any((task) => task.id == taskId)) {
+      cancel();
+      return;
+    }
+    _cancellations[taskId] = cancel;
+  }
+
+  void unregisterCancellation(String taskId) => _cancellations.remove(taskId);
+
+  void cancelTask(String taskId) {
+    final cancel = _cancellations.remove(taskId);
+    if (cancel == null) return;
+    cancel();
+    if (!mounted) return;
+    final task = state.where((task) => task.id == taskId).firstOrNull;
+    if (task == null) return;
+    setSteps(
+        taskId,
+        task.steps
+            .map((step) => step.copyWith(
+                  status: step.running
+                      ? BgStepStatus.failed
+                      : step.status == BgStepStatus.pending
+                          ? BgStepStatus.skipped
+                          : step.status,
+                ))
+            .toList());
+    failTask(taskId, error: '已取消');
+  }
 
   /// 测试专用：覆盖持久化目录。
   ///
@@ -260,6 +294,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   @override
   void dispose() {
+    for (final cancel in _cancellations.values.toList()) {
+      cancel();
+    }
+    _cancellations.clear();
     _disposedSnapshot = List.of(state);
     _iosSyncTimer?.cancel();
     _iosSyncTimer = null;
@@ -377,6 +415,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool? failed,
     bool? skipped,
     String? error,
+    String? label,
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
@@ -394,7 +433,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       } else {
         return t; // no change
       }
-      steps[index] = steps[index].copyWith(status: newStatus, error: error);
+      steps[index] =
+          steps[index].copyWith(status: newStatus, error: error, label: label);
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
@@ -403,6 +443,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
+    _cancellations.remove(taskId)?.call();
     state = state.where((t) => t.id != taskId).toList();
     _persistTasks();
     _syncIosContinuedTask();
@@ -410,11 +451,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Save removals before publishing them; absent IDs also retry disk cleanup.
   Future<bool> removeTasksPersisted(Iterable<String> ids) async {
+    final removedIds = ids.toSet();
+    for (final id in removedIds) {
+      cancelTask(id);
+    }
     while (_removalBarrier != null) {
       await _removalBarrier!.future;
     }
     if (!mounted) return false;
-    final removedIds = ids.toSet();
     if (removedIds.isEmpty) return true;
 
     final gate = Completer<void>();

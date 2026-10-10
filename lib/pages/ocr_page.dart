@@ -14,6 +14,7 @@ import '../providers/background_task_provider.dart';
 import '../providers/ocr_instructions_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
+import '../services/ocr_task_runner.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
@@ -99,7 +100,17 @@ Map<String, dynamic> applySelectedOcrInstruction(
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage({super.key, this.testImages, this.retryData});
+  const OcrPage(
+      {super.key,
+      this.testImages,
+      this.retryData,
+      this.testCameraPicker,
+      this.testGalleryPicker});
+
+  @visibleForTesting
+  final Future<XFile?> Function()? testCameraPicker;
+  @visibleForTesting
+  final Future<List<XFile>> Function()? testGalleryPicker;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -1264,15 +1275,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _takePhotoWithSystemCamera() async {
     try {
       final picker = ImagePicker();
-      final file = await picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 2048,
-        maxHeight: 2048,
-        imageQuality: 90,
-      );
-      if (file == null) return;
+      final file = await (widget.testCameraPicker?.call() ??
+          picker.pickImage(
+            source: ImageSource.camera,
+            maxWidth: 2048,
+            maxHeight: 2048,
+            imageQuality: 90,
+          ));
+      if (!mounted || file == null) return;
 
       final bytes = await file.readAsBytes();
+      if (!mounted) return;
 
       setState(() {
         _selectedImages.add(
@@ -1297,17 +1310,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       // 移动端直接通过 image_picker 打开系统相册，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await pickGalleryMedia(
-        GalleryMediaKind.image,
-        imageQuality: 90,
-        maxWidth: 2048,
-        maxHeight: 2048,
-      );
-      if (files.isEmpty) return;
+      final files = await (widget.testGalleryPicker?.call() ??
+          pickGalleryMedia(
+            GalleryMediaKind.image,
+            imageQuality: 90,
+            maxWidth: 2048,
+            maxHeight: 2048,
+          ));
+      if (!mounted || files.isEmpty) return;
 
       final newImages = <SelectedImage>[];
       for (final file in files) {
         final bytes = await file.readAsBytes();
+        if (!mounted) return;
         if (bytes.isEmpty) continue; // 读取失败的文件跳过（与相册路径一致）
         newImages.add(
           SelectedImage(
@@ -1318,6 +1333,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
 
+      if (!mounted) return;
       setState(() {
         _selectedImages.addAll(newImages);
       });
@@ -1334,7 +1350,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromAppAlbum() async {
     try {
       final result = await showAppAlbumPickerDialog(context);
-      if (result == null || result.isEmpty) return;
+      if (!mounted || result == null || result.isEmpty) return;
       for (final entry in result) {
         await _handleSelectedImage(entry.key, entry.value);
       }
@@ -1357,6 +1373,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Handle a selected image from the album picker.
   Future<void> _handleSelectedImage(String fileName, Uint8List data) async {
+    if (!mounted) return;
     try {
       final format = fileName.contains('.')
           ? fileName.split('.').last.toLowerCase()
@@ -1487,7 +1504,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
 
   Future<void> _startOcr() async {
-    if (_ocrStarting) return;
+    if (_ocrStarting || _isProcessing) return;
     if (_selectedImages.isEmpty) return;
 
     final modelOptions = _getOcrModelOptions(ref);
@@ -1497,6 +1514,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
       return;
     }
+
+    _ocrStarting = true;
+    final images = _selectedImages
+        .map((image) => SelectedImage(
+              bytes: Uint8List.fromList(image.bytes),
+              format: image.format,
+              sourceName: image.sourceName,
+            ))
+        .toList();
+    final folder = _saveFolder;
+    final modelIndex = _selectedModelIndex;
 
     // Build config from the selected model's own source config,
     // ensuring host/API key match the model's provider.
@@ -1517,11 +1545,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // instruction instead of silently dropping it. Guarded so a second tap
     // during the async load cannot start a duplicate OCR.
     if (_pendingRetryInstructionIndex != null) {
-      _ocrStarting = true;
       try {
         await _resolvePendingRetryInstruction();
-      } finally {
+      } catch (_) {
         _ocrStarting = false;
+        rethrow;
       }
     }
 
@@ -1538,33 +1566,31 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _selectedInstructionIndex,
     );
 
-    // Step 1: Pop back to home page immediately — matching the original
-    // working flow. This avoids any Riverpod rebuild delay from addTask().
-    if (mounted) {
-      Navigator.pop(context);
-    }
-    // Yield to the event loop so the pop transition renders.
-    await Future<void>.delayed(Duration.zero);
-
-    // Capture notifier references after pop (ref is still valid).
+    // Capture every provider and input before navigation. The runner owns
+    // copies and never reads this page or WidgetRef after it is removed.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
     final textNotifier = ref.read(textRecordsProvider.notifier);
-
-    // Step 2: Create the task (appears in the task list instantly).
     final timestamp = _currentTimestamp();
-    final allHaveSourceNames =
-        _selectedImages.every((img) => img.sourceName != null);
+    final allHaveSourceNames = images.every((img) => img.sourceName != null);
     final title = allHaveSourceNames
-        ? 'OCR_${_selectedImages.first.sourceName!}'
+        ? 'OCR_${images.first.sourceName!}'
         : 'OCR_$timestamp';
-    final modelIndex = _selectedModelIndex;
-    final imageBytesList = _selectedImages.map((img) => img.bytes).toList();
-    final imageFormatList = _selectedImages.map((img) => img.format).toList();
-    final imageNameList = _selectedImages.map((img) => img.sourceName).toList();
+    final imageBytesList = images.map((img) => img.bytes).toList();
+    final imageFormatList = images.map((img) => img.format).toList();
+    final imageNameList = images.map((img) => img.sourceName).toList();
     final taskId = bgNotifier.addTask(
       type: BackgroundTaskType.ocr,
       title: title,
       retryData: null,
+    );
+    final runner = OcrTaskRunner(
+      taskId: taskId,
+      notifier: bgNotifier,
+      config: effectiveConfig,
+      images: images.map((img) => (img.bytes, img.format)).toList(),
+      title: title,
+      folder: folder,
+      onSaved: () => unawaited(textNotifier.loadRecords()),
     );
 
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
@@ -1585,18 +1611,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         instructionContent,
         bgNotifier));
 
-    // Step 4: Execute OCR immediately.
-    try {
-      await _performOcr(effectiveConfig, taskId, bgNotifier, textNotifier,
-          title: title);
-    } catch (e) {
-      bgNotifier.failTask(taskId, error: 'OCR启动失败: $e');
-    }
+    _isProcessing = true;
+    unawaited(runner.run());
+    Navigator.pop(context);
   }
 
   /// Compute retryData for an OCR task in the background.
   /// Fire-and-forget — the task can execute without retryData.
-  Future<void> _computeOcrRetryData(
+  static Future<void> _computeOcrRetryData(
     String taskId,
     List<Uint8List> imageBytesList,
     List<String> imageFormatList,
@@ -1625,7 +1647,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             'instructionContent': instructionContent,
         };
       });
-      bgNotifier.setRetryData(taskId, retryData);
+      if (bgNotifier.mounted &&
+          bgNotifier.state.any((task) => task.id == taskId)) {
+        bgNotifier.setRetryData(taskId, retryData);
+      }
     } catch (e) {
       debugPrint('[OCR] Isolate.run failed, falling back to main thread: $e');
       try {
@@ -1645,153 +1670,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           if (instructionContent != null)
             'instructionContent': instructionContent,
         };
-        bgNotifier.setRetryData(taskId, retryData);
+        if (bgNotifier.mounted &&
+            bgNotifier.state.any((task) => task.id == taskId)) {
+          bgNotifier.setRetryData(taskId, retryData);
+        }
       } catch (retryError) {
         debugPrint('[OCR] Failed to compute retryData: $retryError');
       }
     }
   }
 
-  Future<void> _performOcr(
-    OcrConfig ocrConfig,
-    String taskId,
-    BackgroundTaskNotifier bgNotifier,
-    TextRecordsNotifier textNotifier, {
-    String? title,
-  }) async {
-    OcrService? service;
-    try {
-      if (mounted) {
-        setState(() {
-          _isProcessing = true;
-          _errorMessage = null;
-        });
-      }
-
-      // Step 1: Connecting (default: pending → running)
-      bgNotifier.updateStep(taskId, 0, running: true);
-
-      service = OcrService(config: ocrConfig);
-
-      // Step 2: Uploading (step index 1)
-      bgNotifier.updateStep(taskId, 0, completed: true);
-      bgNotifier.updateStep(taskId, 1, running: true);
-
-      OcrResult result;
-
-      if (_selectedImages.length == 1) {
-        final img = _selectedImages.first;
-        result = await service.recognize(
-          imageBytes: img.bytes,
-          imageFormat: img.format,
-        );
-      } else {
-        final batchInput =
-            _selectedImages.map((img) => (img.bytes, img.format)).toList();
-        result = await service.recognizeBatch(imageBytesList: batchInput);
-      }
-
-      if (!result.isComplete) {
-        bgNotifier.setResult(taskId, result.text);
-        throw Exception(
-          'OCR 返回了不完整结果（finish_reason=${result.finishReason}）',
-        );
-      }
-
-      // Step 3: Processing complete → Step 4: Receiving result
-      bgNotifier.updateStep(taskId, 1, completed: true);
-      // Mark "处理中" as running now that server has responded
-      bgNotifier.updateStep(taskId, 2, running: true);
-
-      // Store the OCR result internally
-      bgNotifier.setResult(taskId, result.text);
-
-      // Processing done, now receiving result
-      bgNotifier.updateStep(taskId, 2, completed: true);
-      bgNotifier.updateStep(taskId, 3, running: true);
-
-      // Step 5: Saving file — save to file and get the path
-      bgNotifier.updateStep(taskId, 3, completed: true);
-      bgNotifier.updateStep(taskId, 4, running: true);
-
-      // Capture the actual file path from _saveOcrResult
-      final filePath = await _saveOcrResult(result.text, title: title);
-      bgNotifier.updateStep(taskId, 4, completed: true);
-      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-
-      // Refresh text records so the files page shows the new OCR result
-      unawaited(textNotifier.loadRecords());
-    } catch (e) {
-      // Mark the failed step
-      final task = bgNotifier.state.where((t) => t.id == taskId).firstOrNull;
-      if (task != null) {
-        final runningIndex = task.steps.indexWhere((s) => s.running);
-        if (runningIndex >= 0) {
-          bgNotifier.updateStep(taskId, runningIndex,
-              failed: true, error: 'OCR识别失败: $e');
-        }
-        // Mark remaining pending steps as skipped
-        for (var i = 0; i < task.steps.length; i++) {
-          if (task.steps[i].status == BgStepStatus.pending) {
-            bgNotifier.updateStep(taskId, i, skipped: true);
-          }
-        }
-      }
-      // Capture raw request/response diagnostics from OcrService
-      Map<String, dynamic>? rawRequest;
-      Map<String, dynamic>? rawResponse;
-      if (service != null) {
-        rawRequest = {
-          if (service.lastRequestUrl != null) 'url': service.lastRequestUrl,
-          if (service.lastRequestHeaders != null)
-            'headers': service.lastRequestHeaders,
-          if (service.lastRequestBody != null) 'body': service.lastRequestBody,
-        };
-        rawResponse = {
-          if (service.lastResponseStatusCode != null)
-            'statusCode': service.lastResponseStatusCode,
-          if (service.lastResponseHeaders != null)
-            'headers': service.lastResponseHeaders,
-          if (service.lastResponseData != null)
-            'data': service.lastResponseData,
-        };
-      }
-      bgNotifier.failTask(taskId,
-          error: 'OCR识别失败: $e',
-          rawRequest: rawRequest,
-          rawResponse: rawResponse);
-    }
-  }
-
   String _currentTimestamp() {
     final now = DateTime.now();
     return '${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}';
-  }
-
-  /// Save the OCR result as a text record, named by the task title.
-  /// Returns the file path of the saved text file, or null on failure.
-  Future<String?> _saveOcrResult(String text, {String? title}) async {
-    final now = DateTime.now();
-
-    final bytes = Uint8List.fromList(utf8.encode(text));
-    final hash = computeTextHash(bytes);
-    final storageFileName = '$hash.txt';
-
-    // Capture the file path returned by writeText
-    final filePath = await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(
-      TextRecord(
-        name: title ??
-            'OCR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
-        hash: hash,
-        format: 'txt',
-        createdAt: now,
-        size: bytes.length,
-        folder: _saveFolder,
-        textLength: text.length,
-      ),
-    );
-    return filePath;
   }
 
   // ==================================================================

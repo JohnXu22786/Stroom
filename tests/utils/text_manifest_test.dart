@@ -15,6 +15,25 @@ void main() {
     TextManifest.invalidateCache();
   });
 
+  testWidgets('cancel guard after asynchronous load prevents text insertion',
+      (tester) async {
+    var cancelled = false;
+    final saving = TextManifest.addRecord(
+      TextRecord(
+          name: 'cancelled',
+          hash: 'cancelled',
+          createdAt: DateTime.now(),
+          size: 1),
+      beforeCommit: () {
+        if (cancelled) throw StateError('cancelled');
+      },
+    );
+    cancelled = true;
+    await expectLater(saving, throwsStateError);
+    expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+    expect(await TextManifest.loadRecords(), isEmpty);
+  });
+
   // ====== ManifestDatabase text records (in-memory, no file I/O) ======
 
   group('ManifestDatabase text records', () {
