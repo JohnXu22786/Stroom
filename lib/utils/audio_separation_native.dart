@@ -669,8 +669,21 @@ class _AudioSampleDescription {
   }
 }
 
+class _Mp4aDecoderConfig {
+  final int objectTypeIndication;
+  final Uint8List? audioSpecificConfig;
+
+  const _Mp4aDecoderConfig({
+    required this.objectTypeIndication,
+    required this.audioSpecificConfig,
+  });
+}
+
 /// Pure-Dart MP4/ISOBMFF container parser.
 class _Mp4Demuxer {
+  // MPEG-4 Audio and MPEG-2 AAC Main, LC, and SSR are supported.
+  static const _aacObjectTypeIndications = {0x40, 0x66, 0x67, 0x68};
+
   final Uint8List _data;
   int _offset = 0;
 
@@ -820,6 +833,7 @@ class _Mp4Demuxer {
                         _offset += 4; // pre-defined + reserved
                         var entrySampleRate = _readUint32() >> 16;
                         Uint8List? entryAudioSpecificConfig;
+                        var supportedMp4aEntry = true;
                         if (entryCodec == 'mp4a') {
                           if (audioSampleEntryVersion == 2 &&
                               entrySize >= 72 &&
@@ -836,21 +850,29 @@ class _Mp4Demuxer {
                               entryChannels = version2Channels;
                             }
                           }
-                          entryAudioSpecificConfig = _readAudioSpecificConfig(
+                          final decoderConfig = _readMp4aDecoderConfig(
                             es,
                             entrySize,
                             audioSampleEntryVersion,
                           );
+                          if (decoderConfig != null) {
+                            supportedMp4aEntry =
+                                _aacObjectTypeIndications.contains(
+                              decoderConfig.objectTypeIndication,
+                            );
+                            entryAudioSpecificConfig =
+                                decoderConfig.audioSpecificConfig;
+                          }
                         }
-                        sampleDescriptions.add(
-                          _AudioSampleDescription(
-                            codec: entryCodec,
-                            sampleRate: entrySampleRate,
-                            channels: entryChannels,
-                            bitsPerSample: entryBitsPerSample,
-                            audioSpecificConfig: entryAudioSpecificConfig,
-                          ),
-                        );
+                        sampleDescriptions.add(supportedMp4aEntry
+                            ? _AudioSampleDescription(
+                                codec: entryCodec,
+                                sampleRate: entrySampleRate,
+                                channels: entryChannels,
+                                bitsPerSample: entryBitsPerSample,
+                                audioSpecificConfig: entryAudioSpecificConfig,
+                              )
+                            : null);
                       } else {
                         sampleDescriptions.add(null);
                       }
@@ -982,7 +1004,7 @@ class _Mp4Demuxer {
     );
   }
 
-  Uint8List? _readAudioSpecificConfig(
+  _Mp4aDecoderConfig? _readMp4aDecoderConfig(
       int entryStart, int entrySize, int audioSampleEntryVersion) {
     if (entrySize < 36 || entryStart + entrySize > _data.length) return null;
     final entryEnd = entryStart + entrySize;
@@ -1003,15 +1025,14 @@ class _Mp4Demuxer {
         _data.sublist(childStart + 4, childStart + 8),
       );
       if (childType == 'esds' && childSize >= 12) {
-        return _findAudioSpecificConfig(
-            childStart + 12, childStart + childSize);
+        return _findMp4aDecoderConfig(childStart + 12, childStart + childSize);
       }
       childStart += childSize;
     }
     return null;
   }
 
-  Uint8List? _findAudioSpecificConfig(int start, int end) {
+  _Mp4aDecoderConfig? _findMp4aDecoderConfig(int start, int end) {
     final esDescriptor = _readDescriptor(start, end);
     if (esDescriptor == null || esDescriptor.$1 != 0x03) return null;
 
@@ -1036,17 +1057,26 @@ class _Mp4Demuxer {
         // DecoderConfigDescriptor's fixed fields precede its child descriptors.
         final configChildren = bodyStart + 13;
         if (configChildren > bodyEnd) return null;
+        final objectTypeIndication = _data[bodyStart];
         var child = configChildren;
         while (child < bodyEnd) {
           final config = _readDescriptor(child, bodyEnd);
           if (config == null) return null;
           final (configTag, configStart, configEnd) = config;
           if (configTag == 0x05) {
-            if (configStart == configEnd) return null;
-            return Uint8List.fromList(_data.sublist(configStart, configEnd));
+            return _Mp4aDecoderConfig(
+              objectTypeIndication: objectTypeIndication,
+              audioSpecificConfig: configStart == configEnd
+                  ? null
+                  : Uint8List.fromList(_data.sublist(configStart, configEnd)),
+            );
           }
           child = configEnd;
         }
+        return _Mp4aDecoderConfig(
+          objectTypeIndication: objectTypeIndication,
+          audioSpecificConfig: null,
+        );
       }
       cursor = bodyEnd;
     }
