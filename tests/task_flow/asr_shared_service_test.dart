@@ -26,17 +26,20 @@ import 'package:stroom/utils/text_manifest.dart';
 class _AsrAdapter implements HttpClientAdapter {
   _AsrAdapter({
     required this.responseBody,
+    this.responseBodies = const [],
     this.responseStatusCode = 200,
     this.responseContentType = Headers.jsonContentType,
     this.holdResponse = false,
   });
 
   final String responseBody;
+  final List<String> responseBodies;
   final int responseStatusCode;
   final String responseContentType;
   final bool holdResponse;
   final requests = <({RequestOptions options, Uint8List body})>[];
   int closeCalls = 0;
+  int _responseIndex = 0;
   final requestStarted = Completer<void>();
   final cancelObserved = Completer<void>();
   final releaseResponse = Completer<void>();
@@ -80,7 +83,7 @@ class _AsrAdapter implements HttpClientAdapter {
       }
     }
     return ResponseBody.fromString(
-      responseBody,
+      responseBodies.isEmpty ? responseBody : responseBodies[_responseIndex++],
       responseStatusCode,
       headers: {
         Headers.contentTypeHeader: [responseContentType],
@@ -220,10 +223,7 @@ void main() {
       await adapter.cancelObserved.future.timeout(const Duration(seconds: 5));
       await assertion;
     } else if (responseStatusCode >= 400) {
-      await expectLater(
-        request,
-        throwsA(isA<BlockExecutionException>()),
-      );
+      await expectLater(request, throwsA(isA<BlockExecutionException>()));
     } else {
       expect(await request, 'recognized');
     }
@@ -342,6 +342,56 @@ void main() {
 
     expect(adapter.closeCalls, 1);
   });
+
+  test(
+    'partial chunk results fail the task and never save formal text',
+    () async {
+      final adapter = _AsrAdapter(
+        responseBody: '',
+        responseBodies: [
+          '{"text":"first chunk"}',
+          '{"error":{"message":"middle failed"}}',
+          '{"text":"last chunk"}',
+        ],
+      );
+      final dio = Dio()..httpClientAdapter = adapter;
+      final file = await audioFile('partial.wav', dataBytes: 140);
+
+      await expectLater(
+        executeAsrBlock(
+          block: asrBlock(extraParams: {'saveFolder': 'transcripts'}),
+          def: BlockTypeDefinition.asr,
+          input: file.path,
+          execId: execId,
+          execNotifier: executions,
+          flowSubTask: subTask,
+          bgNotifier: background,
+          providerEntries: providers(
+            providerTypeConfig: {
+              'maxFileSizeMb': 0.0001,
+              'chunking': 'fixedSize',
+              'fallbackMethod': 'generic',
+            },
+          ),
+          asrServiceFactory: (config) => AsrService(config: config, dio: dio),
+        ),
+        throwsA(isA<BlockExecutionException>()),
+      );
+
+      expect(adapter.requests, hasLength(3));
+      expect(background.state.single.status, TaskStatus.failed);
+      expect(background.state.single.result, 'first chunk last chunk');
+      expect(background.state.single.error, contains('middle failed'));
+      expect(background.state.single.error, contains('片段 2'));
+      expect(background.state.single.error, contains('成功: first chunk'));
+      expect(background.state.single.error, contains('成功: last chunk'));
+      expect(
+        executions.execution(execId)!.subTasks.single.status,
+        TaskStatus.failed,
+      );
+      expect(await TextManifest.loadRecords(), isEmpty);
+    },
+  );
 
   test('task-flow closes its owned Dio after a request failure', () async {
     final adapter = await executeWithOwnedService(

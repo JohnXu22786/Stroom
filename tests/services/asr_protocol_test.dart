@@ -20,6 +20,7 @@ class _ProtocolAdapter implements HttpClientAdapter {
   final String responseContentType;
 
   Uint8List? requestBody;
+  final requestBodies = <Uint8List>[];
   int _responseIndex = 0;
 
   @override
@@ -35,6 +36,7 @@ class _ProtocolAdapter implements HttpClientAdapter {
       }
     }
     requestBody = Uint8List.fromList(bytes);
+    requestBodies.add(requestBody!);
 
     final body = responseBodies.isEmpty
         ? responseBody
@@ -98,21 +100,26 @@ Future<({AsrResult result, AsrService service, _ProtocolAdapter adapter})>
 }
 
 bool _multipartHasField(List<int> bytes, String name, String value) {
+  return _multipartField(bytes, name) == value;
+}
+
+String? _multipartField(List<int> bytes, String name) {
   final body = utf8.decode(bytes, allowMalformed: true);
   final marker = 'name="$name"';
   var index = 0;
   while (index < body.length) {
     final fieldIndex = body.indexOf(marker, index);
-    if (fieldIndex < 0) return false;
+    if (fieldIndex < 0) return null;
     final headerEnd = body.indexOf('\r\n\r\n', fieldIndex);
-    if (headerEnd < 0) return false;
+    if (headerEnd < 0) return null;
     final valueStart = headerEnd + 4;
     final valueEnd = body.indexOf('\r\n', valueStart);
-    if (valueEnd < 0) return false;
-    if (body.substring(valueStart, valueEnd) == value) return true;
+    if (valueEnd < 0) return null;
+    final value = body.substring(valueStart, valueEnd);
+    if (value.isNotEmpty) return value;
     index = valueEnd + 2;
   }
-  return false;
+  return null;
 }
 
 Uint8List _testWav(int dataSize) {
@@ -218,6 +225,229 @@ void main() {
         expect(call.result.segments![1].startSeconds, closeTo(0.0035, 0.0001));
         expect(call.result.subtitle, contains('00:00:00,004 --> 00:00:00,005'));
         expect(call.result.subtitle, contains('00:00:00,007 --> 00:00:00,008'));
+      },
+    );
+
+    test('rebases JSON segment and word timestamps for each chunk', () async {
+      final response = jsonEncode({
+        'text': 'turn',
+        'segments': [
+          {'start': 0, 'end': 0.001, 'text': 'turn'},
+        ],
+        'words': [
+          {'start': 0, 'end': 0.001, 'word': 'turn'},
+        ],
+      });
+      final call = await _transcribe(
+        responseBody: response,
+        responseBodies: [response, response, response],
+        responseFormat: 'verbose_json',
+        audioBytes: _testWav(140),
+        maxFileSizeBytes: 100,
+        chunking: 'fixedSize',
+        fallbackMethod: 'generic',
+      );
+
+      expect(call.result.segments, hasLength(3));
+      expect(call.result.words, hasLength(3));
+      expect(call.result.segments![1].startSeconds, closeTo(0.0035, 0.0001));
+      expect(call.result.words![2].endSeconds, closeTo(0.008, 0.0001));
+    });
+
+    test(
+      'chunk failure throws structured partial results and prompt context',
+      () async {
+        final adapter = _ProtocolAdapter(
+          responseBody: '',
+          responseBodies: [
+            '{"text":"first chunk"}',
+            '{"error":{"message":"middle failed"}}',
+            '{"text":"last chunk"}',
+          ],
+        );
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+            typeConfig: {
+              'enableResponseFormat': true,
+              'responseFormat': 'json',
+              'enablePrompt': true,
+              'prompt': 'domain vocabulary',
+            },
+          ),
+          dio: dio,
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
+          throwsA(
+            isA<AsrChunkedTranscriptionException>()
+                .having((e) => e.chunks, 'chunks', hasLength(3))
+                .having((e) => e.isPartial, 'isPartial', isTrue)
+                .having(
+                  (e) => e.partialText,
+                  'partialText',
+                  'first chunk last chunk',
+                )
+                .having((e) => e.chunks[1].index, 'failed index', 1)
+                .having(
+                  (e) => e.chunks[1].status,
+                  'failed status',
+                  AsrChunkStatus.failed,
+                )
+                .having(
+                  (e) => e.chunks[2].startSeconds,
+                  'third chunk start',
+                  closeTo(0.007, 0.0001),
+                )
+                .having(
+                  (e) => e.chunks[2].endSeconds,
+                  'third chunk end',
+                  closeTo(0.00875, 0.0001),
+                ),
+          ),
+        );
+
+        final bodies = adapter.requestBodies
+            .map((bytes) => utf8.decode(bytes, allowMalformed: true))
+            .toList();
+        expect(bodies[0], contains('domain vocabulary'));
+        expect(bodies[1], contains('domain vocabulary'));
+        expect(bodies[1], contains('first chunk'));
+        expect(bodies[2], contains('domain vocabulary'));
+        expect(bodies[2], isNot(contains('first chunk')));
+        expect(bodies[2], isNot(contains('last chunk')));
+      },
+    );
+
+    test('valid empty text response succeeds for every chunk', () async {
+      final call = await _transcribe(
+        responseBody: '{"text":""}',
+        responseBodies: ['{"text":""}', '{"text":""}', '{"text":""}'],
+        audioBytes: _testWav(140),
+        maxFileSizeBytes: 100,
+        chunking: 'fixedSize',
+        fallbackMethod: 'generic',
+      );
+
+      expect(call.result.text, isEmpty);
+      expect(call.result.chunks, hasLength(3));
+      expect(
+        call.result.chunks!.every((c) => c.status == AsrChunkStatus.succeeded),
+        isTrue,
+      );
+    });
+
+    test('empty subtitle chunks succeed while malformed subtitles fail',
+        () async {
+      final empty = await _transcribe(
+        responseBody: '',
+        responseBodies: ['', '', ''],
+        responseContentType: 'text/plain; charset=utf-8',
+        responseFormat: 'srt',
+        audioBytes: _testWav(140),
+        maxFileSizeBytes: 100,
+        chunking: 'fixedSize',
+        fallbackMethod: 'generic',
+      );
+      expect(empty.result.text, isEmpty);
+      expect(
+        empty.result.chunks!.every((c) => c.status == AsrChunkStatus.succeeded),
+        isTrue,
+      );
+
+      final malformed = _transcribe(
+        responseBody: 'not a subtitle',
+        responseBodies: ['not a subtitle', 'not a subtitle', 'not a subtitle'],
+        responseContentType: 'text/plain; charset=utf-8',
+        responseFormat: 'srt',
+        audioBytes: _testWav(140),
+        maxFileSizeBytes: 100,
+        chunking: 'fixedSize',
+        fallbackMethod: 'generic',
+      );
+      await expectLater(
+        malformed,
+        throwsA(
+          isA<AsrChunkedTranscriptionException>()
+              .having((e) => e.isPartial, 'isPartial', isFalse)
+              .having((e) => e.partialText, 'partialText', isEmpty)
+              .having(
+                (e) => e.chunks.every((c) => c.status == AsrChunkStatus.failed),
+                'all chunks failed',
+                isTrue,
+              ),
+        ),
+      );
+    });
+
+    test(
+      'successful chunk concatenation retains repeated boundary words',
+      () async {
+        final call = await _transcribe(
+          responseBody: '{"text":"again"}',
+          responseBodies: [
+            '{"text":"again"}',
+            '{"text":"again"}',
+            '{"text":"done"}',
+          ],
+          audioBytes: _testWav(140),
+          maxFileSizeBytes: 100,
+          chunking: 'fixedSize',
+          fallbackMethod: 'generic',
+        );
+
+        expect(call.result.text, 'again again done');
+        expect(call.result.chunks!.map((c) => c.index), [0, 1, 2]);
+        expect(
+          call.result.chunks!.map((c) => c.status),
+          everyElement(AsrChunkStatus.succeeded),
+        );
+      },
+    );
+
+    test(
+      'chunk prompt keeps supplementary Unicode characters intact',
+      () async {
+        final prefix = List.filled(99, 'a').join();
+        final suffix = List.filled(99, 'b').join();
+        final previousText = '$prefix😀$suffix';
+        final adapter = _ProtocolAdapter(
+          responseBody: '',
+          responseBodies: [
+            jsonEncode({'text': previousText}),
+            jsonEncode({'text': 'next'}),
+            jsonEncode({'text': 'last'}),
+          ],
+        );
+        final dio = Dio()..httpClientAdapter = adapter;
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+            maxFileSizeBytes: 100,
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+            typeConfig: {
+              'enableResponseFormat': true,
+              'responseFormat': 'json',
+            },
+          ),
+          dio: dio,
+        );
+
+        await service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav');
+
+        final prompt = _multipartField(adapter.requestBodies[1], 'prompt');
+        expect(prompt, contains('😀'));
+        expect(prompt, isNot(contains('�')));
+        expect(prompt, contains(suffix));
+        expect(prompt, isNot(contains(prefix)));
       },
     );
 
@@ -486,7 +716,7 @@ void main() {
     );
 
     test(
-      'chunk prompts replace JSON custom prompt values without JSON encoding',
+      'chunk prompts preserve JSON custom prompt values without encoding',
       () async {
         final call = await _transcribe(
           responseBody: '{"text":"first chunk"}',
@@ -508,7 +738,7 @@ void main() {
           _multipartHasField(
             call.adapter.requestBody!,
             'prompt',
-            'first chunk',
+            'custom prompt\nfirst chunk',
           ),
           isTrue,
         );
@@ -522,5 +752,78 @@ void main() {
         );
       },
     );
+
+    test('chunk prompt carryover accepts structured JSON custom prompts',
+        () async {
+      final call = await _transcribe(
+        responseBody: '{"text":"first chunk"}',
+        responseBodies: [
+          '{"text":"first chunk"}',
+          '{"text":"second chunk"}',
+        ],
+        audioBytes: _testWav(100),
+        maxFileSizeBytes: 100,
+        chunking: 'fixedSize',
+        fallbackMethod: 'generic',
+        customParams: [
+          CustomParam(
+            paramName: 'prompt',
+            type: 'json',
+            defaultValue: '{"vocabulary":["Stroom"]}',
+          ),
+        ],
+      );
+
+      expect(call.result.text, 'first chunk second chunk');
+      expect(
+        _multipartField(call.adapter.requestBodies[1], 'prompt'),
+        '{"vocabulary":["Stroom"]}\nfirst chunk',
+      );
+    });
+
+    test('failed chunk does not lose structured prompt encoding metadata',
+        () async {
+      final adapter = _ProtocolAdapter(
+        responseBody: '',
+        responseBodies: [
+          '{"text":"first chunk"}',
+          '{"error":{"message":"middle failed"}}',
+          '{"text":"last chunk"}',
+        ],
+      );
+      final service = AsrService(
+        config: AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+          maxFileSizeBytes: 100,
+          chunking: 'fixedSize',
+          fallbackMethod: 'generic',
+          customParams: [
+            CustomParam(
+              paramName: 'prompt',
+              type: 'json',
+              defaultValue: '{"vocabulary":["Stroom"]}',
+            ),
+          ],
+        ),
+        dio: Dio()..httpClientAdapter = adapter,
+      );
+
+      await expectLater(
+        service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
+        throwsA(
+          isA<AsrChunkedTranscriptionException>().having(
+            (error) => error.chunks[1].status,
+            'middle chunk status',
+            AsrChunkStatus.failed,
+          ),
+        ),
+      );
+      expect(adapter.requestBodies, hasLength(3));
+      expect(
+        _multipartField(adapter.requestBodies[2], 'prompt'),
+        '{"vocabulary":["Stroom"]}',
+      );
+    });
   });
 }

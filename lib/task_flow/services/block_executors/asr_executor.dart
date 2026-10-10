@@ -241,6 +241,9 @@ Future<String> executeAsrBlock({
     return result;
   } catch (e) {
     if (e is BlockExecutionException) rethrow;
+    if (e is AsrChunkedTranscriptionException && e.partialText.isNotEmpty) {
+      bgNotifier.setResult(taskId, e.partialText);
+    }
     failSubTask(
       bgNotifier,
       taskId,
