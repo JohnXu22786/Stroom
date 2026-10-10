@@ -43,6 +43,7 @@ const _serviceStopWaitTimeout = Duration(seconds: 5);
 const _serviceStopPollInterval = Duration(milliseconds: 50);
 
 Future<void> _serviceLifecycleQueue = Future<void>.value();
+Completer<void>? _desktopCloseMinimizeWriteQueue;
 // Null means this process has no explicit service choice; otherwise prefer
 // the user's latest choice over a stale preference value.
 bool? _explicitUserEnabledInProcess;
@@ -736,6 +737,14 @@ bool isDesktopPlatform() {
 Future<bool> isDesktopCloseMinimizeEnabled() async {
   try {
     final prefs = await SharedPreferences.getInstance();
+    // SharedPreferences changes its cache before the backing-store write
+    // completes. Close handling must wait for any in-flight update (including
+    // its failure rollback) before choosing whether to quit or minimize.
+    while (true) {
+      final pendingWrite = _desktopCloseMinimizeWriteQueue;
+      if (pendingWrite == null) break;
+      await pendingWrite.future;
+    }
     return prefs.getBool(_desktopCloseMinimizeKey) ?? true;
   } catch (_) {
     return true;
@@ -744,7 +753,11 @@ Future<bool> isDesktopCloseMinimizeEnabled() async {
 
 /// Enables or disables the desktop "minimize on close" behavior.
 Future<bool> setDesktopCloseMinimizeEnabled(bool enabled) async {
+  final previousWrite = _desktopCloseMinimizeWriteQueue?.future;
+  final writeComplete = Completer<void>();
+  _desktopCloseMinimizeWriteQueue = writeComplete;
   try {
+    if (previousWrite != null) await previousWrite;
     final prefs = await SharedPreferences.getInstance();
     final previousValue = prefs.getBool(_desktopCloseMinimizeKey) ?? true;
     var saved = false;
@@ -761,5 +774,10 @@ Future<bool> setDesktopCloseMinimizeEnabled(bool enabled) async {
     return saved;
   } catch (_) {
     return false;
+  } finally {
+    writeComplete.complete();
+    if (identical(_desktopCloseMinimizeWriteQueue, writeComplete)) {
+      _desktopCloseMinimizeWriteQueue = null;
+    }
   }
 }
