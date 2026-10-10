@@ -92,11 +92,37 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _FailingDesktopCloseMinimizePreferenceStore
+    extends InMemorySharedPreferencesStore {
+  _FailingDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.desktop_close_minimize') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
     SharedPreferences preferences) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
     'flutter.background_service_enabled': false,
+  });
+  await preferences.reload();
+  return originalStore;
+}
+
+Future<SharedPreferencesStorePlatform>
+    _rejectDesktopCloseMinimizePreferenceWrites(
+        SharedPreferences preferences) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance =
+      _FailingDesktopCloseMinimizePreferenceStore({
+    'flutter.desktop_close_minimize': true,
   });
   await preferences.reload();
   return originalStore;
@@ -352,8 +378,28 @@ void main() {
     test('desktop close-minimize toggle defaults to enabled and persists',
         () async {
       expect(await isDesktopCloseMinimizeEnabled(), isTrue);
-      await setDesktopCloseMinimizeEnabled(false);
+      await expectLater(
+        setDesktopCloseMinimizeEnabled(false),
+        completion(isTrue),
+      );
       expect(await isDesktopCloseMinimizeEnabled(), isFalse);
+    });
+
+    test('desktop close-minimize reports a rejected preference write',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore =
+          await _rejectDesktopCloseMinimizePreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await expectLater(
+        setDesktopCloseMinimizeEnabled(false),
+        completion(isFalse),
+      );
+      await prefs.reload();
+      expect(prefs.getBool('desktop_close_minimize'), isTrue);
     });
 
     test('isDesktopPlatform reflects the target platform', () {

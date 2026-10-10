@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_background_service_platform_interface/flutter_background_service_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/pages/background_optimization_page.dart';
 import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
@@ -90,6 +91,20 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   @override
   Stream<Map<String, dynamic>?> on(String method) {
     return const Stream.empty();
+  }
+}
+
+class _FailingDesktopCloseMinimizePreferenceStore
+    extends InMemorySharedPreferencesStore {
+  _FailingDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
+      : super.withData(data);
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.desktop_close_minimize') {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
   }
 }
 
@@ -922,6 +937,12 @@ void main() {
         // The preference is persisted...
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getBool('desktop_close_minimize'), isFalse);
+        expect(
+          tester
+              .widget<SwitchListTile>(find.byType(SwitchListTile).first)
+              .value,
+          isFalse,
+        );
         // ...but the close interception must NEVER be released:
         // releasing it would let the native layer destroy the window
         // before the quit confirmation can run.
@@ -935,6 +956,48 @@ void main() {
           isTrue,
           reason: 'setPreventClose(false) 会释放拦截，导致退出确认失效',
         );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets(
+        'keeps desktop close-minimize switch at the saved value when persistence fails',
+        (tester) async {
+      registerMockPlatform();
+      DesktopAppService.instance.resetForTesting();
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        SharedPreferencesStorePlatform.instance =
+            _FailingDesktopCloseMinimizePreferenceStore({
+          'flutter.desktop_close_minimize': true,
+        });
+        await prefs.reload();
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+        });
+
+        tester.view.physicalSize = const Size(1080, 5000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        final toggle = find.byType(SwitchListTile).first;
+        expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+        await prefs.reload();
+        expect(prefs.getBool('desktop_close_minimize'), isTrue);
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.instance.resetForTesting();
