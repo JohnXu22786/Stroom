@@ -722,7 +722,7 @@ class _Mp4Demuxer {
                 trackInfo.codec == 'raw ' ||
                 trackInfo.codec == 'twos' ||
                 trackInfo.codec == 'sowt') {
-              audioTrack = trackInfo;
+              audioTrack ??= trackInfo;
             }
           }
           _offset = childStart + _boxSizeAt(childStart);
