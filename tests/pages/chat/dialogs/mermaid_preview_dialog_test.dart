@@ -89,6 +89,72 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets(
+    'toolbar zoom controls continue from the JavaScript-fitted zoom '
+    'without a transform handler',
+    (tester) async {
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _ZoomTrackingWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _ZoomTrackingWebViewPlatform());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showMermaidPreviewDialog(
+                context: context,
+                mermaidCode: 'graph TD\nA-->B',
+              ),
+              child: const Text('Open preview'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open preview'));
+      await tester.pump();
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      // JavaScript auto-fit updates the web view, but the unsupported bridge
+      // leaves the dialog's cached Flutter zoom at 1.0.
+      webView.controller.simulateJsFitToViewport(0.45);
+
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      expect(webView.controller.zoomLevel, closeTo(0.55, 0.0001));
+      await tester.tap(find.byIcon(Icons.zoom_out));
+      await tester.pump();
+      expect(webView.controller.zoomLevel, closeTo(0.45, 0.0001));
+      expect(
+        webView.controller.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+      expect(
+        webView.controller.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([-0.1])'))),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }
 
 class _NeverCreatedWebViewPlatform extends InAppWebViewPlatform {
@@ -113,4 +179,92 @@ class _NeverCreatedWebView extends PlatformInAppWebViewWidget {
 
   @override
   void dispose() {}
+}
+
+class _ZoomTrackingWebViewPlatform extends InAppWebViewPlatform {
+  _ZoomTrackingWebView? webView;
+
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+    PlatformInAppWebViewWidgetCreationParams params,
+  ) =>
+      webView = _ZoomTrackingWebView(params);
+}
+
+class _ZoomTrackingWebView extends PlatformInAppWebViewWidget {
+  final controller = _ZoomTrackingWebViewController();
+
+  _ZoomTrackingWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
+}
+
+class _ZoomTrackingWebViewController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+  double zoomLevel = 1.0;
+
+  _ZoomTrackingWebViewController()
+      : super.implementation(
+            const PlatformInAppWebViewControllerCreationParams(id: 0));
+
+  void simulateJsFitToViewport(double fittedZoom) {
+    zoomLevel = fittedZoom;
+  }
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  Future<void> loadData({
+    required String data,
+    String mimeType = 'text/html',
+    String encoding = 'utf8',
+    WebUri? baseUrl,
+    Uri? androidHistoryUrl,
+    WebUri? historyUrl,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  void addJavaScriptHandler({
+    required String handlerName,
+    required JavaScriptHandlerCallback callback,
+  }) =>
+      throw UnimplementedError('JavaScript handlers are unavailable on web');
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {
+    evaluatedScripts.add(source);
+    final relativeZoom = RegExp(
+      r'window\.applyZoomDeltasAfterFit\(\[(-?\d+(?:\.\d+)?)\]\)',
+    ).firstMatch(source);
+    if (relativeZoom != null) {
+      final delta = double.parse(relativeZoom.group(1)!);
+      zoomLevel = (zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+      return null;
+    }
+
+    final absoluteZoom =
+        RegExp(r'window\.setZoom\((-?\d+(?:\.\d+)?),').firstMatch(source);
+    if (absoluteZoom != null) {
+      zoomLevel = double.parse(absoluteZoom.group(1)!);
+    }
+    return null;
+  }
 }
