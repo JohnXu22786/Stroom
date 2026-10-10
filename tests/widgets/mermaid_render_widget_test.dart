@@ -727,8 +727,7 @@ void main() {
         final clickScripts = webView.controller.evaluatedScripts.where(
           (script) =>
               script.contains('document.elementFromPoint') &&
-              script.contains(
-                  "target.dispatchEvent(new MouseEvent('click', {"),
+              script.contains("target.dispatchEvent(new MouseEvent('click', {"),
         );
         expect(
           clickScripts,
@@ -794,8 +793,8 @@ void main() {
           webView.controller.evaluatedScripts.where(
             (script) =>
                 script.contains('document.elementFromPoint') &&
-                script.contains(
-                    "target.dispatchEvent(new MouseEvent('click', {"),
+                script
+                    .contains("target.dispatchEvent(new MouseEvent('click', {"),
           ),
           isEmpty,
           reason: 'dragging the diagram must never fire a Mermaid click target',
@@ -1258,9 +1257,7 @@ void main() {
 }
 
 Future<_MermaidWebView> _mountReadyMermaidWidget(
-    WidgetTester tester,
-    _MermaidWebViewPlatform platform,
-    Widget body) async {
+    WidgetTester tester, _MermaidWebViewPlatform platform, Widget body) async {
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
   await tester.runAsync(() async {

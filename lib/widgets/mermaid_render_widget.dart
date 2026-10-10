@@ -1147,9 +1147,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   // Forward stationary taps to Mermaid's existing DOM click
                   // handlers. This recognizer is deliberately not on [team]:
                   // a tap must not accept the scale team's pan recognizer.
-                  TapGestureRecognizer:
-                      GestureRecognizerFactoryWithHandlers<
-                          TapGestureRecognizer>(
+                  TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      TapGestureRecognizer>(
                     TapGestureRecognizer.new,
                     (instance) => instance.onTapUp = _onDiagramTap,
                   ),
