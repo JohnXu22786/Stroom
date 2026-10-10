@@ -65,6 +65,9 @@ class MermaidChartPage extends StatefulWidget {
   /// 可选的初始代码，用于从文本储存区打开已有 .mmd 文件
   final String? initialCode;
 
+  /// Existing storage record when editing a saved .mmd chart.
+  final TextRecord? existingRecord;
+
   /// 初始是否显示预览（WebView）。测试环境中设为 false 以避免
   /// InAppWebView 平台未初始化导致的崩溃。
   final bool initialShowPreview;
@@ -72,6 +75,7 @@ class MermaidChartPage extends StatefulWidget {
   const MermaidChartPage({
     super.key,
     this.initialCode,
+    this.existingRecord,
     this.initialShowPreview = true,
   });
 
@@ -273,9 +277,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     // Local controller - will be garbage collected after _saveChart completes.
     // Not explicitly disposed because the dialog's dismiss animation still
     // references it after showDialog returns.
-    final fileNameController = TextEditingController(text: '我的图表');
+    final existingRecord = widget.existingRecord;
+    final fileNameController = TextEditingController(
+      text: existingRecord?.name ?? '我的图表',
+    );
     final selectedFolder = await FolderPickerDialog.show(
       context,
+      currentFolder: existingRecord?.folder ?? '',
       availableFolders: folders,
       title: '保存图表',
       hintText: '选择或创建文件夹保存 .mmd 图表文件',
@@ -314,25 +322,54 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
       // Use user-provided filename (without extension for storage consistency)
       final baseName = userFileName;
-      final saveName = '$baseName-$typeLabel';
+      final saveName = existingRecord == null
+          ? '$baseName-$typeLabel'
+          : baseName;
       final records = await TextManifest.loadRecords();
       String finalName = saveName;
       int counter = 2;
-      while (records.any((r) => r.name == finalName)) {
+      bool hasNameConflict(TextRecord record) =>
+          record.id != existingRecord?.id &&
+          record.name == finalName &&
+          (existingRecord == null || record.folder == selectedFolder);
+      while (records.any(hasNameConflict)) {
         finalName = '$saveName ($counter)';
         counter++;
       }
 
       await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+      if (existingRecord == null) {
+        await TextManifest.addRecord(TextRecord(
+          name: finalName,
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: content.length,
+        ));
+      } else {
+        await TextManifest.updateRecord(TextRecord(
+          id: existingRecord.id,
+          name: finalName,
+          hash: hash,
+          format: existingRecord.format,
+          createdAt: existingRecord.createdAt,
+          modifiedAt: hash == existingRecord.hash
+              ? existingRecord.modifiedAt
+              : DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: content.length,
+        ));
+
+        if (hash != existingRecord.hash &&
+            !records.any((r) =>
+                r.id != existingRecord.id &&
+                r.storagePath == existingRecord.storagePath)) {
+          await TextManifest.deleteFile(existingRecord.storagePath);
+        }
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
