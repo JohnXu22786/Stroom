@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,11 +13,16 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 /// Builds the test app. [initialShowPreview] defaults to false to avoid
 /// InAppWebView platform not being initialized in test environment.
-Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
+Widget _buildTestApp({
+  String? initialCode,
+  TextRecord? existingRecord,
+  bool initialShowPreview = false,
+}) {
   return ProviderScope(
     child: MaterialApp(
       home: MermaidChartPage(
         initialCode: initialCode,
+        existingRecord: existingRecord,
         initialShowPreview: initialShowPreview,
       ),
       localizationsDelegates: [
@@ -439,6 +447,84 @@ void main() {
       );
       expect(savedRecord.folder, '');
     });
+
+    testWidgets('saving an edited chart updates its existing record in place',
+        (tester) async {
+      const originalContent = ' \ngraph TD\n  A-->B\n ';
+      const editedContent = ' \ngraph TD\n  A-->C\n ';
+      final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+      final originalRecord = TextRecord(
+        id: 'existing-chart-id',
+        name: 'existing-chart',
+        hash: computeTextHash(originalBytes),
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 1),
+        size: originalBytes.length,
+        textLength: originalContent.length,
+      );
+      const otherFolder = 'another-folder';
+      await TextManifest.addFolder(otherFolder);
+      final sameNameInAnotherFolder = TextRecord(
+        id: 'same-name-in-another-folder',
+        name: originalRecord.name,
+        hash: originalRecord.hash,
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 2),
+        size: originalBytes.length,
+        folder: otherFolder,
+        textLength: originalContent.length,
+      );
+      await TextManifest.writeText(originalRecord.storagePath, originalContent);
+      await TextManifest.addRecord(originalRecord);
+      await TextManifest.addRecord(sameNameInAnotherFolder);
+
+      await tester.pumpWidget(_buildTestApp(
+        initialCode: originalContent,
+        existingRecord: originalRecord,
+      ));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField).first, editedContent);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      expect(tester.widget<TextField>(fileNameField).controller?.text,
+          originalRecord.name);
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      expect(records, hasLength(2));
+      final savedRecord = records.singleWhere((r) => r.id == originalRecord.id);
+      expect(savedRecord.id, originalRecord.id);
+      expect(savedRecord.name, originalRecord.name);
+      expect(savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(editedContent))));
+      expect(savedRecord.modifiedAt.isAfter(originalRecord.modifiedAt), isTrue);
+      expect(
+          await TextManifest.readText(savedRecord.storagePath), editedContent);
+
+      final preservedRecord =
+          records.singleWhere((r) => r.id == sameNameInAnotherFolder.id);
+      expect(preservedRecord.name, originalRecord.name);
+      expect(preservedRecord.folder, otherFolder);
+      expect(await TextManifest.readText(preservedRecord.storagePath),
+          originalContent);
+    });
+
     // ═══════════════════════════════════════════════════
     // Editor Mode Switching (UI only, no WebView)
     // ═══════════════════════════════════════════════════
