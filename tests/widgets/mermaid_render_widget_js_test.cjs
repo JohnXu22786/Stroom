@@ -75,6 +75,15 @@ for (const [templateName, templateSource] of reportErrorTargets) {
   });
 }
 
+test('web render shows the readable Chinese loading hint', () => {
+  const loadingHint = webTemplateSource.match(
+    /<div id="loading-hint">([^<]*)<\/div>/,
+  );
+
+  assert.ok(loadingHint, 'Could not find the web loading hint');
+  assert.equal(loadingHint[1], '图表加载中...');
+});
+
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
   const viewport = {clientWidth: 0, clientHeight: 0};
   const attributes = {};
