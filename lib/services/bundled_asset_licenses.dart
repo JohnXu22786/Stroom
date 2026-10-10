@@ -16,6 +16,13 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const ['flutter_math_fork 0.7.4 KaTeX fonts'],
+      await rootBundle.loadString(
+        'assets/vendor/flutter_math_fork-katex-fonts-LICENSE.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const ['Mermaid 11.16.1'],
       await rootBundle.loadString('assets/vendor/mermaid/LICENSE.txt'),
     );
