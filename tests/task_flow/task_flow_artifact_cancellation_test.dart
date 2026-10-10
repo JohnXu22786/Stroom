@@ -245,8 +245,8 @@ void main() {
 
   test('separates a video stored behind a WebFileStore key', () async {
     const key = 'videos/library_clip.mp4';
-    final video = await File('tests/fixtures/catcatch/audio_only.mp4')
-        .readAsBytes();
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
     await WebFileStore.write(key, video);
 
     final outputPath = await separateVideo(key);
@@ -256,10 +256,10 @@ void main() {
   });
 
   test('separates a video from a native file path', () async {
-    final video = await File('tests/fixtures/catcatch/audio_only.mp4')
-        .readAsBytes();
-    final inputFile = await File('${directory.path}/native_clip.mp4')
-        .writeAsBytes(video);
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
+    final inputFile =
+        await File('${directory.path}/native_clip.mp4').writeAsBytes(video);
 
     final outputPath = await separateVideo(inputFile.path);
 
