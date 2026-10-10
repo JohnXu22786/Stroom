@@ -62,7 +62,7 @@ class OcrTaskRunner {
     if (!notifier.mounted || !notifier.state.any((task) => task.id == taskId)) {
       cancel();
     }
-    _cancelToken.throwIfCancellationRequested();
+    if (_cancelToken.isCancelled) throw _cancelToken.cancelError!;
   }
 
   void _advance(int next) {

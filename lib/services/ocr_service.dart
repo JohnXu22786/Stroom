@@ -249,7 +249,7 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
-      cancelToken?.throwIfCancellationRequested();
+      if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
@@ -330,7 +330,7 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
-      cancelToken?.throwIfCancellationRequested();
+      if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
