@@ -73,6 +73,22 @@ Future<T> _awaitWhileFlowActive<T>(
   return result;
 }
 
+Future<T> _startWhileFlowActive<T>(
+  Future<T> Function() startWork,
+  TaskFlowExecutionNotifier execNotifier,
+  String execId,
+  BlockTypeDefinition def,
+) async {
+  if (!isFlowExecutionActive(execNotifier, execId)) {
+    throw BlockExecutionException(
+      '任务流已结束或删除',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+  return _awaitWhileFlowActive(startWork(), execNotifier, execId, def);
+}
+
 /// Reads a video file and extracts its audio track — all in a background
 /// isolate so the GUI stays responsive even for 100+ MB files.
 Future<Uint8List> _readAndExtractInIsolate(
@@ -203,6 +219,9 @@ Future<String> executeAudioSeparationBlock({
   /// Allows the WebFileStore read wait to be controlled in cancellation tests.
   Future<Uint8List?> Function(String)? readWebFileBytes,
 
+  /// Allows cancellation tests to observe when audio metadata work starts.
+  Future<(String, String)> Function(Uint8List)? computeAudioMeta,
+
   /// Allows cancellation tests to stop between the output write and manifest
   /// insertion.
   Future<void> Function()? onAudioFileWritten,
@@ -238,8 +257,8 @@ Future<String> executeAudioSeparationBlock({
     final bool inputExists;
     if (usesWebFileStore) {
       final readWebFile = readWebFileBytes ?? WebFileStore.read;
-      webVideoBytes = await _awaitWhileFlowActive(
-        readWebFile(input),
+      webVideoBytes = await _startWhileFlowActive(
+        () => readWebFile(input),
         execNotifier,
         execId,
         def,
@@ -331,8 +350,9 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 1, running: true);
 
     await _yieldFrame();
-    final meta = await _awaitWhileFlowActive(
-      _computeAudioMetaInBackground(audioBytes),
+    final computeMeta = computeAudioMeta ?? _computeAudioMetaInBackground;
+    final meta = await _startWhileFlowActive(
+      () => computeMeta(audioBytes),
       execNotifier,
       execId,
       def,
