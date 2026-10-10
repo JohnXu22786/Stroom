@@ -1691,6 +1691,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         result = await service.recognizeBatch(imageBytesList: batchInput);
       }
 
+      if (!result.isComplete) {
+        bgNotifier.setResult(taskId, result.text);
+        throw Exception(
+          'OCR 返回了不完整结果（finish_reason=${result.finishReason}）',
+        );
+      }
+
       // Step 3: Processing complete → Step 4: Receiving result
       bgNotifier.updateStep(taskId, 1, completed: true);
       // Mark "处理中" as running now that server has responded

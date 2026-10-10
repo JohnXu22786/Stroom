@@ -34,14 +34,8 @@ class OcrConfig {
     this.customParams = const [],
   });
 
-  /// Returns the host without a trailing slash.
-  String get normalizedHost {
-    var h = host.trim();
-    while (h.endsWith('/')) {
-      h = h.substring(0, h.length - 1);
-    }
-    return h;
-  }
+  /// Returns the configured endpoint with surrounding whitespace removed.
+  String get normalizedHost => host.trim();
 
   /// The default system prompt used to guide OCR extraction.
   String get effectiveSystemPrompt =>
@@ -90,11 +84,15 @@ class OcrResult {
   final String text;
   final int processingTimeMs;
   final int imageCount;
+  final bool isComplete;
+  final String? finishReason;
 
   const OcrResult({
     required this.text,
     this.processingTimeMs = 0,
     this.imageCount = 1,
+    this.isComplete = true,
+    this.finishReason,
   });
 }
 
@@ -144,6 +142,9 @@ class OcrService {
   OcrService({
     required this.config,
     Dio? dio,
+    Duration? connectTimeout,
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
   }) : _dio = dio ??
             Dio(BaseOptions(
               headers: {
@@ -152,6 +153,9 @@ class OcrService {
                   'Authorization': 'Bearer ${config.apiKey}',
                 ...openRouterAppHeaders,
               },
+              connectTimeout: connectTimeout,
+              sendTimeout: sendTimeout,
+              receiveTimeout: receiveTimeout,
               // No timeouts — OCR tasks may take a long time
             ));
 
@@ -167,9 +171,12 @@ class OcrService {
   /// Dio receive timeout, exposed for diagnostic and testing.
   Duration? get receiveTimeout => _dio.options.receiveTimeout;
 
+  /// Close the underlying client when this service owns its lifetime.
+  void close({bool force = false}) => _dio.close(force: force);
+
   /// The chat completions endpoint URL.
   /// The user provides the full endpoint URL including the path,
-  /// so normalizedHost is used directly without appending /chat/completions.
+  /// so normalizedHost is used directly without rewriting or appending a path.
   String get _chatUrl => config.normalizedHost;
 
   /// Perform OCR on a single image.
@@ -180,6 +187,7 @@ class OcrService {
   Future<OcrResult> recognize({
     required Uint8List imageBytes,
     String imageFormat = 'jpeg',
+    CancelToken? cancelToken,
   }) async {
     await AppLogService.info(
         'OcrService', '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节');
@@ -216,6 +224,7 @@ class OcrService {
       final response = await _dio.post(
         _chatUrl,
         data: body,
+        cancelToken: cancelToken,
       );
 
       stopwatch.stop();
@@ -227,14 +236,16 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
-      final text = _extractText(response.data);
+      final parsed = _extractResponse(response.data);
 
       await AppLogService.info('OcrService',
-          'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+          'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
       return OcrResult(
-        text: text,
+        text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: 1,
+        isComplete: parsed.finishReason != 'length',
+        finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
       // Capture response diagnostics from exception
@@ -298,14 +309,16 @@ class OcrService {
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
 
-      final text = _extractText(response.data);
+      final parsed = _extractResponse(response.data);
 
       await AppLogService.info('OcrService',
-          '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${text.length}');
+          '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
       return OcrResult(
-        text: text,
+        text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: imageBytesList.length,
+        isComplete: parsed.finishReason != 'length',
+        finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
       // Capture response diagnostics from exception
@@ -368,9 +381,36 @@ class OcrService {
     for (final param in config.customParams) {
       final name = param.paramName.trim();
       if (name.isEmpty) continue;
-      final value = param.defaultValue.trim();
-      if (value.isEmpty) continue;
-      body[name] = _parseParamValue(value, param.type);
+      final rawValue = param.type == 'json'
+          ? param.defaultValue
+          : param.options.isNotEmpty
+              ? param.options.first
+              : param.defaultValue.trim().isNotEmpty
+                  ? param.defaultValue
+                  : param.type == 'boolean'
+                      ? 'true'
+                      : '';
+      final value = rawValue.trim();
+      if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
+      if (name == 'model' || name == 'messages') {
+        throw ArgumentError.value(
+          name,
+          'paramName',
+          'Custom OCR parameters cannot override $name',
+        );
+      }
+      final parsedValue = _parseParamValue(
+        param.type == 'string' ? rawValue : value,
+        param.type,
+      );
+      if (name == 'stream' && parsedValue != false) {
+        throw ArgumentError.value(
+          parsedValue,
+          'stream',
+          'OCR only supports non-streaming requests; configure stream=false',
+        );
+      }
+      body[name] = parsedValue;
     }
 
     return body;
@@ -381,20 +421,28 @@ class OcrService {
     switch (type) {
       case 'number':
         final numVal = num.tryParse(value);
-        return numVal ?? value;
+        if (numVal == null || !numVal.isFinite) {
+          throw FormatException('Invalid number OCR parameter: $value');
+        }
+        return numVal;
       case 'boolean':
         if (value.toLowerCase() == 'true') return true;
         if (value.toLowerCase() == 'false') return false;
-        return value;
+        throw FormatException('Invalid boolean OCR parameter: $value');
       case 'json':
         try {
           return jsonDecode(value);
-        } catch (_) {
-          return value;
+        } on FormatException catch (e) {
+          throw FormatException('Invalid JSON OCR parameter: ${e.message}');
         }
       case 'string':
-      default:
         return value;
+      default:
+        throw ArgumentError.value(
+          type,
+          'type',
+          'Unsupported OCR parameter type',
+        );
     }
   }
 
@@ -408,28 +456,44 @@ class OcrService {
     };
   }
 
-  /// Extract text from the standard OpenAI chat completion response.
+  /// Extract text and completion metadata from an OpenAI chat completion.
   ///
   /// Handles:
   /// - `content` as a plain `String` (standard format)
-  /// - `content` as a `List` of content blocks (e.g. `[{"type": "text", "text": "..."}]`)
-  ///   — concatenates all `text` fields from blocks of type "text"
+  /// - `content` as a list of text blocks, concatenated in order
   /// - Detects garbled JSON-bracket content (e.g. `}}]}}]...`) and throws.
-  String _extractText(dynamic responseData) {
+  ({String text, String? finishReason}) _extractResponse(dynamic responseData) {
     try {
       if (responseData is! Map) {
         throw Exception('API 返回格式异常（非 JSON 对象）');
       }
       final data = Map<String, dynamic>.from(responseData);
 
-      final choices = data['choices'] as List?;
-      if (choices == null || choices.isEmpty) {
+      final rawChoices = data['choices'];
+      if (rawChoices is! List || rawChoices.isEmpty) {
         throw Exception('API 返回了空的 choices 列表');
       }
-      final message = choices[0]['message'] as Map?;
-      if (message == null) {
+      final choice = rawChoices.first;
+      if (choice is! Map) {
+        throw Exception('API 返回中的 choice 格式异常');
+      }
+      final rawFinishReason = choice['finish_reason'];
+      if (rawFinishReason != null && rawFinishReason is! String) {
+        throw Exception('API 返回中的 finish_reason 格式异常');
+      }
+      final finishReason = rawFinishReason as String?;
+      final rawMessage = choice['message'];
+      if (rawMessage is! Map) {
         throw Exception('API 返回中缺少 message 字段');
       }
+      final refusal = rawMessage['refusal'];
+      if (refusal != null) {
+        if (refusal is! String || refusal.trim().isNotEmpty) {
+          final detail = refusal is String ? ': $refusal' : '';
+          throw Exception('OCR 请求被模型拒绝$detail');
+        }
+      }
+      final message = rawMessage;
       final content = message['content'];
       if (content == null) {
         throw Exception('OCR 未识别到文字内容');
@@ -442,11 +506,16 @@ class OcrService {
         // Some providers return content as a list of text blocks
         final parts = <String>[];
         for (final block in content) {
-          if (block is Map &&
-              block['type'] == 'text' &&
-              block['text'] is String) {
-            parts.add(block['text'] as String);
+          if (block is! Map) {
+            throw Exception('OCR 返回了格式异常的 content block');
           }
+          if (block['type'] != 'text') {
+            throw Exception('OCR 返回了不支持的非文本 content block');
+          }
+          if (block['text'] is! String) {
+            throw Exception('OCR 返回了格式异常的 text block');
+          }
+          parts.add(block['text'] as String);
         }
         if (parts.isEmpty) {
           throw Exception('OCR 未识别到文字内容（content 列表为空）');
@@ -467,7 +536,7 @@ class OcrService {
         throw Exception('OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型');
       }
 
-      return text;
+      return (text: text, finishReason: finishReason);
     } on Exception {
       rethrow;
     } catch (e) {
