@@ -938,7 +938,9 @@ void main() {
         final prefs = await SharedPreferences.getInstance();
         expect(prefs.getBool('desktop_close_minimize'), isFalse);
         expect(
-          tester.widget<SwitchListTile>(find.byType(SwitchListTile).first).value,
+          tester
+              .widget<SwitchListTile>(find.byType(SwitchListTile).first)
+              .value,
           isFalse,
         );
         // ...but the close interception must NEVER be released:
