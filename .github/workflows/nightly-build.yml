@@ -40,7 +40,10 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-24.04
-    container: debian:trixie
+    # WebKit's bubblewrap process sandbox needs to create Linux namespaces.
+    container:
+      image: debian:trixie
+      options: --cap-add=SYS_ADMIN
     steps:
       - name: Install Linux dependencies
         run: |
