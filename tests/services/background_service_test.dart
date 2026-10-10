@@ -15,6 +15,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  bool _deferStopCompletion = false;
+  bool _stopRequested = false;
   final Set<int> _throwOnCheckCalls = {};
   int _serviceRunningCheckCount = 0;
 
@@ -40,6 +42,17 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   void setThrowOnCheck(bool shouldThrow) {
     _throwOnCheck = shouldThrow;
+  }
+
+  void deferStopCompletion() {
+    _deferStopCompletion = true;
+  }
+
+  void completeDelayedStop() {
+    if (!_stopRequested) {
+      throw StateError('No stop request is pending.');
+    }
+    _isRunning = false;
   }
 
   void setThrowOnCheckCalls(Set<int> calls) {
@@ -77,7 +90,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   @override
   void invoke(String method, [Map<String, dynamic>? args]) {
     if (method == 'stopService') {
-      _isRunning = false;
+      _stopRequested = true;
+      if (!_deferStopCompletion) _isRunning = false;
     }
   }
 
@@ -440,6 +454,30 @@ void main() {
       // After restart the enabled state must be persisted again so a
       // later process death still triggers cold-start restore.
       expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+
+    test(
+        'restart timeout arms watchdog when the stop request completes late',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..deferStopCompletion();
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        mock.completeDelayedStop();
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'the late stop must not leave a persistently enabled service '
+            'without watchdog recovery armed',
+      );
     });
 
     test(

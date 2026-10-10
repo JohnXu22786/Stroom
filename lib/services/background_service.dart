@@ -373,7 +373,14 @@ Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
         _explicitUserEnabledInProcess = true;
 
         final service = FlutterBackgroundService();
-        await _requestServiceStopAndWait(service);
+        try {
+          await _requestServiceStopAndWait(service);
+        } catch (_) {
+          // stopService is fire-and-forget, so a timeout can precede a late
+          // stop. Keep recovery armed for the persisted enabled intent.
+          await _enableKeepAlive();
+          rethrow;
+        }
         bool started;
         try {
           started = await service.startService();
