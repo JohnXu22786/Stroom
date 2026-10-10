@@ -198,7 +198,9 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 /// 启动后台服务。
 ///
-/// 返回 `true` 表示服务已启动（或已在运行），`false` 表示启动失败。
+/// 返回 `true` 表示服务已启动（或已在运行），且持久启动所需的看门狗已调度。
+/// 持久启动时若 Android 看门狗调度失败，返回 `false`，但保留已运行的
+/// 服务和持久启用状态，以便后续恢复事件再次尝试调度。
 /// [persistEnabled] controls whether this start records a persistent user choice.
 /// 失败原因已记录日志。
 Future<bool> startBackgroundService({bool persistEnabled = true}) =>
@@ -232,7 +234,8 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
         }
         // Activate the native AlarmManager keep-alive watchdog (only if
         // the user has the watchdog toggle enabled).
-        await _enableKeepAlive();
+        final keepAliveScheduled = await _enableKeepAlive();
+        if (persistEnabled && !keepAliveScheduled) return false;
         return true;
       } catch (e) {
         debugPrint(
@@ -338,7 +341,8 @@ Future<void> _waitForServiceToStop(FlutterBackgroundService service) async {
 
 /// 重新启动后台服务。
 ///
-/// 返回 `true` 表示重启成功，`false` 表示启动失败。
+/// 返回 `false` 表示服务未能启动或必要的 Android 看门狗未能调度。
+/// 看门狗调度失败时，服务和持久启用状态仍保持开启。
 Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
       await AppLogService.info('BackgroundService', '重新启动后台服务');
       try {
@@ -355,7 +359,7 @@ Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
           await AppLogService.warning('BackgroundService', '重启服务启动返回失败');
           return false;
         }
-        await _enableKeepAlive();
+        if (!await _enableKeepAlive()) return false;
         await AppLogService.info('BackgroundService', '后台服务已重新启动');
         return true;
       } catch (e) {
@@ -523,20 +527,27 @@ Future<void> setBatteryReminderEnabled(bool enabled) async {
 /// deep Doze), otherwise it degrades to setAndAllowWhileIdle /
 /// setInexactRepeating.
 ///
-/// This is a fire-and-forget call — failures are logged but not
-/// propagated since keep-alive is a best-effort enhancement.
-Future<void> _enableKeepAlive() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  if (!await isWatchdogEnabled()) return;
+/// Returns `false` when Android does not confirm that the alarm was scheduled.
+/// Non-Android platforms and a disabled watchdog do not require an alarm.
+Future<bool> _enableKeepAlive() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  if (!await isWatchdogEnabled()) return true;
   try {
     // await：invokeMethod 的失败是异步抛出的，不 await 会变成
     // 未处理的异步异常（每次冷启动/恢复前台都会触发）。
     // 超时保护：平台通道卡死时不能阻塞启动/恢复流程。
-    await _keepAliveChannel
-        .invokeMethod('startKeepAlive')
+    final scheduled = await _keepAliveChannel
+        .invokeMethod<bool>('startKeepAlive')
         .timeout(_keepAliveChannelTimeout);
+    if (scheduled != true) {
+      debugPrint(
+          '[BackgroundService] Android did not schedule the keep-alive alarm.');
+      return false;
+    }
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to enable keep-alive alarm: $e');
+    return false;
   }
 }
 
@@ -549,9 +560,13 @@ Future<void> _rearmKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   if (!await isWatchdogEnabled()) return;
   try {
-    await _keepAliveChannel
-        .invokeMethod('rearmKeepAlive')
+    final scheduled = await _keepAliveChannel
+        .invokeMethod<bool>('rearmKeepAlive')
         .timeout(_keepAliveChannelTimeout);
+    if (scheduled != true) {
+      debugPrint(
+          '[BackgroundService] Android did not schedule the keep-alive alarm.');
+    }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive alarm: $e');
   }

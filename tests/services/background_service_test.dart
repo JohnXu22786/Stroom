@@ -104,6 +104,7 @@ Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
 
 /// Records method calls made on the keep-alive method channel.
 final List<MethodCall> keepAliveCalls = [];
+bool keepAliveSchedulingResult = true;
 
 /// Registers a mock background service platform for testing and returns it.
 MockBackgroundServicePlatform registerMockPlatform() {
@@ -130,15 +131,15 @@ void main() {
     resetBackgroundServiceLifecycleStateForTesting();
     SharedPreferences.setMockInitialValues({});
     keepAliveCalls.clear();
-    // Set up a mock MethodChannel handler for the keep-alive channel
-    // so that fire-and-forget invokeMethod calls don't create pending
-    // platform channel calls that fail the test after completion.
+    keepAliveSchedulingResult = true;
+    // Set up a mock MethodChannel handler so keep-alive calls complete with
+    // the result selected by each test.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.johntsui.stroom/keepalive'),
       (MethodCall methodCall) async {
         keepAliveCalls.add(methodCall);
-        return true;
+        return keepAliveSchedulingResult;
       },
     );
   });
@@ -435,6 +436,42 @@ void main() {
       );
     });
 
+    test(
+        'startBackgroundService reports watchdog scheduling failure without disabling the service',
+        () async {
+      final mock = registerMockPlatform();
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isTrue,
+      );
+    });
+
+    test(
+        'restartBackgroundService reports watchdog scheduling failure while preserving enabled intent',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+
     test('stopBackgroundService disarms the AlarmManager watchdog', () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(true);
@@ -563,6 +600,34 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume reports watchdog scheduling failure',
+        () async {
+      registerMockPlatform();
+      keepAliveSchedulingResult = false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
+      final loggedMessages = <String>[];
+      final originalDebugPrint = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) {
+        if (message != null) loggedMessages.add(message);
+      };
+
+      try {
+        await withAndroidPlatform(() async {
+          await rearmKeepAliveOnResume();
+        });
+      } finally {
+        debugPrint = originalDebugPrint;
+      }
+
+      expect(
+        loggedMessages,
+        contains(
+            '[BackgroundService] Android did not schedule the keep-alive alarm.'),
+      );
     });
 
     test(
