@@ -233,7 +233,7 @@ void main() {
     });
 
     test(
-        'cold-start restore honors an in-process start when enabled write is rejected',
+        'failed persistent start cannot rely on in-process intent after process death',
         () async {
       final mock = registerMockPlatform();
       final prefs = await SharedPreferences.getInstance();
@@ -243,18 +243,27 @@ void main() {
       });
 
       await withAndroidPlatform(() async {
-        expect(await startBackgroundService(), isTrue);
+        expect(await startBackgroundService(), isFalse);
         await prefs.reload();
         expect(prefs.getBool('background_service_enabled'), isFalse);
 
+        // A process-only explicit choice must not be what makes this look
+        // recoverable after a cold start.
+        resetBackgroundServiceLifecycleStateForTesting();
         mock.setServiceRunning(false);
         await restoreBackgroundServiceOnColdStart();
       });
 
-      expect(mock._isRunning, isTrue);
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'a failed persistent start must not arm a watchdog behind a '
+            'false enabled preference',
+      );
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
-        isTrue,
+        isFalse,
       );
     });
 
@@ -376,6 +385,30 @@ void main() {
       // After restart the enabled state must be persisted again so a
       // later process death still triggers cold-start restore.
       expect(prefs.getBool('background_service_enabled'), isTrue);
+    });
+
+    test(
+        'restartBackgroundService preserves a running service when enabled write is rejected',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(prefs);
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await restartBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
     });
   });
 
@@ -533,7 +566,7 @@ void main() {
     });
 
     test(
-        'resume re-arms watchdog after explicit start preference write is rejected',
+        'resume does not re-arm watchdog after persistent start write is rejected',
         () async {
       registerMockPlatform();
       final prefs = await SharedPreferences.getInstance();
@@ -543,7 +576,7 @@ void main() {
       });
 
       await withAndroidPlatform(() async {
-        expect(await startBackgroundService(), isTrue);
+        expect(await startBackgroundService(), isFalse);
         await prefs.reload();
         expect(prefs.getBool('background_service_enabled'), isFalse);
         await rearmKeepAliveOnResume();
@@ -551,11 +584,11 @@ void main() {
 
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
-        isTrue,
+        isFalse,
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
-        isTrue,
+        isFalse,
       );
     });
 
@@ -569,7 +602,7 @@ void main() {
       });
 
       await withAndroidPlatform(() async {
-        expect(await startBackgroundService(), isTrue);
+        expect(await startBackgroundService(), isFalse);
         expect(await stopBackgroundService(), isTrue);
         await rearmKeepAliveOnResume();
       });
