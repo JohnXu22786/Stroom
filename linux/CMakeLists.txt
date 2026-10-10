@@ -76,6 +76,13 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# WPE 2.48 from Debian 13 lacks the optional theme color API used by the beta
+# plugin. Confine its compatibility declaration to that plugin's sources.
+if(TARGET flutter_inappwebview_linux_plugin)
+  target_compile_options(flutter_inappwebview_linux_plugin PRIVATE
+    "-include${CMAKE_CURRENT_SOURCE_DIR}/wpe_compat.h")
+endif()
+
 # Keep WPE and its subprocesses together in the system packages. The plugin's
 # library-only bundle would omit WebKit processes and resources.
 list(REMOVE_ITEM PLUGIN_BUNDLED_LIBRARIES ${FLUTTER_INAPPWEBVIEW_WPE_LIBS})
