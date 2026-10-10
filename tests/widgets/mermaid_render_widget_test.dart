@@ -607,7 +607,8 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('Ctrl+wheel zoom does not scroll the parent scroll view',
+    testWidgets(
+        'Ctrl+wheel zoom requires vertical input and does not scroll parent',
         (tester) async {
       final previousPlatform = InAppWebViewPlatform.instance;
       final platform = _MermaidWebViewPlatform();
@@ -654,7 +655,27 @@ void main() {
       webView.params.onLoadStop?.call(controller, null);
       await tester.pump();
 
+      int zoomCallCount() => fakeController.evaluatedScripts
+          .where((script) => script.contains('window.setZoom'))
+          .length;
+
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: tester.getCenter(find.byType(MermaidRenderWidget)),
+          kind: PointerDeviceKind.mouse,
+          scrollDelta: const Offset(20, 0),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        zoomCallCount(),
+        0,
+        reason:
+            'Ctrl+horizontal-only wheel should not zoom the Mermaid diagram',
+      );
+
       await tester.sendEventToBinding(
         PointerScrollEvent(
           position: tester.getCenter(find.byType(MermaidRenderWidget)),
@@ -666,9 +687,8 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
       expect(
-        fakeController.evaluatedScripts,
-        contains(
-            predicate<String>((script) => script.contains('window.setZoom'))),
+        zoomCallCount(),
+        1,
         reason: 'Ctrl+wheel should still zoom the Mermaid diagram',
       );
       expect(
