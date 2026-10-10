@@ -351,8 +351,7 @@ void main() {
             return false;
           };
 
-          final save =
-              background_service.setDesktopCloseMinimizeEnabled(false);
+          final save = background_service.setDesktopCloseMinimizeEnabled(false);
           await store.writeStarted.future;
           expect(prefs.getBool('desktop_close_minimize'), isFalse,
               reason:
