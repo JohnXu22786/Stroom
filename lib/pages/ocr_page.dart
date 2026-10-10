@@ -1243,7 +1243,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   const SizedBox(height: 8),
                   ChoiceCard(
                     icon: Icons.photo_library,
-                    title: '从系统相册选择',
+                    title: SystemPickDirectories.isNativeMobile
+                        ? '从设备相册选择'
+                        : '从系统相册选择',
                     subtitle: '浏览并选择设备中的图片',
                     color: Colors.blue,
                     onTap: () {
@@ -1295,10 +1297,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
     try {
-      // 移动端直接通过 image_picker 打开系统相册，
+      // 移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
       final files = await pickGalleryMedia(
         GalleryMediaKind.image,
+        context: context,
         imageQuality: 90,
         maxWidth: 2048,
         maxHeight: 2048,

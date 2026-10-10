@@ -823,10 +823,11 @@ class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {
 
   Future<void> _pickVideoFile() async {
     try {
-      // 移动端直接通过 image_picker 打开系统视频选择器，
+      // 移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"视频"目录
       final pickedFiles = await pickGalleryMedia(
         GalleryMediaKind.video,
+        context: context,
       );
       if (pickedFiles.isEmpty) return;
 
