@@ -89,7 +89,8 @@ class _DelayedAssetWebViewPlatform extends InAppWebViewPlatform {
   @override
   PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
     PlatformInAppWebViewWidgetCreationParams params,
-  ) => webView = _DelayedAssetWebView(params);
+  ) =>
+      webView = _DelayedAssetWebView(params);
 }
 
 class _DelayedAssetWebView extends PlatformInAppWebViewWidget {
