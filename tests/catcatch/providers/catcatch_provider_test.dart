@@ -775,7 +775,8 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isFalse);
     });
 
-    test('rejected user start preference write does not start service', () async {
+    test('rejected user start preference write does not start service',
+        () async {
       await preferences.setBool('background_service_enabled', false);
       final originalStore = SharedPreferencesStorePlatform.instance;
       SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
