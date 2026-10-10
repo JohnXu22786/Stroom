@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
+import '../../../services/ocr_service.dart';
 import '../../../utils/http_timeout.dart';
 import '../../../utils/provider_models.dart';
 import '../../models/block_type_definition.dart';
@@ -17,71 +18,6 @@ import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
 import 'shared_helpers.dart';
-
-Future<String> _callOcrApi({
-  required Uint8List imageBytes,
-  required String imageFormat,
-  required String host,
-  required String apiKey,
-  required String modelId,
-  CancelToken? cancelToken,
-}) async {
-  // Layered timeouts: fast-fail on connect/upload issues, no artificial
-  // kill for slow-but-healthy servers (only a 60-min silent-server bound).
-  // The upload budget is sized from the encoded JSON body (base64 inflates
-  // the image ~33%), not the raw image bytes.
-  final dio = Dio(
-    BaseOptions(
-      connectTimeout: connectTimeoutDefault,
-      sendTimeout: sendTimeoutForBytes(
-        _encodedBodyLength(imageBytes, imageFormat),
-      ),
-      receiveTimeout: receiveTimeoutFallback,
-    ),
-  );
-  try {
-    final dataUri =
-        'data:image/$imageFormat;base64,${base64Encode(imageBytes)}';
-    final body = {
-      'model': modelId,
-      'max_tokens': 4096,
-      'temperature': 0.0,
-      'messages': [
-        {'role': 'system', 'content': '请提取图片中的所有文字内容。只返回文字，不要添加任何解释。'},
-        {
-          'role': 'user',
-          'content': [
-            {
-              'type': 'image_url',
-              'image_url': {'url': dataUri, 'detail': 'high'},
-            },
-          ],
-        },
-      ],
-    };
-    final response = await dio.post(
-      host,
-      data: body,
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-      ),
-      cancelToken: cancelToken,
-    );
-    if (response.data is Map) {
-      final choices = response.data['choices'] as List<dynamic>?;
-      if (choices != null && choices.isNotEmpty) {
-        final msg = choices.first['message'] as Map<String, dynamic>?;
-        return msg?['content'] as String? ?? '';
-      }
-    }
-    return '';
-  } finally {
-    dio.close();
-  }
-}
 
 /// Approximate length of the JSON request body: the base64 data-URI is the
 /// dominant term (~1.33x the raw image bytes) plus a fixed envelope.
@@ -104,6 +40,9 @@ Future<String> executeOcrBlock({
 
   /// Allows the response to be held and released in cancellation tests.
   Future<String> Function(Uint8List, String)? requestOcr,
+
+  /// Controlled Dio client for request/response contract tests.
+  Dio? ocrDio,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -196,16 +135,63 @@ Future<String> executeOcrBlock({
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
-    final result = await (requestOcr != null
-        ? requestOcr(imageBytes, imageFormat)
-        : _callOcrApi(
-            imageBytes: imageBytes,
-            imageFormat: imageFormat,
-            host: config.host,
-            apiKey: config.key,
-            modelId: model.modelId,
-            cancelToken: cancelToken,
-          ));
+    final String result;
+    if (requestOcr != null) {
+      result = await requestOcr(imageBytes, imageFormat);
+    } else {
+      final service = OcrService(
+        config: OcrConfig(
+          host: config.host,
+          apiKey: config.key,
+          model: model.modelId,
+          typeConfig: model.typeConfig,
+          customParams: model.customParams,
+        ),
+        dio: ocrDio,
+        connectTimeout: connectTimeoutDefault,
+        sendTimeout: sendTimeoutForBytes(
+          _encodedBodyLength(imageBytes, imageFormat),
+        ),
+        receiveTimeout: receiveTimeoutFallback,
+      );
+      late final OcrResult ocrResult;
+      try {
+        ocrResult = await service.recognize(
+          imageBytes: imageBytes,
+          imageFormat: imageFormat,
+          cancelToken: cancelToken,
+        );
+      } finally {
+        if (ocrDio == null) service.close();
+      }
+      if (!ocrResult.isComplete) {
+        if (!isFlowExecutionActive(execNotifier, execId)) {
+          throw BlockExecutionException(
+            '任务流已结束或删除',
+            blockType: def.typeKey.name,
+            blockTitle: def.label,
+          );
+        }
+        bgNotifier.setResult(taskId, ocrResult.text);
+        final error =
+            'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
+        bgNotifier.updateStep(taskId, 0, failed: true, error: error);
+        failSubTask(
+          bgNotifier,
+          taskId,
+          execNotifier,
+          execId,
+          flowSubTask.id,
+          error,
+        );
+        throw BlockExecutionException(
+          error,
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      result = ocrResult.text;
+    }
     // The flow may have ended while the request was in flight — don't
     // save an orphaned text record.
     if (!isFlowExecutionActive(execNotifier, execId)) {

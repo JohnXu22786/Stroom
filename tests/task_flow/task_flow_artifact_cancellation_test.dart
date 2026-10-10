@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
@@ -93,14 +94,27 @@ void main() {
     background.dispose();
   });
 
-  ProviderEntriesState providerFor(String type) {
+  ProviderEntriesState providerFor(
+    String type, {
+    String host = 'https://example.invalid/recognition',
+    Map<String, dynamic> typeConfig = const {},
+    List<CustomParam> customParams = const [],
+  }) {
     return ProviderEntriesState(entries: [
       ProviderEntry(name: type, type: type, configs: [
         ProviderConfigItem(
           id: 'config',
-          host: 'https://example.invalid/recognition',
+          host: host,
           key: 'test-key',
-          models: [ModelConfig(id: 'model', name: 'Test', modelId: 'test')],
+          models: [
+            ModelConfig(
+              id: 'model',
+              name: 'Test',
+              modelId: 'test',
+              typeConfig: typeConfig,
+              customParams: customParams,
+            ),
+          ],
         ),
       ]),
     ]);
@@ -213,6 +227,89 @@ void main() {
       expect(executions.execution(execId)?.status, FlowExecutionStatus.running);
     });
   }
+
+  test('OCR uses shared request options and fails truncated output with partial text',
+      () async {
+    final source = await File('${directory.path}/ocr_contract.png')
+        .writeAsBytes([0x89, 0x50, 0x4e, 0x47]);
+    final providers = providerFor(
+      'ocr',
+      host: 'https://example.invalid/v1/chat/completions',
+      typeConfig: {
+        'enableMaxTokens': true,
+        'maxTokens': 777,
+        'enableTemperature': true,
+        'temperature': 0.35,
+        'enableTopP': true,
+        'topP': 0.8,
+        'userInstruction': '提取票据号码',
+      },
+      customParams: [
+        CustomParam(
+          paramName: 'response_format',
+          defaultValue: '{"type":"json_object"}',
+          type: 'json',
+        ),
+      ],
+    );
+    Map<String, dynamic>? requestBody;
+    String? requestUrl;
+    final dio = Dio()
+      ..interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestBody = Map<String, dynamic>.from(options.data as Map);
+          requestUrl = options.uri.toString();
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'choices': [
+                {
+                  'finish_reason': 'length',
+                  'message': {
+                    'content': [
+                      {'type': 'text', 'text': 'partial OCR text'},
+                    ],
+                  },
+                },
+              ],
+            },
+          ));
+        },
+      ));
+
+    await expectLater(
+      executeOcrBlock(
+        block: blockFor(BlockType.ocr),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providers,
+        ocrDio: dio,
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(requestUrl, 'https://example.invalid/v1/chat/completions');
+    expect(requestBody?['model'], 'test');
+    expect(requestBody?['max_tokens'], 777);
+    expect(requestBody?['temperature'], 0.35);
+    expect(requestBody?['top_p'], 0.8);
+    expect(requestBody?['response_format'], {'type': 'json_object'});
+    final messages = requestBody?['messages'] as List;
+    final userContent = (messages[1] as Map)['content'] as List;
+    expect(userContent.last, {'type': 'text', 'text': '提取票据号码'});
+
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.result, 'partial OCR text');
+    expect(background.state.single.steps.single.status, BgStepStatus.failed);
+    expect(executions.execution(execId)?.subTasks.single.status,
+        TaskStatus.failed);
+    expect(await TextManifest.loadRecords(), isEmpty);
+  });
 
   Future<String> separateVideo(String input) => executeAudioSeparationBlock(
         def: BlockTypeDefinition.audioSeparation,

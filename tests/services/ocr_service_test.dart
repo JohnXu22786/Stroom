@@ -300,6 +300,220 @@ void main() {
         );
       });
 
+      test('recognize rejects refusal results', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'refusal': 'I cannot process this image.',
+                'content': 'This text must not be accepted.',
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('recognize rejects non-text content blocks', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {
+                'content': [
+                  {'type': 'text', 'text': 'text that must not be accepted'},
+                  {'type': 'image_url', 'image_url': {'url': 'data:image/png'}},
+                ],
+              },
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        expect(
+          () => service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(isA<Exception>()),
+        );
+      });
+
+      test('recognize retains text and marks a length-truncated result',
+          () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'length',
+              'message': {'content': 'partial OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(result.text, 'partial OCR text');
+        expect(result.isComplete, isFalse);
+        expect(result.finishReason, 'length');
+      });
+
+      test('custom params cannot replace protected request fields', () async {
+        for (final protectedName in ['model', 'messages']) {
+          var sent = false;
+          final dio = Dio()
+            ..interceptors.add(_InterceptorWithCallback(
+              callback: (options, handler) {
+                sent = true;
+                handler.resolve(Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'choices': [
+                      {
+                        'message': {'content': 'ok'},
+                      },
+                    ],
+                  },
+                ));
+              },
+            ));
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'expected-model',
+              apiKey: 'key',
+              host: 'https://api.test.com/v1/chat/completions',
+              customParams: [
+                CustomParam(
+                  paramName: protectedName,
+                  defaultValue: 'custom-value',
+                ),
+              ],
+            ),
+            dio: dio,
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1])),
+            throwsArgumentError,
+          );
+          expect(sent, isFalse);
+        }
+      });
+
+      test('custom stream=true is rejected before sending', () async {
+        var sent = false;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              sent = true;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'choices': [{'message': {'content': 'ok'}}]},
+              ));
+            },
+          ));
+        final service = OcrService(
+          config: OcrConfig(
+            model: 'gpt-4o',
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            customParams: [
+              CustomParam(
+                paramName: 'stream',
+                defaultValue: 'true',
+                type: 'boolean',
+              ),
+            ],
+          ),
+          dio: dio,
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1])),
+          throwsArgumentError,
+        );
+        expect(sent, isFalse);
+      });
+
+      test('invalid custom parameter values are rejected before sending',
+          () async {
+        var sent = false;
+        final dio = Dio()
+          ..interceptors.add(_InterceptorWithCallback(
+            callback: (options, handler) {
+              sent = true;
+              handler.resolve(Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {'choices': [{'message': {'content': 'ok'}}]},
+              ));
+            },
+          ));
+        final service = OcrService(
+          config: OcrConfig(
+            model: 'gpt-4o',
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            customParams: [
+              CustomParam(
+                paramName: 'top_k',
+                defaultValue: 'many',
+                type: 'number',
+              ),
+            ],
+          ),
+          dio: dio,
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1])),
+          throwsFormatException,
+        );
+        expect(sent, isFalse);
+      });
+
+      test('invalid boolean and JSON custom parameter values are rejected',
+          () async {
+        for (final param in [
+          CustomParam(
+            paramName: 'enabled',
+            defaultValue: 'sometimes',
+            type: 'boolean',
+          ),
+          CustomParam(
+            paramName: 'response_format',
+            defaultValue: '{invalid json',
+            type: 'json',
+          ),
+        ]) {
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              customParams: [param],
+            ),
+            dio: _mockDioWithSuccess({
+              'choices': [
+                {
+                  'message': {'content': 'unexpected'},
+                },
+              ],
+            }),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1])),
+            throwsFormatException,
+          );
+        }
+      });
+
       test('recognizeBatch extracts text from standard response', () async {
         final dio = _mockDioWithSuccess({
           'choices': [
