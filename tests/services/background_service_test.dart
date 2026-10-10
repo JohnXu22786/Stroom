@@ -456,8 +456,7 @@ void main() {
       expect(prefs.getBool('background_service_enabled'), isTrue);
     });
 
-    test(
-        'restart timeout arms watchdog when the stop request completes late',
+    test('restart timeout arms watchdog when the stop request completes late',
         () async {
       final mock = registerMockPlatform()
         ..setServiceRunning(true)
