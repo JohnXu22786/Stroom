@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -553,6 +555,41 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets(
+      'web view creation removes the Flutter loading overlay without onLoadStop',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        expect(find.text('正在准备渲染引擎...'), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 400));
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        // The iframe manages its own render progress, so the Flutter overlay
+        // must be removed as soon as the WebView is created. This deliberately
+        // does not send onLoadStop.
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
     testWidgets('shows loading state initially before WebView creation',
         (tester) async {
       const widget = MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B');
@@ -915,4 +952,51 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+class _MermaidWebViewPlatform extends InAppWebViewPlatform {
+  _MermaidWebView? webView;
+
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+          PlatformInAppWebViewWidgetCreationParams params) =>
+      webView = _MermaidWebView(params);
+}
+
+class _MermaidWebView extends PlatformInAppWebViewWidget {
+  final controller = _MermaidWebViewController();
+
+  _MermaidWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
+}
+
+class _MermaidWebViewController extends PlatformInAppWebViewController {
+  _MermaidWebViewController()
+      : super.implementation(
+            const PlatformInAppWebViewControllerCreationParams(id: 0));
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  void addJavaScriptHandler({
+    required String handlerName,
+    required JavaScriptHandlerCallback callback,
+  }) {}
+
+  @override
+  void dispose({bool isKeepAlive = false}) {}
 }
