@@ -111,13 +111,29 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   /// 从 Mermaid 代码中检测图表类型
   ///
-  /// 跳过 %% 注释行和 %%{init} 配置指令以找到真正的图表类型声明。
+  /// 跳过 %% 注释、%%{init} 配置指令和 YAML frontmatter，
+  /// 以找到真正的图表类型声明。
   String _detectTypeFromCode(String code) {
     final lines = code.trimLeft().split('\n');
+    var isFirstContentLine = true;
+    var insideFrontmatter = false;
     for (final rawLine in lines) {
       final line = rawLine.trim();
       // Skip %% comment lines and %%{init} directive lines
       if (line.isEmpty || line.startsWith('%%')) continue;
+
+      if (insideFrontmatter) {
+        if (line == '---') insideFrontmatter = false;
+        continue;
+      }
+
+      if (isFirstContentLine && line == '---') {
+        insideFrontmatter = true;
+        isFirstContentLine = false;
+        continue;
+      }
+      isFirstContentLine = false;
+
       for (final type in MermaidTemplates.getAllTypes()) {
         if (line.startsWith(type.keyword)) {
           return type.id;

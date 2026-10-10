@@ -140,16 +140,20 @@ void main() {
       expect(find.text('添加请求'), findsOneWidget);
     });
 
-    testWidgets('saving after editing the header uses the edited type label',
+    testWidgets(
+        'frontmatter sequenceDiagram selects snippets and save label',
         (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
       await tester.enterText(
         find.byType(TextField).first,
-        'sequenceDiagram\n  A->>B: Hello',
+        '---\ntitle: Test\n---\nsequenceDiagram\n  A->>B: Hello',
       );
       await tester.pump();
+
+      expect(find.text('添加参与者'), findsOneWidget);
+      expect(find.text('添加节点'), findsNothing);
 
       await tester.tap(find.byIcon(Icons.save));
       await tester.pumpAndSettle();
