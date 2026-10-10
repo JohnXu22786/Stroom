@@ -1,4 +1,5 @@
 // Merged from: ocr_page_test.dart, ocr_page_preview_edit_test.dart
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/ocr_page.dart';
+import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
@@ -67,6 +69,7 @@ Widget _buildTestApp({
   List<SelectedImage>? testImages,
   Map<String, dynamic>? retryData,
   List<OcrInstruction> ocrInstructions = const [],
+  BackgroundTaskNotifier? backgroundTasksNotifier,
 }) {
   return ProviderScope(
     overrides: [
@@ -76,6 +79,8 @@ Widget _buildTestApp({
           notifier.state = ProviderEntriesState(entries: entries);
           return notifier;
         }),
+      if (backgroundTasksNotifier != null)
+        backgroundTasksProvider.overrideWith((ref) => backgroundTasksNotifier),
       ocrInstructionsProvider.overrideWith((ref) {
         final notifier = OcrInstructionsNotifier(ref);
         notifier.state = ocrInstructions;
@@ -90,6 +95,10 @@ Widget _buildTestApp({
       ],
     ),
   );
+}
+
+class _InspectableBackgroundTaskNotifier extends BackgroundTaskNotifier {
+  List<BackgroundTask> get tasksForTest => state;
 }
 
 // ============================================================================
@@ -171,6 +180,26 @@ SelectedImage _createTestImage({int seed = 1}) {
     format: 'png',
   );
 }
+
+Map<String, dynamic> _createVersionedRetryData({
+  required String configId,
+  required String modelId,
+  String? instructionContent,
+  String saveFolder = '',
+}) =>
+    OcrRetrySnapshot.capture(
+      configId: configId,
+      modelId: modelId,
+      images: [
+        OcrRetryImage(
+          bytes: _createTestPngBytes(),
+          format: 'png',
+          name: 'retry-image.png',
+        ),
+      ],
+      instructionContent: instructionContent,
+      saveFolder: saveFolder,
+    ).toMap();
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -302,6 +331,161 @@ void main() {
 
       // Should show just the model name when no provider name
       expect(find.text('TestModel'), findsWidgets);
+    });
+  });
+
+  group('OcrPage - stable retry context', () {
+    testWidgets(
+        'restores the referenced model, folder and instruction snapshot', (
+      tester,
+    ) async {
+      final firstEntry = ProviderEntry(
+        id: 'ocr-entry-first',
+        type: 'ocr',
+        name: 'First OCR',
+        configs: [
+          ProviderConfigItem(
+            id: 'ocr-config-first',
+            providerName: 'First Provider',
+            host: 'https://first.example/v1',
+            key: 'first-secret',
+            models: [
+              ModelConfig(
+                id: 'ocr-model-first',
+                name: 'First Model',
+                modelId: 'first-model',
+              ),
+            ],
+          ),
+        ],
+      );
+      final reorderedEntry = ProviderEntry(
+        id: 'ocr-entry-reordered',
+        type: 'ocr',
+        name: 'Second OCR',
+        configs: [
+          ProviderConfigItem(
+            id: 'ocr-config-reordered',
+            providerName: 'Second Provider',
+            host: 'https://second.example/v1',
+            key: 'second-secret',
+            models: [
+              ModelConfig(
+                id: 'ocr-model-other',
+                name: 'Other Model',
+                modelId: 'other-model',
+              ),
+              ModelConfig(
+                id: 'ocr-model-target',
+                name: 'Target Model',
+                modelId: 'target-model',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [firstEntry, reorderedEntry],
+          ocrInstructions: const [
+            OcrInstruction(name: 'Edited prompt', content: 'new prompt'),
+          ],
+          retryData: _createVersionedRetryData(
+            configId: 'ocr-config-reordered',
+            modelId: 'ocr-model-target',
+            instructionContent: 'captured prompt removed from generic list',
+            saveFolder: 'receipts/2026',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Target Model | Second Provider'), findsOneWidget);
+      expect(find.text('receipts/2026'), findsOneWidget);
+      expect(find.text('已保存的指令快照'), findsOneWidget);
+    });
+
+    testWidgets('a deleted model reference blocks submission until reselection',
+        (
+      tester,
+    ) async {
+      final bgNotifier = _InspectableBackgroundTaskNotifier();
+      final availableEntry = ProviderEntry(
+        id: 'ocr-entry-current',
+        type: 'ocr',
+        name: 'Current OCR',
+        configs: [
+          ProviderConfigItem(
+            id: 'current-config',
+            providerName: 'Current Provider',
+            host: 'https://current.example/v1',
+            key: 'current-secret',
+            models: [
+              ModelConfig(
+                id: 'current-model',
+                name: 'Current Model',
+                modelId: 'current-model-api',
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [availableEntry],
+          backgroundTasksNotifier: bgNotifier,
+          retryData: _createVersionedRetryData(
+            configId: 'deleted-config',
+            modelId: 'deleted-model',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
+      expect(find.text('Current Model | Current Provider'), findsNothing);
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+
+      expect(bgNotifier.tasksForTest, isEmpty);
+    });
+
+    testWidgets('legacy model index needs confirmation before submission', (
+      tester,
+    ) async {
+      final bgNotifier = _InspectableBackgroundTaskNotifier();
+      final entry = _createOcrEntry(withModels: true);
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [entry],
+          backgroundTasksNotifier: bgNotifier,
+          retryData: {
+            'type': 'ocr',
+            'images': [
+              {
+                'bytes': base64Encode(_createTestPngBytes()),
+                'format': 'png',
+                'name': 'legacy.png',
+              },
+            ],
+            'modelIndex': 1,
+            'instructionIndex': 0,
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('GPT-4o Mini | OpenAI'), findsOneWidget);
+      expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsOneWidget);
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      expect(bgNotifier.tasksForTest, isEmpty);
+
+      await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
+      await tester.pump();
+      expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsNothing);
+      expect(bgNotifier.tasksForTest, isEmpty);
     });
   });
 
@@ -469,11 +653,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('发票提取'), findsOneWidget);
+      expect(find.text('已保存的指令快照'), findsOneWidget);
     });
 
     testWidgets(
-        'retry falls back to the default when the instruction content is gone',
+        'retry keeps the instruction snapshot when its generic entry is gone',
         (tester) async {
       final entry = _createOcrEntry(withModels: true);
       await tester.pumpWidget(
@@ -493,7 +677,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
+      expect(find.text('已保存的指令快照'), findsOneWidget);
+      expect(find.text('默认（仅发送图片）'), findsNothing);
     });
 
     testWidgets(
@@ -652,6 +837,8 @@ void main() {
       );
       await tester.tap(find.text('打开OCR'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
+      await tester.pump();
 
       // Both taps land inside the pending-restore window (load takes 2s)
       // — the second must not start a duplicate OCR.
