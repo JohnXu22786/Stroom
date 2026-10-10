@@ -552,6 +552,24 @@ void main() {
       expect(controller?.text, contains('NewNode'));
     });
 
+    testWidgets(
+        'snippet insertion preserves final line without trailing newline',
+        (tester) async {
+      const initialCode = 'graph TD\n  A[Start] --> B[End]';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = find.byType(TextField).first;
+      final controller = tester.widget<TextField>(textField).controller;
+      expect(
+        controller?.text,
+        'graph TD\n  A[Start] --> B[End]\n  NewNode[新节点]\n',
+      );
+    });
+
     // ═══════════════════════════════════════════════════
     // Mode Switching Stability (regression tests for freeze fix)
     // ═══════════════════════════════════════════════════
