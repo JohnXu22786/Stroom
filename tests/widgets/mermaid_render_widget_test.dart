@@ -556,6 +556,90 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets('zoom tapped while loading is applied after WebView readiness',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(
+              mermaidCode: 'graph TD\nA-->B',
+              showZoomControls: true,
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final fakeController = webView.controller;
+
+      // The control is visible while loading, but its WebView controller has
+      // not reported creation yet.
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      // Web sets its overlay-ready state on controller creation, before the
+      // page has necessarily loaded the zoom helper.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      // The overlay timeout does not prove that the page loaded or that its
+      // JavaScript zoom helper is available.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      expect(fakeController.zoomLevel, 1.0);
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1,0.1,0.1])'))),
+      );
+
+      // Load completion can precede Mermaid's asynchronous render and fit.
+      // A tap in that interval must be retained too.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+
+      // Mermaid's auto-fit runs after the WebView load callback, so the
+      // queued taps must apply on top of that fitted zoom rather than precede it.
+      fakeController.simulateJsFitToViewport(0.8);
+      expect(fakeController.zoomLevel, closeTo(1.2, 0.0001));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
         'toolbar zoom continues from the JS-fitted zoom without a transform handler',
         (tester) async {
@@ -601,7 +685,7 @@ void main() {
       expect(
         webView.controller.evaluatedScripts,
         contains(predicate<String>((script) =>
-            script.contains('window.setZoom(window.zoomLevel + 0.1'))),
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1389,10 +1473,22 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
+  final _pendingZoomDeltas = <double>[];
   double zoomLevel = 1.0;
+  bool _fitComplete = false;
 
   void simulateJsFitToViewport(double fittedZoom) {
     zoomLevel = fittedZoom;
+    _fitComplete = true;
+    _applyPendingZoomDeltas();
+  }
+
+  void _applyPendingZoomDeltas() {
+    if (!_fitComplete) return;
+    for (final delta in _pendingZoomDeltas) {
+      zoomLevel = (zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    }
+    _pendingZoomDeltas.clear();
   }
 
   _MermaidWebViewController()
@@ -1431,6 +1527,18 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final deferredZoom = RegExp(
+      r'window\.applyZoomDeltasAfterFit\(\[([^\]]*)\]\)',
+    ).firstMatch(source);
+    if (deferredZoom != null) {
+      final deltas = RegExp(r'-?\d+(?:\.\d+)?')
+          .allMatches(deferredZoom.group(1)!)
+          .map((match) => double.parse(match.group(0)!));
+      _pendingZoomDeltas.addAll(deltas);
+      _applyPendingZoomDeltas();
+      return;
+    }
+
     final relativeZoom = RegExp(
       r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
     ).firstMatch(source);

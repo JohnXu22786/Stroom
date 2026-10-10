@@ -464,6 +464,8 @@ MERMAID_CODE_PLACEHOLDER
     var zoomLevel = 1;
     var panX = 0;
     var panY = 0;
+    var fitComplete = false;
+    var pendingZoomDeltas = [];
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -519,6 +521,22 @@ MERMAID_CODE_PLACEHOLDER
       updateTransform();
     };
 
+    window.applyZoomDeltasAfterFit = function(deltas) {
+      if (!Array.isArray(deltas)) return;
+      if (!fitComplete) {
+        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+        return;
+      }
+      var viewport = document.getElementById('viewport');
+      for (var i = 0; i < deltas.length; i++) {
+        window.setZoom(
+          zoomLevel + deltas[i],
+          viewport.clientWidth / 2,
+          viewport.clientHeight / 2
+        );
+      }
+    };
+
     // Fits the rendered diagram into the viewport: zooms so that the WHOLE
     // diagram is visible (contain, NOT cover) at the maximum zoom, then
     // centers it. Called automatically once rendering completes.
@@ -570,6 +588,10 @@ MERMAID_CODE_PLACEHOLDER
       panY = (vh - sh * zoomLevel) / 2;
       updateTransform();
       notifyTransform();
+      fitComplete = true;
+      var deltas = pendingZoomDeltas;
+      pendingZoomDeltas = [];
+      window.applyZoomDeltasAfterFit(deltas);
     };
 
 GESTURE_SCRIPT_PLACEHOLDER
@@ -689,6 +711,7 @@ MERMAID_LOADER_PLACEHOLDER
 class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
+  bool _hasLoadedPage = false;
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
@@ -725,6 +748,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
+
+  /// Toolbar zoom taps made before the WebView is ready to accept commands.
+  final List<double> _pendingZoomDeltas = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -794,9 +820,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (!kIsWeb) {
         _isReady = false;
       }
+      _hasLoadedPage = false;
       _errorMessage = null;
       _showSourceCode = false;
       _zoomLevel = 1.0;
+      _pendingZoomDeltas.clear();
       _panX = 0;
       _panY = 0;
       if (oldWidget.mermaidCode.trim().isEmpty &&
@@ -856,6 +884,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _loadMermaidCode() {
+    _hasLoadedPage = false;
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
@@ -1224,7 +1253,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// its own (possibly stale) pan here.
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
-    if (ctrl == null) return;
+    if (ctrl == null || !_hasLoadedPage) {
+      _pendingZoomDeltas.add(delta);
+      return;
+    }
 
     // Keep native-side state current for Flutter gesture handling, but let
     // JavaScript apply the toolbar delta to its live zoom. The web platform
@@ -1237,9 +1269,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     await ctrl.evaluateJavascript(
-      source: 'window.setZoom(window.zoomLevel + $delta, '
-          "document.getElementById('viewport').clientWidth / 2, "
-          "document.getElementById('viewport').clientHeight / 2)",
+      source: 'window.applyZoomDeltasAfterFit(${jsonEncode([delta])})',
+    );
+  }
+
+  Future<void> _applyPendingZoomDeltas() async {
+    final ctrl = _webViewController;
+    if (ctrl == null || _pendingZoomDeltas.isEmpty) return;
+
+    final pendingDeltas = List<double>.of(_pendingZoomDeltas);
+    _pendingZoomDeltas.clear();
+    await ctrl.evaluateJavascript(
+      source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
     );
   }
 
@@ -1569,10 +1610,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                _hasLoadedPage = true;
                 if (mounted && !_isReady) {
                   setState(() => _isReady = true);
                 }
                 _readyFallbackTimer?.cancel();
+                unawaited(_applyPendingZoomDeltas());
               },
               onReceivedError: (controller, request, error) {
                 _readyFallbackTimer?.cancel();

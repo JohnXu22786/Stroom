@@ -108,6 +108,7 @@ test('fitToViewport retries once the zero-sized viewport is laid out', () => {
         (listeners.get(type) || []).filter((registered) => registered !== listener),
       );
     },
+    applyZoomDeltasAfterFit: () => {},
   };
   const document = {
     getElementById: (id) =>
@@ -119,6 +120,8 @@ test('fitToViewport retries once the zero-sized viewport is laid out', () => {
     zoomLevel: 1,
     panX: 0,
     panY: 0,
+    fitComplete: false,
+    pendingZoomDeltas: [],
     updateTransform: () => transforms.push([context.zoomLevel, context.panX, context.panY]),
     notifyTransform: () => notifications++,
   };
@@ -152,4 +155,69 @@ test('fitToViewport retries once the zero-sized viewport is laid out', () => {
 
   dispatchResize();
   assert.equal(notifications, 1, 'the resize retry should only run once');
+});
+
+test('native and web templates apply queued zoom after auto-fit', () => {
+  for (const [templateName, templateSource] of [
+    ['native', dartSource],
+    ['web', webTemplateSource],
+  ]) {
+    const extract = (pattern, description) => {
+      const match = templateSource.match(pattern);
+      assert.ok(match, `Could not find ${description} in the ${templateName} template`);
+      return match[0];
+    };
+    const state = extract(
+      /    var fitComplete = false;\s*var pendingZoomDeltas = \[\];/,
+      'queued zoom state',
+    );
+    const setZoom = extract(
+      /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      'setZoom',
+    );
+    const applyAfterFit = extract(
+      /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+      'applyZoomDeltasAfterFit',
+    );
+    const fit = extract(
+      /    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
+      'fitToViewport',
+    );
+
+    const viewport = {clientWidth: 200, clientHeight: 100};
+    const attributes = {};
+    const svg = {
+      getBBox: () => ({width: 100, height: 50}),
+      setAttribute: (name, value) => { attributes[name] = value; },
+    };
+    const container = {querySelector: () => svg};
+    const transforms = [];
+    const context = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      updateTransform: () => transforms.push(context.zoomLevel),
+      notifyTransform: () => {},
+    };
+
+    vm.runInNewContext(
+      `${state}\n${setZoom}\n${applyAfterFit}\n${fit}`,
+      context,
+    );
+
+    context.window.applyZoomDeltasAfterFit([0.1]);
+    assert.equal(context.zoomLevel, 1, `${templateName} must wait for auto-fit`);
+
+    context.window.fitToViewport();
+    assert.equal(context.zoomLevel, 2.1);
+    context.window.applyZoomDeltasAfterFit([-0.1]);
+    assert.equal(context.zoomLevel, 2.0);
+    assert.deepEqual(transforms, [2, 2.1, 2]);
+    assert.deepEqual(attributes, {width: 100, height: 50});
+  }
 });
