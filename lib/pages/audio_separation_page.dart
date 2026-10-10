@@ -219,18 +219,20 @@ Future<String?> _saveAudioSeparationFile(
   final name =
       displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
 
-  await FileManifest.writeFile('$hash.$format', audioBytes);
+  await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+    await FileManifest.writeFile('$hash.$format', audioBytes);
 
-  final record = AudioRecord(
-    name: name,
-    hash: hash,
-    format: format,
-    createdAt: timestamp,
-    size: audioBytes.length,
-    sourceText: '',
-    folder: saveFolder,
-  );
-  await FileManifest.addRecord(record);
+    final record = AudioRecord(
+      name: name,
+      hash: hash,
+      format: format,
+      createdAt: timestamp,
+      size: audioBytes.length,
+      sourceText: '',
+      folder: saveFolder,
+    );
+    await FileManifest.addRecord(record);
+  });
 
   final filePath = await FileManifest.readFilePath('$hash.$format');
 

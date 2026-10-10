@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -151,12 +152,25 @@ String computeAudioHash(Uint8List data) {
   return digest.toString();
 }
 
+class _StorageFileSaveContext {
+  _StorageFileSaveContext(this.storageName);
+
+  final String storageName;
+  bool active = true;
+}
+
 // ====================================================================
 // FileManifest — thin wrapper around ManifestOperations
 // ====================================================================
 
 /// Audio file manifest — delegates to [ManifestOperations].
 class FileManifest {
+  static final Map<String, Future<void>> _storageFileSaveTails = {};
+  static final Object _storageFileSaveZoneKey = Object();
+  static Future<void> _folderRemovalTail = Future<void>.value();
+  static Completer<void> _folderRemovalsFinished = Completer<void>()..complete();
+  static int _pendingFolderRemovals = 0;
+
   static final _ops = ManifestOperations<AudioRecord>(
     manifestKey: 'audio_manifest',
     storageDirName: 'tts_audio',
@@ -176,12 +190,185 @@ class FileManifest {
     },
   );
 
+  /// Runs a content-addressed audio save under a per-file lock.
+  ///
+  /// Callers should include both writing the bytes and adding the record in
+  /// [operation], so cancellation cleanup cannot race another manifest save
+  /// for the same storage name.
+  static Future<T> withStorageFileSaveLock<T>(
+    String storageName,
+    Future<T> Function() operation, {
+    Future<void> Function(Future<void> previous)? waitForPrevious,
+    void Function()? onQueued,
+  }) async {
+    final currentContext = Zone.current[_storageFileSaveZoneKey];
+    final isNestedSave = currentContext is _StorageFileSaveContext &&
+        currentContext.active;
+    if (currentContext is _StorageFileSaveContext &&
+        currentContext.active &&
+        currentContext.storageName == storageName) {
+      return operation();
+    }
+
+    var queuedNotified = false;
+    void notifyQueued() {
+      if (queuedNotified) return;
+      queuedNotified = true;
+      onQueued?.call();
+    }
+
+    while (_pendingFolderRemovals > 0 && !isNestedSave) {
+      notifyQueued();
+      final folderRemovalFinished = _folderRemovalsFinished.future;
+      await (waitForPrevious?.call(folderRemovalFinished) ??
+          folderRemovalFinished);
+    }
+
+    final previous = _storageFileSaveTails[storageName];
+    final release = Completer<void>();
+    final tail = previous == null
+        ? release.future
+        : previous.then((_) => release.future);
+    _storageFileSaveTails[storageName] = tail;
+    var previousFinished = previous == null;
+
+    void releaseLock() {
+      if (release.isCompleted) return;
+      release.complete();
+      if (!identical(_storageFileSaveTails[storageName], tail)) return;
+      if (previousFinished) {
+        _storageFileSaveTails.remove(storageName);
+      } else {
+        unawaited(tail.then((_) {
+          if (identical(_storageFileSaveTails[storageName], tail)) {
+            _storageFileSaveTails.remove(storageName);
+          }
+        }));
+      }
+    }
+
+    if (previous != null) {
+      try {
+        notifyQueued();
+        final previousReleased = previous.then((_) {
+          previousFinished = true;
+        });
+        await (waitForPrevious?.call(previousReleased) ?? previousReleased);
+      } catch (_) {
+        releaseLock();
+        rethrow;
+      }
+    }
+
+    final saveContext = _StorageFileSaveContext(storageName);
+    try {
+      return await runZoned<Future<T>>(
+        operation,
+        zoneValues: {_storageFileSaveZoneKey: saveContext},
+      );
+    } finally {
+      saveContext.active = false;
+      releaseLock();
+    }
+  }
+
+  static Future<T> _withFolderRemovalLock<T>(
+    Future<T> Function() operation, {
+    void Function()? onWaitingForSaves,
+  }) async {
+    final previousRemoval = _folderRemovalTail;
+    final releaseRemoval = Completer<void>();
+    final removalTail = previousRemoval.then((_) => releaseRemoval.future);
+    _folderRemovalTail = removalTail;
+    if (_pendingFolderRemovals++ == 0) {
+      _folderRemovalsFinished = Completer<void>();
+    }
+
+    try {
+      await previousRemoval;
+      final activeSaves = _storageFileSaveTails.values.toList();
+      if (activeSaves.isNotEmpty) {
+        onWaitingForSaves?.call();
+        await Future.wait(activeSaves);
+      }
+      return await operation();
+    } finally {
+      releaseRemoval.complete();
+      _pendingFolderRemovals--;
+      if (_pendingFolderRemovals == 0) {
+        _folderRemovalsFinished.complete();
+      }
+      if (identical(_folderRemovalTail, removalTail)) {
+        unawaited(removalTail.then((_) {
+          if (identical(_folderRemovalTail, removalTail)) {
+            _folderRemovalTail = Future<void>.value();
+          }
+        }));
+      }
+    }
+  }
+
   static Future<List<AudioRecord>> loadRecords() => _ops.loadRecords();
-  static Future<void> addRecord(AudioRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
-      _ops.deleteRecord(id, preserveFiles: preserveFiles);
-  static Future<void> deleteRecords(List<String> ids) =>
-      _ops.deleteRecords(ids);
+
+  /// Loads authoritative records and propagates database errors to callers
+  /// that must not interpret a failed read as an empty manifest.
+  static Future<List<AudioRecord>> loadRecordsStrict() =>
+      _ops.loadRecords(forceRefresh: true, throwOnError: true);
+  static Future<void> addRecord(AudioRecord record) {
+    final currentContext = Zone.current[_storageFileSaveZoneKey];
+    if (currentContext is _StorageFileSaveContext &&
+        currentContext.active &&
+        currentContext.storageName == record.storageFileName) {
+      return _ops.addRecord(record);
+    }
+    return withStorageFileSaveLock(
+      record.storageFileName,
+      () => _ops.addRecord(record),
+    );
+  }
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false})
+      async {
+    final records = await _ops.loadRecords();
+    AudioRecord? record;
+    for (final candidate in records) {
+      if (candidate.id == id) {
+        record = candidate;
+        break;
+      }
+    }
+    if (record == null) {
+      await _ops.deleteRecord(id, preserveFiles: preserveFiles);
+      return;
+    }
+    await withStorageFileSaveLock(
+      record.storageFileName,
+      () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+    );
+  }
+
+  static Future<void> deleteRecords(List<String> ids) async {
+    final idSet = ids.toSet();
+    final records = await _ops.loadRecords();
+    final storageNames = records
+        .where((record) => idSet.contains(record.id))
+        .map((record) => record.storageFileName)
+        .toSet()
+        .toList()
+      ..sort();
+
+    Future<void> deleteWithLocks(int index) async {
+      if (index == storageNames.length) {
+        await _ops.deleteRecords(ids);
+        return;
+      }
+      await withStorageFileSaveLock(
+        storageNames[index],
+        () => deleteWithLocks(index + 1),
+      );
+    }
+
+    await deleteWithLocks(0);
+  }
   static Future<void> updateRecord(AudioRecord updated) =>
       _ops.updateRecord(updated);
   static Future<void> renameRecord(String id, String newName) =>
@@ -210,7 +397,17 @@ class FileManifest {
   static Future<void> addFolder(String name) => _ops.addFolder(name);
   static Future<void> addFolderPath(String pathName) =>
       _ops.addFolderPath(pathName);
-  static Future<void> removeFolder(String name) => _ops.removeFolder(name);
+  static Future<void> removeFolder(
+    String name, {
+    void Function()? onWaitingForSaves,
+  }) =>
+      _withFolderRemovalLock(
+        () async {
+          await loadRecordsStrict();
+          await _ops.removeFolder(name);
+        },
+        onWaitingForSaves: onWaitingForSaves,
+      );
   static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
   static Future<void> removeFolderFromCache(String folderPath) =>
       _ops.removeFolderFromCache(folderPath);
