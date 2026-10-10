@@ -111,19 +111,45 @@ class AudioSeparationEngine {
   }
 
   /// Package audio frames into a playable format.
-  /// For raw PCM, wrap in WAV. For AAC, wrap in a valid M4A (MP4 container).
+  /// For PCM, wrap in WAV. For AAC, wrap in a valid M4A (MP4 container).
   Uint8List _packageFrames(List<_AudioFrame> frames, _AudioTrackInfo track) {
-    if (track.codec == 'raw ') {
+    if (track.codec == 'raw ' ||
+        track.codec == 'twos' ||
+        track.codec == 'sowt') {
       // PCM audio — concatenate frames and wrap in WAV
       final concatenated = BytesBuilder();
       for (final frame in frames) {
         concatenated.add(frame.data);
       }
+      final pcmBytes = concatenated.toBytes();
+      final bitsPerSample = track.bitsPerSample > 0 ? track.bitsPerSample : 16;
+      if (bitsPerSample == 8 &&
+          (track.codec == 'twos' || track.codec == 'sowt')) {
+        // QuickTime stores these PCM samples as signed; 8-bit WAV PCM is
+        // unsigned, so shift the sample range before writing the WAV.
+        for (var i = 0; i < pcmBytes.length; i++) {
+          pcmBytes[i] = pcmBytes[i] ^ 0x80;
+        }
+      } else if (track.codec == 'twos') {
+        // QuickTime 'twos' PCM stores each sample big-endian; WAV PCM is
+        // little-endian, so reverse the bytes within each sample.
+        final bytesPerSample = (bitsPerSample + 7) ~/ 8;
+        for (var sampleOffset = 0;
+            sampleOffset + bytesPerSample <= pcmBytes.length;
+            sampleOffset += bytesPerSample) {
+          for (var left = 0; left < bytesPerSample ~/ 2; left++) {
+            final right = bytesPerSample - 1 - left;
+            final tmp = pcmBytes[sampleOffset + left];
+            pcmBytes[sampleOffset + left] = pcmBytes[sampleOffset + right];
+            pcmBytes[sampleOffset + right] = tmp;
+          }
+        }
+      }
       final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
       return pcmToWav(
-        concatenated.toBytes(),
+        pcmBytes,
         sampleRate: sampleRate,
-        bitsPerSample: track.bitsPerSample > 0 ? track.bitsPerSample : 16,
+        bitsPerSample: bitsPerSample,
         numChannels: track.channels > 0 ? track.channels : 2,
       );
     }
@@ -725,7 +751,10 @@ class _Mp4Demuxer {
                       codec = _readString(4);
                       _offset += 6; // reserved
                       _offset += 2; // data reference index
-                      if (codec == 'mp4a' || codec == 'raw ') {
+                      if (codec == 'mp4a' ||
+                          codec == 'raw ' ||
+                          codec == 'twos' ||
+                          codec == 'sowt') {
                         _offset += 8; // reserved
                         channels = _readUint16();
                         bitsPerSample = _readUint16();

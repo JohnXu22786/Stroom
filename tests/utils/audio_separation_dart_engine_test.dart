@@ -296,14 +296,19 @@ void main() {
 
     /// Build a minimal valid MP4 file with a PCM audio track.
     ///
-    /// [pcmFrames] - number of 16-bit PCM sample frames (each frame = 2 bytes)
+    /// [pcmFrames] - number of PCM samples; sample width comes from
+    /// [bitsPerSample].
     /// [dataPattern] - if provided, fills audio data with this repeating pattern
     /// Returns a valid MP4 container as bytes.
     Uint8List buildMinimalMp4WithPcmAudio({
       int pcmFrames = 160,
       Uint8List? dataPattern,
+      String codec = 'raw ',
+      int sampleRate = 44100,
+      int bitsPerSample = 16,
     }) {
-      final audioDataLen = pcmFrames * 2; // 16-bit PCM = 2 bytes per frame
+      final bytesPerSample = (bitsPerSample + 7) ~/ 8;
+      final audioDataLen = pcmFrames * bytesPerSample;
 
       // === Generate PCM audio data (non-zero to detect silence) ===
       Uint8List audioData;
@@ -402,16 +407,16 @@ void main() {
       bytes.add(_buildBoxHeader(52, 'stsd'));
       bytes.add(_u32be(0)); // version=0, flags=0
       bytes.add(_u32be(1)); // entry_count = 1
-      // SampleEntry for 'raw '
+      // SampleEntry for the requested PCM codec.
       bytes.add(_u32be(36)); // entry_size (includes itself)
-      bytes.add(_fourCc('raw ')); // codec
+      bytes.add(_fourCc(codec)); // codec
       bytes.add(_u48be(0)); // reserved (6 bytes)
       bytes.add(_u16be(1)); // data_reference_index = 1
       bytes.add(_u64be(0)); // reserved (8 bytes)
       bytes.add(_u16be(1)); // channels = 1 (mono)
-      bytes.add(_u16be(16)); // bits_per_sample = 16
+      bytes.add(_u16be(bitsPerSample)); // bits_per_sample
       bytes.add(_u32be(0)); // pre-defined(2) + reserved(2)
-      bytes.add(_u32be(44100 << 16)); // sample_rate (16.16 fixed point)
+      bytes.add(_u32be(sampleRate << 16)); // sample_rate (16.16 fixed point)
 
       // stts
       bytes.add(_buildBoxHeader(24, 'stts'));
@@ -431,7 +436,7 @@ void main() {
       // stsz - constant sample size
       bytes.add(_buildBoxHeader(20, 'stsz'));
       bytes.add(_u32be(0)); // version=0, flags=0
-      bytes.add(_u32be(2)); // sample_size = 2 (constant, all frames 2 bytes)
+      bytes.add(_u32be(bytesPerSample)); // constant bytes per sample
       bytes.add(_u32be(pcmFrames)); // sample_count
 
       // stco
@@ -521,6 +526,68 @@ void main() {
       expect(foundPattern, isTrue,
           reason: 'Extracted audio data does not contain original pattern - '
               'data is corrupted or silent!');
+    });
+
+    test('extractAudio packages twos MOV PCM as WAV and swaps byte order',
+        () async {
+      final movBytes = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 2,
+        dataPattern: Uint8List.fromList([0x12, 0x34]),
+        codec: 'twos',
+        sampleRate: 48000,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: movBytes,
+        videoFormat: 'mov',
+      );
+
+      expect(String.fromCharCodes(result.sublist(0, 4)), 'RIFF');
+      expect(_readUint16LE(result, 22), 1);
+      expect(_readUint32LE(result, 24), 48000);
+      expect(extractPcmFromWav(result), [0x34, 0x12, 0x34, 0x12]);
+    });
+
+    test('extractAudio packages sowt MOV PCM as WAV and preserves byte order',
+        () async {
+      final movBytes = buildMinimalMp4WithPcmAudio(
+        pcmFrames: 2,
+        dataPattern: Uint8List.fromList([0x34, 0x12]),
+        codec: 'sowt',
+        sampleRate: 48000,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: movBytes,
+        videoFormat: 'mov',
+      );
+
+      expect(String.fromCharCodes(result.sublist(0, 4)), 'RIFF');
+      expect(_readUint16LE(result, 22), 1);
+      expect(_readUint32LE(result, 24), 48000);
+      expect(extractPcmFromWav(result), [0x34, 0x12, 0x34, 0x12]);
+    });
+
+    test('extractAudio converts signed 8-bit MOV PCM to unsigned WAV samples',
+        () async {
+      for (final codec in ['twos', 'sowt']) {
+        final movBytes = buildMinimalMp4WithPcmAudio(
+          pcmFrames: 4,
+          dataPattern: Uint8List.fromList([0x00, 0x7F, 0x80, 0xFF]),
+          codec: codec,
+          bitsPerSample: 8,
+        );
+
+        final result = await engine.extractAudio(
+          videoBytes: movBytes,
+          videoFormat: 'mov',
+        );
+
+        expect(String.fromCharCodes(result.sublist(0, 4)), 'RIFF');
+        expect(_readUint16LE(result, 22), 1);
+        expect(_readUint16LE(result, 34), 8);
+        expect(extractPcmFromWav(result), [0x80, 0xFF, 0x00, 0x7F]);
+      }
     });
 
     test(
