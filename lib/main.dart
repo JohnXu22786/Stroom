@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'services/app_log_service.dart';
+import 'services/bundled_asset_licenses.dart';
 import 'services/browser_profile_service.dart';
 import 'services/video_player_init.dart';
 
@@ -176,6 +177,7 @@ Future<void> main() async {
     () async {
       try {
         WidgetsFlutterBinding.ensureInitialized();
+        registerBundledAssetLicenses();
         await BrowserProfileService.applyPendingAction();
         await AppLogService.info('App', '应用启动: Stroom');
         registerVideoPlayer();

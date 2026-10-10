@@ -49,8 +49,11 @@ Hide or Back dismisses the custom keyboard without discarding the draft.
 ## Implementation and synchronization
 
 Each formula row owns a retained `MathFormulaField` and source controller.
-MathLive 0.111.0 is bundled locally with its fonts and MIT license under
-`assets/vendor/mathlive`, so rendering and editing do not require a CDN.
+MathLive 0.111.0 is bundled locally under `assets/vendor/mathlive`, and its
+package-level MIT license is retained there, so rendering and editing do not
+require a CDN. The license coverage for its bundled KaTeX-named font files has
+not been confirmed; see the [third-party license and provenance
+notes](third-party-notices.md).
 MathLive handles structured caret positioning, selections and undo; Flutter owns
 the keyboard, mode buttons and graph actions. The native system IME is disabled
 for mathematical input. Bridge arguments are JSON encoded.

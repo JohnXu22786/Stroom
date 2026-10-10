@@ -5,8 +5,9 @@
 /// for `<video>`/`<audio>` elements. Detected media URLs are sent back to
 /// Flutter via the `CatCatchChannel` JavaScript channel.
 ///
-/// Design inspired by the official cat-catch extension's intercept patterns,
-/// but adapted for WebView JavaScriptChannel instead of `chrome.runtime`.
+/// The xifangczy/cat-catch extension was a behavioral reference for media
+/// interception. This hook targets WebView's JavaScriptChannel instead of
+/// `chrome.runtime`; see `docs/third-party-notices.md` for provenance notes.
 class JsHookScript {
   JsHookScript._();
 

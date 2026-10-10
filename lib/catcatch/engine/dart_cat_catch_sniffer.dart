@@ -53,9 +53,9 @@ class SniffResult {
 /// A standalone, pure-Dart media resource sniffer that operates without
 /// any browser environment.
 ///
-/// This is the refactored core of the "cat-catch" system. It replaces any
-/// prior browser-extension-style patterns with direct HTTP requests using
-/// [dio].
+/// The xifangczy/cat-catch extension was a behavioral reference for this
+/// media-sniffing feature. This Dart implementation makes direct HTTP requests
+/// with [dio]; see `docs/third-party-notices.md` for provenance notes.
 ///
 /// Design:
 /// - Takes [targetUrl] and [headers] as input → returns [SniffResult]
