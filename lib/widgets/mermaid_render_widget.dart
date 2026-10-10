@@ -773,6 +773,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _inlineMermaidJs = js;
       _mermaidJsLoading = false;
     });
+    _armWebViewCreationFallback();
   }
 
   @override
@@ -813,11 +814,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     super.dispose();
   }
 
-  /// Arms the total fallback: 12s after the WebView creation was
-  /// requested, if the controller still does not exist (the platform view
-  /// failed to mount — onWebViewCreated never fired), show a visible error
-  /// instead of the loading placeholder spinning forever.
+  /// Arms the total fallback once the WebView can mount: if the controller
+  /// still does not exist after 12s (the platform view failed to mount —
+  /// onWebViewCreated never fired), show an error instead of loading forever.
   void _armWebViewCreationFallback() {
+    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) return;
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
       if (mounted && _webViewController == null && _errorMessage == null) {
