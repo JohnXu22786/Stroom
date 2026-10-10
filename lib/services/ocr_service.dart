@@ -34,14 +34,8 @@ class OcrConfig {
     this.customParams = const [],
   });
 
-  /// Returns the host without a trailing slash.
-  String get normalizedHost {
-    var h = host.trim();
-    while (h.endsWith('/')) {
-      h = h.substring(0, h.length - 1);
-    }
-    return h;
-  }
+  /// Returns the configured endpoint with surrounding whitespace removed.
+  String get normalizedHost => host.trim();
 
   /// The default system prompt used to guide OCR extraction.
   String get effectiveSystemPrompt =>
@@ -182,7 +176,7 @@ class OcrService {
 
   /// The chat completions endpoint URL.
   /// The user provides the full endpoint URL including the path,
-  /// so normalizedHost is used directly without appending /chat/completions.
+  /// so normalizedHost is used directly without rewriting or appending a path.
   String get _chatUrl => config.normalizedHost;
 
   /// Perform OCR on a single image.
@@ -387,8 +381,17 @@ class OcrService {
     for (final param in config.customParams) {
       final name = param.paramName.trim();
       if (name.isEmpty) continue;
-      final value = param.defaultValue.trim();
-      if (value.isEmpty) continue;
+      final rawValue = param.type == 'json'
+          ? param.defaultValue
+          : param.options.isNotEmpty
+              ? param.options.first
+              : param.defaultValue.trim().isNotEmpty
+                  ? param.defaultValue
+                  : param.type == 'boolean'
+                      ? 'true'
+                      : '';
+      final value = rawValue.trim();
+      if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (name == 'model' || name == 'messages') {
         throw ArgumentError.value(
           name,
@@ -396,7 +399,10 @@ class OcrService {
           'Custom OCR parameters cannot override $name',
         );
       }
-      final parsedValue = _parseParamValue(value, param.type);
+      final parsedValue = _parseParamValue(
+        param.type == 'string' ? rawValue : value,
+        param.type,
+      );
       if (name == 'stream' && parsedValue != false) {
         throw ArgumentError.value(
           parsedValue,

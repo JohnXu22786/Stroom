@@ -228,13 +228,12 @@ void main() {
     });
   }
 
-  test('OCR uses shared request options and fails truncated output with partial text',
-      () async {
+  test('OCR shares options and fails truncated output', () async {
     final source = await File('${directory.path}/ocr_contract.png')
         .writeAsBytes([0x89, 0x50, 0x4e, 0x47]);
     final providers = providerFor(
       'ocr',
-      host: 'https://example.invalid/v1/chat/completions',
+      host: 'https://example.invalid/v1/chat/completions/',
       typeConfig: {
         'enableMaxTokens': true,
         'maxTokens': 777,
@@ -249,6 +248,12 @@ void main() {
           paramName: 'response_format',
           defaultValue: '{"type":"json_object"}',
           type: 'json',
+        ),
+        CustomParam(
+          paramName: 'top_k',
+          defaultValue: '',
+          type: 'number',
+          options: ['50', '100'],
         ),
       ],
     );
@@ -293,12 +298,13 @@ void main() {
       throwsA(isA<BlockExecutionException>()),
     );
 
-    expect(requestUrl, 'https://example.invalid/v1/chat/completions');
+    expect(requestUrl, 'https://example.invalid/v1/chat/completions/');
     expect(requestBody?['model'], 'test');
     expect(requestBody?['max_tokens'], 777);
     expect(requestBody?['temperature'], 0.35);
     expect(requestBody?['top_p'], 0.8);
     expect(requestBody?['response_format'], {'type': 'json_object'});
+    expect(requestBody?['top_k'], 50);
     final messages = requestBody?['messages'] as List;
     final userContent = (messages[1] as Map)['content'] as List;
     expect(userContent.last, {'type': 'text', 'text': '提取票据号码'});

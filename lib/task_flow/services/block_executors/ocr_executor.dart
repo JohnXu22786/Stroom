@@ -173,8 +173,7 @@ Future<String> executeOcrBlock({
           );
         }
         bgNotifier.setResult(taskId, ocrResult.text);
-        final error =
-            'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
+        final error = 'OCR 返回了不完整结果（finish_reason=${ocrResult.finishReason}）';
         bgNotifier.updateStep(taskId, 0, failed: true, error: error);
         failSubTask(
           bgNotifier,
