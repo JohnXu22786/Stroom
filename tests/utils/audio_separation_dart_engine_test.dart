@@ -552,6 +552,7 @@ void main() {
     Uint8List buildMinimalMp4WithAacAudio({
       required Uint8List asc,
       required int sampleRate,
+      int objectTypeIndication = 0x40,
       int channels = 2,
       int samplesPerFrame = 1024,
       int audioSampleEntryVersion = 0,
@@ -582,7 +583,7 @@ void main() {
       Uint8List buildMp4aEntry(Uint8List sourceAsc) {
         final decoderSpecificInfo = descriptor(0x05, sourceAsc);
         final decoderConfig = descriptor(0x04, [
-          0x40, // objectTypeIndication: MPEG-4 Audio
+          objectTypeIndication, // objectTypeIndication
           0x15, // streamType: audio
           0, 0, 0, // bufferSizeDB
           ..._u32be(0), // maxBitrate
@@ -953,6 +954,35 @@ void main() {
         sampleDescriptionIndicesPerChunk: [1, 2],
         sampleRate: 44100,
         samplesPerFrame: 2048,
+      );
+
+      await expectLater(
+        engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('validates mp4a tracks against their decoder object type', () async {
+      for (final objectTypeIndication in [0x66, 0x67, 0x68]) {
+        final aacMp4Bytes = buildMinimalMp4WithAacAudio(
+          asc: Uint8List.fromList([0x12, 0x10]),
+          sampleRate: 44100,
+          objectTypeIndication: objectTypeIndication,
+        );
+        final aacResult = await engine.extractAudio(
+          videoBytes: aacMp4Bytes,
+          videoFormat: 'mp4',
+        );
+
+        expect(_findFourCc(aacResult, 'mp4a'), greaterThanOrEqualTo(0),
+            reason:
+                'AAC DecoderConfig OTI 0x${objectTypeIndication.toRadixString(16)} should remain supported.');
+      }
+
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List(0),
+        sampleRate: 44100,
+        objectTypeIndication: 0x6B, // MPEG audio, not AAC
       );
 
       await expectLater(
