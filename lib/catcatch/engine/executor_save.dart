@@ -187,12 +187,12 @@ class _RegisteredAudio {
   _RegisteredAudio(this.record);
   final AudioRecord record;
 
-  Future<void> rollback() => _withStorageLock('audio:${record.storageFileName}',
+  Future<void> rollback() => FileManifest.withStorageFileSaveLock(
+      record.storageFileName,
       () => FileManifest.deleteRecord(record.id, preserveFiles: true));
 }
 
-// Serialize CatCatch saves that target the same content-addressed name. Other
-// manifest writers are not in this lock, so rollback retains shared blobs.
+// Serialize CatCatch saves that target the same content-addressed name.
 final Map<String, Future<void>> _storageLocks = {};
 
 Future<T> _withStorageLock<T>(String key, Future<T> Function() action) async {
@@ -420,7 +420,7 @@ Future<_RegisteredAudio?> _registerCompletedAudio(
   final size = await file.length();
   _throwIfCancelled(cancelled);
   final storageName = '$hash.$ext';
-  return _withStorageLock('audio:$storageName', () async {
+  return FileManifest.withStorageFileSaveLock(storageName, () async {
     _throwIfCancelled(cancelled);
     final records = await FileManifest.loadRecords();
     _throwIfCancelled(cancelled);

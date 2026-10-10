@@ -592,15 +592,6 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
     // Compute MD5 hash of audio data
     final hash = computeAudioHash(audioData);
 
-    // Save audio file using hash as filename
-    await FileManifest.writeFile('$hash.$format', audioData);
-
-    // Save source text companion file
-    if (text.isNotEmpty) {
-      final textBytes = Uint8List.fromList(utf8.encode(text));
-      await FileManifest.writeFile('$hash.txt', textBytes);
-    }
-
     final record = AudioRecord(
       name: displayName,
       hash: hash,
@@ -610,10 +601,19 @@ class TTSStateNotifier extends StateNotifier<TTSState> {
       sourceText: text,
     );
 
-    // Add to manifest
-    await FileManifest.addRecord(record);
+    return FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+      // Save audio file using hash as filename.
+      await FileManifest.writeFile('$hash.$format', audioData);
 
-    return record;
+      // Save source text companion file.
+      if (text.isNotEmpty) {
+        final textBytes = Uint8List.fromList(utf8.encode(text));
+        await FileManifest.writeFile('$hash.txt', textBytes);
+      }
+
+      await FileManifest.addRecord(record);
+      return record;
+    });
   }
 
   /// Parse JSON-type custom param values from string to actual JSON

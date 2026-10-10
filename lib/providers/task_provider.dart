@@ -178,36 +178,44 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
       // 保存音频文件
       final saveFolder = task.customParams?['saveFolder'] ?? '';
-      final saved = await _saveAudioFile(
-        audioData,
-        actualFormat,
-        task.text,
-        isCurrent: isCurrent,
-        name: task.title,
-        // 显式 folder 参数（TTS 页面）优先；任务流块通过 customParams
-        // 传 saveFolder，两者都指向保存目录。
-        folder: task.folder.isNotEmpty ? task.folder : saveFolder,
+      final savedFilePath = await FileManifest.withStorageFileSaveLock(
+        '${computeAudioHash(audioData)}.$actualFormat',
+        () async {
+          final saved = await _saveAudioFile(
+            audioData,
+            actualFormat,
+            task.text,
+            isCurrent: isCurrent,
+            name: task.title,
+            // 显式 folder 参数（TTS 页面）优先；任务流块通过 customParams
+            // 传 saveFolder，两者都指向保存目录。
+            folder: task.folder.isNotEmpty ? task.folder : saveFolder,
+          );
+
+          if (saved == null) return null;
+          try {
+            if (!isCurrent()) {
+              await saved.rollback();
+              return null;
+            }
+
+            // Status and gallery commit finish while this hash is locked, so a
+            // resumed task cannot race the old save's final cancellation check.
+            try {
+              _updateTask(task.id, TaskStatus.completed,
+                  downloadedFilePath: saved.filePath);
+            } catch (_) {
+              await saved.rollback();
+              rethrow;
+            }
+            return saved.filePath;
+          } finally {
+            saved.release();
+          }
+        },
       );
 
-      if (saved == null) return;
-      try {
-        if (!isCurrent()) {
-          await saved.rollback();
-          return;
-        }
-
-        // Status and gallery commit finish while this hash is locked, so a
-        // resumed task cannot race the old save's final cancellation check.
-        try {
-          _updateTask(task.id, TaskStatus.completed,
-              downloadedFilePath: saved.filePath);
-        } catch (_) {
-          await saved.rollback();
-          rethrow;
-        }
-      } finally {
-        saved.release();
-      }
+      if (savedFilePath == null) return;
 
       // 刷新文件列表
       ref.read(audioRecordsProvider.notifier).loadRecords();

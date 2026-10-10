@@ -430,7 +430,7 @@ class MermaidTemplates {
         return [
           ('添加分支', '    新分支'),
           ('添加子分支', '      子分支'),
-          ('添加根节点', '  root((新主题))'),
+          ('添加主题', '    新主题'),
         ];
       case 'timeline':
         return [

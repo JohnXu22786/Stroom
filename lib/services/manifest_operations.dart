@@ -178,23 +178,33 @@ class ManifestOperations<T extends FileRecord> {
 
   // ---- Load / Persist ---------------------------------------------------
 
-  Future<List<T>> loadRecords() async {
-    if (_cache != null && !_dirty) return _cache!;
+  Future<List<T>> loadRecords({
+    bool forceRefresh = false,
+    bool throwOnError = false,
+  }) async {
+    if (_cache != null && !_dirty && !forceRefresh) return _cache!;
 
     try {
       final rows = await _dbGetAllRecords();
-      _cache = rows.map((m) => fromMap(m)).toList();
-      _folderCache =
+      final records = rows.map((m) => fromMap(m)).toList();
+      final folders =
           (await ManifestDatabase.getAllFolders(recordTable: tableName))
               .toSet();
+      _cache = records;
+      _folderCache = folders;
+      _dirty = false;
     } catch (e) {
       debugPrint('ManifestOperations($manifestKey).loadRecords error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'loadRecords failed', e);
+      if (throwOnError) {
+        _dirty = true;
+        rethrow;
+      }
       _cache = [];
       _folderCache = {};
+      _dirty = false;
     }
-    _dirty = false;
     return _cache!;
   }
 
