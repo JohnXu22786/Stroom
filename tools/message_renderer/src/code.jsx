@@ -79,7 +79,9 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
   lang = lang?.toLowerCase();
   streaming =
     streaming && !fenceComplete(context?.source, sourceStart, sourceEnd);
-  const [wrap, setWrap] = useState(true);
+  const [wrap, setWrap] = useState(() =>
+    ["markdown", "md", "text", "plaintext", "txt"].includes(lang),
+  );
   const [source, setSource] = useState(false);
   const [toolbar, setToolbar] = useState(null);
   const action = (name) => context?.action(name, { sourceStart, sourceEnd });
@@ -158,6 +160,7 @@ export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
               unwrapLabel: "取消自动换行",
             }}
             wrap={wrap}
+            lineNumbers
             copyLabel="复制"
             copiedLabel="已复制"
           />

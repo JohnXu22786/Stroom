@@ -490,32 +490,54 @@ test("older WebKit without Array.at still renders assistant Markdown", async () 
   v.dom.window.close();
 });
 
-test("code wrapping changes the inherited DSH line style", async () => {
+test("code blocks keep line numbers and language-specific wrap defaults", async () => {
   const v = await view();
   try {
     v.receive(
       snapshot("a", [
         message("m", [
-          { type: "text", text: "```js\nconst text = 'a long line';\n```" },
+          {
+            type: "text",
+            text: "```js\nconst first = 1;\nconst second = 2;\n```\n\n```text\nfirst line\nsecond line\n```",
+          },
         ]),
       ]),
     );
     await wait();
-    const doc = v.dom.window.document,
-      card = doc.querySelector(".stroom-code-card .md-code-block");
-    const code = card?.querySelector("pre");
-    assert.ok(code, "code is rendered by DSH's CodeBlock");
-    assert.equal(card.getAttribute("data-code-wrap"), "true");
-    assert.equal(v.dom.window.getComputedStyle(code).whiteSpace, "pre-wrap");
-    const wrapButton = card.querySelector('[aria-label="自动换行"]');
-    assert.equal(wrapButton.getAttribute("aria-pressed"), "true");
+    const doc = v.dom.window.document;
+    const [codeCard, proseCard] = doc.querySelectorAll(
+      ".stroom-code-card .md-code-block",
+    );
+    assert.ok(codeCard?.querySelector("pre"), "code is rendered by DSH's CodeBlock");
+    assert.equal(codeCard.getAttribute("data-line-numbers"), "true");
+    assert.equal(proseCard.getAttribute("data-line-numbers"), "true");
+    assert.equal(
+      codeCard.querySelectorAll("pre .line").length,
+      2,
+      "the DSH code block keeps both source lines available beside its gutter",
+    );
+    assert.equal(codeCard.getAttribute("data-code-wrap"), "false");
+    assert.equal(
+      v.dom.window.getComputedStyle(codeCard.querySelector("pre")).whiteSpace,
+      "pre",
+    );
+    assert.equal(proseCard.getAttribute("data-code-wrap"), "true");
+    assert.equal(
+      v.dom.window.getComputedStyle(proseCard.querySelector("pre")).whiteSpace,
+      "pre-wrap",
+    );
+    const wrapButton = codeCard.querySelector('[aria-label="自动换行"]');
+    assert.equal(wrapButton.getAttribute("aria-pressed"), "false");
     wrapButton.click();
     await wait();
-    assert.equal(card.getAttribute("data-code-wrap"), "false");
-    assert.equal(v.dom.window.getComputedStyle(code).whiteSpace, "pre");
+    assert.equal(codeCard.getAttribute("data-code-wrap"), "true");
+    assert.equal(
+      v.dom.window.getComputedStyle(codeCard.querySelector("pre")).whiteSpace,
+      "pre-wrap",
+    );
     assert.equal(
       wrapButton.getAttribute("aria-pressed"),
-      "false",
+      "true",
     );
   } finally {
     v.dom.window.close();
