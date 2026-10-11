@@ -1127,8 +1127,7 @@ void main() {
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
     });
 
-    test(
-        'rearmKeepAliveOnResume proceeds when enabled preference read fails',
+    test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
         () async {
       registerMockPlatform();
       final originalStore = SharedPreferencesStorePlatform.instance;
