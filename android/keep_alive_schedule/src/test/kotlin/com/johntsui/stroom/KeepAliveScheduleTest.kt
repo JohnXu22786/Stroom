@@ -2,10 +2,114 @@ package com.johntsui.stroom
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KeepAliveScheduleTest {
+    @Test
+    fun exactWatchdogAndRevocationBackupUseDistinctPendingIntentIdentity() {
+        assertNotEquals(KEEP_ALIVE_ALARM_ACTION, KEEP_ALIVE_REVOCATION_BACKUP_ACTION)
+        assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
+    }
+
+    @Test
+    fun exactSchedulingAlsoArmsInexactRevocationBackup() {
+        val exactTriggerAt = 300_000L
+        assertEquals(60_000L, revocationBackupTriggerAt(exactTriggerAt) - exactTriggerAt)
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = true,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("exact", "backup"), operations)
+    }
+
+    @Test
+    fun unavailableOrDeniedExactSchedulingKeepsOnlyTheInexactPrimaryAlarm() {
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = false,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("cancel-backup", "inexact-primary"), operations)
+
+        operations.clear()
+        val exactAttemptFailed = scheduleWithExactRevocationFallback(
+            canScheduleExact = true,
+            scheduleExact = { operations += "exact"; false },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+        )
+
+        assertTrue(exactAttemptFailed)
+        assertEquals(listOf("exact", "cancel-backup", "inexact-primary"), operations)
+    }
+
+    @Test
+    fun failedRevocationBackupFallsBackToOneInexactPrimaryAlarm() {
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = true,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; false },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("exact", "backup", "cancel-backup", "inexact-primary"), operations)
+    }
+
+    @Test
+    fun pairedAlarmDeliveryIsClaimedOnceInEitherDeliveryOrder() {
+        for (deliveryOrder in listOf(listOf("exact", "backup"), listOf("backup", "exact"))) {
+            var currentGeneration = 17L
+            val handledDeliveries = mutableListOf<String>()
+
+            for (delivery in deliveryOrder) {
+                val invalidatedGeneration = claimAlarmDeliveryGeneration(
+                    scheduledGeneration = 17L,
+                    currentGeneration = currentGeneration,
+                    keepAliveActive = true,
+                )
+                if (invalidatedGeneration != null) {
+                    currentGeneration = invalidatedGeneration
+                    handledDeliveries += delivery
+                }
+            }
+
+            assertEquals(listOf(deliveryOrder.first()), handledDeliveries)
+            assertEquals(18L, currentGeneration)
+        }
+    }
+
+    @Test
+    fun explicitStopRejectsQueuedAlarmGeneration() {
+        assertNull(
+            claimAlarmDeliveryGeneration(
+                scheduledGeneration = 17L,
+                currentGeneration = 17L,
+                keepAliveActive = false,
+            ),
+        )
+    }
+
     @Test
     fun failedSchedulingKeepsWatchdogEligibleForRecoveryAndReturnsFailure() {
         var watchdogActive = false
