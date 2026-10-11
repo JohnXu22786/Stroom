@@ -88,16 +88,23 @@ jobs:
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
         run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          if [ -z "$BASE_SHA" ]; then
+          EVENT_BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$EVENT_BASE_SHA" ]; then
             echo "Not a PR — skipping diff coverage check."
             exit 0
           fi
           echo "### Changed lib/ files vs tests/ coverage ###"
           echo ""
           UNCOVERED=0
-          if ! CHANGED_LIB_FILES="$(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/*.dart' 'lib/**/*.dart')"; then
-            echo "Unable to determine changed lib files against $BASE_SHA."
+          # Pull request refs can be generated from a slightly older base than
+          # the event payload when main advances during queueing. Use the merge
+          # base so upstream-only changes are not mistaken for PR changes.
+          if ! DIFF_BASE_SHA="$(git merge-base "$EVENT_BASE_SHA" HEAD)"; then
+            echo "Unable to determine the merge base against $EVENT_BASE_SHA."
+            exit 1
+          fi
+          if ! CHANGED_LIB_FILES="$(git diff --diff-filter=ACMRT --name-only "$DIFF_BASE_SHA" HEAD -- 'lib/*.dart' 'lib/**/*.dart')"; then
+            echo "Unable to determine changed lib files against $DIFF_BASE_SHA."
             exit 1
           fi
           while IFS= read -r file; do
@@ -149,7 +156,7 @@ jobs:
                   # this source file, so accept all matching test files.
                   source_import="package:stroom/${file#lib/}"
                   mapfile -t imported_tests < <(
-                    rg -l --glob '*_test.dart' --glob '*_test.cjs' -F "$source_import" tests || true
+                  grep -RIlF --include='*_test.dart' --include='*_test.cjs' -- "$source_import" tests || true
                   )
                   if [ "${#imported_tests[@]}" -gt 0 ]; then
                     echo "  ✅ $file (imported by ${imported_tests[*]})"
@@ -165,7 +172,7 @@ jobs:
                         parent_import="package:stroom/$source_dir/$part_of"
                       fi
                       mapfile -t parent_tests < <(
-                        rg -l --glob '*_test.dart' --glob '*_test.cjs' -F "$parent_import" tests || true
+                        grep -RIlF --include='*_test.dart' --include='*_test.cjs' -- "$parent_import" tests || true
                       )
                     else
                       parent_tests=()
