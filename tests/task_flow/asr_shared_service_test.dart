@@ -26,6 +26,7 @@ import 'package:stroom/task_flow/services/block_executors/asr_executor.dart';
 import 'package:stroom/utils/audio_utils.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _AsrAdapter implements HttpClientAdapter {
   _AsrAdapter({
@@ -520,6 +521,34 @@ void main() {
     expect(result, 'recognized');
     expect(adapter.closeCalls, 0);
     dio.close();
+  });
+
+  test('task-flow reads web audio and detects its content format', () async {
+    final audioBytes = pcmToWav(Uint8List.fromList([1, 2]));
+    const input = 'tts_audio/9f4c2a.mp3';
+    await WebFileStore.write(input, audioBytes);
+
+    Uint8List? requestedBytes;
+    String? requestedFormat;
+    final result = await executeAsrBlock(
+      block: asrBlock(),
+      def: BlockTypeDefinition.asr,
+      input: input,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      providerEntries: providers(),
+      requestAsr: (bytes, format) async {
+        requestedBytes = bytes;
+        requestedFormat = format;
+        return 'recognized';
+      },
+    );
+
+    expect(result, 'recognized');
+    expect(requestedBytes, orderedEquals(audioBytes));
+    expect(requestedFormat, 'wav');
   });
 
   test(
