@@ -2155,6 +2155,305 @@ void main() {
           containsAll(['refresh', 'refresh/child']));
     });
 
+    testWidgets('forced refresh keeps a single audio deletion absent',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_single_delete_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final deleted = AudioRecord(
+        id: 'audio_single_delete_during_refresh',
+        name: 'deleted',
+        hash: 'hash_single_delete_during_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      final survivor = AudioRecord(
+        id: 'audio_single_delete_refresh_survivor',
+        name: 'survivor',
+        hash: 'hash_single_delete_refresh_survivor',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(deleted);
+      await operations.addRecord(survivor);
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      try {
+        await operations.deleteRecord(deleted.id, preserveFiles: true);
+
+        expect(
+            (await ManifestDatabase.getAllAudioRecords())
+                .map((row) => row['id']),
+            unorderedEquals([survivor.id]),
+            reason: 'single deletion must be authoritative in the database');
+        expect((await operations.loadRecords()).map((record) => record.id),
+            unorderedEquals([survivor.id]),
+            reason: 'the current cache must already reflect the deletion');
+      } finally {
+        releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+      }
+
+      expect((await refresh).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'stale refresh must not republish a single delete');
+      expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([survivor.id]));
+      expect((await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([survivor.id]));
+    });
+
+    testWidgets('forced refresh keeps batch audio deletions absent',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_batch_delete_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final deleted = [
+        AudioRecord(
+          id: 'audio_batch_delete_during_refresh_1',
+          name: 'deleted 1',
+          hash: 'hash_batch_delete_during_refresh_1',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+        ),
+        AudioRecord(
+          id: 'audio_batch_delete_during_refresh_2',
+          name: 'deleted 2',
+          hash: 'hash_batch_delete_during_refresh_2',
+          format: 'wav',
+          createdAt: DateTime(2024),
+          size: 4,
+        ),
+      ];
+      final survivor = AudioRecord(
+        id: 'audio_batch_delete_refresh_survivor',
+        name: 'survivor',
+        hash: 'hash_batch_delete_refresh_survivor',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      for (final record in [...deleted, survivor]) {
+        await operations.addRecord(record);
+      }
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      try {
+        await operations
+            .deleteRecords(deleted.map((record) => record.id).toList());
+
+        expect(
+            (await ManifestDatabase.getAllAudioRecords())
+                .map((row) => row['id']),
+            unorderedEquals([survivor.id]),
+            reason: 'the batch deletion must be authoritative in the database');
+        expect((await operations.loadRecords()).map((record) => record.id),
+            unorderedEquals([survivor.id]),
+            reason:
+                'the current cache must already reflect the batch deletion');
+      } finally {
+        releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+      }
+
+      expect((await refresh).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'stale refresh must not republish batch deletes');
+      expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([survivor.id]));
+      expect((await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([survivor.id]));
+    });
+
+    testWidgets('forced refresh keeps audio folder deletions absent',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_folder_delete_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final deleted = AudioRecord(
+        id: 'audio_folder_delete_during_refresh',
+        name: 'deleted',
+        hash: 'hash_folder_delete_during_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'audio_folder_delete_during_refresh',
+      );
+      final survivor = AudioRecord(
+        id: 'audio_folder_delete_refresh_survivor',
+        name: 'survivor',
+        hash: 'hash_folder_delete_refresh_survivor',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await operations.addRecord(deleted);
+      await operations.addRecord(survivor);
+
+      final recordSnapshotReady = Completer<void>();
+      final secondRecordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      final releaseSecondFolderRead = Completer<void>();
+      final folderRecordDeleteStarted = Completer<void>();
+      final releaseFolderRecordDelete = Completer<void>();
+      var refreshCount = 0;
+      operations.beforeAudioFolderRecordDeleteForTesting = () async {
+        folderRecordDeleteStarted.complete();
+        await releaseFolderRecordDelete.future;
+      };
+      operations.beforeFolderLoadForTesting = () async {
+        refreshCount++;
+        if (refreshCount == 1) {
+          recordSnapshotReady.complete();
+          await releaseFolderRead.future;
+        } else {
+          secondRecordSnapshotReady.complete();
+          await releaseSecondFolderRead.future;
+        }
+      };
+
+      final refreshBeforeDelete =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      final folderRemoval =
+          operations.removeFolder('audio_folder_delete_during_refresh');
+      Future<List<AudioRecord>>? refreshDuringDelete;
+      try {
+        await folderRecordDeleteStarted.future;
+        refreshDuringDelete =
+            operations.loadRecords(forceRefresh: true, throwOnError: true);
+        await secondRecordSnapshotReady.future;
+        releaseFolderRecordDelete.complete();
+        await folderRemoval;
+        releaseFolderRead.complete();
+        expect((await refreshBeforeDelete).map((record) => record.id),
+            unorderedEquals([survivor.id]),
+            reason: 'a pre-delete refresh must not restore folder records');
+        releaseSecondFolderRead.complete();
+        expect((await refreshDuringDelete).map((record) => record.id),
+            unorderedEquals([survivor.id]),
+            reason:
+                'an in-flight folder refresh must not restore deleted rows');
+      } finally {
+        if (!releaseFolderRead.isCompleted) releaseFolderRead.complete();
+        if (!releaseFolderRecordDelete.isCompleted) {
+          releaseFolderRecordDelete.complete();
+        }
+        if (!releaseSecondFolderRead.isCompleted) {
+          releaseSecondFolderRead.complete();
+        }
+        await folderRemoval;
+        if (refreshDuringDelete != null) await refreshDuringDelete;
+        operations.beforeFolderLoadForTesting = null;
+        operations.beforeAudioFolderRecordDeleteForTesting = null;
+      }
+
+      expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([survivor.id]),
+          reason: 'folder deletion must be authoritative in the database');
+      expect((await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([survivor.id]),
+          reason: 'the current cache must reflect the folder deletion');
+    });
+
+    testWidgets(
+        'failed audio folder record deletion keeps persisted rows in cache',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_folder_delete_failure_refresh',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      final existing = AudioRecord(
+        id: 'audio_folder_delete_failure',
+        name: 'keep after failed deletion',
+        hash: 'hash_folder_delete_failure',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'audio_folder_delete_failure',
+      );
+      await operations.addRecord(existing);
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      final failure = StateError('injected audio folder record delete failure');
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+      operations.beforeAudioFolderRecordDeleteForTesting = () async {
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          throw failure;
+        };
+      };
+
+      final refresh =
+          operations.loadRecords(forceRefresh: true, throwOnError: true);
+      await recordSnapshotReady.future;
+      try {
+        await expectLater(
+          operations.removeFolder('audio_folder_delete_failure'),
+          throwsA(same(failure)),
+        );
+        expect(
+            (await ManifestDatabase.getAllAudioRecords())
+                .map((row) => row['id']),
+            unorderedEquals([existing.id]),
+            reason: 'a failed deletion must leave its database row intact');
+      } finally {
+        releaseFolderRead.complete();
+        operations.beforeFolderLoadForTesting = null;
+        operations.beforeAudioFolderRecordDeleteForTesting = null;
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+      }
+
+      expect((await refresh).map((record) => record.id),
+          unorderedEquals([existing.id]),
+          reason: 'failed deletion must not make a paused refresh lose rows');
+      expect((await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([existing.id]));
+    });
+
     testWidgets(
         'failed JSON registration preserves folders used by a concurrent registration',
         (WidgetTester t) async {
