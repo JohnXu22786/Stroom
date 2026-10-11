@@ -1362,7 +1362,12 @@ class ManifestDatabase {
           if (!list.contains(path)) {
             beforeFolderInsertForTesting?.call(path);
             list.add(path);
-            await _saveWebData();
+            try {
+              await _saveWebData(rethrowOnError: true);
+            } catch (_) {
+              list.remove(path);
+              rethrow;
+            }
           }
         });
         return;

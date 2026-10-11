@@ -634,6 +634,42 @@ void main() {
   // ====================================================================
 
   group('folder tracking', () {
+    Future<void> expectWebFolderSaveFailureCanRetry(
+      String path,
+      Future<void> Function(String) addFolder,
+    ) async {
+      await FileManifest.loadRecords();
+      await FileManifest.getAllFolders();
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          isNot(contains(path)));
+
+      final failure = StateError('injected Web manifest save failure');
+      var failureInjected = false;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        failureInjected = true;
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(addFolder(path), throwsA(same(failure)));
+      expect(failureInjected, isTrue);
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          isNot(contains(path)),
+          reason: 'a failed Web save must roll back the in-memory folder path');
+
+      await addFolder(path);
+
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          contains(path),
+          reason: 'retry must persist the folder after the Web save fails');
+    }
+
     Future<void> expectFailedFolderInsertCanRetry(
       String path,
       Future<void> Function(String) addFolder,
@@ -675,6 +711,22 @@ void main() {
         (WidgetTester t) async {
       await expectFailedFolderInsertCanRetry(
         'audio-path-retry',
+        FileManifest.addFolderPath,
+      );
+    });
+
+    testWidgets('addFolder retries after Web manifest save failure',
+        (WidgetTester t) async {
+      await expectWebFolderSaveFailureCanRetry(
+        'audio-web-folder-save-retry',
+        FileManifest.addFolder,
+      );
+    });
+
+    testWidgets('addFolderPath retries after Web manifest save failure',
+        (WidgetTester t) async {
+      await expectWebFolderSaveFailureCanRetry(
+        'audio-web-path-save-retry',
         FileManifest.addFolderPath,
       );
     });
