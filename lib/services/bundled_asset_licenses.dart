@@ -53,7 +53,16 @@ void registerBundledAssetLicenses() {
 
     yield LicenseEntryWithLineBreaks(
       const [
-        'mdk-nvjp2k source-file notice (Windows SDK DLL; binary terms unresolved)',
+        'MDK 0.39.0.2635 Windows x64 vendor .nupkg (package-level MIT declaration)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/mdk-0.39.0.2635-Windows-x64-MIT.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'mdk-nvjp2k source-file notice (Windows x64; separate from package MIT; NVIDIA source and external runtime scope)',
       ],
       await rootBundle.loadString(
         'assets/vendor/native/mdk-nvjp2k-source-file-notice.txt',
