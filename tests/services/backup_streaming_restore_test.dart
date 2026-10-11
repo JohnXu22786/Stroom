@@ -193,18 +193,11 @@ void main() {
     final archive = Archive()
       // 带非空 EOCD 注释：覆盖尾部搜索的注释长度边界检查
       ..comment = 'stroom backup with a non-empty comment 中文';
-    archive.addFile(ArchiveFile(
-        'manifest.json',
-        utf8
-            .encode(jsonEncode({
-              'version': 1,
-              'createdAt': DateTime.now().toIso8601String(),
-            }))
-            .length,
-        utf8.encode(jsonEncode({
-          'version': 1,
-          'createdAt': DateTime.now().toIso8601String(),
-        }))));
+    final manifest = utf8.encode(jsonEncode({
+      'version': 1,
+      'createdAt': DateTime.now().toIso8601String(),
+    }));
+    archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     // v1：聊天+设置合并在一个 preferences.json
     // （conversations 在应用内以 JSON 字符串形式存储）
     archive.addFile(ArchiveFile(

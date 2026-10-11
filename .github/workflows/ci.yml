@@ -223,10 +223,8 @@ jobs:
             suite: component-integrations
           - label: Built-in Components
             suite: built-in-components
-          - label: Chat and AI Core
-            suite: chat-ai-core
-          - label: Tasks and Workflow
-            suite: tasks-workflow
+          - label: Chat and TaskFlow Core
+            suite: chat-taskflow-core
           - label: Files and Data
             suite: files-data
           - label: Application and Shared
