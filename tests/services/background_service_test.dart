@@ -362,6 +362,30 @@ void main() {
     });
 
     test(
+        'restoreBackgroundServiceOnColdStart recovers when enabled preference read fails',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+    });
+
+    test(
         'failed persistent start cannot rely on in-process intent after process death',
         () async {
       final mock = registerMockPlatform();
@@ -1101,6 +1125,27 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
+        () async {
+      registerMockPlatform();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
     });
 
     test('rearmKeepAliveOnResume reports watchdog scheduling failure',
