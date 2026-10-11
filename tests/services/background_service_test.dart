@@ -114,6 +114,15 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _FailingPreferenceReadStore extends InMemorySharedPreferencesStore {
+  _FailingPreferenceReadStore(Map<String, Object> data) : super.withData(data);
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    throw StateError('Simulated preference read error');
+  }
+}
+
 class _FailingDesktopCloseMinimizePreferenceStore
     extends InMemorySharedPreferencesStore {
   _FailingDesktopCloseMinimizePreferenceStore(Map<String, Object> data)
@@ -646,16 +655,61 @@ void main() {
       );
     });
 
-    test('successful temporary start does not arm the watchdog', () async {
+    test('temporary start leaves disabled persistent intent unchanged',
+        () async {
       registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', false);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+        await prefs.reload();
+      });
+
+      expect(prefs.getBool('background_service_enabled'), isFalse);
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test(
+        'temporary start does not assume unreadable persistent intent is enabled',
+        () async {
+      registerMockPlatform();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': false,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
 
       await withAndroidPlatform(() async {
         expect(await startBackgroundService(persistEnabled: false), isTrue);
       });
 
+      expect(keepAliveCalls, isEmpty);
+    });
+
+    test('temporary start rearms watchdog when persistent intent is enabled',
+        () async {
+      final mock = registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(persistEnabled: false), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
       expect(
-        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
-        isFalse,
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('startKeepAlive')),
+        reason: 'a temporary start must preserve watchdog backoff state',
       );
     });
 
