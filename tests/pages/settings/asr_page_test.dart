@@ -1,9 +1,13 @@
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// ignore: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
 
 import 'package:stroom/pages/asr_page.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -37,6 +41,38 @@ Widget _buildTestApp({List<ProviderEntry>? entries}) {
     ),
   );
 }
+
+class _AudioInputFilePicker extends FilePickerPlatform {
+  _AudioInputFilePicker(this.bytes);
+
+  final Uint8List bytes;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+    bool cancelUploadOnWindowBlur = true,
+  }) async {
+    return FilePickerResult([
+      PlatformFile(name: 'malformed.wav', size: bytes.length, bytes: bytes),
+    ]);
+  }
+}
+
+Uint8List _truncatedWaveBytes() => Uint8List.fromList([
+      0x52, 0x49, 0x46, 0x46, // RIFF
+      100, 0, 0, 0, // Declared container extends beyond the selected data.
+      0x57, 0x41, 0x56, 0x45, // WAVE
+    ]);
 
 // ============================================================================
 // Helper: Create a sample ASR provider entry with models
@@ -380,6 +416,97 @@ void main() {
 
       // Confirm button should be present
       expect(find.byKey(const Key('media_picker_confirm_btn')), findsOneWidget);
+    });
+
+    testWidgets('reports unsupported RIFF recordings without an async error', (
+      tester,
+    ) async {
+      const hash = 'unsupported_avi_recording';
+      final aviBytes = Uint8List.fromList([
+        0x52, 0x49, 0x46, 0x46, // RIFF
+        4, 0, 0, 0,
+        0x41, 0x56, 0x49, 0x20, // AVI
+      ]);
+      await FileManifest.addRecord(
+        AudioRecord(
+          name: '不支持的录音',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: aviBytes.length,
+        ),
+      );
+      await FileManifest.writeFile('$hash.wav', aviBytes);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('应用内录音'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('选择音频文件失败'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('rejects malformed WAVE recordings during in-app selection', (
+      tester,
+    ) async {
+      const hash = 'malformed_wave_recording';
+      final wavBytes = _truncatedWaveBytes();
+      await FileManifest.addRecord(
+        AudioRecord(
+          name: '损坏的录音',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: wavBytes.length,
+        ),
+      );
+      await FileManifest.writeFile('$hash.wav', wavBytes);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('应用内录音'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('损坏的录音').first);
+      await tester.pumpAndSettle();
+      final confirmButton = find.byKey(const Key('media_picker_confirm_btn'));
+      await tester.ensureVisible(confirmButton);
+      await tester.tap(confirmButton);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('选择音频文件失败'), findsOneWidget);
+      expect(find.text('损坏的录音'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('rejects malformed WAVE files during system-picker selection', (
+      tester,
+    ) async {
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = _AudioInputFilePicker(
+        _truncatedWaveBytes(),
+      );
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('系统音频文件'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('选择音频文件失败'), findsOneWidget);
+      expect(find.text('malformed.wav'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 

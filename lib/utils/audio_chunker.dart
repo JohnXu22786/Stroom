@@ -33,6 +33,8 @@ class WavInfo {
 
   int get bytesPerSample => bitsPerSample ~/ 8;
   int get bytesPerFrame => bytesPerSample * numChannels;
+
+  /// Number of complete time-domain frames (one sample per channel).
   int get totalSamples => dataSize ~/ bytesPerFrame;
   double get durationSeconds => totalSamples / sampleRate;
 }
@@ -118,6 +120,73 @@ class AudioChunkConfig {
     this.maxChunkDuration = 60.0,
     this.analysisWindowSeconds = 1.5,
   });
+
+  /// Reject settings that make chunk boundaries undefined or arithmetic
+  /// unstable. Input-rate-dependent limits are checked by
+  /// [validateForSampleRate].
+  void validate() {
+    if (maxChunkBytes <= 0) {
+      throw ArgumentError.value(maxChunkBytes, 'maxChunkBytes');
+    }
+    if (!silenceDbThreshold.isFinite || silenceDbThreshold >= 0) {
+      throw ArgumentError.value(silenceDbThreshold, 'silenceDbThreshold');
+    }
+    if (!minSilenceDuration.isFinite || minSilenceDuration <= 0) {
+      throw ArgumentError.value(minSilenceDuration, 'minSilenceDuration');
+    }
+    if (frameSize <= 0) {
+      throw ArgumentError.value(frameSize, 'frameSize');
+    }
+    if (!overlapSeconds.isFinite || overlapSeconds < 0) {
+      throw ArgumentError.value(overlapSeconds, 'overlapSeconds');
+    }
+    if (!fixedDurationSeconds.isFinite || fixedDurationSeconds <= 0) {
+      throw ArgumentError.value(fixedDurationSeconds, 'fixedDurationSeconds');
+    }
+    if (!minChunkDuration.isFinite || minChunkDuration <= 0) {
+      throw ArgumentError.value(minChunkDuration, 'minChunkDuration');
+    }
+    if (!targetChunkDuration.isFinite ||
+        targetChunkDuration < minChunkDuration) {
+      throw ArgumentError.value(targetChunkDuration, 'targetChunkDuration');
+    }
+    if (!maxChunkDuration.isFinite || maxChunkDuration < targetChunkDuration) {
+      throw ArgumentError.value(maxChunkDuration, 'maxChunkDuration');
+    }
+    if (!analysisWindowSeconds.isFinite || analysisWindowSeconds <= 0) {
+      throw ArgumentError.value(analysisWindowSeconds, 'analysisWindowSeconds');
+    }
+  }
+
+  void validateForSampleRate(int sampleRate) {
+    validate();
+    if (sampleRate <= 0) {
+      throw ArgumentError.value(sampleRate, 'sampleRate');
+    }
+
+    for (final (name, duration) in <(String, double)>[
+      ('fixedDurationSeconds', fixedDurationSeconds),
+      ('minChunkDuration', minChunkDuration),
+      ('targetChunkDuration', targetChunkDuration),
+      ('maxChunkDuration', maxChunkDuration),
+    ]) {
+      final samples = duration * sampleRate;
+      if (!samples.isFinite || samples < 1 || samples > 0x7fffffffffffffff) {
+        throw ArgumentError.value(duration, name);
+      }
+    }
+
+    final analysisFrames = analysisWindowSeconds * sampleRate / frameSize;
+    final silenceFrames = minSilenceDuration * sampleRate / frameSize;
+    if (!analysisFrames.isFinite || analysisFrames > 0x7fffffffffffffff) {
+      throw ArgumentError.value(analysisWindowSeconds, 'analysisWindowSeconds');
+    }
+    if (!silenceFrames.isFinite ||
+        silenceFrames > 0x7fffffffffffffff ||
+        !(minSilenceDuration * 1000).isFinite) {
+      throw ArgumentError.value(minSilenceDuration, 'minSilenceDuration');
+    }
+  }
 }
 
 /// Chunking strategy.
@@ -172,7 +241,7 @@ enum AudioEnvironment {
 /// Each candidate represents a potential split location (typically the
 /// midpoint of a silence gap) with computed quality metrics.
 class CandidateCut {
-  /// Sample index in the original PCM data.
+  /// Time-domain frame index in the original PCM data.
   final int samplePosition;
 
   /// Duration of the silence gap in seconds.
@@ -378,63 +447,107 @@ class EnvironmentAnalyzer {
 // WAV Header Parser (based on FFmpeg wavdec.c + riffdec.c)
 // ============================================================================
 
-/// Parse a WAV file header and return audio parameters + PCM data offset.
+/// Parse a little-endian PCM WAV header for the PCM chunker.
 ///
-/// Supports standard PCM WAV files in S16LE format (most common).
-/// RIFF, RIFX (big-endian), and WAVE64 containers are handled.
+/// Requires 16-bit integer PCM. RIFX is rejected because its samples are
+/// big-endian. Throws [FormatException] if the file or its PCM metadata is
+/// invalid.
+WavInfo parseWavHeader(Uint8List bytes) =>
+    _parseWavHeader(bytes, allowNonPcm: false);
+
+/// Validate a complete RIFF/WAVE container before uploading it.
 ///
-/// Throws [FormatException] if the file is not a valid WAV.
-WavInfo parseWavHeader(Uint8List bytes) {
-  if (bytes.length < 44) {
-    throw FormatException('File too small to be a valid WAV');
+/// This checks RIFF/chunk bounds and required base metadata for PCM and
+/// compressed WAVE formats. Compressed formats are allowed through here; the
+/// PCM-only chunker still uses [parseWavHeader].
+void validateWavContainer(Uint8List bytes) {
+  _parseWavHeader(bytes, allowNonPcm: true);
+}
+
+const _supportedWavAudioFormatTags = <int>{
+  0x0001, // PCM
+  0x0002, // Microsoft ADPCM
+  0x0003, // IEEE float
+  0x0006, // A-law
+  0x0007, // mu-law
+  0x0011, // IMA/DVI ADPCM
+};
+
+WavInfo _parseWavHeader(
+  Uint8List bytes, {
+  required bool allowNonPcm,
+}) {
+  if (bytes.length < 12) {
+    throw FormatException('Truncated WAV header');
   }
 
-  int offset = 0;
-
-  // --- RIFF header ---
-  final riffTag = _readFourCC(bytes, offset);
-  offset += 4;
-  final isRifx = riffTag == 'RIFX';
-  final isRf64 = riffTag == 'RF64';
-
-  if (riffTag != 'RIFF' && !isRifx && !isRf64) {
-    throw FormatException('Not a RIFF/WAV file: expected RIFF, got $riffTag');
+  final riffTag = _readFourCC(bytes, 0);
+  if (riffTag == 'RIFX') {
+    throw FormatException('RIFX big-endian WAV is unsupported');
+  }
+  if (riffTag != 'RIFF') {
+    throw FormatException('Not a little-endian RIFF/WAV file: $riffTag');
   }
 
-  final _ = _readUint32(bytes, offset, bigEndian: isRifx);
-  offset += 4;
+  final riffSize = _readUint32(bytes, 4);
+  if (riffSize < 4) {
+    throw FormatException('Invalid RIFF container size: $riffSize');
+  }
+  final containerEnd = 8 + riffSize;
+  if (containerEnd > bytes.length) {
+    throw FormatException(
+      'Truncated WAV container: RIFF claims $containerEnd bytes but only '
+      '${bytes.length} are present',
+    );
+  }
 
-  final waveTag = _readFourCC(bytes, offset);
-  offset += 4;
+  final waveTag = _readFourCC(bytes, 8);
   if (waveTag != 'WAVE') {
     throw FormatException('Not a WAV file: expected WAVE, got $waveTag');
   }
 
-  // --- Scan sub-chunks ---
+  // --- Scan chunks inside the RIFF container ---
+  var offset = 12;
   int? sampleRate;
   int? numChannels;
   int? bitsPerSample;
   int? byteRate;
   int? blockAlign;
+  int? fmtExtensionSize;
+  int? imaSamplesPerBlock;
+  int? msAdpcmSamplesPerBlock;
+  int? msAdpcmCoefficientCount;
+  int? extensibleValidBitsPerSample;
+  int? extensibleChannelMask;
+  bool hasExtensibleFormat = false;
   int audioFormat = 0;
   int? dataOffset;
-  int dataSize = 0;
+  int? dataSize;
   bool gotFmt = false;
 
-  while (offset + 8 <= bytes.length) {
+  while (offset < containerEnd) {
+    if (containerEnd - offset < 8) {
+      throw FormatException('Truncated WAV chunk header at byte $offset');
+    }
+
     final tag = _readFourCC(bytes, offset);
     offset += 4;
-    int size = _readUint32(bytes, offset, bigEndian: isRifx);
+    final size = _readUint32(bytes, offset);
     offset += 4;
 
-    // RIFF alignment: chunk size is always even
-    final alignedSize = (size + 1) & ~1;
+    // Every RIFF chunk is padded to an even byte boundary.
+    final paddedSize = size + (size.isOdd ? 1 : 0);
+    if (paddedSize > containerEnd - offset) {
+      throw FormatException(
+        'WAV chunk $tag claims $size bytes beyond the RIFF container',
+      );
+    }
+    final nextChunk = offset + paddedSize;
 
     switch (tag) {
       case 'fmt ':
         if (gotFmt) {
-          // Skip duplicate fmt chunk — advance past its data
-          offset += alignedSize;
+          offset = nextChunk;
           break;
         }
 
@@ -442,30 +555,97 @@ WavInfo parseWavHeader(Uint8List bytes) {
           throw FormatException('fmt chunk too small: $size bytes');
         }
 
-        audioFormat = _readUint16(bytes, offset, bigEndian: isRifx);
+        final fmtOffset = offset;
+        audioFormat = _readUint16(bytes, offset);
         offset += 2;
-        numChannels = _readUint16(bytes, offset, bigEndian: isRifx);
+        numChannels = _readUint16(bytes, offset);
         offset += 2;
-        sampleRate = _readUint32(bytes, offset, bigEndian: isRifx);
+        sampleRate = _readUint32(bytes, offset);
         offset += 4;
-        byteRate = _readUint32(bytes, offset, bigEndian: isRifx);
+        byteRate = _readUint32(bytes, offset);
         offset += 4;
-        blockAlign = _readUint16(bytes, offset, bigEndian: isRifx);
+        blockAlign = _readUint16(bytes, offset);
         offset += 2;
+        bitsPerSample = _readUint16(bytes, offset);
 
-        if (size >= 16) {
-          bitsPerSample = _readUint16(bytes, offset, bigEndian: isRifx);
-          offset += 2;
-        } else {
-          bitsPerSample =
-              8; // WAVEFORMAT (no bitsPerSample) — unreachable due to size<16 guard above
+        var extensionSize = 0;
+        if (size > 16) {
+          if (size < 18) {
+            throw FormatException('fmt chunk is missing its cbSize field');
+          }
+          extensionSize = _readUint16(bytes, fmtOffset + 16);
+          if (extensionSize > size - 18) {
+            throw FormatException(
+              'fmt extension claims $extensionSize bytes but only '
+              '${size - 18} are present',
+            );
+          }
         }
 
-        // Skip extension bytes if any.
-        // The fmt chunk DATA occupies `alignedSize` bytes (padded to even).
-        // We already read 16 bytes of core format fields; skip the rest
-        // (extensions + any RIFF alignment padding byte).
-        offset += alignedSize - 16;
+        if (audioFormat == 0xfffe) {
+          hasExtensibleFormat = true;
+          if (size < 40 || extensionSize < 22) {
+            throw FormatException(
+              'WAVE_FORMAT_EXTENSIBLE fmt chunk must contain its 22-byte '
+              'extension',
+            );
+          }
+          final validBitsPerSample = _readUint16(bytes, fmtOffset + 18);
+          extensibleValidBitsPerSample = validBitsPerSample;
+          extensibleChannelMask = _readUint32(bytes, fmtOffset + 20);
+          if (validBitsPerSample <= 0 || validBitsPerSample > bitsPerSample) {
+            throw FormatException(
+              'Invalid WAVE_FORMAT_EXTENSIBLE valid bits: '
+              '$validBitsPerSample',
+            );
+          }
+
+          final subtypeFormatTag = _readUint16(bytes, fmtOffset + 24);
+          final subtypeFormatTagHigh = _readUint16(bytes, fmtOffset + 26);
+          const supportedSubtypeGuidSuffix = <int>[
+            0x00, 0x00, // Data2
+            0x10, 0x00, // Data3
+            0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71, // Data4
+          ];
+          var hasSupportedGuidSuffix = true;
+          for (var index = 0;
+              index < supportedSubtypeGuidSuffix.length;
+              index++) {
+            if (bytes[fmtOffset + 28 + index] !=
+                supportedSubtypeGuidSuffix[index]) {
+              hasSupportedGuidSuffix = false;
+              break;
+            }
+          }
+          if (subtypeFormatTagHigh != 0 ||
+              !hasSupportedGuidSuffix ||
+              !_supportedWavAudioFormatTags.contains(subtypeFormatTag)) {
+            throw FormatException(
+              'Unsupported WAVE_FORMAT_EXTENSIBLE subtype GUID or format tag',
+            );
+          }
+          if (subtypeFormatTag != 1 && !allowNonPcm) {
+            throw FormatException(
+              'Unsupported WAVE_FORMAT_EXTENSIBLE subtype GUID',
+            );
+          }
+          // The structural validator retains supported compressed subtypes;
+          // the PCM-only path rejects them explicitly above.
+          audioFormat = subtypeFormatTag;
+        }
+
+        fmtExtensionSize = extensionSize;
+        if (audioFormat == 0x0002 && size >= 22) {
+          msAdpcmSamplesPerBlock = _readUint16(bytes, fmtOffset + 18);
+          msAdpcmCoefficientCount = _readUint16(bytes, fmtOffset + 20);
+        }
+        if (audioFormat == 0x0011 && size >= 20) {
+          imaSamplesPerBlock = _readUint16(bytes, fmtOffset + 18);
+        }
+
+        // Preserve valid WAVEFORMATEX extensions by skipping the remaining
+        // bytes in this bounded fmt chunk.
+        offset = nextChunk;
 
         gotFmt = true;
         break;
@@ -474,52 +654,306 @@ WavInfo parseWavHeader(Uint8List bytes) {
         if (!gotFmt) {
           throw FormatException('data chunk before fmt chunk');
         }
+        if (dataOffset != null) {
+          throw const FormatException(
+            'Multiple WAV data chunks are unsupported',
+          );
+        }
         dataOffset = offset;
         dataSize = size;
-        // Found data — stop scanning
-        offset = bytes.length; // force exit loop
+        offset = nextChunk;
         break;
 
       default:
-        // Skip unknown chunks
-        offset += alignedSize;
+        // Ignore metadata chunks such as LIST/JUNK while respecting their
+        // declared bounds and padding.
+        offset = nextChunk;
         break;
     }
-
-    if (dataOffset != null) break;
   }
 
   if (!gotFmt) throw FormatException('No fmt chunk found in WAV');
   if (dataOffset == null) throw FormatException('No data chunk found in WAV');
 
-  // Truncated file: the header claims more data than the file actually
-  // holds. Without this check, slicing the PCM data below would throw a
-  // RangeError instead of a catchable FormatException.
-  if (dataOffset + dataSize > bytes.length) {
-    throw FormatException(
-        'Truncated WAV: data chunk claims $dataSize bytes but only '
-        '${bytes.length - dataOffset} are present');
+  if (audioFormat == 0) {
+    throw const FormatException('Unknown WAV audio format tag: 0');
+  }
+  if (!_supportedWavAudioFormatTags.contains(audioFormat)) {
+    throw FormatException('Unsupported WAV audio format tag: $audioFormat');
   }
 
-  if (audioFormat != 1) {
+  if (audioFormat != 1 && !allowNonPcm) {
     throw FormatException(
         'Unsupported audio format: $audioFormat. Only PCM (1) is supported.');
   }
 
-  if (bitsPerSample != 16) {
+  if (bitsPerSample != 16 && !allowNonPcm) {
     throw FormatException(
         'Unsupported bit depth: $bitsPerSample. Only 16-bit PCM is supported.');
   }
 
+  final channels = numChannels!;
+  final rate = sampleRate!;
+  final align = blockAlign!;
+  final rateBytes = byteRate!;
+  final pcmSize = dataSize!;
+  if (channels <= 0) {
+    throw FormatException('Invalid WAV channel count: $channels');
+  }
+  if (hasExtensibleFormat) {
+    final channelMask = extensibleChannelMask!;
+    var remainingMask = channelMask;
+    var speakerCount = 0;
+    while (remainingMask != 0) {
+      speakerCount += remainingMask & 1;
+      remainingMask >>= 1;
+    }
+    if (channelMask != 0 && speakerCount != channels) {
+      throw FormatException(
+        'Invalid WAVE_FORMAT_EXTENSIBLE channel mask: $speakerCount speaker '
+        'bits for $channels channels',
+      );
+    }
+  }
+  if (rate <= 0) {
+    throw FormatException('Invalid WAV sample rate: $rate');
+  }
+  if (align <= 0) {
+    throw FormatException('Invalid WAV block alignment: $align');
+  }
+  if (rateBytes <= 0) {
+    throw FormatException('Invalid WAV byte rate: $rateBytes');
+  }
+
+  if (audioFormat == 1) {
+    if (bitsPerSample == null ||
+        !const {8, 16, 24, 32}.contains(bitsPerSample)) {
+      throw FormatException('Invalid PCM WAV bit depth: $bitsPerSample');
+    }
+    _validateLinearWavLayout(
+      'PCM',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
+  }
+  if (pcmSize <= 0) {
+    throw FormatException('WAV data chunk is empty');
+  }
+  if (audioFormat == 1 && pcmSize % align != 0) {
+    throw FormatException(
+      'WAV data size $pcmSize is not aligned to $align-byte frames',
+    );
+  }
+  if (audioFormat == 3) {
+    if (bitsPerSample != 32 && bitsPerSample != 64) {
+      throw FormatException(
+        'Invalid IEEE float WAV bit depth: $bitsPerSample; expected 32 or 64',
+      );
+    }
+    if (hasExtensibleFormat && extensibleValidBitsPerSample != bitsPerSample) {
+      throw FormatException(
+        'Invalid IEEE float valid bits: $extensibleValidBitsPerSample',
+      );
+    }
+    _validateLinearWavLayout(
+      'IEEE float',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample!,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
+  }
+  if (audioFormat == 6 || audioFormat == 7) {
+    if (bitsPerSample != 8) {
+      final encoding = audioFormat == 6 ? 'A-law' : 'mu-law';
+      throw FormatException(
+        'Invalid $encoding WAV bit depth: $bitsPerSample; expected 8',
+      );
+    }
+    _validateLinearWavLayout(
+      audioFormat == 6 ? 'A-law' : 'mu-law',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample!,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
+  }
+  if (audioFormat == 0x0002) {
+    if (hasExtensibleFormat) {
+      throw const FormatException(
+        'WAVE_FORMAT_EXTENSIBLE Microsoft ADPCM is unsupported',
+      );
+    }
+    if (bitsPerSample != 4) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM bit depth: $bitsPerSample; expected 4',
+      );
+    }
+    final coefficientCount = msAdpcmCoefficientCount;
+    if (coefficientCount == null ||
+        coefficientCount < 1 ||
+        coefficientCount > 7) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM coefficient count: $coefficientCount',
+      );
+    }
+    final requiredExtensionSize = 4 + coefficientCount * 4;
+    if ((fmtExtensionSize ?? 0) < requiredExtensionSize) {
+      throw FormatException(
+        'Microsoft ADPCM fmt extension is too small: '
+        '${fmtExtensionSize ?? 0} bytes; expected $requiredExtensionSize',
+      );
+    }
+    final samplesPerBlock = msAdpcmSamplesPerBlock;
+    if (samplesPerBlock == null || samplesPerBlock < 2) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM samplesPerBlock: $samplesPerBlock; '
+        'must be at least 2',
+      );
+    }
+    final headerBytes = channels * 7;
+    if (align < headerBytes) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM block alignment: $align for $channels channels',
+      );
+    }
+    final maxSamplesPerBlock = ((align - headerBytes) * 2) ~/ channels + 2;
+    if (samplesPerBlock > maxSamplesPerBlock) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM samplesPerBlock: $samplesPerBlock exceeds '
+        '$maxSamplesPerBlock for block alignment $align',
+      );
+    }
+    final averageByteRateNumerator = rate * align;
+    final minimumByteRate = averageByteRateNumerator ~/ samplesPerBlock;
+    final maximumByteRate =
+        (averageByteRateNumerator + samplesPerBlock - 1) ~/ samplesPerBlock;
+    if (minimumByteRate > 0xffffffff ||
+        (rateBytes != minimumByteRate &&
+            (maximumByteRate > 0xffffffff || rateBytes != maximumByteRate))) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM byte rate: expected about '
+        '$minimumByteRate-$maximumByteRate, got $rateBytes',
+      );
+    }
+    if (pcmSize % align != 0) {
+      throw FormatException(
+        'Microsoft ADPCM data size $pcmSize is not aligned to '
+        '$align-byte blocks',
+      );
+    }
+  }
+  if (audioFormat == 0x0011) {
+    if (hasExtensibleFormat) {
+      throw const FormatException(
+        'WAVE_FORMAT_EXTENSIBLE IMA ADPCM is unsupported',
+      );
+    }
+    if (bitsPerSample != 4) {
+      throw FormatException(
+        'Invalid IMA ADPCM bit depth: $bitsPerSample; expected 4',
+      );
+    }
+    if ((fmtExtensionSize ?? 0) < 2) {
+      throw const FormatException(
+        'IMA ADPCM fmt chunk must contain cbSize and samplesPerBlock',
+      );
+    }
+    final samplesPerBlock = imaSamplesPerBlock;
+    if (samplesPerBlock == null || samplesPerBlock <= 0) {
+      throw FormatException(
+        'Invalid IMA ADPCM samplesPerBlock: $samplesPerBlock',
+      );
+    }
+    final headerBytes = channels * 4;
+    if (align < headerBytes) {
+      throw FormatException(
+        'Invalid IMA ADPCM block alignment: $align for $channels channels',
+      );
+    }
+    final encodedBytes = align - headerBytes;
+    final maxSamplesPerBlock = (encodedBytes * 2) ~/ channels + 1;
+    if (samplesPerBlock > maxSamplesPerBlock) {
+      throw FormatException(
+        'Invalid IMA ADPCM samplesPerBlock: $samplesPerBlock exceeds '
+        '$maxSamplesPerBlock for block alignment $align',
+      );
+    }
+    final averageByteRateNumerator = rate * align;
+    final minimumByteRate = averageByteRateNumerator ~/ samplesPerBlock;
+    final maximumByteRate =
+        (averageByteRateNumerator + samplesPerBlock - 1) ~/ samplesPerBlock;
+    if (minimumByteRate > 0xffffffff ||
+        (rateBytes != minimumByteRate &&
+            (maximumByteRate > 0xffffffff || rateBytes != maximumByteRate))) {
+      throw FormatException(
+        'Invalid IMA ADPCM byte rate: expected about '
+        '$minimumByteRate-$maximumByteRate, got $rateBytes',
+      );
+    }
+    if (pcmSize % align != 0) {
+      throw FormatException(
+        'IMA ADPCM data size $pcmSize is not aligned to $align-byte blocks',
+      );
+    }
+  }
+  if (dataOffset + pcmSize > containerEnd) {
+    throw FormatException('WAV data chunk exceeds its RIFF container');
+  }
+
   return WavInfo(
-    sampleRate: sampleRate!,
-    numChannels: numChannels!,
+    sampleRate: rate,
+    numChannels: channels,
     bitsPerSample: bitsPerSample!,
     dataOffset: dataOffset,
-    dataSize: dataSize,
-    byteRate: byteRate!,
-    blockAlign: blockAlign!,
+    dataSize: pcmSize,
+    byteRate: rateBytes,
+    blockAlign: align,
   );
+}
+
+void _validateLinearWavLayout(
+  String encoding, {
+  required int channels,
+  required int sampleRate,
+  required int bitsPerSample,
+  required int blockAlign,
+  required int byteRate,
+  required int dataSize,
+}) {
+  if (bitsPerSample % 8 != 0) {
+    throw FormatException(
+      'Invalid $encoding WAV bit depth: $bitsPerSample is not byte-aligned',
+    );
+  }
+  final expectedAlign = channels * (bitsPerSample ~/ 8);
+  if (blockAlign != expectedAlign) {
+    throw FormatException(
+      'Invalid $encoding WAV block alignment: expected $expectedAlign, '
+      'got $blockAlign',
+    );
+  }
+  final expectedByteRate = sampleRate * expectedAlign;
+  if (expectedByteRate > 0xffffffff || byteRate != expectedByteRate) {
+    throw FormatException(
+      'Invalid $encoding WAV byte rate: expected $expectedByteRate, '
+      'got $byteRate',
+    );
+  }
+  if (dataSize % blockAlign != 0) {
+    throw FormatException(
+      '$encoding WAV data size $dataSize is not aligned to '
+      '$blockAlign-byte frames',
+    );
+  }
 }
 
 // ============================================================================
@@ -532,6 +966,20 @@ WavInfo parseWavHeader(Uint8List bytes) {
 /// Returns ALL raw interleaved samples (LRLRLR... for stereo). The caller
 /// is responsible for de-interleaving if needed via [WavPreprocessor].
 Float64List readPcmSamplesFloat(Uint8List wavBytes, WavInfo info) {
+  if (info.bitsPerSample != 16 ||
+      info.numChannels <= 0 ||
+      info.sampleRate <= 0 ||
+      info.blockAlign <= 0 ||
+      info.blockAlign != info.bytesPerFrame ||
+      info.byteRate != info.sampleRate * info.blockAlign ||
+      info.dataSize <= 0 ||
+      info.dataSize % info.blockAlign != 0 ||
+      info.dataOffset < 0 ||
+      info.dataOffset > wavBytes.length ||
+      info.dataSize > wavBytes.length - info.dataOffset) {
+    throw FormatException('Invalid PCM WAV data range or metadata');
+  }
+
   // Total INDIVIDUAL samples, not frames: dataSize / bytesPerSample.
   // For stereo 16-bit: bytesPerSample=2, each frame has 2 samples (L+R).
   final rawSampleCount = info.dataSize ~/ info.bytesPerSample;
@@ -546,6 +994,26 @@ Float64List readPcmSamplesFloat(Uint8List wavBytes, WavInfo info) {
   }
 
   return samples;
+}
+
+/// Collapse interleaved channel samples to one peak-energy value per time
+/// frame for silence analysis. Taking the loudest channel preserves speech in
+/// any channel and keeps a silent added channel from attenuating it. The
+/// source PCM remains interleaved for chunk output.
+Float64List _frameEnergySamples(Float64List samples, int numChannels) {
+  if (numChannels == 1) return samples;
+
+  final frameCount = samples.length ~/ numChannels;
+  final frameSamples = Float64List(frameCount);
+  for (int frame = 0; frame < frameCount; frame++) {
+    double peakMagnitude = 0;
+    for (int channel = 0; channel < numChannels; channel++) {
+      final magnitude = samples[frame * numChannels + channel].abs();
+      if (magnitude > peakMagnitude) peakMagnitude = magnitude;
+    }
+    frameSamples[frame] = peakMagnitude;
+  }
+  return frameSamples;
 }
 
 // ============================================================================
@@ -630,6 +1098,7 @@ class SilenceDetector {
     double? dbThreshold,
     double? minSilenceSec,
   }) {
+    config.validateForSampleRate(sampleRate);
     final threshold = dbThreshold ?? config.silenceDbThreshold;
     final minSilenceS = minSilenceSec ?? config.minSilenceDuration;
     final frameSize = config.frameSize;
@@ -680,6 +1149,7 @@ class SilenceDetector {
     double? dbThreshold,
     double? minSilenceSec,
   }) {
+    config.validateForSampleRate(sampleRate);
     final threshold = dbThreshold ?? config.silenceDbThreshold;
     final minSilenceS = minSilenceSec ?? config.minSilenceDuration;
     final frameSize = config.frameSize;
@@ -784,6 +1254,7 @@ class AudioChunker {
 
   /// Split a WAV file using the specified [method].
   List<Uint8List> chunk(Uint8List wavBytes, AudioChunkMethod method) {
+    config.validate();
     switch (method) {
       case AudioChunkMethod.none:
         return [wavBytes];
@@ -803,9 +1274,13 @@ class AudioChunker {
   List<Uint8List> split(Uint8List wavBytes) {
     // Step 1: Parse header
     final info = parseWavHeader(wavBytes);
+    _validateForWav(info);
 
-    // Step 2: Read PCM as float
-    final samples = readPcmSamplesFloat(wavBytes, info);
+    // Step 2: Read interleaved PCM and collapse channels to one analysis
+    // value per time frame. Cuts remain in frames while output preserves the
+    // original channel order.
+    final interleavedSamples = readPcmSamplesFloat(wavBytes, info);
+    final samples = _frameEnergySamples(interleavedSamples, info.numChannels);
 
     // Step 3: Compute frame dB once (shared by environment analysis + gap detection)
     final frameDb = _computeFrameDb(samples, config.frameSize);
@@ -876,13 +1351,15 @@ class AudioChunker {
         chunks.add(_writeWavChunk(
             wavBytes, info, start - pcmDataOffset, end - pcmDataOffset));
       } else {
-        // Sub-split to stay under maxChunkBytes.
-        // Compute in frame units to avoid mid-sample splits.
+        // Split by the maximum number of complete frames that fit under the
+        // payload limit, rather than distributing frames evenly across parts.
         final totalFrames = (end - start) ~/ bpf;
-        final numParts = (chunkBytes / config.maxChunkBytes).ceil();
-        for (int p = 0; p < numParts; p++) {
-          final subStartFrame = (totalFrames * p) ~/ numParts;
-          final subEndFrame = (totalFrames * (p + 1)) ~/ numParts;
+        final maxFramesPerPart = config.maxChunkBytes ~/ bpf;
+        for (int subStartFrame = 0;
+            subStartFrame < totalFrames;
+            subStartFrame += maxFramesPerPart) {
+          final subEndFrame =
+              (subStartFrame + maxFramesPerPart).clamp(0, totalFrames);
           if (subEndFrame > subStartFrame) {
             chunks.add(_writeWavChunk(
                 wavBytes,
@@ -1088,6 +1565,7 @@ class AudioChunker {
           currentSample + maxChunkSamples,
           totalSamples,
           sampleRate,
+          currentSample + minChunkSamples,
         );
         // Guard against duplicate totalSamples (already added at end)
         if (forcePos >= totalSamples) break;
@@ -1119,6 +1597,7 @@ class AudioChunker {
           currentSample + maxChunkSamples,
           totalSamples,
           sampleRate,
+          currentSample + minChunkSamples,
         );
         if (forcePos >= totalSamples) break;
         cuts.add(forcePos);
@@ -1187,8 +1666,9 @@ class AudioChunker {
     int preferredPos,
     int totalSamples,
     int sampleRate,
+    int minimumPosition,
   ) {
-    if (preferredPos >= totalSamples) return totalSamples;
+    if (minimumPosition >= totalSamples) return totalSamples;
 
     // Search for candidates within ±3s of preferredPos
     final windowSamples = (3 * sampleRate).round();
@@ -1196,6 +1676,10 @@ class AudioChunker {
     int nearestDist = windowSamples + 1;
 
     for (final c in candidates) {
+      if (c.samplePosition < minimumPosition ||
+          c.samplePosition >= totalSamples) {
+        continue;
+      }
       final dist = (c.samplePosition - preferredPos).abs();
       if (dist < nearestDist && dist <= windowSamples) {
         nearest = c;
@@ -1205,13 +1689,14 @@ class AudioChunker {
 
     if (nearest != null) return nearest.samplePosition;
 
-    return preferredPos.clamp(0, totalSamples);
+    return preferredPos.clamp(minimumPosition, totalSamples);
   }
 
   /// Split WAV into chunks of fixed [config.fixedDurationSeconds] seconds.
   /// No overlap — chunks are strictly consecutive.
   List<Uint8List> splitByDuration(Uint8List wavBytes) {
     final info = parseWavHeader(wavBytes);
+    _validateForWav(info);
     final samplesPerChunk =
         (config.fixedDurationSeconds * info.sampleRate).round();
     final bpf = info.bytesPerFrame;
@@ -1229,13 +1714,13 @@ class AudioChunker {
         chunks.add(
             _writeWavChunk(wavBytes, info, startSample * bpf, endSample * bpf));
       } else {
-        // Sub-split evenly to stay within maxChunkBytes
-        final numParts = (adjBytes / config.maxChunkBytes).ceil();
-        for (int p = 0; p < numParts; p++) {
-          final subStart =
-              startSample + ((endSample - startSample) * p) ~/ numParts;
-          final subEnd =
-              startSample + ((endSample - startSample) * (p + 1)) ~/ numParts;
+        // Split by the maximum number of complete frames that fit under the
+        // payload limit, preserving the frame boundary at each cut.
+        final maxFramesPerPart = config.maxChunkBytes ~/ bpf;
+        for (int subStart = startSample;
+            subStart < endSample;
+            subStart += maxFramesPerPart) {
+          final subEnd = (subStart + maxFramesPerPart).clamp(0, endSample);
           if (subEnd > subStart) {
             chunks.add(
                 _writeWavChunk(wavBytes, info, subStart * bpf, subEnd * bpf));
@@ -1251,6 +1736,7 @@ class AudioChunker {
   /// Simple byte-count splitting — no silence awareness, no overlap.
   List<Uint8List> splitBySize(Uint8List wavBytes) {
     final info = parseWavHeader(wavBytes);
+    _validateForWav(info);
     final bpf = info.bytesPerFrame;
     final totalSamples = info.totalSamples;
     final chunks = <Uint8List>[];
@@ -1268,6 +1754,17 @@ class AudioChunker {
     }
 
     return chunks;
+  }
+
+  void _validateForWav(WavInfo info) {
+    config.validateForSampleRate(info.sampleRate);
+    if (config.maxChunkBytes < info.bytesPerFrame) {
+      throw ArgumentError.value(
+        config.maxChunkBytes,
+        'maxChunkBytes',
+        'must fit at least one ${info.bytesPerFrame}-byte PCM frame',
+      );
+    }
   }
 }
 

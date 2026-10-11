@@ -422,7 +422,12 @@ class AsrService {
       throw Exception('音频数据为空');
     }
 
-    final fmt = normalizeAsrUploadFormat(audioFormat);
+    final detectedFormat = detectAudioFormat(audioBytes);
+    final fmt = normalizeAsrUploadFormat(
+      normalizeAudioFormat(
+        detectedFormat == 'pcm' ? audioFormat : detectedFormat,
+      ),
+    );
     if (!_asrSupportedFormats.contains(fmt)) {
       throw Exception(
         '不支持的音频格式: $fmt。'
@@ -430,6 +435,32 @@ class AsrService {
         '请将音频转换为 WAV/MP3 格式后重试。',
       );
     }
+
+    void validateDetectedWav(Uint8List bytes) {
+      try {
+        validateWavContainer(bytes);
+      } on FormatException catch (error) {
+        // Keep explicit endian/container rejection visible even for oversized
+        // inputs; malformed RIFF/WAVE inputs retain the friendly size error
+        // used by the existing chunking fallback path.
+        if (error.message.toString().contains('RIFX')) rethrow;
+        if (bytes.length > config.maxFileSizeBytes &&
+            config.uploadMethod != AudioUploadMethod.url) {
+          throw Exception(
+            '文件大小超过限制: '
+            '${formatFileSize(bytes.length)} > '
+            '${formatFileSize(config.maxFileSizeBytes)}。'
+            '音频 WAV 容器无效，已拒绝上传。',
+          );
+        }
+        rethrow;
+      }
+    }
+
+    // Validate recognized WAVE content before preprocessing or any size
+    // fallback can send it through a less-structured upload path. Unknown raw
+    // bytes keep their existing caller-selected format fallback behavior.
+    if (detectedFormat == 'wav') validateDetectedWav(audioBytes);
 
     var workingBytes = audioBytes;
 
@@ -446,6 +477,10 @@ class AsrService {
         await AppLogService.warning('AsrService', '预处理失败: $e');
       }
     }
+
+    // Preprocessing is allowed to replace the working bytes, so validate its
+    // output before deciding whether to upload, compress, or fall back.
+    if (detectedFormat == 'wav') validateDetectedWav(workingBytes);
 
     // ── Check if file fits within limit ─────────────────────────────
     final exceedsLimit = workingBytes.length > config.maxFileSizeBytes &&

@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/utils/audio_codecs.dart';
+import 'package:stroom/utils/audio_utils.dart';
 import 'package:stroom/utils/http_timeout.dart';
 
 /// A mock [HttpClientAdapter] that captures the request data for inspection
@@ -105,6 +107,100 @@ bool _multipartFileHasMimeType(List<int> bodyBytes, String mimeType) {
   if (ctEnd == -1) return false;
   final ctValue = bodyStr.substring(ctIdx, ctEnd);
   return ctValue.contains(mimeType);
+}
+
+Uint8List _buildExtensibleWavWithSubtype(
+  Uint8List pcmWav,
+  int subtype, {
+  int? channelMask,
+}) {
+  final extensible = Uint8List(pcmWav.length + 24);
+  extensible.setRange(0, 36, pcmWav);
+  extensible.setRange(60, extensible.length, pcmWav, 36);
+  final data = ByteData.sublistView(extensible);
+  data.setUint32(4, extensible.length - 8, Endian.little);
+  data.setUint32(16, 40, Endian.little);
+  data.setUint16(20, 0xfffe, Endian.little);
+  data.setUint16(36, 22, Endian.little);
+  data.setUint16(38, 16, Endian.little);
+  final channels = ByteData.sublistView(pcmWav).getUint16(22, Endian.little);
+  final mask = channelMask ??
+      switch (channels) {
+        1 => 1,
+        2 => 3,
+        _ => 0,
+      };
+  data.setUint32(40, mask, Endian.little);
+  data.setUint32(44, subtype, Endian.little);
+  data.setUint16(48, 0, Endian.little);
+  data.setUint16(50, 0x10, Endian.little);
+  extensible.setRange(52, 60, [
+    0x80,
+    0x00,
+    0x00,
+    0xaa,
+    0x00,
+    0x38,
+    0x9b,
+    0x71,
+  ]);
+  return extensible;
+}
+
+Uint8List _buildMonoMsAdpcmWav({
+  required int sampleRate,
+  required int blockAlign,
+  required int samplesPerBlock,
+  required Uint8List data,
+}) {
+  const coefficientCount = 1;
+  const extensionSize = 4 + coefficientCount * 4;
+  const formatSize = 16 + 2 + extensionSize;
+  final dataPadding = data.length.isOdd ? 1 : 0;
+  final fileSize = 12 + 8 + formatSize + 8 + data.length + dataPadding;
+  final output = ByteData(fileSize);
+  var offset = 0;
+
+  void writeFourCc(String value) {
+    for (var index = 0; index < 4; index++) {
+      output.setUint8(offset++, value.codeUnitAt(index));
+    }
+  }
+
+  void writeUint16(int value) {
+    output.setUint16(offset, value, Endian.little);
+    offset += 2;
+  }
+
+  void writeUint32(int value) {
+    output.setUint32(offset, value, Endian.little);
+    offset += 4;
+  }
+
+  writeFourCc('RIFF');
+  writeUint32(fileSize - 8);
+  writeFourCc('WAVE');
+  writeFourCc('fmt ');
+  writeUint32(formatSize);
+  writeUint16(2); // WAVE_FORMAT_ADPCM.
+  writeUint16(1); // Mono.
+  writeUint32(sampleRate);
+  writeUint32(sampleRate * blockAlign ~/ samplesPerBlock);
+  writeUint16(blockAlign);
+  writeUint16(4);
+  writeUint16(extensionSize);
+  writeUint16(samplesPerBlock);
+  writeUint16(coefficientCount);
+  for (var index = 0; index < coefficientCount * 4; index++) {
+    output.setUint8(offset++, 0);
+  }
+  writeFourCc('data');
+  writeUint32(data.length);
+  for (final byte in data) {
+    output.setUint8(offset++, byte);
+  }
+  if (dataPadding != 0) output.setUint8(offset, 0);
+  return Uint8List.view(output.buffer);
 }
 
 void main() {
@@ -307,6 +403,366 @@ void main() {
           reason:
               'File part in multipart body should have content-type: audio/mpeg for mp3',
         );
+      });
+
+      test('upload format follows a WAV signature over a misleading request',
+          () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final wavBytes = pcmToWav(Uint8List.fromList([0, 0]));
+
+        await service.transcribe(audioBytes: wavBytes, audioFormat: 'mp3');
+
+        final body = adapter.capturedBodyBytes!;
+        final bodyText = utf8.decode(body, allowMalformed: true);
+        expect(_multipartFileHasMimeType(body, 'audio/wav'), isTrue);
+        expect(bodyText, contains('filename="audio.wav"'));
+      });
+
+      test('rejects malformed under-limit WAVE data before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedWav = pcmToWav(Uint8List.fromList([0, 0]));
+        ByteData.sublistView(malformedWav).setUint32(
+          4,
+          malformedWav.length - 9,
+          Endian.little,
+        ); // The final data byte lies outside the declared RIFF container.
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedWav),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects incomplete WAVE_FORMAT_EXTENSIBLE before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedExtensible = pcmToWav(Uint8List.fromList([0, 0]));
+        ByteData.sublistView(malformedExtensible).setUint16(
+          20,
+          0xfffe,
+          Endian.little,
+        ); // Extensible PCM requires its 22-byte fmt extension.
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedExtensible),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects unknown WAVE format tags before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final unknownWav = adpcmToWav(
+          Uint8List.fromList([0, 0, 0, 0]),
+          sampleRate: 16000,
+        );
+        ByteData.sublistView(unknownWav).setUint16(20, 0, Endian.little);
+
+        await expectLater(
+          service.transcribe(audioBytes: unknownWav),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects unsupported non-PCM WAVE tags before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final unsupportedTag = adpcmToWav(
+          Uint8List.fromList([0, 0, 0, 0]),
+          sampleRate: 16000,
+        );
+        ByteData.sublistView(unsupportedTag).setUint16(
+          20,
+          0x7777,
+          Endian.little,
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: unsupportedTag),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects unknown extensible subtype before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final unsupportedSubtype = _buildExtensibleWavWithSubtype(
+          pcmToWav(Uint8List.fromList([0, 0])),
+          0x7777,
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: unsupportedSubtype),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects mismatched extensible channel mask before upload',
+          () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedStereo = _buildExtensibleWavWithSubtype(
+          pcmToWav(
+            Uint8List.fromList([0, 0, 0, 0]),
+            numChannels: 2,
+          ),
+          1,
+          channelMask: 1,
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedStereo),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects malformed over-limit WAV before base64 fallback', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 1024,
+            fallbackMethod: 'specific',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedWav = pcmToWav(Uint8List(16000));
+        ByteData.sublistView(malformedWav).setUint32(
+          4,
+          malformedWav.length - 9,
+          Endian.little,
+        ); // The last data byte lies outside the declared RIFF container.
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedWav),
+          throwsA(predicate((error) =>
+              error is Exception && error.toString().contains('音频 WAV 容器无效'))),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('keeps structurally valid ADPCM WAVE uploadable', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final adpcmWav = adpcmToWav(
+          Uint8List.fromList([0, 0, 0, 0]),
+          sampleRate: 16000,
+        );
+
+        await service.transcribe(audioBytes: adpcmWav, audioFormat: 'mp3');
+
+        final body = adapter.capturedBodyBytes!;
+        final bodyText = utf8.decode(body, allowMalformed: true);
+        expect(_multipartFileHasMimeType(body, 'audio/wav'), isTrue);
+        expect(bodyText, contains('filename="audio.wav"'));
+      });
+
+      test('rejects malformed IMA ADPCM fmt metadata before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final validAdpcmWav = adpcmToWav(
+          Uint8List.fromList([0, 0, 0, 0]),
+          sampleRate: 16000,
+        );
+        final missingAdpcmExtension = Uint8List(validAdpcmWav.length - 4);
+        missingAdpcmExtension.setRange(0, 36, validAdpcmWav);
+        missingAdpcmExtension.setRange(
+          36,
+          missingAdpcmExtension.length,
+          validAdpcmWav,
+          40,
+        );
+        final malformedData = ByteData.sublistView(missingAdpcmExtension);
+        malformedData.setUint32(
+          4,
+          missingAdpcmExtension.length - 8,
+          Endian.little,
+        );
+        malformedData.setUint32(16, 16, Endian.little);
+
+        await expectLater(
+          service.transcribe(audioBytes: missingAdpcmExtension),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects one-sample Microsoft ADPCM blocks before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedMsAdpcm = _buildMonoMsAdpcmWav(
+          sampleRate: 16000,
+          blockAlign: 7,
+          samplesPerBlock: 1,
+          data: Uint8List(7),
+        );
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedMsAdpcm),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects malformed IEEE float WAV metadata before upload', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final malformedFloat = pcmToWav(Uint8List.fromList([0, 0]));
+        final fields = ByteData.sublistView(malformedFloat);
+        fields.setUint16(20, 3, Endian.little); // IEEE float.
+        fields.setUint16(34, 0, Endian.little); // Invalid float bit depth.
+        fields.setUint16(32, 1, Endian.little); // Inconsistent block alignment.
+        fields.setUint32(28, 1, Endian.little); // Inconsistent byte rate.
+        fields.setUint32(40, 1, Endian.little); // Misaligned one-byte payload.
+        malformedFloat[44] = 0;
+
+        await expectLater(
+          service.transcribe(audioBytes: malformedFloat),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects non-WAVE RIFF containers before upload-format fallback',
+          () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final aviBytes = Uint8List.fromList([
+          0x52, 0x49, 0x46, 0x46, // RIFF
+          4, 0, 0, 0,
+          0x41, 0x56, 0x49, 0x20, // AVI
+        ]);
+
+        await expectLater(
+          service.transcribe(audioBytes: aviBytes, audioFormat: 'wav'),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('rejects RF64 before upload-format fallback', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+        final rf64 = Uint8List.fromList([
+          0x52, 0x46, 0x36, 0x34, // RF64
+          0xff, 0xff, 0xff, 0xff,
+          0x57, 0x41, 0x56, 0x45, // WAVE
+        ]);
+
+        await expectLater(
+          service.transcribe(audioBytes: rf64, audioFormat: 'mp3'),
+          throwsA(isA<FormatException>()),
+        );
+        expect(adapter.capturedBodyBytes, isNull);
+      });
+
+      test('AAC content keeps its supported M4A upload extension', () async {
+        final adapter = _CapturingAdapter();
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          ),
+          dio: Dio()..httpClientAdapter = adapter,
+        );
+
+        await service.transcribe(
+          audioBytes: Uint8List.fromList([0xff, 0xf1, 0x50, 0x80]),
+          audioFormat: 'mp3',
+        );
+
+        final body = adapter.capturedBodyBytes!;
+        final bodyText = utf8.decode(body, allowMalformed: true);
+        expect(_multipartFileHasMimeType(body, 'audio/mp4'), isTrue);
+        expect(bodyText, contains('filename="audio.m4a"'));
       });
 
       test('request sends correct MIME type for m4a format', () async {
