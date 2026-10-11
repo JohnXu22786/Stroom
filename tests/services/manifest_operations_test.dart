@@ -22,6 +22,8 @@ void main() {
     ManifestDatabase.beforeFolderInsertForTesting = null;
     ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
+    FileManifest.onWaitingForAudioHashFileSaveForTesting = null;
+    FileManifest.beforeAudioPrimaryDeleteForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
@@ -400,6 +402,114 @@ void main() {
       expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
     });
 
+    testWidgets(
+      'single audio deletion keeps the sidecar while another format shares its hash',
+      (WidgetTester t) async {
+        const hash = 'hash_sidecar_shared_formats_single';
+        final audioBytes = Uint8List.fromList([1, 2]);
+        final sidecarBytes = Uint8List.fromList([97, 98]);
+        final wav = AudioRecord(
+          id: 'audio_sidecar_shared_formats_single_wav',
+          name: 'wav',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: 2,
+          sourceText: 'shared text',
+        );
+        final mp3 = AudioRecord(
+          id: 'audio_sidecar_shared_formats_single_mp3',
+          name: 'mp3',
+          hash: hash,
+          format: 'mp3',
+          createdAt: DateTime.now(),
+          size: 2,
+          sourceText: 'shared text',
+        );
+        await FileManifest.writeFile(wav.storagePath, audioBytes);
+        await FileManifest.writeFile(mp3.storagePath, audioBytes);
+        await FileManifest.writeFile(wav.textStoragePath, sidecarBytes);
+        await FileManifest.addRecord(wav);
+        await FileManifest.addRecord(mp3);
+
+        await FileManifest.deleteRecord(wav.id);
+
+        expect(
+            await WebFileStore.exists('tts_audio/${wav.storagePath}'), isFalse);
+        expect(
+            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isTrue);
+        expect(
+          await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
+          isTrue,
+          reason: 'the remaining format still references the hash sidecar',
+        );
+
+        await FileManifest.deleteRecord(mp3.id);
+
+        expect(
+            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse);
+        expect(
+          await WebFileStore.exists('tts_audio/${mp3.textStoragePath}'),
+          isFalse,
+          reason: 'the sidecar is removed after its last hash reference',
+        );
+      },
+    );
+
+    testWidgets(
+      'batch audio deletion keeps the sidecar while another format shares its hash',
+      (WidgetTester t) async {
+        const hash = 'hash_sidecar_shared_formats_batch';
+        final audioBytes = Uint8List.fromList([1, 2]);
+        final sidecarBytes = Uint8List.fromList([97, 98]);
+        final wav = AudioRecord(
+          id: 'audio_sidecar_shared_formats_batch_wav',
+          name: 'wav',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: 2,
+          sourceText: 'shared text',
+        );
+        final mp3 = AudioRecord(
+          id: 'audio_sidecar_shared_formats_batch_mp3',
+          name: 'mp3',
+          hash: hash,
+          format: 'mp3',
+          createdAt: DateTime.now(),
+          size: 2,
+          sourceText: 'shared text',
+        );
+        await FileManifest.writeFile(wav.storagePath, audioBytes);
+        await FileManifest.writeFile(mp3.storagePath, audioBytes);
+        await FileManifest.writeFile(wav.textStoragePath, sidecarBytes);
+        await FileManifest.addRecord(wav);
+        await FileManifest.addRecord(mp3);
+
+        await FileManifest.deleteRecords([wav.id]);
+
+        expect(
+            await WebFileStore.exists('tts_audio/${wav.storagePath}'), isFalse);
+        expect(
+            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isTrue);
+        expect(
+          await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
+          isTrue,
+          reason: 'the remaining format still references the hash sidecar',
+        );
+
+        await FileManifest.deleteRecords([mp3.id]);
+
+        expect(
+            await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse);
+        expect(
+          await WebFileStore.exists('tts_audio/${mp3.textStoragePath}'),
+          isFalse,
+          reason: 'the sidecar is removed after its last hash reference',
+        );
+      },
+    );
+
     testWidgets('moveRecord to root clears the folder', (WidgetTester t) async {
       await VideoManifest.addRecord(VideoRecord(
         id: 'vid_root_1',
@@ -443,14 +553,14 @@ void main() {
     final sidecarBytes = Uint8List.fromList([97, 98]);
 
     AudioRecord audioRecord(String id, String hash) => AudioRecord(
-      id: id,
-      name: id,
-      hash: hash,
-      format: 'wav',
-      createdAt: DateTime.utc(2024),
-      size: audioBytes.length,
-      sourceText: 'ab',
-    );
+          id: id,
+          name: id,
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.utc(2024),
+          size: audioBytes.length,
+          sourceText: 'ab',
+        );
 
     Future<void> addRecordWithFiles(AudioRecord record) async {
       await FileManifest.writeFile(record.storagePath, audioBytes);
@@ -464,6 +574,15 @@ void main() {
       final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
       final records =
           data[ManifestTables.audioRecords] as List<dynamic>? ?? const [];
+      return records.map((row) => (row as Map)['id'] as String).toList();
+    }
+
+    Future<List<String>> persistedImageIds() async {
+      final raw = await WebFileStore.read('manifest_database_data');
+      expect(raw, isNotNull);
+      final data = jsonDecode(utf8.decode(raw!)) as Map<String, dynamic>;
+      final records =
+          data[ManifestTables.imageRecords] as List<dynamic>? ?? const [];
       return records.map((row) => (row as Map)['id'] as String).toList();
     }
 
@@ -528,9 +647,8 @@ void main() {
 
       await delete();
 
-      final remainingRecords = records
-          .where((record) => !deletedIds.contains(record.id))
-          .toList();
+      final remainingRecords =
+          records.where((record) => !deletedIds.contains(record.id)).toList();
       final remainingIds = remainingRecords.map((record) => record.id).toList();
       expect(
         (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
@@ -625,15 +743,15 @@ void main() {
       expect(
         registrationWroteBeforeDeleteFailed,
         isFalse,
-        reason: 'registration persistence must wait for the failed delete rollback',
+        reason:
+            'registration persistence must wait for the failed delete rollback',
       );
       expect(
         (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
         unorderedEquals(originalIds),
       );
-      final cachedIdsAfterRegistration = concurrentRegistrationInFileManifest
-          ? originalIds
-          : deletedIds;
+      final cachedIdsAfterRegistration =
+          concurrentRegistrationInFileManifest ? originalIds : deletedIds;
       expect(
         (await FileManifest.loadRecords()).map((record) => record.id),
         unorderedEquals(cachedIdsAfterRegistration),
@@ -731,6 +849,229 @@ void main() {
     );
 
     testWidgets(
+      'single delete restores metadata and audio when sidecar cleanup fails',
+      (WidgetTester t) async {
+        final record = audioRecord(
+          'audio_single_cleanup_retry',
+          'hash_single_cleanup_retry',
+        );
+        final failure = StateError('injected sidecar cleanup failure');
+        var shouldFail = true;
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'audio_cleanup_failure_test',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (value) => value.toMap(),
+          onExtraDelete: (value) async {
+            if (shouldFail) {
+              shouldFail = false;
+              await WebFileStore.delete('tts_audio/${value.textStoragePath}');
+              throw failure;
+            }
+            await WebFileStore.delete('tts_audio/${value.textStoragePath}');
+          },
+        );
+
+        await FileManifest.writeFile(record.storagePath, audioBytes);
+        await FileManifest.writeFile(record.textStoragePath, sidecarBytes);
+        await operations.addRecord(record);
+
+        await expectLater(
+          operations.deleteRecord(record.id),
+          throwsA(same(failure)),
+        );
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          contains(record.id),
+          reason: 'failed file cleanup must restore durable audio metadata',
+        );
+        expect(await persistedAudioIds(), contains(record.id));
+        expect(
+          (await operations.loadRecords()).map((row) => row.id),
+          contains(record.id),
+          reason: 'failed file cleanup must retain the cached audio row',
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${record.storagePath}'),
+          equals(audioBytes),
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${record.textStoragePath}'),
+          equals(sidecarBytes),
+        );
+
+        await operations.deleteRecord(record.id);
+
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+        expect(await operations.loadRecords(), isEmpty);
+        expect(
+          await WebFileStore.exists('tts_audio/${record.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${record.textStoragePath}'),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
+      'batch delete restores metadata and audio when sidecar cleanup fails',
+      (WidgetTester t) async {
+        final first = audioRecord(
+          'audio_batch_cleanup_retry_1',
+          'hash_batch_cleanup_retry_1',
+        );
+        final second = audioRecord(
+          'audio_batch_cleanup_retry_2',
+          'hash_batch_cleanup_retry_2',
+        );
+        final failure = StateError('injected sidecar cleanup failure');
+        var cleanupCount = 0;
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'audio_cleanup_failure_test',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (value) => value.toMap(),
+          onExtraDelete: (value) async {
+            cleanupCount++;
+            if (cleanupCount == 2) {
+              throw failure;
+            }
+            await WebFileStore.delete('tts_audio/${value.textStoragePath}');
+          },
+        );
+        for (final record in [first, second]) {
+          await FileManifest.writeFile(record.storagePath, audioBytes);
+          await FileManifest.writeFile(record.textStoragePath, sidecarBytes);
+          await operations.addRecord(record);
+        }
+
+        await expectLater(
+          operations.deleteRecords([first.id, second.id]),
+          throwsA(same(failure)),
+        );
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          unorderedEquals([first.id, second.id]),
+          reason: 'failed batch cleanup must restore all durable audio rows',
+        );
+        expect(
+          await persistedAudioIds(),
+          unorderedEquals([first.id, second.id]),
+        );
+        expect(
+          (await operations.loadRecords()).map((row) => row.id),
+          unorderedEquals([first.id, second.id]),
+          reason: 'failed batch cleanup must retain all cached audio rows',
+        );
+        for (final record in [first, second]) {
+          expect(
+            await WebFileStore.read('tts_audio/${record.storagePath}'),
+            equals(audioBytes),
+          );
+          expect(
+            await WebFileStore.read('tts_audio/${record.textStoragePath}'),
+            equals(sidecarBytes),
+          );
+        }
+
+        await operations.deleteRecords([first.id, second.id]);
+
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+        expect(await operations.loadRecords(), isEmpty);
+        for (final record in [first, second]) {
+          expect(
+            await WebFileStore.exists('tts_audio/${record.storagePath}'),
+            isFalse,
+          );
+          expect(
+            await WebFileStore.exists('tts_audio/${record.textStoragePath}'),
+            isFalse,
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'batch cleanup keeps metadata only for primary files still present',
+      (WidgetTester t) async {
+        final first = audioRecord(
+          'audio_batch_primary_cleanup_failure_1',
+          'hash_batch_primary_cleanup_failure_1',
+        );
+        final second = audioRecord(
+          'audio_batch_primary_cleanup_failure_2',
+          'hash_batch_primary_cleanup_failure_2',
+        );
+        final failure = StateError('injected second primary file failure');
+        var primaryDeleteCount = 0;
+        final operations = ManifestOperations<AudioRecord>(
+          manifestKey: 'audio_primary_cleanup_failure_test',
+          storageDirName: 'tts_audio',
+          fromMap: AudioRecord.fromMap,
+          tableName: ManifestTables.audioRecords,
+          toMap: (value) => value.toMap(),
+          onExtraDelete: (value) =>
+              WebFileStore.delete('tts_audio/${value.textStoragePath}'),
+        )..beforeAudioPrimaryDeleteForTesting = (name) async {
+            primaryDeleteCount++;
+            if (primaryDeleteCount == 2) throw failure;
+          };
+
+        for (final record in [first, second]) {
+          await FileManifest.writeFile(record.storagePath, audioBytes);
+          await FileManifest.writeFile(record.textStoragePath, sidecarBytes);
+          await operations.addRecord(record);
+        }
+
+        await expectLater(
+          operations.deleteRecords([first.id, second.id]),
+          throwsA(same(failure)),
+        );
+
+        for (final checkRows in [
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          await persistedAudioIds(),
+          (await operations.loadRecords()).map((record) => record.id),
+        ]) {
+          expect(checkRows, equals([second.id]));
+        }
+        expect(
+          await WebFileStore.exists('tts_audio/${first.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${first.textStoragePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${second.storagePath}'),
+          isTrue,
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${second.textStoragePath}'),
+          equals(sidecarBytes),
+        );
+
+        await operations.deleteRecords([second.id]);
+
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+        expect(await operations.loadRecords(), isEmpty);
+        expect(
+          await WebFileStore.exists('tts_audio/${second.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${second.textStoragePath}'),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
       'single delete rollback preserves a concurrent audio registration',
       (WidgetTester t) async {
         final record = audioRecord(
@@ -766,6 +1107,217 @@ void main() {
           retry: () => FileManifest.deleteRecords([first.id, second.id]),
           concurrentId: 'audio_batch_concurrent_registration',
           registerConcurrentRecord: FileManifest.addRecord,
+        );
+      },
+    );
+
+    testWidgets(
+      'same-hash registration waits for audio sidecar deletion across formats',
+      (WidgetTester t) async {
+        const hash = 'hash_concurrent_shared_sidecar_delete';
+        final target = audioRecord(
+          'audio_concurrent_shared_sidecar_delete_target',
+          hash,
+        );
+        final concurrent = AudioRecord(
+          id: 'audio_concurrent_shared_sidecar_delete_survivor',
+          name: 'survivor',
+          hash: hash,
+          format: 'mp3',
+          createdAt: DateTime.utc(2024),
+          size: audioBytes.length,
+          sourceText: 'ab',
+        );
+        await addRecordWithFiles(target);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+
+        final deleteWriteStarted = Completer<void>();
+        final releaseDeleteWrite = Completer<void>();
+        var hookInvoked = false;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          if (hookInvoked) return;
+          hookInvoked = true;
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          deleteWriteStarted.complete();
+          await releaseDeleteWrite.future;
+        };
+
+        final deleteFuture = FileManifest.deleteRecord(target.id);
+        await deleteWriteStarted.future;
+
+        final registrationAttempted = Completer<void>()..complete();
+        final registrationStarted = Completer<void>();
+        final registrationFuture = FileManifest.withStorageFileSaveLock(
+          concurrent.storageFileName,
+          () async {
+            registrationStarted.complete();
+            await FileManifest.writeFile(concurrent.storagePath, audioBytes);
+            await FileManifest.writeFile(
+              concurrent.textStoragePath,
+              sidecarBytes,
+            );
+            await FileManifest.addRecord(concurrent);
+          },
+        );
+        await registrationAttempted.future;
+        await t.pump();
+        expect(
+          registrationStarted.isCompleted,
+          isFalse,
+          reason: 'the different-format save must wait on the shared hash',
+        );
+
+        releaseDeleteWrite.complete();
+        await deleteFuture;
+        await registrationFuture;
+
+        expect(hookInvoked, isTrue);
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          equals([concurrent.id]),
+        );
+        expect(await persistedAudioIds(), equals([concurrent.id]));
+        expect(
+          (await FileManifest.loadRecords()).map((record) => record.id),
+          equals([concurrent.id]),
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${concurrent.storagePath}'),
+          isTrue,
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${concurrent.textStoragePath}'),
+          equals(sidecarBytes),
+          reason: 'the surviving format must have its hash sidecar',
+        );
+      },
+    );
+
+    testWidgets(
+      'batch delete acquires storage locks before shared hash locks',
+      (WidgetTester t) async {
+        const hash = 'hash_batch_shared_lock_order';
+        final first = AudioRecord(
+          id: 'audio_batch_shared_lock_order_mp3',
+          name: 'first',
+          hash: hash,
+          format: 'mp3',
+          createdAt: DateTime.utc(2024),
+          size: audioBytes.length,
+          sourceText: 'ab',
+        );
+        final second = AudioRecord(
+          id: 'audio_batch_shared_lock_order_wav',
+          name: 'second',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.utc(2024),
+          size: audioBytes.length,
+          sourceText: 'ab',
+        );
+        final concurrent = AudioRecord(
+          id: 'audio_batch_shared_lock_order_registration',
+          name: 'concurrent',
+          hash: hash,
+          format: second.format,
+          createdAt: DateTime.utc(2024),
+          size: audioBytes.length,
+          sourceText: 'ab',
+        );
+        await addRecordWithFiles(first);
+        await addRecordWithFiles(second);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+
+        final externalLockAcquired = Completer<void>();
+        final releaseExternalLock = Completer<void>();
+        final externalHashLock = FileManifest.withStorageFileSaveLock(
+          '$hash.ogg',
+          () async {
+            externalLockAcquired.complete();
+            await releaseExternalLock.future;
+          },
+        );
+        await externalLockAcquired.future;
+
+        final batchQueuedForHash = Completer<void>();
+        FileManifest.onWaitingForAudioHashFileSaveForTesting = (queuedHash) {
+          if (queuedHash == hash && !batchQueuedForHash.isCompleted) {
+            batchQueuedForHash.complete();
+          }
+        };
+        final deleteFuture = FileManifest.deleteRecords([first.id, second.id]);
+        await batchQueuedForHash.future;
+
+        final registrationQueued = Completer<void>();
+        final cancelRegistration = Completer<void>();
+        final registrationFuture = FileManifest.withStorageFileSaveLock(
+          second.storageFileName,
+          () async {
+            await FileManifest.writeFile(concurrent.storagePath, audioBytes);
+            await FileManifest.writeFile(
+              concurrent.textStoragePath,
+              sidecarBytes,
+            );
+            await FileManifest.addRecord(concurrent);
+          },
+          waitForPrevious: (previous) async {
+            await Future.any<void>([
+              previous,
+              cancelRegistration.future.then<void>(
+                (_) => throw StateError('cancelled lock-order regression'),
+              ),
+            ]);
+          },
+          onQueued: () {
+            if (!registrationQueued.isCompleted) {
+              registrationQueued.complete();
+            }
+          },
+        );
+        await registrationQueued.future;
+        releaseExternalLock.complete();
+
+        try {
+          await Future.wait<void>([deleteFuture, registrationFuture])
+              .timeout(const Duration(seconds: 5));
+        } on TimeoutException {
+          cancelRegistration.complete();
+          await expectLater(
+            registrationFuture,
+            throwsA(isA<StateError>()),
+          );
+          await deleteFuture;
+          fail('batch deletion deadlocked with a concurrent same-hash save');
+        } finally {
+          FileManifest.onWaitingForAudioHashFileSaveForTesting = null;
+          if (!releaseExternalLock.isCompleted) {
+            releaseExternalLock.complete();
+          }
+        }
+        await externalHashLock;
+
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          equals([concurrent.id]),
+        );
+        expect(await persistedAudioIds(), equals([concurrent.id]));
+        expect(
+          (await FileManifest.loadRecords()).map((record) => record.id),
+          equals([concurrent.id]),
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${concurrent.storagePath}'),
+          equals(audioBytes),
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${concurrent.textStoragePath}'),
+          equals(sidecarBytes),
         );
       },
     );
@@ -813,7 +1365,8 @@ void main() {
         final deleteWriteStarted = Completer<void>();
         final updateWriteStarted = Completer<void>();
         final releaseDeleteWrite = Completer<void>();
-        final failure = StateError('injected audio deletion persistence failure');
+        final failure =
+            StateError('injected audio deletion persistence failure');
         var saveCount = 0;
         ManifestDatabase.beforeWebDataSaveForTesting = () async {
           saveCount++;
@@ -854,7 +1407,8 @@ void main() {
           unorderedEquals([target.id, survivor.id]),
         );
         expect(
-          databaseRecords.singleWhere((row) => row['id'] == survivor.id)['name'],
+          databaseRecords
+              .singleWhere((row) => row['id'] == survivor.id)['name'],
           'updated survivor',
         );
         expect(
@@ -915,7 +1469,8 @@ void main() {
         final deleteWriteStarted = Completer<void>();
         final clearWriteStarted = Completer<void>();
         final releaseDeleteWrite = Completer<void>();
-        final failure = StateError('injected audio deletion persistence failure');
+        final failure =
+            StateError('injected audio deletion persistence failure');
         var saveCount = 0;
         ManifestDatabase.beforeWebDataSaveForTesting = () async {
           saveCount++;
@@ -946,6 +1501,317 @@ void main() {
         );
         expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
         expect(await persistedAudioIds(), isEmpty);
+      },
+    );
+
+    testWidgets(
+      'audio table clear waits for file cleanup failure rollback',
+      (WidgetTester t) async {
+        final target = audioRecord(
+          'audio_clear_after_cleanup_failure_target',
+          'hash_clear_after_cleanup_failure_target',
+        );
+        await addRecordWithFiles(target);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+        expect(await persistedAudioIds(), equals([target.id]));
+
+        final cleanupStarted = Completer<void>();
+        final releaseCleanupFailure = Completer<void>();
+        final clearCompleted = Completer<void>();
+        final failure = StateError('injected audio file cleanup failure');
+        FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
+          cleanupStarted.complete();
+          await releaseCleanupFailure.future;
+          throw failure;
+        };
+
+        final deleteFuture = FileManifest.deleteRecord(target.id);
+        await cleanupStarted.future;
+        final clearFuture = () async {
+          await ManifestDatabase.clearRecords(ManifestTables.audioRecords);
+          clearCompleted.complete();
+        }();
+        await t.pump();
+        final clearCompletedBeforeCleanup = clearCompleted.isCompleted;
+        releaseCleanupFailure.complete();
+
+        try {
+          await expectLater(deleteFuture, throwsA(same(failure)));
+          await clearFuture;
+        } finally {
+          FileManifest.beforeAudioPrimaryDeleteForTesting = null;
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+        }
+
+        expect(
+          clearCompletedBeforeCleanup,
+          isFalse,
+          reason: 'clear must wait until file cleanup rollback finishes',
+        );
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+        expect(await persistedAudioIds(), isEmpty);
+        expect(
+          await WebFileStore.read('tts_audio/${target.storagePath}'),
+          equals(audioBytes),
+          reason: 'failed cleanup leaves the audio file available',
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${target.textStoragePath}'),
+          equals(sidecarBytes),
+          reason: 'failed cleanup restores the sidecar',
+        );
+      },
+    );
+
+    testWidgets(
+      'failed audio cleanup preserves a concurrent record update',
+      (WidgetTester t) async {
+        final target = audioRecord(
+          'audio_update_after_cleanup_failure_target',
+          'hash_update_after_cleanup_failure_target',
+        );
+        await addRecordWithFiles(target);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+
+        final cleanupStarted = Completer<void>();
+        final releaseCleanupFailure = Completer<void>();
+        final updateCompleted = Completer<void>();
+        final failure = StateError('injected audio file cleanup failure');
+        FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
+          cleanupStarted.complete();
+          await releaseCleanupFailure.future;
+          throw failure;
+        };
+
+        final deleteFuture = FileManifest.deleteRecord(target.id);
+        await cleanupStarted.future;
+        final updateFuture = () async {
+          await FileManifest.updateRecord(target.copyWith(name: 'updated'));
+          updateCompleted.complete();
+        }();
+        await t.pump();
+        final updateCompletedBeforeCleanup = updateCompleted.isCompleted;
+        releaseCleanupFailure.complete();
+
+        try {
+          await expectLater(deleteFuture, throwsA(same(failure)));
+          await updateFuture;
+        } finally {
+          FileManifest.beforeAudioPrimaryDeleteForTesting = null;
+        }
+
+        expect(
+          updateCompletedBeforeCleanup,
+          isFalse,
+          reason: 'record updates must wait for failed deletion rollback',
+        );
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'updated',
+        );
+        expect(
+          (await FileManifest.loadRecords()).single.name,
+          'updated',
+        );
+        expect(
+          (await persistedAudioRecord(target.id))['name'],
+          'updated',
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${target.storagePath}'),
+          equals(audioBytes),
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${target.textStoragePath}'),
+          equals(sidecarBytes),
+        );
+
+        await FileManifest.deleteRecord(target.id);
+        expect(await persistedAudioIds(), isEmpty);
+        expect(
+          await WebFileStore.exists('tts_audio/${target.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets(
+      'batch audio deletion preserves an update to a surviving record',
+      (WidgetTester t) async {
+        final target = audioRecord(
+          'audio_batch_update_survivor_delete_target',
+          'hash_batch_update_survivor_delete_target',
+        );
+        final survivor = audioRecord(
+          'audio_batch_update_survivor_record',
+          'hash_batch_update_survivor_record',
+        );
+        await addRecordWithFiles(target);
+        await addRecordWithFiles(survivor);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+
+        final cleanupStarted = Completer<void>();
+        final releaseCleanup = Completer<void>();
+        FileManifest.beforeAudioPrimaryDeleteForTesting = (_) async {
+          cleanupStarted.complete();
+          await releaseCleanup.future;
+        };
+
+        final deleteFuture = FileManifest.deleteRecords([target.id]);
+        await cleanupStarted.future;
+        var updateCompleted = false;
+        final updateFuture = FileManifest.updateRecord(
+          survivor.copyWith(name: 'updated survivor'),
+        ).whenComplete(() => updateCompleted = true);
+        await t.pump();
+        final updateCompletedBeforeCleanup = updateCompleted;
+        final cacheNameWhileDeletePaused = (await FileManifest.loadRecords())
+            .singleWhere((record) => record.id == survivor.id)
+            .name;
+
+        releaseCleanup.complete();
+        try {
+          await deleteFuture;
+          await updateFuture;
+        } finally {
+          FileManifest.beforeAudioPrimaryDeleteForTesting = null;
+        }
+
+        expect(updateCompletedBeforeCleanup, isFalse);
+        expect(cacheNameWhileDeletePaused, 'updated survivor');
+        expect(await persistedAudioIds(), equals([survivor.id]));
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['name'],
+          'updated survivor',
+        );
+        expect(
+          (await FileManifest.loadRecords()).single.name,
+          'updated survivor',
+        );
+        expect(
+          (await persistedAudioRecord(survivor.id))['name'],
+          'updated survivor',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${survivor.storagePath}'),
+          isTrue,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${survivor.textStoragePath}'),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      'failed audio delete rollback survives a concurrent image save',
+      (WidgetTester t) async {
+        final target = audioRecord(
+          'audio_concurrent_image_save_delete_target',
+          'hash_concurrent_image_save_delete_target',
+        );
+        final image = ImageRecord(
+          id: 'image_concurrent_audio_delete_save',
+          name: 'concurrent image',
+          hash: 'hash_concurrent_audio_delete_image',
+          format: 'png',
+          createdAt: DateTime.utc(2024),
+          size: 1,
+        );
+        await addRecordWithFiles(target);
+        await ManifestDatabase.getAllAudioRecords();
+        await FileManifest.loadRecords();
+        await ManifestDatabase.getAllImageRecords();
+        expect(await persistedAudioIds(), equals([target.id]));
+        expect(await persistedImageIds(), isEmpty);
+
+        final deleteWriteStarted = Completer<void>();
+        final imageWriteStarted = Completer<void>();
+        final releaseDeleteWrite = Completer<void>();
+        final failure =
+            StateError('injected audio deletion persistence failure');
+        var saveCount = 0;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          saveCount++;
+          if (saveCount == 1) {
+            deleteWriteStarted.complete();
+            await releaseDeleteWrite.future;
+            throw failure;
+          }
+          if (saveCount == 2) imageWriteStarted.complete();
+        };
+
+        final deleteFuture = FileManifest.deleteRecord(target.id);
+        await deleteWriteStarted.future;
+        final imageFuture = ManifestDatabase.insertImageRecord(image.toMap());
+        await t.pump();
+        final imageWroteBeforeDeleteFailed = imageWriteStarted.isCompleted;
+        releaseDeleteWrite.complete();
+
+        await expectLater(deleteFuture, throwsA(same(failure)));
+        await imageFuture;
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+
+        expect(
+          imageWroteBeforeDeleteFailed,
+          isFalse,
+          reason: 'a JSON save must wait for the audio rollback to finish',
+        );
+        expect(await persistedAudioIds(), equals([target.id]));
+        expect(await persistedImageIds(), equals([image.id]));
+        expect(
+          (await ManifestDatabase.getAllAudioRecords()).single['id'],
+          target.id,
+        );
+        expect(
+          (await ManifestDatabase.getAllImageRecords()).single['id'],
+          image.id,
+        );
+        expect(
+          (await FileManifest.loadRecords()).map((record) => record.id),
+          equals([target.id]),
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.storagePath}'),
+          isTrue,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
+          isTrue,
+        );
+
+        await FileManifest.deleteRecord(target.id);
+
+        expect(await persistedAudioIds(), isEmpty);
+        expect(await persistedImageIds(), equals([image.id]));
+        expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
+        expect(
+          (await ManifestDatabase.getAllImageRecords()).single['id'],
+          image.id,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.storagePath}'),
+          isFalse,
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${target.textStoragePath}'),
+          isFalse,
+        );
       },
     );
   });

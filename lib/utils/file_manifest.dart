@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 import 'web_file_store.dart';
 import 'file_record.dart';
+import '../services/manifest_database.dart';
 import '../services/manifest_operations.dart';
 import 'folder_path_utils.dart';
 
@@ -159,6 +160,13 @@ class _StorageFileSaveContext {
   bool active = true;
 }
 
+class _AudioHashFileSaveContext {
+  _AudioHashFileSaveContext(this.hashes);
+
+  final Set<String> hashes;
+  bool active = true;
+}
+
 // ====================================================================
 // FileManifest — thin wrapper around ManifestOperations
 // ====================================================================
@@ -167,10 +175,110 @@ class _StorageFileSaveContext {
 class FileManifest {
   static final Map<String, Future<void>> _storageFileSaveTails = {};
   static final Object _storageFileSaveZoneKey = Object();
+  static final Map<String, Future<void>> _audioHashFileSaveTails = {};
+  static final Object _audioHashFileSaveZoneKey = Object();
+  static void Function(String hash)? onWaitingForAudioHashFileSaveForTesting;
+  @visibleForTesting
+  static set beforeAudioPrimaryDeleteForTesting(
+    Future<void> Function(String name)? callback,
+  ) {
+    _ops.beforeAudioPrimaryDeleteForTesting = callback;
+  }
+
   static Future<void> _folderRemovalTail = Future<void>.value();
   static Completer<void> _folderRemovalsFinished = Completer<void>()
     ..complete();
   static int _pendingFolderRemovals = 0;
+
+  static String _audioHashForStorageName(String storageName) {
+    final name = path.basename(storageName);
+    final extensionSeparator = name.lastIndexOf('.');
+    return extensionSeparator == -1
+        ? name
+        : name.substring(0, extensionSeparator);
+  }
+
+  static String? _audioHashForSidecar(String fileName) {
+    final name = path.basename(fileName);
+    if (!name.toLowerCase().endsWith('.txt')) return null;
+    return name.substring(0, name.length - '.txt'.length);
+  }
+
+  static Future<T> _withAudioHashFileSaveLock<T>(
+    String hash,
+    Future<T> Function() operation, {
+    Future<void> Function(Future<void> previous)? waitForPrevious,
+    void Function()? onQueued,
+  }) async {
+    final currentHashContext = Zone.current[_audioHashFileSaveZoneKey];
+    final currentStorageContext = Zone.current[_storageFileSaveZoneKey];
+    final activeHashContext = currentHashContext is _AudioHashFileSaveContext &&
+            currentHashContext.active
+        ? currentHashContext
+        : null;
+    if (activeHashContext != null && activeHashContext.hashes.contains(hash)) {
+      return operation();
+    }
+
+    final isNestedSave = activeHashContext != null ||
+        (currentStorageContext is _StorageFileSaveContext &&
+            currentStorageContext.active);
+    while (_pendingFolderRemovals > 0 && !isNestedSave) {
+      final folderRemovalFinished = _folderRemovalsFinished.future;
+      await folderRemovalFinished;
+    }
+
+    final previous = _audioHashFileSaveTails[hash];
+    final release = Completer<void>();
+    final tail = previous == null
+        ? release.future
+        : previous.then((_) => release.future);
+    _audioHashFileSaveTails[hash] = tail;
+    var previousFinished = previous == null;
+
+    void releaseLock() {
+      if (release.isCompleted) return;
+      release.complete();
+      if (!identical(_audioHashFileSaveTails[hash], tail)) return;
+      if (previousFinished) {
+        _audioHashFileSaveTails.remove(hash);
+      } else {
+        unawaited(tail.then((_) {
+          if (identical(_audioHashFileSaveTails[hash], tail)) {
+            _audioHashFileSaveTails.remove(hash);
+          }
+        }));
+      }
+    }
+
+    if (previous != null) {
+      try {
+        onWaitingForAudioHashFileSaveForTesting?.call(hash);
+        onQueued?.call();
+        final previousReleased = previous.then((_) {
+          previousFinished = true;
+        });
+        await (waitForPrevious?.call(previousReleased) ?? previousReleased);
+      } catch (_) {
+        releaseLock();
+        rethrow;
+      }
+    }
+
+    final saveContext = _AudioHashFileSaveContext({
+      ...?activeHashContext?.hashes,
+      hash,
+    });
+    try {
+      return await runZoned<Future<T>>(
+        operation,
+        zoneValues: {_audioHashFileSaveZoneKey: saveContext},
+      );
+    } finally {
+      saveContext.active = false;
+      releaseLock();
+    }
+  }
 
   static final _ops = ManifestOperations<AudioRecord>(
     manifestKey: 'audio_manifest',
@@ -199,6 +307,21 @@ class FileManifest {
   static Future<T> withStorageFileSaveLock<T>(
     String storageName,
     Future<T> Function() operation, {
+    Future<void> Function(Future<void> previous)? waitForPrevious,
+    void Function()? onQueued,
+  }) =>
+      _withStorageFileSaveLock(
+        storageName,
+        operation,
+        acquireAudioHashLock: true,
+        waitForPrevious: waitForPrevious,
+        onQueued: onQueued,
+      );
+
+  static Future<T> _withStorageFileSaveLock<T>(
+    String storageName,
+    Future<T> Function() operation, {
+    required bool acquireAudioHashLock,
     Future<void> Function(Future<void> previous)? waitForPrevious,
     void Function()? onQueued,
   }) async {
@@ -264,7 +387,14 @@ class FileManifest {
     final saveContext = _StorageFileSaveContext(storageName);
     try {
       return await runZoned<Future<T>>(
-        operation,
+        () => acquireAudioHashLock
+            ? _withAudioHashFileSaveLock(
+                _audioHashForStorageName(storageName),
+                operation,
+                waitForPrevious: waitForPrevious,
+                onQueued: notifyQueued,
+              )
+            : operation(),
         zoneValues: {_storageFileSaveZoneKey: saveContext},
       );
     } finally {
@@ -287,7 +417,10 @@ class FileManifest {
 
     try {
       await previousRemoval;
-      final activeSaves = _storageFileSaveTails.values.toList();
+      final activeSaves = [
+        ..._storageFileSaveTails.values,
+        ..._audioHashFileSaveTails.values,
+      ];
       if (activeSaves.isNotEmpty) {
         onWaitingForSaves?.call();
         await Future.wait(activeSaves);
@@ -339,12 +472,16 @@ class FileManifest {
       }
     }
     if (record == null) {
-      await _ops.deleteRecord(id, preserveFiles: preserveFiles);
+      await ManifestDatabase.withAudioRecordMutationLock(
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+      );
       return;
     }
     await withStorageFileSaveLock(
       record.storageFileName,
-      () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+      () => ManifestDatabase.withAudioRecordMutationLock(
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+      ),
     );
   }
 
@@ -360,24 +497,77 @@ class FileManifest {
 
     Future<void> deleteWithLocks(int index) async {
       if (index == storageNames.length) {
-        await _ops.deleteRecords(ids);
+        await _withAudioHashFileSaveLocks(
+          storageNames.map(_audioHashForStorageName),
+          () => ManifestDatabase.withAudioRecordMutationLock(
+            () => _ops.deleteRecords(ids),
+          ),
+        );
         return;
       }
-      await withStorageFileSaveLock(
+      await _withStorageFileSaveLock(
         storageNames[index],
         () => deleteWithLocks(index + 1),
+        acquireAudioHashLock: false,
       );
     }
 
     await deleteWithLocks(0);
   }
 
+  static Future<T> _withAudioHashFileSaveLocks<T>(
+    Iterable<String> hashes,
+    Future<T> Function() operation,
+  ) {
+    final sortedHashes = hashes.toSet().toList()..sort();
+
+    Future<T> acquire(int index) {
+      if (index == sortedHashes.length) return operation();
+      return _withAudioHashFileSaveLock(
+        sortedHashes[index],
+        () => acquire(index + 1),
+      );
+    }
+
+    return acquire(0);
+  }
+
   static Future<void> updateRecord(AudioRecord updated) =>
-      _ops.updateRecord(updated);
+      _withRecordStorageFileSaveLock(
+        updated.id,
+        () => _ops.updateRecord(updated),
+      );
+
   static Future<void> renameRecord(String id, String newName) =>
-      _ops.renameRecord(id, newName);
+      _withRecordStorageFileSaveLock(
+        id,
+        () => _ops.renameRecord(id, newName),
+      );
+
   static Future<void> moveRecord(String id, String targetFolder) =>
-      _ops.moveRecord(id, targetFolder);
+      _withRecordStorageFileSaveLock(
+        id,
+        () => _ops.moveRecord(id, targetFolder),
+      );
+
+  static Future<void> _withRecordStorageFileSaveLock(
+    String id,
+    Future<void> Function() operation,
+  ) async {
+    final records = await _ops.loadRecords();
+    AudioRecord? record;
+    for (final candidate in records) {
+      if (candidate.id == id) {
+        record = candidate;
+        break;
+      }
+    }
+    if (record == null) {
+      await operation();
+      return;
+    }
+    await withStorageFileSaveLock(record.storageFileName, operation);
+  }
 
   static Future<AudioRecord?> getRecordByHash(String hash) async {
     final records = await _ops.loadRecords();
@@ -388,13 +578,27 @@ class FileManifest {
     }
   }
 
-  static Future<String> writeFile(String fileName, Uint8List data) =>
-      _ops.writeFile(fileName, data);
+  static Future<String> writeFile(String fileName, Uint8List data) {
+    final hash = _audioHashForSidecar(fileName);
+    if (hash == null) return _ops.writeFile(fileName, data);
+    return _withAudioHashFileSaveLock(
+      hash,
+      () => _ops.writeFile(fileName, data),
+    );
+  }
+
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
-  static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
+  static Future<bool> deleteFile(String fileName) {
+    final hash = _audioHashForSidecar(fileName);
+    if (hash == null) return _ops.deleteFile(fileName);
+    return _withAudioHashFileSaveLock(
+      hash,
+      () => _ops.deleteFile(fileName),
+    );
+  }
 
   // Folder management
   static Future<void> addFolder(String name) => _ops.addFolder(name);

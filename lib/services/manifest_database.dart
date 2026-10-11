@@ -429,7 +429,6 @@ class ManifestDatabase {
       _webData![ManifestTables.videoRecords] = videoList;
       await _saveWebData();
       await StartupPreferences.setBool('migrated_video_records', true);
-
     });
   }
 
@@ -538,43 +537,66 @@ class ManifestDatabase {
     required List<String> folderTables,
     required bool removeLegacyTable,
   }) async {
-    final Uint8List? raw;
-    try {
-      raw = await WebFileStore.read(_webStoreKey);
-    } catch (error) {
-      throw StartupDataValidationUnavailable.migration(error);
-    }
-    if (raw == null || raw.isEmpty) {
-      _webData = emptyWebData();
-      await _migrateOldVideoRecordsJson();
-      await _migrateLegacyFoldersJsonV2(
-        folderTables: folderTables,
-        removeLegacyTable: removeLegacyTable,
-      );
-      return;
-    }
+    await _withJsonRecordRegistrationLock(() async {
+      final Uint8List? raw;
+      try {
+        raw = await WebFileStore.read(_webStoreKey);
+      } catch (error) {
+        throw StartupDataValidationUnavailable.migration(error);
+      }
+      if (raw == null || raw.isEmpty) {
+        _webData = emptyWebData();
+        await _migrateOldVideoRecordsJson();
+        await _migrateLegacyFoldersJsonV2(
+          folderTables: folderTables,
+          removeLegacyTable: removeLegacyTable,
+        );
+        return;
+      }
 
-    final migrateOldVideos =
-        await StartupPreferences.getBool('migrated_video_records') != true;
-    final result = await json_parser.migrateWebManifestData(
-      raw,
-      folderTables,
-      removeLegacyTable,
-      migrateOldVideos,
-    );
-    final status = result['status'];
-    if (status == 'parseError' || status == 'invalidManifest') {
-      throw StartupDataValidationUnavailable.migration(
-        FormatException('${result['error']}'),
+      final migrateOldVideos =
+          await StartupPreferences.getBool('migrated_video_records') != true;
+      final result = await json_parser.migrateWebManifestData(
+        raw,
+        folderTables,
+        removeLegacyTable,
+        migrateOldVideos,
       );
-    }
+      final status = result['status'];
+      if (status == 'parseError' || status == 'invalidManifest') {
+        throw StartupDataValidationUnavailable.migration(
+          FormatException('${result['error']}'),
+        );
+      }
 
-    if (status == 'videoError' || status == 'folderError') {
-      if (result['videoChanged'] == true) {
+      if (status == 'videoError' || status == 'folderError') {
+        if (result['videoChanged'] == true) {
+          final payload = result['payloadBytes'];
+          if (payload is! Uint8List || payload.isEmpty) {
+            throw StartupDataValidationUnavailable.migration(
+              StateError('Missing partially migrated web manifest.'),
+            );
+          }
+          await _writeWebMigrationData(payload);
+        }
+        if (result['setVideoFlag'] == true) {
+          await StartupPreferences.setBool('migrated_video_records', true);
+        }
+        throw StartupDataValidationUnavailable.migration(
+          StateError('${result['error']}'),
+        );
+      }
+
+      if (status != 'ok') {
+        throw StartupDataValidationUnavailable.migration(
+          StateError('Invalid web manifest migration result.'),
+        );
+      }
+      if (result['changed'] == true) {
         final payload = result['payloadBytes'];
         if (payload is! Uint8List || payload.isEmpty) {
           throw StartupDataValidationUnavailable.migration(
-            StateError('Missing partially migrated web manifest.'),
+            StateError('Missing migrated web manifest.'),
           );
         }
         await _writeWebMigrationData(payload);
@@ -582,43 +604,24 @@ class ManifestDatabase {
       if (result['setVideoFlag'] == true) {
         await StartupPreferences.setBool('migrated_video_records', true);
       }
-      throw StartupDataValidationUnavailable.migration(
-        StateError('${result['error']}'),
-      );
-    }
-
-    if (status != 'ok') {
-      throw StartupDataValidationUnavailable.migration(
-        StateError('Invalid web manifest migration result.'),
-      );
-    }
-    if (result['changed'] == true) {
-      final payload = result['payloadBytes'];
-      if (payload is! Uint8List || payload.isEmpty) {
-        throw StartupDataValidationUnavailable.migration(
-          StateError('Missing migrated web manifest.'),
+      _webData = null;
+      if (result['foldersMigrated'] == true) {
+        debugPrint(
+          '[ManifestDatabase] Migrated legacy folders to ${folderTables.length} '
+          'per-type table(s) (JSON)',
         );
       }
-      await _writeWebMigrationData(payload);
-    }
-    if (result['setVideoFlag'] == true) {
-      await StartupPreferences.setBool('migrated_video_records', true);
-    }
-    _webData = null;
-    if (result['foldersMigrated'] == true) {
-      debugPrint(
-        '[ManifestDatabase] Migrated legacy folders to ${folderTables.length} '
-        'per-type table(s) (JSON)',
-      );
-    }
+    });
   }
 
   static Future<void> _writeWebMigrationData(Uint8List encoded) async {
-    try {
-      await WebFileStore.write(_webStoreKey, encoded);
-    } catch (error) {
-      throw StartupDataValidationUnavailable.migration(error);
-    }
+    await _withJsonRecordRegistrationLock(() async {
+      try {
+        await WebFileStore.write(_webStoreKey, encoded);
+      } catch (error) {
+        throw StartupDataValidationUnavailable.migration(error);
+      }
+    });
   }
 
   /// Internal: migrate legacy folders in JSON/web mode (v2 format).
@@ -676,16 +679,18 @@ class ManifestDatabase {
 
   static Future<void> _saveWebData({bool rethrowOnError = false}) async {
     if (_webData == null) return;
-    try {
-      final json = jsonEncode(_webData);
-      await beforeWebDataSaveForTesting?.call();
-      await WebFileStore.write(_webStoreKey, utf8Encode(json));
-    } catch (e, st) {
-      debugPrint('ManifestDatabase._saveWebData error: $e');
-      await AppLogService.error(
-          'ManifestDatabase', '_saveWebData failed', e, st);
-      if (rethrowOnError) rethrow;
-    }
+    await _withJsonRecordRegistrationLock(() async {
+      try {
+        final json = jsonEncode(_webData);
+        await beforeWebDataSaveForTesting?.call();
+        await WebFileStore.write(_webStoreKey, utf8Encode(json));
+      } catch (e, st) {
+        debugPrint('ManifestDatabase._saveWebData error: $e');
+        await AppLogService.error(
+            'ManifestDatabase', '_saveWebData failed', e, st);
+        if (rethrowOnError) rethrow;
+      }
+    });
   }
 
   static Future<T> _withJsonRecordRegistrationLock<T>(
@@ -710,6 +715,15 @@ class ManifestDatabase {
       }
       release.complete();
     }
+  }
+
+  /// Keeps a compound audio metadata and file mutation ordered with JSON
+  /// writers until its cleanup or rollback has completed.
+  static Future<T> withAudioRecordMutationLock<T>(
+    Future<T> Function() operation,
+  ) {
+    if (_useJsonStore) return _withJsonRecordRegistrationLock(operation);
+    return operation();
   }
 
   /// Inserts a record and its folder path in one persistence operation.
@@ -947,7 +961,8 @@ class ManifestDatabase {
         beforeJsonRecordRegistrationForTesting?.call();
         await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+          final list =
+              data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
           list.add(record);
           await _saveWebData();
         });
@@ -973,7 +988,8 @@ class ManifestDatabase {
       if (_useJsonStore) {
         await _withJsonRecordRegistrationLock(() async {
           final data = await _loadWebData();
-          final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+          final list =
+              data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
           final index = list.indexWhere((r) => (r as Map)['id'] == id);
           if (index != -1) {
             (list[index] as Map<String, dynamic>).addAll(updates);
@@ -1005,9 +1021,8 @@ class ManifestDatabase {
           final originalRecords =
               data[ManifestTables.audioRecords] as List<dynamic>?;
           final records = originalRecords ?? <dynamic>[];
-          data[ManifestTables.audioRecords] = records
-              .where((r) => (r as Map)['id'] != id)
-              .toList();
+          data[ManifestTables.audioRecords] =
+              records.where((r) => (r as Map)['id'] != id).toList();
           try {
             await _saveWebData(rethrowOnError: true);
           } catch (_) {
@@ -1044,9 +1059,8 @@ class ManifestDatabase {
               data[ManifestTables.audioRecords] as List<dynamic>?;
           final records = originalRecords ?? <dynamic>[];
           final idSet = ids.toSet();
-          data[ManifestTables.audioRecords] = records
-              .where((r) => !idSet.contains((r as Map)['id']))
-              .toList();
+          data[ManifestTables.audioRecords] =
+              records.where((r) => !idSet.contains((r as Map)['id'])).toList();
           try {
             await _saveWebData(rethrowOnError: true);
           } catch (_) {
