@@ -1157,43 +1157,69 @@ void main() {
         },
       );
 
-      test('allows files within maxFileSizeBytes limit', () async {
-        final adapter = _CapturingAdapter();
-        final mockDio = Dio()..httpClientAdapter = adapter;
+      test(
+        'allows files when the complete multipart request fits the limit',
+        () async {
+          final adapter = _CapturingAdapter();
+          final mockDio = Dio()..httpClientAdapter = adapter;
 
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-          maxFileSizeBytes: 100, // 100 bytes max
-        );
-        final service = AsrService(config: config, dio: mockDio);
+          const config = AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+            maxFileSizeBytes: 40000, // Includes the multipart envelope.
+          );
+          final service = AsrService(config: config, dio: mockDio);
 
-        // 50 bytes < 100 bytes max → should proceed
-        final result = await service.transcribe(
-          audioBytes: Uint8List(50),
-          audioFormat: 'wav',
-        );
-        expect(result.text, equals('Hello world'));
-      });
+          final audioBytes = pcmToWav(Uint8List(32000));
+          final result = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          expect(result.text, equals('Hello world'));
+          expect(adapter.capturedBodyBytes!.length, lessThanOrEqualTo(40000));
+        },
+      );
 
-      test('allows files exactly at maxFileSizeBytes', () async {
-        final adapter = _CapturingAdapter();
-        final mockDio = Dio()..httpClientAdapter = adapter;
+      test(
+        'allows a multipart request whose body exactly meets maxFileSizeBytes',
+        () async {
+          final referenceAdapter = _CapturingAdapter();
+          final referenceDio = Dio()..httpClientAdapter = referenceAdapter;
+          final referenceService = AsrService(
+            config: const AsrConfig(
+              apiKey: 'test-key',
+              host: 'https://api.test.com',
+              maxFileSizeBytes: 40000,
+            ),
+            dio: referenceDio,
+          );
+          final audioBytes = pcmToWav(Uint8List(32000));
+          await referenceService.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          final exactRequestBodyLimit =
+              referenceAdapter.capturedBodyBytes!.length;
 
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-          maxFileSizeBytes: 50, // 50 bytes max
-        );
-        final service = AsrService(config: config, dio: mockDio);
+          final adapter = _CapturingAdapter();
+          final mockDio = Dio()..httpClientAdapter = adapter;
+          final service = AsrService(
+            config: AsrConfig(
+              apiKey: 'test-key',
+              host: 'https://api.test.com',
+              maxFileSizeBytes: exactRequestBodyLimit,
+            ),
+            dio: mockDio,
+          );
 
-        // exactly 50 bytes → should proceed
-        final result = await service.transcribe(
-          audioBytes: Uint8List(50),
-          audioFormat: 'wav',
-        );
-        expect(result.text, equals('Hello world'));
-      });
+          final result = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          expect(result.text, equals('Hello world'));
+          expect(adapter.capturedBodyBytes!.length, exactRequestBodyLimit);
+        },
+      );
 
       test('error message includes file size and limit for clarity', () async {
         const config = AsrConfig(
@@ -1211,8 +1237,8 @@ void main() {
           fail('Expected exception was not thrown');
         } on Exception catch (e) {
           final msg = e.toString();
-          expect(msg, contains('2.0 KB'));
-          expect(msg, contains('1.0 KB'));
+          expect(msg, contains('原始音频 2048 字节'));
+          expect(msg, contains('1024 字节'));
         }
       });
     });

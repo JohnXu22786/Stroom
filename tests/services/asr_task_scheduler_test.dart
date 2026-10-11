@@ -267,13 +267,13 @@ void main() {
       final events = <AsrRequestProgress>[];
       final service = AsrService(
         config: _config.copyWith(
-          maxFileSizeBytes: 100,
+          maxFileSizeBytes: 12000,
           chunking: 'fixedSize',
           fallbackMethod: 'generic',
         ),
         dio: dio,
       );
-      final wav = pcmToWav(Uint8List(140));
+      final wav = pcmToWav(Uint8List(32000));
 
       await service.transcribe(
         audioBytes: wav,

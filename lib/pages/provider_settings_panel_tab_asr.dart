@@ -101,7 +101,7 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 6),
       Text(
-        '选择音频压缩格式，减小上传体积。',
+        '若启用压缩，通用兜底先压缩完整 WAV；编码后的文件或请求体仍超限时，再按下方切块方式切分源 PCM 并逐块编码。',
         style: TextStyle(
           fontSize: 13,
           color: cs.onSurfaceVariant,
@@ -256,13 +256,16 @@ extension _ProviderSettingsPanelTabAsrExt on _ProviderSettingsPanelState {
       case 'silence':
         return '智能分析音频环境 + 候选切点评分。'
             '优先在句末/长静音处切，不重叠输出。'
-            '默认 20s min / 45s target / 60s max。';
+            '默认 20s min / 45s target / 60s max。'
+            '仅在通用兜底触发后使用；压缩切块仅支持 PCM WAV。';
       case 'fixedDuration':
-        return '每 N 秒切一块（默认 60 秒）。简单直接，可能截断语句。';
+        return '每 N 秒切一块（默认 60 秒）。简单直接，可能截断语句。'
+            '仅在通用兜底触发后使用；压缩切块仅支持 PCM WAV。';
       case 'fixedSize':
-        return '按字节大小切块，确保不超限制。最机械，可能截断语句。';
+        return '按音频数据大小初步切块，再按实际编码文件和请求体大小细分。'
+            '仅在通用兜底触发后使用；压缩切块仅支持 PCM WAV。';
       default:
-        return '不切块。超过限制的文件将被拒绝。';
+        return '不切块。完整压缩后仍超过上限时，文件会被拒绝。';
     }
   }
 }

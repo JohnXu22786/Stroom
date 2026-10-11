@@ -360,7 +360,7 @@ void main() {
         ],
       );
       final dio = Dio()..httpClientAdapter = adapter;
-      final file = await audioFile('partial.wav', dataBytes: 140);
+      final file = await audioFile('partial.wav', dataBytes: 32000);
 
       await expectLater(
         executeAsrBlock(
@@ -373,7 +373,7 @@ void main() {
           bgNotifier: background,
           providerEntries: providers(
             providerTypeConfig: {
-              'maxFileSizeMb': 0.0001,
+              'maxFileSizeMb': 0.012,
               'chunking': 'fixedSize',
               'fallbackMethod': 'generic',
             },
@@ -415,13 +415,13 @@ void main() {
     addTearDown(dio.close);
     final entries = providers(
       providerTypeConfig: {
-        'maxFileSizeMb': 0.0001,
+        'maxFileSizeMb': 0.012,
         'chunking': 'fixedSize',
         'fallbackMethod': 'generic',
       },
     );
     final providerNotifier = ProviderEntriesNotifier()..state = entries;
-    final encodedAudio = base64Encode(pcmToWav(Uint8List(140)));
+    final encodedAudio = base64Encode(pcmToWav(Uint8List(32000)));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -594,7 +594,7 @@ void main() {
         holdResponse: true,
       );
       final dio = Dio()..httpClientAdapter = adapter;
-      final file = await audioFile('cancel.wav', dataBytes: 400);
+      final file = await audioFile('cancel.wav', dataBytes: 32000);
       final cancelToken = CancelToken();
       final pending = executeAsrBlock(
         block: asrBlock(),
@@ -606,7 +606,7 @@ void main() {
         bgNotifier: background,
         providerEntries: providers(
           providerTypeConfig: {
-            'maxFileSizeMb': 0.0001,
+            'maxFileSizeMb': 0.012,
             'chunking': 'fixedSize',
             'fallbackMethod': 'generic',
           },
