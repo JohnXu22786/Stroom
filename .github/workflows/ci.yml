@@ -272,8 +272,13 @@ jobs:
             pattern: tests/*_test.dart tests/models tests/providers tests/utils
           - label: Services-Startup
             pattern: tests/services tests/startup
-          - label: Feature-Modules
-            pattern: tests/task_flow tests/anki tests/catcatch
+          # Task-flow tests exercise long-lived lifecycle and persistence
+          # state. Keep them isolated from the smaller component suites so a
+          # flaky fixture cannot obscure failures in Anki/CatCatch coverage.
+          - label: Task-Flow
+            pattern: tests/task_flow
+          - label: Feature-Components
+            pattern: tests/anki tests/catcatch
           - label: Pages
             pattern: tests/pages/*_test.dart tests/pages/unified_task_list tests/pages/settings tests/pages/ocr
           - label: Chat
