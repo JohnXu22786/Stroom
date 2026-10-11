@@ -70,10 +70,8 @@ class MermaidTemplates {
     final snippetId = idPattern.firstMatch(snippet);
     if (snippetId == null) return snippet;
 
-    final existingIds = idPattern
-        .allMatches(code)
-        .map((match) => match[2]!)
-        .toSet();
+    final existingIds =
+        idPattern.allMatches(code).map((match) => match[2]!).toSet();
     var nextId = 1;
     while (existingIds.contains('$nextId')) {
       nextId++;
