@@ -24,12 +24,23 @@ Future<List<XFile>> pickNativeGalleryMedia(
   if (!context.mounted) return [];
 
   final theme = Theme.of(context);
+  final gridCount = (MediaQuery.sizeOf(context).width / 96)
+      .floor()
+      .clamp(4, 10)
+      .toInt();
+  const preferredPageSize = 80;
+  final pageSize =
+      ((preferredPageSize + gridCount - 1) ~/ gridCount) * gridCount;
   final assets = await AssetPicker.pickAssets(
     context,
     pickerConfig: AssetPickerConfig(
       // This picker requires a positive limit. Using the accessible library
       // size permits selecting every available asset without a fixed cap.
       maxAssets: math.max(1, availableCount).toInt(),
+      // Keep thumbnails close to 96 logical pixels wide as the screen grows.
+      // The picker requires pageSize to be a multiple of gridCount.
+      gridCount: gridCount,
+      pageSize: pageSize,
       requestType: requestType,
       pickerTheme: AssetPicker.themeData(
         null,
