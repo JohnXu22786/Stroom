@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -39,6 +40,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    TextManifest.beforeFolderLoadForTesting = null;
     TextManifest.invalidateCache();
   });
 
@@ -507,6 +509,55 @@ void main() {
         expect(find.text('根目录'), findsOneWidget);
         // Should show filename input field with hint text
         expect(find.text('输入文件名（自动添加 .mmd 后缀）'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'save persists edits made while folder lookup is pending',
+      (tester) async {
+        const initialContent = 'graph TD\n  A-->BeforeLookup';
+        const editedContent = 'graph TD\n  A-->DuringLookup';
+        final folderLoadStarted = Completer<void>();
+        final releaseFolderLoad = Completer<void>();
+        addTearDown(() {
+          TextManifest.beforeFolderLoadForTesting = null;
+          if (!releaseFolderLoad.isCompleted) releaseFolderLoad.complete();
+        });
+        TextManifest.beforeFolderLoadForTesting = () async {
+          folderLoadStarted.complete();
+          await releaseFolderLoad.future;
+        };
+
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
+        final editor = find.byType(TextField).first;
+        await tester.enterText(editor, initialContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await folderLoadStarted.future;
+        await tester.enterText(editor, editedContent);
+        await tester.pump();
+        releaseFolderLoad.complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('保存图表'), findsOneWidget);
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          editedContent,
+        );
       },
     );
 

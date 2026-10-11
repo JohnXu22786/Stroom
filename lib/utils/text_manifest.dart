@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:uuid/uuid.dart';
 import 'file_record.dart';
 import '../services/manifest_operations.dart';
@@ -201,6 +202,12 @@ class TextManifest {
     tableName: 'text_records',
     toMap: (r) => r.toMap(),
   );
+
+  /// Pauses a folder load in tests to exercise callers that await it.
+  @visibleForTesting
+  static set beforeFolderLoadForTesting(Future<void> Function()? callback) {
+    _ops.beforeFolderLoadForTesting = callback;
+  }
 
   static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
   static Future<List<TextRecord>> loadRecordsUncached() =>
