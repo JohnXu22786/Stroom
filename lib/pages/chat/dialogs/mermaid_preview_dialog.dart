@@ -143,31 +143,28 @@ class _MermaidPreviewDialogContentState
                 MermaidRenderWidget.buildWebAssetUrl(widget.mermaidCode))));
   }
 
-  /// Zoom is anchored at the CENTER of the preview area (not the top-left
-  /// corner): `window.setZoom` keeps the given viewport point fixed while
-  /// scaling, so passing the viewport center zooms towards the middle.
-  /// The center is computed in JS so it is exact at any display scaling.
+  /// Changes the zoom by [delta] at the center of the preview, based on the
+  /// JavaScript renderer's live zoom so web auto-fit is preserved.
   Future<void> _zoomIn() async {
-    await _zoomAroundCenter(_zoomLevel + 0.1);
+    await _zoomAroundCenter(0.1);
   }
 
   Future<void> _zoomOut() async {
-    await _zoomAroundCenter(_zoomLevel - 0.1);
+    await _zoomAroundCenter(-0.1);
   }
 
-  Future<void> _zoomAroundCenter(double newZoom) async {
-    final target = newZoom.clamp(0.1, 10.0);
-    if (target == _zoomLevel) return;
-    // No setState: _zoomLevel is not read in build() and the WebView
-    // reflects the transform visually (the JS round-trip confirms the
-    // value via onTransformChanged).
-    _zoomLevel = target;
-    // The null-safe controller call is safe: zoom controls only appear
-    // after onLoadStop, when the controller exists.
+  Future<void> _zoomAroundCenter(double delta) async {
+    // Keep native state current for other dialog behavior, but let JS apply
+    // the button delta to its live zoom. On web the JS callback bridge is
+    // unsupported, so the cached Flutter zoom can be stale after auto-fit.
+    if (!kIsWeb) {
+      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
+      if (target == _zoomLevel) return;
+      _zoomLevel = target;
+    }
+
     await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($target, '
-          "document.getElementById('viewport').clientWidth / 2, "
-          "document.getElementById('viewport').clientHeight / 2)",
+      source: 'window.applyZoomDeltasAfterFit([$delta])',
     );
   }
 
