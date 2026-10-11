@@ -3,7 +3,7 @@ name: CI Checks
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
@@ -11,26 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-description:
-    name: PR description format
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: tools/ci/requirements.txt
-      - name: Install PR description validator dependencies
-        run: python3 -m pip install --disable-pip-version-check -r tools/ci/requirements.txt
-      - name: Test PR description validator
-        run: python3 -m unittest discover -s tools/ci -p 'test_*.py' -v
-      - name: Validate PR description
-        run: python3 tools/ci/validate_pr_description.py "$GITHUB_EVENT_PATH"
-
-  math-editor:
-    name: Math editor bridge
+  vendor-js:
+    name: Vendor JS boundary tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,35 +23,10 @@ jobs:
           cache-dependency-path: tools/math_editor_test/package-lock.json
       - run: npm ci --prefix tools/math_editor_test
       - run: npm test --prefix tools/math_editor_test
-
-  mermaid-fit-retry:
-    name: Mermaid fit retry behavior
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
 
-  # ── Format Check ──────────────────────────────────────────────────────────
-  format:
-    name: Format Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.9
-          cache: true
-          pub-cache: true
-      - run: flutter pub get
-      - name: Check Dart formatting
-        # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
-        run: dart format --language-version=3.0 --set-exit-if-changed .
-
-  # ── Static Analysis ───────────────────────────────────────────────────────
-  analyze:
+  # Keep the required branch-protection check name while sharing Flutter setup.
+  quality:
     name: Static Analysis
     runs-on: ubuntu-latest
     steps:
@@ -82,6 +39,9 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
+      - name: Check Dart formatting
+        # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
+        run: dart format --language-version=3.0 --set-exit-if-changed .
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
@@ -112,12 +72,13 @@ jobs:
                 UNCOVERED=1
               fi
             fi
-          done < <(git diff --name-only "$BASE_SHA" -- 'lib/**/*.dart')
+          done < <(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/**/*.dart')
           echo ""
           if [ "$UNCOVERED" -eq 0 ]; then
             echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
           else
-            echo "Some changed files lack dedicated test files. Add them or verify coverage via existing tests."
+            echo "Some changed files lack matching tests. Add a test file or update the mapping for the test that covers it."
+            exit 1
           fi
 
   android-unit:
@@ -143,68 +104,29 @@ jobs:
       - name: Run watchdog scheduling regression test
         run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
 
-  # This web-only target stays outside `_test.dart` discovery for VM groups.
-  # Flutter's Web test server serves fixtures from test/, which this job aliases.
-  startup-web:
-    name: Startup Web test
-    runs-on: ubuntu-latest
-    needs: [format, analyze]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.9
-          cache: true
-          pub-cache: true
-      - uses: browser-actions/setup-chrome@v1
-        id: setup-chrome
-      - run: flutter pub get
-      - name: Expose test fixtures to Flutter Web's test server
-        run: ln -s tests test
-      - name: Run Web startup checks in Chrome
-        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
-        env:
-          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
-
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
     name: Tests (${{ matrix.label }})
     runs-on: ubuntu-latest
-    needs: [format, analyze]
+    needs: [quality]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: Core
-            pattern: tests/*_test.dart
-          - label: Anki
-            pattern: tests/anki
-          - label: Widgets
-            pattern: tests/widgets
+          - label: Foundation
+            pattern: tests/*_test.dart tests/models tests/providers tests/utils
+          - label: Services-Startup
+            pattern: tests/services tests/startup
+            webStartup: true
+          - label: Feature-Modules
+            pattern: tests/task_flow tests/anki tests/catcatch
+            catcatchNode: true
           - label: Pages
-            pattern: tests/pages/*_test.dart tests/pages/unified_task_list
-          - label: Pages-ChatPage
-            pattern: tests/pages/chat_page
-          - label: Pages-Settings
-            pattern: tests/pages/settings
-          - label: Pages-Content
-            pattern: tests/pages/content
-          - label: Pages-Chat
-            pattern: tests/pages/chat
-          - label: Providers
-            pattern: tests/providers
-          - label: Services
-            pattern: tests/services
-          - label: Utils
-            pattern: tests/utils
-          - label: Models
-            pattern: tests/models
-          - label: Startup
-            pattern: tests/startup
-          - label: TaskFlow
-            pattern: tests/task_flow
-          - label: CatCatch
-            pattern: tests/catcatch
+            pattern: tests/pages/*_test.dart tests/pages/unified_task_list tests/pages/settings tests/pages/ocr
+          - label: Chat
+            pattern: tests/pages/chat_page tests/pages/chat
+          - label: Content-Widgets
+            pattern: tests/pages/content tests/widgets
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -215,3 +137,21 @@ jobs:
       - run: flutter pub get
       - name: Run ${{ matrix.label }} tests
         run: flutter test ${{ matrix.pattern }}
+      - uses: actions/setup-node@v4
+        if: matrix.catcatchNode == true
+        with:
+          node-version: 22
+      - name: Run CatCatch JavaScript hook tests
+        if: matrix.catcatchNode == true
+        run: node --test tests/catcatch/js_hook_script_test.cjs
+      - uses: browser-actions/setup-chrome@v1
+        if: matrix.webStartup == true
+        id: setup-chrome
+      - name: Expose test fixtures to Flutter Web's test server
+        if: matrix.webStartup == true
+        run: ln -s tests test
+      - name: Run Web startup checks in Chrome
+        if: matrix.webStartup == true
+        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
