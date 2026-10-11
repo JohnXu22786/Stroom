@@ -16,11 +16,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
 
 jobs:
-  vendor-js:
+  # Component and boundary checks share the same Node runtime. Keep each
+  # component as its own matrix entry so failures remain easy to identify.
+  component-boundary:
     # A title/body-only edit keeps the same head SHA. Its skipped check uses a
     # distinct name so it cannot overwrite the formal result for that SHA;
     # base-branch edits keep the normal name and execute the code checks.
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (vendor skipped: {0})', matrix.label) || format('Vendor JS ({0})', matrix.label) }}"
+    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (components skipped: {0})', matrix.label) || format('Component Boundary ({0})', matrix.label) }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     strategy:
@@ -31,6 +33,8 @@ jobs:
             mathEditor: true
           - label: Mermaid fit retry behavior
             mermaid: true
+          - label: CatCatch JS hook boundary
+            catcatch: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,6 +48,8 @@ jobs:
         if: matrix.mathEditor == true
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
         if: matrix.mermaid == true
+      - run: node --test tests/catcatch/js_hook_script_test.cjs
+        if: matrix.catcatch == true
 
   format:
     name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (format skipped)' || 'Format Check' }}"
@@ -186,6 +192,9 @@ jobs:
             exit 1
           fi
 
+  # These are Stroom-owned platform integrations. They stay as separate jobs
+  # because Android/Gradle and Web/Chrome need different toolchains and have
+  # materially different runtimes.
   android-unit:
     name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (Android tests skipped)' || 'Android unit tests' }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
@@ -209,19 +218,6 @@ jobs:
         run: echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")" > android/local.properties
       - name: Run watchdog scheduling regression test
         run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
-
-  catcatch-js:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (CatCatch JS skipped)' || 'CatCatch JavaScript boundary tests' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
-    runs-on: ubuntu-latest
-    needs: [quality]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Run CatCatch JavaScript hook tests
-        run: node --test tests/catcatch/js_hook_script_test.cjs
 
   # This web-only target stays outside `_test.dart` discovery for VM groups.
   # Flutter's Web test server serves fixtures from tests/, which this job aliases.
