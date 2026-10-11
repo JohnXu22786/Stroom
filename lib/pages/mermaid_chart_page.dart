@@ -340,7 +340,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       bool hasNameConflict(TextRecord record) =>
           record.id != existingRecord?.id &&
           record.name == finalName &&
-          (existingRecord == null || record.folder == selectedFolder);
+          record.folder == selectedFolder;
       while (records.any(hasNameConflict)) {
         finalName = '$saveName ($counter)';
         counter++;
