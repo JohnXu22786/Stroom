@@ -89,7 +89,9 @@ void main() {
   });
 
   tearDown(() {
-    InAppWebViewPlatform.instance = originalWebViewPlatform;
+    if (originalWebViewPlatform != null) {
+      InAppWebViewPlatform.instance = originalWebViewPlatform;
+    }
   });
 
   group('Main page navigation (4 buttons, state preservation)', () {
