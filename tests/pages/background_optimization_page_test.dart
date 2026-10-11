@@ -791,6 +791,53 @@ void main() {
       );
     });
 
+    testWidgets(
+        'reports watchdog activation failure while retaining enabled intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_watchdog', false);
+      await prefs.setBool('background_service_cold_start_restore', false);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call);
+          return call.method != 'startKeepAlive';
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(find.text('看门狗激活失败，后台服务保活状态未确认'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+      );
+    });
+
     testWidgets('watchdog remains off when enabling its preference fails',
         (tester) async {
       final mock = registerMockPlatform()..setServiceRunning(true);
