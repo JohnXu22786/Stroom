@@ -364,7 +364,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=6';
+    final base = '$webAssetTemplateUrl?v=7';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base

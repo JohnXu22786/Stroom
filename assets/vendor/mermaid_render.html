@@ -235,7 +235,7 @@
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
-      if (e.ctrlKey || e.metaKey) {
+      if ((e.ctrlKey || e.metaKey) && e.deltaY !== 0) {
         e.preventDefault();
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = e.clientX - rect.left;
@@ -310,7 +310,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v6';
+    var TEMPLATE_VERSION = 'v7';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;
