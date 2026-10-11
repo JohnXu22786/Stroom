@@ -1,0 +1,18 @@
+name: CI Base Retarget
+
+on:
+  pull_request:
+    branches: [main]
+    types: [edited]
+
+concurrency:
+  group: ci-code-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  run-code-ci:
+    name: Base branch retarget checks
+    if: ${{ github.event.changes.base != null }}
+    uses: ./.github/workflows/ci.yml
+    with:
+      base_sha: ${{ github.event.pull_request.base.sha }}
