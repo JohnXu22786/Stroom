@@ -634,6 +634,51 @@ void main() {
   // ====================================================================
 
   group('folder tracking', () {
+    Future<void> expectFailedFolderInsertCanRetry(
+      String path,
+      Future<void> Function(String) addFolder,
+    ) async {
+      final failure = StateError('injected folder persistence failure');
+      var shouldFail = true;
+      ManifestDatabase.beforeFolderInsertForTesting = (insertedPath) {
+        if (shouldFail && insertedPath == path) {
+          shouldFail = false;
+          throw failure;
+        }
+      };
+
+      await expectLater(addFolder(path), throwsA(same(failure)));
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          isNot(contains(path)),
+          reason: 'the injected failure must leave the folder unpersisted');
+
+      await addFolder(path);
+
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          contains(path),
+          reason: 'retry must persist the folder after the first insert fails');
+    }
+
+    testWidgets('addFolder retries after folder persistence failure',
+        (WidgetTester t) async {
+      await expectFailedFolderInsertCanRetry(
+        'audio-folder-retry',
+        FileManifest.addFolder,
+      );
+    });
+
+    testWidgets('addFolderPath retries after folder persistence failure',
+        (WidgetTester t) async {
+      await expectFailedFolderInsertCanRetry(
+        'audio-path-retry',
+        FileManifest.addFolderPath,
+      );
+    });
+
     testWidgets(
         'forced refresh keeps a record registered after its record snapshot',
         (WidgetTester t) async {
