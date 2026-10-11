@@ -94,7 +94,25 @@ void main() {
     'toolbar zoom controls continue from the JavaScript-fitted zoom '
     'without a transform handler',
     (tester) async {
-      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final assetKey = utf8.decode(
+          message!.buffer.asUint8List(
+            message.offsetInBytes,
+            message.lengthInBytes,
+          ),
+        );
+        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+          return null;
+        }
+        return ByteData.view(
+          Uint8List.fromList(utf8.encode('var mermaid = {};')).buffer,
+        );
+      });
+      addTearDown(() {
+        messenger.setMockMessageHandler('flutter/assets', null);
+      });
 
       final previousPlatform = InAppWebViewPlatform.instance;
       final platform = _ZoomTrackingWebViewPlatform();
@@ -117,9 +135,6 @@ void main() {
       );
       await tester.tap(find.text('Open preview'));
       await tester.pump();
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      });
       await tester.pump();
 
       final webView = platform.webView!;
