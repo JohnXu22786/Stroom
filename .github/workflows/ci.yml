@@ -119,11 +119,22 @@ jobs:
                 if [ "${#flattened[@]}" -eq 1 ]; then
                   echo "  ✅ $file (${flattened[0]})"
                 else
-                  echo "  ⚠️  $file → missing $test_f"
-                  if [ "${#flattened[@]}" -gt 1 ]; then
-                    printf '      Ambiguous basename matches: %s\n' "${flattened[*]}"
+                  # Grouped or renamed tests may not share the source basename.
+                  # A package import is explicit evidence that the test covers
+                  # this source file, so accept all matching test files.
+                  source_import="package:stroom/${file#lib/}"
+                  mapfile -t imported_tests < <(
+                    rg -l --glob '*_test.dart' --glob '*_test.cjs' -F "$source_import" tests || true
+                  )
+                  if [ "${#imported_tests[@]}" -gt 0 ]; then
+                    echo "  ✅ $file (imported by ${imported_tests[*]})"
+                  else
+                    echo "  ⚠️  $file → missing $test_f"
+                    if [ "${#flattened[@]}" -gt 1 ]; then
+                      printf '      Ambiguous basename matches: %s\n' "${flattened[*]}"
+                    fi
+                    UNCOVERED=1
                   fi
-                  UNCOVERED=1
                 fi
               fi
             fi
