@@ -12,8 +12,16 @@ concurrency:
 
 jobs:
   vendor-js:
-    name: Vendor JS boundary tests
+    name: Vendor JS (${{ matrix.label }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Math editor bridge
+            mathEditor: true
+          - label: Mermaid fit retry behavior
+            mermaid: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,8 +30,11 @@ jobs:
           cache: npm
           cache-dependency-path: tools/math_editor_test/package-lock.json
       - run: npm ci --prefix tools/math_editor_test
+        if: matrix.mathEditor == true
       - run: npm test --prefix tools/math_editor_test
+        if: matrix.mathEditor == true
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
+        if: matrix.mermaid == true
 
   # Keep the required branch-protection check name while sharing Flutter setup.
   quality:
