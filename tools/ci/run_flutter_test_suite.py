@@ -216,8 +216,15 @@ CI_GROUPS: tuple[str, ...] = (
 def is_feature_ui_test(path: str) -> bool:
     """Route widget tests to UI jobs and leave logic tests with their feature."""
     source = (TEST_ROOT / path).read_text(encoding="utf-8")
+    # `testWidgets` is also used by service tests that need Flutter's test
+    # binding, so require an operation that actually builds or inspects UI.
     builds_or_operates_widgets = re.search(
-        r"\btestWidgets\s*\(|\bWidgetTester\b|\bpumpWidget\s*\(", source
+        r"\b(?:pumpWidget|pumpAndSettle|pumpFrames)\s*\("
+        r"|\bfind\.(?:text|by\w+|ancestor|descendant)\b"
+        r"|\b(?:tester|t|widgetTester)\."
+        r"(?:pump|tap|enterText|drag|longPress|scrollUntilVisible|ensureVisible|"
+        r"widget|state|element|renderObject|sendKeyEvent|takeException)\s*\(",
+        source,
     )
     # This test inspects the rendered Markdown spans directly without a
     # WidgetTester, so it is still a presentation test.
