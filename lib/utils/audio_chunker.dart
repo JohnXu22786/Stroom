@@ -513,6 +513,13 @@ WavInfo _parseWavHeader(
   int? bitsPerSample;
   int? byteRate;
   int? blockAlign;
+  int? fmtExtensionSize;
+  int? imaSamplesPerBlock;
+  int? msAdpcmSamplesPerBlock;
+  int? msAdpcmCoefficientCount;
+  int? extensibleValidBitsPerSample;
+  int? extensibleChannelMask;
+  bool hasExtensibleFormat = false;
   int audioFormat = 0;
   int? dataOffset;
   int? dataSize;
@@ -576,6 +583,7 @@ WavInfo _parseWavHeader(
         }
 
         if (audioFormat == 0xfffe) {
+          hasExtensibleFormat = true;
           if (size < 40 || extensionSize < 22) {
             throw FormatException(
               'WAVE_FORMAT_EXTENSIBLE fmt chunk must contain its 22-byte '
@@ -583,6 +591,8 @@ WavInfo _parseWavHeader(
             );
           }
           final validBitsPerSample = _readUint16(bytes, fmtOffset + 18);
+          extensibleValidBitsPerSample = validBitsPerSample;
+          extensibleChannelMask = _readUint32(bytes, fmtOffset + 20);
           if (validBitsPerSample <= 0 || validBitsPerSample > bitsPerSample) {
             throw FormatException(
               'Invalid WAVE_FORMAT_EXTENSIBLE valid bits: '
@@ -624,6 +634,15 @@ WavInfo _parseWavHeader(
           audioFormat = subtypeFormatTag;
         }
 
+        fmtExtensionSize = extensionSize;
+        if (audioFormat == 0x0002 && size >= 22) {
+          msAdpcmSamplesPerBlock = _readUint16(bytes, fmtOffset + 18);
+          msAdpcmCoefficientCount = _readUint16(bytes, fmtOffset + 20);
+        }
+        if (audioFormat == 0x0011 && size >= 20) {
+          imaSamplesPerBlock = _readUint16(bytes, fmtOffset + 18);
+        }
+
         // Preserve valid WAVEFORMATEX extensions by skipping the remaining
         // bytes in this bounded fmt chunk.
         offset = nextChunk;
@@ -635,12 +654,13 @@ WavInfo _parseWavHeader(
         if (!gotFmt) {
           throw FormatException('data chunk before fmt chunk');
         }
-        // The chunker reads only the first data payload, but continue scanning
-        // so malformed trailing chunks inside the RIFF container are rejected.
-        if (dataOffset == null) {
-          dataOffset = offset;
-          dataSize = size;
+        if (dataOffset != null) {
+          throw const FormatException(
+            'Multiple WAV data chunks are unsupported',
+          );
         }
+        dataOffset = offset;
+        dataSize = size;
         offset = nextChunk;
         break;
 
@@ -680,6 +700,21 @@ WavInfo _parseWavHeader(
   if (channels <= 0) {
     throw FormatException('Invalid WAV channel count: $channels');
   }
+  if (hasExtensibleFormat) {
+    final channelMask = extensibleChannelMask!;
+    var remainingMask = channelMask;
+    var speakerCount = 0;
+    while (remainingMask != 0) {
+      speakerCount += remainingMask & 1;
+      remainingMask >>= 1;
+    }
+    if (channelMask != 0 && speakerCount != channels) {
+      throw FormatException(
+        'Invalid WAVE_FORMAT_EXTENSIBLE channel mask: $speakerCount speaker '
+        'bits for $channels channels',
+      );
+    }
+  }
   if (rate <= 0) {
     throw FormatException('Invalid WAV sample rate: $rate');
   }
@@ -691,21 +726,19 @@ WavInfo _parseWavHeader(
   }
 
   if (audioFormat == 1) {
-    if (bitsPerSample == null || bitsPerSample <= 0) {
+    if (bitsPerSample == null ||
+        !const {8, 16, 24, 32}.contains(bitsPerSample)) {
       throw FormatException('Invalid PCM WAV bit depth: $bitsPerSample');
     }
-    final expectedAlign = channels * ((bitsPerSample + 7) ~/ 8);
-    if (align != expectedAlign) {
-      throw FormatException(
-        'Invalid WAV block alignment: expected $expectedAlign, got $align',
-      );
-    }
-    final expectedByteRate = rate * expectedAlign;
-    if (expectedByteRate > 0xffffffff || rateBytes != expectedByteRate) {
-      throw FormatException(
-        'Invalid WAV byte rate: expected $expectedByteRate, got $rateBytes',
-      );
-    }
+    _validateLinearWavLayout(
+      'PCM',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
   }
   if (pcmSize <= 0) {
     throw FormatException('WAV data chunk is empty');
@@ -714,6 +747,163 @@ WavInfo _parseWavHeader(
     throw FormatException(
       'WAV data size $pcmSize is not aligned to $align-byte frames',
     );
+  }
+  if (audioFormat == 3) {
+    if (bitsPerSample != 32 && bitsPerSample != 64) {
+      throw FormatException(
+        'Invalid IEEE float WAV bit depth: $bitsPerSample; expected 32 or 64',
+      );
+    }
+    if (hasExtensibleFormat && extensibleValidBitsPerSample != bitsPerSample) {
+      throw FormatException(
+        'Invalid IEEE float valid bits: $extensibleValidBitsPerSample',
+      );
+    }
+    _validateLinearWavLayout(
+      'IEEE float',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample!,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
+  }
+  if (audioFormat == 6 || audioFormat == 7) {
+    if (bitsPerSample != 8) {
+      final encoding = audioFormat == 6 ? 'A-law' : 'mu-law';
+      throw FormatException(
+        'Invalid $encoding WAV bit depth: $bitsPerSample; expected 8',
+      );
+    }
+    _validateLinearWavLayout(
+      audioFormat == 6 ? 'A-law' : 'mu-law',
+      channels: channels,
+      sampleRate: rate,
+      bitsPerSample: bitsPerSample!,
+      blockAlign: align,
+      byteRate: rateBytes,
+      dataSize: pcmSize,
+    );
+  }
+  if (audioFormat == 0x0002) {
+    if (hasExtensibleFormat) {
+      throw const FormatException(
+        'WAVE_FORMAT_EXTENSIBLE Microsoft ADPCM is unsupported',
+      );
+    }
+    if (bitsPerSample != 4) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM bit depth: $bitsPerSample; expected 4',
+      );
+    }
+    final coefficientCount = msAdpcmCoefficientCount;
+    if (coefficientCount == null ||
+        coefficientCount < 1 ||
+        coefficientCount > 7) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM coefficient count: $coefficientCount',
+      );
+    }
+    final requiredExtensionSize = 4 + coefficientCount * 4;
+    if ((fmtExtensionSize ?? 0) < requiredExtensionSize) {
+      throw FormatException(
+        'Microsoft ADPCM fmt extension is too small: '
+        '${fmtExtensionSize ?? 0} bytes; expected $requiredExtensionSize',
+      );
+    }
+    final samplesPerBlock = msAdpcmSamplesPerBlock;
+    if (samplesPerBlock == null || samplesPerBlock < 2) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM samplesPerBlock: $samplesPerBlock; '
+        'must be at least 2',
+      );
+    }
+    final headerBytes = channels * 7;
+    if (align < headerBytes) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM block alignment: $align for $channels channels',
+      );
+    }
+    final maxSamplesPerBlock = ((align - headerBytes) * 2) ~/ channels + 2;
+    if (samplesPerBlock > maxSamplesPerBlock) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM samplesPerBlock: $samplesPerBlock exceeds '
+        '$maxSamplesPerBlock for block alignment $align',
+      );
+    }
+    final averageByteRateNumerator = rate * align;
+    final minimumByteRate = averageByteRateNumerator ~/ samplesPerBlock;
+    final maximumByteRate =
+        (averageByteRateNumerator + samplesPerBlock - 1) ~/ samplesPerBlock;
+    if (minimumByteRate > 0xffffffff ||
+        (rateBytes != minimumByteRate &&
+            (maximumByteRate > 0xffffffff || rateBytes != maximumByteRate))) {
+      throw FormatException(
+        'Invalid Microsoft ADPCM byte rate: expected about '
+        '$minimumByteRate-$maximumByteRate, got $rateBytes',
+      );
+    }
+    if (pcmSize % align != 0) {
+      throw FormatException(
+        'Microsoft ADPCM data size $pcmSize is not aligned to '
+        '$align-byte blocks',
+      );
+    }
+  }
+  if (audioFormat == 0x0011) {
+    if (hasExtensibleFormat) {
+      throw const FormatException(
+        'WAVE_FORMAT_EXTENSIBLE IMA ADPCM is unsupported',
+      );
+    }
+    if (bitsPerSample != 4) {
+      throw FormatException(
+        'Invalid IMA ADPCM bit depth: $bitsPerSample; expected 4',
+      );
+    }
+    if ((fmtExtensionSize ?? 0) < 2) {
+      throw const FormatException(
+        'IMA ADPCM fmt chunk must contain cbSize and samplesPerBlock',
+      );
+    }
+    final samplesPerBlock = imaSamplesPerBlock;
+    if (samplesPerBlock == null || samplesPerBlock <= 0) {
+      throw FormatException(
+        'Invalid IMA ADPCM samplesPerBlock: $samplesPerBlock',
+      );
+    }
+    final headerBytes = channels * 4;
+    if (align < headerBytes) {
+      throw FormatException(
+        'Invalid IMA ADPCM block alignment: $align for $channels channels',
+      );
+    }
+    final encodedBytes = align - headerBytes;
+    final maxSamplesPerBlock = (encodedBytes * 2) ~/ channels + 1;
+    if (samplesPerBlock > maxSamplesPerBlock) {
+      throw FormatException(
+        'Invalid IMA ADPCM samplesPerBlock: $samplesPerBlock exceeds '
+        '$maxSamplesPerBlock for block alignment $align',
+      );
+    }
+    final averageByteRateNumerator = rate * align;
+    final minimumByteRate = averageByteRateNumerator ~/ samplesPerBlock;
+    final maximumByteRate =
+        (averageByteRateNumerator + samplesPerBlock - 1) ~/ samplesPerBlock;
+    if (minimumByteRate > 0xffffffff ||
+        (rateBytes != minimumByteRate &&
+            (maximumByteRate > 0xffffffff || rateBytes != maximumByteRate))) {
+      throw FormatException(
+        'Invalid IMA ADPCM byte rate: expected about '
+        '$minimumByteRate-$maximumByteRate, got $rateBytes',
+      );
+    }
+    if (pcmSize % align != 0) {
+      throw FormatException(
+        'IMA ADPCM data size $pcmSize is not aligned to $align-byte blocks',
+      );
+    }
   }
   if (dataOffset + pcmSize > containerEnd) {
     throw FormatException('WAV data chunk exceeds its RIFF container');
@@ -728,6 +918,42 @@ WavInfo _parseWavHeader(
     byteRate: rateBytes,
     blockAlign: align,
   );
+}
+
+void _validateLinearWavLayout(
+  String encoding, {
+  required int channels,
+  required int sampleRate,
+  required int bitsPerSample,
+  required int blockAlign,
+  required int byteRate,
+  required int dataSize,
+}) {
+  if (bitsPerSample % 8 != 0) {
+    throw FormatException(
+      'Invalid $encoding WAV bit depth: $bitsPerSample is not byte-aligned',
+    );
+  }
+  final expectedAlign = channels * (bitsPerSample ~/ 8);
+  if (blockAlign != expectedAlign) {
+    throw FormatException(
+      'Invalid $encoding WAV block alignment: expected $expectedAlign, '
+      'got $blockAlign',
+    );
+  }
+  final expectedByteRate = sampleRate * expectedAlign;
+  if (expectedByteRate > 0xffffffff || byteRate != expectedByteRate) {
+    throw FormatException(
+      'Invalid $encoding WAV byte rate: expected $expectedByteRate, '
+      'got $byteRate',
+    );
+  }
+  if (dataSize % blockAlign != 0) {
+    throw FormatException(
+      '$encoding WAV data size $dataSize is not aligned to '
+      '$blockAlign-byte frames',
+    );
+  }
 }
 
 // ============================================================================

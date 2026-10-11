@@ -273,8 +273,21 @@ void main() {
   });
 
   group('audio_utils - detectAudioFormat', () {
-    test('detects WAV from RIFF header', () {
-      final data = Uint8List.fromList([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0]);
+    test('detects WAV from RIFF/WAVE signature', () {
+      final data = Uint8List.fromList([
+        0x52,
+        0x49,
+        0x46,
+        0x46,
+        0,
+        0,
+        0,
+        0,
+        0x57,
+        0x41,
+        0x56,
+        0x45,
+      ]);
       expect(detectAudioFormat(data), equals('wav'));
     });
 

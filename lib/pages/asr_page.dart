@@ -13,6 +13,7 @@ import '../providers/background_task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
 import '../services/asr_task_scheduler.dart';
+import '../utils/audio_chunker.dart';
 import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -954,6 +955,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   }
 
   /// Pick audio files from the device storage (supports multi-select).
+  String _resolveSelectedAudioFormat(
+    Uint8List bytes, {
+    required String fallbackFormat,
+  }) {
+    if (detectAudioFormat(bytes) == 'wav') {
+      validateWavContainer(bytes);
+    }
+    return resolveAudioFormat(bytes, fallbackFormat: fallbackFormat);
+  }
+
   Future<void> _pickAudioFile() async {
     try {
       final result = await FilePicker.pickFiles(
@@ -972,7 +983,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           SelectedAudio(
             bytes: bytes,
             name: file.name,
-            format: resolveAudioFormat(
+            format: _resolveSelectedAudioFormat(
               bytes,
               fallbackFormat: _detectFormat(file.name),
             ),
@@ -1081,7 +1092,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           SelectedAudio(
             bytes: entry.value,
             name: entry.key,
-            format: resolveAudioFormat(entry.value, fallbackFormat: format),
+            format: _resolveSelectedAudioFormat(
+              entry.value,
+              fallbackFormat: format,
+            ),
           ),
         );
       }

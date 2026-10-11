@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/utils/audio_codecs.dart';
 import 'package:stroom/utils/audio_chunker.dart';
 
 /// Build a synthetic PCM WAV file with configurable silence gaps.
@@ -138,7 +139,10 @@ Uint8List _buildWavFromFrames(
   return Uint8List.view(output.buffer);
 }
 
-Uint8List _buildExtensiblePcmWav(Uint8List pcmWav) {
+Uint8List _buildExtensiblePcmWav(
+  Uint8List pcmWav, {
+  int? channelMask,
+}) {
   final result = Uint8List(pcmWav.length + 24);
   result.setRange(0, 20, pcmWav);
   result.setRange(20, 36, pcmWav, 20);
@@ -150,7 +154,14 @@ Uint8List _buildExtensiblePcmWav(Uint8List pcmWav) {
   data.setUint16(20, 0xfffe, Endian.little); // WAVE_FORMAT_EXTENSIBLE
   data.setUint16(36, 22, Endian.little); // cbSize
   data.setUint16(38, 16, Endian.little); // valid bits per sample
-  data.setUint32(40, 3, Endian.little); // front left + front right
+  final channels = ByteData.sublistView(pcmWav).getUint16(22, Endian.little);
+  final mask = channelMask ??
+      switch (channels) {
+        1 => 1,
+        2 => 3,
+        _ => 0,
+      };
+  data.setUint32(40, mask, Endian.little);
   result.setRange(44, 60, [
     0x01, 0x00, 0x00, 0x00, // PCM subtype GUID, Data1
     0x00, 0x00, // Data2
@@ -196,6 +207,78 @@ Uint8List _appendWavChunk(Uint8List wav, String tag, List<int> payload) {
   result.setRange(wav.length + 8, wav.length + 8 + payload.length, payload);
   _writeUint32(result, 4, result.length - 8);
   return result;
+}
+
+Uint8List _removeImaAdpcmFormatExtension(Uint8List wav) {
+  final withoutExtension = Uint8List(wav.length - 4);
+  withoutExtension.setRange(0, 36, wav);
+  withoutExtension.setRange(36, withoutExtension.length, wav, 40);
+  final data = ByteData.sublistView(withoutExtension);
+  data.setUint32(4, withoutExtension.length - 8, Endian.little);
+  data.setUint32(16, 16, Endian.little);
+  return withoutExtension;
+}
+
+Uint8List _buildWaveWithFormatTag({
+  required int formatTag,
+  int channels = 1,
+  int sampleRate = 16000,
+  required int byteRate,
+  required int blockAlign,
+  required int bitsPerSample,
+  List<int>? formatExtension,
+  required Uint8List data,
+}) {
+  final fmtSize =
+      16 + (formatExtension == null ? 0 : 2 + formatExtension.length);
+  final fmtPadding = fmtSize.isOdd ? 1 : 0;
+  final dataPadding = data.length.isOdd ? 1 : 0;
+  final fileSize =
+      12 + 8 + fmtSize + fmtPadding + 8 + data.length + dataPadding;
+  final output = ByteData(fileSize);
+  var offset = 0;
+
+  void writeFourCc(String value) {
+    for (var index = 0; index < 4; index++) {
+      output.setUint8(offset++, value.codeUnitAt(index));
+    }
+  }
+
+  void writeUint16(int value) {
+    output.setUint16(offset, value, Endian.little);
+    offset += 2;
+  }
+
+  void writeUint32(int value) {
+    output.setUint32(offset, value, Endian.little);
+    offset += 4;
+  }
+
+  writeFourCc('RIFF');
+  writeUint32(fileSize - 8);
+  writeFourCc('WAVE');
+  writeFourCc('fmt ');
+  writeUint32(fmtSize);
+  writeUint16(formatTag);
+  writeUint16(channels);
+  writeUint32(sampleRate);
+  writeUint32(byteRate);
+  writeUint16(blockAlign);
+  writeUint16(bitsPerSample);
+  if (formatExtension != null) {
+    writeUint16(formatExtension.length);
+    for (final byte in formatExtension) {
+      output.setUint8(offset++, byte);
+    }
+  }
+  if (fmtPadding != 0) output.setUint8(offset++, 0);
+  writeFourCc('data');
+  writeUint32(data.length);
+  for (final byte in data) {
+    output.setUint8(offset++, byte);
+  }
+  if (dataPadding != 0) output.setUint8(offset, 0);
+  return Uint8List.view(output.buffer);
 }
 
 void main() {
@@ -341,6 +424,24 @@ void main() {
       expect(info.dataSize, parseWavHeader(original).dataSize);
     });
 
+    test('rejects duplicate data chunks instead of dropping later frames', () {
+      final original = _buildTestWav(segments: [(0.1, 0.5)]);
+      final duplicateData = _appendWavChunk(
+        original,
+        'data',
+        original.sublist(44),
+      );
+
+      expect(
+        () => parseWavHeader(duplicateData),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => validateWavContainer(duplicateData),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('parses and chunks WAVE_FORMAT_EXTENSIBLE PCM', () {
       final standardWav = _buildTestWav(
         sampleRate: 1000,
@@ -376,6 +477,34 @@ void main() {
       );
     });
 
+    test('validates WAVE_FORMAT_EXTENSIBLE channel masks', () {
+      final stereoPcm = _buildTestWav(
+        sampleRate: 1000,
+        numChannels: 2,
+        segments: [(0.1, 0.5)],
+      );
+      final matchingMask = _buildExtensiblePcmWav(stereoPcm);
+      final unspecifiedMask = _buildExtensiblePcmWav(
+        stereoPcm,
+        channelMask: 0,
+      );
+      final mismatchedMask = _buildExtensiblePcmWav(
+        stereoPcm,
+        channelMask: 1,
+      );
+
+      expect(() => validateWavContainer(matchingMask), returnsNormally);
+      expect(() => validateWavContainer(unspecifiedMask), returnsNormally);
+      expect(
+        () => validateWavContainer(mismatchedMask),
+        throwsA(isA<FormatException>()),
+      );
+      expect(
+        () => parseWavHeader(mismatchedMask),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test('requires the WAVE_FORMAT_EXTENSIBLE fmt extension', () {
       final malformedExtensible = _buildTestWav(
         segments: [(0.1, 0.5)],
@@ -408,6 +537,137 @@ void main() {
         () => validateWavContainer(unsupportedSubtype),
         throwsA(isA<FormatException>()),
       );
+    });
+
+    test('validates IMA ADPCM fmt metadata while accepting valid ADPCM', () {
+      final validImaAdpcm = adpcmToWav(
+        Uint8List.fromList([0, 0, 0, 0]),
+        sampleRate: 16000,
+      );
+      expect(() => validateWavContainer(validImaAdpcm), returnsNormally);
+
+      final missingExtension = _removeImaAdpcmFormatExtension(validImaAdpcm);
+      expect(
+        () => validateWavContainer(missingExtension),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidCbSize = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidCbSize).setUint16(36, 0, Endian.little);
+      expect(
+        () => validateWavContainer(invalidCbSize),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidSamplesPerBlock = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidSamplesPerBlock).setUint16(
+        38,
+        0,
+        Endian.little,
+      );
+      expect(
+        () => validateWavContainer(invalidSamplesPerBlock),
+        throwsA(isA<FormatException>()),
+      );
+
+      final invalidBitDepth = Uint8List.fromList(validImaAdpcm);
+      ByteData.sublistView(invalidBitDepth).setUint16(34, 16, Endian.little);
+      expect(
+        () => validateWavContainer(invalidBitDepth),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('validates tag-specific metadata for every upload format', () {
+      final validFloat = _buildWaveWithFormatTag(
+        formatTag: 3,
+        byteRate: 64000,
+        blockAlign: 4,
+        bitsPerSample: 32,
+        data: Uint8List(4),
+      );
+      final validAlaw = _buildWaveWithFormatTag(
+        formatTag: 6,
+        sampleRate: 8000,
+        byteRate: 8000,
+        blockAlign: 1,
+        bitsPerSample: 8,
+        data: Uint8List(1),
+      );
+      final validMulaw = _buildWaveWithFormatTag(
+        formatTag: 7,
+        sampleRate: 8000,
+        byteRate: 8000,
+        blockAlign: 1,
+        bitsPerSample: 8,
+        data: Uint8List(1),
+      );
+      final validMsAdpcm = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 8192,
+        blockAlign: 256,
+        bitsPerSample: 4,
+        formatExtension: [
+          0xf4, 0x01, // 500 samples per block.
+          7, 0, // Seven coefficient pairs.
+          ...List<int>.filled(28, 0),
+        ],
+        data: Uint8List(256),
+      );
+
+      for (final valid in [validFloat, validAlaw, validMulaw, validMsAdpcm]) {
+        expect(() => validateWavContainer(valid), returnsNormally);
+      }
+
+      final invalidFloat = _buildWaveWithFormatTag(
+        formatTag: 3,
+        byteRate: 1,
+        blockAlign: 1,
+        bitsPerSample: 0,
+        data: Uint8List(1),
+      );
+      final invalidAlaw = _buildWaveWithFormatTag(
+        formatTag: 6,
+        sampleRate: 8000,
+        byteRate: 16000,
+        blockAlign: 2,
+        bitsPerSample: 16,
+        data: Uint8List(2),
+      );
+      final missingMsAdpcmExtension = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 8192,
+        blockAlign: 256,
+        bitsPerSample: 4,
+        data: Uint8List(256),
+      );
+      final tooFewMsAdpcmSamplesPerBlock = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 16000,
+        byteRate: 112000,
+        blockAlign: 7,
+        bitsPerSample: 4,
+        formatExtension: [
+          1, 0, // One sample per block is invalid: the header has two seeds.
+          1, 0, // One coefficient pair.
+          ...List<int>.filled(4, 0),
+        ],
+        data: Uint8List(7),
+      );
+
+      for (final invalid in [
+        invalidFloat,
+        invalidAlaw,
+        missingMsAdpcmExtension,
+        tooFewMsAdpcmSamplesPerBlock,
+      ]) {
+        expect(
+          () => validateWavContainer(invalid),
+          throwsA(isA<FormatException>()),
+        );
+      }
     });
 
     test('rejects zero, inconsistent, or truncated PCM WAV metadata', () {
