@@ -26,6 +26,15 @@ void main() {
     });
   });
 
+  group('MermaidTemplates - requirement diagram verification method', () {
+    test('uses the Mermaid-supported verification method field', () {
+      final template = MermaidTemplates.getTemplate('requirement');
+
+      expect(template, contains('verifyMethod: test'));
+      expect(template, isNot(contains('verifiedMethod')));
+    });
+  });
+
   group('MermaidTemplates - Gantt dependencies', () {
     test(
       'dependency task snippet references a task defined in the template',

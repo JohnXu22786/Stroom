@@ -727,7 +727,7 @@ class MermaidTemplates {
     id: 1
     text: 用户能够使用账号密码登录系统
     risk: medium
-    verifiedMethod: test
+    verifyMethod: test
   }
   element 登录页面 {
     type: UI
