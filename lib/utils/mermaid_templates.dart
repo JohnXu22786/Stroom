@@ -727,7 +727,7 @@ class MermaidTemplates {
     id: 1
     text: 用户能够使用账号密码登录系统
     risk: medium
-    verifiedMethod: test
+    verifyMethod: test
   }
   element 登录页面 {
     type: UI
@@ -803,7 +803,7 @@ class MermaidTemplates {
           ('添加提交', '  commit id: "新提交"'),
           ('创建分支', '  branch 新分支'),
           ('切换分支', '  checkout 新分支'),
-          ('合并分支', '  merge 当前分支'),
+          ('合并分支', '  merge develop'),
         ];
       case 'mindmap':
         return [

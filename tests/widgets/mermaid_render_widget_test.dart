@@ -130,14 +130,14 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=5&code='));
+      expect(url, contains('mermaid_render.html?v=7&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=5?')));
+      expect(url, isNot(contains('v=7?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=5');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=7');
     });
 
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
@@ -540,7 +540,17 @@ void main() {
       // The cache key must be versioned: a stale key would keep serving
       // the previous library after an update. TEMPLATE_VERSION must stay
       // in sync with the ?v= in buildWebAssetUrl.
-      expect(html, contains("TEMPLATE_VERSION = 'v5'"));
+      final templateVersion =
+          RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
+      expect(templateVersion, 'v7');
+      final urlVersion = templateVersion!.substring(1);
+      final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
+      final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
+      expect(populatedUrl, contains('mermaid_render.html?v=$urlVersion&code='));
+      expect(
+        emptyUrl,
+        '${MermaidRenderWidget.webAssetTemplateUrl}?v=$urlVersion',
+      );
     });
 
     test(
@@ -609,9 +619,8 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      // The overlay timeout does not prove that the page loaded or that its
-      // JavaScript zoom helper is available.
-      await tester.pump(const Duration(seconds: 3));
+      // Until onLoadStop, the page has not reported that its JavaScript zoom
+      // helper is available.
       await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
@@ -640,6 +649,74 @@ void main() {
       // queued taps must apply on top of that fitted zoom rather than precede it.
       fakeController.simulateJsFitToViewport(0.8);
       expect(fakeController.zoomLevel, closeTo(1.2, 0.0001));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'queued toolbar zoom is applied by native readiness fallback without onLoadStop',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(
+              mermaidCode: 'graph TD\nA-->B',
+              showZoomControls: true,
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final fakeController = webView.controller;
+
+      // The toolbar is visible while loading, before its native controller is
+      // created, so this tap is queued in Flutter.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+
+      // Let the native fallback expose the preview without delivering the
+      // WebView's onLoadStop callback.
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(find.text('加载渲染引擎...'), findsNothing);
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+
+      // Once the fallback exposes the preview, later taps must also reach
+      // the page even though onLoadStop never arrives.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(
+        fakeController.evaluatedScripts
+            .where((script) =>
+                script.contains('window.applyZoomDeltasAfterFit([0.1])'))
+            .length,
+        2,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -830,6 +907,63 @@ void main() {
     );
 
     testWidgets(
+      'sub-slop native diagram tap jitter forwards one WebView click',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final hitPoint = tester.getCenter(find.byType(InAppWebView));
+        int forwardedClickCount() => webView.controller.evaluatedScripts
+            .where(
+              (script) =>
+                  script.contains('document.elementFromPoint') &&
+                  script.contains(
+                    "target.dispatchEvent(new MouseEvent('click', {",
+                  ),
+            )
+            .length;
+
+        for (final (pointer, kind, jitter)
+            in <(int, PointerDeviceKind, Offset)>[
+          (1, PointerDeviceKind.touch, const Offset(5, 3)),
+          (2, PointerDeviceKind.mouse, const Offset(0.5, 0.5)),
+        ]) {
+          final clicksBeforeGesture = forwardedClickCount();
+          final gesture = await tester.startGesture(
+            hitPoint,
+            pointer: pointer,
+            kind: kind,
+          );
+          await gesture.moveBy(jitter);
+          await gesture.up();
+          await tester.pump();
+
+          expect(
+            forwardedClickCount() - clicksBeforeGesture,
+            1,
+            reason: 'sub-slop $kind pointer jitter must still invoke the '
+                'page click target exactly once',
+          );
+        }
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'diagram drags pan without forwarding clicks or scrolling parent',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -890,6 +1024,64 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         scrollController.dispose();
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'native initial-page failures after readiness fallback show retry',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        // Native readiness fallback only hides Flutter's loading overlay; it
+        // does not prove that the initial page loaded successfully.
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        const errorMessage = '页面加载失败: Could not connect to host';
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('data:text/html,mermaid'),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
       },
       skip: kIsWeb,
     );
@@ -959,6 +1151,430 @@ void main() {
         await tester.pump();
 
         expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry falls back without load completion or main-frame error',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+            ),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Could not connect to host'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Could not connect to host'), findsNothing);
+
+        // A subresource failure does not resolve the retry navigation or
+        // disable its fallback. No onLoadStop or main-frame error follows.
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/mermaid.min.js'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+
+        // A navigation that completes after the fallback should replace its
+        // timeout message with the successfully loaded preview.
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry source update gets a fresh fallback window',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final initialUrl = webView.controller.loadedUrls.last;
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: initialUrl,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final oldRetryUrl = webView.controller.loadedUrls.last;
+        await tester.pump(const Duration(seconds: 2));
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+        final updatedUrl = webView.controller.loadedUrls.last;
+        webView.params.onLoadStop?.call(controller, oldRetryUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: oldRetryUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale navigation failed',
+          ),
+        );
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Stale navigation failed'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 2));
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        webView.params.onLoadStop?.call(controller, updatedUrl);
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: oldRetryUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale navigation failed after success',
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.text('页面加载失败: Stale navigation failed after success'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry source update restarts recovery after timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: webView.controller.loadedUrls.last,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'same-source web retry ignores callbacks from the prior attempt',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        void sendMainFrameError(WebUri url, String description) {
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: url, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: description,
+            ),
+          );
+        }
+
+        sendMainFrameError(
+          webView.controller.loadedUrls.last,
+          'Initial navigation failed',
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final previousRetryUrl = webView.controller.loadedUrls.last;
+        sendMainFrameError(previousRetryUrl, 'First retry failed');
+        await tester.pump();
+
+        expect(find.text('页面加载失败: First retry failed'), findsOneWidget);
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final currentRetryUrl = webView.controller.loadedUrls.last;
+
+        webView.params.onLoadStop?.call(controller, previousRetryUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        sendMainFrameError(previousRetryUrl, 'Stale retry failure');
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Stale retry failure'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        webView.params.onLoadStop?.call(controller, currentRetryUrl);
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry completion and navigation error resolve fallback state',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+
+        void sendMainFrameError(String description) {
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(
+              url: webView.controller.loadedUrls.last,
+              isForMainFrame: true,
+            ),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: description,
+            ),
+          );
+        }
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        sendMainFrameError('Initial navigation failed');
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('页面加载失败: Initial navigation failed'), findsNothing);
+
+        sendMainFrameError('Retry navigation failed');
+        await tester.pump();
+        expect(find.text('页面加载失败: Retry navigation failed'), findsOneWidget);
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        sendMainFrameError('Final navigation failure');
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('页面加载失败: Final navigation failure'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        sendMainFrameError('Late main-frame failure');
+        await tester.pump();
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Late main-frame failure'),
+          findsOneWidget,
+        );
+        expect(find.text('页面加载超时，请重试'), findsNothing);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -1539,6 +2155,7 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
   final _pendingZoomDeltas = <double>[];
+  final loadedUrls = <WebUri>[];
   double zoomLevel = 1.0;
   bool _fitComplete = false;
 
@@ -1565,7 +2182,14 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     required URLRequest urlRequest,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
-  }) async {}
+  }) async {
+    final url = urlRequest.url;
+    if (url != null) {
+      loadedUrls.add(
+        kIsWeb ? WebUri(Uri.base.resolve(url.toString()).toString()) : url,
+      );
+    }
+  }
 
   @override
   Future<void> loadData({

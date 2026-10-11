@@ -145,14 +145,37 @@ String normalizeAsrUploadFormat(String format) {
 // ===========================================================================
 
 /// 已知音频格式的魔数字节。
-/// WAV:  "RIFF"
+/// WAV:  "RIFF....WAVE" or "RIFX....WAVE"
 /// MP3:  "ID3" 或 0xFFFx (MPEG sync)
 /// FLAC: "fLaC"
 /// M4A:  box_size(4B) + "ftyp"  (ISO Base Media File Format)
 const _magicWav = [0x52, 0x49, 0x46, 0x46];
+const _magicRifx = [0x52, 0x49, 0x46, 0x58];
+const _magicRf64 = [0x52, 0x46, 0x36, 0x34];
+const _magicWave = [0x57, 0x41, 0x56, 0x45];
 const _magicMp3Id3 = [0x49, 0x44, 0x33];
 const _magicFlac = [0x66, 0x4C, 0x61, 0x43];
 const _magicOgg = [0x4F, 0x67, 0x67, 0x53];
+
+bool _hasWaveContainerSignature(Uint8List data, List<int> riffSignature) {
+  return data.length >= 12 &&
+      data[0] == riffSignature[0] &&
+      data[1] == riffSignature[1] &&
+      data[2] == riffSignature[2] &&
+      data[3] == riffSignature[3] &&
+      data[8] == _magicWave[0] &&
+      data[9] == _magicWave[1] &&
+      data[10] == _magicWave[2] &&
+      data[11] == _magicWave[3];
+}
+
+bool _startsWithFourCc(Uint8List data, List<int> signature) {
+  return data.length >= 4 &&
+      data[0] == signature[0] &&
+      data[1] == signature[1] &&
+      data[2] == signature[2] &&
+      data[3] == signature[3];
+}
 
 /// 检测音频数据的实际格式（基于文件头魔数）。
 ///
@@ -160,12 +183,39 @@ const _magicOgg = [0x4F, 0x67, 0x67, 0x53];
 String detectAudioFormat(Uint8List data) {
   if (data.length < 4) return 'pcm';
 
-  // WAV: "RIFF"
-  if (data[0] == _magicWav[0] &&
-      data[1] == _magicWav[1] &&
-      data[2] == _magicWav[2] &&
-      data[3] == _magicWav[3]) {
+  final startsWithRiff = _startsWithFourCc(data, _magicWav);
+  final startsWithRifx = _startsWithFourCc(data, _magicRifx);
+  final startsWithRf64 = _startsWithFourCc(data, _magicRf64);
+  if (startsWithRf64) {
+    if (data.length < 12) {
+      throw FormatException('Truncated RF64 WAVE header');
+    }
+    throw FormatException(
+      'Unsupported RF64 WAVE container; only RIFF/WAVE is supported',
+    );
+  }
+
+  if ((startsWithRiff || startsWithRifx) && data.length < 12) {
+    throw FormatException('Truncated RIFF/RIFX WAVE header');
+  }
+
+  // WAV: RIFF container with WAVE form type.
+  if (startsWithRiff && _hasWaveContainerSignature(data, _magicWav)) {
     return 'wav';
+  }
+
+  // RIFX is a big-endian WAVE container. It is still WAV content, even
+  // though the PCM chunker rejects its byte order explicitly.
+  if (startsWithRifx && _hasWaveContainerSignature(data, _magicRifx)) {
+    return 'wav';
+  }
+
+  // RIFF/RIFX identifies a container, not raw PCM. Do not let an unsupported
+  // form such as AVI fall through to the caller's extension/request fallback.
+  if (startsWithRiff || startsWithRifx) {
+    throw FormatException(
+      'Unsupported RIFF/RIFX container form; only WAVE audio is supported',
+    );
   }
 
   // AAC ADTS: 12-bit sync (0xFFF), MPEG-4/2, layer=00
@@ -221,6 +271,16 @@ String detectAudioFormat(Uint8List data) {
 
   // 无匹配 → 裸数据
   return 'pcm';
+}
+
+/// Resolve the input format from its content, using the caller's format only
+/// when no supported signature is recognized (including raw PCM).
+String resolveAudioFormat(
+  Uint8List data, {
+  required String fallbackFormat,
+}) {
+  final detected = detectAudioFormat(data);
+  return (detected == 'pcm' ? fallbackFormat : detected).toLowerCase();
 }
 
 /// 确保音频数据具有有效的文件头，使之可被播放器识别。

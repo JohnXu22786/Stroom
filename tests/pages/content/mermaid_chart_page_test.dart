@@ -1037,6 +1037,23 @@ void main() {
     });
 
     testWidgets(
+      'initialCode with multiline %%{init} directive detects sequence type',
+      (tester) async {
+        const initialCode = '''%%{init: {
+  "theme": "dark"
+}}%%
+sequenceDiagram
+  Alice->>Bob: Hi''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        expect(find.text('添加参与者'), findsOneWidget);
+        expect(find.text('添加请求'), findsOneWidget);
+        expect(find.text('添加节点'), findsNothing);
+      },
+    );
+
+    testWidgets(
       'initialCode with only %% comments falls back to flowchart snippets',
       (tester) async {
         const initialCode = '%% comment line 1\n%% comment line 2\n';

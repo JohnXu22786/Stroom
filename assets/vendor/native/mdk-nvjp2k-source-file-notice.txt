@@ -1,0 +1,19 @@
+/*
+ * Copyright (c) 2024-2026 WangBin <wbsecg1 at gmail.com>
+ * AI participated
+ * This file is part of MDK
+ * MDK SDK: https://github.com/wang-bin/mdk-sdk
+ * Free for opensource softwares or non-commercial use.
+ *
+ * The above copyright notice and this permission notice shall be included
+ * in all copies or substantial portions of the Software.
+ *
+ * This software contains source code provided by NVIDIA Corporation.
+ */
+
+Source: https://github.com/wang-bin/mdk-nvjp2k/blob/7ab9b30954957cc76763aa8b9ce356015435c4d6/nvJp2kDecoder.cpp
+Scope: This is the source-file header at the cited commit. The inspected Windows
+SDK includes mdk-nvjp2k.dll, but its correspondence to this source revision
+and its precise binary redistribution terms are unconfirmed. This header does
+not establish the DLL's distribution rights, including any terms applicable
+to NVIDIA-provided code.

@@ -52,6 +52,15 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const [
+        'mdk-nvjp2k source-file notice (Windows SDK DLL; binary terms unresolved)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/mdk-nvjp2k-source-file-notice.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const ['LLVM libc++ (Linux, Android)'],
       await rootBundle.loadString(
         'assets/vendor/native/llvm-libcxx-LICENSE.TXT',

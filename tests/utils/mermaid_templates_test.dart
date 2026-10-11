@@ -26,6 +26,15 @@ void main() {
     });
   });
 
+  group('MermaidTemplates - requirement diagram verification method', () {
+    test('uses the Mermaid-supported verification method field', () {
+      final template = MermaidTemplates.getTemplate('requirement');
+
+      expect(template, contains('verifyMethod: test'));
+      expect(template, isNot(contains('verifiedMethod')));
+    });
+  });
+
   group('MermaidTemplates - Gantt dependencies', () {
     test(
       'dependency task snippet references a task defined in the template',
@@ -39,6 +48,19 @@ void main() {
         expect(dependencySnippet, contains('after a1,'));
       },
     );
+  });
+
+  group('MermaidTemplates - GitGraph snippets', () {
+    test('merge snippet targets a branch defined in the default template', () {
+      final template = MermaidTemplates.getTemplate('gitGraph');
+      final mergeSnippet = MermaidTemplates.getSnippets('gitGraph')
+          .singleWhere((snippet) => snippet.$1 == '合并分支')
+          .$2;
+      final mergeTarget = mergeSnippet.trim().split(RegExp(r'\s+')).last;
+
+      expect(mergeSnippet, startsWith('  merge '));
+      expect(template.split('\n'), contains('  branch $mergeTarget'));
+    });
   });
 
   group('MermaidTemplates - mindmap snippets', () {

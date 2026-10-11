@@ -12,6 +12,10 @@ const webTemplateSource = fs.readFileSync(
   path.resolve(__dirname, '../../assets/vendor/mermaid_render.html'),
   'utf8',
 );
+const webWheelZoomHandler = webTemplateSource.match(
+  /^    document\.addEventListener\('wheel', function\(e\) \{([\s\S]*?)^    \}, \{ passive: false \}\);/m,
+);
+assert.ok(webWheelZoomHandler, 'Could not find the web wheel zoom handler');
 const fitFunction = dartSource.match(
   /window\.fitToViewport\s*=\s*function\(\)\s*\{([\s\S]*?)^    \};/m,
 );
@@ -82,6 +86,47 @@ test('web render shows the readable Chinese loading hint', () => {
 
   assert.ok(loadingHint, 'Could not find the web loading hint');
   assert.equal(loadingHint[1], '图表加载中...');
+});
+
+test('web Ctrl/Meta wheel zoom ignores horizontal-only input', () => {
+  const zoomCalls = [];
+  let preventDefaultCount = 0;
+  const context = {
+    document: {
+      getElementById: (id) => {
+        assert.equal(id, 'viewport');
+        return {getBoundingClientRect: () => ({left: 10, top: 20})};
+      },
+    },
+    window: {setZoom: (...args) => zoomCalls.push(args)},
+    zoomLevel: 1.5,
+  };
+  const handleWheel = vm.runInNewContext(
+    `(function(e) {${webWheelZoomHandler[1]}\n})`,
+    context,
+  );
+
+  for (const modifier of ['ctrlKey', 'metaKey']) {
+    handleWheel({
+      [modifier]: true,
+      deltaY: 0,
+      clientX: 80,
+      clientY: 70,
+      preventDefault: () => preventDefaultCount++,
+    });
+  }
+
+  assert.deepEqual(zoomCalls, []);
+
+  handleWheel({
+    ctrlKey: true,
+    deltaY: 16,
+    clientX: 80,
+    clientY: 70,
+    preventDefault: () => preventDefaultCount++,
+  });
+  assert.deepEqual(zoomCalls, [[1.4, 70, 50]]);
+  assert.equal(preventDefaultCount, 1);
 });
 
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {

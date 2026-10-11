@@ -12,10 +12,9 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'code_block_source_widget.dart';
 
-/// A [OneSequenceGestureRecognizer] that immediately accepts any drag gesture
-/// on the very first [PointerMoveEvent], before the parent [ScrollView]'s
-/// [VerticalDragGestureRecognizer] can accept (which typically requires ~1px
-/// of vertical movement for mouse devices).
+/// A [OneSequenceGestureRecognizer] that accepts a drag after the pointer moves
+/// beyond the pointer's gesture slop, before the parent [ScrollView]'s
+/// [VerticalDragGestureRecognizer] can take the gesture.
 ///
 /// This recognizer is used in a [GestureArenaTeam] alongside the
 /// [ScaleGestureRecognizer] so that when the [ImmediateMermaidGestureRecognizer]
@@ -24,38 +23,43 @@ import 'code_block_source_widget.dart';
 /// are captured for pan/zoom instead of scrolling the parent chat page.
 ///
 /// When paired with a [ScaleGestureRecognizer] in a [GestureArenaTeam]:
-/// - **Taps / clicks** produce no [PointerMoveEvent], so this recognizer never
-///   resolves, allowing toolbar buttons and other tap handlers to work normally.
-/// - **Drags of any direction** produce a [PointerMoveEvent] immediately on
-///   the first movement, at which point this recognizer resolves with
-///   [GestureDisposition.accepted], winning the arena before the parent
-///   [ScrollView] can detect the drag direction.
-/// - **Pinch zoom** also triggers a [PointerMoveEvent] from one of the two
-///   pointers, causing the same early acceptance and team win.
+/// - **Taps / clicks** remain eligible while movement stays within the
+///   pointer's hit slop, allowing the separate tap recognizer to forward the
+///   click.
+/// - **Drags of any direction** resolve with [GestureDisposition.accepted]
+///   after movement exceeds the pointer's gesture slop, winning the arena
+///   before the parent [ScrollView] can take an actual drag.
+/// - **Pinch zoom** is captured when either pointer moves beyond the same slop.
 class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
+  final Map<int, Offset> _initialPositions = <int, Offset>{};
+
   @override
   void addAllowedPointer(PointerDownEvent event) {
     // OneSequenceGestureRecognizer.addAllowedPointer already calls
     // startTrackingPointer, which registers with the pointer router and
     // adds this recognizer to the gesture arena.
     super.addAllowedPointer(event);
+    _initialPositions[event.pointer] = event.position;
   }
 
   @override
   void handleEvent(PointerEvent event) {
     if (event is PointerMoveEvent) {
-      // Accept on the very first movement (any direction, any distance),
-      // winning the gesture arena before the parent ScrollView's
-      // VerticalDragGestureRecognizer can accept (which needs ~1px for mouse).
-      resolve(GestureDisposition.accepted);
+      final initialPosition = _initialPositions[event.pointer];
+      final gestureSlop = computeHitSlop(event.kind, gestureSettings);
+      if (initialPosition != null &&
+          (event.position - initialPosition).distance > gestureSlop) {
+        resolve(GestureDisposition.accepted);
+      }
     } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      _initialPositions.remove(event.pointer);
       stopTrackingPointer(event.pointer);
     }
   }
 
   @override
   void didStopTrackingLastPointer(int pointer) {
-    // No cleanup needed.
+    _initialPositions.clear();
   }
 
   @override
@@ -65,6 +69,7 @@ class ImmediateMermaidGestureRecognizer extends OneSequenceGestureRecognizer {
 
   @override
   void rejectGesture(int pointer) {
+    _initialPositions.remove(pointer);
     stopTrackingPointer(pointer);
   }
 
@@ -364,7 +369,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=5';
+    final base = '$webAssetTemplateUrl?v=7';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -716,9 +721,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
   bool _hasLoadedPage = false;
+  bool _canApplyZoomCommands = false;
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
+  bool _hasWebRetryTimeoutError = false;
+  String? _webRetryUrl;
+  int _webRetryGeneration = 0;
+
+  String _resolveWebUrl(String url) => Uri.base.resolve(url).toString();
 
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
@@ -811,21 +822,31 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
+      final isPendingWebRetry = kIsWeb &&
+          !_isReady &&
+          _webViewController != null &&
+          (_readyFallbackTimer?.isActive ?? false);
+      final isTimedOutWebRetry = kIsWeb &&
+          _hasWebRetryTimeoutError &&
+          _webRetryUrl != null &&
+          _webViewController != null;
+      final shouldRearmWebRetry = isPendingWebRetry || isTimedOutWebRetry;
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
       // stays alive the code change goes through loadData below. (The
       // source-code toggle keeps the WebView mounted — see [build].)
       _initialHtml = null;
-      // On web the loading state is managed INSIDE the iframe (the asset
-      // template shows a hint until the diagram is rendered), so _isReady
-      // stays true and the Flutter overlay never appears there. On native
+      // Ordinary web source updates use the iframe's own loading hint. A
+      // retained-view retry instead keeps Flutter's overlay until its
+      // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb) {
+      if (!kIsWeb || shouldRearmWebRetry) {
         _isReady = false;
       }
       _hasLoadedPage = false;
       _errorMessage = null;
+      _hasWebRetryTimeoutError = false;
       _showSourceCode = false;
       _zoomLevel = 1.0;
       _pendingZoomDeltas.clear();
@@ -837,7 +858,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         // controller and give the remounted platform view a fresh creation
         // deadline, so a failed remount still reaches the error state.
         _webViewController = null;
+        _webRetryUrl = null;
         _armWebViewCreationFallback();
+      }
+      if (shouldRearmWebRetry) {
+        _armReadyFallback(showNavigationTimeoutError: true);
       }
       _loadMermaidCode();
     }
@@ -871,24 +896,34 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   /// Arms a fallback timer that force-ends the loading state after 3s if
-  /// [onLoadStop] has not fired yet (native platforms only). The loading
-  /// overlay must never spin forever: whatever the WebView does (rendered,
-  /// blank, or errored), the overlay is removed so the user sees the
-  /// actual iframe content (which shows its own loading hint or error
-  /// message from the HTML template).
-  void _armReadyFallback() {
+  /// [onLoadStop] has not fired yet. Web retries show an error because a
+  /// failed navigation leaves no iframe loading UI to recover the preview.
+  void _armReadyFallback({bool showNavigationTimeoutError = false}) {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_isReady && _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
-            'force-ending the loading state');
-        setState(() => _isReady = true);
+            'ending the loading state');
+        setState(() {
+          _isReady = true;
+          if (showNavigationTimeoutError) {
+            _errorMessage = '页面加载超时，请重试';
+            _hasWebRetryTimeoutError = true;
+          } else {
+            _canApplyZoomCommands = true;
+            _hasWebRetryTimeoutError = false;
+          }
+        });
+        if (!showNavigationTimeoutError) {
+          unawaited(_applyPendingZoomDeltas());
+        }
       }
     });
   }
 
   void _loadMermaidCode() {
     _hasLoadedPage = false;
+    _canApplyZoomCommands = false;
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
@@ -899,11 +934,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // with the code as a query parameter. A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
-      // No ready-fallback is armed: the iframe manages its own loading
-      // state (the template hides its hint the moment the diagram renders).
-      ctrl.loadUrl(
-          urlRequest: URLRequest(
-              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
+      // The iframe manages its own initial loading state; retained-view
+      // retries arm a Flutter fallback separately in [_retry].
+      final baseUrl = MermaidRenderWidget.buildWebAssetUrl(code);
+      final isTrackedRetry =
+          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
+      final url = isTrackedRetry
+          ? '$baseUrl&attempt=${++_webRetryGeneration}'
+          : baseUrl;
+      if (isTrackedRetry) {
+        _webRetryUrl = _resolveWebUrl(url);
+      }
+      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
       return;
     }
 
@@ -936,6 +978,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final webViewWasNeverCreated = _webViewController == null;
     setState(() {
       _errorMessage = null;
+      _hasWebRetryTimeoutError = false;
       _isReady = false;
       if (webViewWasNeverCreated) {
         _webViewKey = UniqueKey();
@@ -946,6 +989,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // the retry attempt and remount its platform view so creation is
       // attempted again. Re-arming also reports another failed mount.
       _armWebViewCreationFallback();
+    } else if (kIsWeb) {
+      // A web retry reuses the existing view, so it will not receive another
+      // onWebViewCreated callback to restore readiness if navigation stalls.
+      _armReadyFallback(showNavigationTimeoutError: true);
     }
     _loadMermaidCode();
   }
@@ -1022,7 +1069,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
-  /// Forwards an unmoved tap from the Flutter overlay to the DOM element at
+  /// Forwards a tap from the Flutter overlay to the DOM element at
   /// the same WebView viewport position. Mermaid's own SVG click handlers
   /// then process callbacks and links as usual.
   void _onDiagramTap(TapUpDetails details) {
@@ -1121,11 +1168,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// The overlay uses [RawGestureDetector] with a [GestureArenaTeam]
   /// containing two recognizers, plus a separate [TapGestureRecognizer]:
   ///
-  /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena on the very
-  ///    first [PointerMoveEvent] in ANY direction, before the parent
-  ///    [ScrollView]'s [VerticalDragGestureRecognizer] can determine the
-  ///    drag direction (which typically needs ~1px of vertical movement
-  ///    for mouse devices, or ~18px for touch devices).
+  /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena after movement
+  ///    exceeds gesture slop in ANY direction, while allowing smaller
+  ///    movements to remain taps.
   /// 2. [ScaleGestureRecognizer] — handles pan (single-finger drag) and
   ///    pinch zoom (two-finger pinch), communicating with the WebView via
   ///    [evaluateJavascript].
@@ -1139,7 +1184,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Mermaid diagram area, preventing the parent chat scroll view from
   /// scrolling while the user pans or zooms the diagram.
   ///
-  /// Taps without movement are recognized separately and forwarded to the
+  /// Taps within gesture slop are recognized separately and forwarded to the
   /// WebView as a click on the DOM element at the tap position. The tap
   /// recognizer stays outside the pan/zoom team so a tap does not start a
   /// scale gesture. Moving beyond tap slop rejects it, leaving the immediate
@@ -1168,8 +1213,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // without any Flutter-level gesture interception.
     if (kIsWeb) return child;
 
-    // Shared gesture arena team: when the immediate recognizer wins the arena
-    // on first pointer move, the ScaleGestureRecognizer also accepts.
+    // Shared gesture arena team: when the recognizer wins after pointer
+    // movement exceeds gesture slop, the ScaleGestureRecognizer also accepts.
     final team = GestureArenaTeam();
 
     return ClipRect(
@@ -1218,7 +1263,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     },
                   ),
                   // ImmediateMermaidGestureRecognizer: wins the gesture arena
-                  // on the very first PointerMoveEvent (any direction).
+                  // after movement exceeds gesture slop (any direction).
                   // Defined after ScaleGestureRecognizer so it enters the
                   // arena second, ensuring ScaleGestureRecognizer is in
                   // 'possible' state before the team resolves.
@@ -1257,7 +1302,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// its own (possibly stale) pan here.
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
-    if (ctrl == null || !_hasLoadedPage) {
+    if (ctrl == null || !_canApplyZoomCommands) {
       _pendingZoomDeltas.add(delta);
       return;
     }
@@ -1598,7 +1643,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       if (mounted) {
                         final msg =
                             args.isNotEmpty ? args[0].toString() : '未知错误';
-                        setState(() => _errorMessage = msg);
+                        setState(() {
+                          _errorMessage = msg;
+                          _hasWebRetryTimeoutError = false;
+                        });
                       }
                     },
                   );
@@ -1629,26 +1677,47 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                if (kIsWeb &&
+                    _webRetryUrl != null &&
+                    (url == null ||
+                        _resolveWebUrl(url.toString()) != _webRetryUrl)) {
+                  return;
+                }
                 _hasLoadedPage = true;
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
+                _canApplyZoomCommands = true;
+                if (mounted && (!_isReady || _hasWebRetryTimeoutError)) {
+                  setState(() {
+                    _isReady = true;
+                    if (_hasWebRetryTimeoutError) {
+                      _errorMessage = null;
+                      _hasWebRetryTimeoutError = false;
+                    }
+                  });
                 }
                 _readyFallbackTimer?.cancel();
                 unawaited(_applyPendingZoomDeltas());
               },
               onReceivedError: (controller, request, error) {
-                _readyFallbackTimer?.cancel();
+                if (kIsWeb &&
+                    request.isForMainFrame == true &&
+                    _webRetryUrl != null &&
+                    _resolveWebUrl(request.url.toString()) != _webRetryUrl) {
+                  return;
+                }
                 // WebView creation ends the Flutter loading overlay before
                 // the asset URL finishes navigating. Surface main-frame
                 // failures even after that, but leave web subresource errors
                 // to the iframe's own loading/error UI. Native behavior still
-                // only reports load errors while its initial page is pending.
+                // only reports load errors while its initial page is pending;
+                // the readiness fallback only hides the loading overlay.
                 final shouldShowError =
-                    kIsWeb ? request.isForMainFrame == true : !_isReady;
+                    kIsWeb ? request.isForMainFrame == true : !_hasLoadedPage;
                 if (mounted && shouldShowError) {
+                  _readyFallbackTimer?.cancel();
                   setState(() {
                     _isReady = true;
                     _errorMessage = '页面加载失败: ${error.description}';
+                    _hasWebRetryTimeoutError = false;
                   });
                 }
               },
