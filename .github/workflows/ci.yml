@@ -87,6 +87,9 @@ jobs:
               lib/catcatch/engine/js_hook_script.dart)
                 test_f="tests/catcatch/js_hook_script_test.cjs"
                 ;;
+              lib/services/startup_preferences.dart)
+                test_f="tests/startup/startup_check_service_web.dart"
+                ;;
               *)
                 test_f="tests/${file#lib/}"
                 test_f="${test_f%.dart}_test.dart"
