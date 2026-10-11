@@ -65,6 +65,7 @@ class ManifestDatabase {
   static Map<String, dynamic>? _webData;
 
   static Future<void>? _jsonRecordRegistrationQueue;
+  static final Object _jsonRecordRegistrationLockZoneKey = Object();
 
   /// Web 端数据在 WebFileStore 中的 key
   static const String _webStoreKey = 'manifest_database_data';
@@ -373,60 +374,63 @@ class ManifestDatabase {
   }
 
   static Future<void> _migrateOldVideoRecordsJson() async {
-    if (await StartupPreferences.getBool('migrated_video_records') == true) {
-      return;
-    }
-    final audioList =
-        _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
-    final videoList =
-        _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
-    if (videoList.isNotEmpty) {
-      await StartupPreferences.setBool('migrated_video_records', true);
-      return;
-    }
-    final videoFormats = {
-      'mp4',
-      'mov',
-      'avi',
-      'mkv',
-      'webm',
-      'flv',
-      'wmv',
-      'm4v',
-      '3gp',
-      'gif'
-    };
-    final toMigrate = <Map<String, dynamic>>[];
-    final remaining = <Map<String, dynamic>>[];
-    for (final item in audioList) {
-      final map = item as Map<String, dynamic>;
-      if (videoFormats.contains(map['format'] as String?)) {
-        toMigrate.add(map);
-      } else {
-        remaining.add(map);
+    await _withJsonRecordRegistrationLock(() async {
+      if (await StartupPreferences.getBool('migrated_video_records') == true) {
+        return;
       }
-    }
-    if (toMigrate.isEmpty) {
-      await StartupPreferences.setBool('migrated_video_records', true);
-      return;
-    }
-    for (final record in toMigrate) {
-      final videoRecord = <String, dynamic>{
-        'id': record['id'],
-        'name': record['name'],
-        'hash': record['hash'],
-        'format': record['format'],
-        'createdAt': record['createdAt'],
-        'size': record['size'],
-        'folder': record['folder'],
-        'duration': record['duration'],
+      final audioList =
+          _webData![ManifestTables.audioRecords] as List<dynamic>? ?? [];
+      final videoList =
+          _webData![ManifestTables.videoRecords] as List<dynamic>? ?? [];
+      if (videoList.isNotEmpty) {
+        await StartupPreferences.setBool('migrated_video_records', true);
+        return;
+      }
+      final videoFormats = {
+        'mp4',
+        'mov',
+        'avi',
+        'mkv',
+        'webm',
+        'flv',
+        'wmv',
+        'm4v',
+        '3gp',
+        'gif'
       };
-      videoList.add(videoRecord);
-    }
-    _webData![ManifestTables.audioRecords] = remaining;
-    _webData![ManifestTables.videoRecords] = videoList;
-    await _saveWebData();
-    await StartupPreferences.setBool('migrated_video_records', true);
+      final toMigrate = <Map<String, dynamic>>[];
+      final remaining = <Map<String, dynamic>>[];
+      for (final item in audioList) {
+        final map = item as Map<String, dynamic>;
+        if (videoFormats.contains(map['format'] as String?)) {
+          toMigrate.add(map);
+        } else {
+          remaining.add(map);
+        }
+      }
+      if (toMigrate.isEmpty) {
+        await StartupPreferences.setBool('migrated_video_records', true);
+        return;
+      }
+      for (final record in toMigrate) {
+        final videoRecord = <String, dynamic>{
+          'id': record['id'],
+          'name': record['name'],
+          'hash': record['hash'],
+          'format': record['format'],
+          'createdAt': record['createdAt'],
+          'size': record['size'],
+          'folder': record['folder'],
+          'duration': record['duration'],
+        };
+        videoList.add(videoRecord);
+      }
+      _webData![ManifestTables.audioRecords] = remaining;
+      _webData![ManifestTables.videoRecords] = videoList;
+      await _saveWebData();
+      await StartupPreferences.setBool('migrated_video_records', true);
+
+    });
   }
 
   /// Migrate legacy shared folders into the requested per-type tables.
@@ -687,13 +691,19 @@ class ManifestDatabase {
   static Future<T> _withJsonRecordRegistrationLock<T>(
     Future<T> Function() operation,
   ) async {
+    if (Zone.current[_jsonRecordRegistrationLockZoneKey] == true) {
+      return await operation();
+    }
     final previous = _jsonRecordRegistrationQueue;
     final release = Completer<void>();
     final releaseFuture = release.future;
     _jsonRecordRegistrationQueue = releaseFuture;
     try {
       if (previous != null) await previous;
-      return await operation();
+      return await runZoned<Future<T>>(
+        operation,
+        zoneValues: {_jsonRecordRegistrationLockZoneKey: true},
+      );
     } finally {
       if (identical(_jsonRecordRegistrationQueue, releaseFuture)) {
         _jsonRecordRegistrationQueue = null;
@@ -934,10 +944,13 @@ class ManifestDatabase {
   static Future<void> insertAudioRecord(Map<String, dynamic> record) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        list.add(record);
-        await _saveWebData();
+        beforeJsonRecordRegistrationForTesting?.call();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+          list.add(record);
+          await _saveWebData();
+        });
         return;
       }
       final db = await database;
@@ -958,13 +971,15 @@ class ManifestDatabase {
       String id, Map<String, dynamic> updates) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        final index = list.indexWhere((r) => (r as Map)['id'] == id);
-        if (index != -1) {
-          (list[index] as Map<String, dynamic>).addAll(updates);
-          await _saveWebData();
-        }
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+          final index = list.indexWhere((r) => (r as Map)['id'] == id);
+          if (index != -1) {
+            (list[index] as Map<String, dynamic>).addAll(updates);
+            await _saveWebData();
+          }
+        });
         return;
       }
       final db = await database;
@@ -985,23 +1000,25 @@ class ManifestDatabase {
   static Future<void> deleteAudioRecord(String id) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final originalRecords =
-            data[ManifestTables.audioRecords] as List<dynamic>?;
-        final records = originalRecords ?? <dynamic>[];
-        data[ManifestTables.audioRecords] = records
-            .where((r) => (r as Map)['id'] != id)
-            .toList();
-        try {
-          await _saveWebData(rethrowOnError: true);
-        } catch (_) {
-          if (originalRecords == null) {
-            data.remove(ManifestTables.audioRecords);
-          } else {
-            data[ManifestTables.audioRecords] = originalRecords;
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final originalRecords =
+              data[ManifestTables.audioRecords] as List<dynamic>?;
+          final records = originalRecords ?? <dynamic>[];
+          data[ManifestTables.audioRecords] = records
+              .where((r) => (r as Map)['id'] != id)
+              .toList();
+          try {
+            await _saveWebData(rethrowOnError: true);
+          } catch (_) {
+            if (originalRecords == null) {
+              data.remove(ManifestTables.audioRecords);
+            } else {
+              data[ManifestTables.audioRecords] = originalRecords;
+            }
+            rethrow;
           }
-          rethrow;
-        }
+        });
         return;
       }
       final db = await database;
@@ -1021,24 +1038,26 @@ class ManifestDatabase {
   static Future<void> deleteAudioRecords(List<String> ids) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final originalRecords =
-            data[ManifestTables.audioRecords] as List<dynamic>?;
-        final records = originalRecords ?? <dynamic>[];
-        final idSet = ids.toSet();
-        data[ManifestTables.audioRecords] = records
-            .where((r) => !idSet.contains((r as Map)['id']))
-            .toList();
-        try {
-          await _saveWebData(rethrowOnError: true);
-        } catch (_) {
-          if (originalRecords == null) {
-            data.remove(ManifestTables.audioRecords);
-          } else {
-            data[ManifestTables.audioRecords] = originalRecords;
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final originalRecords =
+              data[ManifestTables.audioRecords] as List<dynamic>?;
+          final records = originalRecords ?? <dynamic>[];
+          final idSet = ids.toSet();
+          data[ManifestTables.audioRecords] = records
+              .where((r) => !idSet.contains((r as Map)['id']))
+              .toList();
+          try {
+            await _saveWebData(rethrowOnError: true);
+          } catch (_) {
+            if (originalRecords == null) {
+              data.remove(ManifestTables.audioRecords);
+            } else {
+              data[ManifestTables.audioRecords] = originalRecords;
+            }
+            rethrow;
           }
-          rethrow;
-        }
+        });
         return;
       }
       final db = await database;
@@ -1461,9 +1480,17 @@ class ManifestDatabase {
         throw ArgumentError('Invalid record table: $tableName');
       }
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        data[tableName] = <dynamic>[];
-        await _saveWebData();
+        Future<void> clearJsonRecords() async {
+          final data = await _loadWebData();
+          data[tableName] = <dynamic>[];
+          await _saveWebData();
+        }
+
+        if (tableName == ManifestTables.audioRecords) {
+          await _withJsonRecordRegistrationLock(clearJsonRecords);
+        } else {
+          await clearJsonRecords();
+        }
       } else {
         final db = await database;
         await db.delete(tableName);
