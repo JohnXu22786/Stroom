@@ -10,7 +10,9 @@ import 'package:path/path.dart' as p;
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/ios_continued_task_service.dart';
+import '../services/ocr_retry_storage.dart';
 import '../utils/atomic_file.dart';
+import '../utils/ocr_diagnostics.dart';
 import 'task_provider.dart';
 
 // ============================================================================
@@ -155,10 +157,16 @@ class BackgroundTask {
     this.statusChangedAt,
     this.steps = const [],
     this.downloadedFilePath,
-    this.rawRequest,
-    this.rawResponse,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
     this.retryData,
-  }) : createdAt = createdAt ?? DateTime.now();
+  }) : rawRequest = type == BackgroundTaskType.ocr
+           ? OcrDiagnosticSnapshot.sanitizeRequest(rawRequest)
+           : rawRequest,
+       rawResponse = type == BackgroundTaskType.ocr
+           ? OcrDiagnosticSnapshot.sanitizeResponse(rawResponse)
+           : rawResponse,
+       createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
     TaskStatus? status,
@@ -552,8 +560,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Remove a task from the list.
   void removeTask(String taskId) {
     _cancellations.remove(taskId)?.call();
+    final removed = state.where((task) => task.id == taskId).firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
-    _persistTasks();
+    if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
+      final references = OcrRetryStorage.referencesFromSnapshot(
+        removed!.retryData,
+      );
+      if (references.isEmpty) {
+        _persistTasks();
+      } else {
+        _persistOcrTaskRemoval(references);
+      }
+    } else {
+      _persistTasks();
+    }
     _syncIosContinuedTask();
   }
 
@@ -572,8 +592,23 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final gate = Completer<void>();
     _removalBarrier = gate;
     try {
+      final removedTasks = state
+          .where((task) => removedIds.contains(task.id))
+          .toList();
       final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
       if (!await _writeSnapshot(proposed)) return false;
+      final cacheCandidates = <String>{
+        for (final task in removedTasks)
+          if (task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      };
+      final currentTasks = mounted ? state : (_disposedSnapshot ?? const []);
+      cacheCandidates.addAll({
+        for (final task in currentTasks)
+          if (removedIds.contains(task.id) &&
+              task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      });
       if (mounted) {
         state = state.where((t) => !removedIds.contains(t.id)).toList();
         _syncIosContinuedTask();
@@ -585,11 +620,53 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             ?.where((task) => !removedIds.contains(task.id))
             .toList();
       }
+      await _deleteUnreferencedOcrCache(cacheCandidates);
       return true;
     } finally {
       _removalBarrier = null;
       gate.complete();
     }
+  }
+
+  Future<void> _deleteUnreferencedOcrCache(Set<String> candidates) async {
+    if (candidates.isEmpty) return;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    final referenced = <String>{
+      for (final task in tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+    };
+    try {
+      await OcrRetryStorage.deleteUnreferenced(
+        candidates: candidates,
+        referenced: referenced,
+      );
+    } catch (error) {
+      debugPrint('[BackgroundTaskNotifier] OCR cache cleanup failed: $error');
+    }
+  }
+
+  Future<void> _persistOcrTaskRemoval(Set<String> references) {
+    final barrier = _removalBarrier;
+    if (barrier == null) {
+      final write = _writeSnapshot(state);
+      return _pendingWrite = write.then<void>((saved) async {
+        if (saved) await _deleteUnreferencedOcrCache(references);
+      });
+    }
+
+    final previous = _pendingWrite ?? Future<void>.value();
+    final dirOverride = debugStorageDirectoryOverride;
+    final deferred = previous.then((_) async {
+      await barrier.future;
+      final snapshot = mounted ? state : _disposedSnapshot;
+      if (snapshot == null) return;
+      final saved = await _writeSnapshotNow(snapshot, dirOverride);
+      if (saved) await _deleteUnreferencedOcrCache(references);
+    });
+    _pendingWrite = deferred;
+    if (!mounted) _disposedPersistence = deferred;
+    return deferred;
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -778,12 +855,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return write;
   }
 
-  Future<void> _writeSnapshotNow(
+  Future<bool> _writeSnapshotNow(
     List<BackgroundTask> snapshot,
     String? dirOverride,
   ) async {
     final data = snapshot.map((task) => task.toMap()).toList();
-    await _writeSnapshotData(data, dirOverride);
+    return _writeSnapshotData(data, dirOverride);
   }
 
   Future<bool> _writeSnapshotData(

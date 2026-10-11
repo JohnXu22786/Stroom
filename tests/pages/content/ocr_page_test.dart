@@ -18,9 +18,11 @@ import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/ocr_retry_storage.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 /// Creates a small valid PNG (8x8) via the real engine, tinted [color]
 /// so distinct images can be told apart (default: green).
@@ -73,6 +75,8 @@ Widget _buildTestApp({
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
+  Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
+      testRetryImageRestorer,
   Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
@@ -101,6 +105,7 @@ Widget _buildTestApp({
         retryData: retryData,
         testGalleryPicker: testGalleryPicker,
         testImagePayloadPreparer: testImagePayloadPreparer,
+        testRetryImageRestorer: testRetryImageRestorer,
       ),
       localizationsDelegates: const [
         DefaultMaterialLocalizations.delegate,
@@ -221,20 +226,20 @@ Map<String, dynamic> _createVersionedRetryData({
   required String modelId,
   String? instructionContent,
   String saveFolder = '',
-}) =>
-    OcrRetrySnapshot.capture(
-      configId: configId,
-      modelId: modelId,
-      images: [
-        OcrRetryImage(
-          bytes: _createTestPngBytes(),
-          format: 'png',
-          name: 'retry-image.png',
-        ),
-      ],
-      instructionContent: instructionContent,
-      saveFolder: saveFolder,
-    ).toMap();
+}) => {
+  'type': 'ocr',
+  'version': 1,
+  'modelRef': {'configId': configId, 'modelId': modelId},
+  'images': [
+    {
+      'bytes': base64Encode(_createTestPngBytes()),
+      'format': 'png',
+      'name': 'retry-image.png',
+    },
+  ],
+  if (instructionContent != null) 'instructionContent': instructionContent,
+  'saveFolder': saveFolder,
+};
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -372,6 +377,128 @@ void main() {
   });
 
   group('OcrPage - stable retry context', () {
+    testWidgets('disables image changes while cached retry images restore', (
+      tester,
+    ) async {
+      final pendingRestore = Completer<OcrRetryRestoreResult>();
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          retryData: {
+            'type': 'ocr',
+            'version': 2,
+            'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+            'images': [
+              {
+                'storageRef': 'ocr_retry_cache/${'a' * 64}.bin',
+                'format': 'png',
+                'name': 'retry.png',
+              },
+            ],
+          },
+          testRetryImageRestorer: (_) => pendingRestore.future,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '相册选择'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '拍照识别'))
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('读取重试图片...'), findsOneWidget);
+
+      pendingRestore.complete(
+        OcrRetryRestoreResult(
+          images: [OcrRetryImage(bytes: _createTestPngBytes(), format: 'png')],
+          missingImageCount: 0,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('已选 1 张图片'), findsOneWidget);
+      expect(
+        tester
+            .widget<ElevatedButton>(find.widgetWithText(ElevatedButton, '相册选择'))
+            .onPressed,
+        isNotNull,
+      );
+    });
+
+    testWidgets(
+      'missing cached retry image requires reselecting the full image set',
+      (tester) async {
+        WebFileStore.enableTestMode();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        try {
+          final stored = await tester.runAsync(
+            () => OcrRetryStorage.cacheSnapshot(
+              taskId: 'present-image',
+              snapshot: OcrRetrySnapshot.capture(
+                configId: 'config-1',
+                modelId: 'model-1',
+                images: [
+                  OcrRetryImage(
+                    bytes: Uint8List.fromList([1, 2]),
+                    format: 'png',
+                  ),
+                ],
+              ),
+            ),
+          );
+          final presentImage = (stored!['images'] as List).single as Map;
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry()],
+              backgroundTasksNotifier: notifier,
+              retryData: {
+                'type': 'ocr',
+                'version': 2,
+                'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+                'images': [
+                  presentImage,
+                  {
+                    'storageRef':
+                        'ocr_retry_cache/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.bin',
+                    'format': 'png',
+                    'name': 'missing.png',
+                  },
+                ],
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.text('已选 1 张图片'), findsOneWidget);
+          expect(
+            find.text('原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试'),
+            findsOneWidget,
+          );
+          final startButton = tester.widget<FilledButton>(
+            find.ancestor(
+              of: find.text('开始识别'),
+              matching: find.byType(FilledButton),
+            ),
+          );
+          expect(startButton.onPressed, isNull);
+          await tester.tap(find.text('开始识别'));
+          await tester.pump();
+          expect(notifier.tasksForTest, isEmpty);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          notifier.dispose();
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
     testWidgets(
         'restores the referenced model, folder and instruction snapshot', (
       tester,
