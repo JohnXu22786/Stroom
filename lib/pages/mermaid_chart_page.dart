@@ -271,18 +271,27 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // Save to text storage
   // ---------------------------------------------------------------------------
 
+  void _showEmptyChartError() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('图表内容为空，无法保存')));
+  }
+
   Future<void> _saveChart() async {
-    final content = _codeController.text;
-    if (content.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('图表内容为空，无法保存')));
+    if (_codeController.text.trim().isEmpty) {
+      _showEmptyChartError();
       return;
     }
 
     // Show save dialog with filename input and folder picker
     final folders = await TextManifest.getAllFolders();
     if (!mounted) return;
+
+    final content = _codeController.text;
+    if (content.trim().isEmpty) {
+      _showEmptyChartError();
+      return;
+    }
 
     // Local controller - will be garbage collected after _saveChart completes.
     // Not explicitly disposed because the dialog's dismiss animation still
