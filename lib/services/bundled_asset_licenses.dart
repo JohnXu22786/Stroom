@@ -76,7 +76,9 @@ void registerBundledAssetLicenses() {
 
     yield LicenseEntryWithLineBreaks(
       const [
-        'AndroidX, Material, and Kotlinx Coroutines (Android, v0.5.0-rc.1)',
+        'AndroidX, Material, Kotlinx Coroutines, and '
+            'androidx.arch.core:core-runtime (Android v0.5.0-rc.1; '
+            'Apache-2.0; core-runtime version unknown)',
       ],
       await rootBundle.loadString(
         'assets/vendor/native/android-maven-runtime-APACHE-2.0.txt',
