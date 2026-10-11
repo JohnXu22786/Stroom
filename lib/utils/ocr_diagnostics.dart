@@ -171,7 +171,7 @@ class OcrDiagnosticSnapshot {
     final cleaned = value.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
     if (cleaned.isEmpty || cleaned.length > _maxTextLength) return null;
     if (RegExp(
-      r'^(?:bearer\s|sk-[a-z0-9]|gh[pousr]_)',
+      r'^(?:bearer\s|sk-[a-z0-9]|gh[pousr]_|AIza[a-z0-9_-]{20,}$)',
       caseSensitive: false,
     ).hasMatch(cleaned)) {
       return null;

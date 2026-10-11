@@ -72,11 +72,17 @@ Widget _buildTestApp({
   List<ProviderEntry>? entries,
   List<SelectedImage>? testImages,
   Map<String, dynamic>? retryData,
+  String? retryTaskId,
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
   Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer,
+  Future<Map<String, dynamic>?> Function({
+    required String taskId,
+    required OcrRetrySnapshot snapshot,
+  })? testRetrySnapshotCacher,
+  OcrInstructionsNotifier Function(Ref ref)? testInstructionsNotifierBuilder,
   Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
@@ -94,6 +100,9 @@ Widget _buildTestApp({
       if (backgroundTasksNotifier != null)
         backgroundTasksProvider.overrideWith((ref) => backgroundTasksNotifier),
       ocrInstructionsProvider.overrideWith((ref) {
+        if (testInstructionsNotifierBuilder != null) {
+          return testInstructionsNotifierBuilder(ref);
+        }
         final notifier = OcrInstructionsNotifier(ref);
         notifier.state = ocrInstructions;
         return notifier;
@@ -103,9 +112,11 @@ Widget _buildTestApp({
       home: OcrPage(
         testImages: testImages,
         retryData: retryData,
+        retryTaskId: retryTaskId,
         testGalleryPicker: testGalleryPicker,
         testImagePayloadPreparer: testImagePayloadPreparer,
         testRetryImageRestorer: testRetryImageRestorer,
+        testRetrySnapshotCacher: testRetrySnapshotCacher,
       ),
       localizationsDelegates: const [
         DefaultMaterialLocalizations.delegate,
@@ -162,6 +173,53 @@ class _DelayedInstructionsNotifier extends OcrInstructionsNotifier {
   @override
   Future<void> load() async {
     await Future<void>.delayed(delay);
+    state = const [
+      OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+      OcrInstruction(name: '表格提取', content: '提取表格内容'),
+    ];
+  }
+}
+
+
+class _CompletableInstructionsNotifier extends OcrInstructionsNotifier {
+  _CompletableInstructionsNotifier(
+    super.ref, {
+    required this.loadStarted,
+    required this.finishLoad,
+  });
+
+  final Completer<void> loadStarted;
+  final Completer<void> finishLoad;
+
+  @override
+  Future<void> load() async {
+    if (!loadStarted.isCompleted) loadStarted.complete();
+    await finishLoad.future;
+    state = const [
+      OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+      OcrInstruction(name: '表格提取', content: '提取表格内容'),
+    ];
+  }
+}
+
+class _InstructionsLoadFailsOnRetryNotifier extends OcrInstructionsNotifier {
+  _InstructionsLoadFailsOnRetryNotifier(
+    super.ref, {
+    required this.loadStarted,
+    required this.finishFirstLoad,
+  });
+
+  final Completer<void> loadStarted;
+  final Completer<void> finishFirstLoad;
+  var _loadCount = 0;
+
+  @override
+  Future<void> load() async {
+    if (++_loadCount > 1) {
+      throw StateError('instruction store unavailable');
+    }
+    if (!loadStarted.isCompleted) loadStarted.complete();
+    await finishFirstLoad.future;
     state = const [
       OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
       OcrInstruction(name: '表格提取', content: '提取表格内容'),
@@ -377,6 +435,128 @@ void main() {
   });
 
   group('OcrPage - stable retry context', () {
+    testWidgets('waits for retry image caching before adding a task', (
+      tester,
+    ) async {
+      final cacheStarted = Completer<void>();
+      final finishCache = Completer<Map<String, dynamic>?>();
+      final notifier = _InspectableBackgroundTaskNotifier();
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          testImages: [_createValidOcrTestImage()],
+          backgroundTasksNotifier: notifier,
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+            cacheStarted.complete();
+            return finishCache.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      await cacheStarted.future;
+
+      expect(find.text('保存重试图片...'), findsOneWidget);
+      expect(notifier.tasksForTest, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      finishCache.complete(null);
+      await tester.pump();
+    });
+
+    testWidgets('retry without a snapshot asks for a complete image reselect', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          retryTaskId: 'failed-ocr-task',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('原始 OCR 图片缓存不可用，请清空并重新选择全部图片后重试'),
+        findsOneWidget,
+      );
+      expect(find.text('清空'), findsOneWidget);
+      final startButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('开始识别'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(startButton.onPressed, isNull);
+
+      await tester.tap(find.text('清空'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('原始 OCR 图片缓存不可用，请清空并重新选择全部图片后重试'),
+        findsNothing,
+      );
+      expect(find.text('清空'), findsNothing);
+    });
+
+    testWidgets('retry instruction load failure unlocks OCR start', (
+      tester,
+    ) async {
+      final loadStarted = Completer<void>();
+      final finishFirstLoad = Completer<void>();
+      final notifier = _InspectableBackgroundTaskNotifier();
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          retryData: {
+            'type': 'ocr',
+            'images': [
+              {
+                'bytes': base64Encode(_createTestPngBytes()),
+                'format': 'png',
+              },
+            ],
+            'modelIndex': 0,
+            'instructionIndex': 1,
+          },
+          backgroundTasksNotifier: notifier,
+          testInstructionsNotifierBuilder: (ref) =>
+              _InstructionsLoadFailsOnRetryNotifier(
+                ref,
+                loadStarted: loadStarted,
+                finishFirstLoad: finishFirstLoad,
+              ),
+          testImagePayloadPreparer: (bytes) async => OcrImagePayload(
+            bytes: bytes,
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await loadStarted.future;
+      await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
+      await tester.pump();
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+
+      expect(find.text('读取识别指令失败，请重试'), findsOneWidget);
+      expect(notifier.tasksForTest, isEmpty);
+      final startButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('开始识别'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(startButton.onPressed, isNotNull);
+
+      finishFirstLoad.complete();
+      await tester.pump();
+    });
+
     testWidgets('disables image changes while cached retry images restore', (
       tester,
     ) async {
@@ -952,6 +1132,8 @@ void main() {
     ) async {
       final entry = _createOcrEntry(withModels: true);
       final bgNotifier = BackgroundTaskNotifier();
+      final instructionsLoadStarted = Completer<void>();
+      final finishInstructionsLoad = Completer<void>();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -961,11 +1143,10 @@ void main() {
               return notifier;
             }),
             ocrInstructionsProvider.overrideWith((ref) {
-              // Long load so the restore is still pending after the route
-              // transition settles.
-              final notifier = _DelayedInstructionsNotifier(
+              final notifier = _CompletableInstructionsNotifier(
                 ref,
-                delay: const Duration(seconds: 2),
+                loadStarted: instructionsLoadStarted,
+                finishLoad: finishInstructionsLoad,
               );
               notifier.load();
               return notifier;
@@ -981,13 +1162,42 @@ void main() {
                       context,
                       MaterialPageRoute(
                         builder: (_) => OcrPage(
-                          testImages: [_createValidOcrTestImage()],
                           retryData: {
                             'type': 'ocr',
-                            'images': <Map<String, dynamic>>[],
+                            'images': [
+                              {
+                                'bytes': base64Encode(_createTestPngBytes()),
+                                'format': 'png',
+                              },
+                            ],
                             'modelIndex': 0,
                             'instructionIndex': 1,
                           },
+                          testImagePayloadPreparer: (bytes) async =>
+                              OcrImagePayload(
+                                bytes: bytes,
+                                format: 'png',
+                                width: 1,
+                                height: 1,
+                              ),
+                          testRetrySnapshotCacher:
+                              ({required taskId, required snapshot}) async =>
+                                  OcrRetrySnapshot.capture(
+                                    configId: snapshot.configId,
+                                    modelId: snapshot.modelId,
+                                    images: [
+                                      for (final image in snapshot.images)
+                                        OcrRetryImage.reference(
+                                          storageRef:
+                                              'ocr_retry_cache/${List.filled(64, 'a').join()}.bin',
+                                          format: image.format,
+                                          name: image.name,
+                                        ),
+                                    ],
+                                    instructionContent:
+                                        snapshot.instructionContent,
+                                    saveFolder: snapshot.saveFolder,
+                                  ).toMap(),
                         ),
                       ),
                     ),
@@ -1001,15 +1211,20 @@ void main() {
       );
       await tester.tap(find.text('打开OCR'));
       await tester.pumpAndSettle();
+      await instructionsLoadStarted.future;
       await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
       await tester.pump();
 
-      // Both taps land inside the pending-restore window (load takes 2s)
-      // — the second must not start a duplicate OCR.
+      // Keep the instruction restore pending after the first tap, then ensure
+      // the busy control cannot publish a second task.
       await tester.tap(find.text('开始识别'));
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(find.text('开始识别'));
-      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+      expect(bgNotifier.state, isEmpty);
+      final busyButton = find.byType(FilledButton).last;
+      expect(tester.widget<FilledButton>(busyButton).onPressed, isNull);
+      await tester.tap(busyButton);
+      finishInstructionsLoad.complete();
+      await tester.pump();
       await tester.pumpAndSettle();
 
       // Exactly one task was created and the page popped exactly once

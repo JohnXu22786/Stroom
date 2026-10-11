@@ -83,4 +83,18 @@ void main() {
       'requestId': 'req-old',
     });
   });
+
+  test('credential-shaped values are dropped from request ID fields', () {
+    final googleApiKey = 'AIza${List.filled(35, 'a').join()}';
+    final request = OcrDiagnosticSnapshot.sanitizeRequest({
+      'requestId': googleApiKey,
+    })!;
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'data': {'id': googleApiKey},
+    })!;
+
+    expect(request, isEmpty);
+    expect(response, isEmpty);
+    expect(jsonEncode([request, response]), isNot(contains(googleApiKey)));
+  });
 }
