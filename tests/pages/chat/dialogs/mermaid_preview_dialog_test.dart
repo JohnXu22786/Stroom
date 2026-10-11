@@ -135,6 +135,9 @@ void main() {
       );
       await tester.tap(find.text('Open preview'));
       await tester.pump();
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
       await tester.pump();
 
       final webView = platform.webView!;
