@@ -502,27 +502,20 @@ test("code wrapping changes the inherited DSH line style", async () => {
     );
     await wait();
     const doc = v.dom.window.document,
-      card = doc.querySelector(".code-card");
-    assert.ok(card?.querySelector("pre"));
-    assert.equal(
-      v.dom.window
-        .getComputedStyle(card)
-        .getPropertyValue("--dsl-code-block-line-white-space"),
-      "pre",
-    );
-    card.querySelector('[aria-label="自动换行"]').click();
+      card = doc.querySelector(".stroom-code-card .md-code-block");
+    const code = card?.querySelector("pre");
+    assert.ok(code, "code is rendered by DSH's CodeBlock");
+    assert.equal(card.getAttribute("data-code-wrap"), "true");
+    assert.equal(v.dom.window.getComputedStyle(code).whiteSpace, "pre-wrap");
+    const wrapButton = card.querySelector('[aria-label="自动换行"]');
+    assert.equal(wrapButton.getAttribute("aria-pressed"), "true");
+    wrapButton.click();
     await wait();
+    assert.equal(card.getAttribute("data-code-wrap"), "false");
+    assert.equal(v.dom.window.getComputedStyle(code).whiteSpace, "pre");
     assert.equal(
-      v.dom.window
-        .getComputedStyle(card)
-        .getPropertyValue("--dsl-code-block-line-white-space"),
-      "pre-wrap",
-    );
-    assert.equal(
-      card
-        .querySelector('[aria-label="自动换行"]')
-        .getAttribute("aria-pressed"),
-      "true",
+      wrapButton.getAttribute("aria-pressed"),
+      "false",
     );
   } finally {
     v.dom.window.close();
@@ -542,7 +535,7 @@ test("legacy WebKit highlights code and provides Mermaid's missing API", async (
     await wait();
     const doc = v.dom.window.document;
     const tokens = doc.querySelectorAll(
-      '.code-card pre span[style*="--shiki-"]',
+      '.stroom-code-card .md-code-block pre span[style*="--shiki-"]',
     );
     assert.ok(
       tokens.length > 1,

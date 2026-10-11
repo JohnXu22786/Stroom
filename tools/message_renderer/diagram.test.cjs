@@ -27,7 +27,7 @@ test("Mermaid recovers after a failed render in the same code block", async () =
             contents:
               args.path === "mermaid"
                 ? `export default {initialize(){},async render(id,code){if(code==='bad')throw Error('invalid');return {svg:'<svg><text>valid</text></svg>'};}};`
-                : `export const CodeBlock=()=>null; export const IconCopyOutlineRegular=()=>null; export const IconDownloadOutlineRegular=()=>null; export const IconWrapLinesOutlineRegular=()=>null;`,
+                : `export const CodeBlock=()=>null; export const IconCopyOutlineRegular=()=>null; export const IconDownloadOutlineRegular=()=>null; export const IconWrapLinesOutlineRegular=()=>null; export const IconCodeOutlineRegular=()=>null; export const IconFullscreenOutlineRegular=()=>null;`,
             loader: "js",
           }));
         },
