@@ -206,11 +206,20 @@
     var dragStartY = 0;
     var panStartX = 0;
     var panStartY = 0;
+    var hasDragged = false;
+    var suppressClickAfterPan = false;
+    var suppressClickTimer = null;
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+        suppressClickAfterPan = false;
+      }
       if (e.target.closest('#diagram-container')) {
         isDragging = true;
+        hasDragged = false;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
         panStartX = panX;
@@ -221,6 +230,9 @@
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
+        if (e.clientX !== dragStartX || e.clientY !== dragStartY) {
+          hasDragged = true;
+        }
         panX = panStartX + (e.clientX - dragStartX);
         panY = panStartY + (e.clientY - dragStartY);
         updateTransform();
@@ -230,8 +242,27 @@
     });
 
     document.addEventListener('mouseup', function() {
+      if (isDragging && hasDragged) {
+        suppressClickAfterPan = true;
+        suppressClickTimer = setTimeout(function() {
+          suppressClickAfterPan = false;
+          suppressClickTimer = null;
+        }, 0);
+      }
       isDragging = false;
+      hasDragged = false;
     });
+
+    document.addEventListener('click', function(e) {
+      if (!suppressClickAfterPan || e.detail === 0) return;
+      suppressClickAfterPan = false;
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
@@ -310,7 +341,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v7';
+    var TEMPLATE_VERSION = 'v8';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;
