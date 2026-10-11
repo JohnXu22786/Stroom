@@ -160,6 +160,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "startup/**",
         "services/app_log_service_test.dart",
         "services/background_service_test.dart",
+        "services/bundled_asset_licenses_test.dart",
         "services/connectivity_test_service_test.dart",
         "services/desktop_app_service_test.dart",
         "services/ios_continued_task_service_test.dart",
