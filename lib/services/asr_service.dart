@@ -10,6 +10,7 @@ import '../utils/audio_codecs.dart';
 import '../utils/audio_chunker.dart';
 import '../utils/audio_utils.dart';
 import '../utils/format_file_size.dart';
+import '../utils/http_timeout.dart';
 import 'app_log_service.dart';
 import '../utils/http_utils.dart';
 
@@ -221,6 +222,38 @@ class AsrResult {
   });
 }
 
+enum AsrRequestPhase {
+  uploading,
+  waiting,
+  receiving,
+  responseReceived,
+  chunkCompleted,
+}
+
+/// A request event tied to bytes actually sent, bytes actually received, or
+/// a chunk/response that the service has finished processing.
+class AsrRequestProgress {
+  final AsrRequestPhase phase;
+  final int chunkIndex;
+  final int chunkCount;
+  final int sentBytes;
+  final int totalSendBytes;
+  final int receivedBytes;
+  final int totalReceiveBytes;
+
+  const AsrRequestProgress({
+    required this.phase,
+    this.chunkIndex = 1,
+    this.chunkCount = 1,
+    this.sentBytes = 0,
+    this.totalSendBytes = 0,
+    this.receivedBytes = 0,
+    this.totalReceiveBytes = 0,
+  });
+}
+
+typedef AsrProgressCallback = void Function(AsrRequestProgress progress);
+
 enum AsrChunkStatus { succeeded, failed }
 
 /// The outcome for one non-overlapping audio chunk.
@@ -334,9 +367,13 @@ class AsrService {
                     'Authorization': 'Bearer ${config.apiKey}',
                   ...openRouterAppHeaders,
                 },
-                // No timeouts — ASR transcription may take a long time
+                connectTimeout: connectTimeoutDefault,
+                receiveTimeout: receiveTimeoutFallback,
               ),
-            );
+            ) {
+    _dio.options.connectTimeout ??= connectTimeoutDefault;
+    _dio.options.receiveTimeout ??= receiveTimeoutFallback;
+  }
 
   /// Dio default headers, exposed for testing.
   Map<String, dynamic> get defaultHeaders => _dio.options.headers;
@@ -372,6 +409,7 @@ class AsrService {
     required Uint8List audioBytes,
     String audioFormat = 'wav',
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     await AppLogService.info(
       'AsrService',
@@ -419,6 +457,7 @@ class AsrService {
         workingBytes,
         fmt,
         cancelToken: cancelToken,
+        onProgress: onProgress,
       );
     }
 
@@ -449,6 +488,7 @@ class AsrService {
               workingBytes,
               fmt,
               cancelToken: cancelToken,
+              onProgress: onProgress,
             );
           }
         } catch (e) {
@@ -487,6 +527,7 @@ class AsrService {
             workingBytes,
             actualFmt,
             cancelToken: cancelToken,
+            onProgress: onProgress,
           );
         } on FormatException catch (e) {
           // Malformed/unparseable WAV — fall through to the rejection below.
@@ -502,6 +543,7 @@ class AsrService {
           actualFmt,
           config.uploadMethod,
           cancelToken: cancelToken,
+          onProgress: onProgress,
         );
       }
     }
@@ -585,6 +627,7 @@ class AsrService {
     Uint8List workingBytes,
     String fmt, {
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     var actualFmt = fmt;
     if (config.compression != 'none' && fmt == 'wav') {
@@ -597,6 +640,7 @@ class AsrService {
       actualFmt,
       config.uploadMethod,
       cancelToken: cancelToken,
+      onProgress: onProgress,
     );
   }
 
@@ -623,12 +667,14 @@ class AsrService {
     Uint8List bytes,
     String fmt, {
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     return _sendViaMethod(
       bytes,
       fmt,
       AudioUploadMethod.base64Json,
       cancelToken: cancelToken,
+      onProgress: onProgress,
     );
   }
 
@@ -638,6 +684,7 @@ class AsrService {
     String fmt,
     AudioUploadMethod method, {
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     final stopwatch = Stopwatch()..start();
     final mimeTypeString = getMimeType(fmt);
@@ -659,6 +706,7 @@ class AsrService {
         jsonCustomParamNames: jsonCustomParamNames,
         method: method,
         cancelToken: cancelToken,
+        onProgress: onProgress,
       );
 
       stopwatch.stop();
@@ -692,6 +740,7 @@ class AsrService {
   Future<AsrResult> transcribeFromUrl(
     String audioUrl, {
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     await AppLogService.info('AsrService', '开始转写 (URL): $audioUrl');
 
@@ -709,6 +758,7 @@ class AsrService {
     final stopwatch = Stopwatch()..start();
     final sharedParams = _buildSharedParams();
     sharedParams['file'] = trimmed;
+    final requestBody = jsonEncode(sharedParams);
 
     // Capture diagnostics
     lastRequestBody = sharedParams;
@@ -724,12 +774,23 @@ class AsrService {
     try {
       final response = await _dio.post(
         config.transcribeUrl,
-        data: jsonEncode(sharedParams),
-        options: Options(headers: {'Content-Type': 'application/json'}),
+        data: requestBody,
+        options: Options(
+          headers: {'Content-Type': 'application/json'},
+          sendTimeout: sendTimeoutForBytes(utf8.encode(requestBody).length),
+          receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+        ),
         cancelToken: cancelToken,
+        onSendProgress: (sent, total) =>
+            _reportSendProgress(onProgress, sent, total),
+        onReceiveProgress: (received, total) =>
+            _reportReceiveProgress(onProgress, received, total),
       );
 
       stopwatch.stop();
+      onProgress?.call(
+        const AsrRequestProgress(phase: AsrRequestPhase.responseReceived),
+      );
       _captureResponseDiagnostics(response);
       final parsed = _parseResponse(response.data);
 
@@ -838,6 +899,7 @@ class AsrService {
     Uint8List wavBytes,
     String audioFormat, {
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
   }) async {
     // Map chunking config string to enum
     final chunkMethod = switch (config.chunking) {
@@ -921,6 +983,9 @@ class AsrService {
           mimeType: mimeType,
           jsonCustomParamNames: chunkCustomParamNames,
           cancelToken: cancelToken,
+          onProgress: onProgress,
+          chunkIndex: i + 1,
+          chunkCount: chunks.length,
         );
         _captureResponseDiagnostics(response);
         final result = _parseResponse(response.data, allowEmptyText: true);
@@ -933,6 +998,13 @@ class AsrService {
             endSeconds: chunkEndSeconds,
             status: AsrChunkStatus.succeeded,
             text: chunkText,
+          ),
+        );
+        onProgress?.call(
+          AsrRequestProgress(
+            phase: AsrRequestPhase.chunkCompleted,
+            chunkIndex: i + 1,
+            chunkCount: chunks.length,
           ),
         );
         if (chunkText.isNotEmpty) {
@@ -1034,6 +1106,9 @@ class AsrService {
     required Set<String> jsonCustomParamNames,
     AudioUploadMethod? method,
     CancelToken? cancelToken,
+    AsrProgressCallback? onProgress,
+    int chunkIndex = 1,
+    int chunkCount = 1,
   }) async {
     final effectiveMethod = method ?? config.uploadMethod;
     final diagnosticFields = Map<String, dynamic>.from(sharedParams);
@@ -1065,11 +1140,36 @@ class AsrService {
 
         _captureDiagnostics(diagnosticFields);
 
-        return _dio.post(
+        final response = await _dio.post(
           config.transcribeUrl,
           data: formData,
+          options: Options(
+            sendTimeout: sendTimeoutForBytes(formData.length),
+            receiveTimeout:
+                _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+          ),
           cancelToken: cancelToken,
+          onSendProgress: (sent, total) => _reportSendProgress(
+            onProgress,
+            sent,
+            total,
+            chunkIndex: chunkIndex,
+            chunkCount: chunkCount,
+          ),
+          onReceiveProgress: (received, total) => _reportReceiveProgress(
+            onProgress,
+            received,
+            total,
+            chunkIndex: chunkIndex,
+            chunkCount: chunkCount,
+          ),
         );
+        _reportResponseReceived(
+          onProgress,
+          chunkIndex: chunkIndex,
+          chunkCount: chunkCount,
+        );
+        return response;
 
       case AudioUploadMethod.base64Json:
         final b64 = base64Encode(audioBytes);
@@ -1079,17 +1179,104 @@ class AsrService {
 
         _captureDiagnostics(diagnosticFields);
 
-        return _dio.post(
+        final requestBody = jsonEncode(sharedParams);
+        final response = await _dio.post(
           config.transcribeUrl,
-          data: jsonEncode(sharedParams),
-          options: Options(headers: {'Content-Type': 'application/json'}),
+          data: requestBody,
+          options: Options(
+            headers: {'Content-Type': 'application/json'},
+            sendTimeout: sendTimeoutForBytes(utf8.encode(requestBody).length),
+            receiveTimeout:
+                _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+          ),
           cancelToken: cancelToken,
+          onSendProgress: (sent, total) => _reportSendProgress(
+            onProgress,
+            sent,
+            total,
+            chunkIndex: chunkIndex,
+            chunkCount: chunkCount,
+          ),
+          onReceiveProgress: (received, total) => _reportReceiveProgress(
+            onProgress,
+            received,
+            total,
+            chunkIndex: chunkIndex,
+            chunkCount: chunkCount,
+          ),
         );
+        _reportResponseReceived(
+          onProgress,
+          chunkIndex: chunkIndex,
+          chunkCount: chunkCount,
+        );
+        return response;
 
       case AudioUploadMethod.url:
         // Should not be reached — use transcribeFromUrl for URL method.
         throw Exception('URL 上传方式请使用 transcribeFromUrl() 方法，而不是 transcribe()');
     }
+  }
+
+  void _reportSendProgress(
+    AsrProgressCallback? onProgress,
+    int sent,
+    int total, {
+    int chunkIndex = 1,
+    int chunkCount = 1,
+  }) {
+    onProgress?.call(
+      AsrRequestProgress(
+        phase: AsrRequestPhase.uploading,
+        chunkIndex: chunkIndex,
+        chunkCount: chunkCount,
+        sentBytes: sent,
+        totalSendBytes: total,
+      ),
+    );
+    if (total > 0 && sent >= total) {
+      onProgress?.call(
+        AsrRequestProgress(
+          phase: AsrRequestPhase.waiting,
+          chunkIndex: chunkIndex,
+          chunkCount: chunkCount,
+          sentBytes: sent,
+          totalSendBytes: total,
+        ),
+      );
+    }
+  }
+
+  void _reportReceiveProgress(
+    AsrProgressCallback? onProgress,
+    int received,
+    int total, {
+    int chunkIndex = 1,
+    int chunkCount = 1,
+  }) {
+    onProgress?.call(
+      AsrRequestProgress(
+        phase: AsrRequestPhase.receiving,
+        chunkIndex: chunkIndex,
+        chunkCount: chunkCount,
+        receivedBytes: received,
+        totalReceiveBytes: total,
+      ),
+    );
+  }
+
+  void _reportResponseReceived(
+    AsrProgressCallback? onProgress, {
+    int chunkIndex = 1,
+    int chunkCount = 1,
+  }) {
+    onProgress?.call(
+      AsrRequestProgress(
+        phase: AsrRequestPhase.responseReceived,
+        chunkIndex: chunkIndex,
+        chunkCount: chunkCount,
+      ),
+    );
   }
 
   void _captureDiagnostics(Map<String, dynamic> diagnosticFields) {

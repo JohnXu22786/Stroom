@@ -253,8 +253,10 @@ class BackgroundTask {
             ? DateTime.parse(map['statusChangedAt'] as String)
             : null,
         steps: (map['steps'] as List?)
-                ?.map((s) =>
-                    BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)))
+                ?.map(
+                  (s) =>
+                      BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
+                )
                 .toList() ??
             [],
         downloadedFilePath: map['downloadedFilePath'] as String?,
@@ -277,6 +279,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
   final Map<String, void Function()> _cancellations = {};
 
+  /// Returns a live task by ID, or null after removal or notifier disposal.
+  BackgroundTask? taskById(String taskId) {
+    if (!mounted) return null;
+    return state.where((task) => task.id == taskId).firstOrNull;
+  }
+
   /// Only live owned operations register callbacks; restored records do not.
   void registerCancellation(String taskId, void Function() cancel) {
     if (!mounted || !state.any((task) => task.id == taskId)) {
@@ -296,16 +304,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final task = state.where((task) => task.id == taskId).firstOrNull;
     if (task == null) return;
     setSteps(
-        taskId,
-        task.steps
-            .map((step) => step.copyWith(
-                  status: step.running
-                      ? BgStepStatus.failed
-                      : step.status == BgStepStatus.pending
-                          ? BgStepStatus.skipped
-                          : step.status,
-                ))
-            .toList());
+      taskId,
+      task.steps
+          .map(
+            (step) => step.copyWith(
+              status: step.running
+                  ? BgStepStatus.failed
+                  : step.status == BgStepStatus.pending
+                      ? BgStepStatus.skipped
+                      : step.status,
+            ),
+          )
+          .toList(),
+    );
     failTask(taskId, error: '已取消');
   }
 
@@ -364,22 +375,34 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Start a waiting task — transitions it from [TaskStatus.waiting] to [TaskStatus.running].
   /// Does nothing if the task is not in waiting status (e.g. already running/completed).
   void startTask(String taskId) {
-    state = state.map((t) {
-      if (t.id != taskId) return t;
-      if (t.status != TaskStatus.waiting) return t;
-      return t.copyWith(
-        status: TaskStatus.running,
-        statusChangedAt: DateTime.now(),
-      );
-    }).toList();
+    startTaskIfWaiting(taskId);
+  }
+
+  /// Atomically claim a waiting task for execution.
+  ///
+  /// A queue uses the return value to avoid starting a task removed or
+  /// canceled while it was waiting.
+  bool startTaskIfWaiting(String taskId) {
+    final index = state.indexWhere((task) => task.id == taskId);
+    if (index == -1 || state[index].status != TaskStatus.waiting) return false;
+    final tasks = [...state];
+    tasks[index] = tasks[index].copyWith(
+      status: TaskStatus.running,
+      statusChangedAt: DateTime.now(),
+    );
+    state = tasks;
     _persistTasks();
     _syncIosContinuedTask();
+    return true;
   }
 
   /// Mark a task as completed and keep it in the list (visible to user).
   /// Optionally provide [downloadedFilePath] for the "open file" button.
-  void completeTask(String taskId,
-      {String? downloadedFilePath, bool resultSavedAsPartial = false}) {
+  void completeTask(
+    String taskId, {
+    String? downloadedFilePath,
+    bool resultSavedAsPartial = false,
+  }) {
     _updateTask(
       taskId,
       TaskStatus.completed,
@@ -389,12 +412,19 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Mark a task as failed with an optional error message.
-  void failTask(String taskId,
-      {String? error,
-      Map<String, dynamic>? rawRequest,
-      Map<String, dynamic>? rawResponse}) {
-    _updateTask(taskId, TaskStatus.failed,
-        error: error, rawRequest: rawRequest, rawResponse: rawResponse);
+  void failTask(
+    String taskId, {
+    String? error,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
+  }) {
+    _updateTask(
+      taskId,
+      TaskStatus.failed,
+      error: error,
+      rawRequest: rawRequest,
+      rawResponse: rawResponse,
+    );
   }
 
   /// Set the result text for a task (OCR extracted text, ASR transcription, etc.).
@@ -421,9 +451,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Persist the explicit user choice to save an incomplete OCR result.
   void markPartialResultSaveRequested(String taskId) {
     state = state
-        .map((task) => task.id == taskId
-            ? task.copyWith(partialSaveRequested: true)
-            : task)
+        .map(
+          (task) => task.id == taskId
+              ? task.copyWith(partialSaveRequested: true)
+              : task,
+        )
         .toList();
     _persistTasks();
   }
@@ -474,10 +506,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }) {
     state = state.map((t) {
       if (t.id != taskId) return t;
-      return t.copyWith(
-        rawRequest: rawRequest,
-        rawResponse: rawResponse,
-      );
+      return t.copyWith(rawRequest: rawRequest, rawResponse: rawResponse);
     }).toList();
     _persistTasks();
   }
@@ -509,8 +538,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       } else {
         return t; // no change
       }
-      steps[index] =
-          steps[index].copyWith(status: newStatus, error: error, label: label);
+      steps[index] = steps[index].copyWith(
+        status: newStatus,
+        error: error,
+        label: label,
+      );
       return t.copyWith(steps: steps);
     }).toList();
     _persistTasks();
@@ -676,9 +708,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       (sum, t) =>
           sum +
           t.steps
-              .where((s) =>
-                  s.status == BgStepStatus.completed ||
-                  s.status == BgStepStatus.skipped)
+              .where(
+                (s) =>
+                    s.status == BgStepStatus.completed ||
+                    s.status == BgStepStatus.skipped,
+              )
               .length,
     );
     final rawPercent = totalSteps == 0
@@ -785,13 +819,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final tasks = <BackgroundTask>[];
       for (final m in list) {
         try {
-          tasks
-              .add(BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)));
+          tasks.add(
+            BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)),
+          );
         } catch (e) {
           // 单个损坏条目不应导致整个恢复失败：跳过并继续，
           // 保证其余有效任务仍能恢复。
           debugPrint(
-              '[BackgroundTaskNotifier] Skipping corrupt task entry: $e');
+            '[BackgroundTaskNotifier] Skipping corrupt task entry: $e',
+          );
         }
       }
       return tasks;

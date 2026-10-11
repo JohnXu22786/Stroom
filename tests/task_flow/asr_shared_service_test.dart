@@ -461,7 +461,7 @@ void main() {
     await tester.tap(find.text('open ASR'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始识别'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.runAsync(() async {
       final deadline = DateTime.now().add(const Duration(seconds: 10));
