@@ -122,13 +122,17 @@ runtime software.
 The APK also contains AndroidX, Material Components, and Kotlinx Coroutines
 Maven runtime artifacts. Inspection found 63 `META-INF/*.version` markers;
 the POMs for 62 identified coordinates report Apache-2.0. The
-`androidx.arch.core:core-runtime` marker is malformed, so its version and
-license could not be confirmed and it is not included in the grouped notice.
-The APK embeds the Apache license from `androidx.annotation`; the standard
-[Apache License 2.0 text](https://www.apache.org/licenses/LICENSE-2.0.txt) is
-retained at `assets/vendor/native/android-maven-runtime-APACHE-2.0.txt` and
-registered for the 62 identified artifacts. Flutter's `NOTICES.Z` does not
-enumerate these Maven dependencies.
+`androidx.arch.core:core-runtime` marker contains malformed Gradle task text,
+so its exact version cannot be recovered from this APK. Google's [Maven
+metadata](https://dl.google.com/dl/android/maven2/androidx/arch/core/core-runtime/maven-metadata.xml)
+currently lists 15 versions; the POMs for all 15 versions identify Apache-2.0.
+The coordinate is included in the Apache-2.0 group despite its unknown exact
+version. The APK embeds the Apache license from
+`androidx.annotation`; the standard [Apache License 2.0
+text](https://www.apache.org/licenses/LICENSE-2.0.txt) is retained at
+`assets/vendor/native/android-maven-runtime-APACHE-2.0.txt` and registered for
+the 62 identified artifacts and `androidx.arch.core:core-runtime`. Flutter's
+`NOTICES.Z` does not enumerate these Maven dependencies.
 
 This notice group describes only the dependencies observed in APK
 `v0.5.0-rc.1`; the repository tracks neither a Gradle lockfile nor
