@@ -705,7 +705,7 @@ class _NavigationWebViewController extends PlatformInAppWebViewController {
 
   @override
   Future<dynamic> evaluateJavascript(
-      {required String source, ContentWorld? contentWorld}) async =>
+          {required String source, ContentWorld? contentWorld}) async =>
       null;
 
   @override

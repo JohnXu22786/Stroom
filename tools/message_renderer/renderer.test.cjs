@@ -827,3 +827,58 @@ test("preview readiness follows each fence, accepting case variants and settled 
     v.dom.window.close();
   }
 });
+
+test("the DSH scroll-to-bottom button requests the Stroom command", async () => {
+  const v = await view();
+  try {
+    const transcript = v.dom.window.document.getElementById("transcript");
+    let scrollTop = 0;
+    Object.defineProperties(transcript, {
+      scrollHeight: { configurable: true, get: () => 1000 },
+      clientHeight: { configurable: true, get: () => 300 },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Math.max(0, Math.min(value, 700));
+        },
+      },
+    });
+
+    v.receive(snapshot("scroll", [message("m", [])]));
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector(".to-bottom"),
+      null,
+      "the button stays hidden at the bottom",
+    );
+    scrollTop = 600;
+    transcript.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    const button = v.dom.window.document.querySelector(".to-bottom");
+    assert.ok(button, "the button appears when the transcript is scrolled up");
+
+    button.click();
+    assert.deepEqual(JSON.parse(JSON.stringify(v.events.at(-1))), {
+      type: "scrollBottom",
+      session: "scroll",
+    });
+    assert.equal(
+      scrollTop,
+      600,
+      "the DSH button delegates scrolling to Flutter instead of bypassing it",
+    );
+
+    v.receive({ type: "scrollBottom", session: "scroll" });
+    assert.equal(scrollTop, 700, "Flutter's response scrolls the transcript");
+    transcript.dispatchEvent(new v.dom.window.Event("scroll"));
+    await wait();
+    assert.equal(
+      v.dom.window.document.querySelector(".to-bottom"),
+      null,
+      "the button hides after Flutter returns the scroll command",
+    );
+  } finally {
+    v.dom.window.close();
+  }
+});

@@ -366,9 +366,9 @@ function View() {
           title="滚动到底部"
           onClick={() => {
             follow = true;
-            scroller().scrollTo({
-              top: scroller().scrollHeight,
-              behavior: "smooth",
+            send({
+              type: "scrollBottom",
+              session: current.session,
             });
           }}
         >

@@ -170,6 +170,10 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       await _loadMoreMessages(skipMinDisplayDelay: true);
       return;
     }
+    if (type == 'scrollBottom') {
+      _onScrollToBottomTap();
+      return;
+    }
     if (type == 'link' && event['uri'] is String) {
       final uri = Uri.tryParse(event['uri'] as String);
       if (uri != null &&

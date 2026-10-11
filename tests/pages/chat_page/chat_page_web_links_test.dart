@@ -264,4 +264,91 @@ void main() {
     expect(find.text('private reasoning'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('DSH scroll-to-bottom event sends the renderer command',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final now = DateTime(2026, 1, 1);
+    final commands = <Map<String, dynamic>>[];
+    late void Function(Map<String, dynamic>) sendEvent;
+    ValueNotifier<Map<String, dynamic>?>? subscribedCommands;
+    Widget hostBuilder(
+      String _,
+      ValueNotifier<Map<String, dynamic>?> nextCommands,
+      void Function(Map<String, dynamic>) nextSendEvent,
+    ) {
+      sendEvent = nextSendEvent;
+      if (!identical(subscribedCommands, nextCommands)) {
+        subscribedCommands = nextCommands;
+        nextCommands.addListener(() {
+          final command = nextCommands.value;
+          if (command != null) commands.add(Map.of(command));
+        });
+      }
+      return const SizedBox.shrink();
+    }
+
+    final conversation = Conversation(
+      id: 'scroll-state',
+      title: 'Scroll state',
+      createdAt: now,
+      updatedAt: now,
+      messages: [
+        ChatMessage(
+          id: 'user',
+          role: 'user',
+          content: 'Question',
+          createdAt: now,
+        ),
+        ChatMessage(
+          id: 'assistant',
+          role: 'assistant',
+          content: 'Answer',
+          createdAt: now,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          conversationsProvider.overrideWith((ref) {
+            final notifier = ConversationsNotifier(ref);
+            notifier.state = [conversation];
+            return notifier;
+          }),
+          activeConversationIdProvider.overrideWith((ref) => 'scroll-state'),
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+        child: MaterialApp(
+          home: ChatPage(messageHostBuilder: hostBuilder),
+        ),
+      ),
+    );
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    sendEvent({'type': 'ready'});
+    await tester.pump();
+    final snapshot = commands.lastWhere(
+      (command) => command['type'] == 'snapshot',
+    );
+    expect(find.byIcon(Icons.arrow_downward), findsNothing);
+
+    sendEvent({
+      'type': 'scrollBottom',
+      'session': snapshot['session'],
+    });
+    await tester.pump();
+    expect(
+      commands.last['type'],
+      'scrollBottom',
+      reason: 'the DSH button routes through Stroom before scrolling',
+    );
+    expect(commands.last['session'], snapshot['session']);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
