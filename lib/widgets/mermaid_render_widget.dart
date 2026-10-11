@@ -145,6 +145,9 @@ class MermaidRenderWidget extends StatefulWidget {
   /// {@endtemplate}
   final bool? testOnlyShowSourceCode;
 
+  /// Test-only: overrides the initial folder lookup used by Save as MMD.
+  final Future<Set<String>> Function()? testOnlyGetAllFolders;
+
   const MermaidRenderWidget({
     super.key,
     required this.mermaidCode,
@@ -153,6 +156,7 @@ class MermaidRenderWidget extends StatefulWidget {
     this.showToolbar = true,
     this.showZoomControls = false,
     this.testOnlyShowSourceCode,
+    this.testOnlyGetAllFolders,
   });
 
   /// Builds a complete HTML document with mermaid.js that renders the
@@ -1316,7 +1320,22 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
-    final folders = await TextManifest.getAllFolders();
+    late final Set<String> folders;
+    try {
+      folders = await (widget.testOnlyGetAllFolders?.call() ??
+          TextManifest.getAllFolders());
+    } catch (e) {
+      _isSaving = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('获取文件夹失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
     if (!mounted) {
       _isSaving = false;
       return;

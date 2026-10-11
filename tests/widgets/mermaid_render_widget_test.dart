@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
@@ -1422,6 +1426,67 @@ void main() {
       expect(tester.element(renderLayerText), same(renderLayerElement));
       expect(tester.takeException(), isNull);
     });
+  });
+
+  group('MermaidRenderWidget - Save as MMD', () {
+    testWidgets(
+      'shows folder lookup failure and unlocks a successful retry',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        var folderLookups = 0;
+        Future<Set<String>> getFolders() async {
+          folderLookups++;
+          if (folderLookups == 1) {
+            throw StateError('folder lookup unavailable');
+          }
+          return TextManifest.getAllFolders();
+        }
+
+        await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          MermaidRenderWidget(
+            mermaidCode: 'graph TD\n  A-->B',
+            testOnlyGetAllFolders: getFolders,
+          ),
+        );
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pump();
+        final firstLookupException = tester.takeException();
+        final folderLookupErrorShown =
+            find.textContaining('获取文件夹失败').evaluate().isNotEmpty;
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        expect(firstLookupException, isNull);
+        expect(folderLookupErrorShown, isTrue);
+        expect(folderLookups, 2);
+        expect(find.byType(FolderPickerDialog), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords())
+            .singleWhere((r) => r.format == 'mmd');
+        expect(savedRecord.folder, '');
+        expect(await TextManifest.readText(savedRecord.storagePath),
+            'graph TD\n  A-->B');
+      },
+      skip: kIsWeb,
+    );
   });
 }
 
