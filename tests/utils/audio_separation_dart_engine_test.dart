@@ -609,10 +609,11 @@ void main() {
       int editListMediaRateInteger = 1,
       int editListMediaRateFraction = 0,
     }) {
-      final audioFrames = sourceFrames ?? <Uint8List>[
-        Uint8List.fromList([0x11, 0x22, 0x33]),
-        Uint8List.fromList([0x44, 0x55, 0x66]),
-      ];
+      final audioFrames = sourceFrames ??
+          <Uint8List>[
+            Uint8List.fromList([0x11, 0x22, 0x33]),
+            Uint8List.fromList([0x44, 0x55, 0x66]),
+          ];
       if ((editListMediaTime == null) != (editListSegmentDuration == null)) {
         throw ArgumentError(
           'An edit list needs both a media time and duration.',

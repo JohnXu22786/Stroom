@@ -1151,12 +1151,11 @@ class _Mp4Demuxer {
       if (entry.mediaTime < 0 || mediaRate <= 0) {
         return <int>{};
       }
-      final mediaDuration = (entry.segmentDuration *
-                  mediaTimescale *
-                  mediaRate +
-              movieTimescale * 0x10000 -
-              1) ~/
-          (movieTimescale * 0x10000);
+      final mediaDuration =
+          (entry.segmentDuration * mediaTimescale * mediaRate +
+                  movieTimescale * 0x10000 -
+                  1) ~/
+              (movieTimescale * 0x10000);
       mediaRanges.add((entry.mediaTime, entry.mediaTime + mediaDuration));
     }
 
