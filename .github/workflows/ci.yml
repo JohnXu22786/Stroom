@@ -98,14 +98,15 @@ jobs:
                 # is covered by tests/assistant_test.dart). Accept that layout
                 # only when the basename identifies exactly one test file;
                 # ambiguous names must be added to the explicit map above.
-                case "$base" in
-                  *_test.dart) stem="${base%_test.dart}" ;;
-                  *_test.cjs) stem="${base%_test.cjs}" ;;
-                  *) stem="$base" ;;
-                esac
-                mapfile -t flattened < <(
-                  find tests -type f \( -name "${stem}_test.dart" -o -name "${stem}_test.cjs" \) -print
-                )
+                if [[ "$base" == *_test.dart ]]; then
+                  stem="${base%_test.dart}"
+                  mapfile -t flattened < <(
+                    find tests -type f -name "${stem}_test.dart" -print
+                  )
+                else
+                  # Non-Dart tests are accepted only by an explicit source map.
+                  flattened=()
+                fi
                 if [ "${#flattened[@]}" -eq 1 ]; then
                   echo "  ✅ $file (${flattened[0]})"
                 else
