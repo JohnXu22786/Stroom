@@ -1,15 +1,32 @@
+/// Converts integral indexes returned by the WebView bridge to Dart ints.
+/// JavaScript numbers can arrive as doubles on Flutter Web/Wasm.
+int? messageWebInteger(Object? value) {
+  if (value is int) return value;
+  if (value is! num || !value.isFinite) return null;
+  const maxSafeJavaScriptInteger = 9007199254740991;
+  if (value < -maxSafeJavaScriptInteger || value > maxSafeJavaScriptInteger) {
+    return null;
+  }
+  final asDouble = value.toDouble();
+  if (asDouble.truncateToDouble() != asDouble) return null;
+  return asDouble.toInt();
+}
+
 /// Resolves a fence from current Flutter-owned source, never JS-supplied code.
 ({String code, String language, bool complete, bool generating})?
     messageCodeFence(String text, Object? start, Object? end,
         {bool streaming = false}) {
-  if (start is! int ||
-      end is! int ||
-      start < 0 ||
-      end <= start ||
-      end > text.length) return null;
-  var source = text.substring(start, end);
-  final lineStart = start == 0 ? 0 : text.lastIndexOf('\n', start - 1) + 1;
-  final prefix = text.substring(lineStart, start);
+  final startOffset = messageWebInteger(start);
+  final endOffset = messageWebInteger(end);
+  if (startOffset == null ||
+      endOffset == null ||
+      startOffset < 0 ||
+      endOffset <= startOffset ||
+      endOffset > text.length) return null;
+  var source = text.substring(startOffset, endOffset).replaceAll('\r\n', '\n');
+  final lineStart =
+      startOffset == 0 ? 0 : text.lastIndexOf('\n', startOffset - 1) + 1;
+  final prefix = text.substring(lineStart, startOffset);
   final quotes = '>'.allMatches(prefix).length;
   // Removing a quote also consumes any outer list indentation. Only the
   // container prefix after the last quote remains to be stripped.

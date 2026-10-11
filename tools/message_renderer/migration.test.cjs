@@ -83,6 +83,111 @@ test("Web startup migration matches canonical ordering and retries malformed dat
       content: "正文旁边的错误",
       blocks: [{ type: "error", message: "tool failed" }],
     },
+    {
+      role: "assistant",
+      content: "旧记录里的完整回复",
+      toolCallRoundStarts: [0],
+      toolCalls: [
+        {
+          id: "legacy-tool",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "done",
+        },
+      ],
+      blocks: [
+        {
+          type: "tool_call",
+          id: "legacy-tool",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "done",
+        },
+      ],
+    },
+    {
+      role: "assistant",
+      content: "第一轮第二轮",
+      textSections: ["第一轮", "第二轮"],
+      toolCallRoundStarts: [0, 1],
+      toolCalls: [
+        {
+          id: "round-tool-1",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "first",
+        },
+        {
+          id: "round-tool-2",
+          name: "search",
+          arguments: {},
+          status: "completed",
+          result: "second",
+        },
+      ],
+      blocks: [
+        {
+          type: "tool_call",
+          id: "round-tool-1",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "first",
+        },
+        {
+          type: "tool_call",
+          id: "round-tool-2",
+          name: "search",
+          arguments: {},
+          status: "completed",
+          result: "second",
+        },
+      ],
+    },
+    {
+      role: "assistant",
+      content: "无块记录里的说明",
+      toolCallRoundStarts: [0],
+      toolCalls: [
+        {
+          id: "rebuild-tool",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "done",
+        },
+      ],
+    },
+    {
+      role: "assistant",
+      content: "第一轮第二轮",
+      textSections: ["第一轮", "第二轮"],
+      toolCallRoundStarts: [0, 1],
+      toolCalls: [
+        {
+          id: "partial-tool-1",
+          name: "read",
+          arguments: {},
+          status: "completed",
+          result: "first",
+        },
+        {
+          id: "partial-tool-2",
+          name: "search",
+          arguments: {},
+          status: "completed",
+          result: "second",
+        },
+      ],
+      blocks: [
+        { type: "text", text: "第一轮" },
+        { type: "tool_call", id: "partial-tool-1" },
+        { type: "tool_call", id: "partial-tool-2" },
+      ],
+    },
   );
   listener({
     data: [
@@ -122,6 +227,32 @@ test("Web startup migration matches canonical ordering and retries malformed dat
     { type: "error", message: "tool failed" },
     { type: "text", text: "正文旁边的错误" },
   ]);
+  assert.deepEqual(
+    migrated[8].blocks.map((block) => block.type),
+    ["tool_call", "text"],
+  );
+  assert.equal(migrated[8].blocks[1].text, "旧记录里的完整回复");
+  assert.deepEqual(
+    migrated[9].blocks.map((block) => block.type),
+    ["text", "tool_call", "text", "tool_call"],
+  );
+  assert.deepEqual(
+    migrated[9].blocks.filter((block) => block.type === "text").map((block) => block.text),
+    ["第一轮", "第二轮"],
+  );
+  assert.deepEqual(
+    migrated[10].blocks.map((block) => block.type),
+    ["tool_call", "text"],
+  );
+  assert.equal(migrated[10].blocks[1].text, "无块记录里的说明");
+  assert.deepEqual(
+    migrated[11].blocks.map((block) => block.type),
+    ["text", "tool_call", "text", "tool_call"],
+  );
+  assert.deepEqual(
+    migrated[11].blocks.filter((block) => block.type === "text").map((block) => block.text),
+    ["第一轮", "第二轮"],
+  );
   const saved = result.slice(result.indexOf("\n") + 1);
   listener({ data: ["canonicalizeConversations", saved] });
   assert.equal(result.slice(result.indexOf("\n") + 1), saved);

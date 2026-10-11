@@ -100,6 +100,16 @@ button:disabled {
 .message.user {
   margin-left: 15%;
 }
+.message-timestamp {
+  display: block;
+  padding-left: 4px;
+  margin: 2px 0;
+  color: var(--secondary);
+  font-size: 11px;
+}
+.message.user .message-timestamp + footer {
+  margin-top: 4px;
+}
 .user-text {
   background: var(--subtle);
   border-radius: 16px;

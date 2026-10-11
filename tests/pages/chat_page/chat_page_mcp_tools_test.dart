@@ -72,7 +72,8 @@ void main() {
           return notifier;
         }),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
 
     // Let _initialize + MCP initialization (synchronous placeholder
@@ -144,7 +145,8 @@ void main() {
           return notifier;
         }),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ));
 
     for (var i = 0; i < 20; i++) {

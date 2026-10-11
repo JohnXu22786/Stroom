@@ -39,6 +39,10 @@ const titles = {
   json: "检查 JSON",
   delete: "删除",
 };
+const foldSearchCase = (value) =>
+  // JavaScript lowercasing is context-sensitive for Greek final sigma, but
+  // search should treat both sigma forms as the same character.
+  value.toLowerCase().replace(/\u03c2/g, "\u03c3");
 let current = { session: null, messages: [], hasOlder: false, theme: {} };
 let search = { query: "" };
 let update;
@@ -69,12 +73,24 @@ function action(messageId, name, extra = {}) {
   });
 }
 
+function formatMessageTimestamp(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const pad = (part) => (part < 10 ? `0${part}` : String(part));
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 const Message = memo(function Message({ message }) {
+  const timestamp =
+    message.role === "user" ? formatMessageTimestamp(message.createdAt) : "";
+  const pendingThumbnailIds = (message.attachments || [])
+    .filter((attachment) => attachment.fileType === "image" && !attachment.thumbnail)
+    .map((attachment) => attachment.id);
+  const pendingThumbnailKey = JSON.stringify(pendingThumbnailIds);
   useEffect(() => {
-    for (const attachment of message.attachments || [])
-      if (attachment.fileType === "image" && !attachment.thumbnail)
-        action(message.id, "thumbnail", { attachmentId: attachment.id });
-  }, [message.id]);
+    for (const attachmentId of pendingThumbnailIds)
+      action(message.id, "thumbnail", { attachmentId });
+  }, [message.id, pendingThumbnailKey]);
   return (
     <article
       data-message-id={message.id}
@@ -151,6 +167,11 @@ const Message = memo(function Message({ message }) {
           ))}
         </div>
       )}
+      {timestamp && (
+        <time className="message-timestamp" dateTime={message.createdAt}>
+          {timestamp}
+        </time>
+      )}
       <footer>
         {(message.actions || []).map((name) => (
           <button
@@ -216,19 +237,19 @@ function applySearch(emit = true) {
           previousOwner = owner;
         }
       }
-      const foldedText = text.toLowerCase();
+      const foldedText = foldSearchCase(text);
       const foldedStartOffsets = [];
       const foldedEndOffsets = [];
       let originalOffset = 0;
       for (const character of text) {
-        const foldedLength = character.toLowerCase().length;
+        const foldedLength = foldSearchCase(character).length;
         for (let i = 0; i < foldedLength; i++) {
           foldedStartOffsets.push(originalOffset);
           foldedEndOffsets.push(originalOffset + character.length);
         }
         originalOffset += character.length;
       }
-      const query = search.query.toLowerCase();
+      const query = foldSearchCase(search.query);
       let start = 0,
         occurrence = 0;
       const ranges = [];

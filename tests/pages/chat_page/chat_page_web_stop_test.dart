@@ -17,9 +17,18 @@ import 'package:stroom/services/chat_stream_manager.dart';
 
 class _DelayedManager extends ChatStreamManager {
   _DelayedManager() : super(null);
-  final result = Completer<StreamResult>();
-  late String messageId;
-  late List<ChatMessage> sentHistory;
+  final results = <Completer<StreamResult>>[];
+  final messageIds = <String>[];
+  final sentHistories = <List<ChatMessage>>[];
+  bool _finalizationPending = false;
+
+  @override
+  bool isStreamingFor(String convId) => _finalizationPending;
+
+  @override
+  void cancel([String? convId]) {
+    _finalizationPending = true;
+  }
 
   @override
   Future<StreamResult> startStreaming({
@@ -34,16 +43,23 @@ class _DelayedManager extends ChatStreamManager {
     Assistant? assistant,
     ProviderEntriesState? entriesStateOverride,
   }) {
-    messageId = streamingMsgId!;
-    sentHistory = history;
+    messageIds.add(streamingMsgId!);
+    sentHistories.add(List<ChatMessage>.from(history));
+    final result = Completer<StreamResult>();
+    results.add(result);
     return result.future;
+  }
+
+  void finish(StreamResult result) {
+    _finalizationPending = false;
+    results.first.complete(result);
   }
 }
 
 void main() {
-  testWidgets('stopping preserves canonical reply until finalization by ID', (
-    tester,
-  ) async {
+  testWidgets(
+      'stopping preserves the reply and delays follow-up until finalization',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     final manager = _DelayedManager();
     await tester.pumpWidget(
@@ -103,13 +119,18 @@ void main() {
     container.read(streamingFullReplyProvider('stop-conv').notifier).state =
         'partial';
     await tester.pump();
-    Map<String, dynamic> reply() => tester
-        .widget<DshMessageView>(find.byType(DshMessageView))
-        .messages
-        .singleWhere((m) => m['id'] == manager.messageId);
+    final stoppedMessageId = manager.messageIds.first;
+    List<Map<String, dynamic>> messages() =>
+        tester.widget<DshMessageView>(find.byType(DshMessageView)).messages;
+    Map<String, dynamic> reply() =>
+        messages().singleWhere((m) => m['id'] == stoppedMessageId);
     expect(reply()['streaming'], true);
     await tester.tap(find.byIcon(Icons.stop_circle_outlined));
     await tester.pump();
+    expect(
+      container.read(streamingConversationsProvider),
+      isNot(contains('stop-conv')),
+    );
     expect(reply()['streaming'], false);
     expect(reply()['content'], 'partial');
     expect((reply()['blocks'] as List).map((b) => b['type']), [
@@ -119,33 +140,104 @@ void main() {
       'text',
     ]);
     expect((reply()['blocks'] as List).last['text'], 'partial');
+    expect(reply()['actions'], isNot(contains('retry')),
+        reason: '重试操作也必须等待取消结果持久化完成');
+    expect(reply()['actions'], isNot(contains('delete')),
+        reason: 'manager 保存取消结果期间，不能删除即将写入的部分回复');
+    final userMessage = messages().singleWhere((m) => m['role'] == 'user');
+    expect(userMessage['actions'], isNot(contains('edit')),
+        reason: '停止收尾期间不能开始会截断历史的编辑');
     // Persistence has not finished. Rebuilds must keep the frozen reply.
     await tester.pump(const Duration(seconds: 1));
     expect(reply()['content'], 'partial');
+
+    // Stopping clears the stream marker before the existing send Future has
+    // finished. A send attempt during that interval must remain in the input
+    // instead of being silently discarded by the pending-send guard.
+    await tester.enterText(find.byType(TextField), 'follow-up');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    expect(manager.sentHistories, hasLength(1));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'follow-up',
+    );
+
     final finalMessage = ChatMessage(
-      id: manager.messageId,
+      id: stoppedMessageId,
       role: 'assistant',
       content: 'final',
+      reasoningContent: 'reason\n',
+      reasoningSections: ['reason', ''],
+      textSections: ['', 'partial'],
+      toolCalls: [
+        ToolCallData(
+          id: 'tool',
+          name: 'search',
+          arguments: const {},
+          status: ToolCallStatus.completed,
+          result: 'found',
+        ),
+      ],
+      toolCallRoundStarts: [0],
       rawResponse: const {'done': true},
     );
-    manager.result.complete(
+    manager.finish(
       StreamResult(
-        history: [...manager.sentHistory, finalMessage],
+        history: [...manager.sentHistories.first, finalMessage],
         assistantMessage: finalMessage,
         fullReply: 'final',
       ),
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
+    for (var i = 0; i < 15; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
     expect(reply()['content'], 'final');
     expect(reply()['actions'], contains('raw'));
+    expect(reply()['actions'], contains('retry'));
+    expect(reply()['actions'], contains('delete'),
+        reason: '取消结果保存完成后应重新提供删除操作');
+    final finalizedUserMessage =
+        messages().singleWhere((m) => m['role'] == 'user');
+    expect(finalizedUserMessage['actions'], contains('edit'));
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(manager.sentHistories, hasLength(2));
+    final followUpHistory = manager.sentHistories.last.singleWhere(
+      (message) => message.id == stoppedMessageId,
+    );
+    expect(followUpHistory.reasoningContent, 'reason\n');
     expect(
       tester
           .widget<DshMessageView>(find.byType(DshMessageView))
           .messages
-          .where((m) => m['id'] == manager.messageId),
+          .where((m) => m['id'] == stoppedMessageId),
       hasLength(1),
     );
+    manager.results.last.complete(
+      StreamResult(
+        history: [
+          ...manager.sentHistories.last,
+          ChatMessage(
+            id: manager.messageIds.last,
+            role: 'assistant',
+            content: 'follow-up reply',
+          ),
+        ],
+        assistantMessage: ChatMessage(
+          id: manager.messageIds.last,
+          role: 'assistant',
+          content: 'follow-up reply',
+        ),
+        fullReply: 'follow-up reply',
+      ),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
   });

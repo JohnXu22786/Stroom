@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DisclosureRow, JsonTree } from "@deepseek-ai/dsh-client-ui-primitives";
 
 const labels = {
@@ -16,6 +16,9 @@ const labels = {
 
 export function Tool({ block }) {
   const [open, setOpen] = useState(block.status === "error");
+  useEffect(() => {
+    if (block.status === "error") setOpen(true);
+  }, [block.status]);
   let parsed;
   try {
     parsed = JSON.parse(block.result);

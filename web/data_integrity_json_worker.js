@@ -516,10 +516,7 @@ function canonicalizeConversations(json) {
         const needsRepair = Array.isArray(message.toolCallRoundStarts) && sections !== null &&
           Array.isArray(existing) && existing.filter(b => isRecord(b) && b.type === 'reasoning').length < sections.length;
         if (Array.isArray(existing) && existing.length && !needsRepair) {
-          if (!existing.some(b => isRecord(b) && b.type === 'text') &&
-              typeof message.content === 'string' && message.content.length) {
-            existing.push({type:'text',text:message.content});
-          }
+          restoreMissingAssistantText(message, existing);
           if (!existing.some(b => isRecord(b) && b.type === 'reasoning') &&
               typeof message.reasoningContent === 'string' && message.reasoningContent.length) {
             existing.unshift({type:'reasoning',text:message.reasoningContent,isComplete:true});
@@ -534,13 +531,72 @@ function canonicalizeConversations(json) {
         const blocks = legacyToBlocks(sections && sections.length ? sections :
           (typeof message.reasoningContent === 'string' && message.reasoningContent ? [message.reasoningContent] : []),
           Array.isArray(message.textSections) ? message.textSections.filter(v => typeof v === 'string') : [], tools, Array.isArray(message.toolCallRoundStarts) ? message.toolCallRoundStarts.filter(v => Number.isInteger(v) && v >= 0 && v <= tools.length) : []);
-        if (!blocks.some(b => b.type === 'text') && typeof message.content === 'string' && message.content) blocks.push({type:'text',text:message.content});
+        if (!blocks.some(b => b.type === 'text')) restoreMissingAssistantText(message, blocks);
         preserveStoredErrorText(message, blocks);
         message.blocks = blocks;
       }
     }
     return 'ok:0:0\n' + JSON.stringify(conversations);
   } catch (error) {return 'parse-error\n' + JSON.stringify(String(error));}
+}
+
+function restoreMissingAssistantText(message, blocks) {
+  const sections = Array.isArray(message.textSections)
+    ? message.textSections.filter(value => typeof value === 'string')
+    : [];
+  const existingTextBlocks = blocks.filter(block => isRecord(block) && block.type === 'text');
+  const hasPerRoundText = sections.some(section => section.length > 0);
+  if (!hasPerRoundText) {
+    if (!existingTextBlocks.length && typeof message.content === 'string' && message.content.length) {
+      // With no per-round text data, preserve the old loader's trailing
+      // aggregate-content position after tool cards.
+      blocks.push({type:'text',text:message.content});
+    }
+    return;
+  }
+  const textChunks = sections;
+  const missingTextChunks = Array(textChunks.length).fill('');
+  let existingTextIndex = 0;
+  for (let index = 0; index < textChunks.length; index++) {
+    const chunk = textChunks[index];
+    if (!chunk.length) continue;
+    if (existingTextIndex < existingTextBlocks.length) {
+      if (existingTextBlocks[existingTextIndex].text !== chunk) return;
+      existingTextIndex++;
+    } else {
+      missingTextChunks[index] = chunk;
+    }
+  }
+  if (existingTextIndex !== existingTextBlocks.length ||
+      !missingTextChunks.some(chunk => chunk.length)) return;
+
+  const toolCount = blocks.filter(block => isRecord(block) && block.type === 'tool_call').length;
+  const starts = Array.isArray(message.toolCallRoundStarts)
+    ? message.toolCallRoundStarts.filter(index => Number.isInteger(index) && index >= 0 && index <= toolCount)
+    : [];
+  const roundCount = starts.length || (toolCount > 0 ? 1 : 0);
+  const roundStart = index => starts.length ? starts[index] : 0;
+  const ordered = [];
+  let toolIndex = 0;
+  let roundIndex = 0;
+  const addTextChunk = index => {
+    if (index < missingTextChunks.length && missingTextChunks[index].length) {
+      ordered.push({type:'text',text:missingTextChunks[index]});
+    }
+  };
+
+  for (const block of blocks) {
+    if (isRecord(block) && block.type === 'tool_call') {
+      while (roundIndex < roundCount && roundStart(roundIndex) <= toolIndex) {
+        addTextChunk(roundIndex++);
+      }
+      toolIndex++;
+    }
+    ordered.push(block);
+  }
+  while (roundIndex < roundCount) addTextChunk(roundIndex++);
+  for (let index = roundCount; index < textChunks.length; index++) addTextChunk(index);
+  blocks.splice(0, blocks.length, ...ordered);
 }
 
 function preserveStoredErrorText(message, blocks) {

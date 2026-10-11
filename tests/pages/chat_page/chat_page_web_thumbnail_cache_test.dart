@@ -1,28 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/pages/chat/message_view/dsh_message_view.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
-import 'package:stroom/services/attachment_storage.dart';
-
-class _Documents extends PathProviderPlatform {
-  _Documents(this.path);
-
-  final String path;
-
-  @override
-  Future<String> getApplicationDocumentsPath() async => path;
-}
 
 Future<Uint8List> _tinyPng({Color color = Colors.red}) async {
   final recorder = ui.PictureRecorder();
@@ -37,6 +25,12 @@ Future<Uint8List> _tinyPng({Color color = Colors.red}) async {
   return bytes!.buffer.asUint8List();
 }
 
+Future<void> _allowImageDecode(WidgetTester tester) async {
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 50)),
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -44,16 +38,13 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    final directory = await Directory.systemTemp.createTemp('chat_thumbnails_');
-    final previousPathProvider = PathProviderPlatform.instance;
-    PathProviderPlatform.instance = _Documents(directory.path);
 
     try {
-      await tester.binding.setSurfaceSize(const Size(1200, 2000));
-      final attachmentPath = await AttachmentStorage.saveFile(
-        'image.png',
-        await _tinyPng(),
-      );
+      final thumbnailBytes = await tester.runAsync(_tinyPng);
+      if (thumbnailBytes == null) {
+        throw StateError('Failed to generate the test thumbnail');
+      }
+      Future<Uint8List?> readThumbnail(String _) async => thumbnailBytes;
       ChatMessage message(String id) => ChatMessage(
             id: id,
             role: 'user',
@@ -65,7 +56,7 @@ void main() {
                 mimeType: 'image/png',
                 fileType: 'image',
                 hash: 'same-hash',
-                storagePath: attachmentPath,
+                storagePath: 'thumbnail.png',
                 fileSize: 100,
               ),
             ],
@@ -114,7 +105,10 @@ void main() {
                 .overrideWith((ref) => ProviderEntriesNotifier()),
           ],
           child: MaterialApp(
-            home: ChatPage(messageHostBuilder: hostBuilder),
+            home: ChatPage(
+              messageHostBuilder: hostBuilder,
+              thumbnailBytesReader: readThumbnail,
+            ),
           ),
         ),
       );
@@ -132,6 +126,8 @@ void main() {
         'messageId': 'message-a',
         'attachmentId': 'same-attachment-id',
       });
+      await _allowImageDecode(tester);
+      await tester.pump();
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -167,9 +163,6 @@ void main() {
       expect(secondAttachment.containsKey('thumbnail'), isFalse);
     } finally {
       await tester.pumpWidget(const SizedBox.shrink());
-      PathProviderPlatform.instance = previousPathProvider;
-      await directory.delete(recursive: true);
-      await tester.binding.setSurfaceSize(null);
     }
   });
 
@@ -177,15 +170,15 @@ void main() {
     'a pending thumbnail does not block the same id in a new conversation',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final directory =
-          await Directory.systemTemp.createTemp('chat_thumbnail_race_');
-      final previousPathProvider = PathProviderPlatform.instance;
       final staleLoad = Completer<Uint8List?>();
-      PathProviderPlatform.instance = _Documents(directory.path);
 
       try {
-        await tester.binding.setSurfaceSize(const Size(1200, 2000));
-        final currentThumbnail = await _tinyPng(color: Colors.blue);
+        final currentThumbnail = await tester.runAsync(
+          () => _tinyPng(color: Colors.blue),
+        );
+        if (currentThumbnail == null) {
+          throw StateError('Failed to generate the test thumbnail');
+        }
         var staleReads = 0;
         var currentReads = 0;
         ChatMessage message(String id, String path) => ChatMessage(
@@ -233,6 +226,7 @@ void main() {
           sendEvent = nextSendEvent;
           return const SizedBox.shrink();
         }
+
         Future<Uint8List?> readThumbnail(String path) {
           if (path == 'conversation-a.png') {
             staleReads++;
@@ -299,6 +293,8 @@ void main() {
           'messageId': 'message-b',
           'attachmentId': 'reused-attachment-id',
         });
+        await _allowImageDecode(tester);
+        await tester.pump();
         for (var i = 0; i < 10; i++) {
           await tester.pump(const Duration(milliseconds: 50));
         }
@@ -316,7 +312,9 @@ void main() {
         final latestThumbnail = secondAttachment()['thumbnail'] as String;
         expect(latestThumbnail, startsWith('data:image/png;base64,'));
 
-        staleLoad.complete(await _tinyPng());
+        staleLoad.complete(await tester.runAsync(_tinyPng));
+        await _allowImageDecode(tester);
+        await tester.pump();
         for (var i = 0; i < 10; i++) {
           await tester.pump(const Duration(milliseconds: 50));
         }
@@ -324,9 +322,6 @@ void main() {
       } finally {
         if (!staleLoad.isCompleted) staleLoad.complete(null);
         await tester.pumpWidget(const SizedBox.shrink());
-        PathProviderPlatform.instance = previousPathProvider;
-        await directory.delete(recursive: true);
-        await tester.binding.setSurfaceSize(null);
       }
     },
   );

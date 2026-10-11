@@ -19,6 +19,23 @@ const dshAdaptation = {
             throw new Error(`DSH adaptation anchor changed: ${from}`);
           contents = contents.replace(from, to);
         }
+        // Fragment-only Markdown links stay inside the document; allow them
+        // through DSH's external-protocol sanitizer for native anchor behavior.
+        replaceOnce(
+          "function sanitizeUrl(url) {\n\ttry {",
+          "function sanitizeUrl(url) {\n\tif (url.startsWith(\"#\")) return url;\n\ttry {",
+        );
+        replaceOnce(
+          'const external = ["http:", "https:"].includes(new URL(href).protocol);\n\tconst open = external ? openExternalLink : void 0;',
+          'const protocol = href.startsWith("#") ? "" : new URL(href).protocol;\n\tconst external = ["http:", "https:"].includes(protocol);\n\tconst delegated = external || ["tel:", "sms:"].includes(protocol);\n\tconst open = delegated ? openExternalLink : void 0;',
+        );
+        // DSH's Markdown sanitizer excludes phone links by default. Preserve
+        // safe tel/sms destinations and route clicks through Stroom's URI
+        // allowlist, while keeping unsupported schemes inert.
+        replaceOnce(
+          'case "mailto:": return url;',
+          'case "mailto:": case "tel:": case "sms:": return url;',
+        );
         // Rename the recovery helper and wrap it: source positions stay intact,
         // including positions used by DSH's incremental parser and React keys.
         replaceOnce(
@@ -84,7 +101,7 @@ const css = result.outputFiles.find((f) => f.path.endsWith(".css")).text;
 await mkdir(output, { recursive: true });
 await writeFile(
   path.join(output, "index.html"),
-  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: https: http:; font-src data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><style>${css}</style></head><body><div id="root"></div><script>${js}</script></body></html>\n`,
+  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: https: http:; font-src data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><style>${css}</style></head><body><div id="root"></div><script>${js}</script></body></html>\n`,
 );
 const license = await readFile(
   path.join(root, "node_modules/@deepseek-ai/dsh-client-ui-primitives/LICENSE"),

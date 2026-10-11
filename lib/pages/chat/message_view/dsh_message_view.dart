@@ -39,6 +39,7 @@ class DshMessageViewState extends State<DshMessageView> {
   final _commands = ValueNotifier<Map<String, dynamic>?>(null);
   String _session = const Uuid().v4();
   bool _ready = false;
+  Map<String, dynamic>? _pendingSearch;
   bool _scheduled = false;
   final Map<String, String> _sentMessages = {};
   String? _sentTheme;
@@ -46,7 +47,12 @@ class DshMessageViewState extends State<DshMessageView> {
   bool? _sentHistoryLoaded;
 
   void send(Map<String, dynamic> command) {
-    if (!_ready) return;
+    if (!_ready) {
+      if (command['type'] == 'search') {
+        _pendingSearch = Map<String, dynamic>.of(command);
+      }
+      return;
+    }
     _commands.value = {...command, 'session': _session};
   }
 
@@ -107,6 +113,15 @@ class DshMessageViewState extends State<DshMessageView> {
     if (event['type'] == 'ready') {
       _ready = true;
       _sync(snapshot: true);
+      final pendingSearch = _pendingSearch;
+      _pendingSearch = null;
+      // If history is still loading, the page drops this ready event until
+      // its conversation data is active. Preserve an early search in the
+      // renderer so the later history snapshot can apply it. When history is
+      // already loaded, the page's ready handler sends the current query.
+      if (pendingSearch != null && !widget.historyLoaded) {
+        send(pendingSearch);
+      }
       widget.onEvent({'type': 'ready'});
       return;
     }

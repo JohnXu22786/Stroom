@@ -295,7 +295,8 @@ class DataMigrationService {
   /// 的约定保留损坏现场（带时间戳的隔离 key），再从旧全局版本或
   /// v0 展开重建 —— 迁移步骤全部幂等，重跑无害，但损坏证据不丢失。
   static Future<Map<String, int>> _resolvePartVersions(
-      StartupMigrationPreferences prefs) async {
+    StartupMigrationPreferences prefs,
+  ) async {
     final raw = await prefs.getString(_kDataFormatVersionsKey);
     final stored = _parsePartVersions(raw);
     if (stored != null) {
@@ -315,8 +316,10 @@ class DataMigrationService {
     if (await prefs.containsKey(_kLegacyDataFormatVersionKey)) {
       await prefs.remove(_kLegacyDataFormatVersionKey);
     }
-    debugPrint('[DataMigrationService] 已从旧全局版本 v$legacy '
-        '展开 per-part 版本: $expanded');
+    debugPrint(
+      '[DataMigrationService] 已从旧全局版本 v$legacy '
+      '展开 per-part 版本: $expanded',
+    );
     return expanded;
   }
 
@@ -336,13 +339,11 @@ class DataMigrationService {
         (part) =>
             (existingVersions[part] ?? 0) < DataParts.currentVersions[part]!,
       );
-      final hasLegacyVersion =
-          await StartupPreferences.containsKey(_kLegacyDataFormatVersionKey);
+      final hasLegacyVersion = await StartupPreferences.containsKey(
+        _kLegacyDataFormatVersionKey,
+      );
       if (!hasOutdatedPart && !hasLegacyVersion) {
-        await AppLogService.info(
-          'DataMigrationService',
-          '数据格式版本为最新，无需迁移',
-        );
+        await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
         return const MigrationResult(needsMigration: false);
       }
     }
@@ -354,10 +355,10 @@ class DataMigrationService {
       prefs = await StartupMigrationPreferences.load();
     } catch (error, stackTrace) {
       Error.throwWithStackTrace(
-        StartupPreferencesUnavailable(
-          const {_kDataFormatVersionsKey, _kLegacyDataFormatVersionKey},
-          error,
-        ),
+        StartupPreferencesUnavailable(const {
+          _kDataFormatVersionsKey,
+          _kLegacyDataFormatVersionKey,
+        }, error),
         stackTrace,
       );
     }
@@ -371,10 +372,7 @@ class DataMigrationService {
         .toList();
 
     if (outdatedParts.isEmpty) {
-      await AppLogService.info(
-        'DataMigrationService',
-        '数据格式版本为最新，无需迁移',
-      );
+      await AppLogService.info('DataMigrationService', '数据格式版本为最新，无需迁移');
       return const MigrationResult(needsMigration: false);
     }
 
@@ -394,10 +392,14 @@ class DataMigrationService {
         // Flutter tests use an ephemeral mocked preference store and may not
         // install path_provider. Production still requires a durable snapshot.
         if (snapshot == null && !_isFlutterTest) {
-          debugPrint('[DataMigrationService] 迁移前快照失败，'
-              '取消本次迁移（下次启动重试）');
+          debugPrint(
+            '[DataMigrationService] 迁移前快照失败，'
+            '取消本次迁移（下次启动重试）',
+          );
           await AppLogService.error(
-              'DataMigrationService', '迁移前快照失败，取消本次迁移（下次启动重试）');
+            'DataMigrationService',
+            '迁移前快照失败，取消本次迁移（下次启动重试）',
+          );
           throw StartupDataValidationUnavailable.migration(
             StateError('Unable to create the required pre-migration snapshot.'),
           );
@@ -407,8 +409,10 @@ class DataMigrationService {
       // 执行迁移：只迁移版本落后的部分（顺序见 DataParts.all）
       await _performPartMigrations(stored, prefs: prefs);
 
-      debugPrint('[DataMigrationService] Per-part data format migration '
-          'completed: $detail');
+      debugPrint(
+        '[DataMigrationService] Per-part data format migration '
+        'completed: $detail',
+      );
       await AppLogService.info('DataMigrationService', '数据格式迁移成功: $detail');
 
       // 迁移完成后立即校验迁移后的数据，且在提升版本标记之前完成。
@@ -426,15 +430,22 @@ class DataMigrationService {
             StateError('Post-migration data validation failed: $description'),
           );
         }
-        debugPrint('[DataMigrationService] 迁移后校验失败（数据损坏），'
-            '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}');
-        await AppLogService.error('DataMigrationService',
-            '迁移后数据校验失败，恢复迁移前快照并冻结', check.corruptions.first.message);
+        debugPrint(
+          '[DataMigrationService] 迁移后校验失败（数据损坏），'
+          '恢复迁移前快照并冻结: ${check.corruptions.map((i) => i.message).join('; ')}',
+        );
+        await AppLogService.error(
+          'DataMigrationService',
+          '迁移后数据校验失败，恢复迁移前快照并冻结',
+          check.corruptions.first.message,
+        );
         try {
           final restored = await DataSafetyManager.restoreLatestSnapshot();
           if (!restored) {
             await AppLogService.error(
-                'DataMigrationService', '恢复迁移前快照失败（无可用快照）');
+              'DataMigrationService',
+              '恢复迁移前快照失败（无可用快照）',
+            );
           }
         } catch (e) {
           debugPrint('[DataMigrationService] 恢复迁移前快照失败: $e');
@@ -459,8 +470,10 @@ class DataMigrationService {
       try {
         await AppLogService.error('DataMigrationService', '数据格式迁移失败', e);
       } catch (logError) {
-        debugPrint('[DataMigrationService] Failed to log migration failure: '
-            '$logError');
+        debugPrint(
+          '[DataMigrationService] Failed to log migration failure: '
+          '$logError',
+        );
       }
       if (_isFlutterTest && e is FormatException) {
         Error.throwWithStackTrace(e, stackTrace);
@@ -477,10 +490,7 @@ class DataMigrationService {
 
     // 迁移完成后总是需要重启应用，确保所有 provider 和服务
     // 以新的数据格式重新初始化，避免因旧状态导致闪退。
-    return const MigrationResult(
-      needsMigration: true,
-      restartRequired: true,
-    );
+    return const MigrationResult(needsMigration: true, restartRequired: true);
   }
 
   // ================================================================
@@ -588,26 +598,39 @@ class DataMigrationService {
           final raw = await prefs.getString('conversations');
           if (raw != null && raw.isNotEmpty) {
             final transformed = kIsWeb
-                ? await json_parser.migrateLegacyConversationsWeb(raw,
-                    canonical: true)
+                ? await json_parser.migrateLegacyConversationsWeb(
+                    raw,
+                    canonical: true,
+                  )
                 : _isFlutterTest
                     ? _canonicalizeConversations(raw)
-                    : await data_migration_isolate
-                        .runInIsolate(() => _canonicalizeConversations(raw));
+                    : await data_migration_isolate.runInIsolate(
+                        () => _canonicalizeConversations(raw),
+                      );
             if (transformed['parseError'] != null) {
               throw FormatException(transformed['parseError'] as String);
             }
             if (transformed['isList'] != true) {
-              throw const FormatException('conversations must be an array');
+              debugPrint(
+                '[DataMigrationService] conversations 不是合法数组，'
+                '已隔离并重置为空列表',
+              );
+              await _quarantineCorruptData(prefs, 'conversations', raw);
+              await prefs.setString('conversations', '[]');
+              return;
             }
             await prefs.setString(
-                'conversations', transformed['encoded'] as String);
+              'conversations',
+              transformed['encoded'] as String,
+            );
           }
         }
         break;
       default:
-        debugPrint('[DataMigrationService] No migration steps defined '
-            'for part $part v$version');
+        debugPrint(
+          '[DataMigrationService] No migration steps defined '
+          'for part $part v$version',
+        );
     }
   }
 
@@ -647,9 +670,11 @@ class DataMigrationService {
     final preMigrationVersions = Map<String, int>.of(stored);
 
     final outdatedParts = DataParts.all
-        .where((p) =>
-            selectedParts.contains(p) &&
-            (stored[p] ?? 0) < DataParts.currentVersions[p]!)
+        .where(
+          (p) =>
+              selectedParts.contains(p) &&
+              (stored[p] ?? 0) < DataParts.currentVersions[p]!,
+        )
         .toList();
     if (outdatedParts.isEmpty) {
       if (validateRestoredDataBeforeVersionCommit) {
@@ -699,10 +724,7 @@ class DataMigrationService {
       Error.throwWithStackTrace(e, stackTrace);
     }
 
-    return const MigrationResult(
-      needsMigration: true,
-      restartRequired: true,
-    );
+    return const MigrationResult(needsMigration: true, restartRequired: true);
   }
 
   /// 将备份中的格式版本只应用到本次实际恢复的数据部分。
@@ -820,7 +842,8 @@ class DataMigrationService {
     StartupMigrationPreferences prefs,
   ) async {
     debugPrint(
-        '[DataMigrationService] settings v0→v1: Starting data format migration');
+      '[DataMigrationService] settings v0→v1: Starting data format migration',
+    );
 
     // --- 第1步：迁移旧版 chat_configs → provider_entries ---
     await _migrateOldChatConfigs(prefs);
@@ -833,18 +856,21 @@ class DataMigrationService {
     await prefs.remove('data_format_version_migrated');
 
     debugPrint(
-        '[DataMigrationService] settings v0→v1: Migration completed successfully');
+      '[DataMigrationService] settings v0→v1: Migration completed successfully',
+    );
   }
 
   /// 迁移旧 chat_configs 到 provider_entries（委托 [DataMigrationOldConfigs]，
   /// 实现见 data_migration_old_configs.dart）。
   static Future<void> _migrateOldChatConfigs(
-          StartupMigrationPreferences prefs) =>
+    StartupMigrationPreferences prefs,
+  ) =>
       DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
 
   /// 修复 provider_entries 中 id 为 null 的条目（委托 [DataMigrationOldConfigs]）。
   static Future<void> _fixNullIdsInProviderEntries(
-          StartupMigrationPreferences prefs) =>
+    StartupMigrationPreferences prefs,
+  ) =>
       DataMigrationOldConfigs.fixNullIdsInProviderEntries(prefs);
 
   /// pictures/audio/videos/texts v0 → v1: 移除共享 folders 表，
@@ -864,8 +890,9 @@ class DataMigrationService {
   }) async {
     try {
       debugPrint(
-          '[DataMigrationService] media v0→v1: Migrating legacy shared folders '
-          'to per-type folder tables');
+        '[DataMigrationService] media v0→v1: Migrating legacy shared folders '
+        'to per-type folder tables',
+      );
 
       await ManifestDatabase.migrateLegacyFoldersToPerType(
         onlyFolderTables: mediaParts.map(_folderTableForMediaPart).toSet(),
@@ -873,7 +900,8 @@ class DataMigrationService {
       );
 
       debugPrint(
-          '[DataMigrationService] media v0→v1: Migration completed successfully');
+        '[DataMigrationService] media v0→v1: Migration completed successfully',
+      );
     } catch (e) {
       // The database-unavailable case is handled inside ManifestDatabase.
       // Any actual Web or SQLite migration failure must keep the version old.
@@ -923,8 +951,10 @@ class DataMigrationService {
       final parseError = migratedData['parseError'];
       if (parseError is String) throw FormatException(parseError);
       if (migratedData['isList'] != true) {
-        debugPrint('[DataMigrationService] conversations 不是合法数组，'
-            '已隔离并重置为空列表');
+        debugPrint(
+          '[DataMigrationService] conversations 不是合法数组，'
+          '已隔离并重置为空列表',
+        );
         await _quarantineCorruptData(prefs, 'conversations', raw);
         await prefs.setString('conversations', '[]');
         return;
@@ -936,8 +966,9 @@ class DataMigrationService {
       final migrated = migratedData['migrated']! as int;
       final skipped = migratedData['skipped']! as int;
       debugPrint(
-          '[DataMigrationService] chat v0→v1: Migrated $migrated messages'
-          '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}');
+        '[DataMigrationService] chat v0→v1: Migrated $migrated messages'
+        '${skipped > 0 ? ', skipped $skipped corrupt entries' : ''}',
+      );
     } catch (e) {
       // 结构性迁移失败（jsonDecode 失败等）必须上抛：否则
       // checkAndMigrate 会把该部分版本升到当前值，数据永久停留在
@@ -967,20 +998,17 @@ Map<String, Object?> _canonicalizeConversations(String raw) {
             existing.where((b) => b is Map && b['type'] == 'reasoning').length <
                 sections.length;
         if (existing is List && existing.isNotEmpty && !needsRepair) {
-          if (!existing.any((b) => b is Map && b['type'] == 'text') &&
-              message['content'] is String &&
-              (message['content'] as String).isNotEmpty) {
-            existing.add(TextBlock(text: message['content'] as String).toMap());
-          }
+          _restoreMissingAssistantText(message, existing);
           if (!existing.any((b) => b is Map && b['type'] == 'reasoning') &&
               message['reasoningContent'] is String &&
               (message['reasoningContent'] as String).isNotEmpty) {
             existing.insert(
-                0,
-                ReasoningBlock(
-                        text: message['reasoningContent'] as String,
-                        isComplete: true)
-                    .toMap());
+              0,
+              ReasoningBlock(
+                text: message['reasoningContent'] as String,
+                isComplete: true,
+              ).toMap(),
+            );
           }
           _preserveStoredErrorText(message, existing);
           continue;
@@ -992,12 +1020,15 @@ Map<String, Object?> _canonicalizeConversations(String raw) {
           try {
             tools.add(ToolCallData.fromMap(Map<String, dynamic>.from(rawTool)));
           } catch (_) {
-            tools.add(ToolCallData(
+            tools.add(
+              ToolCallData(
                 id: 'corrupt-${tools.length}',
                 name: '损坏的工具记录',
                 arguments: {},
                 status: ToolCallStatus.error,
-                result: '无法读取原工具记录'));
+                result: '无法读取原工具记录',
+              ),
+            );
           }
         }
         final blocks = assistantBlocks(
@@ -1028,17 +1059,95 @@ Map<String, Object?> _canonicalizeConversations(String raw) {
   }
 }
 
+void _restoreMissingAssistantText(Map message, List blocks) {
+  final sections = _canonicalStrings(message['textSections']);
+  final existingTextBlocks =
+      blocks.where((block) => block is Map && block['type'] == 'text').toList();
+  final hasPerRoundText =
+      sections?.any((section) => section.isNotEmpty) == true;
+  if (!hasPerRoundText) {
+    final content = message['content'];
+    if (existingTextBlocks.isEmpty && content is String && content.isNotEmpty) {
+      // Without text sections the old loader showed the aggregate content
+      // after the tool cards. Keep that order rather than guessing its round.
+      blocks.add(TextBlock(text: content).toMap());
+    }
+    return;
+  }
+  final textChunks = sections!;
+  final missingTextChunks = List<String>.filled(textChunks.length, '');
+  var existingTextIndex = 0;
+  for (var index = 0; index < textChunks.length; index++) {
+    final chunk = textChunks[index];
+    if (chunk.isEmpty) continue;
+    if (existingTextIndex < existingTextBlocks.length) {
+      final block = existingTextBlocks[existingTextIndex];
+      if (block is! Map || block['text'] != chunk) return;
+      existingTextIndex++;
+    } else {
+      missingTextChunks[index] = chunk;
+    }
+  }
+  if (existingTextIndex != existingTextBlocks.length ||
+      !missingTextChunks.any((chunk) => chunk.isNotEmpty)) return;
+
+  final toolCount = blocks
+      .where((block) => block is Map && block['type'] == 'tool_call')
+      .length;
+  final starts = message['toolCallRoundStarts'] is List
+      ? (message['toolCallRoundStarts'] as List)
+          .whereType<int>()
+          .where((index) => index >= 0 && index <= toolCount)
+          .toList()
+      : <int>[];
+  final roundCount =
+      starts.isNotEmpty ? starts.length : (toolCount > 0 ? 1 : 0);
+  int roundStart(int index) => starts.isNotEmpty ? starts[index] : 0;
+
+  final ordered = <dynamic>[];
+  var toolIndex = 0;
+  var roundIndex = 0;
+  void addTextChunk(int index) {
+    if (index < missingTextChunks.length &&
+        missingTextChunks[index].isNotEmpty) {
+      ordered.add(TextBlock(text: missingTextChunks[index]).toMap());
+    }
+  }
+
+  for (final block in blocks) {
+    if (block is Map && block['type'] == 'tool_call') {
+      while (roundIndex < roundCount && roundStart(roundIndex) <= toolIndex) {
+        addTextChunk(roundIndex++);
+      }
+      toolIndex++;
+    }
+    ordered.add(block);
+  }
+  while (roundIndex < roundCount) {
+    addTextChunk(roundIndex++);
+  }
+  for (var index = roundCount; index < textChunks.length; index++) {
+    addTextChunk(index);
+  }
+
+  blocks
+    ..clear()
+    ..addAll(ordered);
+}
+
 void _preserveStoredErrorText(Map message, List blocks) {
   if (message['isError'] != true ||
       message['content'] is! String ||
       blocks.any((b) => b is Map && b['type'] == 'error')) return;
   final errorText = (message['content'] as String).split('\n\n---\n').first;
   if (errorText.isNotEmpty &&
-      !blocks.any((b) =>
-          b is Map &&
-          b['type'] == 'text' &&
-          b['text'] is String &&
-          (b['text'] as String).startsWith(errorText))) {
+      !blocks.any(
+        (b) =>
+            b is Map &&
+            b['type'] == 'text' &&
+            b['text'] is String &&
+            (b['text'] as String).startsWith(errorText),
+      )) {
     blocks.insert(0, TextBlock(text: errorText).toMap());
   }
 }
@@ -1081,8 +1190,10 @@ Map<String, Object?> _transformLegacyConversations(String raw) {
           textChunks:
               (message['textSections'] as List<dynamic>?)?.cast<String>() ?? [],
           toolCalls: ((message['toolCalls'] as List<dynamic>?) ?? [])
-              .map((toolCall) =>
-                  ToolCallData.fromMap(Map<String, dynamic>.from(toolCall)))
+              .map(
+                (toolCall) =>
+                    ToolCallData.fromMap(Map<String, dynamic>.from(toolCall)),
+              )
               .toList(),
           toolCallRoundStarts:
               (message['toolCallRoundStarts'] as List<dynamic>?)?.cast<int>() ??

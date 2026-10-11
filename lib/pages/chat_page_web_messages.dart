@@ -5,19 +5,23 @@ const _externalMessageLinkSchemes = {
   'http',
   'https',
   'mailto',
+  'tel',
+  'sms',
 };
 
 extension _ChatPageWebMessagesExt on _ChatPageState {
   List<Map<String, dynamic>> _webMessageData() {
-    if (_loadedConversationId != ref.read(activeConversationIdProvider)) {
+    final activeId = ref.read(activeConversationIdProvider);
+    final historyMutationBlocked = _historyMutationBlocked;
+    if (_loadedConversationId != activeId) {
       _messageThumbnails.clear();
     } else {
       final retainedAttachmentIds = _history
           .expand((message) => message.attachments)
           .map((attachment) => attachment.id)
           .toSet();
-      _messageThumbnails.removeWhere(
-          (id, _) => !retainedAttachmentIds.contains(id));
+      _messageThumbnails
+          .removeWhere((id, _) => !retainedAttachmentIds.contains(id));
     }
     final messages = <Map<String, dynamic>>[];
     final start = _isSearching ? 0 : _loadedUpToIndex.clamp(0, _history.length);
@@ -38,6 +42,7 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       messages.add({
         'id': message.id,
         'role': message.role,
+        'createdAt': message.createdAt.toIso8601String(),
         'content': message.content,
         'blocks': blocks,
         'streaming': streaming,
@@ -45,10 +50,11 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
         'actions': [
           'copy',
           if (message.role == 'assistant' && !streaming) 'save',
-          if (!streaming) message.role == 'assistant' ? 'retry' : 'edit',
+          if (!streaming && !historyMutationBlocked)
+            message.role == 'assistant' ? 'retry' : 'edit',
           if (message.role == 'assistant' && hasRaw) 'raw',
           if (message.role == 'assistant' && hasRaw && _developerMode) 'json',
-          if (!streaming) 'delete',
+          if (!streaming && !historyMutationBlocked) 'delete',
         ],
         'attachments': message.attachments
             .map((a) => {
@@ -144,13 +150,11 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       final validIds = _history.map((m) => m.id).toSet();
       final matches = <SearchMatch>[];
       for (final value in event['matches'] as List) {
-        if (value is Map &&
-            validIds.contains(value['messageId']) &&
-            value['occurrence'] is int) {
-          final occurrence = value['occurrence'] as int;
-          matches.add(SearchMatch(
-              value['messageId'] as String, occurrence, occurrence));
-        }
+        if (value is! Map || !validIds.contains(value['messageId'])) continue;
+        final occurrence = messageWebInteger(value['occurrence']);
+        if (occurrence == null) continue;
+        matches.add(
+            SearchMatch(value['messageId'] as String, occurrence, occurrence));
       }
       setState(() {
         _searchMatches
@@ -159,7 +163,7 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
         _currentMatchIndex = _currentMatchIndex.clamp(
             0, matches.isEmpty ? 0 : matches.length - 1);
       });
-      if (matches.isNotEmpty) _searchWebMessages(locate: true);
+      if (matches.isNotEmpty) _scrollToCurrentMatch();
       return;
     }
     if (type == 'loadOlder') {
@@ -205,21 +209,26 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
         if (bytes == null ||
             !mounted ||
             conversationId != _loadedConversationId) return;
-        final codec = await ui.instantiateImageCodec(bytes, targetWidth: 160);
-        final frame = await codec.getNextFrame();
-        final png =
-            await frame.image.toByteData(format: ui.ImageByteFormat.png);
-        frame.image.dispose();
-        codec.dispose();
-        final stillAttached = _history.any((currentMessage) =>
-            currentMessage.attachments.any((a) => a.id == attachment.id));
-        if (png != null &&
-            mounted &&
-            conversationId == _loadedConversationId &&
-            conversationId == ref.read(activeConversationIdProvider) &&
-            stillAttached) {
-          setState(() => _messageThumbnails[attachment.id] =
-              'data:image/png;base64,${base64Encode(png.buffer.asUint8List())}');
+        ui.Codec? codec;
+        ui.Image? image;
+        try {
+          codec = await ui.instantiateImageCodec(bytes, targetWidth: 160);
+          final frame = await codec.getNextFrame();
+          image = frame.image;
+          final png = await image.toByteData(format: ui.ImageByteFormat.png);
+          final stillAttached = _history.any((currentMessage) =>
+              currentMessage.attachments.any((a) => a.id == attachment.id));
+          if (png != null &&
+              mounted &&
+              conversationId == _loadedConversationId &&
+              conversationId == ref.read(activeConversationIdProvider) &&
+              stillAttached) {
+            setState(() => _messageThumbnails[attachment.id] =
+                'data:image/png;base64,${base64Encode(png.buffer.asUint8List())}');
+          }
+        } finally {
+          image?.dispose();
+          codec?.dispose();
         }
       } catch (error) {
         debugPrint('[MessageThumbnail] $error');
@@ -256,14 +265,13 @@ extension _ChatPageWebMessagesExt on _ChatPageState {
       }
       return;
     }
-    final index = event['blockIndex'];
+    final index = messageWebInteger(event['blockIndex']);
     final blocks = data['blocks'] as List<Map<String, dynamic>>;
-    if (index is! int || index < 0 || index >= blocks.length) return;
+    if (index == null || index < 0 || index >= blocks.length) return;
     final block = blocks[index];
     if (action == 'reasoning' && block['type'] == 'reasoning') {
-      final ordinal = block['sectionIndex'] is int
-          ? block['sectionIndex'] as int
-          : blocks.take(index).where((b) => b['type'] == 'reasoning').length;
+      final ordinal = messageWebInteger(block['sectionIndex']) ??
+          blocks.take(index).where((b) => b['type'] == 'reasoning').length;
       showReasoningPanel(
           context: context,
           messageId: id,

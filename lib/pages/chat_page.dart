@@ -138,12 +138,22 @@ class ChatPage extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<Uint8List?> Function(String path)? thumbnailBytesReader;
 
+  final bool _forceNativeMessagesForTesting;
+
   const ChatPage({
     super.key,
     this.initialSearchQuery,
     this.messageHostBuilder,
     this.thumbnailBytesReader,
-  });
+  }) : _forceNativeMessagesForTesting = false;
+
+  @visibleForTesting
+  const ChatPage.withNativeMessageRendererForTesting({
+    super.key,
+    this.initialSearchQuery,
+    this.messageHostBuilder,
+    this.thumbnailBytesReader,
+  }) : _forceNativeMessagesForTesting = true;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -177,7 +187,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
   bool get _useWebMessages =>
       widget.messageHostBuilder != null ||
-      !const bool.fromEnvironment('STROOM_NATIVE_MESSAGES');
+      (!widget._forceNativeMessagesForTesting &&
+          !const bool.fromEnvironment('STROOM_NATIVE_MESSAGES'));
   final _webMessageKey = GlobalKey<DshMessageViewState>();
   final Map<String, String> _messageThumbnails = {};
   final Set<(String, String)> _loadingMessageThumbnails = {};

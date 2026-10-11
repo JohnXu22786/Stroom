@@ -457,6 +457,35 @@ class ChatMessage {
     }
   }
 
+  static List<MessageBlock> _replaceTextBlocks(
+    List<MessageBlock>? currentBlocks,
+    List<String>? textSections,
+    String content,
+  ) {
+    final replacementTexts = (textSections ?? const <String>[])
+        .where((section) => section.isNotEmpty)
+        .toList();
+    if (replacementTexts.isEmpty && content.isNotEmpty) {
+      replacementTexts.add(content);
+    }
+
+    final updated = <MessageBlock>[];
+    var nextTextIndex = 0;
+    for (final block in currentBlocks ?? const <MessageBlock>[]) {
+      if (block is TextBlock) {
+        if (nextTextIndex < replacementTexts.length) {
+          updated.add(TextBlock(text: replacementTexts[nextTextIndex++]));
+        }
+      } else {
+        updated.add(block);
+      }
+    }
+    while (nextTextIndex < replacementTexts.length) {
+      updated.add(TextBlock(text: replacementTexts[nextTextIndex++]));
+    }
+    return updated;
+  }
+
   /// 创建消息副本，允许替换任意字段。
   /// 主要用于上下文管理（prune）时重建带压缩标记的消息。
   ChatMessage copyWith({
@@ -474,24 +503,51 @@ class ChatMessage {
     List<String>? textSections,
     List<int>? toolCallRoundStarts,
     List<MessageBlock>? blocks,
-  }) =>
-      ChatMessage(
-        id: id,
-        role: role ?? this.role,
-        content: content ?? this.content,
-        createdAt: createdAt ?? this.createdAt,
-        attachments: attachments ?? this.attachments,
-        isStreaming: isStreaming ?? this.isStreaming,
-        isError: isError ?? this.isError,
-        reasoningContent: reasoningContent ?? this.reasoningContent,
-        rawRequest: rawRequest ?? this.rawRequest,
-        rawResponse: rawResponse ?? this.rawResponse,
-        toolCalls: toolCalls ?? this.toolCalls,
-        reasoningSections: reasoningSections ?? this.reasoningSections,
-        textSections: textSections ?? this.textSections,
-        toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
-        blocks: blocks ?? this.blocks,
-      );
+  }) {
+    final updatedRole = role ?? this.role;
+    final updatedContent = content ?? this.content;
+    final contentChanged = content != null && content != this.content;
+    var updatedTextSections = textSections ?? this.textSections;
+
+    if (contentChanged && updatedRole == 'assistant' && textSections == null) {
+      final currentSections = this.textSections;
+      if (currentSections == null || currentSections.isEmpty) {
+        updatedTextSections =
+            updatedContent.isNotEmpty ? [updatedContent] : null;
+      } else {
+        final firstTextIndex = currentSections.indexWhere((s) => s.isNotEmpty);
+        final replacementIndex = firstTextIndex < 0 ? 0 : firstTextIndex;
+        updatedTextSections = List<String>.filled(currentSections.length, '');
+        if (updatedContent.isNotEmpty) {
+          updatedTextSections![replacementIndex] = updatedContent;
+        }
+      }
+    }
+
+    final updatedBlocks = blocks ??
+        (contentChanged && updatedRole == 'assistant'
+            ? _replaceTextBlocks(
+                this.blocks, updatedTextSections, updatedContent)
+            : this.blocks);
+
+    return ChatMessage(
+      id: id,
+      role: updatedRole,
+      content: updatedContent,
+      createdAt: createdAt ?? this.createdAt,
+      attachments: attachments ?? this.attachments,
+      isStreaming: isStreaming ?? this.isStreaming,
+      isError: isError ?? this.isError,
+      reasoningContent: reasoningContent ?? this.reasoningContent,
+      rawRequest: rawRequest ?? this.rawRequest,
+      rawResponse: rawResponse ?? this.rawResponse,
+      toolCalls: toolCalls ?? this.toolCalls,
+      reasoningSections: reasoningSections ?? this.reasoningSections,
+      textSections: updatedTextSections,
+      toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
+      blocks: updatedBlocks,
+    );
+  }
 
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';

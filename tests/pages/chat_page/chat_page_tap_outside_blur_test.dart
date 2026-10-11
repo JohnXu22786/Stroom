@@ -90,7 +90,8 @@ Future<void> pumpChat(WidgetTester tester) async {
       child: MaterialApp(
         builder: (context, child) =>
             TapOutsideUnfocus(child: child ?? const SizedBox.shrink()),
-        home: Scaffold(body: const ChatPage()),
+        home: Scaffold(
+            body: const ChatPage.withNativeMessageRendererForTesting()),
       ),
     ),
   );

@@ -112,7 +112,8 @@ Future<void> pumpChat(
           // the Scaffold in the test tree so a regression (reading
           // MediaQuery instead) fails these tests instead of only
           // misbehaving on device.
-          home: Scaffold(body: const ChatPage()),
+          home: Scaffold(
+              body: const ChatPage.withNativeMessageRendererForTesting()),
         ),
       ),
       visible: visible,
@@ -831,7 +832,9 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: Scaffold(body: ChatPage())),
+            child: const MaterialApp(
+                home: Scaffold(
+                    body: ChatPage.withNativeMessageRendererForTesting())),
           ),
           visible: false,
         ),
@@ -857,7 +860,9 @@ void main() {
                 return ProviderEntriesNotifier();
               }),
             ],
-            child: const MaterialApp(home: Scaffold(body: ChatPage())),
+            child: const MaterialApp(
+                home: Scaffold(
+                    body: ChatPage.withNativeMessageRendererForTesting())),
           ),
           visible: true,
         ),

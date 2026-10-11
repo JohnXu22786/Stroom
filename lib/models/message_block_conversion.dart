@@ -32,14 +32,16 @@ List<MessageBlock> legacyToBlocks({
             : toolCalls.length;
     for (var j = start; j < end && j < toolCalls.length; j++) {
       final tc = toolCalls[j];
-      blocks.add(ToolCallBlock(
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-        status: tc.status,
-        result: tc.result,
-        compactedAt: tc.compactedAt,
-      ));
+      blocks.add(
+        ToolCallBlock(
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          status: tc.status,
+          result: tc.result,
+          compactedAt: tc.compactedAt,
+        ),
+      );
     }
   }
   // Remaining reasoning/text after all tool rounds — interleaved, matching _buildWithRounds
@@ -77,6 +79,8 @@ List<MessageBlock> assistantBlocks({
     toolCallRoundStarts: toolCallRoundStarts ?? [],
   );
   if (!blocks.any((block) => block is TextBlock) && content.isNotEmpty) {
+    // Legacy content has no per-round boundary. Preserve the old loader's
+    // trailing fallback position after any tool calls.
     blocks.add(TextBlock(text: content));
   }
   return blocks;

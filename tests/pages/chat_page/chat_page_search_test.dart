@@ -15,7 +15,14 @@ import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 
-Widget _buildApp({String? initialSearchQuery}) {
+Widget _buildApp({
+  String? initialSearchQuery,
+  Widget Function(
+    String,
+    ValueNotifier<Map<String, dynamic>?>,
+    void Function(Map<String, dynamic>),
+  )? messageHostBuilder,
+}) {
   SharedPreferences.setMockInitialValues({});
   return ProviderScope(
     overrides: [
@@ -29,7 +36,13 @@ Widget _buildApp({String? initialSearchQuery}) {
     ],
     child: MaterialApp(
       home: Scaffold(
-        body: ChatPage(initialSearchQuery: initialSearchQuery),
+        body: messageHostBuilder == null
+            ? ChatPage.withNativeMessageRendererForTesting(
+                initialSearchQuery: initialSearchQuery)
+            : ChatPage(
+                initialSearchQuery: initialSearchQuery,
+                messageHostBuilder: messageHostBuilder,
+              ),
       ),
     ),
   );
@@ -39,8 +52,16 @@ Future<void> _pumpChat(
   WidgetTester tester, {
   required List<ChatMessage> messages,
   String? initialSearchQuery,
+  Widget Function(
+    String,
+    ValueNotifier<Map<String, dynamic>?>,
+    void Function(Map<String, dynamic>),
+  )? messageHostBuilder,
 }) async {
-  await tester.pumpWidget(_buildApp(initialSearchQuery: initialSearchQuery));
+  await tester.pumpWidget(_buildApp(
+    initialSearchQuery: initialSearchQuery,
+    messageHostBuilder: messageHostBuilder,
+  ));
   await tester.pump();
 
   final ctx = tester.element(find.byType(ChatPage));
@@ -208,5 +229,146 @@ void main() {
       expect(bubbleRect.bottom, greaterThan(0),
           reason: 'the matched message must be inside the viewport');
     });
+  });
+
+  testWidgets('DSH search results update the counter and navigate matches',
+      (tester) async {
+    final commands = <Map<String, dynamic>>[];
+    ValueNotifier<Map<String, dynamic>?>? boundCommands;
+    late void Function(Map<String, dynamic>) sendEvent;
+
+    Widget hostBuilder(
+      String _,
+      ValueNotifier<Map<String, dynamic>?> nextCommands,
+      void Function(Map<String, dynamic>) nextSendEvent,
+    ) {
+      sendEvent = nextSendEvent;
+      if (!identical(boundCommands, nextCommands)) {
+        boundCommands = nextCommands;
+        nextCommands.addListener(() {
+          final command = nextCommands.value;
+          if (command != null) commands.add(Map.of(command));
+        });
+      }
+      return const SizedBox.shrink();
+    }
+
+    await _pumpChat(
+      tester,
+      messages: _messages(),
+      initialSearchQuery: 'term',
+      messageHostBuilder: hostBuilder,
+    );
+
+    sendEvent({'type': 'ready'});
+    await tester.pump();
+
+    final snapshot =
+        commands.firstWhere((command) => command['type'] == 'snapshot');
+    final initialSearch =
+        commands.lastWhere((command) => command['type'] == 'search');
+    expect(snapshot['messages'], hasLength(3));
+    expect(initialSearch['query'], 'term');
+    expect(initialSearch['emitResults'], isTrue);
+
+    sendEvent({
+      'type': 'searchResults',
+      'session': snapshot['session'],
+      'query': 'term',
+      'matches': [
+        {'messageId': 'a1', 'occurrence': 7.0},
+        {'messageId': 'a2', 'occurrence': 14},
+      ],
+    });
+    await tester.pump();
+
+    expect(find.text('1/2'), findsOneWidget);
+    final firstNavigation =
+        commands.lastWhere((command) => command['type'] == 'search');
+    expect(firstNavigation['messageId'], 'a1');
+    expect(firstNavigation['occurrence'], 7);
+    expect(firstNavigation['emitResults'], isFalse);
+
+    await tester.tap(find.byTooltip('下一个'));
+    await tester.pump();
+
+    expect(find.text('2/2'), findsOneWidget);
+    final nextNavigation =
+        commands.lastWhere((command) => command['type'] == 'search');
+    expect(nextNavigation['messageId'], 'a2');
+    expect(nextNavigation['occurrence'], 14);
+    expect(nextNavigation['emitResults'], isFalse);
+  });
+
+  testWidgets(
+      'DSH keeps an older search match in the visible window after closing search',
+      (tester) async {
+    final commands = <Map<String, dynamic>>[];
+    ValueNotifier<Map<String, dynamic>?>? boundCommands;
+    late void Function(Map<String, dynamic>) sendEvent;
+
+    Widget hostBuilder(
+      String _,
+      ValueNotifier<Map<String, dynamic>?> nextCommands,
+      void Function(Map<String, dynamic>) nextSendEvent,
+    ) {
+      sendEvent = nextSendEvent;
+      if (!identical(boundCommands, nextCommands)) {
+        boundCommands = nextCommands;
+        nextCommands.addListener(() {
+          final command = nextCommands.value;
+          if (command != null) commands.add(Map.of(command));
+        });
+      }
+      return const SizedBox.shrink();
+    }
+
+    final messages = [
+      for (var i = 0; i < 35; i++)
+        ChatMessage(
+          id: 'm$i',
+          role: i.isEven ? 'user' : 'assistant',
+          content: 'Message $i content',
+          createdAt: DateTime(2025, 1, 1).add(Duration(hours: i)),
+        ),
+    ];
+    await _pumpChat(
+      tester,
+      messages: messages,
+      initialSearchQuery: 'Message 0 content',
+      messageHostBuilder: hostBuilder,
+    );
+
+    sendEvent({'type': 'ready'});
+    await tester.pump();
+    final snapshot = commands.firstWhere(
+      (command) => command['type'] == 'snapshot',
+    );
+    expect(snapshot['messages'], hasLength(35));
+    sendEvent({
+      'type': 'searchResults',
+      'session': snapshot['session'],
+      'query': 'Message 0 content',
+      'matches': [
+        {'messageId': 'm0', 'occurrence': 0},
+      ],
+    });
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(find.text('1/1'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('关闭搜索'));
+    await tester.pump();
+    await tester.pump();
+    // Ask the host for a fresh snapshot so this asserts the payload after the
+    // search window has closed, even when it equals the last sent patch.
+    sendEvent({'type': 'ready'});
+    await tester.pump();
+    final visibleSnapshot =
+        commands.where((command) => command['type'] == 'snapshot').last;
+    final visibleMessages = visibleSnapshot['messages'] as List<dynamic>;
+    expect(visibleMessages.any((message) => message['id'] == 'm0'), isTrue,
+        reason: 'closing search must keep the located older message visible');
   });
 }

@@ -106,6 +106,108 @@ const message = (id, blocks, extra = {}) => ({
   ...extra,
 });
 
+test("user message timestamps are rendered in local time", async () => {
+  const v = await view();
+  const createdAt = "2026-05-06T07:08:00.000Z";
+  v.receive(
+    snapshot("timestamps", [
+      message("user", [], {
+        role: "user",
+        content: "Question",
+        createdAt,
+        actions: [],
+      }),
+      message("assistant", [{ type: "text", text: "Answer" }], {
+        createdAt,
+        actions: [],
+      }),
+    ]),
+  );
+  await wait();
+
+  const doc = v.dom.window.document;
+  const timestamp = doc.querySelector(
+    '[data-message-id="user"] time.message-timestamp',
+  );
+  assert.ok(timestamp, "user messages retain their visible timestamp");
+  const date = new Date(createdAt);
+  const pad = (value) => String(value).padStart(2, "0");
+  assert.equal(
+    timestamp.textContent,
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  );
+  assert.equal(timestamp.getAttribute("datetime"), createdAt);
+  assert.equal(
+    doc.querySelector('[data-message-id="assistant"] time.message-timestamp'),
+    null,
+    "assistant timestamps remain hidden",
+  );
+  v.dom.window.close();
+});
+
+test("multilingual chat text does not force a Chinese screen reader language", async () => {
+  const v = await view();
+  assert.equal(v.dom.window.document.documentElement.getAttribute("lang"), null);
+  v.dom.window.close();
+});
+
+test("new image attachments on a patched message request thumbnails once", async () => {
+  const v = await view();
+  v.receive(snapshot("images", [message("m", [], { streaming: true })]));
+  await wait();
+
+  const attachment = {
+    id: "image-1",
+    fileName: "diagram.png",
+    fileType: "image",
+  };
+  v.receive({
+    type: "patch",
+    session: "images",
+    messages: [message("m", [], { streaming: true, attachments: [attachment] })],
+  });
+  await wait();
+
+  const thumbnailActions = () =>
+    v.events.filter(
+      (event) => event.type === "action" && event.action === "thumbnail",
+    );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(thumbnailActions())),
+    [
+      {
+        type: "action",
+        session: "images",
+        messageId: "m",
+        action: "thumbnail",
+        attachmentId: "image-1",
+      },
+    ],
+    "a new attachment on an existing message requests its thumbnail",
+  );
+
+  v.receive({
+    type: "patch",
+    session: "images",
+    messages: [
+      message("m", [{ type: "text", text: "continued" }], {
+        streaming: true,
+        attachments: [attachment],
+      }),
+    ],
+  });
+  await wait();
+  assert.equal(thumbnailActions().length, 1);
+  assert.equal(
+    v.dom.window.document.querySelector(
+      '[data-message-id="m"] .attachment img',
+    ),
+    null,
+    "the thumbnail action remains pending until Flutter returns its result",
+  );
+  v.dom.window.close();
+});
+
 test("DSH Markdown preserves safe extensions, tools and incomplete streaming fences", async () => {
   const v = await view();
   v.receive(
@@ -157,6 +259,85 @@ test("DSH Markdown preserves safe extensions, tools and incomplete streaming fen
   v.dom.window.close();
 });
 
+test("a running tool that fails opens its details after a live patch", async () => {
+  const v = await view();
+  v.receive(
+    snapshot("tool-status", [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "running",
+          result: null,
+        },
+      ]),
+    ]),
+  );
+  await wait();
+
+  const doc = v.dom.window.document;
+  const runningRow = doc.querySelector(".tool [data-disclosure-row]");
+  assert.equal(runningRow?.getAttribute("aria-expanded"), "false");
+  assert.equal(doc.querySelector(".tool-detail"), null);
+
+  v.receive({
+    type: "patch",
+    session: "tool-status",
+    order: ["m"],
+    messages: [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "error",
+          result: "permission denied",
+        },
+      ]),
+    ],
+  });
+  await wait();
+
+  const failedRow = doc.querySelector(".tool [data-disclosure-row]");
+  assert.equal(failedRow?.getAttribute("aria-expanded"), "true");
+  assert.equal(doc.querySelector(".tool-detail pre")?.textContent, "permission denied");
+
+  failedRow.click();
+  await wait();
+  assert.equal(
+    doc.querySelector(".tool [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    "false",
+    "the user can collapse the failure details",
+  );
+  v.receive({
+    type: "patch",
+    session: "tool-status",
+    order: ["m"],
+    messages: [
+      message("m", [
+        {
+          type: "tool_call",
+          id: "tool-1",
+          name: "read_file",
+          arguments: { path: "/tmp/file.txt" },
+          status: "error",
+          result: "permission denied (updated)",
+        },
+      ]),
+    ],
+  });
+  await wait();
+  assert.equal(
+    doc.querySelector(".tool [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    "false",
+    "later result patches must preserve the user's collapsed state",
+  );
+  v.dom.window.close();
+});
+
 test("Markdown links open supported schemes and preserve local anchors", async () => {
   const v = await view();
   v.receive(
@@ -164,7 +345,7 @@ test("Markdown links open supported schemes and preserve local anchors", async (
       message("m", [
         {
           type: "text",
-          text: "[web](https://example.com) [mail](mailto:a@example.com) [note](#footnote)",
+          text: "[web](https://example.com) [mail](mailto:a@example.com) [call](tel:+1-555-0100) [text](sms:+1-555-0100) [note](#footnote)",
         },
       ]),
     ]),
@@ -172,12 +353,11 @@ test("Markdown links open supported schemes and preserve local anchors", async (
   await wait();
   const doc = v.dom.window.document;
   const links = [...doc.querySelectorAll("a")];
-  assert.equal(links.length, 2);
-
-  const localAnchor = doc.createElement("a");
-  localAnchor.href = "#footnote";
-  localAnchor.textContent = "note";
-  doc.querySelector("[data-message-id='m']").append(localAnchor);
+  assert.equal(links.length, 5);
+  const localAnchor = links.find(
+    (link) => link.getAttribute("href") === "#footnote",
+  );
+  assert.ok(localAnchor, "Markdown fragment links remain available in the page");
 
   const anchorClick = new v.dom.window.MouseEvent("click", {
     bubbles: true,
@@ -196,7 +376,7 @@ test("Markdown links open supported schemes and preserve local anchors", async (
   assert.equal(modifiedClick.defaultPrevented, false);
   assert.deepEqual(v.events.filter((event) => event.type === "link"), []);
 
-  for (const link of links) {
+  for (const link of links.filter((link) => link !== localAnchor)) {
     const click = new v.dom.window.MouseEvent("click", {
       bubbles: true,
       cancelable: true,
@@ -209,6 +389,8 @@ test("Markdown links open supported schemes and preserve local anchors", async (
     [
       "https://example.com",
       "mailto:a@example.com",
+      "tel:+1-555-0100",
+      "sms:+1-555-0100",
     ],
   );
   v.dom.window.close();
@@ -557,6 +739,26 @@ test("search highlights original offsets after Unicode lowercase expansion", asy
   }
 });
 
+test("search matches Greek final sigma case-insensitively", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [message("greek", [{ type: "text", text: "ΟΣ" }])]),
+    );
+    await wait();
+    v.receive({ type: "search", session: "a", query: "Σ" });
+    await wait();
+
+    const results = v.events.filter((event) => event.type === "searchResults").at(-1);
+    assert.deepEqual(JSON.parse(JSON.stringify(results.matches)), [
+      { messageId: "greek", occurrence: 0 },
+    ]);
+    assert.equal(v.dom.window.document.querySelector("mark")?.textContent, "Σ");
+  } finally {
+    v.dom.window.close();
+  }
+});
+
 test("preview readiness follows each fence, accepting case variants and settled tails", async () => {
   const v = await view();
   try {
@@ -577,6 +779,15 @@ test("preview readiness follows each fence, accepting case variants and settled 
     );
     button.click();
     assert.equal(v.events.at(-1).action, "html");
+    update("```HTML\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
+    await wait();
+    button = v.dom.window.document.querySelector('[data-action="html"]');
+    assert.ok(button, "CRLF fence offers HTML preview");
+    assert.equal(
+      button.disabled,
+      false,
+      "closed CRLF fence stays ready while later prose streams",
+    );
     update("> ```HTML\n> <h1>quoted</h1>\n> ```\n\nmore", true);
     await wait();
     assert.equal(

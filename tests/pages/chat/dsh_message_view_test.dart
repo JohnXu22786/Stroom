@@ -4,6 +4,50 @@ import 'package:stroom/pages/chat/message_view/dsh_message_view.dart';
 import 'package:stroom/pages/chat/message_view/message_code_fence.dart';
 
 void main() {
+  testWidgets('buffers an early search until the renderer is ready',
+      (tester) async {
+    final commands = <Map<String, dynamic>>[];
+    final events = <Map<String, dynamic>>[];
+    late void Function(Map<String, dynamic>) receive;
+    ValueNotifier<Map<String, dynamic>?>? bound;
+    Widget host(String html, ValueNotifier<Map<String, dynamic>?> notifier,
+        void Function(Map<String, dynamic>) callback) {
+      receive = callback;
+      if (!identical(bound, notifier)) {
+        bound = notifier;
+        notifier.addListener(() {
+          final command = notifier.value;
+          if (command != null) commands.add(command);
+        });
+      }
+      return const SizedBox();
+    }
+
+    await tester.pumpWidget(MaterialApp(
+        home: DshMessageView(
+            conversationId: 'conversation',
+            messages: const [],
+            theme: const {'dark': false},
+            hasOlder: false,
+            historyLoaded: false,
+            onEvent: events.add,
+            hostBuilder: host)));
+
+    tester.state<DshMessageViewState>(find.byType(DshMessageView)).send({
+      'type': 'search',
+      'query': 'term',
+      'emitResults': true,
+    });
+    expect(commands, isEmpty);
+
+    receive({'type': 'ready'});
+
+    expect(commands.map((command) => command['type']), ['snapshot', 'search']);
+    expect(commands.last['query'], 'term');
+    expect(commands.last['session'], commands.first['session']);
+    expect(events.single['type'], 'ready');
+  });
+
   testWidgets('bridge diffs messages and rejects actions from an old session',
       (tester) async {
     final commands = <Map<String, dynamic>>[];
@@ -74,6 +118,8 @@ void main() {
     expect(fence.code, '<h1>标题</h1>');
     expect(fence.language, 'html');
     expect(fence.complete, isTrue);
+    expect(messageCodeFence(text, 3.0, end.toDouble())?.code, '<h1>标题</h1>');
+    expect(messageCodeFence(text, 3.5, end.toDouble()), isNull);
     expect(
         messageCodeFence(text, 3, end, streaming: true)!.generating, isFalse);
     const tabClose = '```html\nx\n```\t';
@@ -86,6 +132,11 @@ void main() {
         isTrue);
     expect(messageCodeFence(open, 0, open.length)!.generating, isFalse);
     expect(messageCodeFence(open, 0, open.length)!.language, 'html');
+    const crlf = '```html\r\n<h1>Windows</h1>\r\n```\r\n';
+    final crlfFence = messageCodeFence(crlf, 0, crlf.length, streaming: true)!;
+    expect(crlfFence.code, '<h1>Windows</h1>');
+    expect(crlfFence.complete, isTrue);
+    expect(crlfFence.generating, isFalse);
     expect(messageCodeFence(text, -1, end), isNull);
     expect(messageCodeFence(text, 3, text.length + 1), isNull);
     expect(messageCodeFence(text, 0, end), isNull);

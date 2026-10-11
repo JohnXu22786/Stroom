@@ -54,10 +54,6 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   Future<void> _scrollToCurrentMatch() async {
-    if (_useWebMessages) {
-      _searchWebMessages(locate: true);
-      return;
-    }
     // Serialize navigations: a rapid second tap must wait for the first
     // one's pagination loads instead of racing them (load-more refuses
     // concurrent runs, which would silently drop the newer navigation).
@@ -118,6 +114,11 @@ extension _ChatPageSearchExt on _ChatPageState {
       if (_currentMatchIndex != targetIndex ||
           _currentMatchIndex >= _searchMatches.length ||
           _searchMatches[_currentMatchIndex].messageId != match.messageId) {
+        return;
+      }
+
+      if (_useWebMessages) {
+        _searchWebMessages(locate: true);
         return;
       }
 
