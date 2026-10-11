@@ -1158,7 +1158,12 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .resumeExecution('saved');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(
+        () =>
+            inputs.length == 1 &&
+            notifier.execution('saved')?.status ==
+                FlowExecutionStatus.completed,
+        'checkpoint ASR resume');
     expect(inputs, ['transcribed']);
     expect(notifier.execution('saved')!.status, FlowExecutionStatus.completed);
   });
