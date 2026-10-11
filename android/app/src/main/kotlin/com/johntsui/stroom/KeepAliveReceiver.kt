@@ -121,6 +121,30 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 schedule = { scheduleAlarmNow(context, intervalMs) },
             )
 
+        /** Schedule after an explicit start and retry once if the first attempt fails. */
+        fun scheduleExplicitStartAlarm(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            val schedule = { scheduleAlarm(context) }
+            val scheduled = scheduleAlarmWithRetry(
+                schedule = schedule,
+                retrySchedule = schedule,
+                isStillActive = {
+                    prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                        prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                        prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
+                },
+                retryLater = { retry ->
+                    if (!Handler(Looper.getMainLooper()).postDelayed(retry, SCHEDULE_RETRY_DELAY_MS)) {
+                        Log.w(TAG, "Could not queue explicit keep-alive scheduling retry")
+                    }
+                },
+            )
+            if (!scheduled) {
+                Log.w(TAG, "Initial explicit keep-alive scheduling failed")
+            }
+            return scheduled
+        }
+
         private fun scheduleAlarmNow(context: Context, intervalMs: Long): Boolean {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = createPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT)
@@ -353,7 +377,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
             scheduled
         }
 
-        scheduleReceiverAlarmWithRetry(
+        scheduleAlarmWithRetry(
             schedule = { scheduleAtInterval(intervalMs) },
             retrySchedule = { scheduleAtInterval(currentInterval()) },
             isStillActive = {
