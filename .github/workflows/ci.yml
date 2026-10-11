@@ -99,8 +99,10 @@ jobs:
           # Pull request refs are normally merge commits. Their first parent
           # is the exact base used to build the ref, even when main advances
           # after the event payload was created. Use it to exclude upstream
-          # changes; fall back to a merge-base for a plain head checkout.
-          if git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+          # changes; fall back to a merge-base for a plain head checkout or a
+          # feature branch whose own history happens to contain a merge.
+          PR_HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if SECOND_PARENT_SHA="$(git rev-parse --verify HEAD^2 2>/dev/null)" && [ "$SECOND_PARENT_SHA" = "$PR_HEAD_SHA" ]; then
             if ! DIFF_BASE_SHA="$(git rev-parse HEAD^1)"; then
               echo "Unable to determine the merge ref base."
               exit 1
