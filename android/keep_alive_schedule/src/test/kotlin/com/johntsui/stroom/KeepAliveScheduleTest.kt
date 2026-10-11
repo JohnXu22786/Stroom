@@ -146,8 +146,8 @@ class KeepAliveScheduleTest {
     @Test
     fun failedRearmRetriesOnceWithTheSelectedNormalOrBackoffInterval() {
         for (selectedInterval in listOf(
-            KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
-            KeepAliveReceiver.FAILURE_BACKOFF_INTERVAL_MS,
+            KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS,
+            KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS,
         )) {
             val retryQueue = mutableListOf<() -> Unit>()
             val scheduledIntervals = mutableListOf<Long>()
@@ -188,7 +188,7 @@ class KeepAliveScheduleTest {
             var watchdogEnabled = true
 
             scheduleAlarmWithRetryAtInterval(
-                intervalMs = KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
+                intervalMs = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS,
                 scheduleAtInterval = { ++scheduleAttempts; false },
                 isStillActive = { keepAliveActive && serviceEnabled && watchdogEnabled },
                 retryLater = { retryQueue += it },
