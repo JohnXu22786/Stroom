@@ -89,6 +89,54 @@ AGPLv3 §13 also permits combining an AGPLv3-covered work with GPLv3-covered
 code; the AGPL terms continue to apply to the AGPL-covered portion, while the
 GPLv3 terms remain applicable to the GPLv3-covered portion.
 
+## Android runtime dependencies observed in release APK v0.5.0-rc.1
+
+The [Android release APK](https://github.com/JohnXu22786/Stroom/releases/tag/v0.5.0-rc.1)
+(SHA-256 `0b3e3d179a49ffdc79be7b91cbdc1477d8e3f57acdb03bf7659adb508f837f12`)
+contains `j$.util.DesugarTimeZone`. Neither the APK's standalone notices nor
+Flutter's `NOTICES.Z` lists `desugar_jdk_libs`. Android Gradle configures
+`coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")`, and the
+[Google Maven POM](https://dl.google.com/dl/android/maven2/com/android/tools/desugar_jdk_libs/2.1.4/desugar_jdk_libs-2.1.4.pom)
+identifies GNU GPL version 2 with the Classpath Exception. The exact upstream
+[`LICENSE`](https://github.com/google/desugar_jdk_libs/blob/50d9c1fb3e85fa4c00161525a45484f712c1f003/LICENSE)
+and [`ADDITIONAL_LICENSE_INFO`](https://github.com/google/desugar_jdk_libs/blob/50d9c1fb3e85fa4c00161525a45484f712c1f003/ADDITIONAL_LICENSE_INFO)
+from that 2.1.4 preparation commit are retained at
+`assets/vendor/native/desugar-2.1.4-LICENSE.txt` and
+`assets/vendor/native/desugar-2.1.4-ADDITIONAL_LICENSE_INFO.txt`, and
+both are shown on Flutter's Open Source Licenses page.
+
+The Classpath Exception permits linking independent modules with the library
+in one executable under each module's own license terms. It does not extend to
+code copied into or derived from the GPL-covered library. We found no AGPLv3
+incompatibility for the independent-module linking path described by the
+exception. The upstream additional licensing note warns that the broader
+repository may include separate Apache-2.0 or FreeType programs. The inspected
+`jdk11/src/java.base` subset at the preparation commit had no such headers;
+that scoped check does not establish the license of every upstream source file.
+
+The separate [`desugar_jdk_libs_configuration:2.1.4` POM](https://dl.google.com/dl/android/maven2/com/android/tools/desugar_jdk_libs_configuration/2.1.4/desugar_jdk_libs_configuration-2.1.4.pom)
+identifies BSD-3-Clause. It is build-time configuration; its 29 class
+descriptors were not found in this release APK, so it is not listed as bundled
+runtime software.
+
+The APK also contains AndroidX, Material Components, and Kotlinx Coroutines
+Maven runtime artifacts. Inspection found 63 `META-INF/*.version` markers;
+the POMs for 62 identified coordinates report Apache-2.0. The
+`androidx.arch.core:core-runtime` marker is malformed, so its version and
+license could not be confirmed and it is not included in the grouped notice.
+The APK embeds the Apache license from `androidx.annotation`; the standard
+[Apache License 2.0 text](https://www.apache.org/licenses/LICENSE-2.0.txt) is
+retained at `assets/vendor/native/android-maven-runtime-APACHE-2.0.txt` and
+registered for the 62 identified artifacts. Flutter's `NOTICES.Z` does not
+enumerate these Maven dependencies.
+
+This notice group describes only the dependencies observed in APK
+`v0.5.0-rc.1`; the repository tracks neither a Gradle lockfile nor
+`pubspec.lock`, so it does not claim to cover future build graphs. On newer
+`main`, `wechat_assets_picker` 10.1.3 has a root Apache-2.0 license already
+collected by Flutter. Its `photo_manager` dependency declares no Android Maven
+runtime dependency and is not part of this observed APK group.
+
 ## CatCatch behavior reference
 
 The WebView hook and Dart media sniffer use the behavior of

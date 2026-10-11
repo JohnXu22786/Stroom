@@ -59,6 +59,29 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const ['desugar_jdk_libs 2.1.4 (Android; GPLv2 with Classpath Exception)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/desugar-2.1.4-LICENSE.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['desugar_jdk_libs 2.1.4 additional licensing information'],
+      await rootBundle.loadString(
+        'assets/vendor/native/desugar-2.1.4-ADDITIONAL_LICENSE_INFO.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'AndroidX, Material, and Kotlinx Coroutines (Android, v0.5.0-rc.1)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/android-maven-runtime-APACHE-2.0.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const [
         'MDK CocoaPods 0.36.0 text (Apple; type Commercial; scope unresolved)',
       ],
