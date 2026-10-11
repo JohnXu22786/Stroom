@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,5 +77,69 @@ void main() {
     expect(task.retryData, retryData);
     expect(task.steps.where((step) => step.failed), hasLength(1));
     expect(task.steps.where((step) => step.running), isEmpty);
+  });
+
+  test('removing a task during extraction does not save its result', () async {
+    final notifier = BackgroundTaskNotifier();
+    final extractionStarted = Completer<void>();
+    final extractionResult =
+        Completer<({Uint8List audioBytes, String hash, String format})>();
+
+    final execution = runAudioSeparationForTesting(
+      videos: [
+        SelectedVideo(
+          bytes: Uint8List.fromList([1, 2, 3]),
+          name: 'pending.mp4',
+        ),
+      ],
+      bgNotifier: notifier,
+      saveFolder: '',
+      workerExtract: (_) {
+        extractionStarted.complete();
+        return extractionResult.future;
+      },
+    );
+
+    await extractionStarted.future.timeout(const Duration(seconds: 5));
+    expect(notifier.state, hasLength(1));
+    notifier.removeTask(notifier.state.single.id);
+    extractionResult.complete((
+      audioBytes: Uint8List.fromList([1, 2, 3, 4]),
+      hash: 'removed_audio_task',
+      format: 'wav',
+    ));
+
+    await execution;
+
+    expect(await FileManifest.readFile('removed_audio_task.wav'), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+    expect(notifier.state, isEmpty);
+  });
+
+  test('normal separation still saves output and completes its task', () async {
+    final notifier = BackgroundTaskNotifier();
+    final audioBytes = Uint8List.fromList([5, 6, 7, 8]);
+
+    await runAudioSeparationForTesting(
+      videos: [
+        SelectedVideo(
+          bytes: Uint8List.fromList([1, 2, 3]),
+          name: 'complete.mp4',
+        ),
+      ],
+      bgNotifier: notifier,
+      saveFolder: '',
+      workerExtract: (_) async =>
+          (audioBytes: audioBytes, hash: 'completed_audio_task', format: 'wav'),
+    );
+
+    expect(notifier.state, hasLength(1));
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(await FileManifest.readFile('completed_audio_task.wav'), audioBytes);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(
+      (await FileManifest.loadRecords()).single.storageFileName,
+      'completed_audio_task.wav',
+    );
   });
 }

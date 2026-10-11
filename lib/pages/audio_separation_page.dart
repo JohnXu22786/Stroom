@@ -83,8 +83,12 @@ Future<void> _runAudioSeparation({
   required List<SelectedVideo> videos,
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
+  Future<({Uint8List audioBytes, String hash, String format})> Function(
+      SelectedVideo video)?
+      workerExtract,
 }) async {
   final throttler = _BgThrottler(bgNotifier);
+  final taskIds = <String>{};
   try {
     for (final video in videos) {
       final title = '音频分离_${p.basenameWithoutExtension(video.name)}';
@@ -93,19 +97,34 @@ Future<void> _runAudioSeparation({
         title: title,
         retryData: null,
       );
+      taskIds.add(taskId);
+      var cancelled = false;
+      bool isTaskLive() => !cancelled && bgNotifier.taskById(taskId) != null;
+      bgNotifier.registerCancellation(taskId, () {
+        cancelled = true;
+        throttler.discardTask(taskId);
+      });
+      if (!isTaskLive()) continue;
+
       var activeStepIndex = 0;
       throttler.updateStep(taskId, activeStepIndex, running: true);
 
       try {
         final retryData = await _computeAudioSeparationRetryData(video);
+        if (!isTaskLive()) continue;
         bgNotifier.setRetryData(taskId, retryData);
 
-        final result = await _workerExtract(video.bytes, video.format);
+        final result = await (workerExtract?.call(video) ??
+            _workerExtract(video.bytes, video.format));
+        // Isolate.run cannot be stopped after it starts, so discard a result
+        // whose task was removed before it reaches persistence.
+        if (!isTaskLive()) continue;
 
         throttler.updateStep(taskId, activeStepIndex, completed: true);
         activeStepIndex = 1;
         throttler.updateStep(taskId, activeStepIndex, running: true);
 
+        if (!isTaskLive()) continue;
         final filePath = await saveAudioSeparationFile(
           result.audioBytes,
           hash: result.hash,
@@ -114,18 +133,38 @@ Future<void> _runAudioSeparation({
           videoName: video.name,
           saveFolder: saveFolder,
         );
+        if (!isTaskLive()) continue;
 
         throttler.updateStep(taskId, 1, completed: true);
         throttler.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
+        if (!isTaskLive()) continue;
         throttler.updateStep(taskId, activeStepIndex, failed: true);
         throttler.failTask(taskId, error: '音频提取失败: $e');
       }
     }
   } finally {
     throttler.dispose(); // flush any remaining queued ops
+    for (final taskId in taskIds) {
+      bgNotifier.unregisterCancellation(taskId);
+    }
   }
 }
+
+@visibleForTesting
+Future<void> runAudioSeparationForTesting({
+  required List<SelectedVideo> videos,
+  required BackgroundTaskNotifier bgNotifier,
+  required String saveFolder,
+  required Future<({Uint8List audioBytes, String hash, String format})>
+      Function(SelectedVideo video) workerExtract,
+}) =>
+    _runAudioSeparation(
+      videos: videos,
+      bgNotifier: bgNotifier,
+      saveFolder: saveFolder,
+      workerExtract: workerExtract,
+    );
 
 Future<Map<String, dynamic>> _computeAudioSeparationRetryData(
     SelectedVideo video) async {
@@ -159,37 +198,41 @@ Map<String, dynamic> _serializeAudioSeparationRetryData(SelectedVideo video) =>
 class _BgThrottler {
   final BackgroundTaskNotifier _notifier;
   Timer? _timer;
-  final List<void Function()> _queue = [];
+  final List<({String taskId, void Function() apply})> _queue = [];
 
   _BgThrottler(this._notifier);
 
   void updateStep(String taskId, int index,
           {bool? completed, bool? running, bool? failed, bool? skipped}) =>
-      _enqueue(() => _notifier.updateStep(taskId, index,
+      _enqueue(taskId, () => _notifier.updateStep(taskId, index,
           completed: completed,
           running: running,
           failed: failed,
           skipped: skipped));
 
   void completeTask(String taskId, {String? downloadedFilePath}) =>
-      _enqueue(() => _notifier.completeTask(taskId,
+      _enqueue(taskId, () => _notifier.completeTask(taskId,
           downloadedFilePath: downloadedFilePath));
 
   void failTask(String taskId, {String? error}) =>
-      _enqueue(() => _notifier.failTask(taskId, error: error));
+      _enqueue(taskId, () => _notifier.failTask(taskId, error: error));
 
-  void _enqueue(void Function() op) {
-    _queue.add(op);
+  void discardTask(String taskId) {
+    _queue.removeWhere((operation) => operation.taskId == taskId);
+  }
+
+  void _enqueue(String taskId, void Function() op) {
+    _queue.add((taskId: taskId, apply: op));
     _timer ??= Timer(const Duration(milliseconds: 250), _flush);
   }
 
   void _flush() {
     _timer = null;
-    final ops = List<void Function()>.from(_queue);
+    final ops = List<({String taskId, void Function() apply})>.from(_queue);
     _queue.clear();
-    for (final op in ops) {
+    for (final operation in ops) {
       try {
-        op();
+        operation.apply();
       } catch (e) {
         // If one op throws, still apply the rest so a single
         // failing updateStep doesn't drop the entire batch.
