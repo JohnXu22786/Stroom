@@ -225,8 +225,10 @@ jobs:
             suite: built-in-components
           - label: Chat and TaskFlow Core
             suite: chat-taskflow-core
-          - label: Files and Application Runtime
-            suite: files-app-core
+          - label: Files and Data
+            suite: files-data
+          - label: Application and Shared
+            suite: application-shared
           - label: Chat UI
             suite: chat-ai-ui
           - label: Other Feature UI
@@ -241,14 +243,14 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'files-app-core'
+        if: matrix.suite == 'application-shared'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'files-app-core'
+        if: matrix.suite == 'application-shared'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
       - name: Run Web startup checks in Chrome
-        if: matrix.suite == 'files-app-core'
+        if: matrix.suite == 'application-shared'
         run: flutter test --platform chrome test/startup/startup_check_service_web.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}

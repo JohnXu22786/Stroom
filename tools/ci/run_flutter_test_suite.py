@@ -196,18 +196,19 @@ FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
     "component-integrations": "component-integrations",
     "chat-ai-core": "chat-taskflow-core",
     "chat-ai-ui": "chat-ai-ui",
-    "files-data": "files-app-core",
+    "files-data": "files-data",
     "media-processing": "built-in-components",
     "text-math": "built-in-components",
     "tasks-workflow": "chat-taskflow-core",
-    "application-shared": "files-app-core",
+    "application-shared": "application-shared",
 }
 
 CI_GROUPS: tuple[str, ...] = (
     "component-integrations",
     "built-in-components",
     "chat-taskflow-core",
-    "files-app-core",
+    "files-data",
+    "application-shared",
     "chat-ai-ui",
     "feature-ui",
 )
