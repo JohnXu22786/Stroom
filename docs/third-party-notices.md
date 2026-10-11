@@ -84,8 +84,9 @@ it is not relabeled as the `.nupkg`'s MIT license.
 Static PE inspection of `mdk-nvjp2k.dll` shows imports of `nvjpeg2k_0.dll`,
 `cudart64_12.dll`, and `mdk.dll`. Neither NVIDIA DLL is present in the
 inspected `.nupkg` or FVP SDK archive. The nvJPEG2000 supplement §4.1 limits
-nvJPEG2K use to systems with NVIDIA GPUs, and §4.2 lists `nvjpeg2k_0.dll` among
-runtime files distributable under the base Agreement; see the
+nvJPEG2K use to systems with NVIDIA GPUs; its “Distribution” paragraph lists
+`nvjpeg2k_0.dll` among runtime files distributable under the base Agreement;
+see the
 [nvJPEG2000 license supplement](https://docs.nvidia.com/cuda/nvjpeg2000/license.html).
 The notice “This software contains source code provided by NVIDIA
 Corporation.” appears in the

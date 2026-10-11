@@ -24,8 +24,8 @@ returned HTTP 403 through this environment's HTTPS tunnel.
 Static PE inspection shows imports of nvjpeg2k_0.dll and cudart64_12.dll, in
 addition to mdk.dll. Neither NVIDIA runtime DLL is present in the inspected
 vendor .nupkg or FVP Windows x64 SDK archive. The nvJPEG2000 supplement §4.1
-limits use to NVIDIA GPU systems and §4.2 lists nvjpeg2k_0.dll among runtime
-files distributable under the Agreement
+limits use to NVIDIA GPU systems; its “Distribution” paragraph lists
+nvjpeg2k_0.dll among runtime files distributable under the Agreement
 (https://docs.nvidia.com/cuda/nvjpeg2000/license.html). The NVIDIA SDK
 Agreement §1.2(iii) requires the source notice above in distributed
 modifications and derivative works of sample source code; it is not a general
