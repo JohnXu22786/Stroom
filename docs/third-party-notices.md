@@ -137,6 +137,34 @@ This notice group describes only the dependencies observed in APK
 collected by Flutter. Its `photo_manager` dependency declares no Android Maven
 runtime dependency and is not part of this observed APK group.
 
+## iOS CocoaPods frameworks observed in release IPA v0.5.0-rc.1
+
+The unsigned iOS release IPA (SHA-256
+`8b2b7bff76d89b6fdcf68b13babf2405650020ee726352bf3249d2f55dd0e3ae`) contains
+the following CocoaPods frameworks. Their embedded `Info.plist` versions and
+the version-specific CocoaPods specs identify these licenses:
+
+| Framework | IPA version | CocoaPods license |
+| --- | --- | --- |
+| [DKImagePickerController](https://cocoapods.org/pods/DKImagePickerController#4.3.9) | 4.3.9 | MIT |
+| [DKPhotoGallery](https://cocoapods.org/pods/DKPhotoGallery#0.0.19) | 0.0.19 | MIT |
+| [OrderedSet](https://cocoapods.org/pods/OrderedSet#6.0.3) | 6.0.3 | MIT |
+| [SwiftyGif](https://cocoapods.org/pods/SwiftyGif#5.4.5) | 5.4.5 | MIT |
+| [SDWebImage](https://cocoapods.org/pods/SDWebImage#5.21.7) | 5.21.7 | MIT |
+| [libwebp](https://cocoapods.org/pods/libwebp#1.6.0) | 1.6.0 | BSD-3-Clause |
+
+The five MIT license texts are retained together at
+`assets/vendor/native/ios-cocoapods-MIT-licenses.txt`; the complete BSD-3-Clause
+text for libwebp is at
+`assets/vendor/native/libwebp-1.6.0-BSD-3-Clause.txt`. Flutter's generated
+`NOTICES.Z` does not identify these native CocoaPods framework/version pairs.
+It contains generic libwebp BSD notices, but does not attribute them to the
+native `libwebp` 1.6.0 framework; the explicit entry supplies that link.
+
+This is evidence from the named IPA only. That release contains FVP 0.36.1 and
+MDK 0.39.0, separate from the FVP 0.37.3 / MDK CocoaPods 0.36.0 evidence above.
+It does not identify current or future iOS build graphs.
+
 ## CatCatch behavior reference
 
 The WebView hook and Dart media sniffer use the behavior of
@@ -177,9 +205,19 @@ license grant, and this note does not determine whether any code was copied.
   entry on Flutter's license page.
 - **Mermaid 11.16.1** is MIT-licensed. The license from its
   [`mermaid@11.16.1` release](https://github.com/mermaid-js/mermaid/blob/mermaid%4011.16.1/LICENSE)
-  is retained at `assets/vendor/mermaid/LICENSE.txt`. The license page also
-  displays the embedded dependency notices from `assets/vendor/mermaid.min.js`.
-  Those notices identify DOMPurify 3.4.0 (Apache-2.0 or MPL-2.0), js-yaml 4.1.1
-  (MIT), lodash-es 4.18.1 (MIT), and several Cytoscape components (MIT). The
-  embedded notices do not state the Cytoscape package version; no version is
-  inferred here.
+  is retained at `assets/vendor/mermaid/LICENSE.txt`. The SHA-256 of the
+  checked-in `assets/vendor/mermaid.min.js` matches the exact
+  [`mermaid@11.16.1` npm tarball](https://registry.npmjs.org/mermaid/-/mermaid-11.16.1.tgz).
+  Its source map identifies 59 bundled package/version entries. Their complete
+  upstream license files are retained in
+  `assets/vendor/mermaid/THIRD-PARTY-LICENSES.txt` and shown on the in-app
+  license page: 22 MIT, 31 ISC, five BSD-3-Clause, and DOMPurify 3.4.0 under
+  `(MPL-2.0 OR Apache-2.0)`. Both full license alternatives for DOMPurify are
+  included. `khroma` 2.1.0 omits license metadata from its package JSON, but its
+  npm tarball contains an MIT license, which is retained and identified in the
+  corpus. These entries describe the checked-in Mermaid bundle and do not
+  claim license coverage for future bundle versions. The in-app page also keeps
+  Mermaid's embedded bundled-license comment block as a separate attribution
+  entry; it includes additional MIT attributions for code embedded within
+  Cytoscape (Promises/A+, jQuery event handling, Bezier curves, and Runge-Kutta
+  spring physics).

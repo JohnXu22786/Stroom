@@ -85,6 +85,22 @@ void registerBundledAssetLicenses() {
 
     yield LicenseEntryWithLineBreaks(
       const [
+        'iOS release v0.5.0-rc.1 CocoaPods frameworks (MIT; five frameworks)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/ios-cocoapods-MIT-licenses.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['libwebp 1.6.0 (iOS CocoaPods; BSD-3-Clause)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/libwebp-1.6.0-BSD-3-Clause.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
         'MDK CocoaPods 0.36.0 text (Apple; type Commercial; scope unresolved)',
       ],
       await rootBundle.loadString(
@@ -104,6 +120,15 @@ void registerBundledAssetLicenses() {
       await rootBundle.loadString('assets/vendor/mermaid/LICENSE.txt'),
     );
 
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'Mermaid 11.16.1 dependencies (59 package/version entries)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/mermaid/THIRD-PARTY-LICENSES.txt',
+      ),
+    );
+
     final mermaidSource =
         await rootBundle.loadString('assets/vendor/mermaid.min.js');
     final bundledNotices = RegExp(
@@ -116,7 +141,7 @@ void registerBundledAssetLicenses() {
 
     if (bundledNotices.isNotEmpty) {
       yield LicenseEntryWithLineBreaks(
-        const ['Mermaid 11.16.1 bundled dependency notices'],
+        const ['Mermaid 11.16.1 embedded bundled dependency attributions'],
         bundledNotices.join('\n\n'),
       );
     }
