@@ -45,7 +45,23 @@ jobs:
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
         if: matrix.mermaid == true
 
-  # Keep the required branch-protection check name while sharing Flutter setup.
+  format:
+    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (format skipped)' || 'Format Check' }}"
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - run: flutter pub get
+      - name: Check Dart formatting
+        # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
+        run: dart format --language-version=3.0 --set-exit-if-changed .
+
+  # Keep the required branch-protection check name for static analysis.
   quality:
     # The prior Static Analysis result remains attached to the unchanged head
     # SHA during metadata-only edits; base retargets use this formal name.
@@ -62,9 +78,6 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
-      - name: Check Dart formatting
-        # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
-        run: dart format --language-version=3.0 --set-exit-if-changed .
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
@@ -88,6 +101,9 @@ jobs:
                 test_f="tests/catcatch/js_hook_script_test.cjs"
                 ;;
               lib/services/startup_preferences.dart)
+                test_f="tests/startup/startup_check_service_web.dart"
+                ;;
+              lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
                 ;;
               *)
