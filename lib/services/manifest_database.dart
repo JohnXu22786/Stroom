@@ -986,9 +986,22 @@ class ManifestDatabase {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        list.removeWhere((r) => (r as Map)['id'] == id);
-        await _saveWebData();
+        final originalRecords =
+            data[ManifestTables.audioRecords] as List<dynamic>?;
+        final records = originalRecords ?? <dynamic>[];
+        data[ManifestTables.audioRecords] = records
+            .where((r) => (r as Map)['id'] != id)
+            .toList();
+        try {
+          await _saveWebData(rethrowOnError: true);
+        } catch (_) {
+          if (originalRecords == null) {
+            data.remove(ManifestTables.audioRecords);
+          } else {
+            data[ManifestTables.audioRecords] = originalRecords;
+          }
+          rethrow;
+        }
         return;
       }
       final db = await database;
@@ -1009,10 +1022,23 @@ class ManifestDatabase {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+        final originalRecords =
+            data[ManifestTables.audioRecords] as List<dynamic>?;
+        final records = originalRecords ?? <dynamic>[];
         final idSet = ids.toSet();
-        list.removeWhere((r) => idSet.contains((r as Map)['id']));
-        await _saveWebData();
+        data[ManifestTables.audioRecords] = records
+            .where((r) => !idSet.contains((r as Map)['id']))
+            .toList();
+        try {
+          await _saveWebData(rethrowOnError: true);
+        } catch (_) {
+          if (originalRecords == null) {
+            data.remove(ManifestTables.audioRecords);
+          } else {
+            data[ManifestTables.audioRecords] = originalRecords;
+          }
+          rethrow;
+        }
         return;
       }
       final db = await database;

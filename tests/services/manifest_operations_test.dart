@@ -437,6 +437,151 @@ void main() {
     });
   });
 
+  group('audio deletion persistence failures', () {
+    final audioBytes = Uint8List.fromList([1, 2, 3]);
+    final sidecarBytes = Uint8List.fromList([97, 98]);
+
+    AudioRecord audioRecord(String id, String hash) => AudioRecord(
+      id: id,
+      name: id,
+      hash: hash,
+      format: 'wav',
+      createdAt: DateTime.utc(2024),
+      size: audioBytes.length,
+      sourceText: 'ab',
+    );
+
+    Future<void> addRecordWithFiles(AudioRecord record) async {
+      await FileManifest.writeFile(record.storagePath, audioBytes);
+      await FileManifest.writeFile(record.textStoragePath, sidecarBytes);
+      await FileManifest.addRecord(record);
+    }
+
+    Future<void> expectDeleteFailurePreservesStateAndCanRetry({
+      required List<AudioRecord> records,
+      required List<String> deletedIds,
+      required Future<void> Function() delete,
+    }) async {
+      final originalIds = records.map((record) => record.id).toList();
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals(originalIds),
+      );
+      expect(
+        (await FileManifest.loadRecords()).map((record) => record.id),
+        unorderedEquals(originalIds),
+      );
+
+      final failure = StateError('injected audio deletion persistence failure');
+      var failureInjected = false;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        failureInjected = true;
+        ManifestDatabase.beforeWebDataSaveForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(delete(), throwsA(same(failure)));
+      expect(failureInjected, isTrue);
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals(originalIds),
+        reason: 'failed JSON persistence must restore the database record list',
+      );
+      expect(
+        (await FileManifest.loadRecords()).map((record) => record.id),
+        unorderedEquals(originalIds),
+        reason: 'failed metadata deletion must leave the manifest cache intact',
+      );
+      for (final record in records) {
+        expect(
+          await WebFileStore.read('tts_audio/${record.storagePath}'),
+          equals(audioBytes),
+          reason: 'the audio bytes must remain usable after a failed deletion',
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${record.textStoragePath}'),
+          equals(sidecarBytes),
+          reason: 'the source-text sidecar must remain usable after a failure',
+        );
+      }
+
+      await delete();
+
+      final remainingRecords = records
+          .where((record) => !deletedIds.contains(record.id))
+          .toList();
+      final remainingIds = remainingRecords.map((record) => record.id).toList();
+      expect(
+        (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+        unorderedEquals(remainingIds),
+        reason: 'retry must remove the requested durable metadata',
+      );
+      expect(
+        (await FileManifest.loadRecords()).map((record) => record.id),
+        unorderedEquals(remainingIds),
+        reason: 'retry must update the manifest cache',
+      );
+      for (final record in records) {
+        final shouldRemain = !deletedIds.contains(record.id);
+        expect(
+          await WebFileStore.exists('tts_audio/${record.storagePath}'),
+          shouldRemain,
+          reason: 'audio files must match the successful retry result',
+        );
+        expect(
+          await WebFileStore.exists('tts_audio/${record.textStoragePath}'),
+          shouldRemain,
+          reason: 'sidecars must match the successful retry result',
+        );
+      }
+    }
+
+    testWidgets(
+      'single delete preserves metadata, cache, audio and sidecar after JSON save failure',
+      (WidgetTester t) async {
+        final record = audioRecord(
+          'audio_single_delete_retry',
+          'hash_single_retry',
+        );
+        await addRecordWithFiles(record);
+
+        await expectDeleteFailurePreservesStateAndCanRetry(
+          records: [record],
+          deletedIds: [record.id],
+          delete: () => FileManifest.deleteRecord(record.id),
+        );
+      },
+    );
+
+    testWidgets(
+      'batch delete preserves metadata, cache, audio and sidecars after JSON save failure',
+      (WidgetTester t) async {
+        final first = audioRecord(
+          'audio_batch_delete_retry_1',
+          'hash_batch_retry_1',
+        );
+        final second = audioRecord(
+          'audio_batch_delete_retry_2',
+          'hash_batch_retry_2',
+        );
+        final survivor = audioRecord(
+          'audio_batch_delete_survivor',
+          'hash_batch_survivor',
+        );
+        await addRecordWithFiles(first);
+        await addRecordWithFiles(second);
+        await addRecordWithFiles(survivor);
+        final deletedIds = [first.id, second.id];
+
+        await expectDeleteFailurePreservesStateAndCanRetry(
+          records: [first, second, survivor],
+          deletedIds: deletedIds,
+          delete: () => FileManifest.deleteRecords(deletedIds),
+        );
+      },
+    );
+  });
+
   // ====================================================================
   // removeFolder — records, folder entries and ref-counted files
   // ====================================================================

@@ -66,6 +66,7 @@ class ManifestOperations<T extends FileRecord> {
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
   bool get _isVideoTable => tableName == ManifestTables.videoRecords;
   bool get _isTextTable => tableName == ManifestTables.textRecords;
+  bool get _isAudioTable => tableName == ManifestTables.audioRecords;
 
   /// 缩略图文件名：图片表使用带版本号的 v2 命名（旧版 `_thumb.png`
   /// 是被强制缩放成 256×256 的变形产物，已废弃）；其余表保持原命名。
@@ -279,6 +280,14 @@ class ManifestOperations<T extends FileRecord> {
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index == -1) return;
       final record = _cache![index];
+      if (_isAudioTable) {
+        // Keep audio bytes and the cached row available if metadata persistence
+        // fails, so callers can retry the deletion.
+        await _dbDeleteRecord(id);
+        if (!preserveFiles) await _deleteEntityFiles(record);
+        _cache!.removeAt(index);
+        return;
+      }
       // A caller undoing a just-added record cannot know whether another
       // writer has begun using the same content-addressed file. In that
       // case, remove only its metadata and retain the shared bytes.
@@ -318,6 +327,10 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
 
+      // Commit audio metadata first so a persistence error leaves its cache and
+      // files available for retry.
+      if (_isAudioTable) await _dbDeleteRecords(ids);
+
       for (final r in toDelete) {
         final sn = storageNameOf(r);
         storageCount[sn] = (storageCount[sn] ?? 1) - 1;
@@ -351,7 +364,9 @@ class ManifestOperations<T extends FileRecord> {
         }
       }
       _cache = remaining;
-      await _dbDeleteRecords(ids);
+      if (!_isAudioTable) {
+        await _dbDeleteRecords(ids);
+      }
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'deleteRecords failed', e, st);
