@@ -211,16 +211,19 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   void _insertSnippet(String snippet) {
     final currentCode = _codeController.text;
+    final snippetWithUniqueRequirementId =
+        MermaidTemplates.assignUniqueRequirementId(currentCode, snippet);
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
       final codeToPreserve = currentCode.endsWith('\n')
           ? currentCode.substring(0, insertionPoint)
           : currentCode;
-      _codeController.text = '$codeToPreserve\n$snippet\n';
+      _codeController.text =
+          '$codeToPreserve\n$snippetWithUniqueRequirementId\n';
     } else {
       _codeController.text = MermaidTemplates.insertSnippet(
         currentCode,
-        snippet,
+        snippetWithUniqueRequirementId,
       );
     }
     _codeController.selection = TextSelection.fromPosition(

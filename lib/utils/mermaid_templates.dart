@@ -51,6 +51,41 @@ class MermaidTemplates {
     return buf.toString();
   }
 
+  /// Assigns an unused ID to a requirement snippet for the current diagram.
+  static String assignUniqueRequirementId(String code, String snippet) {
+    final isRequirementDiagram = RegExp(
+      r'^[ \t]*requirementDiagram(?:[ \t]|$)',
+      multiLine: true,
+    ).hasMatch(code);
+    final isRequirementSnippet = RegExp(
+      r'^[ \t]*requirement[ \t]+\S+[ \t]*\{',
+      multiLine: true,
+    ).hasMatch(snippet);
+    if (!isRequirementDiagram || !isRequirementSnippet) return snippet;
+
+    final idPattern = RegExp(
+      r'^([ \t]*id[ \t]*:[ \t]*)(\S+)',
+      multiLine: true,
+    );
+    final snippetId = idPattern.firstMatch(snippet);
+    if (snippetId == null) return snippet;
+
+    final existingIds = idPattern
+        .allMatches(code)
+        .map((match) => match[2]!)
+        .toSet();
+    var nextId = 1;
+    while (existingIds.contains('$nextId')) {
+      nextId++;
+    }
+
+    return snippet.replaceRange(
+      snippetId.start,
+      snippetId.end,
+      '${snippetId[1]}$nextId',
+    );
+  }
+
   /// Adds a Gantt task that depends on the last task ID in [code].
   ///
   /// If the chart has tasks but none has an ID, one is assigned to the last
