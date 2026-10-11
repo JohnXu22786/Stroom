@@ -221,3 +221,132 @@ test('native and web templates apply queued zoom after auto-fit', () => {
     assert.deepEqual(attributes, {width: 100, height: 50});
   }
 });
+
+const webLibraryLoader = webTemplateSource.match(
+  /^    var TEMPLATE_VERSION = '[^']+';[\s\S]*?^    \}\)\(\);/m,
+);
+assert.ok(webLibraryLoader, 'Could not find the web Mermaid library loader');
+const webReportError = webTemplateSource.match(
+  /^    function reportError\(msg\) \{[\s\S]*?^    \}/m,
+);
+assert.ok(webReportError, 'Could not find the web reportError function');
+
+function createWebLibraryLoaderHarness(fetch) {
+  const timers = new Map();
+  const scripts = [];
+  const bridgeCalls = [];
+  const errorElements = [];
+  let nextTimerId = 0;
+  const loadingHint = {style: {display: 'block'}};
+  const codeElement = {textContent: ''};
+  const viewport = {
+    children: [],
+    set textContent(value) {
+      this.children = [];
+      this._textContent = value;
+    },
+    appendChild(element) {
+      this.children.push(element);
+    },
+  };
+  const context = {
+    window: {
+      location: {search: '?code=graph%20TD'},
+      flutter_inappwebview: {
+        callHandler: (...args) => bridgeCalls.push(args),
+      },
+    },
+    document: {
+      getElementById: (id) => {
+        if (id === 'loading-hint') return loadingHint;
+        if (id === 'mermaid-code') return codeElement;
+        if (id === 'viewport') return viewport;
+        return null;
+      },
+      createElement: (tagName) => {
+        const element = {tagName, className: '', textContent: ''};
+        if (tagName === 'div') errorElements.push(element);
+        return element;
+      },
+      head: {
+        appendChild: (script) => scripts.push(script),
+      },
+    },
+    fetch,
+    URLSearchParams,
+    setTimeout: (callback, delay) => {
+      const id = ++nextTimerId;
+      timers.set(id, {callback, delay});
+      return id;
+    },
+    clearTimeout: (id) => timers.delete(id),
+  };
+
+  vm.runInNewContext(
+    `${webReportError[0]}\n${webLibraryLoader[0]}`,
+    context,
+  );
+
+  return {
+    bridgeCalls,
+    errorElements,
+    loadingHint,
+    scripts,
+    timers,
+  };
+}
+
+function fireLibraryLoadTimeout(harness) {
+  const timeout = [...harness.timers.entries()].find(
+    ([, timer]) => Number.isFinite(timer.delay) && timer.delay > 0,
+  );
+  assert.ok(timeout, 'the library load should have a finite timeout');
+  const [id, {callback}] = timeout;
+  harness.timers.delete(id);
+  callback();
+}
+
+async function flushLoaderPromises() {
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('stalled .gz fetch reports a bounded library-load error', () => {
+  let fetchCount = 0;
+  const harness = createWebLibraryLoaderHarness(() => {
+    fetchCount++;
+    return new Promise(() => {});
+  });
+
+  assert.equal(fetchCount, 1);
+  assert.equal(harness.scripts.length, 0);
+  fireLibraryLoadTimeout(harness);
+
+  assert.equal(harness.loadingHint.style.display, 'none');
+  assert.equal(harness.errorElements[0].textContent, 'Mermaid 资源加载超时');
+  assert.deepEqual(harness.bridgeCalls, [
+    ['onMermaidError', 'Mermaid 资源加载超时'],
+  ]);
+});
+
+test('stalled raw-library fallback reports a bounded library-load error', async () => {
+  const harness = createWebLibraryLoaderHarness(
+    () => Promise.reject(new Error('compressed asset unavailable')),
+  );
+  await flushLoaderPromises();
+
+  assert.equal(harness.scripts.length, 1);
+  assert.equal(harness.scripts[0].src, 'mermaid.min.js');
+  fireLibraryLoadTimeout(harness);
+
+  assert.equal(harness.loadingHint.style.display, 'none');
+  assert.equal(harness.errorElements[0].textContent, 'Mermaid 资源加载超时');
+  assert.deepEqual(harness.bridgeCalls, [
+    ['onMermaidError', 'Mermaid 资源加载超时'],
+  ]);
+
+  harness.scripts[0].onload();
+  assert.equal(harness.timers.size, 0);
+  assert.deepEqual(harness.bridgeCalls, [
+    ['onMermaidError', 'Mermaid 资源加载超时'],
+  ]);
+});

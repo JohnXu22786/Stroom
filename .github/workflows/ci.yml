@@ -16,25 +16,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
 
 jobs:
-  # Component and boundary checks share the same Node runtime. Keep each
-  # component as its own matrix entry so failures remain easy to identify.
-  component-boundary:
-    # A title/body-only edit keeps the same head SHA. Its skipped check uses a
-    # distinct name so it cannot overwrite the formal result for that SHA;
-    # base-branch edits keep the normal name and execute the code checks.
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (components skipped: {0})', matrix.label) || format('Component Boundary ({0})', matrix.label) }}"
+  # Small JavaScript checks for the integrated components share one Node job.
+  components:
+    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (component scripts skipped)' || 'Component Integration scripts' }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Math editor bridge
-            mathEditor: true
-          - label: Mermaid fit retry behavior
-            mermaid: true
-          - label: CatCatch JS hook boundary
-            catcatch: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,13 +29,9 @@ jobs:
           cache: npm
           cache-dependency-path: tools/math_editor_test/package-lock.json
       - run: npm ci --prefix tools/math_editor_test
-        if: matrix.mathEditor == true
       - run: npm test --prefix tools/math_editor_test
-        if: matrix.mathEditor == true
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
-        if: matrix.mermaid == true
       - run: node --test tests/catcatch/js_hook_script_test.cjs
-        if: matrix.catcatch == true
 
   format:
     name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (format skipped)' || 'Format Check' }}"
@@ -207,11 +189,11 @@ jobs:
             exit 1
           fi
 
-  # These are Stroom-owned platform integrations. They stay as separate jobs
-  # because Android/Gradle and Web/Chrome need different toolchains and have
-  # materially different runtimes.
-  android-unit:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (Android tests skipped)' || 'Android unit tests' }}"
+  # KeepAliveSchedule has no Android dependencies. Test the exact production
+  # Kotlin sources in their standalone JVM build instead of building the full
+  # Flutter Android app and its plugins for four helper tests.
+  app-runtime-jvm:
+    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (JVM tests skipped)' || 'Application Runtime (Kotlin/JVM)' }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     steps:
@@ -220,45 +202,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.9
-          cache: true
-          pub-cache: true
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.14'
-      - run: flutter pub get
-      - name: Set Flutter SDK path for Gradle
-        run: echo "flutter.sdk=$(dirname "$(dirname "$(command -v flutter)")")" > android/local.properties
-      - name: Run watchdog scheduling regression test
-        run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
+      - name: Test standalone scheduling module
+        run: gradle -p android/keep_alive_schedule test
 
-  # This web-only target stays outside `_test.dart` discovery for VM groups.
-  # Flutter's Web test server serves fixtures from tests/, which this job aliases.
-  startup-web:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (startup web skipped)' || 'Startup Web test' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
-    runs-on: ubuntu-latest
-    needs: [quality]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.9
-          cache: true
-          pub-cache: true
-      - uses: browser-actions/setup-chrome@v1
-        id: setup-chrome
-      - run: flutter pub get
-      - name: Expose test fixtures to Flutter Web's test server
-        run: ln -s tests test
-      - name: Run Web startup checks in Chrome
-        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
-        env:
-          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
-
-  # ── Test Suite (parallel groups) ──────────────────────────────────────────
+  # ── Functional test suites ────────────────────────────────────────────────
   test:
     name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (tests skipped: {0})', matrix.label) || format('Tests ({0})', matrix.label) }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
@@ -268,23 +218,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: Foundation
-            pattern: tests/*_test.dart tests/models tests/providers tests/utils
-          - label: Services-Startup
-            pattern: tests/services tests/startup
-          # Task-flow tests exercise long-lived lifecycle and persistence
-          # state. Keep them isolated from the smaller component suites so a
-          # flaky fixture cannot obscure failures in Anki/CatCatch coverage.
-          - label: Task-Flow
-            pattern: tests/task_flow
-          - label: Feature-Components
-            pattern: tests/anki tests/catcatch
-          - label: Pages
-            pattern: tests/pages/*_test.dart tests/pages/unified_task_list tests/pages/settings tests/pages/ocr
-          - label: Chat
-            pattern: tests/pages/chat_page tests/pages/chat
-          - label: Content-Widgets
-            pattern: tests/pages/content tests/widgets
+          - label: Component Integrations
+            suite: component-integrations
+          - label: Chat and AI (logic)
+            suite: chat-ai-core
+          - label: Chat and AI (screens)
+            suite: chat-ai-ui
+          - label: Files and Data
+            suite: files-data
+          - label: Media Processing
+            suite: media-processing
+          - label: Text and Math
+            suite: text-math
+          - label: Tasks and Workflow
+            suite: tasks-workflow
+          - label: Application and Shared
+            suite: application-shared
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -293,5 +242,16 @@ jobs:
           cache: true
           pub-cache: true
       - run: flutter pub get
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+        if: matrix.suite == 'application-shared'
+      - name: Expose test fixtures to Flutter Web's test server
+        if: matrix.suite == 'application-shared'
+        run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
-        run: flutter test ${{ matrix.pattern }}
+        run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
+      - name: Run Web startup checks in Chrome
+        if: matrix.suite == 'application-shared'
+        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}

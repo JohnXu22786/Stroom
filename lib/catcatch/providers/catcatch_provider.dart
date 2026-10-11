@@ -120,6 +120,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         else
           state[i],
     ];
+    unawaited(_persistTasks());
   }
 
   /// 继续任务（从暂停状态恢复）

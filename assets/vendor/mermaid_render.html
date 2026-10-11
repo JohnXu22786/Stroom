@@ -313,6 +313,15 @@
     var TEMPLATE_VERSION = 'v5';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
+    var libraryLoadTimer = null;
+    var libraryLoadTimedOut = false;
+
+    function clearLibraryLoadTimer() {
+      if (libraryLoadTimer !== null) {
+        clearTimeout(libraryLoadTimer);
+        libraryLoadTimer = null;
+      }
+    }
 
     // Loads the mermaid library blob. Every diagram opens a fresh iframe
     // document, so without a persistent cache each one would re-download
@@ -361,6 +370,7 @@
     function initMermaid() {
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
+      clearLibraryLoadTimer();
       // Render watchdog: if the diagram has not appeared 15s after the
       // library loaded, surface an error instead of a perpetual hint.
       var renderTimer = setTimeout(function() {
@@ -394,8 +404,15 @@
     function runScriptUrl(url) {
       var script = document.createElement('script');
       script.async = true;
-      script.onload = initMermaid;
+      script.onload = function() {
+        if (libraryLoadTimedOut) return;
+        initMermaid();
+      };
       script.onerror = function() {
+        if (libraryLoadTimedOut) return;
+        clearLibraryLoadTimer();
+        var hint = document.getElementById('loading-hint');
+        if (hint) hint.style.display = 'none';
         reportError('Mermaid 资源加载失败: ' + url);
       };
       script.src = url;
@@ -413,10 +430,18 @@
         return;
       }
       codeEl.textContent = code;
+      libraryLoadTimer = setTimeout(function() {
+        libraryLoadTimer = null;
+        libraryLoadTimedOut = true;
+        if (hint) hint.style.display = 'none';
+        reportError('Mermaid 资源加载超时');
+      }, 15000);
       try {
         loadLibrary().then(function(jsBlob) {
+          if (libraryLoadTimedOut) return;
           runScriptUrl(URL.createObjectURL(jsBlob));
         }).catch(function(err) {
+          if (libraryLoadTimedOut) return;
           // DecompressionStream unavailable or the gz asset missing:
           // fall back to the raw library file.
           runScriptUrl('mermaid.min.js');
