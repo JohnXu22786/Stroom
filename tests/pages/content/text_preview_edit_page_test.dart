@@ -4,11 +4,14 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/pages/text_preview_edit_page.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/mermaid_render_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 构建测试应用，将 TextPreviewEditPage 放置在一个可以弹出返回的路径中
@@ -420,6 +423,94 @@ void main() {
       expect(savedContent, equals(newContent));
     });
 
+    testWidgets(
+      'saving an SRT record preserves its subtitle storage extension',
+      (tester) async {
+        const originalContent = '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+        final subtitleFile = TextRecord(
+          id: 'txt_srt_edit',
+          name: 'subtitle',
+          hash: computeTextHash(originalBytes),
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: originalBytes.length,
+        );
+        await TextManifest.writeFile(
+          subtitleFile.storageFileName,
+          originalBytes,
+        );
+        await TextManifest.addRecord(subtitleFile);
+        await enterEditMode(
+          tester,
+          file: subtitleFile,
+          content: originalContent,
+        );
+
+        const editedContent = '1\n00:00:00,000 --> 00:00:01,000\nUpdated';
+        tester.widget<TextField>(find.byType(TextField)).controller?.text =
+            editedContent;
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final updated = (await TextManifest.loadRecords()).firstWhere(
+          (record) => record.id == subtitleFile.id,
+        );
+        expect(updated.storageFileName, endsWith('.srt'));
+        expect(
+          await TextManifest.readText(updated.storageFileName),
+          editedContent,
+        );
+        expect(
+          await TextManifest.readText(subtitleFile.storageFileName),
+          isNull,
+        );
+      },
+    );
+
+    testWidgets('saving one subtitle preserves a shared source file', (
+      tester,
+    ) async {
+      const originalContent = '1\n00:00:00,000 --> 00:00:01,000\nHello';
+      final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+      final firstRecord = TextRecord(
+        id: 'txt_srt_shared_1',
+        name: 'subtitle one',
+        hash: computeTextHash(originalBytes),
+        format: 'srt',
+        createdAt: DateTime.now(),
+        size: originalBytes.length,
+      );
+      final secondRecord = TextRecord(
+        id: 'txt_srt_shared_2',
+        name: 'subtitle two',
+        hash: firstRecord.hash,
+        format: 'srt',
+        createdAt: DateTime.now(),
+        size: originalBytes.length,
+      );
+      await TextManifest.writeFile(firstRecord.storageFileName, originalBytes);
+      await TextManifest.addRecord(firstRecord);
+      await TextManifest.addRecord(secondRecord);
+      await enterEditMode(tester, file: firstRecord, content: originalContent);
+
+      const editedContent = '1\n00:00:00,000 --> 00:00:01,000\nUpdated';
+      tester.widget<TextField>(find.byType(TextField)).controller?.text =
+          editedContent;
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final second = (await TextManifest.loadRecords()).firstWhere(
+        (record) => record.id == secondRecord.id,
+      );
+      expect(
+        await TextManifest.readText(second.storageFileName),
+        originalContent,
+      );
+    });
+
     testWidgets('save with Chinese text preserves content correctly',
         (tester) async {
       await enterEditMode(tester);
@@ -822,6 +913,69 @@ void main() {
         // Should show the chart editor button in view mode
         expect(find.byIcon(Icons.account_tree), findsOneWidget);
       });
+
+      testWidgets('chart save refreshes the parent preview before reopening',
+          (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _TestMermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _TestMermaidWebViewPlatform());
+
+        const editedContent = 'graph TD\n  A[Edited] --> B[End]';
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(_buildTestApp(mmdFile, mmdContent));
+        await navigateToEditor(tester);
+
+        tester
+            .widget<IconButton>(
+                find.widgetWithIcon(IconButton, Icons.account_tree))
+            .onPressed!();
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        _notifyTestMermaidWebViewCreated(platform);
+        await tester.pump();
+        final chartException = tester.takeException();
+        expect(chartException, isNull, reason: '$chartException');
+        expect(find.byType(MermaidChartPage), findsOneWidget);
+        await tester.enterText(find.byType(TextField).first, editedContent);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 800));
+        _notifyTestMermaidWebViewLoaded(platform);
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(find.text(editedContent), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.account_tree));
+        await tester.pump(const Duration(milliseconds: 350));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
+        _notifyTestMermaidWebViewCreated(platform);
+        await tester.pump();
+        final reopenedEditor =
+            tester.widget<TextField>(find.byType(TextField).first);
+        expect(reopenedEditor.controller?.text, editedContent);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
     });
 
     // ==================== Scroll on Drag (desktop) ====================
@@ -979,4 +1133,86 @@ void main() {
       });
     });
   });
+}
+
+class _TestMermaidWebViewPlatform extends InAppWebViewPlatform {
+  _TestMermaidWebView? webView;
+
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+    PlatformInAppWebViewWidgetCreationParams params,
+  ) =>
+      webView = _TestMermaidWebView(params);
+}
+
+class _TestMermaidWebView extends PlatformInAppWebViewWidget {
+  final controller = _TestMermaidWebViewController();
+
+  _TestMermaidWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
+}
+
+void _notifyTestMermaidWebViewCreated(_TestMermaidWebViewPlatform platform) {
+  final webView = platform.webView!;
+  final controller = webView
+      .controllerFromPlatform<InAppWebViewController>(webView.controller);
+  webView.params.onWebViewCreated?.call(controller);
+  _notifyTestMermaidWebViewLoaded(platform);
+}
+
+void _notifyTestMermaidWebViewLoaded(_TestMermaidWebViewPlatform platform) {
+  final webView = platform.webView!;
+  final controller = webView
+      .controllerFromPlatform<InAppWebViewController>(webView.controller);
+  webView.params.onLoadStop?.call(controller, null);
+}
+
+class _TestMermaidWebViewController extends PlatformInAppWebViewController {
+  _TestMermaidWebViewController()
+      : super.implementation(
+          const PlatformInAppWebViewControllerCreationParams(id: 0),
+        );
+
+  @override
+  Future<void> loadUrl({
+    required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  Future<void> loadData({
+    required String data,
+    String mimeType = 'text/html',
+    String encoding = 'utf8',
+    WebUri? baseUrl,
+    Uri? androidHistoryUrl,
+    WebUri? historyUrl,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  void addJavaScriptHandler({
+    required String handlerName,
+    required JavaScriptHandlerCallback callback,
+  }) {}
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {}
+
+  @override
+  void dispose({bool isKeepAlive = false}) {}
 }

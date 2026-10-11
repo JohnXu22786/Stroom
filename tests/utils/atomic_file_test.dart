@@ -70,6 +70,34 @@ void main() {
   });
 
   group('AtomicFile', () {
+    test(
+        'cancelled staged bytes preserve shared file and remove temporary output',
+        () async {
+      final file = File('${tempDir.path}/shared.txt');
+      await file.writeAsString('existing');
+      var cancelled = false;
+      final staged = Completer<void>();
+      final release = Completer<void>();
+      final realIO = _RealIO();
+      final operation = IOOverrides.runZoned(
+        () => AtomicFile.writeBytes(file, [1, 2, 3], beforeCommit: () {
+          if (cancelled) throw StateError('cancelled');
+        }),
+        createFile: (path) =>
+            _ControlledFile(realIO.createFile(path), beforeWrite: () async {
+          staged.complete();
+          await release.future;
+        }),
+      );
+      final assertion = expectLater(operation, throwsStateError);
+      await staged.future;
+      cancelled = true;
+      release.complete();
+      await assertion;
+      expect(await file.readAsString(), 'existing');
+      expect(tempDir.listSync().map((entry) => entry.path), [file.path]);
+    });
+
     test('writeString creates the file with full content', () async {
       final file = File('${tempDir.path}/tasks.json');
       await AtomicFile.writeString(file, '{"a":1}');

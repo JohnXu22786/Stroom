@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,9 +10,9 @@ import '../providers/provider_config.dart';
 import '../utils/provider_models.dart';
 import '../providers/tts_state_provider.dart';
 import '../providers/background_task_provider.dart';
-import '../providers/task_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/asr_service.dart';
+import '../services/asr_task_scheduler.dart';
 import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -37,8 +35,13 @@ class _ModelOption {
   final String host;
   final String apiKey;
   final Map<String, dynamic> providerTypeConfig;
-  const _ModelOption(this.model, this.providerName, this.host, this.apiKey,
-      this.providerTypeConfig);
+  const _ModelOption(
+    this.model,
+    this.providerName,
+    this.host,
+    this.apiKey,
+    this.providerTypeConfig,
+  );
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -94,10 +97,19 @@ class SelectedAudio {
 /// in-app recordings (multi-select), then performing speech-to-text
 /// transcription and saving results to text storage.
 class AsrPage extends ConsumerStatefulWidget {
-  const AsrPage({super.key, this.retryData});
+  const AsrPage({
+    super.key,
+    this.retryData,
+    this.asrServiceFactory,
+    this.onNavigateBack,
+  });
 
   /// Retry data to pre-populate the form (audio files, model, etc.).
   final Map<String, dynamic>? retryData;
+  final AsrService Function(AsrConfig config)? asrServiceFactory;
+
+  /// Optional navigation hook for hosts that manage this page lifecycle.
+  final VoidCallback? onNavigateBack;
 
   @override
   ConsumerState<AsrPage> createState() => _AsrPageState();
@@ -105,7 +117,7 @@ class AsrPage extends ConsumerStatefulWidget {
 
 class _AsrPageState extends ConsumerState<AsrPage> {
   final List<SelectedAudio> _selectedAudios = [];
-  final bool _isProcessing = false;
+  bool _isProcessing = false;
   String? _errorMessage;
   String? _transcriptionResult;
   int _selectedModelIndex = 0;
@@ -137,22 +149,22 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         // URL-mode entry: restore the link (no bytes).
         final url = audioData['url'];
         if (url is String && url.isNotEmpty) {
-          _selectedAudios.add(SelectedAudio(
-            bytes: Uint8List(0),
-            name: url,
-            format: 'url',
-          ));
+          _selectedAudios.add(
+            SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+          );
           continue;
         }
         final bytesStr = audioData['bytes'] as String?;
         if (bytesStr != null) {
           try {
             final bytes = base64Decode(bytesStr);
-            _selectedAudios.add(SelectedAudio(
-              bytes: bytes,
-              name: audioData['name'] as String? ?? 'audio',
-              format: audioData['format'] as String? ?? 'wav',
-            ));
+            _selectedAudios.add(
+              SelectedAudio(
+                bytes: bytes,
+                name: audioData['name'] as String? ?? 'audio',
+                format: audioData['format'] as String? ?? 'wav',
+              ),
+            );
           } catch (e) {
             debugPrint('Failed to decode retry audio: $e');
           }
@@ -231,9 +243,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -274,10 +284,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -311,8 +318,11 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致（同 OCR 页面）
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -841,36 +851,14 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // Audio Source Methods
   // ==================================================================
 
-  /// Parse the upload method from a provider typeConfig (defaults to multipart).
-  static AudioUploadMethod _uploadMethodFor(Map<String, dynamic> typeConfig) {
-    final str = typeConfig['uploadMethod'] as String?;
-    if (str == null) return AudioUploadMethod.multipart;
-    return AudioUploadMethod.values.firstWhere(
-      (m) => m.name == str,
-      orElse: () => AudioUploadMethod.multipart,
-    );
-  }
-
   /// The upload method of the currently selected ASR provider.
   AudioUploadMethod _getCurrentUploadMethod() {
     final modelOptions = _getAsrModelOptions(ref);
     if (modelOptions.isEmpty) return AudioUploadMethod.multipart;
     final idx = _selectedModelIndex.clamp(0, modelOptions.length - 1);
-    return _uploadMethodFor(modelOptions[idx].providerTypeConfig);
-  }
-
-  /// A short display name for a URL entry (last path segment, else host),
-  /// used for the task title and saved text-record name.
-  static String _urlDisplayName(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final segments =
-          uri.pathSegments.where((s) => s.isNotEmpty).toList(growable: false);
-      final name = segments.isNotEmpty ? segments.last : uri.host;
-      return name.length <= 40 ? name : name.substring(0, 40);
-    } catch (_) {
-      return url;
-    }
+    return asrUploadMethodFromProviderTypeConfig(
+      modelOptions[idx].providerTypeConfig,
+    );
   }
 
   /// Ask the user for a public audio URL (URL upload mode) and add it as
@@ -886,19 +874,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // duplicate text records).
     if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('该链接已在列表中')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
       }
       return;
     }
     if (mounted) {
       setState(() {
-        _selectedAudios.add(SelectedAudio(
-          bytes: Uint8List(0),
-          name: url,
-          format: 'url',
-        ));
+        _selectedAudios.add(
+          SelectedAudio(bytes: Uint8List(0), name: url, format: 'url'),
+        );
         _errorMessage = null;
         _transcriptionResult = null;
       });
@@ -1111,8 +1097,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   // ASR Processing
   // ==================================================================
 
-  Future<void> _startTranscription() async {
-    if (_selectedAudios.isEmpty) return;
+  void _startTranscription() {
+    if (_isProcessing || _selectedAudios.isEmpty) return;
 
     final modelOptions = _getAsrModelOptions(ref);
     if (modelOptions.isEmpty || _selectedModelIndex >= modelOptions.length) {
@@ -1122,45 +1108,20 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
 
-    // Build config from the selected model's own source config,
-    // ensuring host/API key match the model's provider.
-    // Also passes through the model's typeConfig and customParams
-    // for built-in ASR parameters and custom parameters.
     final selectedOption = modelOptions[_selectedModelIndex];
-    final tc = Map<String, dynamic>.from(selectedOption.model.typeConfig);
-
-    // Upload settings come from provider typeConfig, not model typeConfig
-    final ptc = selectedOption.providerTypeConfig;
-    final uploadMethod = _uploadMethodFor(ptc);
-    final maxFileSizeMb = ptc['maxFileSizeMb'] as num?;
-    final maxFileSizeBytes = maxFileSizeMb != null
-        ? (maxFileSizeMb * 1024 * 1024).toInt()
-        : AsrConfig.defaultMaxAudioFileSizeBytes;
-    final preprocessing = ptc['preprocessing'] as String? ?? 'none';
-    final chunking = ptc['chunking'] as String? ?? 'none';
-    final compression = ptc['compression'] as String? ?? 'none';
-    final fallbackMethod = ptc['fallbackMethod'] as String? ?? 'none';
-
-    final effectiveConfig = AsrConfig(
+    final providerTypeConfig = selectedOption.providerTypeConfig;
+    final uploadMethod = asrUploadMethodFromProviderTypeConfig(
+      providerTypeConfig,
+    );
+    final config = createAsrConfigFromProviderModel(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
-      model: selectedOption.model.modelId,
-      typeConfig: tc,
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
-      uploadMethod: uploadMethod,
-      maxFileSizeBytes: maxFileSizeBytes,
-      preprocessing: preprocessing,
-      chunking: chunking,
-      compression: compression,
-      fallbackMethod: fallbackMethod,
+      model: selectedOption.model,
+      providerTypeConfig: providerTypeConfig,
     );
 
-    // Validate that the selected entries match the provider's upload method.
-    // URL-mode providers can only transcribe public links; file-based
-    // providers (multipart/base64) cannot transcribe links.
-    final hasFileEntries = _selectedAudios.any((a) => !a.isUrl);
-    final hasUrlEntries = _selectedAudios.any((a) => a.isUrl);
+    final hasFileEntries = _selectedAudios.any((audio) => !audio.isUrl);
+    final hasUrlEntries = _selectedAudios.any((audio) => audio.isUrl);
     if (uploadMethod == AudioUploadMethod.url && hasFileEntries) {
       setState(() {
         _errorMessage = '当前供应商使用 URL 上传方式，请移除本地音频文件后重试';
@@ -1174,221 +1135,53 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       return;
     }
 
-    // Capture the list before pop
-    final audiosToProcess = List<SelectedAudio>.from(_selectedAudios);
-
-    // Step 1: Pop back to home page immediately — matching the original
-    // working flow. This avoids any Riverpod rebuild delay from addTask().
-    if (mounted) {
-      Navigator.pop(context);
-    }
-    // Yield to the event loop so the pop transition renders.
-    await Future<void>.delayed(Duration.zero);
-
-    // Capture notifier references after pop (ref is still valid).
-    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
-    final textNotifier = ref.read(textRecordsProvider.notifier);
-
-    // Step 2: Create tasks as "waiting" — the execution chain transitions
-    // them to "running" one by one. retryData is null — it is computed
-    // asynchronously in the background (fire-and-forget below).
-    final taskEntries = <_TaskEntry>[];
-    for (final audio in audiosToProcess) {
-      final title = audio.isUrl
-          ? 'ASR_${_urlDisplayName(audio.name)}'
-          : 'ASR_${audio.name}';
-      final taskId = bgNotifier.addTask(
-        type: BackgroundTaskType.asr,
-        title: title,
-        retryData: null,
-        startImmediately: false,
-      );
-      taskEntries.add(_TaskEntry(taskId, audio, title));
-    }
-
-    // Step 3: Fire-and-forget retryData computation (only needed for retry).
-    final modelIndex = _selectedModelIndex;
-    final saveFolder = _saveFolder;
-    for (final entry in taskEntries) {
-      unawaited(
-          _computeAsrRetryData(entry, modelIndex, saveFolder, bgNotifier));
-    }
-
-    // Step 4: Execute tasks in sequence one-by-one (auto-chain) immediately.
-    try {
-      await _executeTaskChain(
-          taskEntries, effectiveConfig, bgNotifier, textNotifier);
-    } catch (e) {
-      debugPrint('[ASR] _executeTaskChain failed: $e');
-      for (final entry in taskEntries) {
-        final task =
-            bgNotifier.state.where((t) => t.id == entry.taskId).firstOrNull;
-        if (task != null &&
-            (task.status == TaskStatus.waiting ||
-                task.status == TaskStatus.running)) {
-          bgNotifier.failTask(entry.taskId, error: '任务执行异常: $e');
-        }
-      }
-    }
-  }
-
-  /// Build the retry-data map for a single ASR task (URL or bytes entry).
-  /// Shared by the isolate and main-thread fallback paths so the format
-  /// cannot drift between them.
-  static Map<String, dynamic> _buildAsrRetryData(
-    SelectedAudio audio,
-    int modelIndex,
-    String? saveFolder,
-  ) {
-    return <String, dynamic>{
-      'type': 'asr',
-      'audios': [
-        if (audio.isUrl)
-          <String, dynamic>{
-            'url': audio.name,
-            'name': audio.name,
-            'format': 'url',
-          }
-        else
-          <String, dynamic>{
-            'bytes': base64Encode(audio.bytes),
-            'name': audio.name,
-            'format': audio.format,
-          },
-      ],
-      'modelIndex': modelIndex,
-      'saveFolder': saveFolder,
-    };
-  }
-
-  /// Compute retryData for a single ASR task in a background isolate.
-  /// Fire-and-forget — the task can execute without retryData.
-  Future<void> _computeAsrRetryData(
-    _TaskEntry entry,
-    int modelIndex,
-    String? saveFolder,
-    BackgroundTaskNotifier bgNotifier,
-  ) async {
-    try {
-      final retryData = await Isolate.run(() {
-        return _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
-      });
-      bgNotifier.setRetryData(entry.taskId, retryData);
-    } catch (e) {
-      // Isolate may not be available (e.g. Flutter Web).
-      // Fall back to main-thread computation.
-      debugPrint('[ASR] Isolate.run failed, falling back to main thread: $e');
-      try {
-        final retryData =
-            _buildAsrRetryData(entry.audio, modelIndex, saveFolder);
-        bgNotifier.setRetryData(entry.taskId, retryData);
-      } catch (retryError) {
-        debugPrint('[ASR] Failed to compute retryData: $retryError');
-      }
-    }
-  }
-
-  /// Execute all tasks in sequence. Each task is started after the previous
-  /// one completes or fails, regardless of the outcome.
-  Future<void> _executeTaskChain(
-    List<_TaskEntry> entries,
-    AsrConfig config,
-    BackgroundTaskNotifier bgNotifier,
-    TextRecordsNotifier textNotifier,
-  ) async {
-    for (final entry in entries) {
-      final taskId = entry.taskId;
-
-      // Start the waiting task (transition waiting -> running)
-      bgNotifier.startTask(taskId);
-
-      final service = AsrService(config: config);
-
-      try {
-        // Step 0: 连接服务器
-        bgNotifier.updateStep(taskId, 0, running: true);
-        bgNotifier.updateStep(taskId, 0, completed: true);
-
-        // Step 1: 上传音频
-        bgNotifier.updateStep(taskId, 1, running: true);
-
-        final result = entry.audio.isUrl
-            ? await service.transcribeFromUrl(entry.audio.name)
-            : await service.transcribe(
-                audioBytes: entry.audio.bytes,
-                audioFormat: entry.audio.format,
-              );
-
-        // Step 1 complete
-        bgNotifier.updateStep(taskId, 1, completed: true);
-
-        // Step 2: 转写中 (server processing response received)
-        bgNotifier.setResult(taskId, result.text);
-        bgNotifier.updateStep(taskId, 2, completed: true);
-
-        // Step 3: 接收结果
-        bgNotifier.updateStep(taskId, 3, running: true);
-
-        // Step 4: 保存文件
-        bgNotifier.updateStep(taskId, 3, completed: true);
-        bgNotifier.updateStep(taskId, 4, running: true);
-
-        final filePath =
-            await _saveTranscriptionResult(result.text, title: entry.title);
-
-        bgNotifier.updateStep(taskId, 4, completed: true);
-        bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
-
-        // Refresh text records
-        unawaited(textNotifier.loadRecords());
-      } catch (e) {
-        // Capture raw request/response diagnostics from AsrService
-        final rawRequest = <String, dynamic>{
-          if (service.lastRequestUrl != null) 'url': service.lastRequestUrl,
-          if (service.lastRequestHeaders != null)
-            'headers': service.lastRequestHeaders,
-          if (service.lastRequestBody != null) 'body': service.lastRequestBody,
-        };
-        final rawResponse = <String, dynamic>{
-          if (service.lastResponseStatusCode != null)
-            'statusCode': service.lastResponseStatusCode,
-          if (service.lastResponseHeaders != null)
-            'headers': service.lastResponseHeaders,
-          if (service.lastResponseData != null)
-            'data': service.lastResponseData,
-        };
-        bgNotifier.failTask(taskId,
-            error: '音频转写失败: $e',
-            rawRequest: rawRequest,
-            rawResponse: rawResponse);
-      }
-      // Continue to next task in the for loop regardless of success/failure
-    }
-  }
-
-  /// Save the transcription result as a text record, named by the task title.
-  /// Returns the file path of the saved text file for the "open file" button.
-  Future<String> _saveTranscriptionResult(String text, {String? title}) async {
-    final now = DateTime.now();
-
-    final bytes = Uint8List.fromList(utf8.encode(text));
-    final hash = computeTextHash(bytes);
-    final storageFileName = '$hash.txt';
-
-    final filePath = await TextManifest.writeText(storageFileName, text);
-    await TextManifest.addRecord(
-      TextRecord(
-        name: title ??
-            'ASR_${now.year}${_pad(now.month)}${_pad(now.day)}${_pad(now.hour)}${_pad(now.minute)}${_pad(now.second)}',
-        hash: hash,
-        format: 'txt',
-        createdAt: now,
-        size: bytes.length,
-        folder: _saveFolder,
-        textLength: text.length,
+    final audios = List<AsrTaskAudio>.unmodifiable(
+      _selectedAudios.map(
+        (audio) => AsrTaskAudio(
+          bytes: audio.bytes,
+          name: audio.name,
+          format: audio.format,
+        ),
       ),
     );
-    return filePath;
+    final modelIndex = _selectedModelIndex;
+    final saveFolder = _saveFolder;
+    final bgNotifier = ref.read(backgroundTasksProvider.notifier);
+    final textNotifier = ref.read(textRecordsProvider.notifier);
+    final scheduler = AsrTaskScheduler(
+      notifier: bgNotifier,
+      config: config,
+      audios: audios,
+      saveFolder: saveFolder,
+      modelIndex: modelIndex,
+      serviceFactory: widget.asrServiceFactory,
+      onSaved: () => unawaited(textNotifier.loadRecords()),
+    );
+
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+    try {
+      unawaited(scheduler.start());
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _errorMessage = '任务启动失败: $error';
+        });
+      }
+      return;
+    }
+
+    final onNavigateBack = widget.onNavigateBack;
+    if (mounted) {
+      if (onNavigateBack != null) {
+        onNavigateBack();
+      } else {
+        Navigator.pop(context);
+      }
+    }
   }
 
   // ==================================================================
@@ -1548,17 +1341,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
-
-  String _pad(int n) => n.toString().padLeft(2, '0');
-}
-
-/// Helper to pair a task ID with its audio data and title for chained execution.
-class _TaskEntry {
-  final String taskId;
-  final SelectedAudio audio;
-  final String title;
-
-  const _TaskEntry(this.taskId, this.audio, this.title);
 }
 
 /// Dialog asking for a public audio URL (URL upload mode).
@@ -1622,10 +1404,7 @@ class _UrlInputDialogState extends State<_UrlInputDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('添加'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('添加')),
       ],
     );
   }

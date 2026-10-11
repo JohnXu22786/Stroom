@@ -31,6 +31,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   bool _isEditMode = false;
   bool _isSaving = false;
   late TextEditingController _contentController;
+  late TextRecord _currentFile;
   late String _originalContent;
   bool _hasChanges = false;
 
@@ -53,6 +54,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   @override
   void initState() {
     super.initState();
+    _currentFile = widget.file;
     _originalContent = widget.initialContent ?? '';
     _contentController = TextEditingController(text: _originalContent);
     _contentController.addListener(_onContentChanged);
@@ -283,30 +285,41 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       final newContent = _contentController.text;
       final bytes = Uint8List.fromList(utf8.encode(newContent));
       final newHash = computeTextHash(bytes);
-      final oldStorageFileName = widget.file.storageFileName;
-      final newStorageFileName = '$newHash.txt';
+      final oldStorageFileName = _currentFile.storageFileName;
+      final updatedRecord = TextRecord(
+        id: _currentFile.id,
+        name: _currentFile.name,
+        hash: newHash,
+        format: _currentFile.format,
+        createdAt: _currentFile.createdAt,
+        modifiedAt: newHash == _currentFile.hash
+            ? _currentFile.modifiedAt
+            : DateTime.now(),
+        size: bytes.length,
+        folder: _currentFile.folder,
+        textLength: newContent.length,
+      );
+      final newStorageFileName = updatedRecord.storageFileName;
 
       // 写入新内容到新的存储文件（基于新 hash 的文件名）
       await TextManifest.writeText(newStorageFileName, newContent);
 
       // 删除旧的存储文件
-      await TextManifest.deleteFile(oldStorageFileName);
+      if (oldStorageFileName != newStorageFileName) {
+        final records = await TextManifest.loadRecords();
+        final oldPathIsShared = records.any(
+          (record) =>
+              record.id != _currentFile.id &&
+              record.storageFileName == oldStorageFileName,
+        );
+        if (!oldPathIsShared) {
+          await TextManifest.deleteFile(oldStorageFileName);
+        }
+      }
 
       // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
       // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateRecord(TextRecord(
-        id: widget.file.id,
-        name: widget.file.name,
-        hash: newHash,
-        format: widget.file.format,
-        createdAt: widget.file.createdAt,
-        modifiedAt: newHash == widget.file.hash
-            ? widget.file.modifiedAt
-            : DateTime.now(),
-        size: bytes.length,
-        folder: widget.file.folder,
-        textLength: newContent.length,
-      ));
+      await TextManifest.updateRecord(updatedRecord);
 
       if (mounted) {
         setState(() => _isSaving = false);
@@ -329,7 +342,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
   /// 构建 AppBar 操作按钮（仅图标）
   List<Widget> _buildAppBarActions() {
     // Markdown 渲染不随字号设置变化，不显示字号调整按钮
-    final isMarkdown = widget.file.format == 'md';
+    final isMarkdown = _currentFile.format == 'md';
     if (_isEditMode) {
       return [
         // 字号调整按钮（Markdown 不显示）
@@ -381,19 +394,41 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
           tooltip: '字号调整',
           onPressed: _showFontSizePopup,
         ),
-      if (widget.file.format == 'mmd')
+      if (_currentFile.format == 'mmd')
         IconButton(
           icon: const Icon(Icons.account_tree, size: 20),
           tooltip: '图表编辑',
-          onPressed: () {
-            Navigator.push(
+          onPressed: () async {
+            final result = await Navigator.push<String>(
               context,
-              MaterialPageRoute(
+              MaterialPageRoute<String>(
                 builder: (_) => MermaidChartPage(
                   initialCode: _contentController.text,
+                  existingRecord: _currentFile,
                 ),
               ),
             );
+            if (result != 'saved' || !mounted) return;
+
+            final records = await TextManifest.loadRecords();
+            for (final record in records) {
+              if (record.id != _currentFile.id) continue;
+              final content = await TextManifest.readText(record.storagePath);
+              if (content == null || !mounted) return;
+
+              _originalContent = content;
+              _contentController.value = TextEditingValue(
+                text: content,
+                selection: TextSelection.collapsed(offset: content.length),
+              );
+              setState(() {
+                _currentFile = record;
+                _hasChanges = false;
+                _undoStack.clear();
+                _redoStack.clear();
+              });
+              return;
+            }
           },
         ),
       IconButton(
@@ -406,7 +441,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = '${widget.file.name}.${widget.file.format}';
+    final title = '${_currentFile.name}.${_currentFile.format}';
 
     return PopScope(
       canPop: !_hasChanges,
@@ -462,7 +497,7 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
                   style: TextStyle(fontSize: _fontSize, height: 1.5),
                 ),
               )
-            : widget.file.format == 'md'
+            : _currentFile.format == 'md'
                 ? SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
                     child: MarkdownWidget(

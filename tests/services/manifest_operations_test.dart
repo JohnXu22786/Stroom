@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/manifest_operations.dart';
 import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/image_thumbnail_loader.dart';
@@ -16,6 +18,9 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeFolderInsertForTesting = null;
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
@@ -629,6 +634,313 @@ void main() {
   // ====================================================================
 
   group('folder tracking', () {
+    testWidgets(
+        'forced refresh keeps a record registered after its record snapshot',
+        (WidgetTester t) async {
+      final operations = ManifestOperations<AudioRecord>(
+        manifestKey: 'test_audio_manifest',
+        storageDirName: 'tts_audio',
+        fromMap: AudioRecord.fromMap,
+        tableName: ManifestTables.audioRecords,
+        toMap: (record) => record.toMap(),
+      );
+      await operations.loadRecords();
+
+      final recordSnapshotReady = Completer<void>();
+      final releaseFolderRead = Completer<void>();
+      operations.beforeFolderLoadForTesting = () async {
+        recordSnapshotReady.complete();
+        await releaseFolderRead.future;
+      };
+
+      final refresh = operations.loadRecords(forceRefresh: true);
+      await recordSnapshotReady.future;
+
+      final record = AudioRecord(
+        id: 'audio_registered_during_refresh',
+        name: 'registered',
+        hash: 'hash_registered_during_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'refresh/child',
+      );
+      await operations.addRecord(record);
+      releaseFolderRead.complete();
+
+      expect((await refresh).map((item) => item.id), contains(record.id),
+          reason:
+              'a refresh based on an older record snapshot must not overwrite a successful registration');
+      expect((await operations.loadRecords()).map((item) => item.id),
+          contains(record.id));
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          containsAll(['refresh', 'refresh/child']));
+    });
+
+    testWidgets(
+        'failed JSON registration preserves folders used by a concurrent registration',
+        (WidgetTester t) async {
+      final firstWriteStarted = Completer<void>();
+      final secondRegistrationStarted = Completer<void>();
+      final releaseFirstWrite = Completer<void>();
+      final failure = StateError('injected first registration failure');
+      var registrationCount = 0;
+      var writeCount = 0;
+      ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+        registrationCount++;
+        if (registrationCount == 2) secondRegistrationStarted.complete();
+      };
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        writeCount++;
+        if (writeCount == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+          throw failure;
+        }
+      };
+
+      final firstRecord = AudioRecord(
+        id: 'audio_concurrent_failed_registration',
+        name: 'first',
+        hash: 'hash_concurrent_failed_registration',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'concurrent/shared/child',
+      );
+      final secondRecord = AudioRecord(
+        id: 'audio_concurrent_successful_registration',
+        name: 'second',
+        hash: 'hash_concurrent_successful_registration',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'concurrent/shared/child',
+      );
+      const folderPaths = [
+        'concurrent',
+        'concurrent/shared',
+        'concurrent/shared/child',
+      ];
+      Future<void> insertRecord(AudioRecord record) =>
+          ManifestDatabase.insertRecordWithFolders(
+            recordTable: ManifestTables.audioRecords,
+            record: record.toMap(),
+            folderPaths: folderPaths,
+          );
+
+      final firstInsert = insertRecord(firstRecord);
+      await firstWriteStarted.future;
+      final secondInsert = insertRecord(secondRecord);
+      await secondRegistrationStarted.future;
+      await t.pump();
+      releaseFirstWrite.complete();
+
+      await expectLater(firstInsert, throwsA(same(failure)));
+      await secondInsert;
+
+      expect(
+          (await ManifestDatabase.getAllAudioRecords()).map((row) => row['id']),
+          equals([secondRecord.id]));
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          containsAll(folderPaths),
+          reason:
+              'rollback must not remove paths required by a concurrent successful registration');
+    });
+
+    testWidgets(
+        'failed JSON registration is not cached by a concurrent forced refresh',
+        (WidgetTester t) async {
+      final firstWriteStarted = Completer<void>();
+      final releaseFirstWrite = Completer<void>();
+      final failure = StateError('injected registration failure');
+      var writeCount = 0;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        writeCount++;
+        if (writeCount == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+          throw failure;
+        }
+      };
+      final record = AudioRecord(
+        id: 'audio_uncommitted_refresh',
+        name: 'pending',
+        hash: 'hash_uncommitted_refresh',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'pending/child',
+      );
+
+      final registration = FileManifest.addRecord(record);
+      await firstWriteStarted.future;
+      final refreshed = FileManifest.loadRecordsStrict();
+      await t.pump();
+      releaseFirstWrite.complete();
+
+      await expectLater(registration, throwsA(same(failure)));
+      expect(await refreshed, isEmpty,
+          reason: 'a forced refresh must not expose an uncommitted row');
+      expect(await FileManifest.loadRecords(), isEmpty,
+          reason: 'rollback must not leave the failed row in the record cache');
+    });
+
+    testWidgets(
+        'failed JSON registration preserves a concurrent folder registration',
+        (WidgetTester t) async {
+      final firstWriteStarted = Completer<void>();
+      final releaseFirstWrite = Completer<void>();
+      final failure = StateError('injected registration failure');
+      var writeCount = 0;
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        writeCount++;
+        if (writeCount == 1) {
+          firstWriteStarted.complete();
+          await releaseFirstWrite.future;
+          throw failure;
+        }
+      };
+      final record = AudioRecord(
+        id: 'audio_concurrent_folder_registration',
+        name: 'pending',
+        hash: 'hash_concurrent_folder_registration',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'concurrent-folder/shared',
+      );
+
+      final registration = FileManifest.addRecord(record);
+      await firstWriteStarted.future;
+      final folderRegistration = FileManifest.addFolder(record.folder);
+      await t.pump();
+      releaseFirstWrite.complete();
+
+      await expectLater(registration, throwsA(same(failure)));
+      await folderRegistration;
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          equals([record.folder]),
+          reason:
+              'rollback must not remove a folder registered by a concurrent successful operation');
+    });
+
+    testWidgets(
+        'text addRecord rolls back record and folders when canceled during persistence',
+        (WidgetTester t) async {
+      var cancelled = false;
+      final cancellation = StateError('cancelled during manifest persistence');
+      ManifestDatabase.beforeWebDataSaveForTesting = () async {
+        cancelled = true;
+      };
+
+      await expectLater(
+        TextManifest.addRecord(
+          TextRecord(
+            id: 'text_cancel_folder_save',
+            name: 'cancelled',
+            hash: 'hash_cancel_folder_save',
+            createdAt: DateTime(2024),
+            size: 4,
+            folder: 'cancelled/child',
+          ),
+          beforeCommit: () {
+            if (cancelled) throw cancellation;
+          },
+        ),
+        throwsA(same(cancellation)),
+      );
+
+      expect(await ManifestDatabase.getAllTextRecords(), isEmpty);
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.textRecords),
+          isEmpty);
+      expect(await TextManifest.loadRecords(), isEmpty);
+    });
+
+    testWidgets(
+        'addRecord rolls back folder persistence failure and retry completes it',
+        (WidgetTester t) async {
+      final existingRecord = AudioRecord(
+        id: 'audio_existing_folder_retry',
+        name: 'existing',
+        hash: 'hash_existing_folder_retry',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(existingRecord);
+      await FileManifest.addFolder('existing');
+      final record = AudioRecord(
+        id: 'audio_folder_retry',
+        name: 'tts',
+        hash: 'hash_folder_retry',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+        folder: 'existing/child/grandchild',
+      );
+      final failure = StateError('injected folder persistence failure');
+      var shouldFail = true;
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (shouldFail && path == 'existing/child') {
+          shouldFail = false;
+          throw failure;
+        }
+      };
+
+      await expectLater(FileManifest.addRecord(record), throwsA(same(failure)));
+
+      expect((await FileManifest.loadRecords()).map((row) => row.id),
+          equals([existingRecord.id]),
+          reason:
+              'a failed add must not remain visible through the record cache');
+      final failedRows = await ManifestDatabase.getAllAudioRecords();
+      expect(failedRows.any((row) => row['id'] == record.id), isFalse,
+          reason: 'a failed add must not remain persisted as a record');
+      expect(failedRows.map((row) => row['id']), equals([existingRecord.id]),
+          reason: 'a failed add must preserve pre-existing records');
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          equals(['existing']),
+          reason: 'a failed add must retain pre-existing folders only');
+
+      await FileManifest.addRecord(record);
+
+      expect(
+          (await ManifestDatabase.getAllAudioRecords())
+              .any((row) => row['id'] == record.id),
+          isTrue,
+          reason: 'retry must persist the audio record');
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          containsAll([
+            'existing',
+            'existing/child',
+            'existing/child/grandchild',
+          ]),
+          reason: 'retry must persist the complete folder path');
+    });
+
+    testWidgets('ordinary audio folder registration persists the folder',
+        (WidgetTester t) async {
+      await FileManifest.addFolder('ordinary/audio');
+
+      expect(
+          await ManifestDatabase.getAllFolders(
+              recordTable: ManifestTables.audioRecords),
+          contains('ordinary/audio'));
+    });
+
     testWidgets('addRecord tracks folder and all ancestors',
         (WidgetTester t) async {
       await VideoManifest.addRecord(VideoRecord(

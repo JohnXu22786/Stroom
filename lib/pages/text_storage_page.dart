@@ -251,7 +251,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => MermaidChartPage(initialCode: content),
+          builder: (_) => MermaidChartPage(
+            initialCode: content,
+            existingRecord: file,
+          ),
         ),
       );
     } else {

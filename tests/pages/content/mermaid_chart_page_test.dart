@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,11 +13,16 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 /// Builds the test app. [initialShowPreview] defaults to false to avoid
 /// InAppWebView platform not being initialized in test environment.
-Widget _buildTestApp({String? initialCode, bool initialShowPreview = false}) {
+Widget _buildTestApp({
+  String? initialCode,
+  TextRecord? existingRecord,
+  bool initialShowPreview = false,
+}) {
   return ProviderScope(
     child: MaterialApp(
       home: MermaidChartPage(
         initialCode: initialCode,
+        existingRecord: existingRecord,
         initialShowPreview: initialShowPreview,
       ),
       localizationsDelegates: [
@@ -85,8 +93,9 @@ void main() {
       expect(textField.controller?.text, contains('Custom'));
     });
 
-    testWidgets('initialCode auto-detects sequenceDiagram type',
-        (tester) async {
+    testWidgets('initialCode auto-detects sequenceDiagram type', (
+      tester,
+    ) async {
       const initialCode = 'sequenceDiagram\n  A->>B: Hello';
       await tester.pumpWidget(
         const ProviderScope(
@@ -121,8 +130,285 @@ void main() {
       expect(textField.controller?.text, contains('Test'));
     });
 
-    testWidgets('manually editing the header updates snippet buttons',
-        (tester) async {
+    testWidgets('Gantt dependency snippet uses an existing task ID', (
+      tester,
+    ) async {
+      const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD
+  section Existing
+  Prepare release :releasePrep, 2026-10-01, 3d''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(
+        textField.controller?.text,
+        contains('后续任务 :after releasePrep, 5d'),
+      );
+      expect(textField.controller?.text, isNot(contains('after a1')));
+    });
+
+    testWidgets(
+      'Gantt dependency snippet ignores titles that contain colon-separated words',
+      (tester) async {
+        const initialCode = '''gantt
+  title Status: plan, build, ship
+  accDescr {
+    Plan: design, build, ship
+  }''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        final code = textField.controller?.text ?? '';
+        expect(code, contains('title Status: plan, build, ship'));
+        expect(code, contains('Plan: design, build, ship'));
+        expect(
+          code.contains(
+            RegExp(
+              r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2}, 1d\n'
+              r'  后续任务 :after dependencyTask1, 5d',
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      'Gantt dependency snippet adds an ID when existing tasks lack one',
+      (tester) async {
+        const initialCode = '''gantt
+  dateFormat  DD MMM YYYY
+  section Existing
+  Prepare release :1 Oct 2026, 3d %% kickoff task''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(
+          textField.controller?.text,
+          contains(
+            'Prepare release :dependencyTask1, 1 Oct 2026, 3d %% kickoff task',
+          ),
+        );
+        expect(
+          textField.controller?.text,
+          contains('后续任务 :after dependencyTask1, 5d'),
+        );
+      },
+    );
+
+    testWidgets(
+      'Gantt dependency snippet adds an ID to tasks with explicit end dates',
+      (tester) async {
+        const initialCode = '''gantt
+  accDescr {
+    dateFormat YYYY-MM-DD
+  }
+  dateFormat  dddd Do MMM YYYY [at] h:mm:ss.SSS a
+  section Existing
+  Prepare release :Thursday 1st Oct 2026 at 9:00:12.345 am, Saturday 3rd Oct 2026 at 3:30:56.789 pm''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(
+          textField.controller?.text,
+          contains(
+            'Prepare release :dependencyTask1, '
+            'Thursday 1st Oct 2026 at 9:00:12.345 am, '
+            'Saturday 3rd Oct 2026 at 3:30:56.789 pm',
+          ),
+        );
+        expect(
+          textField.controller?.text,
+          contains('后续任务 :after dependencyTask1, 5d'),
+        );
+      },
+    );
+
+    testWidgets(
+      'Gantt dependency snippet recognizes dates with comma literals',
+      (tester) async {
+        const dateFormatCases = [
+          ['MMMM D,YYYY', 'October 1,2026, October 3,2026'],
+          ['MMMM D[,]YYYY', 'October 1,2026, October 3,2026'],
+        ];
+
+        for (final dateFormatCase in dateFormatCases) {
+          await tester.pumpWidget(const SizedBox.shrink());
+          final initialCode = '''gantt
+  dateFormat  ${dateFormatCase[0]}
+  section Existing
+  Prepare release :${dateFormatCase[1]}''';
+          await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+          await tester.pump();
+
+          await tester.tap(find.text('添加依赖任务'));
+          await tester.pump();
+
+          final textField = tester.widget<TextField>(
+            find.byType(TextField).first,
+          );
+          final code = textField.controller?.text ?? '';
+          expect(
+            code,
+            contains('Prepare release :dependencyTask1, ${dateFormatCase[1]}'),
+            reason: '${dateFormatCase[0]} generated $code',
+          );
+          expect(code, contains('后续任务 :after dependencyTask1, 5d'));
+          expect(code, isNot(contains('依赖基准任务 :')));
+        }
+      },
+    );
+
+    testWidgets(
+      'Gantt dependency snippet adds tasks when the chart has no tasks',
+      (tester) async {
+        const initialCode = '''gantt
+  dateFormat  dddd ddd dd d MMMM Do YYYY %% dates are localized
+  title Empty Project''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        final code = textField.controller?.text ?? '';
+        expect(
+          code.contains(
+            RegExp(
+              r'依赖基准任务 :dependencyTask1, '
+              r'[A-Z][a-z]+ [A-Z][a-z]{2} [A-Z][a-z] [0-6] '
+              r'[A-Z][a-z]+ \d{1,2}(?:st|nd|rd|th) \d{4}, 1d\n'
+              r'  后续任务 :after dependencyTask1, 5d',
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets('Gantt dependency snippet respects time-based date formats', (
+      tester,
+    ) async {
+      const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD HH:mm:ss.SSS Z ZZ
+  title Empty Project''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加依赖任务'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller?.text ?? '';
+      expect(
+        code.contains(
+          RegExp(
+            r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} '
+            r'\d{2}:\d{2}:\d{2}\.\d{3} [+-]\d{2}:\d{2} '
+            r'[+-]\d{4}, 1d\n'
+            r'  后续任务 :after dependencyTask1, 5d',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    testWidgets(
+      'Gantt dependency snippet supports 12-hour date format tokens',
+      (tester) async {
+        const dateFormatCases = [
+          ['YYYY-MM-DD h:mm a', r'\d{1,2}:\d{2} (?:am|pm)'],
+          ['YYYY-MM-DD hh:mm A', r'\d{2}:\d{2} (?:AM|PM)'],
+        ];
+
+        for (final dateFormatCase in dateFormatCases) {
+          await tester.pumpWidget(const SizedBox.shrink());
+          final initialCode = '''gantt
+  dateFormat  ${dateFormatCase[0]}
+  title Empty Project''';
+          await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+          await tester.pump();
+
+          await tester.tap(find.text('添加依赖任务'));
+          await tester.pump();
+
+          final textField = tester.widget<TextField>(
+            find.byType(TextField).first,
+          );
+          final code = textField.controller?.text ?? '';
+          final pattern = RegExp(
+            [
+              r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} ',
+              dateFormatCase[1],
+              r', 1d\n  后续任务 :after dependencyTask1, 5d',
+            ].join(),
+          );
+          expect(
+            code.contains(pattern),
+            isTrue,
+            reason: '${dateFormatCase[0]} generated $code',
+          );
+        }
+      },
+    );
+
+    testWidgets(
+      'Gantt dependency snippet unwraps bracket-escaped date literals',
+      (tester) async {
+        const initialCode = '''gantt
+  dateFormat  YYYY-MM-DD [at] h:mm a
+  title Empty Project''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        await tester.tap(find.text('添加依赖任务'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        final code = textField.controller?.text ?? '';
+        expect(
+          code.contains(
+            RegExp(
+              r'依赖基准任务 :dependencyTask1, \d{4}-\d{2}-\d{2} '
+              r'at \d{1,2}:\d{2} (?:am|pm), 1d\n'
+              r'  后续任务 :after dependencyTask1, 5d',
+            ),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets('manually editing the header updates snippet buttons', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
@@ -140,8 +426,9 @@ void main() {
       expect(find.text('添加请求'), findsOneWidget);
     });
 
-    testWidgets('frontmatter sequenceDiagram selects snippets and save label',
-        (tester) async {
+    testWidgets('frontmatter sequenceDiagram selects snippets and save label', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
 
@@ -177,51 +464,55 @@ void main() {
     // ═══════════════════════════════════════════════════
 
     testWidgets(
-        'edit mode with initialShowPreview:false shows code editor only',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
-      await tester.pump();
+      'edit mode with initialShowPreview:false shows code editor only',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
 
-      // Should start in edit mode (code icon in AppBar)
-      expect(find.byIcon(Icons.code), findsOneWidget);
-      expect(find.byIcon(Icons.view_column), findsNothing);
-      expect(find.byIcon(Icons.visibility), findsNothing);
+        // Should start in edit mode (code icon in AppBar)
+        expect(find.byIcon(Icons.code), findsOneWidget);
+        expect(find.byIcon(Icons.view_column), findsNothing);
+        expect(find.byIcon(Icons.visibility), findsNothing);
 
-      // In edit mode, there should be exactly one TextField (the code editor)
-      // The "代码" label (split mode editor label) should NOT be visible
-      expect(find.text('代码'), findsNothing);
+        // In edit mode, there should be exactly one TextField (the code editor)
+        // The "代码" label (split mode editor label) should NOT be visible
+        expect(find.text('代码'), findsNothing);
 
-      // The TextField should be visible
-      expect(find.byType(TextField), findsOneWidget);
-    });
+        // The TextField should be visible
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
     // ═══════════════════════════════════════════════════
     // Save - Folder Picker Dialog integration
     // ═══════════════════════════════════════════════════
 
-    testWidgets('save button shows folder picker dialog when content not empty',
-        (tester) async {
-      await tester.pumpWidget(_buildTestApp());
-      await tester.pump();
+    testWidgets(
+      'save button shows folder picker dialog when content not empty',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pump();
 
-      // Enter some content
-      final textField = find.byType(TextField).first;
-      await tester.enterText(textField, 'graph TD\n  A-->B');
-      await tester.pump();
+        // Enter some content
+        final textField = find.byType(TextField).first;
+        await tester.enterText(textField, 'graph TD\n  A-->B');
+        await tester.pump();
 
-      // Tap save button
-      await tester.tap(find.byIcon(Icons.save));
-      await tester.pumpAndSettle();
+        // Tap save button
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
 
-      // Should show the save dialog with filename input and folder picker
-      expect(find.text('保存图表'), findsOneWidget);
-      expect(find.text('根目录'), findsOneWidget);
-      // Should show filename input field with hint text
-      expect(find.text('输入文件名（自动添加 .mmd 后缀）'), findsOneWidget);
-    });
+        // Should show the save dialog with filename input and folder picker
+        expect(find.text('保存图表'), findsOneWidget);
+        expect(find.text('根目录'), findsOneWidget);
+        // Should show filename input field with hint text
+        expect(find.text('输入文件名（自动添加 .mmd 后缀）'), findsOneWidget);
+      },
+    );
 
-    testWidgets('save with empty content shows error, no folder picker',
-        (tester) async {
+    testWidgets('save with empty content shows error, no folder picker', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -240,8 +531,9 @@ void main() {
       expect(find.byType(FolderPickerDialog), findsNothing);
     });
 
-    testWidgets('cancel in folder picker returns without saving',
-        (tester) async {
+    testWidgets('cancel in folder picker returns without saving', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -265,8 +557,9 @@ void main() {
       expect(find.textContaining('已保存'), findsNothing);
     });
 
-    testWidgets('confirm in folder picker saves to selected folder',
-        (tester) async {
+    testWidgets('confirm in folder picker saves to selected folder', (
+      tester,
+    ) async {
       // Pre-create a folder
       final folders = await TextManifest.getAllFolders();
       if (!folders.contains('my_charts')) {
@@ -304,14 +597,13 @@ void main() {
 
       // Verify the record was saved with the correct folder
       final records = await TextManifest.loadRecords();
-      final savedRecord = records.lastWhere(
-        (r) => r.format == 'mmd',
-      );
+      final savedRecord = records.lastWhere((r) => r.format == 'mmd');
       expect(savedRecord.folder, 'my_charts');
     });
 
-    testWidgets('save dialog shows filename input and saves with custom name',
-        (tester) async {
+    testWidgets('save dialog shows filename input and saves with custom name', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -354,15 +646,14 @@ void main() {
 
       // Verify the record was saved with the custom name
       final records = await TextManifest.loadRecords();
-      final savedRecord = records.lastWhere(
-        (r) => r.format == 'mmd',
-      );
+      final savedRecord = records.lastWhere((r) => r.format == 'mmd');
       expect(savedRecord.name, contains('自定义图表名'));
       expect(savedRecord.folder, '');
     });
 
-    testWidgets('save with empty filename shows error, does not save',
-        (tester) async {
+    testWidgets('save with empty filename shows error, does not save', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -402,8 +693,9 @@ void main() {
       expect(records.where((r) => r.format == 'mmd'), isEmpty);
     });
 
-    testWidgets('confirm in root folder picker saves to root (empty folder)',
-        (tester) async {
+    testWidgets('confirm in root folder picker saves to root (empty folder)', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -434,85 +726,240 @@ void main() {
 
       // Verify the record was saved with empty folder (root)
       final records = await TextManifest.loadRecords();
-      final savedRecord = records.lastWhere(
-        (r) => r.format == 'mmd',
-      );
+      final savedRecord = records.lastWhere((r) => r.format == 'mmd');
       expect(savedRecord.folder, '');
     });
+
+    testWidgets('new chart name conflicts are scoped to selected folder', (
+      tester,
+    ) async {
+      const otherFolder = 'existing-folder';
+      const destinationFolder = 'new-folder';
+      const sharedName = 'shared-chart-流程图';
+      const existingContent = 'graph TD\n  A-->Existing';
+      final existingBytes = Uint8List.fromList(utf8.encode(existingContent));
+      await TextManifest.addFolder(otherFolder);
+      await TextManifest.addFolder(destinationFolder);
+      final existingRecord = TextRecord(
+        id: 'same-name-in-another-folder',
+        name: sharedName,
+        hash: computeTextHash(existingBytes),
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 1),
+        size: existingBytes.length,
+        folder: otherFolder,
+        textLength: existingContent.length,
+      );
+      await TextManifest.writeText(existingRecord.storagePath, existingContent);
+      await TextManifest.addRecord(existingRecord);
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->New',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, 'shared-chart');
+      await tester.tap(find.text(destinationFolder));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      final savedRecord = records.singleWhere(
+        (record) => record.folder == destinationFolder,
+      );
+      expect(savedRecord.name, sharedName);
+      expect(
+        records.where((record) => record.name == sharedName),
+        hasLength(2),
+      );
+    });
+
+    testWidgets('saving an edited chart updates its existing record in place', (
+      tester,
+    ) async {
+      const originalContent = ' \ngraph TD\n  A-->B\n ';
+      const editedContent = ' \ngraph TD\n  A-->C\n ';
+      final originalBytes = Uint8List.fromList(utf8.encode(originalContent));
+      final originalRecord = TextRecord(
+        id: 'existing-chart-id',
+        name: 'existing-chart',
+        hash: computeTextHash(originalBytes),
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 1),
+        size: originalBytes.length,
+        textLength: originalContent.length,
+      );
+      const otherFolder = 'another-folder';
+      await TextManifest.addFolder(otherFolder);
+      final sameNameInAnotherFolder = TextRecord(
+        id: 'same-name-in-another-folder',
+        name: originalRecord.name,
+        hash: originalRecord.hash,
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 2),
+        size: originalBytes.length,
+        folder: otherFolder,
+        textLength: originalContent.length,
+      );
+      await TextManifest.writeText(originalRecord.storagePath, originalContent);
+      await TextManifest.addRecord(originalRecord);
+      await TextManifest.addRecord(sameNameInAnotherFolder);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: originalContent,
+          existingRecord: originalRecord,
+        ),
+      );
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField).first, editedContent);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      expect(
+        tester.widget<TextField>(fileNameField).controller?.text,
+        originalRecord.name,
+      );
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      expect(records, hasLength(2));
+      final savedRecord = records.singleWhere((r) => r.id == originalRecord.id);
+      expect(savedRecord.id, originalRecord.id);
+      expect(savedRecord.name, originalRecord.name);
+      expect(
+        savedRecord.hash,
+        computeTextHash(Uint8List.fromList(utf8.encode(editedContent))),
+      );
+      expect(savedRecord.modifiedAt.isAfter(originalRecord.modifiedAt), isTrue);
+      expect(
+        await TextManifest.readText(savedRecord.storagePath),
+        editedContent,
+      );
+
+      final preservedRecord = records.singleWhere(
+        (r) => r.id == sameNameInAnotherFolder.id,
+      );
+      expect(preservedRecord.name, originalRecord.name);
+      expect(preservedRecord.folder, otherFolder);
+      expect(
+        await TextManifest.readText(preservedRecord.storagePath),
+        originalContent,
+      );
+    });
+
     // ═══════════════════════════════════════════════════
     // Editor Mode Switching (UI only, no WebView)
     // ═══════════════════════════════════════════════════
 
-    testWidgets('initialCode hides chart type selector, keeps snippet buttons',
-        (tester) async {
-      const initialCode = 'graph TD\n  A[Custom] --> B[End]';
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: MermaidChartPage(
-              initialCode: initialCode,
-              initialShowPreview: false,
+    testWidgets(
+      'initialCode hides chart type selector, keeps snippet buttons',
+      (tester) async {
+        const initialCode = 'graph TD\n  A[Custom] --> B[End]';
+        await tester.pumpWidget(
+          const ProviderScope(
+            child: MaterialApp(
+              home: MermaidChartPage(
+                initialCode: initialCode,
+                initialShowPreview: false,
+              ),
+              localizationsDelegates: [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      // Chart type selector chips (Row 1) should NOT be shown
-      expect(find.text('流程图'), findsNothing);
-      expect(find.text('时序图'), findsNothing);
-      expect(find.text('类图'), findsNothing);
+        // Chart type selector chips (Row 1) should NOT be shown
+        expect(find.text('流程图'), findsNothing);
+        expect(find.text('时序图'), findsNothing);
+        expect(find.text('类图'), findsNothing);
 
-      // Snippet buttons (Row 2) SHOULD be shown
-      expect(find.text('添加节点'), findsOneWidget);
-      expect(find.text('添加连接线'), findsOneWidget);
+        // Snippet buttons (Row 2) SHOULD be shown
+        expect(find.text('添加节点'), findsOneWidget);
+        expect(find.text('添加连接线'), findsOneWidget);
 
-      // Code editor should contain the initial code
-      final textField = tester.widget<TextField>(find.byType(TextField).first);
-      expect(textField.controller?.text, contains('graph TD'));
-      expect(textField.controller?.text, contains('Custom'));
-    });
+        // Code editor should contain the initial code
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(textField.controller?.text, contains('graph TD'));
+        expect(textField.controller?.text, contains('Custom'));
+      },
+    );
 
     testWidgets(
-        'initialCode with %% comment correctly detects type for snippets',
-        (tester) async {
-      const initialCode =
-          '%% Auto-generated sequence diagram\nsequenceDiagram\n  A->>B: Hello';
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: MermaidChartPage(
-              initialCode: initialCode,
-              initialShowPreview: false,
+      'initialCode with %% comment correctly detects type for snippets',
+      (tester) async {
+        const initialCode =
+            '%% Auto-generated sequence diagram\nsequenceDiagram\n  A->>B: Hello';
+        await tester.pumpWidget(
+          const ProviderScope(
+            child: MaterialApp(
+              home: MermaidChartPage(
+                initialCode: initialCode,
+                initialShowPreview: false,
+              ),
+              localizationsDelegates: [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      // Chart type selector should be hidden
-      expect(find.text('流程图'), findsNothing);
+        // Chart type selector should be hidden
+        expect(find.text('流程图'), findsNothing);
 
-      // Sequence diagram snippet buttons should be shown
-      // (based on correct type detection skipping %% comment)
-      expect(find.text('添加参与者'), findsOneWidget);
-      expect(find.text('添加请求'), findsOneWidget);
+        // Sequence diagram snippet buttons should be shown
+        // (based on correct type detection skipping %% comment)
+        expect(find.text('添加参与者'), findsOneWidget);
+        expect(find.text('添加请求'), findsOneWidget);
 
-      // Code editor should contain the initial code
-      final textField = tester.widget<TextField>(find.byType(TextField).first);
-      expect(textField.controller?.text, contains('sequenceDiagram'));
-    });
+        // Code editor should contain the initial code
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(textField.controller?.text, contains('sequenceDiagram'));
+      },
+    );
 
-    testWidgets('initialCode with %%{init} directive correctly detects type',
-        (tester) async {
+    testWidgets('initialCode with %%{init} directive correctly detects type', (
+      tester,
+    ) async {
       const initialCode =
           '%%{init: {\'theme\': \'dark\'}}%%\ngantt\n  title Project';
       await tester.pumpWidget(
@@ -539,35 +986,37 @@ void main() {
     });
 
     testWidgets(
-        'initialCode with only %% comments falls back to flowchart snippets',
-        (tester) async {
-      const initialCode = '%% comment line 1\n%% comment line 2\n';
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: MermaidChartPage(
-              initialCode: initialCode,
-              initialShowPreview: false,
+      'initialCode with only %% comments falls back to flowchart snippets',
+      (tester) async {
+        const initialCode = '%% comment line 1\n%% comment line 2\n';
+        await tester.pumpWidget(
+          const ProviderScope(
+            child: MaterialApp(
+              home: MermaidChartPage(
+                initialCode: initialCode,
+                initialShowPreview: false,
+              ),
+              localizationsDelegates: [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
             ),
-            localizationsDelegates: [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
-            ],
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      // Chart type selector should be hidden
-      expect(find.text('流程图'), findsNothing);
+        // Chart type selector should be hidden
+        expect(find.text('流程图'), findsNothing);
 
-      // Fallback to flowchart snippets
-      expect(find.text('添加节点'), findsOneWidget);
-      expect(find.text('添加连接线'), findsOneWidget);
-    });
+        // Fallback to flowchart snippets
+        expect(find.text('添加节点'), findsOneWidget);
+        expect(find.text('添加连接线'), findsOneWidget);
+      },
+    );
 
-    testWidgets('without initialCode shows chart type selector',
-        (tester) async {
+    testWidgets('without initialCode shows chart type selector', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
 
@@ -604,55 +1053,57 @@ void main() {
     });
 
     testWidgets(
-        'snippet insertion preserves final line without trailing newline',
-        (tester) async {
-      const initialCode = 'graph TD\n  A[Start] --> B[End]';
-      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
-      await tester.pump();
+      'snippet insertion preserves final line without trailing newline',
+      (tester) async {
+        const initialCode = 'graph TD\n  A[Start] --> B[End]';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
 
-      await tester.tap(find.text('添加节点'));
-      await tester.pump();
+        await tester.tap(find.text('添加节点'));
+        await tester.pump();
 
-      final textField = find.byType(TextField).first;
-      final controller = tester.widget<TextField>(textField).controller;
-      expect(
-        controller?.text,
-        'graph TD\n  A[Start] --> B[End]\n  NewNode[新节点]\n',
-      );
-    });
+        final textField = find.byType(TextField).first;
+        final controller = tester.widget<TextField>(textField).controller;
+        expect(
+          controller?.text,
+          'graph TD\n  A[Start] --> B[End]\n  NewNode[新节点]\n',
+        );
+      },
+    );
 
     // ═══════════════════════════════════════════════════
     // Mode Switching Stability (regression tests for freeze fix)
     // ═══════════════════════════════════════════════════
 
     testWidgets(
-        'rapid mode switching between edit, split, and preview does not hang',
-        (tester) async {
-      // Start in edit mode (no InAppWebView)
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
-      await tester.pump();
-
-      // Open the mode menu repeatedly to verify no freeze occurs.
-      for (int i = 0; i < 3; i++) {
-        // Open mode menu by tapping the mode toggle button (use tooltip)
-        await tester.tap(find.byTooltip('切换视图模式'));
+      'rapid mode switching between edit, split, and preview does not hang',
+      (tester) async {
+        // Start in edit mode (no InAppWebView)
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
 
-        // Menu should show all three modes
-        expect(find.text('编辑模式'), findsOneWidget);
-        expect(find.text('编辑+预览'), findsOneWidget);
-        expect(find.text('预览模式'), findsOneWidget);
+        // Open the mode menu repeatedly to verify no freeze occurs.
+        for (int i = 0; i < 3; i++) {
+          // Open mode menu by tapping the mode toggle button (use tooltip)
+          await tester.tap(find.byTooltip('切换视图模式'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
 
-        // Dismiss the menu by tapping outside
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-      }
+          // Menu should show all three modes
+          expect(find.text('编辑模式'), findsOneWidget);
+          expect(find.text('编辑+预览'), findsOneWidget);
+          expect(find.text('预览模式'), findsOneWidget);
 
-      // After all cycles, the page is still responsive
-      expect(find.byType(TextField), findsOneWidget);
-    });
+          // Dismiss the menu by tapping outside
+          await tester.tapAt(const Offset(10, 10));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+
+        // After all cycles, the page is still responsive
+        expect(find.byType(TextField), findsOneWidget);
+      },
+    );
 
     testWidgets('rapid mode menu open/close does not crash', (tester) async {
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
@@ -688,59 +1139,63 @@ void main() {
     // Adaptive layout & zoom controls
     // ═══════════════════════════════════════════════════
 
-    testWidgets('split mode uses vertical stack when space is taller than wide',
-        (tester) async {
-      // Regression: when available space is taller than wide (e.g.
-      // portrait phone, narrow window, tall split-screen), split mode
-      // should show preview on top and code editor on bottom (vertical
-      // stack). This is the existing behavior that should be preserved.
-      // Set viewport to tall dimensions (600 wide x 1000 tall).
-      tester.view.physicalSize = const Size(600, 1000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+    testWidgets(
+      'split mode uses vertical stack when space is taller than wide',
+      (tester) async {
+        // Regression: when available space is taller than wide (e.g.
+        // portrait phone, narrow window, tall split-screen), split mode
+        // should show preview on top and code editor on bottom (vertical
+        // stack). This is the existing behavior that should be preserved.
+        // Set viewport to tall dimensions (600 wide x 1000 tall).
+        tester.view.physicalSize = const Size(600, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
 
-      // MermaidRenderWidget should be visible (preview area)
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-      // Code editor label should be visible
-      expect(find.text('代码'), findsOneWidget);
-      // The Mermaid code text field should exist
-      expect(find.byType(TextField), findsOneWidget);
-      // No swap button in narrow mode
-      expect(find.byIcon(Icons.swap_horiz), findsNothing);
-    });
+        // MermaidRenderWidget should be visible (preview area)
+        expect(find.byType(MermaidRenderWidget), findsOneWidget);
+        // Code editor label should be visible
+        expect(find.text('代码'), findsOneWidget);
+        // The Mermaid code text field should exist
+        expect(find.byType(TextField), findsOneWidget);
+        // No swap button in narrow mode
+        expect(find.byIcon(Icons.swap_horiz), findsNothing);
+      },
+    );
 
     testWidgets(
-        'split mode uses horizontal layout when space is wider than tall',
-        (tester) async {
-      // Regression: when available space is wider than tall (e.g.
-      // landscape device, wide desktop window, wide split-screen),
-      // split mode should show preview and code editor side by side
-      // with a swap button between them.
-      // Set viewport to wide dimensions (1600 wide x 900 tall).
-      tester.view.physicalSize = const Size(1600, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      'split mode uses horizontal layout when space is wider than tall',
+      (tester) async {
+        // Regression: when available space is wider than tall (e.g.
+        // landscape device, wide desktop window, wide split-screen),
+        // split mode should show preview and code editor side by side
+        // with a swap button between them.
+        // Set viewport to wide dimensions (1600 wide x 900 tall).
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
 
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
 
-      // MermaidRenderWidget should still be visible
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
-      // Code label should be visible
-      expect(find.text('代码'), findsOneWidget);
-      // In wide mode, the swap button should exist
-      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
-    });
+        // MermaidRenderWidget should still be visible
+        expect(find.byType(MermaidRenderWidget), findsOneWidget);
+        // Code label should be visible
+        expect(find.text('代码'), findsOneWidget);
+        // In wide mode, the swap button should exist
+        expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+      },
+    );
 
-    testWidgets('wide split mode swap button toggles panel positions',
-        (tester) async {
+    testWidgets('wide split mode swap button toggles panel positions', (
+      tester,
+    ) async {
       // Regression: tapping the swap_horiz button in wide split mode
       // should exchange the left/right positions of preview and code
       // editor panels. Since we cannot tap buttons and create WebView
@@ -771,25 +1226,27 @@ void main() {
     });
 
     testWidgets(
-        'split mode preview shows zoom controls (showZoomControls passed to MermaidRenderWidget)',
-        (tester) async {
-      // Regression: the chart page should pass showZoomControls:true
-      // to MermaidRenderWidget so zoom in/out buttons appear at the
-      // top-right of the preview area.
-      // We only call pumpWidget once to avoid InAppWebView creation.
-      await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
+      'split mode preview shows zoom controls (showZoomControls passed to MermaidRenderWidget)',
+      (tester) async {
+        // Regression: the chart page should pass showZoomControls:true
+        // to MermaidRenderWidget so zoom in/out buttons appear at the
+        // top-right of the preview area.
+        // We only call pumpWidget once to avoid InAppWebView creation.
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: true));
 
-      // MermaidRenderWidget should be present
-      expect(find.byType(MermaidRenderWidget), findsOneWidget);
+        // MermaidRenderWidget should be present
+        expect(find.byType(MermaidRenderWidget), findsOneWidget);
 
-      // Zoom controls should be visible with showZoomControls:true
-      // showZoomControls shows buttons even during the loading state.
-      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
-      expect(find.byIcon(Icons.zoom_out), findsOneWidget);
-    });
+        // Zoom controls should be visible with showZoomControls:true
+        // showZoomControls shows buttons even during the loading state.
+        expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+        expect(find.byIcon(Icons.zoom_out), findsOneWidget);
+      },
+    );
 
-    testWidgets('split mode preview shows zoom controls but NOT full toolbar',
-        (tester) async {
+    testWidgets('split mode preview shows zoom controls but NOT full toolbar', (
+      tester,
+    ) async {
       // Regression: the Mermaid page preview should zoom controls
       // (zoom_in, zoom_out) via showZoomControls:true, but should NOT
       // show the full 4-button toolbar (fullscreen, code toggle, save)

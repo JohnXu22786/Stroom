@@ -59,7 +59,7 @@
 </head>
 <body>
   <div id="viewport">
-    <div id="loading-hint">å›¾è¡¨åŠ è½½ä¸­...</div>
+    <div id="loading-hint">图表加载中...</div>
     <div id="diagram-container">
       <pre class="mermaid" id="mermaid-code">
 
@@ -70,6 +70,8 @@
     var zoomLevel = 1;
     var panX = 0;
     var panY = 0;
+    var fitComplete = false;
+    var pendingZoomDeltas = [];
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -78,8 +80,12 @@
     }
 
     function reportError(msg) {
-      document.getElementById('viewport').innerHTML =
-        '<div class="error-message">' + msg + '</div>';
+      var viewport = document.getElementById('viewport');
+      var errorMessage = document.createElement('div');
+      errorMessage.className = 'error-message';
+      errorMessage.textContent = msg;
+      viewport.textContent = '';
+      viewport.appendChild(errorMessage);
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
           window.flutter_inappwebview.callHandler('onMermaidError', msg);
@@ -119,6 +125,22 @@
       panY = y;
       zoomLevel = Math.max(0.1, Math.min(10, level));
       updateTransform();
+    };
+
+    window.applyZoomDeltasAfterFit = function(deltas) {
+      if (!Array.isArray(deltas)) return;
+      if (!fitComplete) {
+        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+        return;
+      }
+      var viewport = document.getElementById('viewport');
+      for (var i = 0; i < deltas.length; i++) {
+        window.setZoom(
+          zoomLevel + deltas[i],
+          viewport.clientWidth / 2,
+          viewport.clientHeight / 2
+        );
+      }
     };
 
     // Fits the rendered diagram into the viewport: zooms so that the WHOLE
@@ -172,6 +194,10 @@
       panY = (vh - sh * zoomLevel) / 2;
       updateTransform();
       notifyTransform();
+      fitComplete = true;
+      var deltas = pendingZoomDeltas;
+      pendingZoomDeltas = [];
+      window.applyZoomDeltasAfterFit(deltas);
     };
 
 

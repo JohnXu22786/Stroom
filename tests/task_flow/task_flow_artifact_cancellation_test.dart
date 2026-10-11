@@ -5,7 +5,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -25,8 +27,11 @@ import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
+
 class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
   void Function()? onCompletedStep;
+  void Function()? onRunningStep;
 
   @override
   void updateStep(
@@ -37,6 +42,7 @@ class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
     bool? failed,
     bool? skipped,
     String? error,
+    String? label,
   }) {
     super.updateStep(
       taskId,
@@ -46,8 +52,10 @@ class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
       failed: failed,
       skipped: skipped,
       error: error,
+      label: label,
     );
     if (index == 1 && completed == true) onCompletedStep?.call();
+    if (index == 1 && running == true) onRunningStep?.call();
   }
 }
 
@@ -93,14 +101,27 @@ void main() {
     background.dispose();
   });
 
-  ProviderEntriesState providerFor(String type) {
+  ProviderEntriesState providerFor(
+    String type, {
+    String host = 'https://example.invalid/recognition',
+    Map<String, dynamic> typeConfig = const {},
+    List<CustomParam> customParams = const [],
+  }) {
     return ProviderEntriesState(entries: [
       ProviderEntry(name: type, type: type, configs: [
         ProviderConfigItem(
           id: 'config',
-          host: 'https://example.invalid/recognition',
+          host: host,
           key: 'test-key',
-          models: [ModelConfig(id: 'model', name: 'Test', modelId: 'test')],
+          models: [
+            ModelConfig(
+              id: 'model',
+              name: 'Test',
+              modelId: 'test',
+              typeConfig: typeConfig,
+              customParams: customParams,
+            ),
+          ],
         ),
       ]),
     ]);
@@ -121,9 +142,8 @@ void main() {
       final isAsr = type == BlockType.asr;
       final source =
           await File('${directory.path}/input.${isAsr ? 'wav' : 'png'}')
-              .writeAsBytes(isAsr
-                  ? pcmToWav(Uint8List.fromList([0, 0]))
-                  : [0x89, 0x50, 0x4e, 0x47]);
+              .writeAsBytes(
+                  isAsr ? pcmToWav(Uint8List.fromList([0, 0])) : _validPng());
       final pending = isAsr
           ? executeAsrBlock(
               block: blockFor(type),
@@ -148,7 +168,8 @@ void main() {
               flowSubTask: subTask,
               bgNotifier: background,
               providerEntries: providerFor('ocr'),
-              requestOcr: (_, __) {
+              requestOcr: (_, format) {
+                expect(format, 'png');
                 arrived.complete();
                 return release.future;
               },
@@ -177,9 +198,8 @@ void main() {
       final isAsr = type == BlockType.asr;
       final source =
           await File('${directory.path}/active.${isAsr ? 'wav' : 'png'}')
-              .writeAsBytes(isAsr
-                  ? pcmToWav(Uint8List.fromList([0, 0]))
-                  : [0x89, 0x50, 0x4e, 0x47]);
+              .writeAsBytes(
+                  isAsr ? pcmToWav(Uint8List.fromList([0, 0])) : _validPng());
       final result = await (isAsr
           ? executeAsrBlock(
               block: blockFor(type),
@@ -201,7 +221,10 @@ void main() {
               flowSubTask: subTask,
               bgNotifier: background,
               providerEntries: providerFor('ocr'),
-              requestOcr: (_, __) async => 'active result',
+              requestOcr: (_, format) async {
+                expect(format, 'png');
+                return 'active result';
+              },
             ));
       expect(result, 'active result');
       final records = await TextManifest.loadRecords();
@@ -213,6 +236,95 @@ void main() {
       expect(executions.execution(execId)?.status, FlowExecutionStatus.running);
     });
   }
+
+  test('OCR shares options and fails truncated output', () async {
+    final source = await File('${directory.path}/ocr_contract.png')
+        .writeAsBytes(_validPng());
+    final providers = providerFor(
+      'ocr',
+      host: 'https://example.invalid/v1/chat/completions/',
+      typeConfig: {
+        'enableMaxTokens': true,
+        'maxTokens': 777,
+        'enableTemperature': true,
+        'temperature': 0.35,
+        'enableTopP': true,
+        'topP': 0.8,
+        'userInstruction': '提取票据号码',
+      },
+      customParams: [
+        CustomParam(
+          paramName: 'response_format',
+          defaultValue: '{"type":"json_object"}',
+          type: 'json',
+        ),
+        CustomParam(
+          paramName: 'top_k',
+          defaultValue: '',
+          type: 'number',
+          options: ['50', '100'],
+        ),
+      ],
+    );
+    Map<String, dynamic>? requestBody;
+    String? requestUrl;
+    final dio = Dio()
+      ..interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestBody = Map<String, dynamic>.from(options.data as Map);
+          requestUrl = options.uri.toString();
+          handler.resolve(Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'choices': [
+                {
+                  'finish_reason': 'length',
+                  'message': {
+                    'content': [
+                      {'type': 'text', 'text': 'partial OCR text'},
+                    ],
+                  },
+                },
+              ],
+            },
+          ));
+        },
+      ));
+
+    await expectLater(
+      executeOcrBlock(
+        block: blockFor(BlockType.ocr),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providers,
+        ocrDio: dio,
+      ),
+      throwsA(isA<BlockExecutionException>()),
+    );
+
+    expect(requestUrl, 'https://example.invalid/v1/chat/completions/');
+    expect(requestBody?['model'], 'test');
+    expect(requestBody?['max_tokens'], 777);
+    expect(requestBody?['temperature'], 0.35);
+    expect(requestBody?['top_p'], 0.8);
+    expect(requestBody?['response_format'], {'type': 'json_object'});
+    expect(requestBody?['top_k'], 50);
+    final messages = requestBody?['messages'] as List;
+    final userContent = (messages[1] as Map)['content'] as List;
+    expect(userContent.last, {'type': 'text', 'text': '提取票据号码'});
+
+    expect(background.state.single.status, TaskStatus.failed);
+    expect(background.state.single.result, 'partial OCR text');
+    expect(background.state.single.steps.first.status, BgStepStatus.failed);
+    expect(executions.execution(execId)?.subTasks.single.status,
+        TaskStatus.failed);
+    expect(await TextManifest.loadRecords(), isEmpty);
+  });
 
   Future<String> separateVideo(String input) => executeAudioSeparationBlock(
         def: BlockTypeDefinition.audioSeparation,
@@ -265,6 +377,155 @@ void main() {
 
     expect(await WebFileStore.read(outputPath), isNotEmpty);
     expect(await FileManifest.loadRecords(), hasLength(1));
+  });
+
+  test('does not start a WebFileStore read after cancellation during yield',
+      () async {
+    const key = 'videos/cancel_before_read.mp4';
+    await WebFileStore.write(key, Uint8List.fromList([1]));
+    var readCalls = 0;
+
+    final pending = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      readWebFileBytes: (_) {
+        readCalls++;
+        return Future.value(Uint8List.fromList([1]));
+      },
+    );
+    // The executor is suspended at its first frame yield, immediately before
+    // it checks the WebFileStore key and starts reading the input.
+    executions.cancelExecution(execId);
+
+    await expectLater(pending, throwsA(isA<BlockExecutionException>()));
+
+    expect(readCalls, 0);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+  });
+
+  test('active flow still reads and separates a WebFileStore input', () async {
+    const key = 'videos/active_read.mp4';
+    final video =
+        await File('tests/fixtures/catcatch/audio_only.mp4').readAsBytes();
+    await WebFileStore.write(key, video);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    var readCalls = 0;
+
+    final outputPath = await executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: key,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      readWebFileBytes: (path) {
+        readCalls++;
+        expect(path, key);
+        return WebFileStore.read(path);
+      },
+      extractAudio: (path, format) {
+        expect(path, key);
+        expect(format, 'mp4');
+        return Future.value(extracted);
+      },
+    );
+
+    expect(readCalls, 1);
+    expect(outputPath, 'tts_audio/${computeAudioHash(extracted)}.wav');
+    expect(await WebFileStore.read(outputPath), extracted);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.running,
+    );
+  });
+
+  test('does not start metadata hashing after cancellation during yield',
+      () async {
+    final source = await File('${directory.path}/cancel_before_hash.mp4')
+        .writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    final cancellationScheduled = Completer<void>();
+    background.dispose();
+    final cancellingBackground = _CancelOnCompletedStepBackground();
+    background = cancellingBackground;
+    cancellingBackground.onRunningStep = () {
+      scheduleMicrotask(() {
+        executions.cancelExecution(execId);
+        cancellationScheduled.complete();
+      });
+    };
+    final pendingMetadata = Completer<(String, String)>();
+    var metadataCalls = 0;
+
+    final pending = executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) => Future.value(extracted),
+      computeAudioMeta: (_) {
+        metadataCalls++;
+        return pendingMetadata.future;
+      },
+    );
+
+    await expectLater(
+      pending.timeout(const Duration(seconds: 2)),
+      throwsA(isA<BlockExecutionException>()),
+    );
+    await cancellationScheduled.future;
+    pendingMetadata.complete((computeAudioHash(extracted), 'wav'));
+
+    expect(metadataCalls, 0);
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.cancelled,
+    );
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
+
+  test('active flow still hashes and persists separated audio', () async {
+    final source =
+        await File('${directory.path}/active_metadata.mp4').writeAsBytes([1]);
+    final extracted = pcmToWav(Uint8List.fromList([0, 0]));
+    var metadataCalls = 0;
+
+    final outputPath = await executeAudioSeparationBlock(
+      def: BlockTypeDefinition.audioSeparation,
+      block: TaskFlowBlock(typeKey: BlockType.audioSeparation),
+      input: source.path,
+      execId: execId,
+      execNotifier: executions,
+      flowSubTask: subTask,
+      bgNotifier: background,
+      extractAudio: (_, __) => Future.value(extracted),
+      computeAudioMeta: (audioBytes) {
+        metadataCalls++;
+        return computeAudioMetaWithEventLoopYield(audioBytes);
+      },
+    );
+
+    expect(metadataCalls, 1);
+    expect(outputPath, 'tts_audio/${computeAudioHash(extracted)}.wav');
+    expect(await WebFileStore.read(outputPath), extracted);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+    expect(
+      executions.execution(execId)?.status,
+      FlowExecutionStatus.running,
+    );
   });
 
   test('cancellation releases a pending WebFileStore read', () async {

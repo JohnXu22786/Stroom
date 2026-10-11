@@ -67,8 +67,8 @@ class _MermaidPreviewDialogContentState
       // mermaid.min.js itself) — the diagram appears when rendered.
       _isLoading = false;
       _mermaidJsLoading = false;
-    } else {
       _armReadyFallback();
+    } else {
       _loadMermaidAsset();
     }
   }
@@ -80,6 +80,10 @@ class _MermaidPreviewDialogContentState
       _inlineMermaidJs = js;
       _mermaidJsLoading = false;
     });
+    // The WebView is now eligible to mount. Starting the timeout before the
+    // bundled asset is available can consume the entire creation deadline
+    // while no WebView exists in the widget tree.
+    _armReadyFallback();
   }
 
   @override
@@ -89,16 +93,20 @@ class _MermaidPreviewDialogContentState
     super.dispose();
   }
 
-  /// Arms a fallback timer that force-ends the loading state after 3s if
-  /// [onLoadStop] has not fired yet, so the loading overlay can never spin
-  /// forever: the user then sees the actual iframe content (which shows its
-  /// own loading hint or error message from the HTML template). On the web
-  /// platform onLoadStop reliably does NOT fire, so this timer is the
-  /// actual path that reveals the rendered diagram there.
+  /// Arms a timeout once the WebView is eligible to mount. It reports a
+  /// visible error if no controller is created, or ends the loading overlay
+  /// if a created WebView never fires [onLoadStop].
   void _armReadyFallback() {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isLoading) {
+      if (!mounted) return;
+      if (_webViewController == null) {
+        debugPrint('[MermaidPreviewDialog] WebView was not created within 3s');
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      } else if (_isLoading) {
         debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
             '3s, force-ending the loading state');
         setState(() => _isLoading = false);
@@ -135,31 +143,28 @@ class _MermaidPreviewDialogContentState
                 MermaidRenderWidget.buildWebAssetUrl(widget.mermaidCode))));
   }
 
-  /// Zoom is anchored at the CENTER of the preview area (not the top-left
-  /// corner): `window.setZoom` keeps the given viewport point fixed while
-  /// scaling, so passing the viewport center zooms towards the middle.
-  /// The center is computed in JS so it is exact at any display scaling.
+  /// Changes the zoom by [delta] at the center of the preview, based on the
+  /// JavaScript renderer's live zoom so web auto-fit is preserved.
   Future<void> _zoomIn() async {
-    await _zoomAroundCenter(_zoomLevel + 0.1);
+    await _zoomAroundCenter(0.1);
   }
 
   Future<void> _zoomOut() async {
-    await _zoomAroundCenter(_zoomLevel - 0.1);
+    await _zoomAroundCenter(-0.1);
   }
 
-  Future<void> _zoomAroundCenter(double newZoom) async {
-    final target = newZoom.clamp(0.1, 10.0);
-    if (target == _zoomLevel) return;
-    // No setState: _zoomLevel is not read in build() and the WebView
-    // reflects the transform visually (the JS round-trip confirms the
-    // value via onTransformChanged).
-    _zoomLevel = target;
-    // The null-safe controller call is safe: zoom controls only appear
-    // after onLoadStop, when the controller exists.
+  Future<void> _zoomAroundCenter(double delta) async {
+    // Keep native state current for other dialog behavior, but let JS apply
+    // the button delta to its live zoom. On web the JS callback bridge is
+    // unsupported, so the cached Flutter zoom can be stale after auto-fit.
+    if (!kIsWeb) {
+      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
+      if (target == _zoomLevel) return;
+      _zoomLevel = target;
+    }
+
     await _webViewController?.evaluateJavascript(
-      source: 'window.setZoom($target, '
-          "document.getElementById('viewport').clientWidth / 2, "
-          "document.getElementById('viewport').clientHeight / 2)",
+      source: 'window.applyZoomDeltasAfterFit([$delta])',
     );
   }
 
@@ -228,7 +233,18 @@ class _MermaidPreviewDialogContentState
                         encoding: 'utf8',
                       ),
                 onWebViewCreated: (ctrl) {
+                  _readyFallbackTimer?.cancel();
+                  final hadError = _hasError;
                   _webViewController = ctrl;
+                  if (hadError && mounted) {
+                    setState(() {
+                      _hasError = false;
+                      _isLoading = !kIsWeb;
+                    });
+                  }
+                  // Give a created native WebView its own load-stop fallback
+                  // window, separate from the deadline for platform creation.
+                  if (!kIsWeb) _armReadyFallback();
                   // On web the iframe manages its own loading state (the
                   // asset template shows a hint until the diagram renders),
                   // so the dialog is immediately ready and no fallback

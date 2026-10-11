@@ -14,7 +14,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     showChatAttachmentPanel(
       context: context,
       onPickFromCamera: _pickFromCamera,
-      // 设备相册直接通过 image_picker 打开（不再弹出中间选择对话框）
+      // 设备相册直接打开（不再弹出中间选择对话框）
       onPickFromGallery: _pickFromGallery,
       onPickFromFilePicker: _pickFromFilePicker,
       onPickFromAppFiles: _pickFromAppFiles,
@@ -65,12 +65,15 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// 从设备相册选取图片
   ///
   /// 支持多选图片，自动适配不同平台：
-  /// - Android/iOS/移动 Web: image_picker 平台选择器
+  /// - Android/iOS: 微信风格的应用内相册选择器；移动 Web: image_picker
   /// - 桌面原生/桌面 Web: file_picker 文件选择器
   /// 不支持时显示清晰的错误信息。
   Future<void> _pickFromGallery() async {
     try {
-      final files = await pickGalleryMedia(GalleryMediaKind.image);
+      final files = await pickGalleryMedia(
+        GalleryMediaKind.image,
+        context: context,
+      );
       if (files.isEmpty) return;
       for (final file in files) {
         final bytes = await file.readAsBytes();

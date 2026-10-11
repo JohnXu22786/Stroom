@@ -433,16 +433,30 @@ void main() {
     test('toMap/fromMap preserves result field', () {
       final notifier = BackgroundTaskNotifier();
 
-      final id = notifier.addTask(
-          type: BackgroundTaskType.audioSeparation, title: '音频分离');
-      notifier.setResult(id, '结果文本');
+      final id = notifier.addTask(type: BackgroundTaskType.ocr, title: 'OCR结果');
+      notifier.setResult(
+        id,
+        '结果文本',
+        isComplete: false,
+        folder: 'captured folder',
+      );
+      notifier.markPartialResultSaveRequested(id);
+      notifier.completeTask(id, resultSavedAsPartial: true);
 
       final task = notifier.state[0];
       final map = task.toMap();
       expect(map['result'], '结果文本');
+      expect(map['resultIsComplete'], isFalse);
+      expect(map['resultFolder'], 'captured folder');
+      expect(map['partialSaveRequested'], isTrue);
+      expect(map['resultSavedAsPartial'], isTrue);
       final restored = BackgroundTask.fromMap(map);
 
       expect(restored.result, '结果文本');
+      expect(restored.resultIsComplete, isFalse);
+      expect(restored.resultFolder, 'captured folder');
+      expect(restored.partialSaveRequested, isTrue);
+      expect(restored.resultSavedAsPartial, isTrue);
     });
 
     test('fromMap handles missing result key (backward compatibility)', () {
@@ -459,6 +473,23 @@ void main() {
       expect(restored.result, isNull);
       expect(restored.title, '旧数据任务');
       expect(restored.status, TaskStatus.running);
+    });
+
+    test('legacy truncated OCR result stays marked incomplete', () {
+      final map = {
+        'id': 'legacy-truncated-ocr',
+        'type': 'ocr',
+        'title': '旧的不完整 OCR',
+        'status': 'failed',
+        'result': 'partial text',
+        'error': 'OCR识别失败: Exception: OCR 返回了不完整结果（finish_reason=length）',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+
+      final restored = BackgroundTask.fromMap(map);
+
+      expect(restored.result, 'partial text');
+      expect(restored.resultIsComplete, isFalse);
     });
 
     // ==================================================================

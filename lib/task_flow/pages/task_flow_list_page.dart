@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../pages/unified_task_list/task_utils.dart';
+import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_templates.dart';
 import '../providers/task_flow_provider.dart';
@@ -331,37 +332,216 @@ class TaskFlowListPage extends ConsumerWidget {
 
   void _showTemplates(BuildContext context) {
     showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (sheetContext) => SafeArea(
-                child: SingleChildScrollView(
-              child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        final colors = Theme.of(sheetContext).colorScheme;
+        final height = MediaQuery.sizeOf(sheetContext).height;
+
+        return SafeArea(
+          child: SizedBox(
+            height: height * 0.86,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colors.onSurfaceVariant.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      Text('选择示例模板',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 8),
-                      const Text('模板会打开为待配置的草稿，选择模型和助手后再保存。'),
-                      for (final template in taskFlowTemplates)
-                        ListTile(
-                            title: Text(template.name),
-                            subtitle: Text(
-                                '${template.description}\n${template.requirements}'),
-                            isThreeLine: true,
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () {
-                              Navigator.of(sheetContext).pop();
-                              Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                      builder: (_) => TaskFlowBuilderPage(
-                                          initialDraft:
-                                              template.createDraft())));
-                            }),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '选择示例模板',
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '选择一个接近需求的流程，后续还可以继续调整。',
+                              style: Theme.of(sheetContext)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colors.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${taskFlowTemplates.length} 个模板',
+                        style: Theme.of(sheetContext)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: colors.onSurfaceVariant),
+                      ),
+                      IconButton(
+                        tooltip: '关闭',
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
-                  )),
-            )));
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: taskFlowTemplates.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (_, index) {
+                        final template = taskFlowTemplates[index];
+                        return _buildTemplateCard(
+                          sheetContext,
+                          template,
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => TaskFlowBuilderPage(
+                                  initialDraft: template.createDraft(),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 18, color: colors.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '模板会以待配置的草稿打开；选择模型和助手后再保存。',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: colors.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTemplateCard(
+    BuildContext context,
+    TaskFlowTemplate template, {
+    required VoidCallback onPressed,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+
+    final icon = switch (template.inputType) {
+      IOType.audio => Icons.mic_none_rounded,
+      IOType.image => Icons.image_outlined,
+      IOType.text => Icons.text_fields_rounded,
+      IOType.video => Icons.video_library_outlined,
+      IOType.url => Icons.link_rounded,
+      IOType.file => Icons.insert_drive_file_outlined,
+      IOType.any => Icons.input_rounded,
+    };
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        onTap: onPressed,
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: colors.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: colors.onPrimaryContainer),
+        ),
+        title: Text(
+          template.name,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                template.description,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.tune_rounded,
+                      size: 16, color: colors.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      template.requirements,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: colors.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        trailing: FilledButton.tonal(
+          onPressed: onPressed,
+          child: const Text('使用'),
+        ),
+      ),
+    );
   }
 }

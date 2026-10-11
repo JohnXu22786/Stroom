@@ -65,6 +65,9 @@ class MermaidChartPage extends StatefulWidget {
   /// 可选的初始代码，用于从文本储存区打开已有 .mmd 文件
   final String? initialCode;
 
+  /// Existing storage record when editing a saved .mmd chart.
+  final TextRecord? existingRecord;
+
   /// 初始是否显示预览（WebView）。测试环境中设为 false 以避免
   /// InAppWebView 平台未初始化导致的崩溃。
   final bool initialShowPreview;
@@ -72,6 +75,7 @@ class MermaidChartPage extends StatefulWidget {
   const MermaidChartPage({
     super.key,
     this.initialCode,
+    this.existingRecord,
     this.initialShowPreview = true,
   });
 
@@ -215,6 +219,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     );
   }
 
+  void _insertGanttDependencyTask() {
+    final updatedCode = MermaidTemplates.insertGanttDependencyTask(
+      _codeController.text,
+    );
+    _codeController.value = TextEditingValue(
+      text: updatedCode,
+      selection: TextSelection.collapsed(offset: updatedCode.length),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Editor mode popup
   // ---------------------------------------------------------------------------
@@ -258,11 +272,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   // ---------------------------------------------------------------------------
 
   Future<void> _saveChart() async {
-    final content = _codeController.text.trim();
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('图表内容为空，无法保存')),
-      );
+    final content = _codeController.text;
+    if (content.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图表内容为空，无法保存')));
       return;
     }
 
@@ -273,9 +287,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     // Local controller - will be garbage collected after _saveChart completes.
     // Not explicitly disposed because the dialog's dismiss animation still
     // references it after showDialog returns.
-    final fileNameController = TextEditingController(text: '我的图表');
+    final existingRecord = widget.existingRecord;
+    final fileNameController = TextEditingController(
+      text: existingRecord?.name ?? '我的图表',
+    );
     final selectedFolder = await FolderPickerDialog.show(
       context,
+      currentFolder: existingRecord?.folder ?? '',
       availableFolders: folders,
       title: '保存图表',
       hintText: '选择或创建文件夹保存 .mmd 图表文件',
@@ -294,9 +312,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
     if (userFileName.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
       }
       return;
     }
@@ -314,32 +332,67 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
       // Use user-provided filename (without extension for storage consistency)
       final baseName = userFileName;
-      final saveName = '$baseName-$typeLabel';
+      final saveName =
+          existingRecord == null ? '$baseName-$typeLabel' : baseName;
       final records = await TextManifest.loadRecords();
       String finalName = saveName;
       int counter = 2;
-      while (records.any((r) => r.name == finalName)) {
+      bool hasNameConflict(TextRecord record) =>
+          record.id != existingRecord?.id &&
+          record.name == finalName &&
+          record.folder == selectedFolder;
+      while (records.any(hasNameConflict)) {
         finalName = '$saveName ($counter)';
         counter++;
       }
 
       await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+      if (existingRecord == null) {
+        await TextManifest.addRecord(
+          TextRecord(
+            name: finalName,
+            hash: hash,
+            format: 'mmd',
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: selectedFolder,
+            textLength: content.length,
+          ),
+        );
+      } else {
+        await TextManifest.updateRecord(
+          TextRecord(
+            id: existingRecord.id,
+            name: finalName,
+            hash: hash,
+            format: existingRecord.format,
+            createdAt: existingRecord.createdAt,
+            modifiedAt: hash == existingRecord.hash
+                ? existingRecord.modifiedAt
+                : DateTime.now(),
+            size: bytes.length,
+            folder: selectedFolder,
+            textLength: content.length,
+          ),
+        );
+
+        if (hash != existingRecord.hash &&
+            !records.any(
+              (r) =>
+                  r.id != existingRecord.id &&
+                  r.storagePath == existingRecord.storagePath,
+            )) {
+          await TextManifest.deleteFile(existingRecord.storagePath);
+        }
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd'),
+              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -349,10 +402,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('保存失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -374,10 +424,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         actions: [
           // Three-state editor mode selector (popup menu)
           IconButton(
-            icon: Icon(
-              _editorMode.icon,
-              size: 20,
-            ),
+            icon: Icon(_editorMode.icon, size: 20),
             tooltip: '切换视图模式',
             onPressed: _showEditorModeMenu,
           ),
@@ -460,7 +507,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           label,
                           style: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () => _insertSnippet(snippet),
+                        onPressed: () {
+                          if (_selectedTypeId == 'gantt' && label == '添加依赖任务') {
+                            _insertGanttDependencyTask();
+                          } else {
+                            _insertSnippet(snippet);
+                          }
+                        },
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
@@ -471,9 +524,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             ),
 
           // ----- Main content -----
-          Expanded(
-            child: _buildMainContent(cs),
-          ),
+          Expanded(child: _buildMainContent(cs)),
         ],
       ),
     );
@@ -509,12 +560,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             children: [
               Expanded(child: leftPanel),
               // Swap button in the middle — centered vertically
-              SizedBox(
-                width: 28,
-                child: Center(
-                  child: _buildSwapButton(cs),
-                ),
-              ),
+              SizedBox(width: 28, child: Center(child: _buildSwapButton(cs))),
               Expanded(child: rightPanel),
             ],
           );
@@ -537,9 +583,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               ),
             // Editor overlay for edit mode (full area)
             if (_editorMode == EditorMode.edit)
-              Positioned.fill(
-                child: _buildCodeEditor(cs),
-              ),
+              Positioned.fill(child: _buildCodeEditor(cs)),
             // Editor overlay for split mode (bottom portion, no overlap)
             if (isSplitMode)
               Positioned(
@@ -627,10 +671,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               const SizedBox(width: 4),
               Text(
                 '代码',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
               const Expanded(child: Divider(thickness: 0.5)),
             ],
@@ -675,9 +716,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       child: TextField(
         controller: _codeController,
         decoration: InputDecoration(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),
           hintText: '输入 Mermaid 代码...',
           labelText: 'Mermaid 代码',

@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
@@ -297,7 +301,7 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       // The fit must be wired into the mermaid.run success path.
       final runIdx = html.indexOf('mermaid.run');
-      final fitCallIdx = html.indexOf('fitToViewport()');
+      final fitCallIdx = html.indexOf('window.fitToViewport();', runIdx);
       expect(runIdx, greaterThanOrEqualTo(0));
       expect(fitCallIdx, greaterThan(runIdx),
           reason: 'fitToViewport() must be invoked after mermaid.run finishes');
@@ -556,6 +560,90 @@ void main() {
   });
 
   group('MermaidRenderWidget - widget rendering', () {
+    testWidgets('zoom tapped while loading is applied after WebView readiness',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(
+              mermaidCode: 'graph TD\nA-->B',
+              showZoomControls: true,
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final fakeController = webView.controller;
+
+      // The control is visible while loading, but its WebView controller has
+      // not reported creation yet.
+      expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      // Web sets its overlay-ready state on controller creation, before the
+      // page has necessarily loaded the zoom helper.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      // The overlay timeout does not prove that the page loaded or that its
+      // JavaScript zoom helper is available.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      expect(fakeController.zoomLevel, 1.0);
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1,0.1,0.1])'))),
+      );
+
+      // Load completion can precede Mermaid's asynchronous render and fit.
+      // A tap in that interval must be retained too.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+
+      // Mermaid's auto-fit runs after the WebView load callback, so the
+      // queued taps must apply on top of that fitted zoom rather than precede it.
+      fakeController.simulateJsFitToViewport(0.8);
+      expect(fakeController.zoomLevel, closeTo(1.2, 0.0001));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
         'toolbar zoom continues from the JS-fitted zoom without a transform handler',
         (tester) async {
@@ -601,7 +689,7 @@ void main() {
       expect(
         webView.controller.evaluatedScripts,
         contains(predicate<String>((script) =>
-            script.contains('window.setZoom(window.zoomLevel + 0.1'))),
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -702,7 +790,112 @@ void main() {
     });
 
     testWidgets(
-      'web view creation removes the Flutter loading overlay without onLoadStop',
+      'a stationary native diagram tap forwards one WebView click',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final hitPoint = tester.getCenter(find.byType(InAppWebView));
+
+        await tester.tapAt(hitPoint);
+        await tester.pump();
+
+        final clickScripts = webView.controller.evaluatedScripts.where(
+          (script) =>
+              script.contains('document.elementFromPoint') &&
+              script.contains("target.dispatchEvent(new MouseEvent('click', {"),
+        );
+        expect(
+          clickScripts,
+          hasLength(1),
+          reason: 'a tap on the native gesture overlay must invoke the page '
+              'click target exactly once',
+        );
+        expect(clickScripts.single, contains('bubbles: true'));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'diagram drags pan without forwarding clicks or scrolling parent',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final scrollController = ScrollController();
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          SingleChildScrollView(
+            controller: scrollController,
+            child: Column(
+              children: [
+                const SizedBox(height: 100),
+                const MermaidRenderWidget(
+                  mermaidCode: 'graph TD\nA-->B',
+                  height: 200,
+                  showToolbar: false,
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        );
+
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(0, -40),
+        );
+        await tester.pump();
+        expect(scrollController.offset, closeTo(0, 0.1));
+
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(60, 0),
+        );
+        await tester.pump();
+
+        expect(scrollController.offset, closeTo(0, 0.1));
+        expect(
+          webView.controller.evaluatedScripts,
+          contains(predicate<String>(
+              (script) => script.contains('window.setPanZoom('))),
+        );
+        expect(
+          webView.controller.evaluatedScripts.where(
+            (script) =>
+                script.contains('document.elementFromPoint') &&
+                script
+                    .contains("target.dispatchEvent(new MouseEvent('click', {"),
+          ),
+          isEmpty,
+          reason: 'dragging the diagram must never fire a Mermaid click target',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        scrollController.dispose();
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'web main-frame navigation errors show retry after creation hides loading',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
         final platform = _MermaidWebViewPlatform();
@@ -730,10 +923,146 @@ void main() {
         // must be removed as soon as the WebView is created. This deliberately
         // does not send onLoadStop.
         expect(find.text('加载渲染引擎...'), findsNothing);
+
+        const errorMessage = '页面加载失败: Could not connect to host';
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/mermaid.min.js'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        // Subresource failures stay inside the web renderer so the iframe's
+        // loading hint and error handling remain visible.
+        expect(find.text(errorMessage), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+            ),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
       skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'retry after WebView creation timeout mounts a fresh platform view',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+        final failedWebViewElement = tester.element(find.byType(InAppWebView));
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+
+        expect(
+          tester.element(find.byType(InAppWebView)),
+          isNot(same(failedWebViewElement)),
+          reason: 'Retry must create a new platform view when the controller '
+              'was never created',
+        );
+        expect(find.text(creationError), findsNothing);
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'the creation fallback must report a repeated mount failure',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'empty-code remount reports a failed WebView creation',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final firstWebView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        expect(find.byType(InAppWebView), findsNothing);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        final remountedWebView = platform.webView!;
+        expect(remountedWebView, isNot(same(firstWebView)));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        // Simulate a platform view that mounts but never calls
+        // onWebViewCreated after the previous controller was retained.
+        await tester.pump(const Duration(seconds: 12));
+
+        expect(find.text('图表渲染引擎初始化失败，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
     );
 
     testWidgets('shows loading state initially before WebView creation',
@@ -1098,6 +1427,88 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('MermaidRenderWidget - Save as MMD', () {
+    testWidgets(
+      'shows folder lookup failure and unlocks a successful retry',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        var folderLookups = 0;
+        Future<Set<String>> getFolders() async {
+          folderLookups++;
+          if (folderLookups == 1) {
+            throw StateError('folder lookup unavailable');
+          }
+          return TextManifest.getAllFolders();
+        }
+
+        await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          MermaidRenderWidget(
+            mermaidCode: 'graph TD\n  A-->B',
+            testOnlyGetAllFolders: getFolders,
+          ),
+        );
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pump();
+        final firstLookupException = tester.takeException();
+        final folderLookupErrorShown =
+            find.textContaining('获取文件夹失败').evaluate().isNotEmpty;
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        expect(firstLookupException, isNull);
+        expect(folderLookupErrorShown, isTrue);
+        expect(folderLookups, 2);
+        expect(find.byType(FolderPickerDialog), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords())
+            .singleWhere((r) => r.format == 'mmd');
+        expect(savedRecord.folder, '');
+        expect(await TextManifest.readText(savedRecord.storagePath),
+            'graph TD\n  A-->B');
+      },
+      skip: kIsWeb,
+    );
+  });
+}
+
+Future<_MermaidWebView> _mountReadyMermaidWidget(
+    WidgetTester tester, _MermaidWebViewPlatform platform, Widget body) async {
+  await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+  await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  });
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump();
+
+  final webView = platform.webView!;
+  final controller = webView.controllerFromPlatform<InAppWebViewController>(
+    webView.controller,
+  );
+  webView.params.onWebViewCreated!(controller);
+  webView.params.onLoadStop?.call(controller, null);
+  await tester.pump();
+  return webView;
 }
 
 class _MermaidWebViewPlatform extends InAppWebViewPlatform {
@@ -1127,10 +1538,22 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
+  final _pendingZoomDeltas = <double>[];
   double zoomLevel = 1.0;
+  bool _fitComplete = false;
 
   void simulateJsFitToViewport(double fittedZoom) {
     zoomLevel = fittedZoom;
+    _fitComplete = true;
+    _applyPendingZoomDeltas();
+  }
+
+  void _applyPendingZoomDeltas() {
+    if (!_fitComplete) return;
+    for (final delta in _pendingZoomDeltas) {
+      zoomLevel = (zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    }
+    _pendingZoomDeltas.clear();
   }
 
   _MermaidWebViewController()
@@ -1140,6 +1563,18 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   @override
   Future<void> loadUrl({
     required URLRequest urlRequest,
+    Uri? iosAllowingReadAccessTo,
+    WebUri? allowingReadAccessTo,
+  }) async {}
+
+  @override
+  Future<void> loadData({
+    required String data,
+    String mimeType = 'text/html',
+    String encoding = 'utf8',
+    WebUri? baseUrl,
+    Uri? androidHistoryUrl,
+    WebUri? historyUrl,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
   }) async {}
@@ -1157,6 +1592,18 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final deferredZoom = RegExp(
+      r'window\.applyZoomDeltasAfterFit\(\[([^\]]*)\]\)',
+    ).firstMatch(source);
+    if (deferredZoom != null) {
+      final deltas = RegExp(r'-?\d+(?:\.\d+)?')
+          .allMatches(deferredZoom.group(1)!)
+          .map((match) => double.parse(match.group(0)!));
+      _pendingZoomDeltas.addAll(deltas);
+      _applyPendingZoomDeltas();
+      return;
+    }
+
     final relativeZoom = RegExp(
       r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
     ).firstMatch(source);

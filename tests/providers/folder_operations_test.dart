@@ -1030,6 +1030,37 @@ void main() {
       expect(dbRecord.format, equals('md'));
     });
 
+    testWidgets(
+      'format rename moves subtitle content to the new storage path',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_subtitle',
+          name: 'transcript',
+          hash: 'hash_fmt_subtitle',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 20,
+        );
+        const subtitle = '1\n00:00:00,000 --> 00:00:01,000\nHello';
+        await TextManifest.writeText(original.storageFileName, subtitle);
+        await TextManifest.addRecord(original);
+
+        await notifier.renameRecord(
+          'txt_fmt_subtitle',
+          'transcript',
+          format: 'vtt',
+        );
+
+        final renamed = (await TextManifest.loadRecords()).firstWhere(
+          (record) => record.id == 'txt_fmt_subtitle',
+        );
+        expect(await TextManifest.readText(renamed.storageFileName), subtitle);
+        expect(await TextManifest.readText(original.storageFileName), isNull);
+      },
+    );
+
     testWidgets('renameRecord with a new name and format updates both',
         (WidgetTester t) async {
       final notifier = TextRecordsNotifier();
