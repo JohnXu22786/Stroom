@@ -434,8 +434,7 @@ void main() {
 
     test(
         'restoreBackgroundServiceOnColdStart keeps service stopped but rearms '
-        'watchdog when cold-start restore is off',
-        () async {
+        'watchdog when cold-start restore is off', () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
       mock.setStartResult(true);
