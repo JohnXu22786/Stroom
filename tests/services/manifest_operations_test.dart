@@ -1982,8 +1982,8 @@ void main() {
           reason: 'video .jpg thumbnail must be deleted with its folder');
     });
 
-    testWidgets('removes audio .txt sidecar when folder records are deleted',
-        (WidgetTester t) async {
+    test('removes audio .txt sidecar when folder records are deleted',
+        () async {
       final hash = 'hash_sidecar_folder';
       await FileManifest.writeFile('$hash.wav', Uint8List.fromList([1, 2]));
       await FileManifest.writeFile('$hash.txt', Uint8List.fromList([97]));
@@ -2007,9 +2007,9 @@ void main() {
       expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
     });
 
-    testWidgets(
+    test(
         'keeps a shared audio sidecar until the last folder reference is removed',
-        (WidgetTester t) async {
+        () async {
       const hash = 'hash_shared_sidecar_formats_in_folders';
       final wav = AudioRecord(
         id: 'audio_shared_sidecar_folder_wav',
