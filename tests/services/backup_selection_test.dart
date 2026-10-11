@@ -12,6 +12,11 @@ import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
+ArchiveFile _testArchiveFile(String name, int declaredSize, List<int> data) {
+  assert(declaredSize == 0 || declaredSize == data.length);
+  return ArchiveFile(name, data.length, data);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -492,7 +497,7 @@ void main() {
 
       // Build backup with new data for ALL types
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -500,7 +505,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -588,7 +593,7 @@ void main() {
 
       // Build a backup archive with different records
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -596,7 +601,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -652,7 +657,7 @@ void main() {
 
       // Build an old-format (v1) backup with preferences.json
       final archive = Archive();
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -660,7 +665,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -670,7 +675,7 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'preferences.json', 0, utf8.encode(jsonEncode(prefData))));
 
       final encoded = ZipEncoder().encode(archive);
@@ -699,7 +704,7 @@ void main() {
 
       // Build a v2 backup with both chat_data.json and settings.json
       final archive = Archive();
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -707,7 +712,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -718,7 +723,7 @@ void main() {
             'folders': <String>[],
           }))));
       // Chat data
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
@@ -726,7 +731,7 @@ void main() {
             'active_conversation_id': 'conv1',
           }))));
       // Settings data
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -863,7 +868,7 @@ void main() {
 
       // Build backup with video records
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -871,7 +876,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -959,7 +964,7 @@ void main() {
 
       // Build a v2 backup archive with DIFFERENT chat data and DIFFERENT settings
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -967,7 +972,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -978,7 +983,7 @@ void main() {
             'folders': <String>[],
           }))));
       // New chat data from backup
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
@@ -986,7 +991,7 @@ void main() {
             'active_conversation_id': 'conv_backup',
           }))));
       // New settings data from backup (DIFFERENT from existing)
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1062,7 +1067,7 @@ void main() {
 
       // Build a v2 backup archive with DIFFERENT settings data
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1070,7 +1075,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1080,14 +1085,14 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
             'conversations': '[{"id":"backup_conv","messages":[]}]',
             'active_conversation_id': 'backup_conv',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1156,7 +1161,7 @@ void main() {
 
       // Build a v2 backup with different data
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1164,7 +1169,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1174,14 +1179,14 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
             'conversations': '[{"id":"alt_conv"}]',
             'active_conversation_id': 'alt_conv',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1233,7 +1238,7 @@ void main() {
 
       // Build a v2 backup WITHOUT chat_data.json (only settings.json)
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1241,7 +1246,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1251,7 +1256,7 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1307,7 +1312,7 @@ void main() {
 
       // Build a v2 backup
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1315,7 +1320,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1325,14 +1330,14 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
             'conversations': '[{"id":"new_conv"}]',
             'active_conversation_id': 'new_conv',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1391,7 +1396,7 @@ void main() {
 
       // Build a v1 backup
       final archive = Archive();
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1399,7 +1404,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1409,7 +1414,7 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'preferences.json',
           0,
           utf8.encode(jsonEncode({
@@ -1469,7 +1474,7 @@ void main() {
 
       // Build a v1 backup
       final archive = Archive();
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1477,7 +1482,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1487,7 +1492,7 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      archive.addFile(ArchiveFile(
+      archive.addFile(_testArchiveFile(
           'preferences.json',
           0,
           utf8.encode(jsonEncode({
@@ -1715,7 +1720,7 @@ void main() {
 
       // Build a full backup with DIFFERENT data
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1723,7 +1728,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1779,13 +1784,13 @@ void main() {
             'folders': <String>[],
           }))));
       // Also include chat and settings to test SharedPreferences preservation
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
             'conversations': '[{"id":"backup_conv"}]',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -1895,7 +1900,7 @@ void main() {
 
       // Build backup with DIFFERENT data for ALL 4 types
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -1903,7 +1908,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2099,7 +2104,7 @@ void main() {
       });
 
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2107,7 +2112,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2177,7 +2182,7 @@ void main() {
       });
 
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2185,7 +2190,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2242,7 +2247,7 @@ void main() {
         {'domain': 'example.com', 'name': 'session', 'value': 'abc'},
       ]);
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2250,7 +2255,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2260,8 +2265,8 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(
-          ArchiveFile('browser_cookies.json', 0, utf8.encode(cookiesContent)));
+      backupArchive.addFile(_testArchiveFile(
+          'browser_cookies.json', 0, utf8.encode(cookiesContent)));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -2326,7 +2331,7 @@ void main() {
       // Build backup with anki data
       final ankiContent = 'mock_anki_content_for_restore';
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2334,7 +2339,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2344,8 +2349,8 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(
-          ArchiveFile('anki/collection.anki2', 0, utf8.encode(ankiContent)));
+      backupArchive.addFile(_testArchiveFile(
+          'anki/collection.anki2', 0, utf8.encode(ankiContent)));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -2455,7 +2460,7 @@ void main() {
 
       // Build backup with task data
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2463,7 +2468,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2488,18 +2493,18 @@ void main() {
         'expectedDurationSec': 1,
         'createdAt': DateTime.now().toIso8601String(),
       };
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'synthesis/tasks.json', 0, utf8.encode(jsonEncode([synthesisTask]))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'catcatch/tasks.json', 0, utf8.encode(jsonEncode([catCatchTask]))));
       // Also include chat/settings in backup (should not be restored)
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'chat_data.json',
           0,
           utf8.encode(jsonEncode({
             'conversations': '[{"id":"backup_conv"}]',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'settings.json',
           0,
           utf8.encode(jsonEncode({
@@ -2578,7 +2583,7 @@ void main() {
 
       // Build backup with folders for images only
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2586,7 +2591,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2693,7 +2698,7 @@ void main() {
         (WidgetTester t) async {
       // Build a backup archive that includes an anki/ file
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2701,7 +2706,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2712,7 +2717,7 @@ void main() {
             'folders': <String>[],
           }))));
       // Add anki data
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'anki/collection.anki2', 0, utf8.encode('mock anki db content')));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
@@ -2741,7 +2746,7 @@ void main() {
         (WidgetTester t) async {
       // Build a backup archive that includes an anki/ file
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2749,7 +2754,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2761,8 +2766,8 @@ void main() {
           }))));
       // Add anki data
       final ankiContent = 'mock anki db content for restore test';
-      backupArchive.addFile(
-          ArchiveFile('anki/collection.anki2', 0, utf8.encode(ankiContent)));
+      backupArchive.addFile(_testArchiveFile(
+          'anki/collection.anki2', 0, utf8.encode(ankiContent)));
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
 
@@ -2807,7 +2812,7 @@ void main() {
 
       // Build a backup with different data
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2815,7 +2820,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2893,7 +2898,7 @@ void main() {
       // Build a backup WITHOUT any of those files (empty stroom_manifest,
       // no chat_data/settings/tasks/anki/cookies/attachments)
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2901,7 +2906,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2979,7 +2984,7 @@ void main() {
 
       // Backup without any files
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -2987,7 +2992,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3044,7 +3049,7 @@ void main() {
       // Backup with a NESTED-shape-corrupt stroom_manifest.json
       // (valid JSON, wrong inner shape: image_records is a string)
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3052,7 +3057,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3113,7 +3118,7 @@ void main() {
 
       // Backup WITHOUT stroom_manifest.json / database/manifest_data.json
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3154,7 +3159,7 @@ void main() {
         (WidgetTester t) async {
       // Backup with corrupt chat_data.json (not valid object)
       final backupArchive = Archive();
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3162,7 +3167,7 @@ void main() {
             'createdAt': DateTime.now().toIso8601String(),
             'appVersion': 'test',
           }))));
-      backupArchive.addFile(ArchiveFile(
+      backupArchive.addFile(_testArchiveFile(
           'stroom_manifest.json',
           0,
           utf8.encode(jsonEncode({
@@ -3172,7 +3177,7 @@ void main() {
             'text_records': <Map<String, dynamic>>[],
             'folders': <String>[],
           }))));
-      backupArchive.addFile(ArchiveFile('chat_data.json', 0,
+      backupArchive.addFile(_testArchiveFile('chat_data.json', 0,
           utf8.encode('{"conversations": '))); // ← malformed JSON
       final encoded = ZipEncoder().encode(backupArchive);
       final backupBytes = Uint8List.fromList(encoded);
