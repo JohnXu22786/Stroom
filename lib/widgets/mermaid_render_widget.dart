@@ -1423,30 +1423,27 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       (operation) => operation.centerX != null && operation.centerY != null,
     );
     if (!hasWheelZoom) {
-      final pendingDeltas = pendingOperations
-          .map((operation) => operation.delta)
-          .toList();
+      final pendingDeltas =
+          pendingOperations.map((operation) => operation.delta).toList();
       await ctrl.evaluateJavascript(
         source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
       );
       return;
     }
 
-    final operations = pendingOperations
-        .map<Map<String, Object?>>((operation) {
-          final centerX = operation.centerX;
-          final centerY = operation.centerY;
-          if (centerX == null || centerY == null) {
-            return {'kind': 'toolbar', 'delta': operation.delta};
-          }
-          return {
-            'kind': 'wheel',
-            'delta': operation.delta,
-            'centerX': centerX,
-            'centerY': centerY,
-          };
-        })
-        .toList();
+    final operations = pendingOperations.map<Map<String, Object?>>((operation) {
+      final centerX = operation.centerX;
+      final centerY = operation.centerY;
+      if (centerX == null || centerY == null) {
+        return {'kind': 'toolbar', 'delta': operation.delta};
+      }
+      return {
+        'kind': 'wheel',
+        'delta': operation.delta,
+        'centerX': centerX,
+        'centerY': centerY,
+      };
+    }).toList();
     await ctrl.evaluateJavascript(
       source: 'window.applyZoomOperationsAfterFit(${jsonEncode(operations)})',
     );

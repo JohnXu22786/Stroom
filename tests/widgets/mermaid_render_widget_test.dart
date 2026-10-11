@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -390,7 +391,7 @@ void main() {
 
     test('HTML has wheel zoom handler with Ctrl/Cmd key modifier', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('wheel'));
+      expect(html, contains("document.addEventListener('wheel'"));
       expect(html, contains('ctrlKey'));
       expect(html, contains('metaKey'),
           reason:
@@ -478,7 +479,7 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mousedown'),
           reason: 'default should include mouse drag handlers');
-      expect(html, contains('wheel'),
+      expect(html, contains("document.addEventListener('wheel'"),
           reason: 'default should include wheel zoom handler');
       expect(html, contains('touchstart'),
           reason: 'default should include touch handlers');
@@ -491,13 +492,23 @@ void main() {
           withJsGestures: false);
       expect(html, isNot(contains('mousedown')),
           reason: 'should omit mouse drag handlers');
-      expect(html, isNot(contains('wheel')),
+      expect(html, isNot(contains("document.addEventListener('wheel'")),
           reason: 'should omit wheel zoom handler');
       expect(html, isNot(contains('touchstart')),
           reason: 'should omit touch handlers');
       // Core mermaid rendering should still be present
       expect(html, contains('mermaid.initialize'));
       expect(html, contains('mermaid.run'));
+      expect(
+        html,
+        contains(
+          'window.applyWheelZoomAfterFit = function(delta, centerX, centerY)',
+        ),
+        reason:
+            'native programmatic wheel zoom support should remain available',
+      );
+      expect(html, contains('window.applyZoomOperationsAfterFit = function'),
+          reason: 'native buffered zoom operations should remain available');
       expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')),
           reason: 'code placeholder should be replaced');
     });
@@ -831,38 +842,47 @@ void main() {
         Offset(widgetRect.width * 0.75, widgetRect.height * 0.75),
       ];
 
-      // Toolbar and wheel inputs arrive while the WebView exists but has not
-      // reported that its JavaScript zoom commands are ready.
-      await tester.tap(find.byIcon(Icons.zoom_in));
-      await tester.pump();
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendEventToBinding(
-        PointerScrollEvent(
-          position: tester.getCenter(find.byType(MermaidRenderWidget)),
-          kind: PointerDeviceKind.mouse,
-          scrollDelta: const Offset(20, 0),
-        ),
-      );
-      await tester.pump();
-
-      expect(fakeController.evaluatedScripts, isEmpty);
-
-      for (final localCenter in localWheelCenters) {
+      Future<void> sendWheel(Offset position, Offset scrollDelta) async {
         await tester.sendEventToBinding(
           PointerScrollEvent(
-            position: widgetRect.topLeft + localCenter,
+            position: position,
             kind: PointerDeviceKind.mouse,
-            scrollDelta: const Offset(0, -20),
+            scrollDelta: scrollDelta,
           ),
         );
         await tester.pump();
+      }
+
+      // Load completion removes Flutter's loading overlay, while Mermaid's
+      // asynchronous render and first fit are still pending.
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+
+      // The toolbar and wheel inputs reach the page before its first fit.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      expect(
+        HardwareKeyboard.instance.logicalKeysPressed,
+        contains(LogicalKeyboardKey.controlLeft),
+      );
+      await sendWheel(widgetRect.center, const Offset(20, 0));
+
+      expect(
+        fakeController.evaluatedScripts,
+        ['window.applyZoomDeltasAfterFit([0.1])'],
+        reason: 'horizontal-only Ctrl+wheel should not issue another zoom',
+      );
+
+      for (final localCenter in localWheelCenters) {
+        await sendWheel(widgetRect.topLeft + localCenter, const Offset(0, -20));
       }
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
       expect(
         fakeController.evaluatedScripts,
-        isEmpty,
-        reason: 'zoom commands should wait until the WebView reports readiness',
+        hasLength(3),
+        reason: 'the toolbar and both vertical wheel inputs should be captured',
       );
       expect(
         fakeController.zoomLevel,
@@ -870,24 +890,30 @@ void main() {
         reason: 'pre-fit wheel input must not mutate the unfit zoom state',
       );
 
-      webView.params.onLoadStop?.call(controller, null);
-      await tester.pump();
-      expect(fakeController.evaluatedScripts, hasLength(1));
+      final expectedCommands = <String>[
+        'window.applyZoomDeltasAfterFit([0.1])',
+        for (final center in localWheelCenters)
+          'window.applyWheelZoomAfterFit(0.1, ${center.dx}, ${center.dy});',
+      ];
       expect(
-        fakeController.evaluatedScripts.single,
-        contains('window.applyZoomOperationsAfterFit('),
+        fakeController.evaluatedScripts,
+        expectedCommands,
+        reason:
+            'both vertical wheel events should queue in order with their anchors',
       );
 
       fakeController.simulateJsFitToViewport(0.8);
       expect(
         fakeController.zoomLevel,
         closeTo(1.1, 0.0001),
-        reason: 'toolbar and wheel steps should apply on top of the fitted zoom',
+        reason:
+            'toolbar and wheel steps should apply on top of the fitted zoom',
       );
       expect(
         fakeController.wheelZoomAnchors,
         localWheelCenters,
-        reason: 'queued wheel zooms must preserve their individual cursor anchors',
+        reason:
+            'queued wheel zooms must preserve their individual cursor anchors',
       );
       double anchor(
         double pan,
@@ -2225,9 +2251,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     for (final operation in _pendingZoomOperations) {
       final centerX = operation.centerX ?? viewportSize.width / 2;
       final centerY = operation.centerY ?? viewportSize.height / 2;
-      final newZoom = (zoomLevel + operation.delta)
-          .clamp(0.1, 10.0)
-          .toDouble();
+      final newZoom = (zoomLevel + operation.delta).clamp(0.1, 10.0).toDouble();
       if (newZoom == zoomLevel) continue;
       panX = centerX - (centerX - panX) * (newZoom / zoomLevel);
       panY = centerY - (centerY - panY) * (newZoom / zoomLevel);
