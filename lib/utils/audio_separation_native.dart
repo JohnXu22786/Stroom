@@ -736,7 +736,6 @@ class _Mp4Demuxer {
     17, // ER AAC LC
     19, // ER AAC LTP
     20, // ER AAC Scalable
-    22, // ER BSAC
     23, // ER AAC LD
     29, // PS
     39, // AAC ELD

@@ -3,7 +3,7 @@ import 'dart:math' show pi, sin;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/utils/audio_separation.dart'
+import 'package:stroom/utils/audio_separation_native.dart'
     show AudioSeparationEngine, extractAudioSync;
 import 'package:stroom/utils/audio_utils.dart';
 
@@ -1269,16 +1269,21 @@ void main() {
 
     test('rejects non-AAC AudioSpecificConfig under MPEG-4 audio OTI',
         () async {
-      // AOT 8 is CELP, not AAC; the remaining fields declare 44.1 kHz stereo.
-      final mp4Bytes = buildMinimalMp4WithAacAudio(
-        asc: Uint8List.fromList([0x42, 0x10]),
-        sampleRate: 44100,
-      );
+      // AOT 8 is CELP and AOT 22 is ER-BSAC, neither is AAC.
+      for (final asc in [
+        Uint8List.fromList([0x42, 0x10]),
+        Uint8List.fromList([0xB2, 0x10]),
+      ]) {
+        final mp4Bytes = buildMinimalMp4WithAacAudio(
+          asc: asc,
+          sampleRate: 44100,
+        );
 
-      await expectLater(
-        engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
-        throwsA(isA<Exception>()),
-      );
+        await expectLater(
+          engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
+          throwsA(isA<Exception>()),
+        );
+      }
     });
 
     test('validates mp4a tracks against their decoder object type', () async {
