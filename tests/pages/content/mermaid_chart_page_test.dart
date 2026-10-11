@@ -730,6 +730,65 @@ void main() {
       expect(savedRecord.folder, '');
     });
 
+    testWidgets('new chart name conflicts are scoped to selected folder', (
+      tester,
+    ) async {
+      const otherFolder = 'existing-folder';
+      const destinationFolder = 'new-folder';
+      const sharedName = 'shared-chart-流程图';
+      const existingContent = 'graph TD\n  A-->Existing';
+      final existingBytes = Uint8List.fromList(utf8.encode(existingContent));
+      await TextManifest.addFolder(otherFolder);
+      await TextManifest.addFolder(destinationFolder);
+      final existingRecord = TextRecord(
+        id: 'same-name-in-another-folder',
+        name: sharedName,
+        hash: computeTextHash(existingBytes),
+        format: 'mmd',
+        createdAt: DateTime.utc(2024, 1, 1),
+        size: existingBytes.length,
+        folder: otherFolder,
+        textLength: existingContent.length,
+      );
+      await TextManifest.writeText(existingRecord.storagePath, existingContent);
+      await TextManifest.addRecord(existingRecord);
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->New',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, 'shared-chart');
+      await tester.tap(find.text(destinationFolder));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final records = await TextManifest.loadRecords();
+      final savedRecord = records.singleWhere(
+        (record) => record.folder == destinationFolder,
+      );
+      expect(savedRecord.name, sharedName);
+      expect(
+        records.where((record) => record.name == sharedName),
+        hasLength(2),
+      );
+    });
+
     testWidgets('saving an edited chart updates its existing record in place', (
       tester,
     ) async {
