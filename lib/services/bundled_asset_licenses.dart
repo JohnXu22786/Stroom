@@ -23,6 +23,56 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const [
+        'FFmpeg shared libraries (Linux, Windows, Android, Apple)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/ffmpeg-COPYING.LGPLv2.1',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['libass (Windows, Android, macOS; observed runtime)'],
+      await rootBundle.loadString('assets/vendor/native/libass-COPYING'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['dav1d (macOS framework slice; observed runtime)'],
+      await rootBundle.loadString('assets/vendor/native/dav1d-COPYING'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['mdk-braw (Linux, Windows, macOS; observed runtime plugins)'],
+      await rootBundle.loadString('assets/vendor/native/mdk-braw-LICENSE'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['mdk-r3d (Linux, Windows, macOS; observed runtime plugins)'],
+      await rootBundle.loadString('assets/vendor/native/mdk-r3d-LICENSE'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['LLVM libc++ (Linux, Android)'],
+      await rootBundle.loadString('assets/vendor/native/llvm-libcxx-LICENSE.TXT'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'MDK CocoaPods 0.36.0 text (Apple; type Commercial; scope unresolved)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/mdk-cocoapods-0.36.0-license-text.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['Anki sync protocol schemas (AGPL-3.0-or-later)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/anki-sync-proto-AGPL-3.0-or-later.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const ['Mermaid 11.16.1'],
       await rootBundle.loadString('assets/vendor/mermaid/LICENSE.txt'),
     );
