@@ -72,7 +72,7 @@ dependencies:
   cupertino_icons: ^1.0.9
   material_color_utilities: ^0.13.0
   idb_shim: ^2.9.6+1
-  archive: ^4.0.9
+  archive: 4.5.0
   # 桌面平台磁盘剩余空间查询（dart:ffi 辅助库）
   ffi: ^2.1.4
   url_launcher: ^6.3.2
