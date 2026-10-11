@@ -223,7 +223,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: start requested from Dart")
-                    val scheduled = KeepAliveReceiver.scheduleAlarm(this)
+                    val scheduled = KeepAliveReceiver.scheduleExplicitStartAlarm(this)
                     // 用户显式启动看门狗：清零连续失败计数，
                     // 恢复正常的 5 分钟调度间隔。
                     KeepAliveReceiver.resetFailureCount(this)
