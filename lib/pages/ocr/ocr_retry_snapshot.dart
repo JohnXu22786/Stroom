@@ -6,6 +6,10 @@ import 'dart:typed_data';
 /// New snapshots keep a storage reference. [bytes] is populated only while
 /// reading legacy inline snapshots or before the image is written to storage.
 class OcrRetryImage {
+  static final RegExp _storageReferencePattern = RegExp(
+    r'^ocr_retry_cache/[0-9a-f]{64}\.bin$',
+  );
+
   final Uint8List? bytes;
   final String? storageRef;
   final String format;
@@ -26,11 +30,14 @@ class OcrRetryImage {
 
   Map<String, dynamic> toMap() {
     final ref = storageRef;
-    if (ref == null || bytes != null) {
+    if (ref == null || !isValidStorageReference(ref) || bytes != null) {
       throw StateError('OCR retry images must be cached before serialization');
     }
     return {'storageRef': ref, 'format': format, 'name': name};
   }
+
+  static bool isValidStorageReference(String reference) =>
+      _storageReferencePattern.hasMatch(reference);
 
   factory OcrRetryImage.fromMap(Map<String, dynamic> map) {
     final encoded = map['bytes'];
@@ -42,7 +49,9 @@ class OcrRetryImage {
         name: map['name'] as String?,
       );
     }
-    if (storageRef is String && storageRef.isNotEmpty && encoded == null) {
+    if (storageRef is String &&
+        isValidStorageReference(storageRef) &&
+        encoded == null) {
       return OcrRetryImage.reference(
         storageRef: storageRef,
         format: map['format'] as String? ?? 'jpeg',
@@ -152,10 +161,11 @@ class OcrRetrySnapshot {
       version: version,
       configId: configId,
       modelId: modelId,
-      legacyModelIndex: !hasStableModelRef && map['modelIndex'] is int
+      legacyModelIndex:
+          supportedVersion && !hasStableModelRef && map['modelIndex'] is int
           ? map['modelIndex'] as int
           : null,
-      legacyInstructionIndex: map['instructionIndex'] is int
+      legacyInstructionIndex: supportedVersion && map['instructionIndex'] is int
           ? map['instructionIndex'] as int
           : null,
       instructionContent: map['instructionContent'] is String
@@ -173,6 +183,7 @@ class OcrRetrySnapshot {
 
   bool get needsMigration =>
       version != currentVersion ||
+      hasInvalidImages ||
       images.any((image) => image.storageRef == null);
 
   Map<String, dynamic> toMap() {

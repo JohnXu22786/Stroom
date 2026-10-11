@@ -137,6 +137,11 @@ class OcrTaskRunner {
         notifier.updateStep(taskId, 3, completed: true);
         throw Exception('OCR 返回了不完整结果（finish_reason=${result.finishReason}）');
       }
+      notifier.setRawDiagnostics(
+        taskId,
+        rawRequest: service.diagnosticRequest,
+        rawResponse: service.diagnosticResponse(),
+      );
       _advance(4);
       await _resultSaver.saveResult(
         result.text,

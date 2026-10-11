@@ -122,6 +122,469 @@ void main() {
   });
 
   test(
+    'orphan cleanup deletes only exact unreferenced OCR cache blobs',
+    () async {
+      final imageBytes = Uint8List.fromList([1, 2, 3]);
+      final orphan = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'orphan-cache',
+        snapshot: OcrRetrySnapshot.capture(
+          images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+        ),
+      );
+      final referenced = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'referenced-cache',
+        snapshot: OcrRetrySnapshot.capture(
+          images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+        ),
+      );
+      final orphanReference =
+          ((orphan['images'] as List).single as Map)['storageRef'] as String;
+      final liveReference =
+          ((referenced['images'] as List).single as Map)['storageRef']
+              as String;
+      final unrelatedKey = 'unrelated/keep.bin';
+      final malformedCacheKey = 'ocr_retry_cache/not-an-owned-blob.bin';
+      await WebFileStore.write(unrelatedKey, Uint8List.fromList([4, 5, 6]));
+      await WebFileStore.write(
+        malformedCacheKey,
+        Uint8List.fromList([7, 8, 9]),
+      );
+
+      await OcrRetryStorage.cleanupUnreferencedCache(
+        referenced: {liveReference},
+      );
+
+      expect(await OcrRetryStorage.read(orphanReference), isNull);
+      expect(await OcrRetryStorage.read(liveReference), imageBytes);
+      expect(await WebFileStore.read(unrelatedKey), [4, 5, 6]);
+      expect(await WebFileStore.read(malformedCacheKey), [7, 8, 9]);
+    },
+  );
+
+  test(
+    'unknown damaged image count is not replaced with a placeholder',
+    () async {
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': 2,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': 'damaged',
+      });
+
+      final migrated = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'unknown-count-task',
+        snapshot: snapshot,
+        allowIncompleteImages: true,
+      );
+      final restored = OcrRetrySnapshot.fromMap(migrated);
+
+      expect(snapshot.hasInvalidImages, isTrue);
+      expect(snapshot.imageEntryCount, 0);
+      expect(restored.imageEntryCount, 0);
+      expect(restored.images, isEmpty);
+      expect(restored.needsMigration, isFalse);
+    },
+  );
+
+  test('migration preserves surviving cache reference identity', () async {
+    final firstBytes = Uint8List.fromList([1, 2, 3]);
+    final secondBytes = Uint8List.fromList([4, 5, 6]);
+    final original = await OcrRetryStorage.cacheSnapshot(
+      taskId: 'mixed-cache-identity',
+      snapshot: OcrRetrySnapshot.capture(
+        images: [
+          OcrRetryImage(bytes: firstBytes, format: 'png'),
+          OcrRetryImage(bytes: secondBytes, format: 'png'),
+        ],
+      ),
+    );
+    final originalImages = (original['images'] as List).cast<Map>();
+    final survivingReference = originalImages[1]['storageRef'] as String;
+    final damaged = OcrRetrySnapshot.fromMap({
+      ...original,
+      'images': [
+        {'bytes': 'not-valid-base64!!!', 'format': 'png'},
+        originalImages[1],
+      ],
+    });
+
+    final migrated = await OcrRetryStorage.cacheSnapshot(
+      taskId: 'mixed-cache-identity',
+      snapshot: damaged,
+      allowIncompleteImages: true,
+    );
+    final references = OcrRetryStorage.referencesFromSnapshot(migrated);
+    final restored = await OcrRetryStorage.restoreImages(
+      OcrRetrySnapshot.fromMap(migrated),
+    );
+
+    expect(references, contains(survivingReference));
+    expect(restored.images.single.bytes, secondBytes);
+    await OcrRetryStorage.deleteUnreferenced(
+      candidates: {survivingReference},
+      referenced: references,
+    );
+    expect(await OcrRetryStorage.read(survivingReference), secondBytes);
+    expect(
+      (migrated['images'] as List).every(
+        (image) => image is Map && !image.containsKey('bytes'),
+      ),
+      isTrue,
+    );
+    expect(jsonEncode(migrated), isNot(contains('not-valid-base64!!!')));
+  });
+
+  test(
+    'malformed cache paths migrate to unavailable owned references',
+    () async {
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': 2,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': [
+          {'storageRef': '../outside.bin', 'format': 'png'},
+        ],
+      });
+
+      final migrated = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'malformed-path-task',
+        snapshot: snapshot,
+        allowIncompleteImages: true,
+      );
+      final restored = OcrRetrySnapshot.fromMap(migrated);
+      final image = (migrated['images'] as List).single as Map;
+
+      expect(snapshot.hasInvalidImages, isTrue);
+      expect(snapshot.needsMigration, isTrue);
+      expect(restored.needsMigration, isFalse);
+      expect(restored.imageEntryCount, 1);
+      expect(image['storageRef'], startsWith('ocr_retry_cache/'));
+      expect(
+        await OcrRetryStorage.restoreImages(restored),
+        isA<OcrRetryRestoreResult>().having(
+          (result) => result.isComplete,
+          'complete image set',
+          isFalse,
+        ),
+      );
+      expect(jsonEncode(migrated), isNot(contains('../outside.bin')));
+      expect(jsonEncode(migrated), isNot(contains('bytes')));
+    },
+  );
+
+  test(
+    'restore migrates legacy images before unrelated task updates persist',
+    () async {
+      final bytes = Uint8List.fromList(List<int>.filled(160 * 1024, 0x5a));
+      final legacySnapshot = <String, dynamic>{
+        'type': 'ocr',
+        'version': 1,
+        'modelRef': {'configId': 'legacy-config', 'modelId': 'legacy-model'},
+        'images': [
+          {'bytes': base64Encode(bytes), 'format': 'png', 'name': 'legacy.png'},
+        ],
+      };
+      final taskFile = File(
+        '${taskDirectory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+      );
+      await taskFile.parent.create(recursive: true);
+      await taskFile.writeAsString(
+        jsonEncode([
+          {
+            'id': 'legacy-ocr',
+            'type': 'ocr',
+            'title': 'legacy OCR task',
+            'status': 'completed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [],
+            'retryData': legacySnapshot,
+          },
+          {
+            'id': 'unrelated-task',
+            'type': 'asr',
+            'title': 'unrelated task',
+            'status': 'waiting',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [
+              {'label': 'step', 'status': 'pending'},
+            ],
+          },
+        ]),
+      );
+      final notifier = BackgroundTaskNotifier();
+      try {
+        await notifier.restoreFromPersistence();
+        final restored = notifier.state.singleWhere(
+          (task) => task.id == 'legacy-ocr',
+        );
+        final migratedData = restored.retryData!;
+        final migratedSnapshot = OcrRetrySnapshot.fromMap(migratedData);
+        expect(migratedSnapshot.needsMigration, isFalse);
+        expect(migratedSnapshot.images.single.bytes, isNull);
+        expect(
+          await OcrRetryStorage.restoreImages(migratedSnapshot),
+          isA<OcrRetryRestoreResult>().having(
+            (result) => result.images.single.bytes,
+            'restored image bytes',
+            bytes,
+          ),
+        );
+
+        notifier.updateStep('unrelated-task', 0, completed: true);
+        await notifier.pendingPersistence;
+        final encoded = await taskFile.readAsString();
+        expect(encoded, isNot(contains(base64Encode(bytes))));
+        final persisted = (jsonDecode(encoded) as List)
+            .cast<Map<String, dynamic>>()
+            .singleWhere((task) => task['id'] == 'legacy-ocr');
+        final image =
+            ((persisted['retryData'] as Map)['images'] as List).single as Map;
+        expect(image.keys.toSet(), {'storageRef', 'format', 'name'});
+      } finally {
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    },
+  );
+
+  test(
+    'restore drops malformed legacy image bodies and keeps retry incomplete',
+    () async {
+      final bytes = Uint8List.fromList(List<int>.filled(64 * 1024, 0x5a));
+      final encodedBytes = base64Encode(bytes);
+      final malformedBytes = '$encodedBytes!!!';
+      final legacySnapshot = <String, dynamic>{
+        'type': 'ocr',
+        'version': 1,
+        'modelRef': {'configId': 'legacy-config', 'modelId': 'legacy-model'},
+        'instructionContent': 'saved prompt',
+        'images': [
+          {'bytes': encodedBytes, 'format': 'png', 'name': 'valid.png'},
+          {'bytes': malformedBytes, 'format': 'png', 'name': 'broken.png'},
+        ],
+      };
+      final taskFile = File(
+        '${taskDirectory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+      );
+      await taskFile.parent.create(recursive: true);
+      await taskFile.writeAsString(
+        jsonEncode([
+          {
+            'id': 'damaged-legacy-ocr',
+            'type': 'ocr',
+            'title': 'damaged legacy OCR task',
+            'status': 'completed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [],
+            'retryData': legacySnapshot,
+          },
+          {
+            'id': 'unrelated-task',
+            'type': 'asr',
+            'title': 'unrelated task',
+            'status': 'waiting',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [
+              {'label': 'step', 'status': 'pending'},
+            ],
+          },
+        ]),
+      );
+      final notifier = BackgroundTaskNotifier();
+      try {
+        await notifier.restoreFromPersistence();
+        final restored = notifier.state.singleWhere(
+          (task) => task.id == 'damaged-legacy-ocr',
+        );
+        final snapshot = OcrRetrySnapshot.fromMap(restored.retryData!);
+        final images = await OcrRetryStorage.restoreImages(snapshot);
+        expect(snapshot.needsMigration, isFalse);
+        expect(snapshot.instructionContent, 'saved prompt');
+        expect(images.images.single.bytes, bytes);
+        expect(images.isComplete, isFalse);
+        expect(images.missingImageCount, 1);
+
+        notifier.updateStep('unrelated-task', 0, completed: true);
+        await notifier.pendingPersistence;
+        final persisted = await taskFile.readAsString();
+        expect(persisted, isNot(contains(encodedBytes)));
+        expect(persisted, isNot(contains(malformedBytes)));
+      } finally {
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    },
+  );
+
+  test(
+    'restore migrates malformed version 2 entries before unrelated updates persist',
+    () async {
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final encodedBytes = base64Encode(List<int>.filled(64 * 1024, 0x5a));
+      final validSnapshot = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'mixed-v2-ocr',
+        snapshot: OcrRetrySnapshot.capture(
+          configId: 'config-1',
+          modelId: 'model-1',
+          images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          instructionContent: 'saved prompt',
+        ),
+      );
+      final malformedSnapshot = <String, dynamic>{
+        ...validSnapshot,
+        'images': [
+          ...(validSnapshot['images'] as List),
+          {'bytes': '$encodedBytes!!!', 'format': 'png'},
+        ],
+      };
+      final taskFile = File(
+        '${taskDirectory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+      );
+      await taskFile.parent.create(recursive: true);
+      await taskFile.writeAsString(
+        jsonEncode([
+          {
+            'id': 'mixed-v2-ocr',
+            'type': 'ocr',
+            'title': 'mixed v2 OCR task',
+            'status': 'completed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [],
+            'retryData': malformedSnapshot,
+          },
+          {
+            'id': 'unrelated-task',
+            'type': 'asr',
+            'title': 'unrelated task',
+            'status': 'waiting',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [
+              {'label': 'step', 'status': 'pending'},
+            ],
+          },
+        ]),
+      );
+
+      final notifier = BackgroundTaskNotifier();
+      try {
+        await notifier.restoreFromPersistence();
+        final task = notifier.state.singleWhere(
+          (candidate) => candidate.id == 'mixed-v2-ocr',
+        );
+        final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+        final images = await OcrRetryStorage.restoreImages(snapshot);
+        expect(snapshot.hasInvalidImages, isFalse);
+        expect(snapshot.imageEntryCount, 2);
+        expect(snapshot.instructionContent, 'saved prompt');
+        expect(images.images.single.bytes, bytes);
+        expect(images.isComplete, isFalse);
+        expect(images.missingImageCount, 1);
+
+        notifier.updateStep('unrelated-task', 0, completed: true);
+        await notifier.pendingPersistence;
+        final persisted = await taskFile.readAsString();
+        expect(persisted, isNot(contains(encodedBytes)));
+      } finally {
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    },
+  );
+
+  test(
+    'failed malformed snapshot migration retains readable cache references',
+    () async {
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final cached = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'mixed-v2-failure',
+        snapshot: OcrRetrySnapshot.capture(
+          configId: 'config-1',
+          modelId: 'model-1',
+          images: [OcrRetryImage(bytes: bytes, format: 'png')],
+        ),
+      );
+      final readableImage = (cached['images'] as List).single as Map;
+      final readableReference = readableImage['storageRef'] as String;
+      final missingReference =
+          'ocr_retry_cache/${List.filled(64, 'f').join()}.bin';
+      final encodedMalformedBody = base64Encode(
+        List<int>.filled(32 * 1024, 0x5a),
+      );
+      final malformedSnapshot = <String, dynamic>{
+        ...cached,
+        'images': [
+          readableImage,
+          OcrRetryImage.reference(
+            storageRef: missingReference,
+            format: 'png',
+          ).toMap(),
+          {'bytes': '$encodedMalformedBody!!!', 'format': 'png'},
+        ],
+      };
+      final taskFile = File(
+        '${taskDirectory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+      );
+      await taskFile.parent.create(recursive: true);
+      await taskFile.writeAsString(
+        jsonEncode([
+          {
+            'id': 'mixed-v2-failure',
+            'type': 'ocr',
+            'title': 'mixed OCR retry',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [],
+            'retryData': malformedSnapshot,
+          },
+          {
+            'id': 'unrelated-task',
+            'type': 'asr',
+            'title': 'unrelated task',
+            'status': 'waiting',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'steps': [
+              {'label': 'step', 'status': 'pending'},
+            ],
+          },
+        ]),
+      );
+
+      final notifier = BackgroundTaskNotifier();
+      try {
+        await notifier.restoreFromPersistence();
+        final task = notifier.state.singleWhere(
+          (candidate) => candidate.id == 'mixed-v2-failure',
+        );
+        final retryData = task.retryData!;
+        final snapshot = OcrRetrySnapshot.fromMap(retryData);
+        final references = OcrRetryStorage.referencesFromSnapshot(retryData);
+        final restored = await OcrRetryStorage.restoreImages(snapshot);
+        expect(references, contains(readableReference));
+        expect(restored.images.single.bytes, bytes);
+        expect(restored.isComplete, isFalse);
+        expect(restored.missingImageCount, 2);
+        expect(jsonEncode(retryData), isNot(contains(encodedMalformedBody)));
+
+        notifier.updateStep('unrelated-task', 0, completed: true);
+        await notifier.pendingPersistence;
+        var persisted = await taskFile.readAsString();
+        expect(persisted, contains(readableReference));
+        expect(persisted, isNot(contains(encodedMalformedBody)));
+        expect(await OcrRetryStorage.read(readableReference), bytes);
+
+        notifier.removeTask('mixed-v2-failure');
+        await notifier.pendingPersistence;
+        persisted = await taskFile.readAsString();
+        expect(persisted, isNot(contains(readableReference)));
+        expect(await OcrRetryStorage.read(readableReference), isNull);
+      } finally {
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      }
+    },
+  );
+
+  test(
     'step persistence stays small after cached retry data is attached',
     () async {
       final bytes = Uint8List.fromList(List<int>.filled(160 * 1024, 0x5a));

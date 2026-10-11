@@ -14,7 +14,10 @@ import 'package:stroom/services/ocr_service.dart';
 import 'package:stroom/services/ocr_task_runner.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
-const _config = OcrConfig(host: 'https://ocr.test/chat', apiKey: 'key');
+const _config = OcrConfig(
+  host: 'https://ocr.test/chat',
+  apiKey: 'opaque-test-api-secret-83',
+);
 
 class _ControlledAdapter implements HttpClientAdapter {
   final requested = Completer<RequestOptions>();
@@ -128,6 +131,29 @@ void main() {
     expect(adapter.calls, 1);
     expect(saves, 1);
     expect(notifier.state.single.status, TaskStatus.completed);
+    final completedTask = notifier.state.single;
+    expect(completedTask.rawRequest?['host'], 'ocr.test');
+    expect(completedTask.rawRequest?['imageCount'], 1);
+    expect(completedTask.rawRequest?['imageBytes'], 3);
+    expect(completedTask.rawRequest?['durationMs'], isA<int>());
+    expect(completedTask.rawRequest?.containsKey('body'), isFalse);
+    expect(completedTask.rawResponse?['statusCode'], 200);
+    expect(completedTask.rawResponse?['finishReason'], 'stop');
+    expect(completedTask.rawResponse?['requestId'], 'req-ocr-123');
+    expect(completedTask.rawResponse?['durationMs'], isA<int>());
+    await notifier.pendingPersistence;
+    final persistedFile = File(
+      '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+    );
+    final persistedTask =
+        (jsonDecode(await persistedFile.readAsString()) as List)
+            .cast<Map<String, dynamic>>()
+            .single;
+    final persistedDiagnostics = jsonEncode(persistedTask);
+    expect(persistedDiagnostics, contains('req-ocr-123'));
+    expect(persistedDiagnostics, isNot(contains('opaque-test-api-secret-83')));
+    expect(persistedDiagnostics, isNot(contains('data:image')));
+    expect(persistedDiagnostics, isNot(contains('choices')));
     expect((await TextManifest.loadRecords()).single.folder, 'captured folder');
     expect(adapter.closed, isTrue);
   });
@@ -751,6 +777,7 @@ void main() {
       expect(adapter.calls, 1);
       expect(saves, 0);
       expect(notifier.state.single.status, TaskStatus.failed);
+      expect(notifier.state.single.rawResponse?['errorType'], timeout.name);
       expect(adapter.closed, isTrue);
     });
   }

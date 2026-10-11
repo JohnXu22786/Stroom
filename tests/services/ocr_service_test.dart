@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/services/ocr_service.dart';
 import 'package:stroom/providers/provider_config.dart';
@@ -9,14 +10,19 @@ import 'dart:typed_data';
 // ============================================================================
 
 /// Create a mock Dio that returns a successful response with the given data.
-Dio _mockDioWithSuccess(dynamic data) {
-  return Dio()..interceptors.add(_SuccessInterceptor(data));
+Dio _mockDioWithSuccess(
+  dynamic data, {
+  Map<String, List<String>> headers = const {},
+}) {
+  return Dio()..interceptors.add(_SuccessInterceptor(data, headers: headers));
 }
 
 /// An interceptor that always returns a successful response with the given data.
 class _SuccessInterceptor extends Interceptor {
   final dynamic _data;
-  _SuccessInterceptor(this._data);
+  final Map<String, List<String>> _headers;
+  _SuccessInterceptor(this._data, {Map<String, List<String>> headers = const {}})
+      : _headers = headers;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -24,6 +30,7 @@ class _SuccessInterceptor extends Interceptor {
       requestOptions: options,
       statusCode: 200,
       data: _data,
+      headers: Headers.fromMap(_headers),
     ));
   }
 }
@@ -528,6 +535,60 @@ void main() {
         );
         expect(sent, isFalse);
       });
+
+      test(
+        'request-construction failures retain sanitized timing diagnostics',
+        () async {
+          const apiKey = 'opaque-user-secret-88';
+          final service = OcrService(
+            config: OcrConfig(
+              model: 'gpt-4o',
+              apiKey: apiKey,
+              host: 'https://api.test.com/v1/chat/completions',
+              customParams: [
+                CustomParam(
+                  paramName: 'top_k',
+                  defaultValue: 'many',
+                  type: 'number',
+                ),
+              ],
+            ),
+            dio: Dio(),
+          );
+
+          Future<void> expectCapturedDiagnostics() async {
+            final request = service.diagnosticRequest;
+            expect(request['host'], 'api.test.com');
+            expect(request['method'], 'POST');
+            expect(request['durationMs'], isA<int>());
+            expect(request['imageCount'], 1);
+            expect(request['imageBytes'], 1);
+            expect(jsonEncode(request), isNot(contains(apiKey)));
+            expect(service.lastRequestBody, isNull);
+            expect(
+              service
+                  .diagnosticResponse(error: const FormatException())['durationMs'],
+              isA<int>(),
+            );
+          }
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1])),
+            throwsFormatException,
+          );
+          await expectCapturedDiagnostics();
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1]), 'jpeg'),
+              ],
+            ),
+            throwsFormatException,
+          );
+          await expectCapturedDiagnostics();
+        },
+      );
 
       test('invalid boolean and JSON custom parameter values are rejected',
           () async {
@@ -1304,6 +1365,96 @@ void main() {
         expect(service.lastRequestHeaders, isNotNull);
         expect(service.lastResponseData, isNotNull);
         expect(service.lastResponseStatusCode, equals(200));
+      });
+
+      test('diagnostic request IDs exclude the configured API key', () async {
+        const apiKey = 'opaque-user-secret-87';
+        final dio = _mockDioWithSuccess(
+          {
+            'id': apiKey,
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          },
+          headers: {
+            'x-request-id': [apiKey],
+          },
+        );
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: apiKey,
+            host: 'https://api.test.com/v1',
+          ),
+          dio: dio,
+        );
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        expect(service.diagnosticRequest['requestId'], isNull);
+        expect(service.diagnosticResponse()['requestId'], isNull);
+      });
+
+      test('diagnostic host excludes the configured API key', () async {
+        const apiKey = 'opaque-user-secret-87';
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {'content': 'test text'},
+            },
+          ],
+        });
+        final service = OcrService(
+          config: OcrConfig(
+            model: 'gpt-4o',
+            apiKey: apiKey,
+            host: 'https://$apiKey.api.test.com/v1',
+          ),
+          dio: dio,
+        );
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        final diagnostic = service.diagnosticRequest;
+        expect(diagnostic['host'], isNull);
+        expect(jsonEncode(diagnostic), isNot(contains(apiKey)));
+      });
+
+      test('diagnostic finish reason excludes the configured API key', () async {
+        const apiKey = 'opaque-user-secret-87';
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'message': {'content': 'test text'},
+              'finish_reason': apiKey,
+            },
+          ],
+        });
+        final service = OcrService(
+          config: const OcrConfig(
+            model: 'gpt-4o',
+            apiKey: apiKey,
+            host: 'https://api.test.com/v1',
+          ),
+          dio: dio,
+        );
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        final diagnostic = service.diagnosticResponse();
+        expect(diagnostic['finishReason'], isNull);
+        expect(jsonEncode(diagnostic), isNot(contains(apiKey)));
       });
     });
   });
