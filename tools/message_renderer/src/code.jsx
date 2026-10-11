@@ -1,8 +1,11 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CodeBlock,
   IconCopyOutlineRegular,
+  IconCodeOutlineRegular,
   IconDownloadOutlineRegular,
+  IconFullscreenOutlineRegular,
   IconWrapLinesOutlineRegular,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import mermaid from "mermaid";
@@ -72,89 +75,156 @@ function Diagram({ code }) {
 
 export function StroomCode({ code, lang, streaming, sourceStart, sourceEnd }) {
   const context = useContext(MessageContext);
+  const host = useRef(null);
   lang = lang?.toLowerCase();
   streaming =
     streaming && !fenceComplete(context?.source, sourceStart, sourceEnd);
-  const [wrap, setWrap] = useState(false);
+  const [wrap, setWrap] = useState(true);
   const [source, setSource] = useState(false);
+  const [toolbar, setToolbar] = useState(null);
   const action = (name) => context?.action(name, { sourceStart, sourceEnd });
   const special = lang === "html" || lang === "mermaid";
   const htmlTitle =
     lang === "html" ? /<title[^>]*>([^<]*)<\/title>/i.exec(code)?.[1] : null;
+  const showingHtmlPreview = lang === "html" && !source;
+  const showingDiagram = lang === "mermaid" && !source && !streaming;
+  const showingPreview = showingHtmlPreview || showingDiagram;
+  useEffect(() => {
+    setToolbar(
+      showingPreview
+        ? null
+        : host.current?.querySelector("[data-code-block-banner]") || null,
+    );
+  }, [showingPreview, lang]);
   return (
     <section
-      className={`code-card ${wrap ? "wrap" : ""}`}
+      ref={host}
+      className="stroom-code-card"
       data-source-start={sourceStart}
     >
-      <header>
-        <span>
-          {htmlTitle || lang || "代码"}
-          {streaming ? " · 生成中" : ""}
-        </span>
-        <div>
-          <button
-            title="复制代码"
-            aria-label="复制代码"
-            onClick={() => action("copyCode")}
-          >
-            <IconCopyOutlineRegular size={16} />
-          </button>
-          <button
-            title="保存代码"
-            aria-label="保存代码"
-            onClick={() => action("saveCode")}
-          >
-            <IconDownloadOutlineRegular size={16} />
-          </button>
-          <button
-            title="自动换行"
-            aria-label="自动换行"
-            aria-pressed={wrap}
-            onClick={() => setWrap((v) => !v)}
-          >
-            <IconWrapLinesOutlineRegular size={16} />
-          </button>
-          {special && (
-            <button onClick={() => setSource((v) => !v)}>
-              {source ? "内容" : "源码"}
-            </button>
+      {showingPreview ? (
+        <>
+          <CodeActions
+            className="stroom-code-actions-floating"
+            action={action}
+            special={special}
+            lang={lang}
+            streaming={streaming}
+            wrap={wrap}
+            setWrap={setWrap}
+            source={source}
+            setSource={setSource}
+          />
+          {showingHtmlPreview ? (
+            <div className="html-preview-card">
+              <strong>{htmlTitle || "HTML 页面"}</strong>
+              <p>{streaming ? "正在生成页面…" : "点击全屏查看页面"}</p>
+              <button
+                data-action="html"
+                disabled={streaming}
+                onClick={() => action("html")}
+              >
+                打开预览
+              </button>
+            </div>
+          ) : (
+            <Diagram code={code} />
           )}
-          <button
-            data-action={special ? lang : "code"}
-            title="全屏"
-            aria-label="全屏"
-            disabled={special && streaming}
-            onClick={() => action(special ? lang : "code")}
-          >
-            ⛶
-          </button>
-        </div>
-      </header>
-      {lang === "html" && !source ? (
-        <div className="html-card">
-          <strong>{htmlTitle || "HTML 页面"}</strong>
-          <p>{streaming ? "正在生成页面…" : "点击全屏查看页面"}</p>
-          <button
-            data-action="html"
-            disabled={streaming}
-            onClick={() => action("html")}
-          >
-            打开预览
-          </button>
-        </div>
-      ) : lang === "mermaid" && !source && !streaming ? (
-        <Diagram code={code} />
+        </>
       ) : (
-        <CodeBlock
-          code={code}
-          lang={lang}
-          streaming={streaming}
-          lineNumbers
-          showHeader={false}
-          copyLabel="复制"
-          copiedLabel="已复制"
-        />
+        <>
+          {toolbar && createPortal(
+            <CodeActions
+              className="stroom-code-actions"
+              action={action}
+              special={special}
+              lang={lang}
+              streaming={streaming}
+              wrap={wrap}
+              setWrap={setWrap}
+              source={source}
+              setSource={setSource}
+            />,
+            toolbar,
+          )}
+          <CodeBlock
+            code={code}
+            lang={lang}
+            streaming={streaming}
+            className="stroom-dsh-code-block"
+            toolbarLabels={{
+              codeLabel: "代码块",
+              wrapLabel: "自动换行",
+              unwrapLabel: "取消自动换行",
+            }}
+            wrap={wrap}
+            copyLabel="复制"
+            copiedLabel="已复制"
+          />
+        </>
       )}
     </section>
+  );
+}
+
+function CodeActions({
+  className,
+  action,
+  special,
+  lang,
+  streaming,
+  wrap,
+  setWrap,
+  source,
+  setSource,
+}) {
+  return (
+    <div className={className} aria-label="代码块操作">
+      <button
+        className="stroom-code-action"
+        title="复制代码"
+        aria-label="复制代码"
+        onClick={() => action("copyCode")}
+      >
+        <IconCopyOutlineRegular size={16} />
+      </button>
+      <button
+        className="stroom-code-action"
+        title="保存代码"
+        aria-label="保存代码"
+        onClick={() => action("saveCode")}
+      >
+        <IconDownloadOutlineRegular size={16} />
+      </button>
+      <button
+        className="stroom-code-action"
+        title="自动换行"
+        aria-label="自动换行"
+        aria-pressed={wrap}
+        onClick={() => setWrap((value) => !value)}
+      >
+        <IconWrapLinesOutlineRegular size={16} />
+      </button>
+      {(lang === "html" || lang === "mermaid") && (
+        <button
+          className="stroom-code-action"
+          title={source ? (lang === "html" ? "查看页面" : "查看图表") : "查看源码"}
+          aria-label={source ? (lang === "html" ? "查看页面" : "查看图表") : "查看源码"}
+          onClick={() => setSource((value) => !value)}
+        >
+          <IconCodeOutlineRegular size={16} />
+        </button>
+      )}
+      <button
+        className="stroom-code-action"
+        data-action={special ? lang : "code"}
+        title="全屏"
+        aria-label="全屏"
+        disabled={special && streaming}
+        onClick={() => action(special ? lang : "code")}
+      >
+        <IconFullscreenOutlineRegular size={16} />
+      </button>
+    </div>
   );
 }

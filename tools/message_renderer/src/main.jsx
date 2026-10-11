@@ -3,7 +3,10 @@ import { memo, useEffect, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import {
+  DisclosureRow,
   MarkdownText,
+  IconThinkOutlineRegular,
+  IconFullscreenOutlineRegular,
   IconCopyOutlineRegular,
   IconDownloadOutlineRegular,
   IconRefreshOutlineRegular,
@@ -11,6 +14,7 @@ import {
   IconCodeOutlineRegular,
   IconTrashOutlineRegular,
   MarkdownDelegateProvider,
+  TextShimmer,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import "katex/contrib/mhchem/mhchem.js";
 import { MessageContext } from "./code.jsx";
@@ -18,7 +22,15 @@ import { Tool } from "./tool.jsx";
 import "./style.css";
 
 const labels = {
-  code: { copyLabel: "复制", copiedLabel: "已复制" },
+  code: {
+    copyLabel: "复制",
+    copiedLabel: "已复制",
+    toolbarLabels: {
+      codeLabel: "代码块",
+      wrapLabel: "自动换行",
+      unwrapLabel: "取消自动换行",
+    },
+  },
   footnotes: "注释",
 };
 const icons = {
@@ -80,6 +92,78 @@ function formatMessageTimestamp(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function reasoningSummary(text, running) {
+  if (!running) return text.split("\n", 1)[0] || "";
+  let summary = "";
+  let paragraphStart = 0;
+  const separator = /\r?\n(?:[\t ]*\r?\n)+/g;
+  while (true) {
+    const nextParagraph = separator.exec(text);
+    const paragraphEnd = nextParagraph === null
+      ? text.length
+      : nextParagraph.index + nextParagraph[0].indexOf("\n");
+    const newline = text.indexOf("\n", paragraphStart);
+    if (newline !== -1 && newline <= paragraphEnd) {
+      const candidate = text.slice(paragraphStart, newline).trim();
+      if (candidate) summary = candidate;
+    }
+    if (nextParagraph === null) return summary;
+    paragraphStart = nextParagraph.index + nextParagraph[0].length;
+  }
+}
+
+function ReasoningBlock({ message, block, index }) {
+  const [expanded, setExpanded] = useState(false);
+  const running = message.streaming && !block.isComplete;
+  const summary = reasoningSummary(block.text, running).replaceAll("**", "");
+  return (
+    <div
+      className="reasoning-row"
+      data-expanded={expanded || undefined}
+      data-preview={!expanded && summary ? "" : undefined}
+      data-state={running ? "running" : "ok"}
+    >
+      <DisclosureRow
+        rowClassName="reasoning-disclosure"
+        leadingClassName="reasoning-leading"
+        titleClassName="reasoning-title"
+        icon={<IconThinkOutlineRegular size={14} />}
+        title="思考"
+        running={running}
+        open={expanded}
+        expandable
+        expandOnRowClick
+        onToggle={() => setExpanded((value) => !value)}
+        headerAccessory={(
+          <button
+            className="reasoning-fullscreen"
+            data-action="reasoning"
+            title="查看完整推理"
+            aria-label="查看完整推理"
+            onClick={() => action(message.id, "reasoning", { blockIndex: index })}
+          >
+            <IconFullscreenOutlineRegular size={14} />
+          </button>
+        )}
+        collapsedContent={summary ? (
+          <>
+            <span className="reasoning-separator" data-shimmer-decoration aria-hidden />
+            <span className="reasoning-summary" data-streaming={running || undefined}>
+              <span className="reasoning-summary-text"><TextShimmer>{summary}</TextShimmer></span>
+            </span>
+          </>
+        ) : undefined}
+      >
+        {expanded && (
+          <div className="reasoning-body">
+            <MarkdownText text={block.text} streaming={running} labels={labels} />
+          </div>
+        )}
+      </DisclosureRow>
+    </div>
+  );
+}
+
 const Message = memo(function Message({ message }) {
   const timestamp =
     message.role === "user" ? formatMessageTimestamp(message.createdAt) : "";
@@ -123,25 +207,7 @@ const Message = memo(function Message({ message }) {
                 </div>
               )}
               {block.type === "reasoning" && block.text && (
-                <button
-                  className="reasoning"
-                  data-action="reasoning"
-                  onClick={() =>
-                    action(message.id, "reasoning", { blockIndex: index })
-                  }
-                >
-                  <span
-                    className={
-                      block.isComplete || !message.streaming ? "" : "pulse"
-                    }
-                  >
-                    ✧
-                  </span>{" "}
-                  {block.isComplete || !message.streaming
-                    ? "推理过程"
-                    : "正在思考"}{" "}
-                  <span>›</span>
-                </button>
+                <ReasoningBlock message={message} block={block} index={index} />
               )}
               {block.type === "tool_call" && <Tool block={block} />}
               {block.type === "error" && (
@@ -211,10 +277,10 @@ function applySearch(emit = true) {
           {
             acceptNode: (n) => {
               if (n.nodeType === Node.ELEMENT_NODE)
-                return n.matches("br, .code-card, code, .katex, button")
+                return n.matches("br, .stroom-code-card, .md-code-block, code, .katex, button")
                   ? NodeFilter.FILTER_ACCEPT
                   : NodeFilter.FILTER_SKIP;
-              return n.parentElement.closest(".code-card, code, .katex, button")
+              return n.parentElement.closest(".stroom-code-card, .md-code-block, code, .katex, button")
                 ? NodeFilter.FILTER_REJECT
                 : NodeFilter.FILTER_ACCEPT;
             },
@@ -402,6 +468,10 @@ function receive(command) {
       document.documentElement.dataset.theme = command.theme.dark
         ? "dark"
         : "light";
+      document.body.toggleAttribute(
+        "data-ds-dark-theme",
+        !!command.theme.dark,
+      );
       document.documentElement.style.setProperty(
         "--message-size",
         `${command.theme.fontSize || 16}px`,

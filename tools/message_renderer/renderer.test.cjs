@@ -278,8 +278,9 @@ test("a running tool that fails opens its details after a live patch", async () 
   await wait();
 
   const doc = v.dom.window.document;
-  const runningRow = doc.querySelector(".tool [data-disclosure-row]");
+  const runningRow = doc.querySelector(".tool-row [data-disclosure-row]");
   assert.equal(runningRow?.getAttribute("aria-expanded"), "false");
+  assert.equal(doc.querySelector(".tool-summary")?.textContent, "执行中");
   assert.equal(doc.querySelector(".tool-detail"), null);
 
   v.receive({
@@ -301,14 +302,14 @@ test("a running tool that fails opens its details after a live patch", async () 
   });
   await wait();
 
-  const failedRow = doc.querySelector(".tool [data-disclosure-row]");
+  const failedRow = doc.querySelector(".tool-row [data-disclosure-row]");
   assert.equal(failedRow?.getAttribute("aria-expanded"), "true");
   assert.equal(doc.querySelector(".tool-detail pre")?.textContent, "permission denied");
 
   failedRow.click();
   await wait();
   assert.equal(
-    doc.querySelector(".tool [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    doc.querySelector(".tool-row [data-disclosure-row]")?.getAttribute("aria-expanded"),
     "false",
     "the user can collapse the failure details",
   );
@@ -331,7 +332,7 @@ test("a running tool that fails opens its details after a live patch", async () 
   });
   await wait();
   assert.equal(
-    doc.querySelector(".tool [data-disclosure-row]")?.getAttribute("aria-expanded"),
+    doc.querySelector(".tool-row [data-disclosure-row]")?.getAttribute("aria-expanded"),
     "false",
     "later result patches must preserve the user's collapsed state",
   );
@@ -779,6 +780,20 @@ test("preview readiness follows each fence, accepting case variants and settled 
     );
     button.click();
     assert.equal(v.events.at(-1).action, "html");
+    let sourceToggle = v.dom.window.document.querySelector(
+      'button[aria-label="查看源码"]',
+    );
+    assert.ok(sourceToggle, "HTML preview can switch to source");
+    sourceToggle.click();
+    await wait();
+    assert.ok(v.dom.window.document.querySelector(".md-code-block"));
+    const previewToggle = v.dom.window.document.querySelector(
+      'button[aria-label="查看页面"]',
+    );
+    assert.ok(previewToggle, "HTML source can switch back to preview");
+    previewToggle.click();
+    await wait();
+    assert.ok(v.dom.window.document.querySelector(".html-preview-card"));
     update("```HTML\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
     await wait();
     button = v.dom.window.document.querySelector('[data-action="html"]');
