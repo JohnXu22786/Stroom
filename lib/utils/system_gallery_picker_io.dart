@@ -24,10 +24,8 @@ Future<List<XFile>> pickNativeGalleryMedia(
   if (!context.mounted) return [];
 
   final theme = Theme.of(context);
-  final gridCount = (MediaQuery.sizeOf(context).width / 96)
-      .floor()
-      .clamp(4, 10)
-      .toInt();
+  final gridCount =
+      (MediaQuery.sizeOf(context).width / 96).floor().clamp(4, 10).toInt();
   const preferredPageSize = 80;
   final pageSize =
       ((preferredPageSize + gridCount - 1) ~/ gridCount) * gridCount;
