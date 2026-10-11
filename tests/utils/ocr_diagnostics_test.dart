@@ -86,15 +86,129 @@ void main() {
 
   test('credential-shaped values are dropped from request ID fields', () {
     final googleApiKey = 'AIza${List.filled(35, 'a').join()}';
+    const openAiProjectKey = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
+    const anthropicApiKey =
+        'sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890';
+    const groqApiKey = 'gsk_abcdefghijklmnopqrstuvwxyz1234567890';
+    const openRouterApiKey =
+        'sk-or-v1-abcdefghijklmnopqrstuvwxyz1234567890';
     final request = OcrDiagnosticSnapshot.sanitizeRequest({
       'requestId': googleApiKey,
     })!;
     final response = OcrDiagnosticSnapshot.sanitizeResponse({
       'data': {'id': googleApiKey},
     })!;
+    final prefixedGoogleKey = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider $googleApiKey',
+    })!;
+    final tokenAssignment = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider token=private-value',
+    })!;
+    final bearerAssignment = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider bearer=private-value',
+    })!;
+    final prefixedApiKey = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider xApiKey=private-value',
+    })!;
+    final spacedApiKey = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider API key=private-value',
+    })!;
+    final bareKeyAssignment = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider key=private-value',
+    })!;
+    final openAiProjectRequestId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': openAiProjectKey,
+    })!;
+    final anthropicRequestId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': anthropicApiKey,
+    })!;
+    final groqRequestId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': groqApiKey,
+    })!;
+    final openRouterRequestId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': openRouterApiKey,
+    })!;
 
     expect(request, isEmpty);
     expect(response, isEmpty);
+    expect(prefixedGoogleKey, isEmpty);
+    expect(tokenAssignment, isEmpty);
+    expect(bearerAssignment, isEmpty);
+    expect(prefixedApiKey, isEmpty);
+    expect(spacedApiKey, isEmpty);
+    expect(bareKeyAssignment, isEmpty);
+    expect(openAiProjectRequestId, isEmpty);
+    expect(anthropicRequestId, isEmpty);
+    expect(groqRequestId, isEmpty);
+    expect(openRouterRequestId, isEmpty);
     expect(jsonEncode([request, response]), isNot(contains(googleApiKey)));
+  });
+
+  test(
+    'request IDs redact configured credentials with inserted whitespace',
+    () {
+      const apiKey = 'opaque-user-secret-87';
+      final spacedApiKey = apiKey.split('').join(' ');
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'requestId': 'req-$spacedApiKey'},
+        excludedValues: [apiKey],
+      )!;
+
+      expect(response, isEmpty);
+      expect(jsonEncode(response), isNot(contains(apiKey)));
+    },
+  );
+
+  test('image data URIs are dropped from response request IDs', () {
+    const imageDataUri = 'data:image/png;base64,AA==';
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'data': {'id': imageDataUri},
+    })!;
+
+    expect(response, isEmpty);
+    expect(jsonEncode(response), isNot(contains(imageDataUri)));
+  });
+
+  test('short legacy OCR task errors redact token assignments', () {
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 请求被模型拒绝: token=private-value',
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
+
+  test('request IDs redact credential fields with underscore prefixes', () {
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'provider client_secret=private-value',
+    })!;
+
+    expect(response, isEmpty);
+  });
+
+  test('finish reasons exclude configured credentials', () {
+    const apiKey = 'opaque-user-secret-87';
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'data': {
+          'choices': [
+            {'finish_reason': apiKey},
+          ],
+        },
+      },
+      excludedValues: [apiKey],
+    )!;
+
+    expect(response, isEmpty);
+  });
+
+  test('finish reasons redact credential-shaped values', () {
+    const apiKey = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'finishReason': apiKey,
+    })!;
+
+    expect(response, isEmpty);
+    expect(jsonEncode(response), isNot(contains(apiKey)));
   });
 }

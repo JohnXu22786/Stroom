@@ -150,6 +150,7 @@ class OcrService {
         imageBytes: _lastImageBytes,
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
+        excludedValues: [config.apiKey],
       );
 
   Map<String, dynamic> diagnosticResponse({Object? error}) =>
@@ -158,7 +159,9 @@ class OcrService {
         finishReason: _lastFinishReason,
         durationMs: _lastDurationMs,
         requestId: _lastRequestId,
-        errorType: error?.runtimeType.toString() ?? _lastErrorType,
+        errorType: _lastErrorType ?? error?.runtimeType.toString(),
+        data: lastResponseData,
+        excludedValues: [config.apiKey],
       );
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -231,36 +234,25 @@ class OcrService {
     final stopwatch = Stopwatch()..start();
     _beginDiagnosticCapture(1, imageBytes.length);
 
-    final base64Image = base64Encode(imageBytes);
-    final dataUri = 'data:image/$imageFormat;base64,$base64Image';
-
-    // Images first, optional instruction text after them — matches the
-    // official qwen-vl-ocr / DeepSeek-OCR request examples.
-    final contents = <Map<String, dynamic>>[
-      _buildImageContent(dataUri),
-    ];
-    final instruction = config.effectiveUserInstruction;
-    if (instruction.isNotEmpty) {
-      contents.add({'type': 'text', 'text': instruction});
-    }
-
-    final body = _buildRequestBody(contents);
-
-    // Capture request diagnostics
-    lastRequestBody = body;
-    lastRequestUrl = _chatUrl;
-    lastRequestHeaders = {
-      'Content-Type': 'application/json',
-      if (config.apiKey.isNotEmpty)
-        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
-    };
-    lastResponseData = null;
-    lastResponseStatusCode = null;
-    lastResponseHeaders = null;
-
     try {
+      final base64Image = base64Encode(imageBytes);
+      final dataUri = 'data:image/$imageFormat;base64,$base64Image';
+
+      // Images first, optional instruction text after them — matches the
+      // official qwen-vl-ocr / DeepSeek-OCR request examples.
+      final contents = <Map<String, dynamic>>[
+        _buildImageContent(dataUri),
+      ];
+      final instruction = config.effectiveUserInstruction;
+      if (instruction.isNotEmpty) {
+        contents.add({'type': 'text', 'text': instruction});
+      }
+
+      final body = _buildRequestBody(contents);
+
+      lastRequestBody = body;
       final response = await _dio.post(
-        _chatUrl,
+        lastRequestUrl!,
         data: body,
         options: _requestOptions(body),
         cancelToken: cancelToken,
@@ -324,34 +316,23 @@ class OcrService {
       imageBytesList.fold<int>(0, (sum, image) => sum + image.$1.length),
     );
 
-    // Consecutive image parts (image identity is conveyed by array order,
-    // per official docs), then the optional instruction text last.
-    final contents = <Map<String, dynamic>>[
-      for (final (bytes, format) in imageBytesList)
-        _buildImageContent('data:image/$format;base64,${base64Encode(bytes)}'),
-    ];
-    final instruction = config.effectiveUserInstruction;
-    if (instruction.isNotEmpty) {
-      contents.add({'type': 'text', 'text': instruction});
-    }
-
-    final body = _buildRequestBody(contents);
-
-    // Capture request diagnostics
-    lastRequestBody = body;
-    lastRequestUrl = _chatUrl;
-    lastRequestHeaders = {
-      'Content-Type': 'application/json',
-      if (config.apiKey.isNotEmpty)
-        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
-    };
-    lastResponseData = null;
-    lastResponseStatusCode = null;
-    lastResponseHeaders = null;
-
     try {
+      // Consecutive image parts (image identity is conveyed by array order,
+      // per official docs), then the optional instruction text last.
+      final contents = <Map<String, dynamic>>[
+        for (final (bytes, format) in imageBytesList)
+          _buildImageContent('data:image/$format;base64,${base64Encode(bytes)}'),
+      ];
+      final instruction = config.effectiveUserInstruction;
+      if (instruction.isNotEmpty) {
+        contents.add({'type': 'text', 'text': instruction});
+      }
+
+      final body = _buildRequestBody(contents);
+
+      lastRequestBody = body;
       final response = await _dio.post(
-        _chatUrl,
+        lastRequestUrl!,
         data: body,
         options: _requestOptions(body),
         cancelToken: cancelToken,
@@ -400,6 +381,16 @@ class OcrService {
     _lastFinishReason = null;
     _lastRequestId = null;
     _lastErrorType = null;
+    lastRequestBody = null;
+    lastRequestUrl = _chatUrl;
+    lastRequestHeaders = {
+      'Content-Type': 'application/json',
+      if (config.apiKey.isNotEmpty)
+        'Authorization': 'Bearer ${_maskApiKey(config.apiKey)}',
+    };
+    lastResponseData = null;
+    lastResponseStatusCode = null;
+    lastResponseHeaders = null;
   }
 
   void _finishDiagnosticCapture(Stopwatch stopwatch) {

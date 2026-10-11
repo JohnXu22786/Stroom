@@ -46,5 +46,25 @@ void main() {
       expect(restored.modelId, 'model-stable-7');
       expect(restored.images.every((image) => image.bytes == null), isTrue);
     });
+
+    test('current snapshots with malformed entries require migration', () {
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': 2,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': [
+          {
+            'storageRef':
+                'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin',
+            'format': 'png',
+          },
+          {'bytes': 'not-valid-base64!!!', 'format': 'png'},
+        ],
+      });
+
+      expect(snapshot.hasInvalidImages, isTrue);
+      expect(snapshot.imageEntryCount, 2);
+      expect(snapshot.needsMigration, isTrue);
+    });
   });
 }

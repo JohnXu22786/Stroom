@@ -30,17 +30,34 @@ class OcrRetryStorage {
 
   static const _cacheDirectoryName = 'ocr_retry_cache';
   static final Map<String, Future<void>> _taskWrites = {};
-  static final _referencePattern = RegExp(
-    r'^ocr_retry_cache/[0-9a-f]{64}\.bin$',
-  );
+  static Future<void> _cacheMaintenanceTail = Future<void>.value();
+
+  /// Serializes cache writes through task publication against orphan cleanup.
+  static Future<T> withCacheMaintenanceLock<T>(Future<T> Function() operation) {
+    final previous = _cacheMaintenanceTail;
+    final release = Completer<void>();
+    _cacheMaintenanceTail = release.future;
+    return () async {
+      await previous;
+      try {
+        return await operation();
+      } finally {
+        release.complete();
+      }
+    }();
+  }
 
   static Future<Map<String, dynamic>> cacheSnapshot({
     required String taskId,
     required OcrRetrySnapshot snapshot,
+    bool allowIncompleteImages = false,
   }) async {
+    final missingImageCount = snapshot.imageEntryCount - snapshot.images.length;
+    final hasIncompleteImages =
+        snapshot.hasInvalidImages || missingImageCount != 0;
     if (taskId.isEmpty ||
-        snapshot.hasInvalidImages ||
-        snapshot.imageEntryCount != snapshot.images.length) {
+        missingImageCount < 0 ||
+        (hasIncompleteImages && !allowIncompleteImages)) {
       throw const FormatException('OCR retry snapshot is incomplete');
     }
 
@@ -48,8 +65,13 @@ class OcrRetryStorage {
       final cachedImages = <OcrRetryImage>[];
       final previousBytes = <String, Uint8List?>{};
       try {
-        for (var index = 0; index < snapshot.images.length; index++) {
-          final image = snapshot.images[index];
+        final invalidCountWithoutImageEntries =
+            snapshot.hasInvalidImages && missingImageCount == 0;
+        final imagesToCache = invalidCountWithoutImageEntries
+            ? const <OcrRetryImage>[]
+            : snapshot.images;
+        for (var index = 0; index < imagesToCache.length; index++) {
+          final image = imagesToCache[index];
           final bytes =
               image.bytes ??
               (image.storageRef == null ? null : await read(image.storageRef!));
@@ -58,13 +80,27 @@ class OcrRetryStorage {
               'An OCR retry image is missing; select the images again',
             );
           }
-          final reference = _referenceFor(taskId, index);
+          final reference = image.storageRef ?? _referenceFor(taskId, index);
           previousBytes[reference] = await _writeIfChanged(reference, bytes);
           cachedImages.add(
             OcrRetryImage.reference(
               storageRef: reference,
               format: image.format,
               name: image.name,
+            ),
+          );
+        }
+
+        final unavailableImageCount = hasIncompleteImages
+            ? (invalidCountWithoutImageEntries
+                  ? snapshot.imageEntryCount
+                  : missingImageCount)
+            : 0;
+        for (var index = 0; index < unavailableImageCount; index++) {
+          cachedImages.add(
+            OcrRetryImage.reference(
+              storageRef: _missingReferenceFor(taskId, index),
+              format: 'jpeg',
             ),
           );
         }
@@ -96,6 +132,79 @@ class OcrRetryStorage {
       }
     });
   }
+
+  /// Preserves safe retry context and existing cache references while
+  /// replacing unavailable image bodies with references that require reselection.
+  static Map<String, dynamic> unavailableSnapshot({
+    required String taskId,
+    required OcrRetrySnapshot snapshot,
+  }) {
+    final supportedVersion =
+        snapshot.isLegacy ||
+        snapshot.version == 1 ||
+        snapshot.version == OcrRetrySnapshot.currentVersion;
+    return _unavailableSnapshot(
+      taskId: taskId,
+      imageCount: snapshot.imageEntryCount,
+      preservedImages: [
+        if (supportedVersion)
+          for (final image in snapshot.images)
+            if (image.storageRef != null) image,
+      ],
+      configId: snapshot.configId,
+      modelId: snapshot.modelId,
+      instructionContent: snapshot.instructionContent,
+      saveFolder: snapshot.saveFolder,
+      legacyModelIndex: snapshot.legacyModelIndex,
+      legacyInstructionIndex: snapshot.legacyInstructionIndex,
+    );
+  }
+
+  /// Creates a retry snapshot from legacy request metadata. Image references
+  /// deliberately lack backing files, so the user must reselect them.
+  static Map<String, dynamic> unavailableSnapshotForCount({
+    required String taskId,
+    required int imageCount,
+    String? modelId,
+    String? instructionContent,
+  }) => _unavailableSnapshot(
+    taskId: taskId,
+    imageCount: imageCount,
+    modelId: modelId,
+    instructionContent: instructionContent,
+  );
+
+  static Map<String, dynamic> _unavailableSnapshot({
+    required String taskId,
+    required int imageCount,
+    List<OcrRetryImage> preservedImages = const [],
+    String? configId,
+    String? modelId,
+    String? instructionContent,
+    String saveFolder = '',
+    int? legacyModelIndex,
+    int? legacyInstructionIndex,
+  }) => OcrRetrySnapshot.capture(
+    configId: configId,
+    modelId: modelId,
+    images: [
+      for (final image in preservedImages)
+        OcrRetryImage.reference(
+          storageRef: image.storageRef!,
+          format: image.format,
+          name: image.name,
+        ),
+      for (var index = preservedImages.length; index < imageCount; index++)
+        OcrRetryImage.reference(
+          storageRef: _missingReferenceFor(taskId, index),
+          format: 'jpeg',
+        ),
+    ],
+    instructionContent: instructionContent,
+    saveFolder: saveFolder,
+    legacyModelIndex: legacyModelIndex,
+    legacyInstructionIndex: legacyInstructionIndex,
+  ).toMap();
 
   static Future<OcrRetryRestoreResult> restoreImages(
     OcrRetrySnapshot snapshot,
@@ -162,13 +271,43 @@ class OcrRetryStorage {
     }
   }
 
+  /// Removes exact OCR cache blobs that are no longer referenced by tasks.
+  static Future<void> cleanupUnreferencedCache({
+    required Set<String> referenced,
+  }) async {
+    final candidates = <String>{};
+    if (_usesWebStore) {
+      candidates.addAll(
+        await WebFileStore.keysWithPrefix('$_cacheDirectoryName/'),
+      );
+    } else {
+      final directory = Directory(
+        p.join(await AppStorage.directory, _cacheDirectoryName),
+      );
+      if (!await directory.exists()) return;
+      await for (final entry in directory.list(followLinks: false)) {
+        if (entry is File) {
+          candidates.add('$_cacheDirectoryName/${p.basename(entry.path)}');
+        }
+      }
+    }
+    await deleteUnreferenced(candidates: candidates, referenced: referenced);
+  }
+
   static String _referenceFor(String taskId, int index) {
     final hash = sha256.convert(utf8.encode('$taskId:$index')).toString();
     return '$_cacheDirectoryName/$hash.bin';
   }
 
+  static String _missingReferenceFor(String taskId, int index) {
+    final hash = sha256
+        .convert(utf8.encode('missing:$taskId:$index'))
+        .toString();
+    return '$_cacheDirectoryName/$hash.bin';
+  }
+
   static bool _isCacheReference(String reference) =>
-      _referencePattern.hasMatch(reference);
+      OcrRetryImage.isValidStorageReference(reference);
 
   static bool get _usesWebStore => kIsWeb || WebFileStore.isTestMode;
 
