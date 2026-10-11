@@ -907,6 +907,63 @@ void main() {
     );
 
     testWidgets(
+      'sub-slop native diagram tap jitter forwards one WebView click',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final hitPoint = tester.getCenter(find.byType(InAppWebView));
+        int forwardedClickCount() => webView.controller.evaluatedScripts
+            .where(
+              (script) =>
+                  script.contains('document.elementFromPoint') &&
+                  script.contains(
+                    "target.dispatchEvent(new MouseEvent('click', {",
+                  ),
+            )
+            .length;
+
+        for (final (pointer, kind, jitter)
+            in <(int, PointerDeviceKind, Offset)>[
+          (1, PointerDeviceKind.touch, const Offset(5, 3)),
+          (2, PointerDeviceKind.mouse, const Offset(0.5, 0.5)),
+        ]) {
+          final clicksBeforeGesture = forwardedClickCount();
+          final gesture = await tester.startGesture(
+            hitPoint,
+            pointer: pointer,
+            kind: kind,
+          );
+          await gesture.moveBy(jitter);
+          await gesture.up();
+          await tester.pump();
+
+          expect(
+            forwardedClickCount() - clicksBeforeGesture,
+            1,
+            reason: 'sub-slop $kind pointer jitter must still invoke the '
+                'page click target exactly once',
+          );
+        }
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'diagram drags pan without forwarding clicks or scrolling parent',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
