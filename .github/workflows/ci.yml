@@ -7,7 +7,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Keep metadata-only edits out of the code workflow's pending slot. This
+  # preserves a queued run for a commit or base-branch retarget.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && 'metadata' || 'code' }}
   # A title/body-only edit gets its own short validation workflow and must not
   # cancel a code run. Retargeting a PR changes `changes.base` and still
   # cancels the prior run so the new base is checked.
