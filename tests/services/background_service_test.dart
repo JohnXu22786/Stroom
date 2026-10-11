@@ -433,8 +433,8 @@ void main() {
     });
 
     test(
-        'restoreBackgroundServiceOnColdStart does nothing when cold-start restore toggle is off',
-        () async {
+        'restoreBackgroundServiceOnColdStart keeps service stopped but rearms '
+        'watchdog when cold-start restore is off', () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
       mock.setStartResult(true);
@@ -442,6 +442,7 @@ void main() {
       // Service was previously enabled...
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
       // ...but the user disabled cold-start auto-restore.
       await setColdStartRestoreEnabled(false);
 
@@ -450,6 +451,11 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
         // Service must NOT be started
         expect(mock._isRunning, isFalse);
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        expect(
+          keepAliveCalls.map((call) => call.method),
+          contains('rearmKeepAlive'),
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

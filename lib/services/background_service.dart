@@ -443,13 +443,18 @@ bool isBackgroundServiceSupported() {
 /// [initializeBackgroundService] has completed.
 Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!isBackgroundServiceSupported()) return;
-  if (!await isColdStartRestoreEnabled()) return;
 
   try {
     final wasEnabled = await _isBackgroundServiceEnabled(
       assumeEnabledOnReadError: false,
     );
     if (!wasEnabled) return;
+    if (!await isColdStartRestoreEnabled()) {
+      // This toggle suppresses an immediate start, but the persisted enabled
+      // intent still needs the watchdog armed for a later recovery attempt.
+      await _rearmKeepAlive();
+      return;
+    }
 
     try {
       final service = FlutterBackgroundService();
