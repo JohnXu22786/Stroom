@@ -23,8 +23,19 @@ returned HTTP 403 through this environment's HTTPS tunnel.
 
 Static PE inspection shows imports of nvjpeg2k_0.dll and cudart64_12.dll, in
 addition to mdk.dll. Neither NVIDIA runtime DLL is present in the inspected
-vendor .nupkg or FVP Windows x64 SDK archive. NVIDIA's nvJPEG2000 license
-supplement applies to its runtime files on NVIDIA GPU systems and requires the
-NVIDIA source notice included above. Those external runtime files are outside
-the inspected MDK package snapshot and its package-level MIT entry. This
-source-file notice remains separate; it is not relabeled as MIT.
+vendor .nupkg or FVP Windows x64 SDK archive. The nvJPEG2000 supplement §4.1
+limits use to NVIDIA GPU systems and §4.2 lists nvjpeg2k_0.dll among runtime
+files distributable under the Agreement
+(https://docs.nvidia.com/cuda/nvjpeg2000/license.html). The NVIDIA SDK
+Agreement §1.2(iii) requires the source notice above in distributed
+modifications and derivative works of sample source code; it is not a general
+runtime-DLL notice condition.
+
+The CUDA Toolkit EULA separately lists Windows cudart.dll and permits
+version- or architecture-specific filename variants, subject to its
+distribution requirements
+(https://docs.nvidia.com/cuda/eula/index.html#attachment-a). The import name
+cudart64_12.dll does not identify the precise CUDA Toolkit build. These
+external runtime files are outside the inspected MDK package snapshot and its
+package-level MIT entry. This source-file notice remains separate; it is not
+relabeled as MIT.

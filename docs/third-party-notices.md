@@ -83,17 +83,31 @@ it is not relabeled as the `.nupkg`'s MIT license.
 
 Static PE inspection of `mdk-nvjp2k.dll` shows imports of `nvjpeg2k_0.dll`,
 `cudart64_12.dll`, and `mdk.dll`. Neither NVIDIA DLL is present in the
-inspected `.nupkg` or FVP SDK archive. NVIDIA's
-[nvJPEG2000 license supplement](https://docs.nvidia.com/cuda/nvjpeg2000/license.html)
-limits nvJPEG2000 to systems with NVIDIA GPUs, permits distribution of its
-listed runtime files under that Agreement, and requires the notice “This
-software contains source code provided by NVIDIA Corporation.” The retained
-source-file header includes that notice. The CUDA and nvJPEG2000 runtime DLLs
-are outside this Windows package snapshot and must be considered under
-NVIDIA's supplement if supplied by a deployment; the package-level MIT entry
-does not cover those external files. The inspected Windows `.nupkg` declaration
-is evidence for this dated package snapshot only, not a complete or
-reproducible all-platform MDK runtime bill of materials.
+inspected `.nupkg` or FVP SDK archive. The nvJPEG2000 supplement §4.1 limits
+nvJPEG2K use to systems with NVIDIA GPUs, and §4.2 lists `nvjpeg2k_0.dll` among
+runtime files distributable under the base Agreement; see the
+[nvJPEG2000 license supplement](https://docs.nvidia.com/cuda/nvjpeg2000/license.html).
+The notice “This software contains source code provided by NVIDIA
+Corporation.” appears in the
+[base NVIDIA SDK Agreement §1.2(iii)](https://docs.nvidia.com/cuda/nvjpeg2000/license.html#software-license-agreement),
+which requires it in distributed
+modifications and derivative works of sample source code. It is not a general
+notice condition for runtime DLLs. The upstream source-file header contains
+that notice, and Stroom retains it separately.
+
+The CUDA runtime import has a separate license source: the
+[CUDA Toolkit EULA, Attachment A](https://docs.nvidia.com/cuda/eula/index.html#attachment-a)
+lists Windows `cudart.dll` and allows version- or architecture-specific
+filename variants, using `cudart64_90.dll` as an example, subject to the
+EULA's distribution requirements. The import name `cudart64_12.dll` does not
+identify the precise CUDA Toolkit build. Neither runtime DLL is included in
+the inspected packages; if a deployment supplies them, `nvjpeg2k_0.dll` is
+scoped by the nvJPEG2000 supplement and `cudart64_12.dll` by the separate CUDA
+Toolkit EULA. Neither is covered by the MDK `.nupkg` package-level MIT entry.
+
+The inspected Windows `.nupkg` declaration is evidence for this dated package
+snapshot only, not a complete or reproducible all-platform MDK runtime bill of
+materials.
 
 ### MDK runtime terms and commercial use
 
