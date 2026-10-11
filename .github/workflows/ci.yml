@@ -129,11 +129,31 @@ jobs:
                   if [ "${#imported_tests[@]}" -gt 0 ]; then
                     echo "  ✅ $file (imported by ${imported_tests[*]})"
                   else
-                    echo "  ⚠️  $file → missing $test_f"
-                    if [ "${#flattened[@]}" -gt 1 ]; then
-                      printf '      Ambiguous basename matches: %s\n' "${flattened[*]}"
+                    # Dart parts are compiled through their parent library and
+                    # therefore have no direct package import in test files.
+                    part_of=$(sed -nE "s/^part of ['\"]([^'\"]+)['\"];$/\1/p" "$file" | head -1)
+                    if [ -n "$part_of" ]; then
+                      source_dir=$(dirname "${file#lib/}")
+                      if [ "$source_dir" = "." ]; then
+                        parent_import="package:stroom/$part_of"
+                      else
+                        parent_import="package:stroom/$source_dir/$part_of"
+                      fi
+                      mapfile -t parent_tests < <(
+                        rg -l --glob '*_test.dart' --glob '*_test.cjs' -F "$parent_import" tests || true
+                      )
+                    else
+                      parent_tests=()
                     fi
-                    UNCOVERED=1
+                    if [ "${#parent_tests[@]}" -gt 0 ]; then
+                      echo "  ✅ $file (parent library imported by ${parent_tests[*]})"
+                    else
+                      echo "  ⚠️  $file → missing $test_f"
+                      if [ "${#flattened[@]}" -gt 1 ]; then
+                        printf '      Ambiguous basename matches: %s\n' "${flattened[*]}"
+                      fi
+                      UNCOVERED=1
+                    fi
                   fi
                 fi
               fi
