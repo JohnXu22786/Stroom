@@ -1,68 +1,70 @@
-# Stroom 分支与版本管理
+# Stroom Branch and Version Management
 
-本文面向所有贡献者（包括从个人 fork 提交 PR 的外部贡献者）和维护者。Git 和 GitHub 没有统一的分支命名标准；以下内容是 Stroom 仓库的协作约定。尖括号中的内容是命名占位符，不代表对应分支已经创建。普通贡献默认以 `main` 为 PR 目标，只有在 issue 或维护者明确要求时才使用其他目标分支。
+This guide is for all contributors, including external contributors who submit pull requests from personal forks, and for maintainers. Git and GitHub do not prescribe one universal branch naming scheme; this document describes the conventions used in the Stroom repository. Angle-bracketed values are placeholders and do not imply that a branch exists. Pull requests normally target `main`; use another base branch only when an issue or a maintainer specifies it.
 
-## 1. 贡献者工作流程
+## 1. Contributor Workflow
 
-外部贡献者通常先 fork 本仓库，在自己的 fork 中从 PR 目标分支创建短期工作分支，再向本仓库提交 PR。不要直接向本仓库的共享分支推送。
+External contributors should usually fork this repository, create a short-lived working branch from the intended pull request base in their fork, and submit a pull request to this repository. Do not push directly to shared branches in the Stroom repository.
 
-工作分支使用小写类型前缀和简短主题，主题单词以连字符分隔。前缀建议与改动类型和提交信息中的类型保持一致：
+Use a lowercase type prefix and a short topic, with words separated by hyphens. The prefix should match the change type and, where possible, the type used in the commit message:
 
-| 分支形式 | 适用改动 | PR 模板中的变更类别 |
+| Branch pattern | Suggested use | Pull request template category |
 | --- | --- | --- |
-| `feat/<topic>` | 新功能或用户可见的能力 | Feature |
-| `fix/<topic>` | 缺陷修复，包括紧急修复 | Bug fix |
-| `docs/<topic>` | 文档修改 | Documentation |
-| `style/<topic>` | 不改变行为的格式或样式调整 | Chore |
-| `refactor/<topic>` | 不改变外部行为的代码重整 | Refactor |
-| `perf/<topic>` | 性能改进 | Performance |
-| `test/<topic>` | 测试添加或维护 | Test |
-| `ci/<topic>` | 持续集成配置 | CI/build |
-| `cd/<topic>` | 持续交付或发布自动化 | CI/build |
-| `build/<topic>` | 构建系统或构建依赖 | CI/build |
-| `chore/<topic>` | 其他维护性工作 | Chore |
-| `revert/<topic>` | 撤销已有改动 | 按被撤销改动的类别填写 |
+| `feat/<topic>` | New features or user-visible capabilities | Feature |
+| `fix/<topic>` | Bug fixes, including urgent fixes | Bug fix |
+| `docs/<topic>` | Documentation changes | Documentation |
+| `style/<topic>` | Formatting or style changes that do not affect behavior | Chore |
+| `refactor/<topic>` | Code restructuring that does not change external behavior | Refactor |
+| `perf/<topic>` | Performance improvements | Performance |
+| `test/<topic>` | Adding or maintaining tests | Test |
+| `ci/<topic>` | Continuous integration configuration | CI/build |
+| `cd/<topic>` | Continuous delivery or release automation | CI/build |
+| `build/<topic>` | Build system or build dependency changes | CI/build |
+| `chore/<topic>` | Other maintenance work | Chore |
+| `revert/<topic>` | Reverting an existing change | Category of the reverted change |
 
-从实际 PR 目标分支创建工作分支。提交 PR 前确认 Base 指向预期目标分支，并在 PR 描述中说明改动目的。PR 默认目标为 `main`；若 issue 或维护者指定版本分支，则按指定目标提交。
+Create the working branch from the actual pull request base. Before submitting, confirm that the pull request targets the intended base and explain the purpose of the change. The default base is `main`; use a version branch only when an issue or maintainer specifies it.
 
-## 2. 长期分支
+## 2. Long-Lived Branches
 
-| 分支形式 | 用途 | 管理方式 |
+| Branch pattern | Purpose | Management |
 | --- | --- | --- |
-| `main` | 默认分支和当前主线。 | 通过 PR、评审及要求的 CI 检查合并。 |
-| `v<MAJOR>.<MINOR>` | 某个次版本系列的开发与集成线。 | 仅在该系列开始开发时创建；由维护者管理。 |
-| `release/<MAJOR>.<MINOR>` | 主线交接后，继续维护仍受支持的旧版本系列。 | 仅在确有维护需要时创建；由维护者管理。 |
+| `main` | Default branch and current primary development line. | Changes are merged through pull requests after review and required CI checks. |
+| `v<MAJOR>.<MINOR>` | Development and integration line for a minor version series. | Created when work on that series begins and managed by maintainers. |
+| `release/<MAJOR>.<MINOR>` | Maintenance line for a supported older version after a newer line takes over `main`. | Created only when ongoing maintenance is needed and managed by maintainers. |
 
-版本开发线和维护线按当前实际需要建立，不提前创建未启动的版本分支。普通贡献者无需自行创建或选择这些长期分支；目标分支由 issue 或维护者说明。
+Create version development and maintenance branches only when needed; do not create branches for version series that have not started. Contributors should not create or choose these long-lived branches themselves. An issue or maintainer should specify the target branch.
 
-## 3. 开发与跨版本修复
+Record each version line's goals, scope, and acceptance criteria in `docs/roadmap/v<MAJOR>.<MINOR>.md`. Use issues or pull requests to track individual work items. A GitHub milestone is optional; maintainers may use one to group related issues and pull requests and track progress, with a link to the version plan in its description.
 
-- 每项改动从其实际目标分支创建独立工作分支，并通过 PR 合并。
-- 适用于旧版本的修复先进入相应目标分支；若较新的开发线也需要该修复，再以短期工作分支通过单独 PR 向前同步。不要把仍需保留的长期维护分支直接作为 PR 源分支。
-- 较新版本专属功能不得合入旧版本分支。不同版本间不兼容的修复应分别适配，并在各自目标分支验证。
-- 长期分支间的必要同步通过 PR 进行，提前处理冲突，避免在版本交接前积累大量差异。
-- `main`、版本开发分支和维护分支不接受未经评审的直接提交、强制更新或未经安排的跨版本合并。
+## 3. Development and Cross-Version Fixes
 
-## 4. 版本主线交接
+- Create a separate working branch from the actual target branch for each change, then merge it through a pull request.
+- First merge a fix into the target branch for the affected older version. If a newer development line also needs the fix, forward-port it through a separate pull request from a short-lived working branch. Do not use a long-lived maintenance branch as the source branch for a pull request.
+- Do not merge features intended only for a newer version into an older version branch. Adapt incompatible fixes separately and validate them on each target branch.
+- Make necessary changes between long-lived branches through pull requests and resolve conflicts early, rather than accumulating a large divergence before a version handoff.
+- Do not push directly to `main`, version development branches, or maintenance branches. Do not force-update them or make unplanned cross-version merges.
 
-当某条 `v<MAJOR>.<MINOR>` 开发线准备接管 `main` 时：
+## 4. Version Handoffs
 
-1. 确认原版本系列是否仍需维护；如需要，在合并前从当前 `main` 创建对应的 `release/<MAJOR>.<MINOR>`。
-2. 完成 `main` 到该开发线的最后一次必要同步。
-3. 完成评审、CI 和合并验证后，通过 PR 将版本开发线合入 `main`。
-4. 合并后由 `main` 承载新的主线；已创建的维护分支继续承载旧版本的必要修复。
+When a `v<MAJOR>.<MINOR>` development line is ready to take over `main`:
 
-## 5. 合并后的分支清理
+1. Decide whether the previous version series still needs maintenance. If it does, create its `release/<MAJOR>.<MINOR>` branch from the current `main` before the handoff.
+2. Complete the final required synchronization from `main` to the development line.
+3. After review, CI, and merge validation, merge the development line into `main` through a pull request.
+4. `main` then carries the new primary development line. Any maintenance branch that was created continues to receive necessary fixes for its older version.
 
-本仓库已启用 GitHub 的“合并 PR 后自动删除源分支”设置。PR 合并后，GitHub 会清理本仓库中该 PR 的源分支；此设置不会删除贡献者 fork 中的分支，fork 所有人可自行清理。若长期分支仍需保留，不要把它作为一次性 PR 的源分支；版本交接时应先按上一节建立独立维护分支。受保护分支仍受 GitHub 仓库保护规则约束。
+## 5. Post-Merge Branch Cleanup
 
-## 6. 发布标签
+This repository has GitHub's automatic deletion of merged pull request branches enabled. After a pull request is merged, GitHub deletes its source branch in this repository. This setting does not delete branches in contributors' forks; fork owners can clean those up themselves. Do not use a long-lived branch as the source of a one-off pull request when it must be kept. Create a separate maintenance branch during a version handoff when needed. Branch protection rules still apply.
 
-发布标签使用 `v` 前缀，格式为 `v<MAJOR>.<MINOR>.<PATCH>`。`v` 是标签命名约定，不属于 SemVer 版本号本身；去掉前缀后的版本号遵循语义化版本（SemVer）。标签表示一次具体发布，和持续变化的分支用途不同。
+## 6. Release Tags
 
-## 7. 仓库维护设置
+Use the `v` prefix for release tags in the form `v<MAJOR>.<MINOR>.<PATCH>`. The prefix is a common tag naming convention and is not part of the SemVer version string; the version without the prefix follows Semantic Versioning (SemVer). A tag identifies a specific release, unlike a branch that continues to change.
 
-- 默认分支保持为 `main`。
-- 对 `main`、版本开发分支和维护分支配置适当的保护规则，例如要求 PR、评审和 CI 检查。
-- PR 说明目标分支、目标版本系列及变更目的；合并前满足目标分支的保护规则。
-- 仓库版本策略或 GitHub 分支设置改变时，同步更新本文档。
+## 7. Repository Settings
+
+- Keep `main` as the default branch.
+- Apply appropriate protection rules to `main`, version development branches, and maintenance branches, such as requiring pull requests, review, and CI checks.
+- State the target branch, version series, and purpose in each pull request. Meet the target branch's protection requirements before merging.
+- Update this guide when the repository's version policy or GitHub branch settings change.
