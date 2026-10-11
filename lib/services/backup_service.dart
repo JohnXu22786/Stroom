@@ -407,6 +407,7 @@ class BackupService {
         final settingsKeys = <String>[];
         for (final key in await StartupPreferences.getKeys()) {
           if (key.startsWith('flutter.') ||
+              _isLegacyProviderQuarantineKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -444,6 +445,7 @@ class BackupService {
         final settingsData = <String, dynamic>{};
         for (final key in prefs.getKeys()) {
           if (key.startsWith('flutter.') ||
+              _isLegacyProviderQuarantineKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -455,7 +457,8 @@ class BackupService {
               chatData[key] = prefs.get(key);
             }
           } else if (selection.settings) {
-            settingsData[key] = prefs.get(key);
+            final value = _safeBackupPreferenceValue(key, prefs.get(key));
+            if (value != null) settingsData[key] = value;
           }
         }
         if (selection.chatRecordsAndAttachments) {
@@ -1584,11 +1587,18 @@ class BackupService {
   static bool _isDeviceLocalPreferenceKey(String key) =>
       key == 'backup_saf_uri' || key == 'browser_cookie_backup_restore_pending';
 
+  /// Corrupt provider snapshots predate secure credential migration and may
+  /// contain plaintext keys. They are recovery artifacts, not portable app
+  /// settings, so never export or restore them through ordinary backups.
+  static bool _isLegacyProviderQuarantineKey(String key) =>
+      key.startsWith('provider_entries_corrupt_');
+
   /// 判断一个 SharedPreferences 键是否属于 [selection] 中选中的类别。
   ///
   /// `flutter.*` 内部键永不参与备份/恢复/清除。
   static bool _isKeyInSelection(String key, BackupSelection selection) {
     if (key.startsWith('flutter.') ||
+        _isLegacyProviderQuarantineKey(key) ||
         _isDeviceLocalPreferenceKey(key) ||
         DataMigrationService.isFormatMetadataKey(key)) {
       return false;
@@ -1788,6 +1798,7 @@ class BackupService {
       final prefs = await SharedPreferences.getInstance();
       for (final key in prefs.getKeys()) {
         if (key.startsWith('flutter.') ||
+            _isLegacyProviderQuarantineKey(key) ||
             DataMigrationService.isFormatMetadataKey(key) ||
             _isDeviceLocalPreferenceKey(key) ||
             (key == _browserCookieRetentionKey && !selection.browserCookies)) {
@@ -1799,7 +1810,8 @@ class BackupService {
           }
         } else {
           if (selection.settings) {
-            settingsData[key] = prefs.get(key);
+            final value = _safeBackupPreferenceValue(key, prefs.get(key));
+            if (value != null) settingsData[key] = value;
           }
         }
       }
@@ -3464,6 +3476,7 @@ class BackupService {
         v1Prefs?.keys.any(
           (key) =>
               !_isDeviceLocalPreferenceKey(key) &&
+              !_isLegacyProviderQuarantineKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key) &&
               predicate(key),
         ) ??
@@ -3475,6 +3488,7 @@ class BackupService {
               key != _browserCookieRetentionKey &&
               !key.startsWith('flutter.') &&
               !_isDeviceLocalPreferenceKey(key) &&
+              !_isLegacyProviderQuarantineKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key),
         ) ??
         false;
@@ -3527,6 +3541,7 @@ class BackupService {
                 (key) =>
                     !_isChatPrefKey(key) &&
                     key != _browserCookieRetentionKey &&
+                    !_isLegacyProviderQuarantineKey(key) &&
                     !DataMigrationService.isFormatMetadataKey(key),
               )),
       pictures: hasMediaData(
@@ -5499,17 +5514,61 @@ Map<String, String> _encodeBackupPreferenceGroups(
   Map<String, Object?> values,
   List<String> chatKeys,
   List<String> settingsKeys,
-) =>
-    {
-      'chat_data': jsonEncode({
-        for (final key in chatKeys)
-          if (values.containsKey(key)) key: values[key],
-      }),
-      'settings': jsonEncode({
-        for (final key in settingsKeys)
-          if (values.containsKey(key)) key: values[key],
-      }),
-    };
+) {
+  final chatData = {
+    for (final key in chatKeys)
+      if (values.containsKey(key)) key: values[key],
+  };
+  final settingsData = {
+    for (final key in settingsKeys)
+      if (values.containsKey(key)) key: values[key],
+  };
+  for (final key in settingsData.keys.toList()) {
+    final value = _safeBackupPreferenceValue(key, settingsData[key]);
+    if (value == null) {
+      settingsData.remove(key);
+    } else {
+      settingsData[key] = value;
+    }
+  }
+  return {
+    'chat_data': jsonEncode(chatData),
+    'settings': jsonEncode(settingsData),
+  };
+}
+
+/// Exports preserve the legacy source on-device when secure storage is
+/// unavailable, but backup archives must never copy its plaintext LLM keys.
+/// Malformed provider settings are omitted rather than copied without a safe
+/// way to identify credential fields.
+Object? _safeBackupPreferenceValue(String key, Object? value) {
+  if (key != 'provider_entries') return value;
+  if (value is! String) return null;
+  try {
+    final decoded = jsonDecode(value);
+    if (decoded is! List) return null;
+    for (final entry in decoded) {
+      if (entry is! Map) return null;
+      if (entry['type'] != 'llm') continue;
+      // Mixed legacy entries can retain the old credential at the entry level
+      // even after configs[] was introduced.
+      entry.remove('key');
+      final configs = entry['configs'];
+      if (configs == null) {
+        // Older provider entries stored their single config at the top level.
+        continue;
+      }
+      if (configs is! List) return null;
+      for (final config in configs) {
+        if (config is! Map) return null;
+        config.remove('key');
+      }
+    }
+    return jsonEncode(decoded);
+  } catch (_) {
+    return null;
+  }
+}
 
 /// 备份计划：主 isolate 收集的数据与文件清单。
 ///

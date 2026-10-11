@@ -129,8 +129,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       debugPrint(
         'Migrated ${oldList.length} old chat config(s) to provider_entries',
       );
-    } catch (e) {
-      debugPrint('Failed to migrate old chat configs: $e');
+    } catch (_) {
+      debugPrint('Failed to migrate old chat configs.');
     }
   }
 
@@ -175,8 +175,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (changed) {
         await prefs.setString('provider_entries', jsonEncode(list));
       }
-    } catch (e) {
-      debugPrint('Failed to migrate custom param types: $e');
+    } catch (_) {
+      debugPrint('Failed to migrate custom parameter types.');
     }
   }
 
@@ -245,8 +245,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (changed) {
         await prefs.setString('provider_entries', jsonEncode(list));
       }
-    } catch (e) {
-      debugPrint('Failed to migrate legacy effort params: $e');
+    } catch (_) {
+      debugPrint('Failed to migrate legacy effort parameters.');
     }
   }
 
@@ -405,22 +405,15 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       host: url ?? '',
       key: '',
       models: [
-        ModelConfig(
-          name: name,
-          modelId: transport,
-          typeConfig: typeConfig,
-        ),
+        ModelConfig(name: name, modelId: transport, typeConfig: typeConfig),
       ],
     );
   }
 
   /// 迁移：为已有 MCP 条目添加或更新内置 MCP 配置
-  Future<void> _migrateBuiltinMcpConfigs(
-    SharedPreferences prefs,
-    List<ProviderEntry> entries,
-  ) async {
+  Future<bool> _migrateBuiltinMcpConfigs(List<ProviderEntry> entries) async {
     final mcpEntryIdx = entries.indexWhere((e) => e.type == 'mcp');
-    if (mcpEntryIdx < 0) return;
+    if (mcpEntryIdx < 0) return false;
 
     final mcpEntry = entries[mcpEntryIdx];
     final builtin = _createBuiltinMcpConfigs();
@@ -464,7 +457,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
               updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
               // Also update headers/env with the old key
               _applyApiKeyToTypeConfig(
-                  updatedConfig.models[0].typeConfig, oldApiKey);
+                updatedConfig.models[0].typeConfig,
+                oldApiKey,
+              );
             }
             final connectivityTest = oldTypeConfig['connectivityTest'];
             if (connectivityTest is Map) {
@@ -498,11 +493,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
     if (changed) {
       entries[mcpEntryIdx] = mcpEntry;
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(entries.map((e) => e.toMap()).toList()),
-      );
     }
+    return changed;
   }
 
   /// Extract API key from an existing config
@@ -517,7 +509,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
   /// Apply an API key to a typeConfig (update headers/env placeholders)
   void _applyApiKeyToTypeConfig(
-      Map<String, dynamic> typeConfig, String apiKey) {
+    Map<String, dynamic> typeConfig,
+    String apiKey,
+  ) {
     if (apiKey.isEmpty) return;
     typeConfig['apiKey'] = apiKey;
     // Update headers
@@ -549,7 +543,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
   /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
   Future<void> _backupCorruptProviderEntries(
-      SharedPreferences prefs, String corruptJson) async {
+    SharedPreferences prefs,
+    String corruptJson,
+  ) async {
     try {
       final backupKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
@@ -562,15 +558,51 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         await prefs.remove(keys.removeAt(0));
       }
       debugPrint(
-          '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey');
-    } catch (e) {
-      debugPrint('Failed to back up corrupt provider entries: $e');
+        '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey',
+      );
+    } catch (_) {
+      debugPrint('Failed to back up corrupt provider entries.');
     }
   }
 
   Future<void> _persist({bool rethrowOnFailure = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_providerEntriesSourceUnreadable) {
+        debugPrint(
+          'Provider settings were not persisted because stored entries could not be read safely.',
+        );
+        if (rethrowOnFailure) {
+          throw StateError('Stored provider entries require recovery.');
+        }
+        return;
+      }
+      _applyCredentialReferencesFromSavedEntries(
+        state.entries,
+        prefs.getString('provider_entries'),
+      );
+      final migrationInput = jsonEncode(
+        state.entries.map((entry) => entry.toCredentialMigrationMap()).toList(),
+      );
+      try {
+        await LlmAccountMigrationService(
+          preferences: _SharedPreferencesLlmAccountPreferences(prefs),
+          credentialStore: _credentialStore,
+        ).migrate(sourceProviderEntriesJson: migrationInput);
+      } on LlmAccountMigrationException {
+        debugPrint(
+          'Secure credential storage is unavailable; provider settings were not persisted.',
+        );
+        if (rethrowOnFailure) {
+          throw StateError('Secure credential migration is unavailable.');
+        }
+        return;
+      }
+
+      _applyCredentialReferencesFromSavedEntries(
+        state.entries,
+        prefs.getString('provider_entries'),
+      );
       final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
       final entriesSaved = await prefs.setString('provider_entries', json);
       final groupsSaved = await prefs.setString(
@@ -580,9 +612,55 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
         throw StateError('Failed to persist provider configuration.');
       }
-    } catch (e) {
-      debugPrint('Failed to persist provider entries: $e');
+    } catch (_) {
+      debugPrint('Failed to persist provider entries.');
       if (rethrowOnFailure) rethrow;
     }
   }
+
+  void _applyCredentialReferencesFromSavedEntries(
+    List<ProviderEntry> entries,
+    String? savedJson,
+  ) {
+    if (savedJson == null) return;
+    try {
+      final decoded = jsonDecode(savedJson);
+      if (decoded is! List) return;
+      final referencesByConfigId = <String, String>{};
+      for (final entry in decoded.whereType<Map>()) {
+        if (entry['type'] != 'llm' || entry['configs'] is! List) continue;
+        for (final config in (entry['configs'] as List).whereType<Map>()) {
+          final id = config['id'];
+          final reference = config['credentialRef'];
+          if (id is String && reference is String) {
+            referencesByConfigId[id] = reference;
+          }
+        }
+      }
+      for (final entry in entries.where((entry) => entry.type == 'llm')) {
+        for (final config in entry.configs) {
+          final reference = referencesByConfigId[config.id];
+          if (reference != null && config.credentialRef == null) {
+            config.credentialRef = reference;
+          }
+        }
+      }
+    } catch (_) {
+      // The migration has already validated its own persisted JSON. A parse
+      // error here only means the legacy state should not be rewritten.
+    }
+  }
+}
+
+class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
+  final SharedPreferences _preferences;
+
+  _SharedPreferencesLlmAccountPreferences(this._preferences);
+
+  @override
+  Future<String?> getString(String key) async => _preferences.getString(key);
+
+  @override
+  Future<bool> setString(String key, String value) =>
+      _preferences.setString(key, value);
 }

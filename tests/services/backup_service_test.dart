@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
@@ -18,6 +20,114 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+  });
+
+  testWidgets('LLM credentials migrate out of ordinary backup exports',
+      (WidgetTester t) async {
+    const secret = 'sk_export_boundary_secret_8632';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'name': 'LLM providers',
+          'configs': [
+            {
+              'id': 'provider-config-export',
+              'providerName': 'Test provider',
+              'host': 'https://api.example.test',
+              'key': secret,
+              'endpointType': 'openai',
+              'models': [
+                {
+                  'name': 'Example model',
+                  'modelId': 'example-model',
+                  'supportStream': true,
+                  'typeConfig': <String, dynamic>{},
+                  'customParams': <Map<String, dynamic>>[],
+                  'reasoningParams': <Map<String, dynamic>>[],
+                },
+              ],
+              'customParams': <Map<String, dynamic>>[],
+              'reasoningParams': <Map<String, dynamic>>[],
+            },
+          ],
+        },
+      ]),
+    );
+    await prefs.setString(
+      'provider_entries_corrupt_123',
+      jsonEncode([
+        {
+          'type': 'llm',
+          'configs': [
+            {'id': 'quarantined-config', 'key': secret},
+          ],
+        },
+      ]),
+    );
+    await LlmAccountMigrationService(
+      preferences: _BackupLlmPreferences(prefs),
+      credentialStore: _BackupCredentialStore(),
+    ).migrate();
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(secret), isFalse);
+    expect(exportedText, contains('provider-config-export'));
+    expect(exportedText, contains('credentialRef'));
+  });
+
+  testWidgets('legacy LLM credentials are redacted from backup exports',
+      (WidgetTester t) async {
+    const secret = 'sk_unmigrated_export_secret_2718';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'legacy-llm-entry',
+          'type': 'llm',
+          'name': 'Legacy LLM providers',
+          'key': secret,
+          'configs': [
+            {
+              'id': 'legacy-provider-config',
+              'providerName': 'Legacy provider',
+              'host': 'https://api.example.test',
+              'key': secret,
+              'models': [
+                {
+                  'id': 'legacy-model',
+                  'modelId': 'legacy-model-id',
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(secret), isFalse);
+    expect(exportedText, contains('legacy-provider-config'));
+    expect(exportedText, contains('legacy-model-id'));
+    expect(prefs.getString('provider_entries'), contains(secret));
   });
 
   // ==================================================================
@@ -505,4 +615,34 @@ void main() {
       expect((manifest as Map<String, dynamic>)['version'], equals(2));
     });
   });
+}
+
+class _BackupLlmPreferences implements LlmAccountPreferences {
+  final SharedPreferences _preferences;
+
+  _BackupLlmPreferences(this._preferences);
+
+  @override
+  Future<String?> getString(String key) async => _preferences.getString(key);
+
+  @override
+  Future<bool> setString(String key, String value) =>
+      _preferences.setString(key, value);
+}
+
+class _BackupCredentialStore implements LlmCredentialStore {
+  final Map<String, String> _values = {};
+
+  @override
+  Future<String?> read(String reference) async => _values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    _values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    _values.remove(reference);
+  }
 }
