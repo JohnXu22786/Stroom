@@ -3,16 +3,20 @@ name: CI Checks
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A title/body-only edit gets its own short validation workflow and must not
+  # cancel a code run. Retargeting a PR changes `changes.base` and still
+  # cancels the prior run so the new base is checked.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
 
 jobs:
   vendor-js:
     name: Vendor JS (${{ matrix.label }})
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -39,6 +43,7 @@ jobs:
   # Keep the required branch-protection check name while sharing Flutter setup.
   quality:
     name: Static Analysis
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,8 +72,15 @@ jobs:
           UNCOVERED=0
           while IFS= read -r file; do
             [ -z "$file" ] && continue
-            test_f="tests/${file#lib/}"
-            test_f="${test_f%.dart}_test.dart"
+            case "$file" in
+              lib/catcatch/engine/js_hook_script.dart)
+                test_f="tests/catcatch/js_hook_script_test.cjs"
+                ;;
+              *)
+                test_f="tests/${file#lib/}"
+                test_f="${test_f%.dart}_test.dart"
+                ;;
+            esac
             if [ -f "$test_f" ]; then
               echo "  ✅ $file"
             else
@@ -94,6 +106,7 @@ jobs:
 
   android-unit:
     name: Android unit tests
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,6 +130,7 @@ jobs:
 
   catcatch-js:
     name: CatCatch JavaScript boundary tests
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     needs: [quality]
     steps:
@@ -131,6 +145,7 @@ jobs:
   # Flutter's Web test server serves fixtures from tests/, which this job aliases.
   startup-web:
     name: Startup Web test
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     needs: [quality]
     steps:
@@ -153,6 +168,7 @@ jobs:
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
     name: Tests (${{ matrix.label }})
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     needs: [quality]
     strategy:
