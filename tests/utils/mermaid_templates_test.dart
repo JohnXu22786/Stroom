@@ -50,6 +50,19 @@ void main() {
     );
   });
 
+  group('MermaidTemplates - GitGraph snippets', () {
+    test('merge snippet targets a branch defined in the default template', () {
+      final template = MermaidTemplates.getTemplate('gitGraph');
+      final mergeSnippet = MermaidTemplates.getSnippets('gitGraph')
+          .singleWhere((snippet) => snippet.$1 == '合并分支')
+          .$2;
+      final mergeTarget = mergeSnippet.trim().split(RegExp(r'\s+')).last;
+
+      expect(mergeSnippet, startsWith('  merge '));
+      expect(template.split('\n'), contains('  branch $mergeTarget'));
+    });
+  });
+
   group('MermaidTemplates - mindmap snippets', () {
     test(
       'adds a topic under the existing root without adding another root',
