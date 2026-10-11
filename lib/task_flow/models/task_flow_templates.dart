@@ -42,10 +42,10 @@ const taskFlowTemplates = [
     blockTypes: [BlockType.ocr, BlockType.chat],
   ),
   TaskFlowTemplate(
-    name: '文本生成语音',
-    description: '输入文本 → 语音合成',
-    requirements: '需要配置 TTS 模型，并选择音色',
-    inputType: IOType.text,
-    blockTypes: [BlockType.tts],
+    name: '帮我读出图片文字',
+    description: '选择图片 → 识别文字 → 语音朗读',
+    requirements: '需要配置 OCR 和语音合成模型，并选择音色',
+    inputType: IOType.image,
+    blockTypes: [BlockType.ocr, BlockType.tts],
   ),
 ];
