@@ -381,6 +381,42 @@ void main() {
       // Confirm button should be present
       expect(find.byKey(const Key('media_picker_confirm_btn')), findsOneWidget);
     });
+
+    testWidgets('reports unsupported RIFF recordings without an async error', (
+      tester,
+    ) async {
+      const hash = 'unsupported_avi_recording';
+      final aviBytes = Uint8List.fromList([
+        0x52, 0x49, 0x46, 0x46, // RIFF
+        4, 0, 0, 0,
+        0x41, 0x56, 0x49, 0x20, // AVI
+      ]);
+      await FileManifest.addRecord(
+        AudioRecord(
+          name: '不支持的录音',
+          hash: hash,
+          format: 'wav',
+          createdAt: DateTime.now(),
+          size: aviBytes.length,
+        ),
+      );
+      await FileManifest.writeFile('$hash.wav', aviBytes);
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('录音选择'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('应用内录音'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('media_picker_confirm_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('选择音频文件失败'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   // ====================================================================

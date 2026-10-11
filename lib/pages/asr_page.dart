@@ -972,7 +972,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           SelectedAudio(
             bytes: bytes,
             name: file.name,
-            format: _detectFormat(file.name),
+            format: resolveAudioFormat(
+              bytes,
+              fallbackFormat: _detectFormat(file.name),
+            ),
           ),
         );
       }
@@ -1065,17 +1068,28 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // Look up records to get correct formats
     final records = ref.read(audioRecordsProvider);
     final newAudios = <SelectedAudio>[];
-    for (final entry in result) {
-      String format = 'wav';
-      for (final r in records) {
-        if (r.name == entry.key) {
-          format = r.format;
-          break;
+    try {
+      for (final entry in result) {
+        String format = 'wav';
+        for (final r in records) {
+          if (r.name == entry.key) {
+            format = r.format;
+            break;
+          }
         }
+        newAudios.add(
+          SelectedAudio(
+            bytes: entry.value,
+            name: entry.key,
+            format: resolveAudioFormat(entry.value, fallbackFormat: format),
+          ),
+        );
       }
-      newAudios.add(
-        SelectedAudio(bytes: entry.value, name: entry.key, format: format),
+    } on FormatException catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('选择音频文件失败: $error')),
       );
+      return;
     }
 
     setState(() {

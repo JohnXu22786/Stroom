@@ -17,6 +17,60 @@ void main() {
       expect(detectAudioFormat(data), equals('pcm'));
     });
 
+    test('recognizes RIFX as WAV content rather than raw PCM', () {
+      final data = Uint8List.fromList([
+        0x52, 0x49, 0x46, 0x58, // RIFX
+        0, 0, 0, 4, // Big-endian RIFF size
+        0x57, 0x41, 0x56, 0x45, // WAVE
+      ]);
+      expect(detectAudioFormat(data), 'wav');
+    });
+
+    test('rejects RF64 before applying a fallback format', () {
+      final rf64 = Uint8List.fromList([
+        0x52, 0x46, 0x36, 0x34, // RF64
+        0xff, 0xff, 0xff, 0xff, // RF64 placeholder size
+        0x57, 0x41, 0x56, 0x45, // WAVE
+      ]);
+      final truncatedRf64 = Uint8List.fromList(rf64.sublist(0, 4));
+
+      for (final bytes in [rf64, truncatedRf64]) {
+        expect(
+          () => detectAudioFormat(bytes),
+          throwsA(isA<FormatException>()),
+        );
+        expect(
+          () => resolveAudioFormat(bytes, fallbackFormat: 'mp3'),
+          throwsA(isA<FormatException>()),
+        );
+      }
+    });
+
+    test('rejects unsupported RIFF and RIFX containers before fallback', () {
+      for (final container in [
+        [0x52, 0x49, 0x46, 0x46], // RIFF
+        [0x52, 0x49, 0x46, 0x58], // RIFX
+      ]) {
+        final avi = Uint8List.fromList([
+          ...container,
+          4, 0, 0, 0,
+          0x41, 0x56, 0x49, 0x20, // AVI
+        ]);
+
+        expect(
+          () => detectAudioFormat(avi),
+          throwsA(isA<FormatException>()),
+        );
+        for (final fallback in ['wav', 'mp3', 'pcm']) {
+          expect(
+            () => resolveAudioFormat(avi, fallbackFormat: fallback),
+            throwsA(isA<FormatException>()),
+            reason: '$fallback fallback must not relabel an AVI container',
+          );
+        }
+      }
+    });
+
     test('detects AAC ADTS and does not confuse with MP3', () {
       // AAC ADTS frame header: sync=0xFFF, MPEG-4, layer=00
       // Byte 2: profile(1)<<6 | freqIdx(4)<<2 | chanConfig_h(2)
@@ -155,13 +209,50 @@ void main() {
       // WAV data requested as pcm
       final wavData = Uint8List.fromList([
         0x52, 0x49, 0x46, 0x46, // RIFF
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0,
+        0x57, 0x41, 0x56, 0x45, // WAVE
+        0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       ]);
       final result = ensureValidAudioFormat(wavData, requestedFormat: 'pcm');
       // Should detect it's actually wav and keep it
       expect(result.$2, equals('wav'));
+    });
+  });
+
+  group('resolveAudioFormat', () {
+    test('prefers a known content signature over the requested format', () {
+      final wav = pcmToWav(Uint8List.fromList([0, 0]));
+
+      expect(resolveAudioFormat(wav, fallbackFormat: 'mp3'), 'wav');
+    });
+
+    test('retains the requested format for unknown raw PCM bytes', () {
+      final pcm = Uint8List.fromList([1, 2, 3]);
+
+      expect(resolveAudioFormat(pcm, fallbackFormat: 'MP3'), 'mp3');
+    });
+
+    test('rejects truncated RIFF and RIFX prefixes before raw PCM fallback',
+        () {
+      for (final signature in ['RIFF', 'RIFX']) {
+        final truncated = Uint8List.fromList(signature.codeUnits);
+
+        expect(
+          () => resolveAudioFormat(truncated, fallbackFormat: 'pcm'),
+          throwsA(isA<FormatException>()),
+          reason: signature,
+        );
+        expect(
+          () => ensureValidAudioFormat(
+            truncated,
+            requestedFormat: 'pcm',
+          ),
+          throwsA(isA<FormatException>()),
+          reason: 'ensureValidAudioFormat: $signature',
+        );
+      }
     });
   });
 
