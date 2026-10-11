@@ -7,6 +7,7 @@ import '../providers/provider_config.dart';
 
 import '../utils/http_utils.dart';
 import '../utils/http_timeout.dart';
+import '../utils/ocr_diagnostics.dart';
 import 'app_log_service.dart';
 
 // ============================================================================
@@ -135,6 +136,31 @@ class OcrService {
   /// The last HTTP response status code.
   int? lastResponseStatusCode;
 
+  int? _lastDurationMs;
+  int _lastImageCount = 0;
+  int _lastImageBytes = 0;
+  String? _lastFinishReason;
+  String? _lastRequestId;
+  String? _lastErrorType;
+
+  /// Safe diagnostic maps for task persistence and the error detail view.
+  Map<String, dynamic> get diagnosticRequest => OcrDiagnosticSnapshot.request(
+        url: lastRequestUrl,
+        imageCount: _lastImageCount,
+        imageBytes: _lastImageBytes,
+        durationMs: _lastDurationMs,
+        requestId: _lastRequestId,
+      );
+
+  Map<String, dynamic> diagnosticResponse({Object? error}) =>
+      OcrDiagnosticSnapshot.response(
+        statusCode: lastResponseStatusCode,
+        finishReason: _lastFinishReason,
+        durationMs: _lastDurationMs,
+        requestId: _lastRequestId,
+        errorType: error?.runtimeType.toString() ?? _lastErrorType,
+      );
+
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
   static String _maskApiKey(String key) {
     if (key.isEmpty) return '****';
@@ -203,6 +229,7 @@ class OcrService {
     await AppLogService.info(
         'OcrService', '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节');
     final stopwatch = Stopwatch()..start();
+    _beginDiagnosticCapture(1, imageBytes.length);
 
     final base64Image = base64Encode(imageBytes);
     final dataUri = 'data:image/$imageFormat;base64,$base64Image';
@@ -248,10 +275,14 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
+      _lastRequestId =
+          OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
+          OcrDiagnosticSnapshot.requestIdFromData(response.data);
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
+      _lastFinishReason = parsed.finishReason;
 
       await AppLogService.info('OcrService',
           'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
@@ -266,6 +297,8 @@ class OcrService {
       // Capture response diagnostics from exception
       _captureDioExceptionDiagnostics(e);
       throwWrappedDioException(e);
+    } finally {
+      _finishDiagnosticCapture(stopwatch);
     }
   }
 
@@ -286,6 +319,10 @@ class OcrService {
     }
 
     final stopwatch = Stopwatch()..start();
+    _beginDiagnosticCapture(
+      imageBytesList.length,
+      imageBytesList.fold<int>(0, (sum, image) => sum + image.$1.length),
+    );
 
     // Consecutive image parts (image identity is conveyed by array order,
     // per official docs), then the optional instruction text last.
@@ -329,10 +366,14 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
+      _lastRequestId =
+          OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
+          OcrDiagnosticSnapshot.requestIdFromData(response.data);
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
+      _lastFinishReason = parsed.finishReason;
 
       await AppLogService.info('OcrService',
           '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
@@ -347,7 +388,23 @@ class OcrService {
       // Capture response diagnostics from exception
       _captureDioExceptionDiagnostics(e);
       throwWrappedDioException(e);
+    } finally {
+      _finishDiagnosticCapture(stopwatch);
     }
+  }
+
+  void _beginDiagnosticCapture(int imageCount, int imageBytes) {
+    _lastDurationMs = null;
+    _lastImageCount = imageCount;
+    _lastImageBytes = imageBytes;
+    _lastFinishReason = null;
+    _lastRequestId = null;
+    _lastErrorType = null;
+  }
+
+  void _finishDiagnosticCapture(Stopwatch stopwatch) {
+    if (stopwatch.isRunning) stopwatch.stop();
+    _lastDurationMs = stopwatch.elapsedMilliseconds;
   }
 
   Options _requestOptions(Map<String, dynamic> body) => Options(
@@ -378,6 +435,10 @@ class OcrService {
     }
     lastResponseStatusCode = e.response?.statusCode;
     lastResponseHeaders = e.response?.headers.map;
+    _lastRequestId =
+        OcrDiagnosticSnapshot.requestIdFromHeaders(e.response?.headers.map) ??
+        OcrDiagnosticSnapshot.requestIdFromData(e.response?.data);
+    _lastErrorType = e.type.name;
   }
 
   /// Build the standard OpenAI-compatible request body.

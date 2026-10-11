@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 
 import '../providers/background_task_provider.dart';
+import '../utils/ocr_diagnostics.dart';
 import '../utils/text_manifest.dart';
 import 'ocr_result_saver.dart';
 import 'ocr_service.dart';
@@ -147,9 +148,10 @@ class OcrTaskRunner {
         final task =
             notifier.state.where((task) => task.id == taskId).firstOrNull;
         if (task != null) {
+          final safeError = OcrDiagnosticSnapshot.safeTaskError(error);
           for (var i = 0; i < task.steps.length; i++) {
             if (task.steps[i].running) {
-              notifier.updateStep(taskId, i, failed: true, error: '$error');
+              notifier.updateStep(taskId, i, failed: true, error: safeError);
             } else if (task.steps[i].status == BgStepStatus.pending) {
               notifier.updateStep(taskId, i, skipped: true);
             }
@@ -157,26 +159,14 @@ class OcrTaskRunner {
           final service = _service;
           final result = task.result;
           final errorMessage = result == null
-              ? 'OCR识别失败: $error'
+              ? 'OCR识别失败: $safeError'
               : task.resultIsComplete
-                  ? 'OCR结果保存失败: $error'
-                  : 'OCR结果不完整: $error';
+                  ? 'OCR结果保存失败: $safeError'
+                  : 'OCR结果不完整: $safeError';
           notifier.failTask(taskId,
               error: errorMessage,
-              rawRequest: service == null
-                  ? null
-                  : {
-                      'url': service.lastRequestUrl,
-                      'headers': service.lastRequestHeaders,
-                      'body': service.lastRequestBody,
-                    },
-              rawResponse: service == null
-                  ? null
-                  : {
-                      'statusCode': service.lastResponseStatusCode,
-                      'headers': service.lastResponseHeaders,
-                      'data': service.lastResponseData,
-                    });
+              rawRequest: service?.diagnosticRequest,
+              rawResponse: service?.diagnosticResponse(error: error));
         }
       }
     } finally {

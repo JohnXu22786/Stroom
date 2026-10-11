@@ -1,0 +1,232 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as p;
+
+import '../pages/ocr/ocr_retry_snapshot.dart';
+import '../utils/atomic_file.dart';
+import '../utils/web_file_store.dart';
+import 'storage_service.dart';
+
+class OcrRetryRestoreResult {
+  final List<OcrRetryImage> images;
+  final int missingImageCount;
+
+  const OcrRetryRestoreResult({
+    required this.images,
+    required this.missingImageCount,
+  });
+
+  bool get isComplete => missingImageCount == 0;
+}
+
+/// Stores OCR retry inputs outside the task JSON and resolves old inline data.
+class OcrRetryStorage {
+  OcrRetryStorage._();
+
+  static const _cacheDirectoryName = 'ocr_retry_cache';
+  static final Map<String, Future<void>> _taskWrites = {};
+  static final _referencePattern = RegExp(
+    r'^ocr_retry_cache/[0-9a-f]{64}\.bin$',
+  );
+
+  static Future<Map<String, dynamic>> cacheSnapshot({
+    required String taskId,
+    required OcrRetrySnapshot snapshot,
+  }) async {
+    if (taskId.isEmpty ||
+        snapshot.hasInvalidImages ||
+        snapshot.imageEntryCount != snapshot.images.length) {
+      throw const FormatException('OCR retry snapshot is incomplete');
+    }
+
+    return _withTaskWrite(taskId, () async {
+      final cachedImages = <OcrRetryImage>[];
+      final previousBytes = <String, Uint8List?>{};
+      try {
+        for (var index = 0; index < snapshot.images.length; index++) {
+          final image = snapshot.images[index];
+          final bytes =
+              image.bytes ??
+              (image.storageRef == null ? null : await read(image.storageRef!));
+          if (bytes == null || bytes.isEmpty) {
+            throw const FormatException(
+              'An OCR retry image is missing; select the images again',
+            );
+          }
+          final reference = _referenceFor(taskId, index);
+          previousBytes[reference] = await _writeIfChanged(reference, bytes);
+          cachedImages.add(
+            OcrRetryImage.reference(
+              storageRef: reference,
+              format: image.format,
+              name: image.name,
+            ),
+          );
+        }
+
+        return OcrRetrySnapshot.capture(
+          configId: snapshot.configId,
+          modelId: snapshot.modelId,
+          images: cachedImages,
+          instructionContent: snapshot.instructionContent,
+          saveFolder: snapshot.saveFolder,
+          legacyModelIndex: snapshot.legacyModelIndex,
+          legacyInstructionIndex: snapshot.legacyInstructionIndex,
+        ).toMap();
+      } catch (_) {
+        for (final entry in previousBytes.entries.toList().reversed) {
+          try {
+            final oldBytes = entry.value;
+            if (oldBytes == null) {
+              await deleteUnreferenced(
+                candidates: {entry.key},
+                referenced: const {},
+              );
+            } else {
+              await _writeIfChanged(entry.key, oldBytes);
+            }
+          } catch (_) {}
+        }
+        rethrow;
+      }
+    });
+  }
+
+  static Future<OcrRetryRestoreResult> restoreImages(
+    OcrRetrySnapshot snapshot,
+  ) async {
+    final restored = <OcrRetryImage>[];
+    var missing = snapshot.imageEntryCount - snapshot.images.length;
+    for (final image in snapshot.images) {
+      final bytes =
+          image.bytes ??
+          (image.storageRef == null ? null : await read(image.storageRef!));
+      if (bytes == null || bytes.isEmpty) {
+        missing++;
+        continue;
+      }
+      restored.add(
+        OcrRetryImage(bytes: bytes, format: image.format, name: image.name),
+      );
+    }
+    return OcrRetryRestoreResult(
+      images: List.unmodifiable(restored),
+      missingImageCount: missing,
+    );
+  }
+
+  static Future<Uint8List?> read(String reference) async {
+    if (!_isCacheReference(reference)) return null;
+    if (_usesWebStore) return WebFileStore.read(reference);
+    final file = await _nativeFile(reference);
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  static Set<String> referencesFromSnapshot(Map<String, dynamic>? snapshot) {
+    if (snapshot == null || snapshot['type'] != 'ocr') return <String>{};
+    final rawImages = snapshot['images'];
+    if (rawImages is! List) return <String>{};
+    return {
+      for (final image in rawImages)
+        if (image is Map &&
+            image['storageRef'] is String &&
+            _isCacheReference(image['storageRef'] as String))
+          image['storageRef'] as String,
+    };
+  }
+
+  /// Deletes only validated OCR references that no remaining task owns.
+  static Future<void> deleteUnreferenced({
+    required Set<String> candidates,
+    required Set<String> referenced,
+  }) async {
+    final deletable = candidates
+        .where(
+          (reference) =>
+              _isCacheReference(reference) && !referenced.contains(reference),
+        )
+        .toSet();
+    for (final reference in deletable) {
+      if (_usesWebStore) {
+        await WebFileStore.delete(reference);
+      } else {
+        final file = await _nativeFile(reference);
+        if (await file.exists()) await file.delete();
+      }
+    }
+  }
+
+  static String _referenceFor(String taskId, int index) {
+    final hash = sha256.convert(utf8.encode('$taskId:$index')).toString();
+    return '$_cacheDirectoryName/$hash.bin';
+  }
+
+  static bool _isCacheReference(String reference) =>
+      _referencePattern.hasMatch(reference);
+
+  static bool get _usesWebStore => kIsWeb || WebFileStore.isTestMode;
+
+  static Future<T> _withTaskWrite<T>(
+    String taskId,
+    Future<T> Function() write,
+  ) async {
+    final previous = _taskWrites[taskId] ?? Future<void>.value();
+    final release = Completer<void>();
+    final queuedWrite = release.future;
+    _taskWrites[taskId] = queuedWrite;
+    await previous;
+    try {
+      return await write();
+    } finally {
+      release.complete();
+      if (identical(_taskWrites[taskId], queuedWrite)) {
+        _taskWrites.remove(taskId);
+      }
+    }
+  }
+
+  static Future<Uint8List?> _writeIfChanged(
+    String reference,
+    Uint8List bytes,
+  ) async {
+    final existing = await read(reference);
+    if (existing != null && _sameBytes(existing, bytes)) return existing;
+    if (_usesWebStore) {
+      await WebFileStore.write(reference, bytes);
+      return existing;
+    }
+    final file = await _nativeFile(reference, createDirectory: true);
+    await AtomicFile.writeBytes(file, bytes);
+    return existing;
+  }
+
+  static bool _sameBytes(Uint8List left, Uint8List right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
+    }
+    return true;
+  }
+
+  static Future<File> _nativeFile(
+    String reference, {
+    bool createDirectory = false,
+  }) async {
+    if (!_isCacheReference(reference)) {
+      throw const FormatException('Invalid OCR cache reference');
+    }
+    final directory = Directory(
+      p.join(await AppStorage.directory, _cacheDirectoryName),
+    );
+    if (createDirectory && !await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return File(p.join(directory.path, p.basename(reference)));
+  }
+}

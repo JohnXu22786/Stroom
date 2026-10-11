@@ -28,6 +28,59 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
+    testWidgets('OCR diagnostics show safe summary fields only', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'api.example.com',
+                  'method': 'POST',
+                  'requestId': 'req-123',
+                  'durationMs': 37,
+                  'imageCount': 2,
+                  'imageBytes': 8192,
+                  'body': {
+                    'Authorization': 'Bearer secret-token',
+                    'image': 'data:image/png;base64,private-image-data',
+                  },
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'finishReason': 'length',
+                  'errorType': 'DioException',
+                  'data': {'secret': 'private-response-body'},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Diagnostics'), findsOneWidget);
+      expect(find.text('Request Body'), findsNothing);
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('api.example.com'));
+      expect(displayed.data, contains('req-123'));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, contains('length'));
+      expect(displayed.data, contains('37'));
+      expect(displayed.data, isNot(contains('secret-token')));
+      expect(displayed.data, isNot(contains('private-image-data')));
+      expect(displayed.data, isNot(contains('private-response-body')));
+    });
+
     testWidgets('shows all 6 sections when full data is provided',
         (tester) async {
       await tester.pumpWidget(

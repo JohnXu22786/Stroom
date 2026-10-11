@@ -549,7 +549,7 @@ void main() {
     // Raw diagnostics (rawRequest/rawResponse) tests
     // ==================================================================
 
-    test('toMap/fromMap preserves rawRequest and rawResponse', () {
+    test('toMap/fromMap sanitizes OCR rawRequest and rawResponse', () {
       const rawRequest = {'url': 'https://api.example.com/ocr', 'body': 'test'};
       const rawResponse = {
         'statusCode': 400,
@@ -568,8 +568,8 @@ void main() {
       final map = task.toMap();
       final restored = BackgroundTask.fromMap(map);
 
-      expect(restored.rawRequest, rawRequest);
-      expect(restored.rawResponse, rawResponse);
+      expect(restored.rawRequest, {'host': 'api.example.com'});
+      expect(restored.rawResponse, {'statusCode': 400});
       expect(restored.error, '识别失败');
     });
 
@@ -588,8 +588,8 @@ void main() {
 
       expect(notifier.state[0].status, TaskStatus.failed);
       expect(notifier.state[0].error, 'OCR失败');
-      expect(notifier.state[0].rawRequest, rawRequest);
-      expect(notifier.state[0].rawResponse, rawResponse);
+      expect(notifier.state[0].rawRequest, {'host': 'api.example.com'});
+      expect(notifier.state[0].rawResponse, {'statusCode': 500});
     });
 
     // ==================================================================

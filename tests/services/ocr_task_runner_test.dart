@@ -43,7 +43,8 @@ class _ControlledAdapter implements HttpClientAdapter {
         }),
         200,
         headers: {
-          Headers.contentTypeHeader: ['application/json']
+          Headers.contentTypeHeader: ['application/json'],
+          'x-request-id': ['req-ocr-123'],
         },
       ));
 
@@ -228,6 +229,17 @@ void main() {
     expect(notifier.state.single.steps[3].completed, isTrue);
     expect(notifier.state.single.steps[4].skipped, isTrue);
     expect(await TextManifest.loadRecords(), isEmpty);
+
+    final diagnostics = notifier.state.single;
+    expect(diagnostics.rawRequest?['host'], 'ocr.test');
+    expect(diagnostics.rawRequest?['imageCount'], 1);
+    expect(diagnostics.rawRequest?['imageBytes'], 3);
+    expect(diagnostics.rawRequest?['durationMs'], isA<int>());
+    expect(diagnostics.rawRequest?.containsKey('body'), isFalse);
+    expect(diagnostics.rawResponse?['statusCode'], 200);
+    expect(diagnostics.rawResponse?['finishReason'], 'length');
+    expect(diagnostics.rawResponse?['requestId'], 'req-ocr-123');
+    expect(diagnostics.rawResponse?['durationMs'], isA<int>());
 
     final task = notifier.state.single;
     var failFirstPartialWrite = true;
