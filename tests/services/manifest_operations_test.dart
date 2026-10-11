@@ -2006,6 +2006,68 @@ void main() {
           reason: 'audio .txt sidecar must be deleted with its folder');
       expect(await WebFileStore.exists('tts_audio/$hash.wav'), isFalse);
     });
+
+    testWidgets(
+        'keeps a shared audio sidecar until the last folder reference is removed',
+        (WidgetTester t) async {
+      const hash = 'hash_shared_sidecar_formats_in_folders';
+      final wav = AudioRecord(
+        id: 'audio_shared_sidecar_folder_wav',
+        name: 'wav',
+        hash: hash,
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 2,
+        folder: 'wav_folder',
+        sourceText: 'shared text',
+      );
+      final mp3 = AudioRecord(
+        id: 'audio_shared_sidecar_folder_mp3',
+        name: 'mp3',
+        hash: hash,
+        format: 'mp3',
+        createdAt: DateTime(2024),
+        size: 3,
+        folder: 'mp3_folder',
+        sourceText: 'shared text',
+      );
+      final sidecarBytes = Uint8List.fromList([97, 98]);
+      await FileManifest.writeFile(wav.storagePath, Uint8List.fromList([1, 2]));
+      await FileManifest.writeFile(
+          mp3.storagePath, Uint8List.fromList([3, 4, 5]));
+      await FileManifest.writeFile(wav.textStoragePath, sidecarBytes);
+      await FileManifest.addFolder(wav.folder);
+      await FileManifest.addFolder(mp3.folder);
+      await FileManifest.addRecord(wav);
+      await FileManifest.addRecord(mp3);
+
+      await FileManifest.removeFolder(wav.folder);
+
+      final recordsAfterFirstRemoval = await FileManifest.loadRecords();
+      final sidecarAfterFirstRemoval =
+          await FileManifest.readFile(wav.textStoragePath);
+      final wavFileAfterFirstRemoval =
+          await WebFileStore.exists('tts_audio/${wav.storagePath}');
+      final mp3FileAfterFirstRemoval =
+          await WebFileStore.exists('tts_audio/${mp3.storagePath}');
+
+      await FileManifest.removeFolder(mp3.folder);
+
+      expect(recordsAfterFirstRemoval.map((record) => record.id), [mp3.id]);
+      expect(wavFileAfterFirstRemoval, isFalse,
+          reason: 'the deleted folder primary file must be removed');
+      expect(mp3FileAfterFirstRemoval, isTrue,
+          reason: 'the surviving folder primary file must remain');
+      expect(sidecarAfterFirstRemoval, equals(sidecarBytes),
+          reason:
+              'the shared sidecar must remain while its hash is referenced');
+      expect(await FileManifest.loadRecords(), isEmpty);
+      expect(await WebFileStore.exists('tts_audio/${mp3.storagePath}'), isFalse,
+          reason: 'the final folder primary file must be removed');
+      expect(await WebFileStore.exists('tts_audio/${wav.textStoragePath}'),
+          isFalse,
+          reason: 'the sidecar must be removed after its final hash reference');
+    });
   });
 
   // ====================================================================
