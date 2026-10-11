@@ -1267,6 +1267,20 @@ void main() {
       );
     });
 
+    test('rejects non-AAC AudioSpecificConfig under MPEG-4 audio OTI',
+        () async {
+      // AOT 8 is CELP, not AAC; the remaining fields declare 44.1 kHz stereo.
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x42, 0x10]),
+        sampleRate: 44100,
+      );
+
+      await expectLater(
+        engine.extractAudio(videoBytes: mp4Bytes, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
     test('validates mp4a tracks against their decoder object type', () async {
       for (final objectTypeIndication in [0x66, 0x67, 0x68]) {
         final aacMp4Bytes = buildMinimalMp4WithAacAudio(

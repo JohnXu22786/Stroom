@@ -726,12 +726,39 @@ class _Mp4aDecoderConfig {
 class _Mp4Demuxer {
   // MPEG-4 Audio and MPEG-2 AAC Main, LC, and SSR are supported.
   static const _aacObjectTypeIndications = {0x40, 0x66, 0x67, 0x68};
+  static const _aacAudioObjectTypes = {
+    1, // AAC Main
+    2, // AAC LC
+    3, // AAC SSR
+    4, // AAC LTP
+    5, // SBR
+    6, // AAC Scalable
+    17, // ER AAC LC
+    19, // ER AAC LTP
+    20, // ER AAC Scalable
+    22, // ER BSAC
+    23, // ER AAC LD
+    29, // PS
+    39, // AAC ELD
+    42, // USAC (xHE-AAC)
+  };
 
   final Uint8List _data;
   int _offset = 0;
   int? _movieTimescale;
 
   _Mp4Demuxer(this._data);
+
+  static bool _hasSupportedAacAudioSpecificConfig(Uint8List? asc) {
+    if (asc == null || asc.isEmpty) return true;
+
+    final objectType = asc[0] >> 3;
+    if (objectType != 31) return _aacAudioObjectTypes.contains(objectType);
+    if (asc.length < 2) return false;
+
+    final extendedObjectType = 32 + ((asc[0] & 0x07) << 3) + (asc[1] >> 5);
+    return _aacAudioObjectTypes.contains(extendedObjectType);
+  }
 
   /// Find the first audio track in the MP4 file.
   _AudioTrackInfo? findAudioTrack() {
@@ -930,10 +957,14 @@ class _Mp4Demuxer {
                             audioSampleEntryVersion,
                           );
                           if (decoderConfig != null) {
-                            supportedMp4aEntry =
-                                _aacObjectTypeIndications.contains(
-                              decoderConfig.objectTypeIndication,
-                            );
+                            final objectTypeIndication =
+                                decoderConfig.objectTypeIndication;
+                            supportedMp4aEntry = _aacObjectTypeIndications
+                                    .contains(objectTypeIndication) &&
+                                (objectTypeIndication != 0x40 ||
+                                    _hasSupportedAacAudioSpecificConfig(
+                                      decoderConfig.audioSpecificConfig,
+                                    ));
                             entryAudioSpecificConfig =
                                 decoderConfig.audioSpecificConfig;
                           }
