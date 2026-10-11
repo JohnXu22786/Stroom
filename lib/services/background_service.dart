@@ -199,8 +199,8 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 /// 启动后台服务。
 ///
-/// 返回 `true` 表示服务已启动（或已在运行），且持久启动所需的看门狗已调度。
-/// 持久启动时若 Android 看门狗调度失败，返回 `false`，但保留已运行的
+/// 返回 `true` 表示服务已启动（或已在运行），且持久用户选择所需的看门狗已调度。
+/// 持久用户选择所需的 Android 看门狗调度失败时，返回 `false`，但保留已运行的
 /// 服务和持久启用状态，以便后续恢复事件再次尝试调度。
 /// [persistEnabled] controls whether this start records a persistent user choice.
 /// 失败原因已记录日志。
@@ -216,6 +216,13 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
           if (!await _setServiceEnabledPreference(true)) return false;
           _explicitUserEnabledInProcess = true;
         }
+        final persistentIntentEnabled = persistEnabled ||
+            await _isBackgroundServiceEnabled(
+              assumeEnabledOnReadError: false,
+            );
+        Future<bool> scheduleKeepAlive() =>
+            persistEnabled ? _enableKeepAlive() : _rearmKeepAlive();
+
         // Android 13+ 上通知权限决定前台服务通知是否可见。
         // 权限被拒绝时服务仍能启动（仅通知不可见），因此请求失败不阻塞。
         await _requestNotificationPermissionIfNeeded();
@@ -230,7 +237,7 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
         } catch (_) {
           // Preserve recovery for an explicitly enabled service even when its
           // current running state cannot be checked or reconciled.
-          if (persistEnabled) await _enableKeepAlive();
+          if (persistentIntentEnabled) await scheduleKeepAlive();
           rethrow;
         }
         if (!serviceRunning) {
@@ -238,7 +245,7 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
           try {
             started = await service.startService();
           } catch (_) {
-            if (persistEnabled) await _enableKeepAlive();
+            if (persistentIntentEnabled) await scheduleKeepAlive();
             rethrow;
           }
           if (started) {
@@ -246,15 +253,17 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
           } else {
             await AppLogService.warning('BackgroundService', '后台服务启动返回失败');
             // Preserve a recovery path for persistent user intent even when
-            // this start failed. Temporary starts must not create a watchdog.
-            if (persistEnabled) await _enableKeepAlive();
+            // this start failed. Temporary starts must not create a watchdog
+            // unless the user already enabled persistent operation.
+            if (persistentIntentEnabled) await scheduleKeepAlive();
             return false;
           }
         }
-        // Activate the native AlarmManager keep-alive watchdog for persistent
-        // starts (only if the user has the watchdog toggle enabled).
-        if (persistEnabled) {
-          final keepAliveScheduled = await _enableKeepAlive();
+        // Arm recovery for persistent intent, including temporary starts made
+        // by CatCatch. Only an explicit persistent start resets watchdog
+        // backoff; a temporary start preserves the existing failure count.
+        if (persistentIntentEnabled) {
+          final keepAliveScheduled = await scheduleKeepAlive();
           if (!keepAliveScheduled) return false;
         }
         return true;
@@ -593,9 +602,9 @@ Future<bool> _enableKeepAlive() async {
 /// 与 [_enableKeepAlive] 的区别：只重新调度闹钟，不清零连续失败计数。
 /// 持久失败环境（Android 15 dataSync 上限、无电池豁免等）下，每次
 /// 打开应用都清零计数会让看门狗永远无法进入退避保护。
-Future<void> _rearmKeepAlive() async {
-  if (defaultTargetPlatform != TargetPlatform.android) return;
-  if (!await isWatchdogEnabled()) return;
+Future<bool> _rearmKeepAlive() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  if (!await isWatchdogEnabled()) return true;
   try {
     final scheduled = await _keepAliveChannel
         .invokeMethod<bool>('rearmKeepAlive')
@@ -603,9 +612,12 @@ Future<void> _rearmKeepAlive() async {
     if (scheduled != true) {
       debugPrint(
           '[BackgroundService] Android did not schedule the keep-alive alarm.');
+      return false;
     }
+    return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive alarm: $e');
+    return false;
   }
 }
 
