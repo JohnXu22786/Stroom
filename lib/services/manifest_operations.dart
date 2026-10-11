@@ -508,8 +508,8 @@ class ManifestOperations<T extends FileRecord> {
       final err = FolderPathUtils.validateFolderName(baseName);
       if (err != null) return;
       if (!_folderCache.contains(name)) {
-        _folderCache.add(name);
         await ManifestDatabase.insertFolder(name, recordTable: tableName);
+        _folderCache.add(name);
       }
     } catch (e, st) {
       await AppLogService.error(
@@ -522,8 +522,8 @@ class ManifestOperations<T extends FileRecord> {
     try {
       await loadRecords();
       if (!_folderCache.contains(folderPath)) {
-        _folderCache.add(folderPath);
         await ManifestDatabase.insertFolder(folderPath, recordTable: tableName);
+        _folderCache.add(folderPath);
       }
     } catch (e, st) {
       await AppLogService.error(
