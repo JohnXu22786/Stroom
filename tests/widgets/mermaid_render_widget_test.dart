@@ -130,14 +130,14 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=6&code='));
+      expect(url, contains('mermaid_render.html?v=7&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=6?')));
+      expect(url, isNot(contains('v=7?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=6');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=7');
     });
 
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
@@ -542,7 +542,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v6');
+      expect(templateVersion, 'v7');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
