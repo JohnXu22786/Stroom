@@ -497,7 +497,7 @@ class AsrService {
     final sourceAudioBytesLength = audioBytes.length;
     final rawSourceExceedsLimit =
         sourceAudioBytesLength > config.maxFileSizeBytes &&
-        config.uploadMethod != AudioUploadMethod.url;
+            config.uploadMethod != AudioUploadMethod.url;
     final fallback = config.fallbackMethod;
     var encodedAudioBytes = processedAudioBytes;
     var encodedFormat = fmt;
@@ -565,16 +565,14 @@ class AsrService {
           specificMethod,
         );
         if (!_fitsUploadBudget(processedAudioBytes, specificRequestBodyBytes)) {
-          final nonWavExplanation = fmt != 'wav'
-              ? '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。'
-              : '';
+          final nonWavExplanation =
+              fmt != 'wav' ? '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。' : '';
           specificFallbackFailure = _uploadSizeLimitException(
             sourceAudioBytesLength: sourceAudioBytesLength,
             processedAudioBytesLength: processedAudioBytes.length,
             encodedAudioBytesLength: processedAudioBytes.length,
             requestBodyBytes: specificRequestBodyBytes,
-            explanation:
-                'Base64 与 JSON 字段开销计入请求体预算。'
+            explanation: 'Base64 与 JSON 字段开销计入请求体预算。'
                 '$nonWavExplanation',
           );
           await AppLogService.warning(
@@ -672,8 +670,7 @@ class AsrService {
     }
 
     // ── All fallbacks exhausted — reject ────────────────────────────
-    final isOverBudgetNonWav =
-        fmt != 'wav' &&
+    final isOverBudgetNonWav = fmt != 'wav' &&
         (processedAudioBytes.length > config.maxFileSizeBytes ||
             requestBodyBytes > config.maxFileSizeBytes);
     const nonWavExplanation = '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。';
@@ -691,14 +688,14 @@ class AsrService {
           };
     final specificFallbackExplanation =
         fallback == 'all' && specificFallbackFailure != null
-        ? '特定兜底失败: $specificFallbackFailure。'
-        : fallback == 'all' && specificFallbackUnavailable
-        ? '当前上传方式没有可用的特定兜底。'
-        : '';
+            ? '特定兜底失败: $specificFallbackFailure。'
+            : fallback == 'all' && specificFallbackUnavailable
+                ? '当前上传方式没有可用的特定兜底。'
+                : '';
     final genericFallbackFailureExplanation =
         fallback == 'all' && genericFallbackFailure != null
-        ? '通用兜底失败: $genericFallbackFailure。'
-        : '';
+            ? '通用兜底失败: $genericFallbackFailure。'
+            : '';
     final explanation =
         '$specificFallbackExplanation$genericFallbackFailureExplanation'
         '$fallbackExplanation';
@@ -801,8 +798,7 @@ class AsrService {
     if (method == AudioUploadMethod.url) return 0;
 
     final customParamNames = jsonCustomParamNames ?? <String>{};
-    final params =
-        sharedParams ??
+    final params = sharedParams ??
         _buildSharedParams(jsonCustomParamNames: customParamNames);
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
@@ -1309,12 +1305,12 @@ class AsrService {
         final configuredPrompt = configuredPromptValue is String
             ? configuredPromptValue
             : configuredPromptValue == null
-            ? null
-            : jsonEncode(configuredPromptValue);
+                ? null
+                : jsonEncode(configuredPromptValue);
         chunkParams['prompt'] =
             configuredPrompt == null || configuredPrompt.isEmpty
-            ? promptSuffix
-            : '$configuredPrompt\n$promptSuffix';
+                ? promptSuffix
+                : '$configuredPrompt\n$promptSuffix';
         chunkCustomParamNames.remove('prompt');
         final promptBodyBytes = _measureUploadRequestBodyBytes(
           chunk.encodedAudio,
@@ -1449,7 +1445,7 @@ class AsrService {
         _responseFormat == 'srt' || _responseFormat == 'vtt';
     final subtitle = isSubtitleFormat
         ? _formatSubtitle(segments, _responseFormat) ??
-              (_responseFormat == 'vtt' ? 'WEBVTT' : '')
+            (_responseFormat == 'vtt' ? 'WEBVTT' : '')
         : null;
     return AsrResult(
       text: texts.join(' '),

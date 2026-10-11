@@ -182,9 +182,8 @@ void main() {
       expect(adapter.requests, isEmpty);
     });
 
-    test(
-      'fallback threshold uses original size before resample preprocessing',
-      () async {
+    test('fallback threshold uses original size before resample preprocessing',
+        () async {
       final adapter = _RouteAdapter();
       adapter.onPost(
         '/audio/transcriptions',
@@ -219,14 +218,13 @@ void main() {
         errorMessage,
         contains('超限项: 原始音频 ${sourceBytes.length} 字节 > 102400 字节'),
       );
-        expect(errorMessage, isNot(matches(RegExp(r'请求体 \d+ 字节 > 102400 字节'))));
+      expect(errorMessage, isNot(matches(RegExp(r'请求体 \d+ 字节 > 102400 字节'))));
       expect(sourceBytes.length, greaterThan(100 * 1024));
       expect(adapter.requests, isEmpty);
     });
 
-    test(
-      'one-frame fallback ignores oversized ancillary WAV metadata',
-      () async {
+    test('one-frame fallback ignores oversized ancillary WAV metadata',
+        () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
         return ok('one frame sent');
@@ -401,7 +399,8 @@ void main() {
           reason: 'payload must be WAVE_FORMAT_IMA_ADPCM (0x11)');
     });
 
-    test('fallbackMethod=generic chunking splits over-limit WAV into '
+    test(
+        'fallbackMethod=generic chunking splits over-limit WAV into '
         'multiple uploads and concatenates results', () async {
       final adapter = _RouteAdapter();
       var call = 0;
@@ -544,13 +543,15 @@ void main() {
             (measurementAdapter.requests.single['bodyBytes'] as Uint8List)
                 .length;
         final limit = multipartBodyBytes - 1;
-        final base64BodyBytes = utf8.encode(
-          jsonEncode({
-            'model': 'whisper-1',
-            'response_format': 'json',
-            'file': base64Encode(audioBytes),
-          }),
-        ).length;
+        final base64BodyBytes = utf8
+            .encode(
+              jsonEncode({
+                'model': 'whisper-1',
+                'response_format': 'json',
+                'file': base64Encode(audioBytes),
+              }),
+            )
+            .length;
         expect(audioBytes.length, lessThan(limit));
         expect(base64BodyBytes, lessThanOrEqualTo(limit));
 
@@ -1129,7 +1130,8 @@ void main() {
       },
     );
 
-    test('non-WAV over-limit files with chunking get a friendly rejection, '
+    test(
+        'non-WAV over-limit files with chunking get a friendly rejection, '
         'not a raw parser error', () async {
       final adapter = _RouteAdapter();
       adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
