@@ -446,7 +446,7 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
 
   try {
     final wasEnabled = await _isBackgroundServiceEnabled(
-      assumeEnabledOnReadError: false,
+      assumeEnabledOnReadError: true,
     );
     if (!wasEnabled) return;
     if (!await isColdStartRestoreEnabled()) {
@@ -744,7 +744,7 @@ Future<void> requestScheduleExactAlarm() async {
 Future<void> rearmKeepAliveOnResume() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: false)) {
+    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: true)) {
       return;
     }
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
