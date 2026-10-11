@@ -28,6 +28,7 @@ SUITES: dict[str, tuple[str, ...]] = {
         "utils/mermaid_templates_test.dart",
         "widgets/mermaid_render_widget*_test.dart",
         "pages/content/mermaid_*_test.dart",
+        "pages/content/text_storage_page_mermaid_return_test.dart",
     ),
     "chat-ai-core": (
         "chat_*_test.dart",
