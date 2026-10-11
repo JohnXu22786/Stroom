@@ -882,7 +882,8 @@ void main() {
     final downloads = await downloadsReady.future.timeout(_dispatchWait);
     final confirmId = (await confirmationLaunch).single;
     await _waitFor(
-        () => downloads.idsByUrl.containsKey('https://example.com/confirm') &&
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/confirm') &&
             scheduler.holds(confirmId),
         'special-format CatCatch slot hold');
     expect(scheduler.holds(confirmId), isTrue);
@@ -987,7 +988,8 @@ void main() {
       final downloads = await downloadsReady.future.timeout(_dispatchWait);
       final firstId = (await firstLaunch).single;
       await _waitFor(
-          () => downloads.idsByUrl.containsKey('https://example.com/first') &&
+          () =>
+              downloads.idsByUrl.containsKey('https://example.com/first') &&
               !scheduler.holds(firstId),
           'first CatCatch manual wait releases its slot');
       final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
