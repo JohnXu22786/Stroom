@@ -96,10 +96,16 @@ jobs:
           echo "### Changed lib/ files vs tests/ coverage ###"
           echo ""
           UNCOVERED=0
-          # Pull request refs can be generated from a slightly older base than
-          # the event payload when main advances during queueing. Use the merge
-          # base so upstream-only changes are not mistaken for PR changes.
-          if ! DIFF_BASE_SHA="$(git merge-base "$EVENT_BASE_SHA" HEAD)"; then
+          # Pull request refs are normally merge commits. Their first parent
+          # is the exact base used to build the ref, even when main advances
+          # after the event payload was created. Use it to exclude upstream
+          # changes; fall back to a merge-base for a plain head checkout.
+          if git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+            if ! DIFF_BASE_SHA="$(git rev-parse HEAD^1)"; then
+              echo "Unable to determine the merge ref base."
+              exit 1
+            fi
+          elif ! DIFF_BASE_SHA="$(git merge-base "$EVENT_BASE_SHA" HEAD)"; then
             echo "Unable to determine the merge base against $EVENT_BASE_SHA."
             exit 1
           fi
