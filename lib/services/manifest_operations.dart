@@ -902,6 +902,7 @@ class ManifestOperations<T extends FileRecord> {
       // Decrement per record being deleted; only delete file when count reaches 0
       for (final r in toRemoveRecords) {
         final sn = storageNameOf(r);
+        final h = hashOf(r);
         storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
         if (storageNameCount[sn]! <= 0) {
           final name = storageNameOf(r);
@@ -915,10 +916,9 @@ class ManifestOperations<T extends FileRecord> {
             final file = File(p.join(dir, name));
             if (await file.exists()) await file.delete();
           }
-          await onExtraDelete?.call(r);
+          if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
         }
         // Thumbnail deletion: keyed by hash, not storageName
-        final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
           final thumbName = _thumbFileNameOf(r);
