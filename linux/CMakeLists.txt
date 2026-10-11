@@ -53,6 +53,8 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+# The beta plugin falls back to old headers that cannot compile its API calls.
+pkg_check_modules(STROOM_WPE REQUIRED wpe-webkit-2.0>=2.40)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
@@ -74,6 +76,23 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# WPE 2.48 from Debian 13 lacks the optional theme color API used by the beta
+# plugin. Confine its compatibility declaration to that plugin's sources.
+if(TARGET flutter_inappwebview_linux_plugin)
+  target_compile_options(flutter_inappwebview_linux_plugin PRIVATE
+    "-include${CMAKE_CURRENT_SOURCE_DIR}/wpe_compat.h")
+endif()
+
+# Debian 13 marks the older tray plugin's still-supported indicator API as
+# deprecated. Retain its diagnostic without treating it as a build failure.
+if(TARGET tray_manager_plugin)
+  target_compile_options(tray_manager_plugin PRIVATE
+    -Wno-error=deprecated-declarations)
+endif()
+
+# Keep WPE and its subprocesses together in the system packages. The plugin's
+# library-only bundle would omit WebKit processes and resources.
+list(REMOVE_ITEM PLUGIN_BUNDLED_LIBRARIES ${FLUTTER_INAPPWEBVIEW_WPE_LIBS})
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

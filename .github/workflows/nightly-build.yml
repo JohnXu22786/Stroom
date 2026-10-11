@@ -39,21 +39,42 @@ jobs:
   # ── E2E Tests ────────────────────────────────────────────────────────────
   e2e:
     name: E2E Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # WebKit's bubblewrap sandbox needs namespaces and loopback setup.
+    container:
+      image: debian:trixie
+      options: --cap-add=SYS_ADMIN --cap-add=NET_ADMIN
     steps:
+      - name: Install Linux dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd xvfb strace clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
           pub-cache: true
+      - name: Trust the restored Flutter SDK in the container
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
-      - name: Install xvfb for headless display
-        run: sudo apt-get install -y xvfb
       - name: Run integration tests
+        shell: bash
         run: |
           mkdir -p test-reports
-          xvfb-run flutter test -d linux integration_test/ --reporter expanded 2>&1 | tee test-reports/integration-test.log
+          # A desktop Device closes its log reader when its first app exits.
+          # Use a fresh Flutter invocation for each integration entrypoint.
+          for test_file in integration_test/*_test.dart; do
+            if ! xvfb-run flutter test -d linux "$test_file" --reporter expanded --verbose 2>&1 | tee -a test-reports/integration-test.log; then
+              # The integration runner does not forward native stderr. Retry
+              # only the failed entrypoint with a trace, retaining the failure.
+              report="test-reports/$(basename "$test_file" .dart)"
+              strace -f -e trace=process,signal,write -e trace-fds=2 -s 512 -o "$report-native.log" \
+                xvfb-run flutter test -d linux "$test_file" --reporter expanded --verbose > "$report-retry.log" 2>&1 || true
+              tail -n 160 "$report-native.log" "$report-retry.log"
+              exit 1
+            fi
+          done
       - name: Upload integration test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -65,19 +86,21 @@ jobs:
   # ── Linux Build ──────────────────────────────────────────────────────────
   build-linux:
     name: Build Linux
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    container: debian:trixie
     steps:
+      - name: Install Linux dependencies
+        run: |
+          apt-get update -y
+          apt-get install -y ca-certificates curl git jq unzip xz-utils zstd clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev libwpewebkit-2.0-dev libwpebackend-fdo-1.0-dev libepoxy-dev libsecret-1-dev
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
           pub-cache: true
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
-      - run: flutter create --platforms=linux .
+      - name: Trust the restored Flutter SDK in the container
+        run: git config --global --add safe.directory "$FLUTTER_ROOT"
       - run: flutter pub get
       - run: flutter build linux --release
 

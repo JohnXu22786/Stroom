@@ -40,7 +40,7 @@ Widget createChatTestApp({String? activeConversationId}) {
       }),
     ],
     child: MaterialApp(
-      home: const ChatPage(),
+      home: const ChatPage.withNativeMessageRendererForTesting(),
     ),
   );
 }
@@ -122,7 +122,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();
@@ -214,7 +215,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();
@@ -314,7 +316,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();
@@ -378,7 +381,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();
@@ -458,7 +462,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();
@@ -521,7 +526,8 @@ void main() {
               return notifier;
             }),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       await tester.pumpAndSettle();

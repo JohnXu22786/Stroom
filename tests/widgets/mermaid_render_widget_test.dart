@@ -1147,7 +1147,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   @override
   void addJavaScriptHandler({
     required String handlerName,
-    required JavaScriptHandlerCallback callback,
+    required Function callback,
   }) =>
       throw UnimplementedError('JavaScript handlers are unavailable on web');
 
