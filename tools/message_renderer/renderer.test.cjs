@@ -823,6 +823,29 @@ test("preview readiness follows each fence, accepting case variants and settled 
       false,
       "settled open fence ready",
     );
+
+    const prefix =
+      "first paragraph\n\nsecond paragraph\n\nthird paragraph\n\n";
+    update(prefix, true);
+    await wait();
+    const openTail = `${prefix}\`\`\`html\n<h1>tail</h1>`;
+    update(openTail, true);
+    await wait();
+    button = v.dom.window.document.querySelector('[data-action="html"]');
+    assert.equal(
+      button.disabled,
+      true,
+      "an open fence in the re-parsed streaming tail waits for its closing fence",
+    );
+
+    const closedTail = `${openTail}\n\`\`\``;
+    update(closedTail, true);
+    await wait();
+    button = v.dom.window.document.querySelector('[data-action="html"]');
+    assert.equal(button.disabled, false, "closed tail fence is ready");
+    button.click();
+    assert.equal(v.events.at(-1).sourceStart, closedTail.indexOf("```"));
+    assert.equal(v.events.at(-1).sourceEnd, closedTail.length);
   } finally {
     v.dom.window.close();
   }

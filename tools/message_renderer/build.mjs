@@ -59,8 +59,20 @@ const dshAdaptation = {
         // Fence rendering stays in DSH's Markdown pipeline; this component
         // supplies Stroom's code/HTML/Mermaid operations around DSH CodeBlock.
         replaceOnce(
+          `function renderBlocks(blocks, context) {
+\treturn blocks.map((block) => renderNode(block.node, block.key, context)).filter((element) => element !== null);
+}`,
+          `function renderBlocks(blocks, context) {
+\treturn blocks.map((block) => {
+\t\tconst start = block.node.position?.start.offset;
+\t\tconst sourceOffset = start === void 0 ? context.sourceOffset ?? 0 : block.key - start;
+\t\treturn renderNode(block.node, block.key, { ...context, sourceOffset });
+\t}).filter((element) => element !== null);
+}`,
+        );
+        replaceOnce(
           "return jsx(CodeBlock, {\n\t\tcode: `${node.value}\\n`,",
-          "return jsx(StroomCode, {\n\t\tsourceStart: node.position?.start.offset,\n\t\tsourceEnd: node.position?.end.offset,\n\t\tcode: `${node.value}\\n`,",
+          "return jsx(StroomCode, {\n\t\tsourceStart: node.position?.start.offset === void 0 ? void 0 : (context.sourceOffset ?? 0) + node.position.start.offset,\n\t\tsourceEnd: node.position?.end.offset === void 0 ? void 0 : (context.sourceOffset ?? 0) + node.position.end.offset,\n\t\tcode: `${node.value}\\n`,",
         );
         contents =
           `import {regexEngine as stroomRegexEngine, engineReady as stroomEngineReady} from ${JSON.stringify(path.join(root, "src/highlighter.js"))};\nimport {normalizeInlineHtml} from ${JSON.stringify(path.join(root, "src/markdown-adaptation.js"))};\nimport {StroomCode} from ${JSON.stringify(path.join(root, "src/code.jsx"))};\n` +
