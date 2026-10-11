@@ -716,6 +716,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
   bool _hasLoadedPage = false;
+  bool _canApplyZoomCommands = false;
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
@@ -882,13 +883,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (mounted && !_isReady && _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
             'force-ending the loading state');
-        setState(() => _isReady = true);
+        setState(() {
+          _isReady = true;
+          _canApplyZoomCommands = true;
+        });
+        unawaited(_applyPendingZoomDeltas());
       }
     });
   }
 
   void _loadMermaidCode() {
     _hasLoadedPage = false;
+    _canApplyZoomCommands = false;
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
@@ -1257,7 +1263,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// its own (possibly stale) pan here.
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
-    if (ctrl == null || !_hasLoadedPage) {
+    if (ctrl == null || !_canApplyZoomCommands) {
       _pendingZoomDeltas.add(delta);
       return;
     }
@@ -1630,6 +1636,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               },
               onLoadStop: (ctrl, url) {
                 _hasLoadedPage = true;
+                _canApplyZoomCommands = true;
                 if (mounted && !_isReady) {
                   setState(() => _isReady = true);
                 }

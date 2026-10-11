@@ -619,9 +619,8 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      // The overlay timeout does not prove that the page loaded or that its
-      // JavaScript zoom helper is available.
-      await tester.pump(const Duration(seconds: 3));
+      // Until onLoadStop, the page has not reported that its JavaScript zoom
+      // helper is available.
       await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
@@ -650,6 +649,74 @@ void main() {
       // queued taps must apply on top of that fitted zoom rather than precede it.
       fakeController.simulateJsFitToViewport(0.8);
       expect(fakeController.zoomLevel, closeTo(1.2, 0.0001));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'queued toolbar zoom is applied by native readiness fallback without onLoadStop',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(
+              mermaidCode: 'graph TD\nA-->B',
+              showZoomControls: true,
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final fakeController = webView.controller;
+
+      // The toolbar is visible while loading, before its native controller is
+      // created, so this tap is queued in Flutter.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+
+      // Let the native fallback expose the preview without delivering the
+      // WebView's onLoadStop callback.
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(find.text('加载渲染引擎...'), findsNothing);
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+
+      // Once the fallback exposes the preview, later taps must also reach
+      // the page even though onLoadStop never arrives.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(
+        fakeController.evaluatedScripts
+            .where((script) =>
+                script.contains('window.applyZoomDeltasAfterFit([0.1])'))
+            .length,
+        2,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
