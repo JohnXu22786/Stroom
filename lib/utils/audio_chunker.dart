@@ -1253,17 +1253,26 @@ class AudioChunker {
   const AudioChunker({this.config = const AudioChunkConfig()});
 
   /// Split a WAV file using the specified [method].
-  List<Uint8List> chunk(Uint8List wavBytes, AudioChunkMethod method) {
+  ///
+  /// If [maxChunks] is set, stop before materializing more than that many
+  /// chunks.
+  List<Uint8List> chunk(
+    Uint8List wavBytes,
+    AudioChunkMethod method, {
+    int? maxChunks,
+  }) {
     config.validate();
+    _validateMaxChunks(maxChunks);
     switch (method) {
       case AudioChunkMethod.none:
+        _checkChunkCapacity(0, maxChunks);
         return [wavBytes];
       case AudioChunkMethod.silence:
-        return split(wavBytes);
+        return split(wavBytes, maxChunks: maxChunks);
       case AudioChunkMethod.fixedDuration:
-        return splitByDuration(wavBytes);
+        return splitByDuration(wavBytes, maxChunks: maxChunks);
       case AudioChunkMethod.fixedSize:
-        return splitBySize(wavBytes);
+        return splitBySize(wavBytes, maxChunks: maxChunks);
     }
   }
 
@@ -1271,7 +1280,7 @@ class AudioChunker {
   ///
   /// Uses environmental analysis + candidate scoring + greedy selection.
   /// Falls back to forced chunking if no silence candidates are available.
-  List<Uint8List> split(Uint8List wavBytes) {
+  List<Uint8List> split(Uint8List wavBytes, {int? maxChunks}) {
     // Step 1: Parse header
     final info = parseWavHeader(wavBytes);
     _validateForWav(info);
@@ -1348,6 +1357,7 @@ class AudioChunker {
 
       final chunkBytes = end - start;
       if (chunkBytes <= config.maxChunkBytes) {
+        _checkChunkCapacity(chunks.length, maxChunks);
         chunks.add(_writeWavChunk(
             wavBytes, info, start - pcmDataOffset, end - pcmDataOffset));
       } else {
@@ -1361,6 +1371,7 @@ class AudioChunker {
           final subEndFrame =
               (subStartFrame + maxFramesPerPart).clamp(0, totalFrames);
           if (subEndFrame > subStartFrame) {
+            _checkChunkCapacity(chunks.length, maxChunks);
             chunks.add(_writeWavChunk(
                 wavBytes,
                 info,
@@ -1694,7 +1705,7 @@ class AudioChunker {
 
   /// Split WAV into chunks of fixed [config.fixedDurationSeconds] seconds.
   /// No overlap — chunks are strictly consecutive.
-  List<Uint8List> splitByDuration(Uint8List wavBytes) {
+  List<Uint8List> splitByDuration(Uint8List wavBytes, {int? maxChunks}) {
     final info = parseWavHeader(wavBytes);
     _validateForWav(info);
     final samplesPerChunk =
@@ -1711,6 +1722,7 @@ class AudioChunker {
 
       final adjBytes = (endSample - startSample) * bpf;
       if (adjBytes <= config.maxChunkBytes) {
+        _checkChunkCapacity(chunks.length, maxChunks);
         chunks.add(
             _writeWavChunk(wavBytes, info, startSample * bpf, endSample * bpf));
       } else {
@@ -1722,6 +1734,7 @@ class AudioChunker {
             subStart += maxFramesPerPart) {
           final subEnd = (subStart + maxFramesPerPart).clamp(0, endSample);
           if (subEnd > subStart) {
+            _checkChunkCapacity(chunks.length, maxChunks);
             chunks.add(
                 _writeWavChunk(wavBytes, info, subStart * bpf, subEnd * bpf));
           }
@@ -1734,7 +1747,7 @@ class AudioChunker {
 
   /// Split WAV into chunks that stay under [config.maxChunkBytes].
   /// Simple byte-count splitting — no silence awareness, no overlap.
-  List<Uint8List> splitBySize(Uint8List wavBytes) {
+  List<Uint8List> splitBySize(Uint8List wavBytes, {int? maxChunks}) {
     final info = parseWavHeader(wavBytes);
     _validateForWav(info);
     final bpf = info.bytesPerFrame;
@@ -1749,11 +1762,24 @@ class AudioChunker {
       int endSample = (startSample + chunkSamples).clamp(0, totalSamples);
       if (endSample <= startSample) break;
 
+      _checkChunkCapacity(chunks.length, maxChunks);
       chunks.add(
           _writeWavChunk(wavBytes, info, startSample * bpf, endSample * bpf));
     }
 
     return chunks;
+  }
+
+  void _validateMaxChunks(int? maxChunks) {
+    if (maxChunks != null && maxChunks <= 0) {
+      throw ArgumentError.value(maxChunks, 'maxChunks');
+    }
+  }
+
+  void _checkChunkCapacity(int currentChunks, int? maxChunks) {
+    if (maxChunks != null && currentChunks >= maxChunks) {
+      throw Exception('初始切块数量超过安全上限 $maxChunks，已停止上传。');
+    }
   }
 
   void _validateForWav(WavInfo info) {
@@ -1799,6 +1825,29 @@ Uint8List _writeWavChunk(
   writer.writeBytes(sliceBytes);
 
   return writer.toBytes();
+}
+
+/// Rebuild a PCM WAV container without ancillary chunks or padding metadata.
+Uint8List canonicalizePcmWav(Uint8List wavBytes) {
+  final info = parseWavHeader(wavBytes);
+  return _writeWavChunk(wavBytes, info, 0, info.dataSize);
+}
+
+/// Split a PCM WAV at [frameIndex], keeping both outputs frame-aligned.
+///
+/// The concatenated PCM data of the returned WAV files is byte-for-byte equal
+/// to the source data. This is used when an encoded chunk must be reduced to
+/// fit a transport budget.
+List<Uint8List> splitWavAtFrame(Uint8List wavBytes, int frameIndex) {
+  final info = parseWavHeader(wavBytes);
+  if (frameIndex <= 0 || frameIndex >= info.totalSamples) {
+    throw RangeError.range(frameIndex, 1, info.totalSamples - 1, 'frameIndex');
+  }
+  final splitByte = frameIndex * info.bytesPerFrame;
+  return [
+    _writeWavChunk(wavBytes, info, 0, splitByte),
+    _writeWavChunk(wavBytes, info, splitByte, info.dataSize),
+  ];
 }
 
 // ============================================================================

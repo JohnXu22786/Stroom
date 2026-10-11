@@ -64,8 +64,10 @@ enum AudioUploadMethod {
 /// which is used directly without appending any path.
 ///
 /// [uploadMethod] selects the HTTP format used to send audio.
-/// [maxFileSizeBytes] controls the maximum allowed audio file size for
-/// file-based upload methods (multipart, base64Json). Does NOT apply to URL.
+/// [maxFileSizeBytes] is the source-file fallback threshold and maximum full
+/// request-body size for file-based upload methods (multipart, base64Json).
+/// The final body includes multipart fields/boundaries or Base64 JSON overhead.
+/// It does NOT apply to URL.
 class AsrConfig {
   final String model;
   final String apiKey;
@@ -81,10 +83,10 @@ class AsrConfig {
   /// How to send the audio file to the API.
   final AudioUploadMethod uploadMethod;
 
-  /// Maximum allowed audio file size in bytes.
+  /// Source-file fallback threshold and maximum request-body size in bytes.
   ///
-  /// Files larger than this will be rejected before sending to the API.
-  /// Defaults to 25 MB (26,214,400 bytes), matching OpenAI's audio API limit.
+  /// The final multipart or Base64 JSON body must fit this limit. Defaults to
+  /// 25 MB (26,214,400 bytes), matching OpenAI's audio API limit.
   /// Set to a higher value for providers that support larger files.
   /// Does NOT apply to [AudioUploadMethod.url].
   final int maxFileSizeBytes;
@@ -309,6 +311,15 @@ class AsrChunkedTranscriptionException implements Exception {
   }
 }
 
+class _AsrUploadSizeLimitException implements Exception {
+  final String message;
+
+  const _AsrUploadSizeLimitException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 // ============================================================================
 // ASR Service
 // ============================================================================
@@ -482,122 +493,218 @@ class AsrService {
     // output before deciding whether to upload, compress, or fall back.
     if (detectedFormat == 'wav') validateDetectedWav(workingBytes);
 
-    // ── Check if file fits within limit ─────────────────────────────
-    final exceedsLimit = workingBytes.length > config.maxFileSizeBytes &&
-        config.uploadMethod != AudioUploadMethod.url;
+    final processedAudioBytes = workingBytes;
+    final sourceAudioBytesLength = audioBytes.length;
+    final rawSourceExceedsLimit =
+        sourceAudioBytesLength > config.maxFileSizeBytes &&
+            config.uploadMethod != AudioUploadMethod.url;
+    final fallback = config.fallbackMethod;
+    var encodedAudioBytes = processedAudioBytes;
+    var encodedFormat = fmt;
+    var encodedAudioPrepared = false;
+    var requestBodyBytes = 0;
 
-    if (!exceedsLimit) {
-      // ── File fits — send via primary method ───────────────────────
-      return _applyCompressionAndSend(
-        workingBytes,
+    // Keep the original PCM available for a later split. Compression is
+    // applied to the whole file first when the source itself fits, and to the
+    // whole file in the generic fallback before deciding whether to chunk.
+    if (!rawSourceExceedsLimit) {
+      if (config.compression != 'none' && fmt == 'wav') {
+        final compressed = _applyCompression(processedAudioBytes, fmt);
+        encodedAudioBytes = compressed.$1;
+        encodedFormat = compressed.$2;
+      }
+      encodedAudioPrepared = true;
+      requestBodyBytes = _measureUploadRequestBodyBytes(
+        encodedAudioBytes,
+        encodedFormat,
+        config.uploadMethod,
+      );
+      if (_fitsUploadBudget(encodedAudioBytes, requestBodyBytes)) {
+        return _sendViaMethod(
+          encodedAudioBytes,
+          encodedFormat,
+          config.uploadMethod,
+          sourceAudioBytesLength: sourceAudioBytesLength,
+          processedAudioBytesLength: processedAudioBytes.length,
+          cancelToken: cancelToken,
+          onProgress: onProgress,
+        );
+      }
+    } else {
+      requestBodyBytes = _measureUploadRequestBodyBytes(
+        processedAudioBytes,
         fmt,
-        cancelToken: cancelToken,
-        onProgress: onProgress,
+        config.uploadMethod,
       );
     }
 
-    // ── File exceeds limit — apply fallback strategy ────────────────
+    // ── Source or serialized request exceeds the configured budget ──
     await AppLogService.info(
       'AsrService',
-      '文件超限 (${formatFileSize(workingBytes.length)} > ${formatFileSize(config.maxFileSizeBytes)})，尝试兜底策略: ${config.fallbackMethod}',
+      '音频超出上传预算: 原始音频 $sourceAudioBytesLength 字节，'
+          '处理后音频 ${processedAudioBytes.length} 字节，请求体 $requestBodyBytes 字节，'
+          '限制 ${config.maxFileSizeBytes} 字节；尝试兜底策略: $fallback',
     );
 
-    final fallback = config.fallbackMethod;
-
     // Step 1: Try specific fallback (base64) if configured
+    Object? specificFallbackFailure;
+    var specificFallbackUnavailable = false;
     if (fallback == 'specific' || fallback == 'all') {
       final specificMethod = _getSpecificFallback(config.uploadMethod);
       if (specificMethod == null) {
+        specificFallbackUnavailable = true;
         await AppLogService.info(
           'AsrService',
           '当前上传方式 (${config.uploadMethod.name}) 没有可用的特定兜底'
               '（URL 需要公网链接，multipart 不缓解超限）',
         );
-      } else {
-        try {
-          if (specificMethod == AudioUploadMethod.base64Json) {
+      } else if (specificMethod == AudioUploadMethod.base64Json) {
+        final specificRequestBodyBytes = _measureUploadRequestBodyBytes(
+          processedAudioBytes,
+          fmt,
+          specificMethod,
+        );
+        if (!_fitsUploadBudget(processedAudioBytes, specificRequestBodyBytes)) {
+          final nonWavExplanation =
+              fmt != 'wav' ? '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。' : '';
+          specificFallbackFailure = _uploadSizeLimitException(
+            sourceAudioBytesLength: sourceAudioBytesLength,
+            processedAudioBytesLength: processedAudioBytes.length,
+            encodedAudioBytesLength: processedAudioBytes.length,
+            requestBodyBytes: specificRequestBodyBytes,
+            explanation: 'Base64 与 JSON 字段开销计入请求体预算。'
+                '$nonWavExplanation',
+          );
+          await AppLogService.warning(
+            'AsrService',
+            '特定兜底 (${specificMethod.name}) 失败: $specificFallbackFailure',
+          );
+        } else {
+          try {
             // NOTE: must await, not `return` — a bare `return future` would
             // deliver the error to the caller without entering this catch,
             // aborting the whole fallback chain.
             return await _sendViaBase64(
-              workingBytes,
+              processedAudioBytes,
               fmt,
+              sourceAudioBytesLength: sourceAudioBytesLength,
+              processedAudioBytesLength: processedAudioBytes.length,
               cancelToken: cancelToken,
               onProgress: onProgress,
             );
+          } catch (e) {
+            if (e is DioException && CancelToken.isCancel(e)) rethrow;
+            specificFallbackFailure = e;
+            await AppLogService.warning(
+              'AsrService',
+              '特定兜底 (${specificMethod.name}) 失败: $e',
+            );
           }
-        } catch (e) {
-          if (e is DioException && CancelToken.isCancel(e)) rethrow;
-          await AppLogService.warning(
-            'AsrService',
-            '特定兜底 (${specificMethod.name}) 失败: $e',
-          );
         }
       }
     }
 
-    // Step 2: Try generic fallback (compression → chunking → re-upload)
+    // With only the specific fallback configured, surface its actual failure
+    // (including a Base64 body-size error) instead of reporting the earlier
+    // primary upload measurement as if generic fallback had also run.
+    if (fallback == 'specific' && specificFallbackFailure != null) {
+      throw specificFallbackFailure;
+    }
+
+    // Step 2: Try generic fallback (whole-file compression → PCM chunking).
+    Object? genericFallbackFailure;
     if (fallback == 'generic' || fallback == 'all') {
-      var actualFmt = fmt;
+      try {
+        if (!encodedAudioPrepared) {
+          if (config.compression != 'none' && fmt == 'wav') {
+            final compressed = _applyCompression(processedAudioBytes, fmt);
+            encodedAudioBytes = compressed.$1;
+            encodedFormat = compressed.$2;
+          }
+          encodedAudioPrepared = true;
+        }
+        requestBodyBytes = _measureUploadRequestBodyBytes(
+          encodedAudioBytes,
+          encodedFormat,
+          config.uploadMethod,
+        );
 
-      // Apply compression if configured
-      if (config.compression != 'none' && fmt == 'wav') {
-        final result = _applyCompression(workingBytes, fmt);
-        workingBytes = result.$1;
-        actualFmt = result.$2;
-      }
-
-      // Apply chunking if configured. Chunking operates on raw PCM WAV only:
-      // - compressed payloads (ADPCM-in-WAV, FLAC) must not be split at
-      //   arbitrary byte offsets (block alignment / frame boundaries);
-      // - non-WAV inputs (mp3 etc.) cannot be parsed by the chunker.
-      if (config.chunking != 'none' &&
-          workingBytes.length > config.maxFileSizeBytes &&
-          config.compression == 'none' &&
-          actualFmt == 'wav') {
-        try {
-          // await required: a bare `return future` would deliver the error to
-          // the caller without entering this catch.
-          return await _transcribeChunked(
-            workingBytes,
-            actualFmt,
+        // Try the complete encoded file first. If it remains too large, split
+        // the preserved PCM WAV and encode each PCM chunk independently.
+        if (_fitsUploadBudget(encodedAudioBytes, requestBodyBytes)) {
+          return await _sendViaMethod(
+            encodedAudioBytes,
+            encodedFormat,
+            config.uploadMethod,
+            sourceAudioBytesLength: sourceAudioBytesLength,
+            processedAudioBytesLength: processedAudioBytes.length,
             cancelToken: cancelToken,
             onProgress: onProgress,
           );
-        } on FormatException catch (e) {
-          // Malformed/unparseable WAV — fall through to the rejection below.
-          // Other failures (e.g. '切块转写全部失败') propagate as-is.
-          unawaited(AppLogService.warning('AsrService', '切块失败: $e'));
         }
-      }
 
-      // If compression/chunking brought it under limit, send via primary
-      if (workingBytes.length <= config.maxFileSizeBytes) {
-        return _sendViaMethod(
-          workingBytes,
-          actualFmt,
-          config.uploadMethod,
-          cancelToken: cancelToken,
-          onProgress: onProgress,
-        );
+        if (config.chunking != 'none' &&
+            fmt == 'wav' &&
+            config.uploadMethod != AudioUploadMethod.url) {
+          try {
+            // await required: a bare `return future` would deliver the error to
+            // the caller without entering this catch.
+            return await _transcribeChunked(
+              processedAudioBytes,
+              fmt,
+              sourceAudioBytesLength: sourceAudioBytesLength,
+              cancelToken: cancelToken,
+              onProgress: onProgress,
+            );
+          } on FormatException catch (e) {
+            // Malformed/unparseable WAV — fall through to the rejection below.
+            genericFallbackFailure = e;
+            unawaited(AppLogService.warning('AsrService', '切块失败: $e'));
+          }
+        }
+      } on _AsrUploadSizeLimitException catch (e) {
+        if (fallback != 'all') rethrow;
+        genericFallbackFailure = e;
+        unawaited(AppLogService.warning('AsrService', '通用兜底失败: $e'));
       }
     }
 
     // ── All fallbacks exhausted — reject ────────────────────────────
-    if (fallback == 'none') {
-      throw Exception(
-        '文件大小超过限制: '
-        '${formatFileSize(workingBytes.length)} > '
-        '${formatFileSize(config.maxFileSizeBytes)}。'
-        '当前兜底策略为“无”，超限文件被直接拒绝。',
-      );
-    }
-    throw Exception(
-      '文件大小超过限制且兜底策略未能解决: '
-      '${formatFileSize(workingBytes.length)} > '
-      '${formatFileSize(config.maxFileSizeBytes)}。'
-      '压缩仅对 WAV 生效且压缩后仍可能超限；切块仅支持未压缩 WAV。'
-      '请降低文件大小，或改用 Base64/URL 上传方式。',
+    final isOverBudgetNonWav = fmt != 'wav' &&
+        (processedAudioBytes.length > config.maxFileSizeBytes ||
+            requestBodyBytes > config.maxFileSizeBytes);
+    const nonWavExplanation = '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。';
+    final fallbackExplanation = isOverBudgetNonWav
+        ? nonWavExplanation
+        : switch (fallback) {
+            'none' => '当前兜底策略为“无”，超预算音频已拒绝。',
+            'specific' => '当前上传方式没有可用的特定兜底。',
+            'generic' => '通用兜底未能将完整请求体降到上传上限内。',
+            'all' =>
+              specificFallbackFailure == null && !specificFallbackUnavailable
+                  ? '特定与通用兜底均未能将完整请求体降到上传上限内。'
+                  : '通用兜底未能将完整请求体降到上传上限内。',
+            _ => '当前兜底策略无法将完整请求体降到上传上限内。',
+          };
+    final specificFallbackExplanation =
+        fallback == 'all' && specificFallbackFailure != null
+            ? '特定兜底失败: $specificFallbackFailure。'
+            : fallback == 'all' && specificFallbackUnavailable
+                ? '当前上传方式没有可用的特定兜底。'
+                : '';
+    final genericFallbackFailureExplanation =
+        fallback == 'all' && genericFallbackFailure != null
+            ? '通用兜底失败: $genericFallbackFailure。'
+            : '';
+    final explanation =
+        '$specificFallbackExplanation$genericFallbackFailureExplanation'
+        '$fallbackExplanation';
+    throw _uploadSizeLimitException(
+      sourceAudioBytesLength: sourceAudioBytesLength,
+      processedAudioBytesLength: processedAudioBytes.length,
+      encodedAudioBytesLength: encodedAudioBytes.length,
+      requestBodyBytes: requestBodyBytes,
+      explanation: explanation,
     );
   }
 
@@ -657,28 +764,6 @@ class AsrService {
     return (workingBytes, fmt);
   }
 
-  /// Apply compression and send via primary method (for files within limit).
-  Future<AsrResult> _applyCompressionAndSend(
-    Uint8List workingBytes,
-    String fmt, {
-    CancelToken? cancelToken,
-    AsrProgressCallback? onProgress,
-  }) async {
-    var actualFmt = fmt;
-    if (config.compression != 'none' && fmt == 'wav') {
-      final result = _applyCompression(workingBytes, fmt);
-      workingBytes = result.$1;
-      actualFmt = result.$2;
-    }
-    return _sendViaMethod(
-      workingBytes,
-      actualFmt,
-      config.uploadMethod,
-      cancelToken: cancelToken,
-      onProgress: onProgress,
-    );
-  }
-
   /// Get the specific fallback method that differs from primary.
   ///
   /// Only base64 is usable as a specific fallback:
@@ -697,10 +782,120 @@ class AsrService {
     }
   }
 
+  bool _fitsUploadBudget(Uint8List encodedAudioBytes, int requestBodyBytes) {
+    return config.uploadMethod == AudioUploadMethod.url ||
+        (encodedAudioBytes.length <= config.maxFileSizeBytes &&
+            requestBodyBytes <= config.maxFileSizeBytes);
+  }
+
+  int _measureUploadRequestBodyBytes(
+    Uint8List audioBytes,
+    String fmt,
+    AudioUploadMethod method, {
+    Map<String, dynamic>? sharedParams,
+    Set<String>? jsonCustomParamNames,
+  }) {
+    if (method == AudioUploadMethod.url) return 0;
+
+    final customParamNames = jsonCustomParamNames ?? <String>{};
+    final params = sharedParams ??
+        _buildSharedParams(jsonCustomParamNames: customParamNames);
+    final mimeTypeString = getMimeType(fmt);
+    final mimeType = mimeTypeString.contains('/')
+        ? DioMediaType.parse(mimeTypeString)
+        : null;
+    final fileName = 'audio.$fmt';
+
+    switch (method) {
+      case AudioUploadMethod.multipart:
+        return _buildMultipartFormData(
+          sharedParams: params,
+          audioBytes: audioBytes,
+          fileName: fileName,
+          mimeType: mimeType,
+          jsonCustomParamNames: customParamNames,
+        ).length;
+      case AudioUploadMethod.base64Json:
+        return _measureBase64JsonBodyBytes(params, audioBytes);
+      case AudioUploadMethod.url:
+        return 0;
+    }
+  }
+
+  int _measureBase64JsonBodyBytes(
+    Map<String, dynamic> sharedParams,
+    Uint8List audioBytes,
+  ) {
+    final paramsWithEmptyFile = Map<String, dynamic>.from(sharedParams)
+      ..['file'] = '';
+    // Base64 uses only unescaped ASCII characters, so replacing its value with
+    // an empty string preserves every other JSON byte exactly.
+    final jsonOverhead = utf8.encode(jsonEncode(paramsWithEmptyFile)).length;
+    final base64Length = ((audioBytes.length + 2) ~/ 3) * 4;
+    return jsonOverhead + base64Length;
+  }
+
+  FormData _buildMultipartFormData({
+    required Map<String, dynamic> sharedParams,
+    required Uint8List audioBytes,
+    required String fileName,
+    required DioMediaType? mimeType,
+    required Set<String> jsonCustomParamNames,
+  }) {
+    final multipartParams = Map<String, dynamic>.from(sharedParams);
+    final timestampGranularities = multipartParams.remove(
+      'timestamp_granularities',
+    );
+    if (timestampGranularities is List) {
+      multipartParams['timestamp_granularities[]'] = timestampGranularities;
+    }
+    for (final name in jsonCustomParamNames) {
+      if (multipartParams.containsKey(name)) {
+        multipartParams[name] = jsonEncode(multipartParams[name]);
+      }
+    }
+    return FormData.fromMap({
+      ...multipartParams,
+      'file': MultipartFile.fromBytes(
+        audioBytes,
+        filename: fileName,
+        contentType: mimeType,
+      ),
+    });
+  }
+
+  _AsrUploadSizeLimitException _uploadSizeLimitException({
+    required int sourceAudioBytesLength,
+    required int processedAudioBytesLength,
+    required int encodedAudioBytesLength,
+    required int requestBodyBytes,
+    required String explanation,
+  }) {
+    final limit = config.maxFileSizeBytes;
+    final exceededMeasurements = [
+      if (sourceAudioBytesLength > limit) '原始音频 $sourceAudioBytesLength 字节',
+      if (processedAudioBytesLength > limit)
+        '处理后音频 $processedAudioBytesLength 字节',
+      if (encodedAudioBytesLength > limit) '编码文件 $encodedAudioBytesLength 字节',
+      if (requestBodyBytes > limit) '请求体 $requestBodyBytes 字节',
+    ];
+    final exceededSummary = exceededMeasurements.isEmpty
+        ? '没有单项尺寸超过上限'
+        : '超限项: ${exceededMeasurements.map((size) => '$size > $limit 字节').join('，')}';
+    return _AsrUploadSizeLimitException(
+      '文件大小超过限制: 原始音频 $sourceAudioBytesLength 字节，'
+      '处理后音频 $processedAudioBytesLength 字节，'
+      '编码文件 $encodedAudioBytesLength 字节，'
+      '请求体 $requestBodyBytes 字节；$exceededSummary。$explanation',
+    );
+  }
+
   /// Send via base64 JSON method.
   Future<AsrResult> _sendViaBase64(
     Uint8List bytes,
     String fmt, {
+    int? sourceAudioBytesLength,
+    int? processedAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
   }) async {
@@ -708,6 +903,8 @@ class AsrService {
       bytes,
       fmt,
       AudioUploadMethod.base64Json,
+      sourceAudioBytesLength: sourceAudioBytesLength,
+      processedAudioBytesLength: processedAudioBytesLength,
       cancelToken: cancelToken,
       onProgress: onProgress,
     );
@@ -718,6 +915,8 @@ class AsrService {
     Uint8List bytes,
     String fmt,
     AudioUploadMethod method, {
+    int? sourceAudioBytesLength,
+    int? processedAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
   }) async {
@@ -740,6 +939,8 @@ class AsrService {
         mimeType: mimeType,
         jsonCustomParamNames: jsonCustomParamNames,
         method: method,
+        sourceAudioBytesLength: sourceAudioBytesLength ?? bytes.length,
+        processedAudioBytesLength: processedAudioBytesLength ?? bytes.length,
         cancelToken: cancelToken,
         onProgress: onProgress,
       );
@@ -933,6 +1134,7 @@ class AsrService {
   Future<AsrResult> _transcribeChunked(
     Uint8List wavBytes,
     String audioFormat, {
+    required int sourceAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
   }) async {
@@ -944,22 +1146,129 @@ class AsrService {
       _ => throw Exception('未知的切块方式: ${config.chunking}'),
     };
 
-    final chunker = AudioChunker(
-      config: AudioChunkConfig(
-        // Each chunk is re-wrapped with a 44-byte WAV header. The data cap
-        // reserves it so the full chunk file stays within maxFileSizeBytes.
-        // For base64 uploads the payload is additionally inflated by ~4/3:
-        // cap = floor(L/4)*3 - 44 guarantees 4*ceil(file/3) <= L for any L.
-        maxChunkBytes: config.uploadMethod == AudioUploadMethod.base64Json
-            ? config.maxFileSizeBytes ~/ 4 * 3 - 44
-            : config.maxFileSizeBytes - 44,
-      ),
+    final wavInfo = parseWavHeader(wavBytes);
+    final singlePcmFrame = wavInfo.totalSamples > 1
+        ? splitWavAtFrame(wavBytes, 1).first
+        : canonicalizePcmWav(wavBytes);
+    final encodedSingleFrame = config.compression == 'none'
+        ? (singlePcmFrame, audioFormat)
+        : _applyCompression(singlePcmFrame, audioFormat);
+    final singleFrameBodyBytes = _measureUploadRequestBodyBytes(
+      encodedSingleFrame.$1,
+      encodedSingleFrame.$2,
+      config.uploadMethod,
     );
-    final chunks = chunker.chunk(wavBytes, chunkMethod);
+    if (!_fitsUploadBudget(encodedSingleFrame.$1, singleFrameBodyBytes)) {
+      throw _uploadSizeLimitException(
+        sourceAudioBytesLength: sourceAudioBytesLength,
+        processedAudioBytesLength: singlePcmFrame.length,
+        encodedAudioBytesLength: encodedSingleFrame.$1.length,
+        requestBodyBytes: singleFrameBodyBytes,
+        explanation: '当前预算无法容纳单个 PCM 帧的编码文件及协议开销。',
+      );
+    }
+
+    const maxAdaptiveSplitDepth = 32;
+    const maxPreparedChunks = 10000;
+    var maxChunkBytes = wavInfo.dataSize;
+    if (chunkMethod == AudioChunkMethod.fixedSize) {
+      // Seed fixed-size chunking with a conservative PCM WAV payload budget.
+      // Compression can change the size in either direction, so every result
+      // is measured and adaptively split below using its exact request body.
+      final emptyWavBodyBytes = _measureUploadRequestBodyBytes(
+        Uint8List(0),
+        'wav',
+        config.uploadMethod,
+      );
+      final encodedPayloadBudget = config.maxFileSizeBytes - emptyWavBodyBytes;
+      final wavFileBudget = config.uploadMethod == AudioUploadMethod.base64Json
+          ? (encodedPayloadBudget ~/ 4) * 3
+          : encodedPayloadBudget;
+      final suggestedChunkBytes = wavFileBudget - 44;
+      maxChunkBytes = suggestedChunkBytes > wavInfo.bytesPerFrame
+          ? suggestedChunkBytes
+          : wavInfo.bytesPerFrame;
+      if (maxChunkBytes > wavInfo.dataSize) {
+        maxChunkBytes = wavInfo.dataSize;
+      }
+
+      // Do not allocate an unbounded initial chunk list for very small caps.
+      // Larger seeds are still refined against the exact encoded request size.
+      final maxChunkFrames = maxChunkBytes ~/ wavInfo.bytesPerFrame;
+      final minimumFramesPerChunk =
+          (wavInfo.totalSamples + maxPreparedChunks - 1) ~/ maxPreparedChunks;
+      if (maxChunkFrames < minimumFramesPerChunk) {
+        maxChunkBytes = minimumFramesPerChunk * wavInfo.bytesPerFrame;
+        if (maxChunkBytes > wavInfo.dataSize) {
+          maxChunkBytes = wavInfo.dataSize;
+        }
+      }
+    }
+    final chunker = AudioChunker(
+      config: AudioChunkConfig(maxChunkBytes: maxChunkBytes),
+    );
+    final initialChunks = chunker.chunk(
+      wavBytes,
+      chunkMethod,
+      maxChunks: maxPreparedChunks,
+    );
+    final preparedChunks =
+        <({Uint8List sourcePcm, Uint8List encodedAudio, String audioFormat})>[];
+
+    void prepareWithinBudget(Uint8List sourcePcm, int depth) {
+      final encoded = config.compression == 'none'
+          ? (sourcePcm, audioFormat)
+          : _applyCompression(sourcePcm, audioFormat);
+      final bodyBytes = _measureUploadRequestBodyBytes(
+        encoded.$1,
+        encoded.$2,
+        config.uploadMethod,
+      );
+      if (_fitsUploadBudget(encoded.$1, bodyBytes)) {
+        if (preparedChunks.length >= maxPreparedChunks) {
+          throw Exception('切块数量超过安全上限 $maxPreparedChunks，已停止上传。');
+        }
+        preparedChunks.add((
+          sourcePcm: sourcePcm,
+          encodedAudio: encoded.$1,
+          audioFormat: encoded.$2,
+        ));
+        return;
+      }
+
+      final sourceInfo = parseWavHeader(sourcePcm);
+      if (sourceInfo.totalSamples <= 1) {
+        throw _uploadSizeLimitException(
+          sourceAudioBytesLength: sourceAudioBytesLength,
+          processedAudioBytesLength: sourcePcm.length,
+          encodedAudioBytesLength: encoded.$1.length,
+          requestBodyBytes: bodyBytes,
+          explanation: '当前预算无法容纳单个 PCM 帧的编码文件及协议开销。',
+        );
+      }
+      if (depth >= maxAdaptiveSplitDepth) {
+        throw _uploadSizeLimitException(
+          sourceAudioBytesLength: sourceAudioBytesLength,
+          processedAudioBytesLength: sourcePcm.length,
+          encodedAudioBytesLength: encoded.$1.length,
+          requestBodyBytes: bodyBytes,
+          explanation: '达到 PCM 细分次数上限，已停止上传。',
+        );
+      }
+
+      final halves = splitWavAtFrame(sourcePcm, sourceInfo.totalSamples ~/ 2);
+      prepareWithinBudget(halves.first, depth + 1);
+      prepareWithinBudget(halves.last, depth + 1);
+    }
+
+    for (final chunk in initialChunks) {
+      prepareWithinBudget(chunk, 0);
+    }
 
     await AppLogService.info(
       'AsrService',
-      '切块完成: ${chunks.length} 个片段 (共 ${wavBytes.length} 字节)',
+      '切块完成: ${preparedChunks.length} 个片段 '
+          '(PCM 源文件 ${wavBytes.length} 字节)',
     );
 
     final chunkResults = <AsrChunkResult>[];
@@ -968,27 +1277,22 @@ class AsrService {
     final segments = <AsrTranscriptSegment>[];
     final words = <AsrTranscriptSegment>[];
     var chunkOffsetSeconds = 0.0;
-    final fmt = audioFormat; // 'wav'
-    final mimeTypeString = getMimeType(fmt);
-    final mimeType = mimeTypeString.contains('/')
-        ? DioMediaType.parse(mimeTypeString)
-        : null;
-    final fileName = 'audio.$fmt';
     final jsonCustomParamNames = <String>{};
     final sharedParams = _buildSharedParams(
       jsonCustomParamNames: jsonCustomParamNames,
     );
 
-    for (int i = 0; i < chunks.length; i++) {
-      final chunk = chunks[i];
+    for (int i = 0; i < preparedChunks.length; i++) {
+      final chunk = preparedChunks[i];
+      final sourceChunk = chunk.sourcePcm;
       final chunkOffset = chunkOffsetSeconds;
-      final chunkDurationSeconds = parseWavHeader(chunk).durationSeconds;
+      final chunkDurationSeconds = parseWavHeader(sourceChunk).durationSeconds;
       final chunkEndSeconds = chunkOffset + chunkDurationSeconds;
       chunkOffsetSeconds = chunkEndSeconds;
 
       // ── Prompt carrying: pass previous chunk's text as prompt ──
-      final chunkParams = Map<String, dynamic>.from(sharedParams);
-      final chunkCustomParamNames = Set<String>.from(jsonCustomParamNames);
+      var chunkParams = Map<String, dynamic>.from(sharedParams);
+      var chunkCustomParamNames = Set<String>.from(jsonCustomParamNames);
       if (i > 0 && previousChunkText.isNotEmpty) {
         final previousText = previousChunkText;
         final previousRunes = previousText.runes.toList();
@@ -1008,19 +1312,38 @@ class AsrService {
                 ? promptSuffix
                 : '$configuredPrompt\n$promptSuffix';
         chunkCustomParamNames.remove('prompt');
+        final promptBodyBytes = _measureUploadRequestBodyBytes(
+          chunk.encodedAudio,
+          chunk.audioFormat,
+          config.uploadMethod,
+          sharedParams: chunkParams,
+          jsonCustomParamNames: chunkCustomParamNames,
+        );
+        if (promptBodyBytes > config.maxFileSizeBytes) {
+          // Prompt carrying is best effort. Keep the chunk if its audio and
+          // configured fields fit without the prior transcript suffix.
+          chunkParams = Map<String, dynamic>.from(sharedParams);
+          chunkCustomParamNames = Set<String>.from(jsonCustomParamNames);
+        }
       }
 
+      final mimeTypeString = getMimeType(chunk.audioFormat);
+      final mimeType = mimeTypeString.contains('/')
+          ? DioMediaType.parse(mimeTypeString)
+          : null;
       try {
         final response = await _sendTranscriptionRequest(
           sharedParams: chunkParams,
-          audioBytes: chunk,
-          fileName: fileName,
+          audioBytes: chunk.encodedAudio,
+          fileName: 'audio.${chunk.audioFormat}',
+          sourceAudioBytesLength: sourceAudioBytesLength,
+          processedAudioBytesLength: sourceChunk.length,
           mimeType: mimeType,
           jsonCustomParamNames: chunkCustomParamNames,
           cancelToken: cancelToken,
           onProgress: onProgress,
           chunkIndex: i + 1,
-          chunkCount: chunks.length,
+          chunkCount: preparedChunks.length,
         );
         _captureResponseDiagnostics(response);
         final result = _parseResponse(response.data, allowEmptyText: true);
@@ -1039,7 +1362,7 @@ class AsrService {
           AsrRequestProgress(
             phase: AsrRequestPhase.chunkCompleted,
             chunkIndex: i + 1,
-            chunkCount: chunks.length,
+            chunkCount: preparedChunks.length,
           ),
         );
         if (chunkText.isNotEmpty) {
@@ -1071,14 +1394,17 @@ class AsrService {
             ),
           );
         }
-        await AppLogService.info('AsrService', '切块 $i/${chunks.length} 转写完成');
+        await AppLogService.info(
+          'AsrService',
+          '切块 $i/${preparedChunks.length} 转写完成',
+        );
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) rethrow;
         previousChunkText = '';
         _captureDioExceptionDiagnostics(e);
         await AppLogService.warning(
           'AsrService',
-          '切块 $i/${chunks.length} 转写失败: $e',
+          '切块 $i/${preparedChunks.length} 转写失败: $e',
         );
         chunkResults.add(
           AsrChunkResult(
@@ -1093,7 +1419,7 @@ class AsrService {
         previousChunkText = '';
         await AppLogService.warning(
           'AsrService',
-          '切块 $i/${chunks.length} 转写失败: $e',
+          '切块 $i/${preparedChunks.length} 转写失败: $e',
         );
         chunkResults.add(
           AsrChunkResult(
@@ -1137,6 +1463,8 @@ class AsrService {
     required Map<String, dynamic> sharedParams,
     required Uint8List audioBytes,
     required String fileName,
+    required int sourceAudioBytesLength,
+    required int processedAudioBytesLength,
     required DioMediaType? mimeType,
     required Set<String> jsonCustomParamNames,
     AudioUploadMethod? method,
@@ -1150,30 +1478,34 @@ class AsrService {
 
     switch (effectiveMethod) {
       case AudioUploadMethod.multipart:
-        final multipartParams = Map<String, dynamic>.from(sharedParams);
-        final timestampGranularities = multipartParams.remove(
-          'timestamp_granularities',
+        final formData = _buildMultipartFormData(
+          sharedParams: sharedParams,
+          audioBytes: audioBytes,
+          fileName: fileName,
+          mimeType: mimeType,
+          jsonCustomParamNames: jsonCustomParamNames,
         );
-        if (timestampGranularities is List) {
-          multipartParams['timestamp_granularities[]'] = timestampGranularities;
-        }
-        for (final name in jsonCustomParamNames) {
-          if (multipartParams.containsKey(name)) {
-            multipartParams[name] = jsonEncode(multipartParams[name]);
-          }
-        }
-        final formData = FormData.fromMap({
-          ...multipartParams,
-          'file': MultipartFile.fromBytes(
-            audioBytes,
-            filename: fileName,
-            contentType: mimeType,
-          ),
-        });
+        final requestBodyBytes = formData.length;
         diagnosticFields['file'] =
-            '$fileName (${audioBytes.length} bytes, ${mimeType?.mimeType ?? 'unknown'})';
+            '$fileName (${audioBytes.length} encoded bytes, '
+            '${mimeType?.mimeType ?? 'unknown'})';
+        diagnosticFields['uploadSizeDiagnostics'] = {
+          'sourceAudioBytes': sourceAudioBytesLength,
+          'processedAudioBytes': processedAudioBytesLength,
+          'encodedAudioBytes': audioBytes.length,
+          'requestBodyBytes': requestBodyBytes,
+        };
 
         _captureDiagnostics(diagnosticFields);
+        if (requestBodyBytes > config.maxFileSizeBytes) {
+          throw _uploadSizeLimitException(
+            sourceAudioBytesLength: sourceAudioBytesLength,
+            processedAudioBytesLength: processedAudioBytesLength,
+            encodedAudioBytesLength: audioBytes.length,
+            requestBodyBytes: requestBodyBytes,
+            explanation: 'Multipart 请求体包含文件、字段和边界开销。',
+          );
+        }
 
         final response = await _dio.post(
           config.transcribeUrl,
@@ -1207,20 +1539,49 @@ class AsrService {
         return response;
 
       case AudioUploadMethod.base64Json:
-        final b64 = base64Encode(audioBytes);
-        sharedParams['file'] = b64;
+        final requestBodyBytes = _measureBase64JsonBodyBytes(
+          sharedParams,
+          audioBytes,
+        );
         diagnosticFields['file'] =
-            '$fileName (base64, ${audioBytes.length} bytes)';
+            '$fileName (${audioBytes.length} encoded bytes, base64)';
+        diagnosticFields['uploadSizeDiagnostics'] = {
+          'sourceAudioBytes': sourceAudioBytesLength,
+          'processedAudioBytes': processedAudioBytesLength,
+          'encodedAudioBytes': audioBytes.length,
+          'requestBodyBytes': requestBodyBytes,
+        };
 
         _captureDiagnostics(diagnosticFields);
+        if (requestBodyBytes > config.maxFileSizeBytes) {
+          throw _uploadSizeLimitException(
+            sourceAudioBytesLength: sourceAudioBytesLength,
+            processedAudioBytesLength: processedAudioBytesLength,
+            encodedAudioBytesLength: audioBytes.length,
+            requestBodyBytes: requestBodyBytes,
+            explanation: 'Base64 与 JSON 字段开销计入请求体预算。',
+          );
+        }
 
-        final requestBody = jsonEncode(sharedParams);
+        final requestParams = Map<String, dynamic>.from(sharedParams)
+          ..['file'] = base64Encode(audioBytes);
+        final requestBody = jsonEncode(requestParams);
+        final actualRequestBodyBytes = utf8.encode(requestBody).length;
+        if (actualRequestBodyBytes > config.maxFileSizeBytes) {
+          throw _uploadSizeLimitException(
+            sourceAudioBytesLength: sourceAudioBytesLength,
+            processedAudioBytesLength: processedAudioBytesLength,
+            encodedAudioBytesLength: audioBytes.length,
+            requestBodyBytes: actualRequestBodyBytes,
+            explanation: 'Base64 与 JSON 字段开销计入请求体预算。',
+          );
+        }
         final response = await _dio.post(
           config.transcribeUrl,
           data: requestBody,
           options: Options(
             headers: {'Content-Type': 'application/json'},
-            sendTimeout: sendTimeoutForBytes(utf8.encode(requestBody).length),
+            sendTimeout: sendTimeoutForBytes(actualRequestBodyBytes),
             receiveTimeout:
                 _dio.options.receiveTimeout ?? receiveTimeoutFallback,
           ),
@@ -1534,9 +1895,17 @@ class AsrService {
     var cueNumber = 1;
     for (final segment in timedSegments) {
       if (format == 'srt') lines.add('$cueNumber');
+      final startSeconds = segment.startSeconds!;
+      final endSeconds = segment.endSeconds!;
+      final startMilliseconds = (startSeconds * 1000).round();
+      final roundedEndMilliseconds = (endSeconds * 1000).round();
+      final endMilliseconds = endSeconds > startSeconds &&
+              roundedEndMilliseconds <= startMilliseconds
+          ? startMilliseconds + 1
+          : roundedEndMilliseconds;
       lines.add(
-        '${_formatSubtitleTime(segment.startSeconds!, format)} --> '
-        '${_formatSubtitleTime(segment.endSeconds!, format)}',
+        '${_formatSubtitleTime(startMilliseconds, format)} --> '
+        '${_formatSubtitleTime(endMilliseconds, format)}',
       );
       lines.add(segment.text);
       lines.add('');
@@ -1578,8 +1947,7 @@ class AsrService {
     return mpegts <= BigInt.from(8589934591);
   }
 
-  String _formatSubtitleTime(double seconds, String format) {
-    final totalMilliseconds = (seconds * 1000).round();
+  String _formatSubtitleTime(int totalMilliseconds, String format) {
     final hours = totalMilliseconds ~/ 3600000;
     final minutes = (totalMilliseconds ~/ 60000) % 60;
     final wholeSeconds = (totalMilliseconds ~/ 1000) % 60;

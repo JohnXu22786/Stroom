@@ -154,6 +154,20 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   }
 }
 
+class _FailingSerializationTask extends CatCatchTask {
+  _FailingSerializationTask()
+      : super(
+          id: 'failing-serialization',
+          url: 'https://example.com/video.mp4',
+          expectedDurationSec: 30,
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 1),
+        );
+
+  @override
+  Map<String, dynamic> toMap() => throw StateError('test persistence failure');
+}
+
 Future<CatCatchTask?> _waitForPersistedTaskForTest(
   Directory directory,
   String taskId, {
@@ -191,6 +205,7 @@ void main() {
     late _CleanupCatCatchNotifier notifier;
     late SharedPreferences preferences;
     late TargetPlatform? originalTargetPlatform;
+    late bool containerDisposed;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -210,12 +225,13 @@ void main() {
           return notifier;
         }),
       ]);
+      containerDisposed = false;
       container.read(catcatchTasksProvider);
       preferences = await SharedPreferences.getInstance();
     });
 
     tearDown(() async {
-      container.dispose();
+      if (!containerDisposed) container.dispose();
       PathProviderPlatform.instance = originalPathProvider;
       debugDefaultTargetPlatformOverride = originalTargetPlatform;
       AppStorage.resetCache();
@@ -297,6 +313,7 @@ void main() {
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
       final failed = Completer<CatCatchTask>();
       final subscription = container.listen<List<CatCatchTask>>(
         catcatchTasksProvider,
@@ -338,6 +355,12 @@ void main() {
               'persisted status',
               TaskStatus.failed,
             ));
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
 
         final retryFailed = Completer<CatCatchTask>();
         final retrySubscription = container.listen<List<CatCatchTask>>(
@@ -361,7 +384,7 @@ void main() {
         expect(servicePlatform.startCalls, 2);
         expect(notifier.executorStarts, 0);
         expect(preferences.getBool('background_service_enabled'), isFalse);
-        expect(servicePlatform.stopCalls, 0);
+        expect(servicePlatform.stopCalls, 1);
       } finally {
         subscription.close();
         await notifier.removeTasksPersisted(['failed-new-task']);
@@ -438,12 +461,113 @@ void main() {
       }
     });
 
-    test('startup failure does not stop service for a queued idle write',
+    test('startup failure preserves a user-enabled service', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', true);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+
+      try {
+        notifier.addTask(
+          'invalid://failed-with-enabled-service',
+          30,
+          taskId: 'failed-with-enabled-service',
+        );
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-with-enabled-service',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        expect(await notifier.removeTasksPersisted(['absent-task']), isTrue);
+
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.startCalls, 1);
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+      } finally {
+        await notifier.removeTasksPersisted(['failed-with-enabled-service']);
+      }
+    });
+
+    test('startup failure waits until a task snapshot saves before cleanup',
         () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
+      final catcatchDirectory = Directory('${directory.path}/catcatch');
+      if (await catcatchDirectory.exists()) {
+        await catcatchDirectory.delete(recursive: true);
+      }
+      await File(catcatchDirectory.path).writeAsString('not a directory');
+
+      final originalDebugPrint = debugPrint;
+      final failedWrites = Completer<void>();
+      final laterFailedWrite = Completer<void>();
+      var persistenceFailures = 0;
+      debugPrint = (message, {wrapWidth}) {
+        if (message?.startsWith(
+              '[CatCatchNotifier] Failed to persist tasks:',
+            ) ==
+            true) {
+          persistenceFailures++;
+          if (persistenceFailures == 2 && !failedWrites.isCompleted) {
+            failedWrites.complete();
+          }
+          if (persistenceFailures == 3 && !laterFailedWrite.isCompleted) {
+            laterFailedWrite.complete();
+          }
+        }
+        originalDebugPrint(message, wrapWidth: wrapWidth);
+      };
+
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-unsaved-task' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-unsaved-task',
+          30,
+          taskId: 'failed-unsaved-task',
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        await failedWrites.future.timeout(const Duration(seconds: 2));
+        notifier.removeTask('absent-task');
+        await laterFailedWrite.future.timeout(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        debugPrint = originalDebugPrint;
+        subscription.close();
+      }
+    });
+
+    test('startup failure cleans up after a queued idle write is persisted',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
       documents.firstRequestStarted = Completer<void>();
       documents.releaseFirstRequest = Completer<void>();
       final failed = Completer<CatCatchTask>();
@@ -482,8 +606,11 @@ void main() {
           'failed-after-idle-write',
         );
         expect(persisted?.status, TaskStatus.failed);
-        expect(servicePlatform.running, isTrue);
-        expect(servicePlatform.stopCalls, 0);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
         expect(preferences.getBool('background_service_enabled'), isFalse);
       } finally {
         if (!documents.releaseFirstRequest!.isCompleted) {
@@ -494,14 +621,240 @@ void main() {
       }
     });
 
-    test('startup failure invalidates a queued removal cleanup', () async {
+    test(
+        'startup failure cleanup survives a queued snapshot failure after the failed state was saved',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      notifier.setTasksForTest([
+        task('other-task').copyWith(status: TaskStatus.running),
+      ]);
+
+      final originalDebugPrint = debugPrint;
+      final laterWriteFailed = Completer<void>();
+      debugPrint = (message, {wrapWidth}) {
+        if (message?.startsWith(
+                  '[CatCatchNotifier] Failed to persist tasks:',
+                ) ==
+                true &&
+            !laterWriteFailed.isCompleted) {
+          laterWriteFailed.complete();
+        }
+        originalDebugPrint(message, wrapWidth: wrapWidth);
+      };
+
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-with-queued-write-error' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-with-queued-write-error',
+          30,
+          taskId: 'failed-with-queued-write-error',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+
+        notifier.setTasksForTest([
+          for (final current in notifier.tasksForTest)
+            if (current.id == 'other-task')
+              current.copyWith(status: TaskStatus.completed)
+            else
+              current,
+          _FailingSerializationTask(),
+        ]);
+        notifier.removeTask('absent-task');
+
+        documents.releaseFirstRequest!.complete();
+        await laterWriteFailed.future.timeout(const Duration(seconds: 2));
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-with-queued-write-error',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        debugPrint = originalDebugPrint;
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+      }
+    });
+
+    test(
+        'startup failure cleanup survives provider disposal during persistence',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-before-provider-disposal' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+
+      try {
+        notifier.addTask(
+          'invalid://failed-before-provider-disposal',
+          30,
+          taskId: 'failed-before-provider-disposal',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+        expect(servicePlatform.running, isTrue);
+        expect(servicePlatform.stopCalls, 0);
+
+        container.dispose();
+        containerDisposed = true;
+        documents.releaseFirstRequest!.complete();
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'failed-before-provider-disposal',
+        );
+        expect(persisted?.status, TaskStatus.failed);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+      }
+    });
+
+    test('startup failure removal cleanup survives provider disposal',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startResult = false;
+      servicePlatform.runningAfterStart = true;
+      servicePlatform.stopRequested = Completer<void>();
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseFirstRequest = Completer<void>();
+      notifier.setTasksForTest([
+        task('other-task').copyWith(status: TaskStatus.running),
+      ]);
+      final failed = Completer<CatCatchTask>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          for (final current in tasks) {
+            if (current.id == 'failed-before-removal-disposal' &&
+                current.status == TaskStatus.failed &&
+                !failed.isCompleted) {
+              failed.complete(current);
+            }
+          }
+        },
+      );
+      Future<bool>? pendingRemoval;
+
+      try {
+        notifier.addTask(
+          'invalid://failed-before-removal-disposal',
+          30,
+          taskId: 'failed-before-removal-disposal',
+        );
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final failure = await failed.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(failure.error, contains('后台服务启动失败'));
+
+        pendingRemoval = notifier.removeTasksPersisted([
+          'other-task',
+          'failed-before-removal-disposal',
+        ]);
+        container.dispose();
+        containerDisposed = true;
+        documents.releaseFirstRequest!.complete();
+        expect(await pendingRemoval, isTrue);
+
+        final persisted =
+            await File('${directory.path}/catcatch/tasks.json').readAsString();
+        expect(jsonDecode(persisted), isEmpty);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!documents.releaseFirstRequest!.isCompleted) {
+          documents.releaseFirstRequest!.complete();
+        }
+        subscription.close();
+        if (pendingRemoval != null) await pendingRemoval;
+      }
+    });
+
+    test('startup failure cleanup waits while another task is running',
+        () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
       await preferences.setBool('background_service_enabled', false);
       servicePlatform.startResult = false;
       servicePlatform.runningAfterStart = true;
       documents.firstRequestStarted = Completer<void>();
       documents.releaseFirstRequest = Completer<void>();
-      notifier.setTasksForTest([task('queued-removal')]);
+      notifier.setTasksForTest([
+        task('queued-removal'),
+        task('still-running').copyWith(status: TaskStatus.running),
+      ]);
       final failed = Completer<CatCatchTask>();
       final subscription = container.listen<List<CatCatchTask>>(
         catcatchTasksProvider,
@@ -540,16 +893,24 @@ void main() {
           'failed-during-removal',
         );
         expect(persisted?.status, TaskStatus.failed);
+        expect(await notifier.removeTasksPersisted(['absent-task']), isTrue);
         expect(servicePlatform.running, isTrue);
         expect(servicePlatform.stopCalls, 0);
         expect(preferences.getBool('background_service_enabled'), isFalse);
+
+        expect(await notifier.removeTasksPersisted(['still-running']), isTrue);
+        expect(servicePlatform.running, isFalse);
+        expect(servicePlatform.stopCalls, 1);
       } finally {
         if (!documents.releaseFirstRequest!.isCompleted) {
           documents.releaseFirstRequest!.complete();
         }
         subscription.close();
         if (pendingRemoval != null) await pendingRemoval;
-        await notifier.removeTasksPersisted(['failed-during-removal']);
+        await notifier.removeTasksPersisted([
+          'still-running',
+          'failed-during-removal',
+        ]);
       }
     });
 

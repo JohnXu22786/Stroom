@@ -44,6 +44,7 @@ const _serviceStopPollInterval = Duration(milliseconds: 50);
 
 Future<void> _serviceLifecycleQueue = Future<void>.value();
 Completer<void>? _desktopCloseMinimizeWriteQueue;
+final Map<String, Completer<void>> _recoveryOptionWriteQueues = {};
 // Null means this process has no explicit service choice; otherwise prefer
 // the user's latest choice over a stale preference value.
 bool? _explicitUserEnabledInProcess;
@@ -442,13 +443,18 @@ bool isBackgroundServiceSupported() {
 /// [initializeBackgroundService] has completed.
 Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!isBackgroundServiceSupported()) return;
-  if (!await isColdStartRestoreEnabled()) return;
 
   try {
     final wasEnabled = await _isBackgroundServiceEnabled(
-      assumeEnabledOnReadError: false,
+      assumeEnabledOnReadError: true,
     );
     if (!wasEnabled) return;
+    if (!await isColdStartRestoreEnabled()) {
+      // This toggle suppresses an immediate start, but the persisted enabled
+      // intent still needs the watchdog armed for a later recovery attempt.
+      await _rearmKeepAlive();
+      return;
+    }
 
     try {
       final service = FlutterBackgroundService();
@@ -519,12 +525,8 @@ Future<bool> isWatchdogEnabled() async {
 }
 
 /// Enables or disables the AlarmManager watchdog.
-Future<void> setWatchdogEnabled(bool enabled) async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_watchdogEnabledKey, enabled);
-  } catch (_) {}
-}
+Future<bool> setWatchdogEnabled(bool enabled) =>
+    _setRecoveryOptionEnabled(_watchdogEnabledKey, enabled);
 
 /// Returns whether cold-start auto-restore is enabled.
 /// Defaults to `true`.
@@ -538,11 +540,37 @@ Future<bool> isColdStartRestoreEnabled() async {
 }
 
 /// Enables or disables cold-start auto-restore.
-Future<void> setColdStartRestoreEnabled(bool enabled) async {
+Future<bool> setColdStartRestoreEnabled(bool enabled) =>
+    _setRecoveryOptionEnabled(_coldStartRestoreEnabledKey, enabled);
+
+Future<bool> _setRecoveryOptionEnabled(String key, bool enabled) async {
+  final previousWrite = _recoveryOptionWriteQueues[key]?.future;
+  final writeComplete = Completer<void>();
+  _recoveryOptionWriteQueues[key] = writeComplete;
   try {
+    if (previousWrite != null) await previousWrite;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_coldStartRestoreEnabledKey, enabled);
-  } catch (_) {}
+    final previousValue = prefs.getBool(key) ?? true;
+    var saved = false;
+    try {
+      saved = await prefs.setBool(key, enabled);
+    } catch (_) {}
+    if (!saved) {
+      // SharedPreferences may update its in-memory cache before the backing
+      // store confirms the write. Restore the last saved choice on failure.
+      try {
+        await prefs.setBool(key, previousValue);
+      } catch (_) {}
+    }
+    return saved;
+  } catch (_) {
+    return false;
+  } finally {
+    writeComplete.complete();
+    if (identical(_recoveryOptionWriteQueues[key], writeComplete)) {
+      _recoveryOptionWriteQueues.remove(key);
+    }
+  }
 }
 
 /// Returns whether the battery optimization reminder card is visible.
@@ -716,7 +744,7 @@ Future<void> requestScheduleExactAlarm() async {
 Future<void> rearmKeepAliveOnResume() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: false)) {
+    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: true)) {
       return;
     }
     // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。

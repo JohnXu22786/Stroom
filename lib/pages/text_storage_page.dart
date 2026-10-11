@@ -269,6 +269,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
     if (mounted) {
       await ref.read(textRecordsProvider.notifier).loadRecords();
+      if (!mounted) return;
+      await ref.read(textFolderListProvider.notifier).loadFolders();
     }
   }
 

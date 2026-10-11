@@ -944,6 +944,26 @@ void main() {
   });
 
   group('AudioChunker frame boundaries', () {
+    test('adaptive PCM split preserves every source frame without overlap', () {
+      final frames = List<List<int>>.generate(
+        17,
+        (index) => [index * 101 - 700, 900 - index * 37],
+      );
+      final wav = _buildWavFromFrames(frames);
+      final originalValues = frames.expand((frame) => frame).toList();
+
+      final pieces = splitWavAtFrame(wav, 7);
+      expect(pieces, hasLength(2));
+      final reconstructed = <int>[];
+      for (final piece in pieces) {
+        final info = parseWavHeader(piece);
+        expect(info.dataSize % info.blockAlign, 0);
+        reconstructed.addAll(_readPcmValues(piece));
+      }
+
+      expect(reconstructed, originalValues);
+    });
+
     test('mono and stereo recordings cut at equivalent times', () {
       const sampleRate = 1000;
       final segments = <(double, double)>[

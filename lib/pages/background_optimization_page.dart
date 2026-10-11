@@ -679,11 +679,26 @@ class _BackgroundOptimizationPageState
               '\n\n适用场景：对后台任务要求极高的用户。'
               '\n耗电影响：极低（每次仅短暂唤醒检查一次）。',
           value: _watchdogEnabled,
-          onChanged: (v) {
-            setState(() => _watchdogEnabled = v);
-            setWatchdogEnabled(v);
+          onChanged: (v) async {
+            final saved = await setWatchdogEnabled(v);
+            if (!saved) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('保存失败，看门狗设置未更改')),
+                );
+              }
+              return;
+            }
+            if (mounted) setState(() => _watchdogEnabled = v);
             if (v && _isServiceRunning) {
-              startBackgroundService();
+              final started = await startBackgroundService();
+              if (!started && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('看门狗激活失败，后台服务保活状态未确认'),
+                  ),
+                );
+              }
             } else if (!v) {
               disableKeepAlive();
             }
@@ -703,9 +718,17 @@ class _BackgroundOptimizationPageState
             '\n\n适用场景：所有用户都建议开启。'
             '\n耗电影响：无（仅在 App 启动时检查一次）。',
         value: _coldStartRestoreEnabled,
-        onChanged: (v) {
-          setState(() => _coldStartRestoreEnabled = v);
-          setColdStartRestoreEnabled(v);
+        onChanged: (v) async {
+          final saved = await setColdStartRestoreEnabled(v);
+          if (!saved) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('保存失败，冷启动恢复设置未更改')),
+              );
+            }
+            return;
+          }
+          if (mounted) setState(() => _coldStartRestoreEnabled = v);
         },
       ),
     ]);

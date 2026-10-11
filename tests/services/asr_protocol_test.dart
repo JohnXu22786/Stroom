@@ -141,6 +141,11 @@ Uint8List _testWav(int dataSize) {
   return bytes;
 }
 
+Uint8List _testWavForDuration(int durationSeconds) {
+  const pcmBytesPerSecond = 8000 * 2;
+  return _testWav(pcmBytesPerSecond * durationSeconds);
+}
+
 void main() {
   group('ASR response protocol', () {
     test('extracts text from a JSON response', () async {
@@ -222,29 +227,40 @@ void main() {
                 ? 'text/plain; charset=utf-8'
                 : 'text/vtt; charset=utf-8',
             responseFormat: format,
-            audioBytes: _testWav(140),
-            maxFileSizeBytes: 100,
+            audioBytes: _testWavForDuration(2),
+            maxFileSizeBytes: 12000,
             chunking: 'fixedSize',
             fallbackMethod: 'generic',
           );
-
           expect(call.result.text, 'first second third');
           expect(call.result.outputFormat, format);
           expect(call.result.segments, hasLength(3));
+          const sampleRate = 8000;
+          // The request budget leaves 11,620 PCM bytes after the WAV and
+          // multipart headers, or 5,810 frames per full chunk.
+          const chunkStartFrames = [0, 5810, 11620];
+          expect(
+            call.result.chunks!.map((chunk) => chunk.startSeconds),
+            chunkStartFrames.map((frame) => frame / sampleRate),
+          );
           expect(
             call.result.segments![1].startSeconds,
-            closeTo(0.0035, 0.0001),
+            chunkStartFrames[1] / sampleRate,
+          );
+          expect(
+            call.result.segments![2].startSeconds,
+            chunkStartFrames[2] / sampleRate,
           );
           final subtitle = call.result.subtitle!;
           final firstCue = format == 'srt'
               ? '00:00:00,000 --> 00:00:00,001'
               : '00:00:00.000 --> 00:00:00.001';
           final secondCue = format == 'srt'
-              ? '00:00:00,004 --> 00:00:00,005'
-              : '00:00:00.004 --> 00:00:00.005';
+              ? '00:00:00,726 --> 00:00:00,727'
+              : '00:00:00.726 --> 00:00:00.727';
           final thirdCue = format == 'srt'
-              ? '00:00:00,007 --> 00:00:00,008'
-              : '00:00:00.007 --> 00:00:00.008';
+              ? '00:00:01,453 --> 00:00:01,454'
+              : '00:00:01.453 --> 00:00:01.454';
           expect(subtitle, contains(firstCue));
           expect(subtitle, contains(secondCue));
           expect(subtitle, contains(thirdCue));
@@ -261,6 +277,38 @@ void main() {
       },
     );
 
+    test('preserves zero-duration subtitle cues when transcribed in chunks',
+        () async {
+      for (final format in ['srt', 'vtt']) {
+        String cue(String text) {
+          final timeSeparator = format == 'srt' ? ',' : '.';
+          final prefix = format == 'srt' ? '1\n' : '';
+          return '$prefix'
+              '00:00:00${timeSeparator}000 --> '
+              '00:00:00${timeSeparator}000\n'
+              '$text';
+        }
+
+        final call = await _transcribe(
+          responseBody: cue('first'),
+          responseBodies: [cue('first'), cue('second'), cue('third')],
+          responseContentType: format == 'srt'
+              ? 'text/plain; charset=utf-8'
+              : 'text/vtt; charset=utf-8',
+          responseFormat: format,
+          audioBytes: _testWavForDuration(2),
+          maxFileSizeBytes: 12000,
+          chunking: 'fixedSize',
+          fallbackMethod: 'generic',
+        );
+        final zeroDurationCue = format == 'srt'
+            ? '00:00:01,453 --> 00:00:01,453'
+            : '00:00:01.453 --> 00:00:01.453';
+
+        expect(call.result.subtitle, contains(zeroDurationCue));
+      }
+    });
+
     test('rebases JSON segment and word timestamps for each chunk', () async {
       final response = jsonEncode({
         'text': 'turn',
@@ -275,16 +323,26 @@ void main() {
         responseBody: response,
         responseBodies: [response, response, response],
         responseFormat: 'verbose_json',
-        audioBytes: _testWav(140),
-        maxFileSizeBytes: 100,
+        audioBytes: _testWavForDuration(2),
+        maxFileSizeBytes: 12000,
         chunking: 'fixedSize',
         fallbackMethod: 'generic',
       );
-
       expect(call.result.segments, hasLength(3));
       expect(call.result.words, hasLength(3));
-      expect(call.result.segments![1].startSeconds, closeTo(0.0035, 0.0001));
-      expect(call.result.words![2].endSeconds, closeTo(0.008, 0.0001));
+      const sampleRate = 8000;
+      // The verbose_json request field uses a few more multipart bytes than
+      // the subtitle request, leaving 11,610 PCM bytes per full chunk.
+      const chunkStartFrames = [0, 5805, 11610];
+      expect(
+        call.result.chunks!.map((chunk) => chunk.startSeconds),
+        chunkStartFrames.map((frame) => frame / sampleRate),
+      );
+      expect(
+        call.result.segments!.map((segment) => segment.startSeconds),
+        chunkStartFrames.map((frame) => frame / sampleRate),
+      );
+      expect(call.result.words![2].endSeconds, 11610 / sampleRate + 0.001);
     });
 
     test(
@@ -303,8 +361,8 @@ void main() {
           config: AsrConfig(
             apiKey: 'test-key',
             host: 'https://api.test.com/audio/transcriptions',
-            maxFileSizeBytes: 100,
-            chunking: 'fixedSize',
+            maxFileSizeBytes: 1000000,
+            chunking: 'fixedDuration',
             fallbackMethod: 'generic',
             typeConfig: {
               'enableResponseFormat': true,
@@ -317,7 +375,10 @@ void main() {
         );
 
         await expectLater(
-          service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
+          service.transcribe(
+            audioBytes: _testWavForDuration(180),
+            audioFormat: 'wav',
+          ),
           throwsA(
             isA<AsrChunkedTranscriptionException>()
                 .having((e) => e.chunks, 'chunks', hasLength(3))
@@ -336,12 +397,12 @@ void main() {
                 .having(
                   (e) => e.chunks[2].startSeconds,
                   'third chunk start',
-                  closeTo(0.007, 0.0001),
+                  closeTo(120, 0.0001),
                 )
                 .having(
                   (e) => e.chunks[2].endSeconds,
                   'third chunk end',
-                  closeTo(0.00875, 0.0001),
+                  closeTo(180, 0.0001),
                 ),
           ),
         );
@@ -362,8 +423,8 @@ void main() {
       final call = await _transcribe(
         responseBody: '{"text":""}',
         responseBodies: ['{"text":""}', '{"text":""}', '{"text":""}'],
-        audioBytes: _testWav(140),
-        maxFileSizeBytes: 100,
+        audioBytes: _testWavForDuration(2),
+        maxFileSizeBytes: 12000,
         chunking: 'fixedSize',
         fallbackMethod: 'generic',
       );
@@ -396,8 +457,8 @@ void main() {
                 ? 'text/plain; charset=utf-8'
                 : 'text/vtt; charset=utf-8',
             responseFormat: format,
-            audioBytes: _testWav(140),
-            maxFileSizeBytes: 100,
+            audioBytes: _testWavForDuration(2),
+            maxFileSizeBytes: 12000,
             chunking: 'fixedSize',
             fallbackMethod: 'generic',
           );
@@ -421,8 +482,8 @@ void main() {
           ],
           responseContentType: 'text/plain; charset=utf-8',
           responseFormat: 'srt',
-          audioBytes: _testWav(140),
-          maxFileSizeBytes: 100,
+          audioBytes: _testWavForDuration(2),
+          maxFileSizeBytes: 12000,
           chunking: 'fixedSize',
           fallbackMethod: 'generic',
         );
@@ -452,8 +513,8 @@ void main() {
             responseBodies: List.filled(3, malformedVttBody),
             responseContentType: 'text/vtt; charset=utf-8',
             responseFormat: 'vtt',
-            audioBytes: _testWav(140),
-            maxFileSizeBytes: 100,
+            audioBytes: _testWavForDuration(2),
+            maxFileSizeBytes: 12000,
             chunking: 'fixedSize',
             fallbackMethod: 'generic',
           );
@@ -481,8 +542,8 @@ void main() {
             '{"text":"again"}',
             '{"text":"done"}',
           ],
-          audioBytes: _testWav(140),
-          maxFileSizeBytes: 100,
+          audioBytes: _testWavForDuration(2),
+          maxFileSizeBytes: 12000,
           chunking: 'fixedSize',
           fallbackMethod: 'generic',
         );
@@ -515,8 +576,8 @@ void main() {
           config: AsrConfig(
             apiKey: 'test-key',
             host: 'https://api.test.com/audio/transcriptions',
-            maxFileSizeBytes: 100,
-            chunking: 'fixedSize',
+            maxFileSizeBytes: 1000000,
+            chunking: 'fixedDuration',
             fallbackMethod: 'generic',
             typeConfig: {
               'enableResponseFormat': true,
@@ -526,7 +587,10 @@ void main() {
           dio: dio,
         );
 
-        await service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav');
+        await service.transcribe(
+          audioBytes: _testWavForDuration(120),
+          audioFormat: 'wav',
+        );
 
         final prompt = _multipartField(adapter.requestBodies[1], 'prompt');
         expect(prompt, contains('😀'));
@@ -806,9 +870,9 @@ void main() {
         final call = await _transcribe(
           responseBody: '{"text":"first chunk"}',
           responseBodies: ['{"text":"first chunk"}', '{"text":"second chunk"}'],
-          audioBytes: _testWav(100),
-          maxFileSizeBytes: 100,
-          chunking: 'fixedSize',
+          audioBytes: _testWavForDuration(120),
+          maxFileSizeBytes: 1000000,
+          chunking: 'fixedDuration',
           fallbackMethod: 'generic',
           customParams: [
             CustomParam(
@@ -844,9 +908,9 @@ void main() {
         final call = await _transcribe(
           responseBody: '{"text":"first chunk"}',
           responseBodies: ['{"text":"first chunk"}', '{"text":"second chunk"}'],
-          audioBytes: _testWav(100),
-          maxFileSizeBytes: 100,
-          chunking: 'fixedSize',
+          audioBytes: _testWavForDuration(120),
+          maxFileSizeBytes: 1000000,
+          chunking: 'fixedDuration',
           fallbackMethod: 'generic',
           customParams: [
             CustomParam(
@@ -880,8 +944,8 @@ void main() {
           config: AsrConfig(
             apiKey: 'test-key',
             host: 'https://api.test.com/audio/transcriptions',
-            maxFileSizeBytes: 100,
-            chunking: 'fixedSize',
+            maxFileSizeBytes: 1000000,
+            chunking: 'fixedDuration',
             fallbackMethod: 'generic',
             customParams: [
               CustomParam(
@@ -895,7 +959,10 @@ void main() {
         );
 
         await expectLater(
-          service.transcribe(audioBytes: _testWav(140), audioFormat: 'wav'),
+          service.transcribe(
+            audioBytes: _testWavForDuration(180),
+            audioFormat: 'wav',
+          ),
           throwsA(
             isA<AsrChunkedTranscriptionException>().having(
               (error) => error.chunks[1].status,

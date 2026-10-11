@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -130,14 +131,14 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=7&code='));
+      expect(url, contains('mermaid_render.html?v=9&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=7?')));
+      expect(url, isNot(contains('v=9?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=7');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=9');
     });
 
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
@@ -390,7 +391,7 @@ void main() {
 
     test('HTML has wheel zoom handler with Ctrl/Cmd key modifier', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('wheel'));
+      expect(html, contains("document.addEventListener('wheel'"));
       expect(html, contains('ctrlKey'));
       expect(html, contains('metaKey'),
           reason:
@@ -478,7 +479,7 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mousedown'),
           reason: 'default should include mouse drag handlers');
-      expect(html, contains('wheel'),
+      expect(html, contains("document.addEventListener('wheel'"),
           reason: 'default should include wheel zoom handler');
       expect(html, contains('touchstart'),
           reason: 'default should include touch handlers');
@@ -491,13 +492,23 @@ void main() {
           withJsGestures: false);
       expect(html, isNot(contains('mousedown')),
           reason: 'should omit mouse drag handlers');
-      expect(html, isNot(contains('wheel')),
+      expect(html, isNot(contains("document.addEventListener('wheel'")),
           reason: 'should omit wheel zoom handler');
       expect(html, isNot(contains('touchstart')),
           reason: 'should omit touch handlers');
       // Core mermaid rendering should still be present
       expect(html, contains('mermaid.initialize'));
       expect(html, contains('mermaid.run'));
+      expect(
+        html,
+        contains(
+          'window.applyWheelZoomAfterFit = function(delta, centerX, centerY)',
+        ),
+        reason:
+            'native programmatic wheel zoom support should remain available',
+      );
+      expect(html, contains('window.applyZoomOperationsAfterFit = function'),
+          reason: 'native buffered zoom operations should remain available');
       expect(html, isNot(contains('MERMAID_CODE_PLACEHOLDER')),
           reason: 'code placeholder should be replaced');
     });
@@ -542,7 +553,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v7');
+      expect(templateVersion, 'v9');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -607,7 +618,11 @@ void main() {
       expect(find.byIcon(Icons.zoom_in), findsOneWidget);
       await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
-      expect(fakeController.evaluatedScripts, isEmpty);
+      expect(
+        fakeController.evaluatedScripts,
+        isEmpty,
+        reason: 'horizontal-only Ctrl+wheel should not send a zoom command',
+      );
 
       webView.params.onWebViewCreated!(controller);
       await tester.pump();
@@ -619,9 +634,8 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      // The overlay timeout does not prove that the page loaded or that its
-      // JavaScript zoom helper is available.
-      await tester.pump(const Duration(seconds: 3));
+      // Until onLoadStop, the page has not reported that its JavaScript zoom
+      // helper is available.
       await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
@@ -650,6 +664,74 @@ void main() {
       // queued taps must apply on top of that fitted zoom rather than precede it.
       fakeController.simulateJsFitToViewport(0.8);
       expect(fakeController.zoomLevel, closeTo(1.2, 0.0001));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'queued toolbar zoom is applied by native readiness fallback without onLoadStop',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(
+              mermaidCode: 'graph TD\nA-->B',
+              showZoomControls: true,
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final fakeController = webView.controller;
+
+      // The toolbar is visible while loading, before its native controller is
+      // created, so this tap is queued in Flutter.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, isEmpty);
+
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+
+      // Let the native fallback expose the preview without delivering the
+      // WebView's onLoadStop callback.
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(find.text('加载渲染引擎...'), findsNothing);
+      expect(
+        fakeController.evaluatedScripts,
+        contains(predicate<String>((script) =>
+            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+      );
+
+      // Once the fallback exposes the preview, later taps must also reach
+      // the page even though onLoadStop never arrives.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+      expect(
+        fakeController.evaluatedScripts
+            .where((script) =>
+                script.contains('window.applyZoomDeltasAfterFit([0.1])'))
+            .length,
+        2,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -706,7 +788,7 @@ void main() {
     });
 
     testWidgets(
-        'Ctrl+wheel zoom requires vertical input and does not scroll parent',
+        'Ctrl+wheel zoom before fit survives auto-fit and does not scroll parent',
         (tester) async {
       final previousPlatform = InAppWebViewPlatform.instance;
       final platform = _MermaidWebViewPlatform();
@@ -728,6 +810,7 @@ void main() {
                     mermaidCode: 'graph TD\nA-->B',
                     height: 200,
                     showToolbar: false,
+                    showZoomControls: true,
                   ),
                   const SizedBox(height: 1000),
                 ],
@@ -750,45 +833,103 @@ void main() {
         fakeController,
       );
       webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+
+      final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+      fakeController.viewportSize = widgetRect.size;
+      final localWheelCenters = [
+        Offset(widgetRect.width * 0.25, widgetRect.height * 0.25),
+        Offset(widgetRect.width * 0.75, widgetRect.height * 0.75),
+      ];
+
+      Future<void> sendWheel(Offset position, Offset scrollDelta) async {
+        await tester.sendEventToBinding(
+          PointerScrollEvent(
+            position: position,
+            kind: PointerDeviceKind.mouse,
+            scrollDelta: scrollDelta,
+          ),
+        );
+        await tester.pump();
+      }
+
+      // Load completion removes Flutter's loading overlay, while Mermaid's
+      // asynchronous render and first fit are still pending.
       webView.params.onLoadStop?.call(controller, null);
       await tester.pump();
 
-      int zoomCallCount() => fakeController.evaluatedScripts
-          .where((script) => script.contains('window.setZoom'))
-          .length;
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendEventToBinding(
-        PointerScrollEvent(
-          position: tester.getCenter(find.byType(MermaidRenderWidget)),
-          kind: PointerDeviceKind.mouse,
-          scrollDelta: const Offset(20, 0),
-        ),
-      );
+      // The toolbar and wheel inputs reach the page before its first fit.
+      await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      expect(
+        HardwareKeyboard.instance.logicalKeysPressed,
+        contains(LogicalKeyboardKey.controlLeft),
+      );
+      await sendWheel(widgetRect.center, const Offset(20, 0));
 
       expect(
-        zoomCallCount(),
-        0,
-        reason:
-            'Ctrl+horizontal-only wheel should not zoom the Mermaid diagram',
+        fakeController.evaluatedScripts,
+        ['window.applyZoomDeltasAfterFit([0.1])'],
+        reason: 'horizontal-only Ctrl+wheel should not issue another zoom',
       );
 
-      await tester.sendEventToBinding(
-        PointerScrollEvent(
-          position: tester.getCenter(find.byType(MermaidRenderWidget)),
-          kind: PointerDeviceKind.mouse,
-          scrollDelta: const Offset(0, 20),
-        ),
-      );
-      await tester.pump();
+      for (final localCenter in localWheelCenters) {
+        await sendWheel(widgetRect.topLeft + localCenter, const Offset(0, -20));
+      }
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
       expect(
-        zoomCallCount(),
-        1,
-        reason: 'Ctrl+wheel should still zoom the Mermaid diagram',
+        fakeController.evaluatedScripts,
+        hasLength(3),
+        reason: 'the toolbar and both vertical wheel inputs should be captured',
       );
+      expect(
+        fakeController.zoomLevel,
+        1.0,
+        reason: 'pre-fit wheel input must not mutate the unfit zoom state',
+      );
+
+      final expectedCommands = <String>[
+        'window.applyZoomDeltasAfterFit([0.1])',
+        for (final center in localWheelCenters)
+          'window.applyWheelZoomAfterFit(0.1, ${center.dx}, ${center.dy});',
+      ];
+      expect(
+        fakeController.evaluatedScripts,
+        expectedCommands,
+        reason:
+            'both vertical wheel events should queue in order with their anchors',
+      );
+
+      fakeController.simulateJsFitToViewport(0.8);
+      expect(
+        fakeController.zoomLevel,
+        closeTo(1.1, 0.0001),
+        reason:
+            'toolbar and wheel steps should apply on top of the fitted zoom',
+      );
+      expect(
+        fakeController.wheelZoomAnchors,
+        localWheelCenters,
+        reason:
+            'queued wheel zooms must preserve their individual cursor anchors',
+      );
+      double anchor(
+        double pan,
+        double center,
+        double oldZoom,
+        double newZoom,
+      ) =>
+          center - (center - pan) * (newZoom / oldZoom);
+      var expectedPanX = anchor(0, widgetRect.width / 2, 0.8, 0.9);
+      var expectedPanY = anchor(0, widgetRect.height / 2, 0.8, 0.9);
+      expectedPanX = anchor(expectedPanX, localWheelCenters[0].dx, 0.9, 1.0);
+      expectedPanY = anchor(expectedPanY, localWheelCenters[0].dy, 0.9, 1.0);
+      expectedPanX = anchor(expectedPanX, localWheelCenters[1].dx, 1.0, 1.1);
+      expectedPanY = anchor(expectedPanY, localWheelCenters[1].dy, 1.0, 1.1);
+      expect(fakeController.panX, closeTo(expectedPanX, 0.0001));
+      expect(fakeController.panY, closeTo(expectedPanY, 0.0001));
       expect(
         scrollController.offset,
         closeTo(0, 0.1),
@@ -834,6 +975,63 @@ void main() {
               'click target exactly once',
         );
         expect(clickScripts.single, contains('bubbles: true'));
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'sub-slop native diagram tap jitter forwards one WebView click',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final hitPoint = tester.getCenter(find.byType(InAppWebView));
+        int forwardedClickCount() => webView.controller.evaluatedScripts
+            .where(
+              (script) =>
+                  script.contains('document.elementFromPoint') &&
+                  script.contains(
+                    "target.dispatchEvent(new MouseEvent('click', {",
+                  ),
+            )
+            .length;
+
+        for (final (pointer, kind, jitter)
+            in <(int, PointerDeviceKind, Offset)>[
+          (1, PointerDeviceKind.touch, const Offset(5, 3)),
+          (2, PointerDeviceKind.mouse, const Offset(0.5, 0.5)),
+        ]) {
+          final clicksBeforeGesture = forwardedClickCount();
+          final gesture = await tester.startGesture(
+            hitPoint,
+            pointer: pointer,
+            kind: kind,
+          );
+          await gesture.moveBy(jitter);
+          await gesture.up();
+          await tester.pump();
+
+          expect(
+            forwardedClickCount() - clicksBeforeGesture,
+            1,
+            reason: 'sub-slop $kind pointer jitter must still invoke the '
+                'page click target exactly once',
+          );
+        }
+
         await tester.pumpWidget(const SizedBox.shrink());
       },
       skip: kIsWeb,
@@ -1027,6 +1225,430 @@ void main() {
         await tester.pump();
 
         expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry falls back without load completion or main-frame error',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+            ),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Could not connect to host'),
+          findsOneWidget,
+        );
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Could not connect to host'), findsNothing);
+
+        // A subresource failure does not resolve the retry navigation or
+        // disable its fallback. No onLoadStop or main-frame error follows.
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/mermaid.min.js'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+
+        // A navigation that completes after the fallback should replace its
+        // timeout message with the successfully loaded preview.
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry source update gets a fresh fallback window',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final initialUrl = webView.controller.loadedUrls.last;
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: initialUrl,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final oldRetryUrl = webView.controller.loadedUrls.last;
+        await tester.pump(const Duration(seconds: 2));
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+        final updatedUrl = webView.controller.loadedUrls.last;
+        webView.params.onLoadStop?.call(controller, oldRetryUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: oldRetryUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale navigation failed',
+          ),
+        );
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Stale navigation failed'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 2));
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        webView.params.onLoadStop?.call(controller, updatedUrl);
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: oldRetryUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale navigation failed after success',
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.text('页面加载失败: Stale navigation failed after success'),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry source update restarts recovery after timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: webView.controller.loadedUrls.last,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'same-source web retry ignores callbacks from the prior attempt',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        void sendMainFrameError(WebUri url, String description) {
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: url, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: description,
+            ),
+          );
+        }
+
+        sendMainFrameError(
+          webView.controller.loadedUrls.last,
+          'Initial navigation failed',
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final previousRetryUrl = webView.controller.loadedUrls.last;
+        sendMainFrameError(previousRetryUrl, 'First retry failed');
+        await tester.pump();
+
+        expect(find.text('页面加载失败: First retry failed'), findsOneWidget);
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        final currentRetryUrl = webView.controller.loadedUrls.last;
+
+        webView.params.onLoadStop?.call(controller, previousRetryUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        sendMainFrameError(previousRetryUrl, 'Stale retry failure');
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载失败: Stale retry failure'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        webView.params.onLoadStop?.call(controller, currentRetryUrl);
+        await tester.pump();
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web retry completion and navigation error resolve fallback state',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+
+        void sendMainFrameError(String description) {
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(
+              url: webView.controller.loadedUrls.last,
+              isForMainFrame: true,
+            ),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: description,
+            ),
+          );
+        }
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        sendMainFrameError('Initial navigation failed');
+        await tester.pump();
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        expect(find.text('页面加载失败: Initial navigation failed'), findsNothing);
+
+        sendMainFrameError('Retry navigation failed');
+        await tester.pump();
+        expect(find.text('页面加载失败: Retry navigation failed'), findsOneWidget);
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        sendMainFrameError('Final navigation failure');
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.text('页面加载失败: Final navigation failure'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        sendMainFrameError('Late main-frame failure');
+        await tester.pump();
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Late main-frame failure'),
+          findsOneWidget,
+        );
+        expect(find.text('页面加载超时，请重试'), findsNothing);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -1606,22 +2228,52 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
-  final _pendingZoomDeltas = <double>[];
+  final List<({double delta, double? centerX, double? centerY})>
+      _pendingZoomOperations = [];
+  final wheelZoomAnchors = <Offset>[];
+  final loadedUrls = <WebUri>[];
+  Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
+  double panX = 0;
+  double panY = 0;
   bool _fitComplete = false;
 
   void simulateJsFitToViewport(double fittedZoom) {
     zoomLevel = fittedZoom;
+    panX = 0;
+    panY = 0;
     _fitComplete = true;
-    _applyPendingZoomDeltas();
+    _applyPendingZoomOperations();
   }
 
-  void _applyPendingZoomDeltas() {
+  void _applyPendingZoomOperations() {
     if (!_fitComplete) return;
-    for (final delta in _pendingZoomDeltas) {
-      zoomLevel = (zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    for (final operation in _pendingZoomOperations) {
+      final centerX = operation.centerX ?? viewportSize.width / 2;
+      final centerY = operation.centerY ?? viewportSize.height / 2;
+      final newZoom = (zoomLevel + operation.delta).clamp(0.1, 10.0).toDouble();
+      if (newZoom == zoomLevel) continue;
+      panX = centerX - (centerX - panX) * (newZoom / zoomLevel);
+      panY = centerY - (centerY - panY) * (newZoom / zoomLevel);
+      zoomLevel = newZoom;
+      if (operation.centerX != null && operation.centerY != null) {
+        wheelZoomAnchors.add(Offset(centerX, centerY));
+      }
     }
-    _pendingZoomDeltas.clear();
+    _pendingZoomOperations.clear();
+  }
+
+  void _queueZoomOperation({
+    required double delta,
+    double? centerX,
+    double? centerY,
+  }) {
+    _pendingZoomOperations.add((
+      delta: delta,
+      centerX: centerX,
+      centerY: centerY,
+    ));
+    _applyPendingZoomOperations();
   }
 
   _MermaidWebViewController()
@@ -1633,7 +2285,14 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     required URLRequest urlRequest,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
-  }) async {}
+  }) async {
+    final url = urlRequest.url;
+    if (url != null) {
+      loadedUrls.add(
+        kIsWeb ? WebUri(Uri.base.resolve(url.toString()).toString()) : url,
+      );
+    }
+  }
 
   @override
   Future<void> loadData({
@@ -1660,6 +2319,41 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final zoomOperations = RegExp(
+      r'window\.applyZoomOperationsAfterFit\((\[[\s\S]*\])\)',
+    ).firstMatch(source);
+    if (zoomOperations != null) {
+      final operations = jsonDecode(zoomOperations.group(1)!) as List<dynamic>;
+      for (final operation in operations.cast<Map<String, dynamic>>()) {
+        final delta = (operation['delta'] as num).toDouble();
+        if (operation['kind'] == 'wheel') {
+          _queueZoomOperation(
+            delta: delta,
+            centerX: (operation['centerX'] as num).toDouble(),
+            centerY: (operation['centerY'] as num).toDouble(),
+          );
+        } else if (operation['kind'] == 'toolbar') {
+          _queueZoomOperation(delta: delta);
+        }
+      }
+      return;
+    }
+
+    final queuedWheelZoom = RegExp(
+      r'window\.applyWheelZoomAfterFit\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)',
+    ).firstMatch(source);
+    if (queuedWheelZoom != null) {
+      final delta = double.parse(queuedWheelZoom.group(1)!);
+      final centerX = double.parse(queuedWheelZoom.group(2)!);
+      final centerY = double.parse(queuedWheelZoom.group(3)!);
+      _queueZoomOperation(
+        delta: delta,
+        centerX: centerX,
+        centerY: centerY,
+      );
+      return;
+    }
+
     final deferredZoom = RegExp(
       r'window\.applyZoomDeltasAfterFit\(\[([^\]]*)\]\)',
     ).firstMatch(source);
@@ -1667,8 +2361,9 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       final deltas = RegExp(r'-?\d+(?:\.\d+)?')
           .allMatches(deferredZoom.group(1)!)
           .map((match) => double.parse(match.group(0)!));
-      _pendingZoomDeltas.addAll(deltas);
-      _applyPendingZoomDeltas();
+      for (final delta in deltas) {
+        _queueZoomOperation(delta: delta);
+      }
       return;
     }
 

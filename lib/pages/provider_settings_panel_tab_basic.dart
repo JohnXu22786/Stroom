@@ -214,9 +214,9 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 6),
       Text(
         _uploadMethod == AudioUploadMethod.multipart
-            ? 'multipart/form-data 直传。最通用，受各供应商大小限制（通常 25 MB）。'
+            ? 'multipart/form-data 直传。实际请求体包含音频、表单字段和边界开销。'
             : _uploadMethod == AudioUploadMethod.base64Json
-                ? 'Base64 编码后 JSON 发送。可绕过部分供应商 multipart 大小限制。'
+                ? 'Base64 编码后以 JSON 发送，可绕过部分供应商的 multipart 专属限制；编码膨胀和 JSON 字段仍计入上传上限。'
                 : '提供公网 URL，供应商自行下载。支持超大文件（Together AI 1 GB 等）。',
         style: TextStyle(
           fontSize: 12,
@@ -232,7 +232,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             Row(
               children: [
                 Text(
-                  '最大文件大小',
+                  '最大上传大小',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -267,8 +267,8 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
             ),
             const SizedBox(height: 6),
             Text(
-              '超过 ${_maxFileSizeMb.toStringAsFixed(1)} MB 的文件将被拒绝。'
-              '默认 25 MB 是 OpenAI 音频 API 上限。',
+              '此值既触发原始音频兜底，也限制最终请求体。系统分别检查原始音频、编码文件和上传体积；Multipart 计入表单字段与边界，Base64 JSON 计入编码膨胀及字段。'
+              '默认 25 MB 与 OpenAI 音频 API 上限对齐。',
               style: TextStyle(
                 fontSize: 12,
                 color: cs.onSurfaceVariant.withAlpha(180),
@@ -293,7 +293,7 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       ),
       const SizedBox(height: 6),
       Text(
-        '当文件超过大小限制时的处理方式。特定兜底（Base64）优先于通用兜底（压缩/切块）。',
+        '原始音频或完整请求体超出上限时触发。特定兜底（Base64）优先于通用兜底（压缩/切块）。',
         style: TextStyle(
           fontSize: 13,
           color: cs.onSurfaceVariant,
@@ -353,11 +353,11 @@ extension _ProviderSettingsPanelTabBasicExt on _ProviderSettingsPanelState {
       const SizedBox(height: 6),
       Text(
         _fallbackMethod == 'specific'
-            ? '优先尝试 Base64 JSON 上传，绕过部分供应商的 multipart 大小限制。'
+            ? '尝试 Base64 JSON；只有计入 Base64 膨胀和 JSON 字段后的请求体符合上限才会发送。'
             : _fallbackMethod == 'generic'
-                ? '先应用压缩，再尝试切块，最后重新上传。'
+                ? '若启用压缩，先压缩完整 WAV；仍超限且已启用切块时，再切原始 PCM 并逐块编码。仅支持 PCM WAV。'
                 : _fallbackMethod == 'all'
-                    ? '先尝试特定兜底，再尝试通用兜底。最大化成功率。'
+                    ? '先尝试符合请求体上限的 Base64；若启用压缩，再压缩完整 WAV。仍超限且已启用切块时，切原始 PCM 并逐块编码。仅支持 PCM WAV。'
                     : '文件超过限制时直接拒绝，不尝试任何兜底。',
         style: TextStyle(
           fontSize: 12,

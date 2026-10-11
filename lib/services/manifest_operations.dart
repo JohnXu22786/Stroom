@@ -236,6 +236,48 @@ class ManifestOperations<T extends FileRecord> {
     return sidecars;
   }
 
+  Future<Map<String, Uint8List>> _snapshotAudioPrimaryFiles(
+    Iterable<T> records,
+    Map<String, int> storageCount,
+  ) async {
+    final remainingCount = Map<String, int>.from(storageCount);
+    final primaryNames = <String>{};
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      remainingCount[storageName] = (remainingCount[storageName] ?? 1) - 1;
+      if (remainingCount[storageName]! <= 0 &&
+          storageName.lastIndexOf('.') != -1) {
+        primaryNames.add(storageName);
+      }
+    }
+
+    final files = <String, Uint8List>{};
+    for (final name in primaryNames) {
+      final bytes = await _readStoredFile(name);
+      if (bytes != null) files[name] = bytes;
+    }
+    return files;
+  }
+
+  Future<void> _restoreAudioPrimaryFiles(
+    Map<String, Uint8List> files,
+  ) async {
+    for (final entry in files.entries) {
+      try {
+        if (!await _storedFileExists(entry.key)) {
+          await _writeStoredFile(entry.key, entry.value);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio file after folder record delete failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+  }
+
   Future<void> _restoreAudioSidecars(
     Map<String, Uint8List> sidecars, {
     Set<String>? hashes,
@@ -850,9 +892,17 @@ class ManifestOperations<T extends FileRecord> {
         hashCount[h] = (hashCount[h] ?? 0) + 1;
       }
 
+      final audioPrimaryFiles = _isAudioTable && idsToDelete.isNotEmpty
+          ? await _snapshotAudioPrimaryFiles(toRemoveRecords, storageNameCount)
+          : <String, Uint8List>{};
+      final audioSidecars = _isAudioTable && idsToDelete.isNotEmpty
+          ? await _snapshotAudioSidecars(toRemoveRecords, storageNameCount)
+          : <String, Uint8List>{};
+
       // Decrement per record being deleted; only delete file when count reaches 0
       for (final r in toRemoveRecords) {
         final sn = storageNameOf(r);
+        final h = hashOf(r);
         storageNameCount[sn] = (storageNameCount[sn] ?? 1) - 1;
         if (storageNameCount[sn]! <= 0) {
           final name = storageNameOf(r);
@@ -866,10 +916,9 @@ class ManifestOperations<T extends FileRecord> {
             final file = File(p.join(dir, name));
             if (await file.exists()) await file.delete();
           }
-          await onExtraDelete?.call(r);
+          if (hashCount[h]! <= 1) await onExtraDelete?.call(r);
         }
         // Thumbnail deletion: keyed by hash, not storageName
-        final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 1) - 1;
         if (hashCount[h]! <= 0) {
           final thumbName = _thumbFileNameOf(r);
@@ -888,8 +937,19 @@ class ManifestOperations<T extends FileRecord> {
       if (idsToDelete.isNotEmpty) {
         if (deletesAudioRecords) {
           _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-          await beforeAudioFolderRecordDeleteForTesting?.call();
-          await _dbDeleteRecords(idsToDelete);
+          try {
+            await beforeAudioFolderRecordDeleteForTesting?.call();
+            await _dbDeleteRecords(idsToDelete);
+          } catch (error, stackTrace) {
+            await _restoreAudioPrimaryFiles(audioPrimaryFiles);
+            await _restoreAudioSidecars(audioSidecars);
+            final cachedIds = _cache!.map((record) => record.id).toSet();
+            for (final record in toRemoveRecords) {
+              if (cachedIds.add(record.id)) _cache!.add(record);
+            }
+            _recordMutationRevision++;
+            Error.throwWithStackTrace(error, stackTrace);
+          }
           // A refresh can install its earlier database snapshot while the
           // delete is awaiting persistence. Reapply the cache mutation, then
           // invalidate any refresh that has not reached its revision check.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
@@ -137,6 +139,55 @@ class _FailingDesktopCloseMinimizePreferenceStore
   }
 }
 
+class _FailingRecoveryPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingRecoveryPreferenceStore(
+    Map<String, Object> data, {
+    required Set<String> failedKeys,
+    this.throwOnWrite = false,
+  })  : _failedKeys = failedKeys,
+        super.withData(data);
+
+  final Set<String> _failedKeys;
+  final bool throwOnWrite;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && _failedKeys.contains(key)) {
+      if (throwOnWrite) {
+        return Future<bool>.error(
+            StateError('Simulated preference write error'));
+      }
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _DelayedRejectedWatchdogWriteStore
+    extends InMemorySharedPreferencesStore {
+  _DelayedRejectedWatchdogWriteStore(Map<String, Object> data)
+      : super.withData(data);
+
+  final firstWatchdogWriteStarted = Completer<void>();
+  final releaseFirstWatchdogWrite = Completer<void>();
+  int watchdogEnableWriteCount = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (valueType == 'Bool' &&
+        key == 'flutter.background_service_watchdog' &&
+        value == true) {
+      watchdogEnableWriteCount++;
+      if (watchdogEnableWriteCount == 1) {
+        firstWatchdogWriteStarted.complete();
+        await releaseFirstWatchdogWrite.future;
+        return false;
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
     SharedPreferences preferences) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
@@ -155,6 +206,26 @@ Future<SharedPreferencesStorePlatform>
       _FailingDesktopCloseMinimizePreferenceStore({
     'flutter.desktop_close_minimize': true,
   });
+  await preferences.reload();
+  return originalStore;
+}
+
+Future<SharedPreferencesStorePlatform> _failRecoveryPreferenceWrites(
+  SharedPreferences preferences, {
+  required bool throwOnWrite,
+}) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingRecoveryPreferenceStore(
+    {
+      'flutter.background_service_watchdog': false,
+      'flutter.background_service_cold_start_restore': false,
+    },
+    failedKeys: {
+      'flutter.background_service_watchdog',
+      'flutter.background_service_cold_start_restore',
+    },
+    throwOnWrite: throwOnWrite,
+  );
   await preferences.reload();
   return originalStore;
 }
@@ -291,6 +362,30 @@ void main() {
     });
 
     test(
+        'restoreBackgroundServiceOnColdStart recovers when enabled preference read fails',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(false);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+    });
+
+    test(
         'failed persistent start cannot rely on in-process intent after process death',
         () async {
       final mock = registerMockPlatform();
@@ -362,8 +457,8 @@ void main() {
     });
 
     test(
-        'restoreBackgroundServiceOnColdStart does nothing when cold-start restore toggle is off',
-        () async {
+        'restoreBackgroundServiceOnColdStart keeps service stopped but rearms '
+        'watchdog when cold-start restore is off', () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
       mock.setStartResult(true);
@@ -371,6 +466,7 @@ void main() {
       // Service was previously enabled...
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
       // ...but the user disabled cold-start auto-restore.
       await setColdStartRestoreEnabled(false);
 
@@ -379,6 +475,11 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
         // Service must NOT be started
         expect(mock._isRunning, isFalse);
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        expect(
+          keepAliveCalls.map((call) => call.method),
+          contains('rearmKeepAlive'),
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -398,6 +499,64 @@ void main() {
       expect(await isColdStartRestoreEnabled(), isTrue);
       await setColdStartRestoreEnabled(false);
       expect(await isColdStartRestoreEnabled(), isFalse);
+    });
+
+    test('recovery toggle setters report rejected preference writes', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        throwOnWrite: false,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      expect(await setWatchdogEnabled(true), isFalse);
+      expect(await setColdStartRestoreEnabled(true), isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
+    });
+
+    test('recovery toggle setters report preference write errors', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        throwOnWrite: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      expect(await setWatchdogEnabled(true), isFalse);
+      expect(await setColdStartRestoreEnabled(true), isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
+    });
+
+    test('a failed watchdog write cannot roll back a later successful write',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _DelayedRejectedWatchdogWriteStore({
+        'flutter.background_service_watchdog': false,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      await prefs.reload();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      final failedWrite = setWatchdogEnabled(true);
+      await store.firstWatchdogWriteStarted.future;
+      final successfulWrite = setWatchdogEnabled(true);
+      await Future<void>.delayed(Duration.zero);
+      final writesBeforeFirstCompletes = store.watchdogEnableWriteCount;
+      store.releaseFirstWatchdogWrite.complete();
+
+      expect(await failedWrite, isFalse);
+      expect(await successfulWrite, isTrue);
+      expect(writesBeforeFirstCompletes, 1);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
     });
 
     test('battery reminder toggle defaults to enabled and persists', () async {
@@ -966,6 +1125,27 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
+        () async {
+      registerMockPlatform();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance = _FailingPreferenceReadStore({
+        'flutter.background_service_enabled': true,
+      });
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
     });
 
     test('rearmKeepAliveOnResume reports watchdog scheduling failure',
