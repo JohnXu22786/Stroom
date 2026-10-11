@@ -39,11 +39,23 @@ It is therefore not listed as an Android runtime component. The separate
 has an MIT license, but no separate wrapper artifact was identified in the
 inspected outputs; only the macOS `libdav1d.dylib` is confirmed here.
 
-The inspected Windows SDK also contains `mdk-nvjp2k.dll`. Its
-[upstream repository](https://github.com/wang-bin/mdk-nvjp2k) has no `LICENSE`
-file or GitHub license metadata, so its terms are unresolved and are not
-represented as a licensed component here. This is one reason this notice set
-does not claim to identify the complete MDK runtime.
+The inspected Windows SDK also contains `mdk-nvjp2k.dll`. The
+[upstream repository](https://github.com/wang-bin/mdk-nvjp2k) has no standalone
+`LICENSE` file or GitHub license metadata. Its
+[`nvJp2kDecoder.cpp` source at commit `7ab9b30954957cc76763aa8b9ce356015435c4d6`](https://github.com/wang-bin/mdk-nvjp2k/blob/7ab9b30954957cc76763aa8b9ce356015435c4d6/nvJp2kDecoder.cpp)
+contains a header that says “Free for opensource softwares or non-commercial
+use.”, requires retaining the copyright and permission notice, and says the
+file contains source code provided by NVIDIA Corporation. Stroom retains that
+source-file header verbatim at
+`assets/vendor/native/mdk-nvjp2k-source-file-notice.txt`.
+
+That header documents the stated terms for the cited source file; it does not
+establish that the inspected Windows DLL corresponds to that source revision
+or establish the DLL's precise redistribution rights, including terms that
+may apply to NVIDIA-provided code. The DLL's binary distribution terms
+therefore remain unresolved, and it is not represented here as a licensed
+component. This is one reason this notice set does not claim to identify the
+complete MDK runtime.
 
 ### MDK runtime terms and commercial use
 
