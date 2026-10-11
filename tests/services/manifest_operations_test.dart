@@ -2393,12 +2393,17 @@ void main() {
     });
 
     testWidgets(
-        'failed audio folder record deletion keeps persisted rows in cache',
+        'failed audio folder record deletion preserves files and can retry',
         (WidgetTester t) async {
+      final audioBytes = Uint8List.fromList([1, 2, 3]);
+      final sidecarBytes = Uint8List.fromList([97, 98]);
       final operations = ManifestOperations<AudioRecord>(
         manifestKey: 'test_audio_folder_delete_failure_refresh',
         storageDirName: 'tts_audio',
         fromMap: AudioRecord.fromMap,
+        onExtraDelete: (record) async {
+          await WebFileStore.delete('tts_audio/${record.textStoragePath}');
+        },
         tableName: ManifestTables.audioRecords,
         toMap: (record) => record.toMap(),
       );
@@ -2408,9 +2413,11 @@ void main() {
         hash: 'hash_folder_delete_failure',
         format: 'wav',
         createdAt: DateTime(2024),
-        size: 4,
+        size: audioBytes.length,
         folder: 'audio_folder_delete_failure',
       );
+      await FileManifest.writeFile(existing.storagePath, audioBytes);
+      await FileManifest.writeFile(existing.textStoragePath, sidecarBytes);
       await operations.addRecord(existing);
 
       final recordSnapshotReady = Completer<void>();
@@ -2440,6 +2447,21 @@ void main() {
                 .map((row) => row['id']),
             unorderedEquals([existing.id]),
             reason: 'a failed deletion must leave its database row intact');
+        expect(
+          await WebFileStore.read('tts_audio/${existing.storagePath}'),
+          equals(audioBytes),
+          reason: 'failed deletion must keep the primary audio bytes playable',
+        );
+        expect(
+          await WebFileStore.read('tts_audio/${existing.textStoragePath}'),
+          equals(sidecarBytes),
+          reason: 'failed deletion must keep the audio text sidecar',
+        );
+        expect(
+          (await operations.loadRecords()).map((record) => record.id),
+          unorderedEquals([existing.id]),
+          reason: 'failed deletion must keep the cached audio row available',
+        );
       } finally {
         releaseFolderRead.complete();
         operations.beforeFolderLoadForTesting = null;
@@ -2452,6 +2474,23 @@ void main() {
           reason: 'failed deletion must not make a paused refresh lose rows');
       expect((await operations.loadRecords()).map((record) => record.id),
           unorderedEquals([existing.id]));
+
+      await operations.removeFolder('audio_folder_delete_failure');
+
+      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty,
+          reason: 'retry must remove the persisted audio row');
+      expect(await operations.loadRecords(), isEmpty,
+          reason: 'retry must remove the audio row from cache');
+      expect(
+        await WebFileStore.exists('tts_audio/${existing.storagePath}'),
+        isFalse,
+        reason: 'successful retry must remove the audio file',
+      );
+      expect(
+        await WebFileStore.exists('tts_audio/${existing.textStoragePath}'),
+        isFalse,
+        reason: 'successful retry must remove the sidecar',
+      );
     });
 
     testWidgets(
