@@ -72,7 +72,7 @@ jobs:
                 UNCOVERED=1
               fi
             fi
-          done < <(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/**/*.dart')
+          done < <(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/*.dart' 'lib/**/*.dart')
           echo ""
           if [ "$UNCOVERED" -eq 0 ]; then
             echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
@@ -104,6 +104,41 @@ jobs:
       - name: Run watchdog scheduling regression test
         run: gradle -p android :app:testDebugUnitTest --tests com.johntsui.stroom.KeepAliveReceiverTest
 
+  catcatch-js:
+    name: CatCatch JavaScript boundary tests
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run CatCatch JavaScript hook tests
+        run: node --test tests/catcatch/js_hook_script_test.cjs
+
+  # This web-only target stays outside `_test.dart` discovery for VM groups.
+  # Flutter's Web test server serves fixtures from tests/, which this job aliases.
+  startup-web:
+    name: Startup Web test
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.9
+          cache: true
+          pub-cache: true
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+      - run: flutter pub get
+      - name: Expose test fixtures to Flutter Web's test server
+        run: ln -s tests test
+      - name: Run Web startup checks in Chrome
+        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+
   # ── Test Suite (parallel groups) ──────────────────────────────────────────
   test:
     name: Tests (${{ matrix.label }})
@@ -117,10 +152,8 @@ jobs:
             pattern: tests/*_test.dart tests/models tests/providers tests/utils
           - label: Services-Startup
             pattern: tests/services tests/startup
-            webStartup: true
           - label: Feature-Modules
             pattern: tests/task_flow tests/anki tests/catcatch
-            catcatchNode: true
           - label: Pages
             pattern: tests/pages/*_test.dart tests/pages/unified_task_list tests/pages/settings tests/pages/ocr
           - label: Chat
@@ -137,21 +170,3 @@ jobs:
       - run: flutter pub get
       - name: Run ${{ matrix.label }} tests
         run: flutter test ${{ matrix.pattern }}
-      - uses: actions/setup-node@v4
-        if: matrix.catcatchNode == true
-        with:
-          node-version: 22
-      - name: Run CatCatch JavaScript hook tests
-        if: matrix.catcatchNode == true
-        run: node --test tests/catcatch/js_hook_script_test.cjs
-      - uses: browser-actions/setup-chrome@v1
-        if: matrix.webStartup == true
-        id: setup-chrome
-      - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.webStartup == true
-        run: ln -s tests test
-      - name: Run Web startup checks in Chrome
-        if: matrix.webStartup == true
-        run: flutter test --platform chrome test/startup/startup_check_service_web.dart
-        env:
-          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
