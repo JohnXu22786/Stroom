@@ -36,6 +36,34 @@ internal fun claimAlarmDeliveryGeneration(
     null
 }
 
+internal enum class AlarmGenerationClaimResult {
+    CLAIMED,
+    STALE,
+    PERSISTENCE_FAILED,
+}
+
+internal fun claimAlarmDeliveryGeneration(
+    scheduledGeneration: Long,
+    currentGeneration: Long,
+    keepAliveActive: Boolean,
+    persistGeneration: (Long) -> Boolean,
+): AlarmGenerationClaimResult {
+    val invalidatedGeneration = claimAlarmDeliveryGeneration(
+        scheduledGeneration = scheduledGeneration,
+        currentGeneration = currentGeneration,
+        keepAliveActive = keepAliveActive,
+    ) ?: return AlarmGenerationClaimResult.STALE
+
+    return if (persistGeneration(invalidatedGeneration)) {
+        AlarmGenerationClaimResult.CLAIMED
+    } else {
+        // SharedPreferences updates its in-memory map before commit() reports a
+        // disk-write failure. Restore the token so the paired alarm can retry.
+        persistGeneration(currentGeneration)
+        AlarmGenerationClaimResult.PERSISTENCE_FAILED
+    }
+}
+
 internal fun scheduleWithActiveIntent(
     persistActiveIntent: () -> Boolean,
     schedule: () -> Boolean,
