@@ -905,6 +905,64 @@ void main() {
     );
 
     testWidgets(
+      'native initial-page failures after readiness fallback show retry',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        // Native readiness fallback only hides Flutter's loading overlay; it
+        // does not prove that the initial page loaded successfully.
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        const errorMessage = '页面加载失败: Could not connect to host';
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('data:text/html,mermaid'),
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'web main-frame navigation errors show retry after creation hides loading',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;

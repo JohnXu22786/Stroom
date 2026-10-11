@@ -1642,9 +1642,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 // the asset URL finishes navigating. Surface main-frame
                 // failures even after that, but leave web subresource errors
                 // to the iframe's own loading/error UI. Native behavior still
-                // only reports load errors while its initial page is pending.
+                // only reports load errors while its initial page is pending;
+                // the readiness fallback only hides the loading overlay.
                 final shouldShowError =
-                    kIsWeb ? request.isForMainFrame == true : !_isReady;
+                    kIsWeb ? request.isForMainFrame == true : !_hasLoadedPage;
                 if (mounted && shouldShowError) {
                   setState(() {
                     _isReady = true;
