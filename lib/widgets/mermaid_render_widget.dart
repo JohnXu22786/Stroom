@@ -369,7 +369,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=8';
+    final base = '$webAssetTemplateUrl?v=9';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -474,7 +474,7 @@ MERMAID_CODE_PLACEHOLDER
     var panX = 0;
     var panY = 0;
     var fitComplete = false;
-    var pendingZoomDeltas = [];
+    var pendingZoomOperations = [];
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -533,7 +533,9 @@ MERMAID_CODE_PLACEHOLDER
     window.applyZoomDeltasAfterFit = function(deltas) {
       if (!Array.isArray(deltas)) return;
       if (!fitComplete) {
-        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+        for (var i = 0; i < deltas.length; i++) {
+          pendingZoomOperations.push({delta: deltas[i], anchored: false});
+        }
         return;
       }
       var viewport = document.getElementById('viewport');
@@ -543,6 +545,36 @@ MERMAID_CODE_PLACEHOLDER
           viewport.clientWidth / 2,
           viewport.clientHeight / 2
         );
+      }
+    };
+
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY) {
+      if (!fitComplete) {
+        pendingZoomOperations.push({
+          delta: delta,
+          anchored: true,
+          centerX: centerX,
+          centerY: centerY
+        });
+        return;
+      }
+      window.setZoom(zoomLevel + delta, centerX, centerY);
+    };
+
+    window.applyZoomOperationsAfterFit = function(operations) {
+      if (!Array.isArray(operations)) return;
+      for (var i = 0; i < operations.length; i++) {
+        var operation = operations[i];
+        if (!operation || typeof operation.delta !== 'number') continue;
+        if (operation.kind === 'wheel') {
+          window.applyWheelZoomAfterFit(
+            operation.delta,
+            operation.centerX,
+            operation.centerY
+          );
+        } else if (operation.kind === 'toolbar') {
+          window.applyZoomDeltasAfterFit([operation.delta]);
+        }
       }
     };
 
@@ -598,9 +630,24 @@ MERMAID_CODE_PLACEHOLDER
       updateTransform();
       notifyTransform();
       fitComplete = true;
-      var deltas = pendingZoomDeltas;
-      pendingZoomDeltas = [];
-      window.applyZoomDeltasAfterFit(deltas);
+      var zoomOperations = pendingZoomOperations;
+      pendingZoomOperations = [];
+      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
+        var zoomOperation = zoomOperations[zoomIndex];
+        if (zoomOperation.anchored) {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            vw / 2,
+            vh / 2
+          );
+        }
+      }
     };
 
 GESTURE_SCRIPT_PLACEHOLDER
@@ -680,13 +727,13 @@ MERMAID_LOADER_PLACEHOLDER
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
-      if (e.ctrlKey || e.metaKey) {
+      if ((e.ctrlKey || e.metaKey) && e.deltaY !== 0) {
         e.preventDefault();
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = e.clientX - rect.left;
         var centerY = e.clientY - rect.top;
         var delta = e.deltaY > 0 ? -0.1 : 0.1;
-        window.setZoom(zoomLevel + delta, centerX, centerY);
+        window.applyWheelZoomAfterFit(delta, centerX, centerY);
       }
     }, { passive: false });
 
@@ -795,8 +842,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
 
-  /// Toolbar zoom taps made before the WebView is ready to accept commands.
-  final List<double> _pendingZoomDeltas = [];
+  /// Zoom inputs made before the WebView is ready to accept commands.
+  final List<({double delta, double? centerX, double? centerY})>
+      _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -880,7 +928,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _hasWebRetryTimeoutError = false;
       _showSourceCode = false;
       _zoomLevel = 1.0;
-      _pendingZoomDeltas.clear();
+      _pendingZoomOperations.clear();
       _panX = 0;
       _panY = 0;
       if (oldWidget.mermaidCode.trim().isEmpty &&
@@ -946,7 +994,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           }
         });
         if (!showNavigationTimeoutError) {
-          unawaited(_applyPendingZoomDeltas());
+          unawaited(_applyPendingZoomOperations());
         }
       }
     });
@@ -1139,19 +1187,27 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.hasSize) return;
     final localPos = renderBox.globalToLocal(event.position);
-    final centerX = localPos.dx.clamp(0.0, renderBox.size.width);
-    final centerY = localPos.dy.clamp(0.0, renderBox.size.height);
+    final centerX = localPos.dx.clamp(0.0, renderBox.size.width).toDouble();
+    final centerY = localPos.dy.clamp(0.0, renderBox.size.height).toDouble();
 
     final delta = verticalDelta > 0 ? -0.1 : 0.1;
-    final newZoom = (_zoomLevel + delta).clamp(0.1, 10.0);
-    if (newZoom != _zoomLevel) {
-      _zoomLevel = newZoom;
-      // Anchor in JS at the cursor position: the JS side owns the pan
-      // state here, so no absolute pan is pushed (avoids snap-back).
-      _webViewController?.evaluateJavascript(
-        source: 'window.setZoom($newZoom, $centerX, $centerY)',
-      );
+    final ctrl = _webViewController;
+    // Keep every wheel step: before fit completes, Flutter cannot know the
+    // final fitted zoom at which JavaScript will apply this delta.
+    _zoomLevel = (_zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    if (ctrl == null || !_canApplyZoomCommands) {
+      _pendingZoomOperations.add((
+        delta: delta,
+        centerX: centerX,
+        centerY: centerY,
+      ));
+      return;
     }
+    // Anchor in JS at the cursor position: JavaScript owns the pan state and
+    // queues the relative step if its initial fit has not completed yet.
+    ctrl.evaluateJavascript(
+      source: 'window.applyWheelZoomAfterFit($delta, $centerX, $centerY);',
+    );
   }
 
   /// Applies a new zoom level while keeping the viewport point
@@ -1334,7 +1390,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
     if (ctrl == null || !_canApplyZoomCommands) {
-      _pendingZoomDeltas.add(delta);
+      _pendingZoomOperations.add((
+        delta: delta,
+        centerX: null,
+        centerY: null,
+      ));
       return;
     }
 
@@ -1353,14 +1413,39 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
-  Future<void> _applyPendingZoomDeltas() async {
+  Future<void> _applyPendingZoomOperations() async {
     final ctrl = _webViewController;
-    if (ctrl == null || _pendingZoomDeltas.isEmpty) return;
+    if (ctrl == null || _pendingZoomOperations.isEmpty) return;
 
-    final pendingDeltas = List<double>.of(_pendingZoomDeltas);
-    _pendingZoomDeltas.clear();
+    final pendingOperations = List.of(_pendingZoomOperations);
+    _pendingZoomOperations.clear();
+    final hasWheelZoom = pendingOperations.any(
+      (operation) => operation.centerX != null && operation.centerY != null,
+    );
+    if (!hasWheelZoom) {
+      final pendingDeltas =
+          pendingOperations.map((operation) => operation.delta).toList();
+      await ctrl.evaluateJavascript(
+        source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
+      );
+      return;
+    }
+
+    final operations = pendingOperations.map<Map<String, Object?>>((operation) {
+      final centerX = operation.centerX;
+      final centerY = operation.centerY;
+      if (centerX == null || centerY == null) {
+        return {'kind': 'toolbar', 'delta': operation.delta};
+      }
+      return {
+        'kind': 'wheel',
+        'delta': operation.delta,
+        'centerX': centerX,
+        'centerY': centerY,
+      };
+    }).toList();
     await ctrl.evaluateJavascript(
-      source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
+      source: 'window.applyZoomOperationsAfterFit(${jsonEncode(operations)})',
     );
   }
 
@@ -1726,7 +1811,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   });
                 }
                 _readyFallbackTimer?.cancel();
-                unawaited(_applyPendingZoomDeltas());
+                unawaited(_applyPendingZoomOperations());
               },
               onReceivedError: (controller, request, error) {
                 if (kIsWeb &&

@@ -16,6 +16,10 @@ const webWheelZoomHandler = webTemplateSource.match(
   /^    document\.addEventListener\('wheel', function\(e\) \{([\s\S]*?)^    \}, \{ passive: false \}\);/m,
 );
 assert.ok(webWheelZoomHandler, 'Could not find the web wheel zoom handler');
+const nativeWheelZoomHandler = dartSource.match(
+  /^    document\.addEventListener\('wheel', function\(e\) \{([\s\S]*?)^    \}, \{ passive: false \}\);/m,
+);
+assert.ok(nativeWheelZoomHandler, 'Could not find the fullscreen inline wheel zoom handler');
 const fitFunction = dartSource.match(
   /window\.fitToViewport\s*=\s*function\(\)\s*\{([\s\S]*?)^    \};/m,
 );
@@ -180,45 +184,209 @@ test('web render shows the readable Chinese loading hint', () => {
   assert.equal(loadingHint[1], '图表加载中...');
 });
 
-test('web Ctrl/Meta wheel zoom ignores horizontal-only input', () => {
-  const zoomCalls = [];
-  let preventDefaultCount = 0;
-  const context = {
-    document: {
-      getElementById: (id) => {
-        assert.equal(id, 'viewport');
-        return {getBoundingClientRect: () => ({left: 10, top: 20})};
+test('native and web Ctrl/Meta wheel zoom ignore horizontal-only input', () => {
+  for (const [templateName, wheelHandler] of [
+    ['fullscreen inline', nativeWheelZoomHandler],
+    ['web', webWheelZoomHandler],
+  ]) {
+    const zoomCalls = [];
+    let preventDefaultCount = 0;
+    const context = {
+      document: {
+        getElementById: (id) => {
+          assert.equal(id, 'viewport');
+          return {getBoundingClientRect: () => ({left: 10, top: 20})};
+        },
       },
-    },
-    window: {setZoom: (...args) => zoomCalls.push(args)},
-    zoomLevel: 1.5,
-  };
-  const handleWheel = vm.runInNewContext(
-    `(function(e) {${webWheelZoomHandler[1]}\n})`,
-    context,
-  );
+      window: {
+        setZoom: (...args) => zoomCalls.push(['setZoom', ...args]),
+        applyWheelZoomAfterFit: (...args) => zoomCalls.push(['wheel', ...args]),
+      },
+      zoomLevel: 1.5,
+    };
+    const handleWheel = vm.runInNewContext(
+      `(function(e) {${wheelHandler[1]}\n})`,
+      context,
+    );
 
-  for (const modifier of ['ctrlKey', 'metaKey']) {
+    for (const modifier of ['ctrlKey', 'metaKey']) {
+      handleWheel({
+        [modifier]: true,
+        deltaY: 0,
+        clientX: 80,
+        clientY: 70,
+        preventDefault: () => preventDefaultCount++,
+      });
+    }
+
+    assert.deepEqual(zoomCalls, [], `${templateName} must ignore horizontal-only input`);
+    assert.equal(preventDefaultCount, 0);
+
     handleWheel({
-      [modifier]: true,
-      deltaY: 0,
+      ctrlKey: true,
+      deltaY: 16,
       clientX: 80,
       clientY: 70,
       preventDefault: () => preventDefaultCount++,
     });
+    assert.deepEqual(zoomCalls, [['wheel', -0.1, 70, 50]]);
+    assert.equal(preventDefaultCount, 1);
+  }
+});
+
+test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates', () => {
+  const targets = [
+    ['fullscreen inline', dartSource, nativeWheelZoomHandler],
+    ['web', webTemplateSource, webWheelZoomHandler],
+  ];
+
+  function createHarness(templateName, templateSource, wheelHandler, viewportSize, diagramSize) {
+    const extract = (pattern, description, optional = false) => {
+      const match = templateSource.match(pattern);
+      if (optional && !match) return null;
+      assert.ok(match, `Could not find ${description} in the ${templateName} template`);
+      return match[0];
+    };
+    const state = extract(
+      /    var fitComplete = false;/,
+      'fit state',
+    );
+    const setZoom = extract(
+      /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      'setZoom',
+    );
+    const applyWheelZoom = extract(
+      /    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      'applyWheelZoomAfterFit',
+      true,
+    );
+    const applyZoomOperations = extract(
+      /    window\.applyZoomOperationsAfterFit = function\(operations\) \{[\s\S]*?^    \};/m,
+      'applyZoomOperationsAfterFit',
+    );
+    const applyZoomDeltas = extract(
+      /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+      'applyZoomDeltasAfterFit',
+    );
+    const fit = extract(
+      /    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
+      'fitToViewport',
+    );
+    const viewport = {
+      clientWidth: viewportSize.width,
+      clientHeight: viewportSize.height,
+      getBoundingClientRect: () => ({left: 10, top: 20}),
+    };
+    const svg = {
+      getBBox: () => ({width: diagramSize.width, height: diagramSize.height}),
+      setAttribute: () => {},
+    };
+    const container = {querySelector: () => svg};
+    const context = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      fitComplete: false,
+      pendingZoomDeltas: [],
+      pendingWheelZooms: [],
+      pendingZoomOperations: [],
+      updateTransform: () => {},
+      notifyTransform: () => {},
+    };
+
+    vm.runInNewContext(
+      [state, setZoom, applyWheelZoom, applyZoomOperations, applyZoomDeltas, fit]
+        .filter(Boolean)
+        .join('\n'),
+      context,
+    );
+    const handleWheel = vm.runInNewContext(
+      `(function(e) {${wheelHandler[1]}\n})`,
+      context,
+    );
+    return {context, handleWheel};
   }
 
-  assert.deepEqual(zoomCalls, []);
+  function dispatch(handleWheel, modifier, deltaY, clientX, clientY) {
+    let prevented = false;
+    handleWheel({
+      [modifier]: true,
+      deltaY,
+      clientX,
+      clientY,
+      preventDefault: () => { prevented = true; },
+    });
+    return prevented;
+  }
 
-  handleWheel({
-    ctrlKey: true,
-    deltaY: 16,
-    clientX: 80,
-    clientY: 70,
-    preventDefault: () => preventDefaultCount++,
-  });
-  assert.deepEqual(zoomCalls, [[1.4, 70, 50]]);
-  assert.equal(preventDefaultCount, 1);
+  function anchor(pan, center, oldZoom, newZoom) {
+    return center - (center - pan) * (newZoom / oldZoom);
+  }
+
+  const failures = [];
+  for (const [templateName, templateSource, wheelHandler] of targets) {
+    try {
+      const {context, handleWheel} = createHarness(
+        templateName,
+        templateSource,
+        wheelHandler,
+        {width: 200, height: 100},
+        {width: 100, height: 50},
+      );
+      dispatch(handleWheel, 'ctrlKey', -10, 60, 50);
+      context.window.applyZoomOperationsAfterFit([
+        {kind: 'toolbar', delta: -0.1},
+      ]);
+      dispatch(handleWheel, 'metaKey', -10, 160, 70);
+      assert.equal(context.zoomLevel, 1, `${templateName} should queue zoom before fit`);
+
+      context.window.fitToViewport();
+      assert.equal(context.zoomLevel, 2.1, `${templateName} should apply queued zooms in input order`);
+      let expectedPanX = anchor(0, 50, 2, 2.1);
+      let expectedPanY = anchor(0, 30, 2, 2.1);
+      expectedPanX = anchor(expectedPanX, 100, 2.1, 2);
+      expectedPanY = anchor(expectedPanY, 50, 2.1, 2);
+      expectedPanX = anchor(expectedPanX, 150, 2, 2.1);
+      expectedPanY = anchor(expectedPanY, 50, 2, 2.1);
+      assert.ok(Math.abs(context.panX - expectedPanX) < 1e-9);
+      assert.ok(Math.abs(context.panY - expectedPanY) < 1e-9);
+
+      // Post-fit wheel input remains immediate, and a later fit cannot replay
+      // events already consumed by the first successful fit.
+      dispatch(handleWheel, 'ctrlKey', -10, 70, 60);
+      assert.ok(Math.abs(context.zoomLevel - 2.2) < 1e-9);
+      context.window.fitToViewport();
+      assert.equal(context.zoomLevel, 2);
+
+      const clamped = createHarness(
+        templateName,
+        templateSource,
+        wheelHandler,
+        {width: 199, height: 100},
+        {width: 20, height: 10},
+      );
+      dispatch(clamped.handleWheel, 'ctrlKey', -10, 60, 50);
+      dispatch(clamped.handleWheel, 'metaKey', -10, 160, 70);
+      dispatch(clamped.handleWheel, 'ctrlKey', 10, 110, 95);
+      assert.equal(clamped.context.zoomLevel, 1);
+      clamped.context.window.fitToViewport();
+      assert.equal(clamped.context.zoomLevel, 9.9, `${templateName} should clamp each queued step`);
+      let clampPanX = anchor(0, 50, 9.95, 10);
+      let clampPanY = anchor(0.25, 30, 9.95, 10);
+      clampPanX = anchor(clampPanX, 100, 10, 9.9);
+      clampPanY = anchor(clampPanY, 75, 10, 9.9);
+      assert.ok(Math.abs(clamped.context.panX - clampPanX) < 1e-9);
+      assert.ok(Math.abs(clamped.context.panY - clampPanY) < 1e-9);
+    } catch (error) {
+      failures.push(`${templateName}: ${error.message}`);
+    }
+  }
+  assert.deepEqual(failures, []);
 });
 
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
@@ -259,6 +427,8 @@ test('fitToViewport retries once the zero-sized viewport is laid out', () => {
     panY: 0,
     fitComplete: false,
     pendingZoomDeltas: [],
+    pendingWheelZooms: [],
+    pendingZoomOperations: [],
     updateTransform: () => transforms.push([context.zoomLevel, context.panX, context.panY]),
     notifyTransform: () => notifications++,
   };
@@ -305,7 +475,7 @@ test('native and web templates apply queued zoom after auto-fit', () => {
       return match[0];
     };
     const state = extract(
-      /    var fitComplete = false;\s*var pendingZoomDeltas = \[\];/,
+      /    var fitComplete = false;\s*var pendingZoomOperations = \[\];/,
       'queued zoom state',
     );
     const setZoom = extract(
