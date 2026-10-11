@@ -172,6 +172,17 @@ class AudioSeparationEngine {
       List<_AudioFrame> frames, _AudioTrackInfo track) {
     final sampleRate = track.sampleRate > 0 ? track.sampleRate : 44100;
     final channels = track.channels > 0 ? track.channels : 2;
+    final audioSampleEntryVersion = sampleRate > 0xFFFF ? 1 : 0;
+
+    // The 16.16 sample-rate field cannot hold rates above 65,535 Hz. For
+    // AudioSampleEntryV1, divide by a power of two until the field fits; the
+    // srat box below carries the actual rate and overrides this value.
+    var sampleRateDivisor = 1;
+    while (sampleRate * 0x10000 ~/ sampleRateDivisor > 0xFFFFFFFF) {
+      sampleRateDivisor *= 2;
+    }
+    final sampleRateField = sampleRate * 0x10000 ~/ sampleRateDivisor;
+
     final sampleCount = frames.length;
 
     // ---------- AAC configuration ----------
@@ -215,9 +226,12 @@ class AudioSeparationEngine {
     final samplesPerFrame = _samplesPerAacFrame(asc, sampleRate);
     final duration = sampleCount * samplesPerFrame;
 
-    // stsd entry size: mp4a base (36) + esds box
+    // stsd entry size: mp4a base (36 for v0, 52 for v1), optional srat box,
+    // and esds box.
     final esdsSize = _esdsBoxSize(asc);
-    final stsdEntrySize = 36 + esdsSize;
+    final sratSize = audioSampleEntryVersion == 1 ? 16 : 0;
+    final stsdEntrySize =
+        (audioSampleEntryVersion == 1 ? 52 : 36) + sratSize + esdsSize;
     final stsdSize =
         16 + stsdEntrySize; // header(8)+ver/flags(4)+entryCount(4)+entry
     const sttsSize = 24; // header + 1 entry
@@ -355,7 +369,7 @@ class AudioSeparationEngine {
 
     // stsd
     _writeBoxHeader(buf, stsdSize, 'stsd');
-    _writeU32be(buf, 0); // version=0, flags=0
+    _writeU32be(buf, 0); // stsd version=0, flags=0
     _writeU32be(buf, 1); // entry_count = 1
 
     // SampleEntry: mp4a
@@ -363,12 +377,24 @@ class AudioSeparationEngine {
     _writeCString(buf, 'mp4a'); // codec
     _writeBytes(buf, [0, 0, 0, 0, 0, 0]); // reserved(6)
     _writeU16be(buf, 1); // data_reference_index
-    _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
+    _writeU16be(buf, audioSampleEntryVersion); // entry_version
+    _writeU16be(buf, 0); // revision_level
+    _writeU32be(buf, 0); // vendor
     _writeU16be(buf, channels); // channel count
     _writeU16be(buf, 16); // sample size
     _writeU16be(buf, 0); // pre-defined
     _writeU16be(buf, 0); // reserved
-    _writeU32be(buf, sampleRate << 16); // sample rate (16.16 fixed-point)
+    _writeU32be(buf, sampleRateField); // sample rate (16.16 fixed-point)
+    if (audioSampleEntryVersion == 1) {
+      // Version 1 AudioSampleEntry fields: samples/bytes per packet/frame.
+      _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+      // ISO/IEC 14496-12 Sampling Rate Box: the actual sample rate overrides
+      // the representable 16.16 rate in the AudioSampleEntry.
+      _writeBoxHeader(buf, sratSize, 'srat');
+      _writeU32be(buf, 0); // version=0, flags=0
+      _writeU32be(buf, sampleRate);
+    }
 
     // esds box inside stsd
     _writeEsdsBox(buf, asc);

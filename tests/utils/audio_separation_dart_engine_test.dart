@@ -20,6 +20,10 @@ int _readUint16LE(Uint8List data, int offset) {
   return data[offset] | (data[offset + 1] << 8);
 }
 
+int _readUint16BE(Uint8List data, int offset) {
+  return (data[offset] << 8) | data[offset + 1];
+}
+
 int _readUint32BE(Uint8List data, int offset) {
   return (data[offset] << 24) |
       (data[offset + 1] << 16) |
@@ -873,6 +877,63 @@ void main() {
       final mdatEnd = mdatStart + _readUint32BE(data, mdatStart);
       return Uint8List.fromList(data.sublist(mdatTypeOffset + 4, mdatEnd));
     }
+
+    test('writes 96 kHz AAC rate with an srat box', () async {
+      // AAC-LC, 96 kHz, stereo.
+      final asc = Uint8List.fromList([0x10, 0x10]);
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: asc,
+        sampleRate: 96000,
+        audioSampleEntryVersion: 2,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final stsdTypeOffset = _findFourCc(result, 'stsd');
+      expect(stsdTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint32BE(result, stsdTypeOffset + 4), 0);
+
+      final mp4aTypeOffset = _findFourCc(result, 'mp4a');
+      expect(mp4aTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint16BE(result, mp4aTypeOffset + 12), 1);
+      expect(_readUint32BE(result, mp4aTypeOffset + 28), 48000 << 16);
+
+      final sratTypeOffset = _findFourCc(result, 'srat');
+      expect(sratTypeOffset, mp4aTypeOffset + 52);
+      expect(_readUint32BE(result, sratTypeOffset - 4), 16);
+      expect(_readUint32BE(result, sratTypeOffset + 4), 0);
+      expect(_readUint32BE(result, sratTypeOffset + 8), 96000);
+      expect(_containsBytes(result, asc), isTrue);
+
+      final mdhdTypeOffset = _findFourCc(result, 'mdhd');
+      expect(mdhdTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint32BE(result, mdhdTypeOffset + 16), 96000);
+    });
+
+    test('keeps ordinary AAC sample rates in version-0 entries', () async {
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final stsdTypeOffset = _findFourCc(result, 'stsd');
+      expect(stsdTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint32BE(result, stsdTypeOffset + 4), 0);
+
+      final mp4aTypeOffset = _findFourCc(result, 'mp4a');
+      expect(mp4aTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint16BE(result, mp4aTypeOffset + 12), 0);
+      expect(_readUint32BE(result, mp4aTypeOffset + 28), 44100 << 16);
+      expect(_findFourCc(result, 'srat'), -1);
+    });
 
     test('honors AAC edit-list trims around encoder priming', () async {
       final sourceFrames = [
