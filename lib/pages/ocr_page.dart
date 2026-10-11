@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:uuid/uuid.dart';
 
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart';
@@ -115,7 +116,8 @@ class OcrPage extends ConsumerStatefulWidget {
       this.testCameraPicker,
       this.testGalleryPicker,
       this.testImagePayloadPreparer,
-      this.testRetryImageRestorer});
+      this.testRetryImageRestorer,
+      this.testRetrySnapshotCacher});
 
   @visibleForTesting
   final Future<XFile?> Function({
@@ -135,6 +137,11 @@ class OcrPage extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer;
+  @visibleForTesting
+  final Future<Map<String, dynamic>?> Function({
+    required String taskId,
+    required OcrRetrySnapshot snapshot,
+  })? testRetrySnapshotCacher;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -151,8 +158,12 @@ class OcrPage extends ConsumerStatefulWidget {
 }
 
 class _OcrPageState extends ConsumerState<OcrPage> {
+  static const _retryImagesUnavailableMessage =
+      '原始 OCR 图片缓存不可用，请清空并重新选择全部图片后重试';
+
   final List<SelectedImage> _selectedImages = [];
   bool _isProcessing = false;
+  bool _isPreparingRetryData = false;
   bool _isRetryImagesLoading = false;
   bool _retryImagesUnavailable = false;
   bool _useOriginalImageQuality = false;
@@ -217,6 +228,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _selectedImages.addAll(widget.testImages!);
     }
     _isRetryImagesLoading = widget.retryData != null;
+    if (widget.retryTaskId != null && widget.retryData == null) {
+      _retryImagesUnavailable = true;
+      _errorMessage = _retryImagesUnavailableMessage;
+    }
     unawaited(_applyRetryData());
   }
 
@@ -1367,7 +1382,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
                   _isProcessing
-                      ? '识别中...'
+                      ? _isPreparingRetryData
+                          ? '保存重试图片...'
+                          : '识别中...'
                       : _isRetryImagesLoading
                           ? '读取重试图片...'
                           : '开始识别',
@@ -1608,7 +1625,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (!mounted) return;
       setState(() {
         _selectedImages.addAll(newImages);
-        _errorMessage = firstError;
+        _errorMessage = firstError ??
+            (_retryImagesUnavailable ? _retryImagesUnavailableMessage : null);
       });
       if (firstError != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1896,6 +1914,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ..clear()
         ..addAll(images);
       _errorMessage = null;
+      _isProcessing = true;
+      _isPreparingRetryData = true;
     });
     final folder = _saveFolder;
 
@@ -1923,9 +1943,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (_pendingRetryInstructionIndex != null) {
       try {
         await _resolvePendingRetryInstruction();
-      } catch (_) {
+      } catch (error) {
         _ocrStarting = false;
-        rethrow;
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _isPreparingRetryData = false;
+            _errorMessage = '读取识别指令失败，请重试';
+          });
+        }
+        debugPrint('[OCR] Failed to restore retry instruction: $error');
+        return;
       }
     }
 
@@ -1963,10 +1991,54 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final imageBytesList = images.map((img) => img.bytes).toList();
     final imageFormatList = images.map((img) => img.format).toList();
     final imageNameList = images.map((img) => img.sourceName).toList();
-    final taskId = bgNotifier.addTask(
+    // Save the exact instruction and destination along with the stable model
+    // reference so later list edits cannot change this retry's request.
+    final instructionContent = _retryInstructionSnapshot ??
+        ((_selectedInstructionIndex >= 0 &&
+                _selectedInstructionIndex < instructions.length)
+            ? instructions[_selectedInstructionIndex].content
+            : null);
+    // Store the retry images before publishing the task or starting its
+    // request. A failed request can then never expose a retry action while its
+    // snapshot is still being written.
+    final taskId = const Uuid().v4();
+    final retryData = await _computeOcrRetryData(
+      taskId,
+      imageBytesList,
+      imageFormatList,
+      imageNameList,
+      selectedOption.configId,
+      selectedOption.modelRecordId,
+      instructionContent,
+      folder,
+    );
+    if (!mounted || !bgNotifier.mounted) {
+      if (retryData != null) {
+        final remainingTasks = bgNotifier.mounted
+            ? bgNotifier.state
+            : const <BackgroundTask>[];
+        try {
+          await OcrRetryStorage.deleteUnreferenced(
+            candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
+            referenced: {
+              for (final task in remainingTasks)
+                if (task.type == BackgroundTaskType.ocr)
+                  ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+            },
+          );
+        } catch (error) {
+          debugPrint('[OCR] Failed to clean an unused retry snapshot: $error');
+        }
+      }
+      return;
+    }
+    setState(() => _isPreparingRetryData = false);
+
+    bgNotifier.addTask(
       type: BackgroundTaskType.ocr,
       title: title,
-      retryData: null,
+      retryData: retryData,
+      taskId: taskId,
     );
     final runner = OcrTaskRunner(
       taskId: taskId,
@@ -1978,33 +2050,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       onSaved: () => unawaited(textNotifier.loadRecords()),
     );
 
-    // Step 3: Fire-and-forget retryData computation (only needed for retry).
-    // Save the exact instruction and destination along with the stable model
-    // reference so later list edits cannot change this retry's request.
-    final instructionContent = _retryInstructionSnapshot ??
-        ((_selectedInstructionIndex >= 0 &&
-                _selectedInstructionIndex < instructions.length)
-            ? instructions[_selectedInstructionIndex].content
-            : null);
-    unawaited(_computeOcrRetryData(
-        taskId,
-        imageBytesList,
-        imageFormatList,
-        imageNameList,
-        selectedOption.configId,
-        selectedOption.modelRecordId,
-        instructionContent,
-        folder,
-        bgNotifier));
-
-    _isProcessing = true;
     unawaited(runner.run());
     Navigator.pop(context);
   }
 
-  /// Compute retryData for an OCR task in the background.
-  /// Fire-and-forget — the task can execute without retryData.
-  static Future<void> _computeOcrRetryData(
+  /// Cache task-owned images before starting OCR so a failed request cannot
+  /// be retried while its image snapshot is still being written.
+  Future<Map<String, dynamic>?> _computeOcrRetryData(
     String taskId,
     List<Uint8List> imageBytesList,
     List<String> imageFormatList,
@@ -2013,7 +2065,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     String modelId,
     String? instructionContent,
     String saveFolder,
-    BackgroundTaskNotifier bgNotifier,
   ) async {
     try {
       final snapshot = OcrRetrySnapshot.capture(
@@ -2030,28 +2081,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         instructionContent: instructionContent,
         saveFolder: saveFolder,
       );
-      final retryData = await OcrRetryStorage.cacheSnapshot(
-        taskId: taskId,
-        snapshot: snapshot,
-      );
-      if (bgNotifier.mounted &&
-          bgNotifier.state.any((task) => task.id == taskId)) {
-        bgNotifier.setRetryData(taskId, retryData);
-      } else {
-        final remainingTasks = bgNotifier.mounted
-            ? bgNotifier.state
-            : const <BackgroundTask>[];
-        await OcrRetryStorage.deleteUnreferenced(
-          candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
-          referenced: {
-            for (final task in remainingTasks)
-              if (task.type == BackgroundTaskType.ocr)
-                ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-          },
-        );
-      }
+      return await (widget.testRetrySnapshotCacher?.call(
+            taskId: taskId,
+            snapshot: snapshot,
+          ) ??
+          OcrRetryStorage.cacheSnapshot(taskId: taskId, snapshot: snapshot));
     } catch (error) {
       debugPrint('[OCR] Failed to cache retry images: $error');
+      return null;
     }
   }
 
