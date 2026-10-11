@@ -11,21 +11,18 @@ void main() {
       registerBundledAssetLicenses();
       final entries = await LicenseRegistry.licenses.toList();
 
-      const packageLabel =
-          'MDK 0.39.0.2635 Windows x64 vendor .nupkg '
+      const packageLabel = 'MDK 0.39.0.2635 Windows x64 vendor .nupkg '
           '(package-level MIT declaration)';
       final packageEntry = entries.singleWhere(
         (entry) => entry.packages.contains(packageLabel),
       );
-      final packageText = packageEntry.paragraphs
-          .map((paragraph) => paragraph.text)
-          .join('\n');
+      final packageText =
+          packageEntry.paragraphs.map((paragraph) => paragraph.text).join('\n');
       expect(packageText, contains('MIT License'));
       expect(packageText, contains('Copyright (c) 2016-2025 WangBin'));
       expect(packageText, isNot(contains('NVIDIA Corporation')));
 
-      const sourceNoticeLabel =
-          'mdk-nvjp2k source-file notice (Windows x64; '
+      const sourceNoticeLabel = 'mdk-nvjp2k source-file notice (Windows x64; '
           'separate from package MIT; '
           'NVIDIA source and external runtime scope)';
       final sourceNoticeEntry = entries.singleWhere(
