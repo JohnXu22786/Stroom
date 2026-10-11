@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class KeepAliveReceiverTest {
+class KeepAliveScheduleTest {
     @Test
     fun failedSchedulingKeepsWatchdogEligibleForRecoveryAndReturnsFailure() {
         var watchdogActive = false
@@ -146,8 +146,8 @@ class KeepAliveReceiverTest {
     @Test
     fun failedRearmRetriesOnceWithTheSelectedNormalOrBackoffInterval() {
         for (selectedInterval in listOf(
-            KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
-            KeepAliveReceiver.FAILURE_BACKOFF_INTERVAL_MS,
+            KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS,
+            KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS,
         )) {
             val retryQueue = mutableListOf<() -> Unit>()
             val scheduledIntervals = mutableListOf<Long>()
@@ -188,7 +188,7 @@ class KeepAliveReceiverTest {
             var watchdogEnabled = true
 
             scheduleAlarmWithRetryAtInterval(
-                intervalMs = KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
+                intervalMs = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS,
                 scheduleAtInterval = { ++scheduleAttempts; false },
                 isStillActive = { keepAliveActive && serviceEnabled && watchdogEnabled },
                 retryLater = { retryQueue += it },

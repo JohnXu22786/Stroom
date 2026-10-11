@@ -70,13 +70,13 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val SCHEDULE_RETRY_DELAY_MS = 1_000L
 
         // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
-        const val KEEP_ALIVE_INTERVAL_MS = 5 * 60 * 1000L // 5 minutes
+        const val KEEP_ALIVE_INTERVAL_MS = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS
 
         // 连续启动失败后的退避间隔（见类注释）。
         // MainActivity 的 rearmKeepAlive 需要读取，用于退避状态下
         // 沿用 30 分钟间隔（而不是用 5 分钟间隔替换退避闹钟）。
         const val MAX_CONSECUTIVE_FAILURES = 3
-        const val FAILURE_BACKOFF_INTERVAL_MS = 30 * 60 * 1000L
+        const val FAILURE_BACKOFF_INTERVAL_MS = KeepAliveScheduleIntervals.FAILURE_BACKOFF_INTERVAL_MS
 
         const val ACTION_KEEP_ALIVE = "com.johntsui.stroom.KEEP_ALIVE"
 
