@@ -813,28 +813,35 @@ void main() {
       () async {
     flow = TaskFlowDefinition(
         id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
-    late _ManualDownloads downloads;
+    final downloadsReady = Completer<_ManualDownloads>();
     final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
-          downloads = _ManualDownloads(ref);
+          final downloads = _ManualDownloads(ref);
+          downloadsReady.complete(downloads);
           return downloads;
         });
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
-    final firstId = (await service.launchFlowMany(
-            'flow', [const FlowRunInput(text: 'https://example.com/first')]))
-        .single;
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final firstLaunch = service.launchFlowMany(
+        'flow', [const FlowRunInput(text: 'https://example.com/first')]);
+    final downloads = await downloadsReady.future.timeout(_dispatchWait);
+    final firstId = (await firstLaunch).single;
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/first'),
+        'first CatCatch task creation');
     final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
     expect(scheduler.holds(firstId), isTrue);
     final secondId = (await service.launchFlowMany(
             'flow', [const FlowRunInput(text: 'https://example.com/second')]))
         .single;
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await _waitFor(() => scheduler.queuedCount == 1, 'second queued flow');
     expect(scheduler.queuedCount, 1);
     await Future<void>.delayed(const Duration(milliseconds: 1100));
     expect(scheduler.holds(firstId), isFalse);
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/second'),
+        'second CatCatch task creation');
     expect(
         downloads.idsByUrl.containsKey('https://example.com/second'), isTrue);
     expect(scheduler.holds(secondId), isTrue);
@@ -860,24 +867,33 @@ void main() {
       () async {
     flow = TaskFlowDefinition(
         id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
-    late _ManualDownloads downloads;
+    final downloadsReady = Completer<_ManualDownloads>();
     final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
-          downloads = _ManualDownloads(ref);
+          final downloads = _ManualDownloads(ref);
+          downloadsReady.complete(downloads);
           return downloads;
         });
     final service = container.read(taskFlowExecutionServiceProvider);
     final scheduler = container.read(taskFlowSchedulerProvider);
-    final confirmId = (await service.launchFlowMany(
-            'flow', [const FlowRunInput(text: 'https://example.com/confirm')]))
-        .single;
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final confirmationLaunch = service.launchFlowMany(
+        'flow', [const FlowRunInput(text: 'https://example.com/confirm')]);
+    final downloads = await downloadsReady.future.timeout(_dispatchWait);
+    final confirmId = (await confirmationLaunch).single;
+    await _waitFor(
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/confirm') &&
+            scheduler.holds(confirmId),
+        'special-format CatCatch slot hold');
     expect(scheduler.holds(confirmId), isTrue);
     final secondId = (await service.launchFlowMany(
             'flow', [const FlowRunInput(text: 'https://example.com/second')]))
         .single;
     await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await _waitFor(
+        () => downloads.idsByUrl.containsKey('https://example.com/second'),
+        'second CatCatch task creation');
     final taskId = downloads.idsByUrl['https://example.com/confirm']!;
     expect(scheduler.holds(confirmId), isFalse);
     expect(scheduler.holds(secondId), isTrue);
@@ -957,27 +973,37 @@ void main() {
     test('$stop while CatCatch selection queues prevents selection', () async {
       flow = TaskFlowDefinition(
           id: 'flow', blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)]);
-      late _ManualDownloads downloads;
+      final downloadsReady = Completer<_ManualDownloads>();
       final container = make(
           scheduler: TaskFlowScheduler(coreCount: 4),
           downloads: (ref) {
-            downloads = _ManualDownloads(ref);
+            final downloads = _ManualDownloads(ref);
+            downloadsReady.complete(downloads);
             return downloads;
           });
       final service = container.read(taskFlowExecutionServiceProvider);
       final scheduler = container.read(taskFlowSchedulerProvider);
-      final firstId = (await service.launchFlowMany(
-              'flow', [const FlowRunInput(text: 'https://example.com/first')]))
-          .single;
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      final firstLaunch = service.launchFlowMany(
+          'flow', [const FlowRunInput(text: 'https://example.com/first')]);
+      final downloads = await downloadsReady.future.timeout(_dispatchWait);
+      final firstId = (await firstLaunch).single;
+      await _waitFor(
+          () =>
+              downloads.idsByUrl.containsKey('https://example.com/first') &&
+              !scheduler.holds(firstId),
+          'first CatCatch manual wait releases its slot');
       final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
-      await service.launchFlowMany(
-          'flow', [const FlowRunInput(text: 'https://example.com/second')]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final secondId = (await service.launchFlowMany(
+              'flow', [const FlowRunInput(text: 'https://example.com/second')]))
+          .single;
+      await _waitFor(
+          () => scheduler.holds(secondId), 'second flow scheduler slot');
       const media =
           MediaResource(url: 'https://x/one.mp4', name: 'one', ext: 'mp4');
       final selecting = service.performManualCatCatchAction(firstTaskId, true,
           (notifier) => notifier.selectMedia(firstTaskId, media));
+      await _waitFor(
+          () => scheduler.queuedCount == 1, 'manual selection queue slot');
       expect(scheduler.queuedCount, 1);
       if (stop == 'pause') {
         await service.pauseExecution(firstId);
@@ -1132,7 +1158,12 @@ void main() {
     await container
         .read(taskFlowExecutionServiceProvider)
         .resumeExecution('saved');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await _waitFor(
+        () =>
+            inputs.length == 1 &&
+            notifier.execution('saved')?.status ==
+                FlowExecutionStatus.completed,
+        'checkpoint ASR resume');
     expect(inputs, ['transcribed']);
     expect(notifier.execution('saved')!.status, FlowExecutionStatus.completed);
   });

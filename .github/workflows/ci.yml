@@ -213,27 +213,26 @@ jobs:
     name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (tests skipped: {0})', matrix.label) || format('Tests ({0})', matrix.label) }}"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
-    needs: [quality]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: Component Integrations
+          # Keep functional ownership in the Dart runner and group related
+          # suites here to reduce repeated Flutter setup while isolating UI.
+          - label: External Components
             suite: component-integrations
-          - label: Chat and AI (logic)
-            suite: chat-ai-core
-          - label: Chat and AI (screens)
-            suite: chat-ai-ui
+          - label: Built-in Components
+            suite: built-in-components
+          - label: Chat and TaskFlow Core
+            suite: chat-taskflow-core
           - label: Files and Data
             suite: files-data
-          - label: Media Processing
-            suite: media-processing
-          - label: Text and Math
-            suite: text-math
-          - label: Tasks and Workflow
-            suite: tasks-workflow
           - label: Application and Shared
             suite: application-shared
+          - label: Chat UI
+            suite: chat-ai-ui
+          - label: Other Feature UI
+            suite: feature-ui
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
