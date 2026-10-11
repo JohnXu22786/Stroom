@@ -1478,7 +1478,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromSystemGallery() async {
     try {
       final mode = _imageImportMode;
-      // 移动端直接通过 image_picker 打开系统相册，
+      // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
       final files = await (widget.testGalleryPicker?.call(
             maxWidth: mode.maxWidth,
@@ -1487,6 +1487,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ) ??
           pickGalleryMedia(
             GalleryMediaKind.image,
+            context: context,
             imageQuality: mode.imageQuality,
             maxWidth: mode.maxWidth,
             maxHeight: mode.maxHeight,
