@@ -144,6 +144,68 @@ class KeepAliveReceiverTest {
     }
 
     @Test
+    fun failedRearmRetriesOnceWithTheSelectedNormalOrBackoffInterval() {
+        for (selectedInterval in listOf(
+            KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
+            KeepAliveReceiver.FAILURE_BACKOFF_INTERVAL_MS,
+        )) {
+            val retryQueue = mutableListOf<() -> Unit>()
+            val scheduledIntervals = mutableListOf<Long>()
+            var scheduleAttempts = 0
+            val keepAliveActive = true
+            val serviceEnabled = true
+            val watchdogEnabled = true
+
+            val scheduled = scheduleAlarmWithRetryAtInterval(
+                intervalMs = selectedInterval,
+                scheduleAtInterval = { interval ->
+                    scheduledIntervals += interval
+                    ++scheduleAttempts == 2
+                },
+                isStillActive = { keepAliveActive && serviceEnabled && watchdogEnabled },
+                retryLater = { retryQueue += it },
+            )
+
+            assertFalse(scheduled)
+            assertEquals(1, scheduleAttempts)
+            assertEquals(1, retryQueue.size)
+
+            retryQueue.single().invoke()
+
+            assertEquals(2, scheduleAttempts)
+            assertEquals(listOf(selectedInterval, selectedInterval), scheduledIntervals)
+            assertEquals(1, retryQueue.size)
+        }
+    }
+
+    @Test
+    fun queuedRearmRetryDoesNotScheduleAfterKeepAliveIntentIsDisabled() {
+        for (disable in listOf("active", "service", "watchdog")) {
+            val retryQueue = mutableListOf<() -> Unit>()
+            var scheduleAttempts = 0
+            var keepAliveActive = true
+            var serviceEnabled = true
+            var watchdogEnabled = true
+
+            scheduleAlarmWithRetryAtInterval(
+                intervalMs = KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS,
+                scheduleAtInterval = { ++scheduleAttempts; false },
+                isStillActive = { keepAliveActive && serviceEnabled && watchdogEnabled },
+                retryLater = { retryQueue += it },
+            )
+            when (disable) {
+                "active" -> keepAliveActive = false
+                "service" -> serviceEnabled = false
+                "watchdog" -> watchdogEnabled = false
+            }
+
+            retryQueue.single().invoke()
+
+            assertEquals("$disable must suppress retry", 1, scheduleAttempts)
+        }
+    }
+
+    @Test
     fun failedReceiverSchedulingQueuesRetryWithCurrentInterval() {
         val retryQueue = mutableListOf<() -> Unit>()
         var scheduleAttempts = 0
