@@ -218,22 +218,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: Component Integrations
+          # Keep functional ownership in the Dart runner and group related
+          # suites here to reduce repeated Flutter setup while isolating UI.
+          - label: External Components
             suite: component-integrations
-          - label: Chat and AI (logic)
-            suite: chat-ai-core
-          - label: Chat and AI (screens)
+          - label: Built-in Components
+            suite: built-in-components
+          - label: Chat and TaskFlow Core
+            suite: chat-taskflow-core
+          - label: Files and Application Runtime
+            suite: files-app-core
+          - label: Chat UI
             suite: chat-ai-ui
-          - label: Files and Data
-            suite: files-data
-          - label: Media Processing
-            suite: media-processing
-          - label: Text and Math
-            suite: text-math
-          - label: Tasks and Workflow
-            suite: tasks-workflow
-          - label: Application and Shared
-            suite: application-shared
+          - label: Other Feature UI
+            suite: feature-ui
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -244,14 +242,14 @@ jobs:
       - run: flutter pub get
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
-        if: matrix.suite == 'application-shared'
+        if: matrix.suite == 'files-app-core'
       - name: Expose test fixtures to Flutter Web's test server
-        if: matrix.suite == 'application-shared'
+        if: matrix.suite == 'files-app-core'
         run: ln -s tests test
       - name: Run ${{ matrix.label }} tests
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
       - name: Run Web startup checks in Chrome
-        if: matrix.suite == 'application-shared'
+        if: matrix.suite == 'files-app-core'
         run: flutter test --platform chrome test/startup/startup_check_service_web.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}

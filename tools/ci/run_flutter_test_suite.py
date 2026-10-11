@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run one Stroom-owned functional suite and verify test ownership is complete."""
+"""Run one Stroom-owned CI group and verify test ownership is complete."""
 
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,9 +15,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = REPO_ROOT / "tests"
 
 # These are product responsibilities. Paths under pages/, services/, widgets/,
-# providers/, models/ and utils/ intentionally meet in the same functional
-# suite where they cover the same feature.
-SUITES: dict[str, tuple[str, ...]] = {
+# providers/, models/ and utils/ first belong to the feature they exercise.
+FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     "component-integrations": (
         "anki/**",
         "catcatch/**",
@@ -190,25 +190,86 @@ SUITES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Several product areas run together to share Flutter setup. UI checks run in
+# their own groups, while functional ownership remains attached to each test.
+FUNCTIONAL_TO_CI_GROUP: dict[str, str] = {
+    "component-integrations": "component-integrations",
+    "chat-ai-core": "chat-taskflow-core",
+    "chat-ai-ui": "chat-ai-ui",
+    "files-data": "files-app-core",
+    "media-processing": "built-in-components",
+    "text-math": "built-in-components",
+    "tasks-workflow": "chat-taskflow-core",
+    "application-shared": "files-app-core",
+}
+
+CI_GROUPS: tuple[str, ...] = (
+    "component-integrations",
+    "built-in-components",
+    "chat-taskflow-core",
+    "files-app-core",
+    "chat-ai-ui",
+    "feature-ui",
+)
+
+
+def is_feature_ui_test(path: str) -> bool:
+    """Route widget tests to UI jobs and leave logic tests with their feature."""
+    source = (TEST_ROOT / path).read_text(encoding="utf-8")
+    builds_or_operates_widgets = re.search(
+        r"\btestWidgets\s*\(|\bWidgetTester\b|\bpumpWidget\s*\(", source
+    )
+    # This test inspects the rendered Markdown spans directly without a
+    # WidgetTester, so it is still a presentation test.
+    renders_markdown = path == "widgets/search_markdown_highlight_test.dart"
+    return builds_or_operates_widgets is not None or renders_markdown
+
 
 def discover_and_validate() -> dict[str, list[str]]:
     files = sorted(
         path.relative_to(TEST_ROOT).as_posix()
         for path in TEST_ROOT.rglob("*_test.dart")
     )
-    assignments: dict[str, list[str]] = {suite: [] for suite in SUITES}
+    assignments: dict[str, list[str]] = {group: [] for group in CI_GROUPS}
     errors: list[str] = []
+
+    unmapped_suites = set(FUNCTIONAL_SUITES) - set(FUNCTIONAL_TO_CI_GROUP)
+    unknown_groups = set(FUNCTIONAL_TO_CI_GROUP.values()) - set(CI_GROUPS)
+    if unmapped_suites:
+        errors.append(f"functional suites missing CI groups: {sorted(unmapped_suites)}")
+    if unknown_groups:
+        errors.append(f"functional suites map to unknown CI groups: {sorted(unknown_groups)}")
 
     for path in files:
         matches = [
             suite
-            for suite, patterns in SUITES.items()
+            for suite, patterns in FUNCTIONAL_SUITES.items()
             if any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
         ]
         if len(matches) != 1:
-            errors.append(f"{path}: expected one suite, matched {matches or 'none'}")
+            errors.append(
+                f"{path}: expected one functional owner, matched {matches or 'none'}"
+            )
             continue
-        assignments[matches[0]].append(path)
+        functional_suite = matches[0]
+        is_ui_test = is_feature_ui_test(path)
+        if functional_suite == "chat-ai-ui" and not is_ui_test:
+            group = FUNCTIONAL_TO_CI_GROUP["chat-ai-core"]
+        elif (
+            functional_suite != "component-integrations"
+            and is_ui_test
+        ):
+            group = (
+                FUNCTIONAL_TO_CI_GROUP["chat-ai-ui"]
+                if functional_suite == "chat-ai-ui"
+                else "feature-ui"
+            )
+        else:
+            group = FUNCTIONAL_TO_CI_GROUP[functional_suite]
+        if group not in assignments:
+            errors.append(f"{path}: missing CI group {group}")
+            continue
+        assignments[group].append(path)
 
     if errors:
         raise ValueError("Test suite ownership must be unique and complete:\n  " + "\n  ".join(errors))
@@ -217,8 +278,8 @@ def discover_and_validate() -> dict[str, list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", nargs="?", choices=list(SUITES))
-    parser.add_argument("--list", action="store_true", dest="list_suites")
+    parser.add_argument("group", nargs="?", choices=list(CI_GROUPS))
+    parser.add_argument("--list", action="store_true", dest="list_groups")
     args = parser.parse_args()
 
     try:
@@ -227,21 +288,21 @@ def main() -> int:
         print(error, file=sys.stderr)
         return 1
 
-    if args.list_suites:
-        for suite, files in assignments.items():
-            print(f"{suite}: {len(files)} test files")
+    if args.list_groups:
+        for group, files in assignments.items():
+            print(f"{group}: {len(files)} test files")
         print(f"Total: {sum(map(len, assignments.values()))} test files")
         return 0
 
-    if args.suite is None:
-        parser.error("provide a suite or use --list")
+    if args.group is None:
+        parser.error("provide a CI group or use --list")
 
-    test_files = assignments[args.suite]
+    test_files = assignments[args.group]
     if not test_files:
-        print(f"Suite {args.suite} has no test files.", file=sys.stderr)
+        print(f"CI group {args.group} has no test files.", file=sys.stderr)
         return 1
 
-    print(f"Running {args.suite}: {len(test_files)} test files")
+    print(f"Running {args.group}: {len(test_files)} test files")
     return subprocess.run(
         ["flutter", "test", *(f"tests/{path}" for path in test_files)],
         cwd=REPO_ROOT,
