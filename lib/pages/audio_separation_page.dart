@@ -264,6 +264,7 @@ Future<String?> saveAudioSeparationFile(
   required String saveFolder,
   bool Function()? shouldSave,
   Future<void> Function(AudioRecord)? registerRecord,
+  Future<String?> Function(String fileName)? resolveFilePath,
 }) async {
   if (audioBytes.isEmpty) {
     throw Exception('提取的音频数据为空');
@@ -315,9 +316,39 @@ Future<String?> saveAudioSeparationFile(
 
   if (skipped) return null;
 
-  final filePath = await FileManifest.readFilePath('$hash.$format');
+  final resolvePath = resolveFilePath ?? FileManifest.readFilePath;
+  late final String? filePath;
+  try {
+    filePath = await resolvePath('$hash.$format');
+  } catch (error, stackTrace) {
+    if (shouldSave != null && !shouldSave()) {
+      try {
+        await _rollbackCancelledAudioSave(record);
+      } catch (cleanupError) {
+        debugPrint(
+            '[AudioSeparation] Failed to clean cancelled save ${record.storageFileName}: $cleanupError');
+      }
+    }
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+  if (shouldSave != null && !shouldSave()) {
+    await _rollbackCancelledAudioSave(record);
+    return null;
+  }
 
   return filePath;
+}
+
+Future<void> _rollbackCancelledAudioSave(AudioRecord record) async {
+  await FileManifest.withStorageFileSaveLock(record.storageFileName, () async {
+    try {
+      await FileManifest.deleteRecord(record.id, preserveFiles: true);
+    } catch (cleanupError) {
+      debugPrint(
+          '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError');
+    }
+    await _deleteUnreferencedAudioFile(record);
+  });
 }
 
 Future<void> _deleteUnreferencedAudioFile(AudioRecord record) async {

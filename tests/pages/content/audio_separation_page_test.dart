@@ -220,4 +220,105 @@ void main() {
         await FileManifest.readFile('removed_during_registration.wav'), isNull);
     expect(await FileManifest.loadRecords(), isEmpty);
   });
+
+  test('save removes its file and record if removed during path resolution',
+      () async {
+    const storageName = 'removed_during_path_resolution.wav';
+    final pathResolutionStarted = Completer<void>();
+    final finishPathResolution = Completer<String?>();
+    var taskIsLive = true;
+
+    final save = saveAudioSeparationFile(
+      Uint8List.fromList([18, 19, 20]),
+      hash: 'removed_during_path_resolution',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => taskIsLive,
+      resolveFilePath: (_) {
+        pathResolutionStarted.complete();
+        return finishPathResolution.future;
+      },
+    );
+
+    await pathResolutionStarted.future.timeout(const Duration(seconds: 5));
+    expect(await FileManifest.readFile(storageName), isNotNull);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+
+    taskIsLive = false;
+    finishPathResolution.complete(await FileManifest.readFilePath(storageName));
+
+    expect(await save, isNull);
+    expect(await FileManifest.readFile(storageName), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
+
+  test('cancelled path resolution preserves a shared audio file', () async {
+    const storageName = 'shared_path_resolution.wav';
+    final audioBytes = Uint8List.fromList([21, 22, 23]);
+    final existingRecord = AudioRecord(
+      name: 'existing shared record',
+      hash: 'shared_path_resolution',
+      format: 'wav',
+      createdAt: DateTime.now(),
+      size: audioBytes.length,
+    );
+    await FileManifest.writeFile(storageName, audioBytes);
+    await FileManifest.addRecord(existingRecord);
+
+    final pathResolutionStarted = Completer<void>();
+    final finishPathResolution = Completer<String?>();
+    var taskIsLive = true;
+    final save = saveAudioSeparationFile(
+      audioBytes,
+      hash: 'shared_path_resolution',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => taskIsLive,
+      resolveFilePath: (_) {
+        pathResolutionStarted.complete();
+        return finishPathResolution.future;
+      },
+    );
+
+    await pathResolutionStarted.future.timeout(const Duration(seconds: 5));
+    expect(await FileManifest.loadRecords(), hasLength(2));
+
+    taskIsLive = false;
+    finishPathResolution.complete(await FileManifest.readFilePath(storageName));
+
+    expect(await save, isNull);
+    expect(await FileManifest.readFile(storageName), audioBytes);
+    final records = await FileManifest.loadRecords();
+    expect(records, hasLength(1));
+    expect(records.single.id, existingRecord.id);
+  });
+
+  test('path resolution errors still clean up a cancelled save', () async {
+    const storageName = 'failed_cancelled_path_resolution.wav';
+    final pathResolutionStarted = Completer<void>();
+    final failPathResolution = Completer<String?>();
+    var taskIsLive = true;
+    final save = saveAudioSeparationFile(
+      Uint8List.fromList([24, 25, 26]),
+      hash: 'failed_cancelled_path_resolution',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => taskIsLive,
+      resolveFilePath: (_) {
+        pathResolutionStarted.complete();
+        return failPathResolution.future;
+      },
+    );
+
+    await pathResolutionStarted.future.timeout(const Duration(seconds: 5));
+    expect(await FileManifest.readFile(storageName), isNotNull);
+    expect(await FileManifest.loadRecords(), hasLength(1));
+
+    taskIsLive = false;
+    failPathResolution.completeError(StateError('path lookup failed'));
+
+    await expectLater(save, throwsA(isA<StateError>()));
+    expect(await FileManifest.readFile(storageName), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
 }
