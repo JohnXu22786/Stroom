@@ -53,7 +53,9 @@ void registerBundledAssetLicenses() {
 
     yield LicenseEntryWithLineBreaks(
       const ['LLVM libc++ (Linux, Android)'],
-      await rootBundle.loadString('assets/vendor/native/llvm-libcxx-LICENSE.TXT'),
+      await rootBundle.loadString(
+        'assets/vendor/native/llvm-libcxx-LICENSE.TXT',
+      ),
     );
 
     yield LicenseEntryWithLineBreaks(
