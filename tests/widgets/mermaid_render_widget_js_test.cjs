@@ -26,6 +26,98 @@ const reportErrorTargets = [
   ['web', webTemplateSource],
 ];
 
+const mouseGestureTargets = [
+  ['web', webTemplateSource],
+  ['fullscreen inline', dartSource],
+];
+
+function extractMouseGestureScript(templateName, templateSource) {
+  const start = templateSource.indexOf('    var isDragging = false;');
+  assert.notEqual(start, -1, `Could not find mouse gesture state in ${templateName}`);
+  const end = templateSource.indexOf(
+    '    // Zoom with Ctrl/Meta + MouseWheel',
+    start,
+  );
+  assert.notEqual(end, -1, `Could not find the end of mouse handlers in ${templateName}`);
+  return templateSource.slice(start, end);
+}
+
+function createMouseGestureHarness(mouseGestureScript) {
+  const listeners = new Map();
+  const timers = new Map();
+  const panUpdates = [];
+  let nextTimerId = 0;
+  let mermaidTargetClicks = 0;
+  const context = {
+    document: {
+      addEventListener: (type, listener, options) => {
+        const registered = listeners.get(type) || [];
+        registered.push({listener, options});
+        listeners.set(type, registered);
+      },
+    },
+    window: {},
+    panX: 0,
+    panY: 0,
+    zoomLevel: 1,
+    updateTransform: () => panUpdates.push([context.panX, context.panY]),
+    notifyTransform: () => {},
+    setTimeout: (callback, delay) => {
+      const id = ++nextTimerId;
+      timers.set(id, {callback, delay});
+      return id;
+    },
+    clearTimeout: (id) => timers.delete(id),
+  };
+  const diagramTarget = {closest: (selector) => selector === '#diagram-container'};
+  vm.runInNewContext(mouseGestureScript, context);
+
+  function dispatch(type, properties = {}) {
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    const event = {
+      target: diagramTarget,
+      clientX: 0,
+      clientY: 0,
+      detail: 1,
+      preventDefault: () => { defaultPrevented = true; },
+      stopPropagation: () => { propagationStopped = true; },
+      stopImmediatePropagation: () => { propagationStopped = true; },
+      ...properties,
+    };
+    const registeredListeners = listeners.get(type) || [];
+    if (type === 'click') {
+      const isCapture = (options) =>
+        options === true || options?.capture === true;
+      for (const {listener, options} of registeredListeners) {
+        if (isCapture(options)) listener(event);
+      }
+      if (!propagationStopped) mermaidTargetClicks++;
+      for (const {listener, options} of registeredListeners) {
+        if (!isCapture(options)) listener(event);
+      }
+    } else {
+      for (const {listener} of registeredListeners) {
+        listener(event);
+      }
+    }
+    return {defaultPrevented, propagationStopped};
+  }
+
+  return {
+    dispatch,
+    get mermaidTargetClicks() { return mermaidTargetClicks; },
+    panUpdates,
+    runPendingTimers() {
+      for (const [id, {callback}] of [...timers]) {
+        timers.delete(id);
+        callback();
+      }
+    },
+    get timerCount() { return timers.size; },
+  };
+}
+
 for (const [templateName, templateSource] of reportErrorTargets) {
   const reportErrorFunction = templateSource.match(
     /function reportError\(msg\)\s*\{([\s\S]*?)^    \}/m,
@@ -395,3 +487,63 @@ test('stalled raw-library fallback reports a bounded library-load error', async 
     ['onMermaidError', 'Mermaid 资源加载超时'],
   ]);
 });
+
+for (const [templateName, templateSource] of mouseGestureTargets) {
+  const mouseGestureScript = extractMouseGestureScript(
+    templateName,
+    templateSource,
+  );
+
+  test(`${templateName} mouse pan suppresses exactly its follow-up click`, () => {
+    const harness = createMouseGestureHarness(mouseGestureScript);
+
+    harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+    harness.dispatch('mouseup');
+    assert.deepEqual(harness.dispatch('click'), {
+      defaultPrevented: false,
+      propagationStopped: false,
+    }, 'an ordinary mouse click must reach Mermaid');
+    assert.equal(harness.mermaidTargetClicks, 1);
+
+    harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+    harness.dispatch('mousemove', {clientX: 25, clientY: 40});
+    assert.deepEqual(harness.panUpdates, [[15, 20]], 'mouse movement must pan');
+    harness.dispatch('mouseup');
+
+    assert.deepEqual(harness.dispatch('click', {detail: 0}), {
+      defaultPrevented: false,
+      propagationStopped: false,
+    }, 'keyboard activation must remain unaffected');
+    assert.equal(harness.mermaidTargetClicks, 2);
+
+    assert.deepEqual(harness.dispatch('click'), {
+      defaultPrevented: true,
+      propagationStopped: true,
+    }, 'the browser click after a pan must be stopped during capture');
+    assert.equal(harness.mermaidTargetClicks, 2);
+    assert.equal(harness.timerCount, 0, 'the consumed click should clear expiry');
+
+    assert.deepEqual(harness.dispatch('click'), {
+      defaultPrevented: false,
+      propagationStopped: false,
+    }, 'suppression must be consumed exactly once');
+    assert.equal(harness.mermaidTargetClicks, 3);
+  });
+
+  test(`${templateName} expires pan suppression if its click never arrives`, () => {
+    const harness = createMouseGestureHarness(mouseGestureScript);
+
+    harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+    harness.dispatch('mousemove', {clientX: 11, clientY: 20});
+    harness.dispatch('mouseup');
+    assert.equal(harness.timerCount, 1, 'pan suppression should be temporary');
+
+    harness.runPendingTimers();
+    assert.equal(harness.timerCount, 0);
+    assert.deepEqual(harness.dispatch('click'), {
+      defaultPrevented: false,
+      propagationStopped: false,
+    }, 'a later unrelated click must not inherit a missing post-pan click');
+    assert.equal(harness.mermaidTargetClicks, 1);
+  });
+}

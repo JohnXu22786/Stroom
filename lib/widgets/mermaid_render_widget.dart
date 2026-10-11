@@ -369,7 +369,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=7';
+    final base = '$webAssetTemplateUrl?v=8';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -620,11 +620,20 @@ MERMAID_LOADER_PLACEHOLDER
     var dragStartY = 0;
     var panStartX = 0;
     var panStartY = 0;
+    var hasDragged = false;
+    var suppressClickAfterPan = false;
+    var suppressClickTimer = null;
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+        suppressClickAfterPan = false;
+      }
       if (e.target.closest('#diagram-container')) {
         isDragging = true;
+        hasDragged = false;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
         panStartX = panX;
@@ -635,6 +644,9 @@ MERMAID_LOADER_PLACEHOLDER
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
+        if (e.clientX !== dragStartX || e.clientY !== dragStartY) {
+          hasDragged = true;
+        }
         panX = panStartX + (e.clientX - dragStartX);
         panY = panStartY + (e.clientY - dragStartY);
         updateTransform();
@@ -644,8 +656,27 @@ MERMAID_LOADER_PLACEHOLDER
     });
 
     document.addEventListener('mouseup', function() {
+      if (isDragging && hasDragged) {
+        suppressClickAfterPan = true;
+        suppressClickTimer = setTimeout(function() {
+          suppressClickAfterPan = false;
+          suppressClickTimer = null;
+        }, 0);
+      }
       isDragging = false;
+      hasDragged = false;
     });
+
+    document.addEventListener('click', function(e) {
+      if (!suppressClickAfterPan || e.detail === 0) return;
+      suppressClickAfterPan = false;
+      if (suppressClickTimer !== null) {
+        clearTimeout(suppressClickTimer);
+        suppressClickTimer = null;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
 
     // Zoom with Ctrl/Meta + MouseWheel
     document.addEventListener('wheel', function(e) {
