@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
@@ -13,6 +13,7 @@ import '../../../services/asr_service.dart';
 import '../../../utils/audio_utils.dart';
 import '../../../utils/file_manifest.dart';
 import '../../../utils/provider_models.dart';
+import '../../../utils/web_file_store.dart';
 import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
@@ -128,8 +129,18 @@ Future<String> executeAsrBlock({
   Uint8List audioBytes;
   String audioFormat;
   try {
-    final file = File(input);
-    if (!await file.exists()) {
+    final usesWebFileStore =
+        kIsWeb || (WebFileStore.isTestMode && await WebFileStore.exists(input));
+    Uint8List? storedBytes;
+    if (usesWebFileStore) {
+      storedBytes = await WebFileStore.read(input);
+    } else {
+      final file = File(input);
+      if (await file.exists()) {
+        storedBytes = await file.readAsBytes();
+      }
+    }
+    if (storedBytes == null) {
       failSubTask(
         bgNotifier,
         taskId,
@@ -144,7 +155,7 @@ Future<String> executeAsrBlock({
         blockTitle: def.label,
       );
     }
-    audioBytes = await file.readAsBytes();
+    audioBytes = storedBytes;
     audioFormat = p.extension(input).replaceFirst('.', '').toLowerCase();
     // Prefer the content-based format over the file extension — a file
     // with an unknown extension (or a .mp3-suffixed file that is actually
