@@ -41,6 +41,15 @@ license grant, and this note does not determine whether any code was copied.
 
 ## Bundled vendor assets
 
+- **flutter_math_fork 0.7.4** is declared as an app dependency. Its
+  [0.7.4 package archive](https://pub.dev/packages/flutter_math_fork/versions/0.7.4)
+  contains KaTeX TTF fonts and a separate MIT notice at
+  `lib/katex_fonts/LICENSE` (Copyright (c) 2018 Khan Academy). Flutter's
+  generated package registry covers the package-root Apache-2.0 license, but
+  does not collect this nested notice because the package metadata does not
+  declare it. Stroom retains the exact upstream notice at
+  `assets/vendor/flutter_math_fork-katex-fonts-LICENSE.txt` and registers it as
+  a separate entry on Flutter's license page.
 - **MathLive 0.111.0** is bundled under `assets/vendor/mathlive`; its MIT
   license is retained at `assets/vendor/mathlive/LICENSE.txt` and registered
   with Flutter's license page. The 20 bundled `fonts/KaTeX_*.woff2` files

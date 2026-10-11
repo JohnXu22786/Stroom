@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_android/shared_preferences_android.dart';
 
@@ -44,7 +44,11 @@ class StartupPreferences {
       (defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.windows);
 
+  @visibleForTesting
+  static bool debugUseLegacyPreferencesForTesting = false;
+
   static bool get _isFlutterTest {
+    if (debugUseLegacyPreferencesForTesting) return true;
     if (kIsWeb) return false;
     try {
       return Platform.environment['FLUTTER_TEST'] == 'true';

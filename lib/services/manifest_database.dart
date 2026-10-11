@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
@@ -34,6 +36,18 @@ class ManifestDatabase {
   /// Enables unit testing without sqflite native bindings.
   static bool _useInMemoryStorage = false;
 
+  /// Injects a folder persistence failure in manifest operation tests.
+  @visibleForTesting
+  static void Function(String path)? beforeFolderInsertForTesting;
+
+  /// Signals the start of a JSON record registration in tests.
+  @visibleForTesting
+  static void Function()? beforeJsonRecordRegistrationForTesting;
+
+  /// Runs immediately before JSON manifest data is written in tests.
+  @visibleForTesting
+  static Future<void> Function()? beforeWebDataSaveForTesting;
+
   /// Enable test mode — all operations use in-memory JSON storage
   /// (same code path as web), avoiding sqflite native dependencies.
   /// Also switches [WebFileStore] to in-memory mode so no IndexedDB
@@ -49,6 +63,8 @@ class ManifestDatabase {
 
   /// Web 端数据缓存（全量 JSON）
   static Map<String, dynamic>? _webData;
+
+  static Future<void>? _jsonRecordRegistrationQueue;
 
   /// Web 端数据在 WebFileStore 中的 key
   static const String _webStoreKey = 'manifest_database_data';
@@ -654,15 +670,114 @@ class ManifestDatabase {
     return _webData!;
   }
 
-  static Future<void> _saveWebData() async {
+  static Future<void> _saveWebData({bool rethrowOnError = false}) async {
     if (_webData == null) return;
     try {
       final json = jsonEncode(_webData);
+      await beforeWebDataSaveForTesting?.call();
       await WebFileStore.write(_webStoreKey, utf8Encode(json));
     } catch (e, st) {
       debugPrint('ManifestDatabase._saveWebData error: $e');
       await AppLogService.error(
           'ManifestDatabase', '_saveWebData failed', e, st);
+      if (rethrowOnError) rethrow;
+    }
+  }
+
+  static Future<T> _withJsonRecordRegistrationLock<T>(
+    Future<T> Function() operation,
+  ) async {
+    final previous = _jsonRecordRegistrationQueue;
+    final release = Completer<void>();
+    final releaseFuture = release.future;
+    _jsonRecordRegistrationQueue = releaseFuture;
+    try {
+      if (previous != null) await previous;
+      return await operation();
+    } finally {
+      if (identical(_jsonRecordRegistrationQueue, releaseFuture)) {
+        _jsonRecordRegistrationQueue = null;
+      }
+      release.complete();
+    }
+  }
+
+  /// Inserts a record and its folder path in one persistence operation.
+  /// Folder entries are kept after their records are deleted, so they must be
+  /// rolled back with the record if an ancestor cannot be persisted.
+  static Future<void> insertRecordWithFolders({
+    required String recordTable,
+    required Map<String, dynamic> record,
+    required Iterable<String> folderPaths,
+    void Function()? beforeCommit,
+  }) async {
+    try {
+      final folderTable = ManifestTables.folderTableFor(recordTable);
+      final isTextRecord = recordTable == ManifestTables.textRecords;
+
+      if (_useJsonStore) {
+        beforeJsonRecordRegistrationForTesting?.call();
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final records = data[recordTable] as List<dynamic>? ?? <dynamic>[];
+          final folders = data[folderTable] as List<dynamic>? ?? <dynamic>[];
+          data[recordTable] = records;
+          data[folderTable] = folders;
+          final insertedFolders = <String>[];
+          var writeAttempted = false;
+
+          if (isTextRecord) beforeCommit?.call();
+          records.add(record);
+          try {
+            for (final path in folderPaths) {
+              if (folders.contains(path)) continue;
+              beforeFolderInsertForTesting?.call(path);
+              folders.add(path);
+              insertedFolders.add(path);
+            }
+            writeAttempted = true;
+            await _saveWebData(rethrowOnError: true);
+            if (isTextRecord) beforeCommit?.call();
+          } catch (error, stackTrace) {
+            records.remove(record);
+            for (final path in insertedFolders) {
+              folders.remove(path);
+            }
+            if (writeAttempted) {
+              try {
+                await _saveWebData(rethrowOnError: true);
+              } catch (_) {
+                // Keep the cancellation or original write error as the failure.
+              }
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+        });
+        return;
+      }
+
+      final db = await database;
+      await db.transaction((txn) async {
+        if (isTextRecord) beforeCommit?.call();
+        await txn.insert(
+          recordTable,
+          recordToDbRow(record),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        for (final path in folderPaths) {
+          beforeFolderInsertForTesting?.call(path);
+          await txn.insert(
+            folderTable,
+            {'path': path},
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        if (isTextRecord) beforeCommit?.call();
+      });
+    } catch (e, stackTrace) {
+      await AppLogService.error(
+          'ManifestDatabase', 'insertRecordWithFolders failed', e, stackTrace);
+      rethrow;
     }
   }
 
@@ -674,9 +789,12 @@ class ManifestDatabase {
   static Future<List<Map<String, dynamic>>> getAllImageRecords() async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
-        return list.cast<Map<String, dynamic>>();
+        return await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.imageRecords] as List<dynamic>? ?? [];
+          return list.cast<Map<String, dynamic>>().toList();
+        });
       }
       final db = await database;
       final rows = await db.query(ManifestTables.imageRecords);
@@ -795,9 +913,12 @@ class ManifestDatabase {
   static Future<List<Map<String, dynamic>>> getAllAudioRecords() async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
-        return list.cast<Map<String, dynamic>>();
+        return await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.audioRecords] as List<dynamic>? ?? [];
+          return list.cast<Map<String, dynamic>>().toList();
+        });
       }
       final db = await database;
       final rows = await db.query(ManifestTables.audioRecords);
@@ -916,9 +1037,12 @@ class ManifestDatabase {
   static Future<List<Map<String, dynamic>>> getAllVideoRecords() async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
-        return list.cast<Map<String, dynamic>>();
+        return await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list =
+              data[ManifestTables.videoRecords] as List<dynamic>? ?? [];
+          return list.cast<Map<String, dynamic>>().toList();
+        });
       }
       final db = await database;
       final rows = await db.query(ManifestTables.videoRecords);
@@ -1037,9 +1161,11 @@ class ManifestDatabase {
   static Future<List<Map<String, dynamic>>> getAllTextRecords() async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
-        return list.cast<Map<String, dynamic>>();
+        return await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+          return list.cast<Map<String, dynamic>>().toList();
+        });
       }
       final db = await database;
       final rows = await db.query(ManifestTables.textRecords);
@@ -1052,21 +1178,44 @@ class ManifestDatabase {
   }
 
   /// 插入一条文本记录
-  static Future<void> insertTextRecord(Map<String, dynamic> record) async {
+  static Future<void> insertTextRecord(Map<String, dynamic> record,
+      {void Function()? beforeCommit}) async {
     try {
       if (_useJsonStore) {
         final data = await _loadWebData();
         final list = data[ManifestTables.textRecords] as List<dynamic>? ?? [];
+        beforeCommit?.call();
         list.add(record);
         await _saveWebData();
+        try {
+          beforeCommit?.call();
+        } catch (_) {
+          list.remove(record);
+          await _saveWebData();
+          rethrow;
+        }
         return;
       }
       final db = await database;
-      await db.insert(
-        ManifestTables.textRecords,
-        recordToDbRow(record),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      if (beforeCommit == null) {
+        await db.insert(
+          ManifestTables.textRecords,
+          recordToDbRow(record),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        // Cancellation while waiting for the database/transaction or insert
+        // rolls back this record. The final guard is the commit boundary.
+        await db.transaction((txn) async {
+          beforeCommit();
+          await txn.insert(
+            ManifestTables.textRecords,
+            recordToDbRow(record),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          beforeCommit();
+        });
+      }
     } catch (e, stackTrace) {
       await AppLogService.error(
           'ManifestDatabase', 'insertTextRecord failed', e, stackTrace);
@@ -1161,19 +1310,21 @@ class ManifestDatabase {
   static Future<List<String>> getAllFolders({String? recordTable}) async {
     try {
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        if (recordTable != null) {
-          final folderTable = ManifestTables.folderTableFor(recordTable);
-          final list = data[folderTable] as List<dynamic>? ?? [];
-          return list.cast<String>();
-        }
-        // 无 recordTable 时合并所有四种类型的文件夹
-        final all = <String>{};
-        for (final ft in ManifestTables.allPerTypeFolderTables) {
-          final list = data[ft] as List<dynamic>? ?? [];
-          all.addAll(list.cast<String>());
-        }
-        return all.toList();
+        return await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          if (recordTable != null) {
+            final folderTable = ManifestTables.folderTableFor(recordTable);
+            final list = data[folderTable] as List<dynamic>? ?? [];
+            return list.cast<String>().toList();
+          }
+          // 无 recordTable 时合并所有四种类型的文件夹
+          final all = <String>{};
+          for (final ft in ManifestTables.allPerTypeFolderTables) {
+            final list = data[ft] as List<dynamic>? ?? [];
+            all.addAll(list.cast<String>());
+          }
+          return all.toList();
+        });
       }
       final db = await database;
       if (recordTable != null) {
@@ -1205,15 +1356,19 @@ class ManifestDatabase {
       }
       final folderTable = ManifestTables.folderTableFor(recordTable);
       if (_useJsonStore) {
-        final data = await _loadWebData();
-        final list = data[folderTable] as List<dynamic>? ?? [];
-        if (!list.contains(path)) {
-          list.add(path);
-          await _saveWebData();
-        }
+        await _withJsonRecordRegistrationLock(() async {
+          final data = await _loadWebData();
+          final list = data[folderTable] as List<dynamic>? ?? [];
+          if (!list.contains(path)) {
+            beforeFolderInsertForTesting?.call(path);
+            list.add(path);
+            await _saveWebData();
+          }
+        });
         return;
       }
       final db = await database;
+      beforeFolderInsertForTesting?.call(path);
       await db.insert(
         folderTable,
         {'path': path},

@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/utils/http_timeout.dart';
 
 /// A mock [HttpClientAdapter] that captures the request data for inspection
 /// and returns a success response.
 class _CapturingAdapter implements HttpClientAdapter {
   String? capturedContentType;
   List<int>? capturedBodyBytes;
+  RequestOptions? capturedOptions;
 
   @override
   Future<ResponseBody> fetch(
@@ -18,6 +20,7 @@ class _CapturingAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<dynamic>? cancelFuture,
   ) async {
+    capturedOptions = options;
     capturedContentType = options.contentType;
     // Capture the request body bytes
     if (requestStream != null) {
@@ -31,7 +34,7 @@ class _CapturingAdapter implements HttpClientAdapter {
       '{"text":"Hello world"}',
       200,
       headers: {
-        Headers.contentTypeHeader: [Headers.jsonContentType]
+        Headers.contentTypeHeader: [Headers.jsonContentType],
       },
     );
   }
@@ -43,7 +46,10 @@ class _CapturingAdapter implements HttpClientAdapter {
 /// Check that [bodyBytes] contains a multipart field with the given [name]
 /// whose value starts with [valuePrefix].
 bool _multipartFieldContains(
-    List<int> bodyBytes, String name, String valuePrefix) {
+  List<int> bodyBytes,
+  String name,
+  String valuePrefix,
+) {
   // Use allowMalformed=true because the body also contains binary audio data
   // which is not valid UTF-8. Dio serializes text fields before file fields,
   // so the field headers/values we search for are in the early text portion.
@@ -131,17 +137,40 @@ void main() {
     });
 
     group('AsrService', () {
+      test(
+        'uses the shared phase timeout policy for transcription requests',
+        () async {
+          final adapter = _CapturingAdapter();
+          const config = AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+          );
+          final service = AsrService(config: config);
+          service.dioForTesting.httpClientAdapter = adapter;
+
+          await service.transcribe(
+            audioBytes: Uint8List.fromList([1, 2, 3]),
+            audioFormat: 'wav',
+          );
+
+          expect(service.connectTimeout, connectTimeoutDefault);
+          expect(service.receiveTimeout, receiveTimeoutFallback);
+          expect(adapter.capturedOptions, isNotNull);
+          expect(adapter.capturedBodyBytes, isNotNull);
+          expect(
+            adapter.capturedOptions!.sendTimeout,
+            sendTimeoutForBytes(adapter.capturedBodyBytes!.length),
+          );
+          service.close();
+        },
+      );
+
       test('throws on empty host', () async {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: '',
-        );
+        const config = AsrConfig(apiKey: 'test-key', host: '');
         final service = AsrService(config: config);
         expect(
-          () => service.transcribe(
-            audioBytes: Uint8List(0),
-            audioFormat: 'wav',
-          ),
+          () =>
+              service.transcribe(audioBytes: Uint8List(0), audioFormat: 'wav'),
           throwsA(isA<Exception>()),
         );
       });
@@ -153,10 +182,8 @@ void main() {
         );
         final service = AsrService(config: config);
         expect(
-          () => service.transcribe(
-            audioBytes: Uint8List(0),
-            audioFormat: 'wav',
-          ),
+          () =>
+              service.transcribe(audioBytes: Uint8List(0), audioFormat: 'wav'),
           throwsA(isA<Exception>()),
         );
       });
@@ -328,8 +355,10 @@ void main() {
         final body = adapter.capturedBodyBytes;
         expect(body, isNotNull);
         expect(_multipartFileHasMimeType(body!, 'audio/webm'), isTrue);
-        expect(utf8.decode(body, allowMalformed: true),
-            contains('filename="audio.webm"'));
+        expect(
+          utf8.decode(body, allowMalformed: true),
+          contains('filename="audio.webm"'),
+        );
       });
 
       test('request includes language in multipart when set', () async {
@@ -386,14 +415,16 @@ void main() {
         expect(testService.lastRequestBody!['model'], 'whisper-1');
         expect(testService.lastRequestBody!['response_format'], 'json');
         expect(
-          (testService.lastRequestBody!['file'] as String)
-              .contains('audio.mp3'),
+          (testService.lastRequestBody!['file'] as String).contains(
+            'audio.mp3',
+          ),
           true,
           reason: 'Diagnostics should contain audio.mp3',
         );
         expect(
-          (testService.lastRequestBody!['file'] as String)
-              .contains('audio/mpeg'),
+          (testService.lastRequestBody!['file'] as String).contains(
+            'audio/mpeg',
+          ),
           true,
           reason: 'Diagnostics should contain audio/mpeg MIME type',
         );
@@ -408,10 +439,7 @@ void main() {
         final config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.test.com',
-          typeConfig: {
-            'enableLanguage': true,
-            'language': 'en',
-          },
+          typeConfig: {'enableLanguage': true, 'language': 'en'},
         );
         final service = AsrService(config: config, dio: mockDio);
 
@@ -452,12 +480,17 @@ void main() {
         expect(bodyBytes, isNotNull);
         expect(
           _multipartFieldContains(
-              bodyBytes!, 'response_format', 'verbose_json'),
+            bodyBytes!,
+            'response_format',
+            'verbose_json',
+          ),
           isTrue,
           reason: 'Multipart body should contain response_format=verbose_json',
         );
-        expect(service.lastRequestBody!['response_format'],
-            equals('verbose_json'));
+        expect(
+          service.lastRequestBody!['response_format'],
+          equals('verbose_json'),
+        );
       });
 
       test('request includes temperature from typeConfig', () async {
@@ -467,10 +500,7 @@ void main() {
         final config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.test.com',
-          typeConfig: {
-            'enableTemperature': true,
-            'temperature': 0.5,
-          },
+          typeConfig: {'enableTemperature': true, 'temperature': 0.5},
         );
         final service = AsrService(config: config, dio: mockDio);
 
@@ -490,37 +520,47 @@ void main() {
         expect(service.lastRequestBody!['temperature'], equals(0.5));
       });
 
-      test('request includes timestamp_granularities from typeConfig',
-          () async {
-        final adapter = _CapturingAdapter();
-        final mockDio = Dio()..httpClientAdapter = adapter;
+      test(
+        'request includes timestamp_granularities from typeConfig',
+        () async {
+          final adapter = _CapturingAdapter();
+          final mockDio = Dio()..httpClientAdapter = adapter;
 
-        final config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-          typeConfig: {
-            'enableTimestampGranularities': true,
-            'timestampGranularities': 'word',
-          },
-        );
-        final service = AsrService(config: config, dio: mockDio);
+          final config = AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableResponseFormat': true,
+              'responseFormat': 'verbose_json',
+              'enableTimestampGranularities': true,
+              'timestampGranularities': 'word',
+            },
+          );
+          final service = AsrService(config: config, dio: mockDio);
 
-        await service.transcribe(
-          audioBytes: Uint8List.fromList([1, 2, 3]),
-          audioFormat: 'wav',
-        );
+          await service.transcribe(
+            audioBytes: Uint8List.fromList([1, 2, 3]),
+            audioFormat: 'wav',
+          );
 
-        final bodyBytes = adapter.capturedBodyBytes;
-        expect(bodyBytes, isNotNull);
-        expect(
-          _multipartFieldContains(
-              bodyBytes!, 'timestamp_granularities', 'word'),
-          isTrue,
-          reason: 'Multipart body should contain timestamp_granularities=word',
-        );
-        expect(service.lastRequestBody!['timestamp_granularities'],
-            equals('word'));
-      });
+          final bodyBytes = adapter.capturedBodyBytes;
+          expect(bodyBytes, isNotNull);
+          expect(
+            _multipartFieldContains(
+              bodyBytes!,
+              'timestamp_granularities[]',
+              'word',
+            ),
+            isTrue,
+            reason:
+                'Multipart body should contain timestamp_granularities[]=word',
+          );
+          expect(
+            service.lastRequestBody!['timestamp_granularities'],
+            equals(['word']),
+          );
+        },
+      );
 
       test('request includes prompt from typeConfig', () async {
         final adapter = _CapturingAdapter();
@@ -561,10 +601,7 @@ void main() {
         final config = AsrConfig(
           apiKey: 'test-key',
           host: 'https://api.test.com',
-          typeConfig: {
-            'enableLanguage': false,
-            'language': 'ja',
-          },
+          typeConfig: {'enableLanguage': false, 'language': 'ja'},
         );
         final service = AsrService(config: config, dio: mockDio);
 
@@ -632,35 +669,37 @@ void main() {
           apiKey: 'key',
           host: 'https://api.test.com',
           language: 'fr',
-          typeConfig: {
-            'enableLanguage': true,
-            'language': 'de',
-          },
+          typeConfig: {'enableLanguage': true, 'language': 'de'},
         );
         expect(config.effectiveLanguage, equals('de'));
       });
     });
 
     group('AsrService file size validation', () {
-      test('rejects files exceeding maxFileSizeBytes before making request',
-          () async {
-        const config = AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com',
-          maxFileSizeBytes: 100, // 100 bytes max
-        );
-        final service = AsrService(config: config);
+      test(
+        'rejects files exceeding maxFileSizeBytes before making request',
+        () async {
+          const config = AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com',
+            maxFileSizeBytes: 100, // 100 bytes max
+          );
+          final service = AsrService(config: config);
 
-        // 200 bytes > 100 bytes max → should reject
-        await expectLater(
-          () => service.transcribe(
-            audioBytes: Uint8List(200),
-            audioFormat: 'wav',
-          ),
-          throwsA(predicate(
-              (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
-        );
-      });
+          // 200 bytes > 100 bytes max → should reject
+          await expectLater(
+            () => service.transcribe(
+              audioBytes: Uint8List(200),
+              audioFormat: 'wav',
+            ),
+            throwsA(
+              predicate(
+                (e) => e is Exception && e.toString().contains('文件大小超过限制'),
+              ),
+            ),
+          );
+        },
+      );
 
       test('allows files within maxFileSizeBytes limit', () async {
         final adapter = _CapturingAdapter();

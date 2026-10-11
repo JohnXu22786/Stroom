@@ -17,18 +17,22 @@ class AtomicFile {
       _enqueue(file, (f) => f.writeAsString(data, flush: true));
 
   /// 将 [bytes] 原子写入 [file]，失败时抛出文件系统异常。
-  static Future<void> writeBytes(File file, List<int> bytes) {
+  static Future<void> writeBytes(File file, List<int> bytes,
+      {void Function()? beforeCommit}) {
     final snapshot = List<int>.of(bytes);
-    return _enqueue(file, (f) => f.writeAsBytes(snapshot, flush: true));
+    return _enqueue(file, (f) => f.writeAsBytes(snapshot, flush: true),
+        beforeCommit: beforeCommit);
   }
 
   static Future<void> _enqueue(
     File file,
-    Future<void> Function(File) write,
-  ) {
+    Future<void> Function(File) write, {
+    void Function()? beforeCommit,
+  }) {
     final key = p.normalize(file.absolute.path);
     final previous = _pendingWrites[key] ?? Future<void>.value();
-    final operation = previous.then((_) => _write(file, write));
+    final operation =
+        previous.then((_) => _write(file, write, beforeCommit: beforeCommit));
     // 调用方收到原始异常；队列本身始终继续，失败不会阻塞后续重试。
     late final Future<void> settled;
     settled = operation
@@ -42,8 +46,9 @@ class AtomicFile {
 
   static Future<void> _write(
     File file,
-    Future<void> Function(File) write,
-  ) async {
+    Future<void> Function(File) write, {
+    void Function()? beforeCommit,
+  }) async {
     final tempDir =
         await file.parent.createTemp('.${p.basename(file.path)}.tmp-');
     final tmpFile = File(p.join(tempDir.path, 'data'));
@@ -52,6 +57,7 @@ class AtomicFile {
       for (var attempt = 0; attempt < 3; attempt++) {
         try {
           // rename 自身替换已有文件，不能先删除目标或回退到直接覆盖。
+          beforeCommit?.call();
           await tmpFile.rename(file.path);
           return;
         } on FileSystemException {

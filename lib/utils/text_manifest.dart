@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
@@ -21,7 +22,7 @@ class TextRecord
   @override
   final String hash; // 文本内容的 MD5 哈希值
   @override
-  final String format; // 文件格式（txt）
+  final String format; // 文件格式（txt/srt/vtt 等）
   @override
   final DateTime createdAt;
   @override
@@ -46,9 +47,13 @@ class TextRecord
         id = id ?? 'txt_${const Uuid().v4()}';
 
   /// 实体文件存储名
-  String get storageFileName => '$hash.txt';
+  String get storageFileName {
+    final extension = format == 'srt' || format == 'vtt' ? format : 'txt';
+    return '$hash.$extension';
+  }
+
   @override
-  String get storagePath => '$hash.txt';
+  String get storagePath => storageFileName;
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -153,6 +158,41 @@ String computeTextHash(Uint8List data) {
 
 /// Text file manifest — delegates to [ManifestOperations].
 class TextManifest {
+  static final Map<String, Future<void>> _pendingSaves = {};
+  static final Object _saveLockZoneKey = Object();
+
+  /// Serialize file and record mutations by content hash so a deletion cannot
+  /// remove text while OCR is publishing a new reference to it.
+  static Future<T> withSaveLock<T>(
+      String hash, Future<T> Function() action) async {
+    final held = Zone.current[_saveLockZoneKey] as Set<String>? ?? const {};
+    if (held.contains(hash)) return action();
+    final previous = _pendingSaves[hash] ?? Future<void>.value();
+    final release = Completer<void>();
+    final pending = previous.then((_) => release.future);
+    _pendingSaves[hash] = pending;
+    await previous;
+    try {
+      return await runZoned(action, zoneValues: {
+        _saveLockZoneKey: {...held, hash}
+      });
+    } finally {
+      release.complete();
+      if (identical(_pendingSaves[hash], pending)) _pendingSaves.remove(hash);
+    }
+  }
+
+  static Future<T> _withSaveLocks<T>(
+      Iterable<String> hashes, Future<T> Function() action) {
+    final ordered = hashes.toSet().toList()..sort();
+    Future<T> acquire(int index) {
+      if (index == ordered.length) return action();
+      return withSaveLock(ordered[index], () => acquire(index + 1));
+    }
+
+    return acquire(0);
+  }
+
   static final _ops = ManifestOperations<TextRecord>(
     manifestKey: 'text_manifest',
     storageDirName: 'texts',
@@ -163,12 +203,39 @@ class TextManifest {
   );
 
   static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
-  static Future<void> addRecord(TextRecord record) => _ops.addRecord(record);
-  static Future<void> deleteRecord(String id) => _ops.deleteRecord(id);
-  static Future<void> deleteRecords(List<String> ids) =>
-      _ops.deleteRecords(ids);
+  static Future<List<TextRecord>> loadRecordsUncached() =>
+      _ops.loadRecordsUncached();
+  static Future<void> addRecord(TextRecord record,
+          {void Function()? beforeCommit}) =>
+      withSaveLock(record.hash,
+          () => _ops.addRecord(record, beforeCommit: beforeCommit));
+  static Future<void> deleteRecord(String id,
+      {bool preserveFiles = false}) async {
+    final records = await loadRecordsUncached();
+    final index = records.indexWhere((record) => record.id == id);
+    if (index == -1) return;
+    await withSaveLock(records[index].hash,
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+  }
+
+  /// Rollback already knows the record hash, so it can remove metadata without
+  /// first reading the manifest again when that lookup is the failing step.
+  static Future<void> deleteRecordWithKnownHash(String id, String hash,
+          {bool preserveFiles = false}) =>
+      withSaveLock(
+          hash, () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+
+  static Future<void> deleteRecords(List<String> ids) async {
+    final idSet = ids.toSet();
+    final records = await loadRecordsUncached();
+    final hashes = records
+        .where((record) => idSet.contains(record.id))
+        .map((record) => record.hash);
+    await _withSaveLocks(hashes, () => _ops.deleteRecords(ids));
+  }
+
   static Future<void> updateRecord(TextRecord updated) =>
-      _ops.updateRecord(updated);
+      withSaveLock(updated.hash, () => _ops.updateRecord(updated));
   static Future<void> renameRecord(String id, String newName) =>
       _ops.renameRecord(id, newName);
   static Future<void> moveRecord(String id, String targetFolder) =>
@@ -176,14 +243,31 @@ class TextManifest {
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
-  static Future<Uint8List?> readFile(String fileName) =>
-      _ops.readFile(fileName);
+  static Future<Uint8List?> readFile(String fileName) async {
+    final bytes = await _ops.readFile(fileName);
+    if (bytes != null ||
+        (!fileName.endsWith('.srt') && !fileName.endsWith('.vtt'))) {
+      return bytes;
+    }
+
+    final extensionIndex = fileName.lastIndexOf('.');
+    final legacyFileName = '${fileName.substring(0, extensionIndex)}.txt';
+    return _ops.readFile(legacyFileName);
+  }
+
+  static Future<String?> readFilePath(String fileName) =>
+      _ops.readFilePath(fileName);
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
 
   /// 写入文本内容到文件
-  static Future<String> writeText(String fileName, String text) async {
+  static Future<String> writeText(String fileName, String text,
+      {void Function()? beforeCommit}) async {
     final bytes = Uint8List.fromList(utf8.encode(text));
-    return writeFile(fileName, bytes);
+    final hash = fileName.endsWith('.txt')
+        ? fileName.substring(0, fileName.length - 4)
+        : fileName;
+    return withSaveLock(hash,
+        () => _ops.writeFile(fileName, bytes, beforeCommit: beforeCommit));
   }
 
   /// 读取文本内容从文件

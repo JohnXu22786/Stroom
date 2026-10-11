@@ -464,6 +464,8 @@ MERMAID_CODE_PLACEHOLDER
     var zoomLevel = 1;
     var panX = 0;
     var panY = 0;
+    var fitComplete = false;
+    var pendingZoomDeltas = [];
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -472,8 +474,12 @@ MERMAID_CODE_PLACEHOLDER
     }
 
     function reportError(msg) {
-      document.getElementById('viewport').innerHTML =
-        '<div class="error-message">' + msg + '</div>';
+      var viewport = document.getElementById('viewport');
+      var errorMessage = document.createElement('div');
+      errorMessage.className = 'error-message';
+      errorMessage.textContent = msg;
+      viewport.textContent = '';
+      viewport.appendChild(errorMessage);
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
           window.flutter_inappwebview.callHandler('onMermaidError', msg);
@@ -515,6 +521,22 @@ MERMAID_CODE_PLACEHOLDER
       updateTransform();
     };
 
+    window.applyZoomDeltasAfterFit = function(deltas) {
+      if (!Array.isArray(deltas)) return;
+      if (!fitComplete) {
+        pendingZoomDeltas = pendingZoomDeltas.concat(deltas);
+        return;
+      }
+      var viewport = document.getElementById('viewport');
+      for (var i = 0; i < deltas.length; i++) {
+        window.setZoom(
+          zoomLevel + deltas[i],
+          viewport.clientWidth / 2,
+          viewport.clientHeight / 2
+        );
+      }
+    };
+
     // Fits the rendered diagram into the viewport: zooms so that the WHOLE
     // diagram is visible (contain, NOT cover) at the maximum zoom, then
     // centers it. Called automatically once rendering completes.
@@ -526,7 +548,18 @@ MERMAID_CODE_PLACEHOLDER
       if (!svg) return;
       var vw = viewport.clientWidth;
       var vh = viewport.clientHeight;
-      if (vw <= 0 || vh <= 0) return;
+      if (vw <= 0 || vh <= 0) {
+        // The WebView can finish rendering before it receives its initial
+        // layout. Retry once its viewport has a non-zero size instead of
+        // leaving the diagram at the default transform.
+        window.addEventListener('resize', function onFitRetry() {
+          if (viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+            window.removeEventListener('resize', onFitRetry);
+            window.fitToViewport();
+          }
+        });
+        return;
+      }
       var sw = 0, sh = 0;
       try {
         var bbox = svg.getBBox();
@@ -555,6 +588,10 @@ MERMAID_CODE_PLACEHOLDER
       panY = (vh - sh * zoomLevel) / 2;
       updateTransform();
       notifyTransform();
+      fitComplete = true;
+      var deltas = pendingZoomDeltas;
+      pendingZoomDeltas = [];
+      window.applyZoomDeltasAfterFit(deltas);
     };
 
 GESTURE_SCRIPT_PLACEHOLDER
@@ -674,7 +711,9 @@ MERMAID_LOADER_PLACEHOLDER
 class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   InAppWebViewController? _webViewController;
   bool _isReady = false;
+  bool _hasLoadedPage = false;
   bool _shouldCreateWebView = false;
+  Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
 
   /// Whether the source code view is shown instead of the rendered diagram.
@@ -709,6 +748,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
+
+  /// Toolbar zoom taps made before the WebView is ready to accept commands.
+  final List<double> _pendingZoomDeltas = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -758,6 +800,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _inlineMermaidJs = js;
       _mermaidJsLoading = false;
     });
+    _armWebViewCreationFallback();
   }
 
   @override
@@ -777,11 +820,21 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (!kIsWeb) {
         _isReady = false;
       }
+      _hasLoadedPage = false;
       _errorMessage = null;
       _showSourceCode = false;
       _zoomLevel = 1.0;
+      _pendingZoomDeltas.clear();
       _panX = 0;
       _panY = 0;
+      if (oldWidget.mermaidCode.trim().isEmpty &&
+          widget.mermaidCode.trim().isNotEmpty) {
+        // The empty-code placeholder unmounts the WebView. Drop its stale
+        // controller and give the remounted platform view a fresh creation
+        // deadline, so a failed remount still reaches the error state.
+        _webViewController = null;
+        _armWebViewCreationFallback();
+      }
       _loadMermaidCode();
     }
   }
@@ -798,11 +851,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     super.dispose();
   }
 
-  /// Arms the total fallback: 12s after the WebView creation was
-  /// requested, if the controller still does not exist (the platform view
-  /// failed to mount — onWebViewCreated never fired), show a visible error
-  /// instead of the loading placeholder spinning forever.
+  /// Arms the total fallback once the WebView can mount: if the controller
+  /// still does not exist after 12s (the platform view failed to mount —
+  /// onWebViewCreated never fired), show an error instead of loading forever.
   void _armWebViewCreationFallback() {
+    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) return;
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
       if (mounted && _webViewController == null && _errorMessage == null) {
@@ -831,6 +884,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _loadMermaidCode() {
+    _hasLoadedPage = false;
     final ctrl = _webViewController;
     if (ctrl == null) return;
 
@@ -875,13 +929,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _retry() {
+    final webViewWasNeverCreated = _webViewController == null;
     setState(() {
       _errorMessage = null;
       _isReady = false;
+      if (webViewWasNeverCreated) {
+        _webViewKey = UniqueKey();
+      }
     });
-    if (_webViewController == null) {
+    if (webViewWasNeverCreated) {
       // The WebView was never created; re-arm the creation fallback for
-      // the retry attempt so a repeated failure cannot spin forever.
+      // the retry attempt and remount its platform view so creation is
+      // attempted again. Re-arming also reports another failed mount.
       _armWebViewCreationFallback();
     }
     _loadMermaidCode();
@@ -959,6 +1018,35 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
+  /// Forwards an unmoved tap from the Flutter overlay to the DOM element at
+  /// the same WebView viewport position. Mermaid's own SVG click handlers
+  /// then process callbacks and links as usual.
+  void _onDiagramTap(TapUpDetails details) {
+    final controller = _webViewController;
+    if (controller == null) return;
+
+    final position = details.localPosition;
+    controller.evaluateJavascript(
+      source: '''
+        (() => {
+          const target = document.elementFromPoint(
+            ${position.dx},
+            ${position.dy}
+          );
+          if (target) {
+            target.dispatchEvent(new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: ${position.dx},
+              clientY: ${position.dy}
+            }));
+          }
+        })();
+      ''',
+    );
+  }
+
   void _handleCtrlWheelZoom(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
 
@@ -1027,7 +1115,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// platform view.
   ///
   /// The overlay uses [RawGestureDetector] with a [GestureArenaTeam]
-  /// containing two recognizers:
+  /// containing two recognizers, plus a separate [TapGestureRecognizer]:
   ///
   /// 1. [ImmediateMermaidGestureRecognizer] — wins the arena on the very
   ///    first [PointerMoveEvent] in ANY direction, before the parent
@@ -1038,7 +1126,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   ///    pinch zoom (two-finger pinch), communicating with the WebView via
   ///    [evaluateJavascript].
   ///
-  /// Both recognizers are in the same [GestureArenaTeam] so that when the
+  /// The scale and immediate recognizers share a [GestureArenaTeam] so that when the
   /// [ImmediateMermaidGestureRecognizer] wins the arena, the
   /// [ScaleGestureRecognizer] also accepts, capturing the gesture for
   /// the diagram regardless of drag direction.
@@ -1047,15 +1135,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Mermaid diagram area, preventing the parent chat scroll view from
   /// scrolling while the user pans or zooms the diagram.
   ///
-  /// Taps (clicks without movement) produce no [PointerMoveEvent], so the
-  /// [ImmediateMermaidGestureRecognizer] never resolves, and toolbar button
-  /// taps and other click handlers work normally above the overlay.
+  /// Taps without movement are recognized separately and forwarded to the
+  /// WebView as a click on the DOM element at the tap position. The tap
+  /// recognizer stays outside the pan/zoom team so a tap does not start a
+  /// scale gesture. Moving beyond tap slop rejects it, leaving the immediate
+  /// recognizer to claim the gesture for pan/zoom. Flutter toolbar controls
+  /// are above this overlay and keep their normal tap behavior.
   ///
   /// The [Listener] on the overlay with [onPointerSignal] handles
   /// Ctrl/MouseWheel zoom on desktop.
   ///
   /// All gestures are communicated to the WebView via [evaluateJavascript]
-  /// calls (see [_onScaleUpdate], [_onPointerSignal] and
+  /// calls (see [_onDiagramTap], [_onScaleUpdate], [_onPointerSignal] and
   /// [_zoomAroundCenter]), so the inline widget owns pan/zoom state and
   /// sends it to the page via `window.setPanZoom`.
   ///
@@ -1090,6 +1181,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               onPointerSignal: _onPointerSignal,
               child: RawGestureDetector(
                 gestures: <Type, GestureRecognizerFactory>{
+                  // Forward stationary taps to Mermaid's existing DOM click
+                  // handlers. This recognizer is deliberately not on [team]:
+                  // a tap must not accept the scale team's pan recognizer.
+                  TapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                      TapGestureRecognizer>(
+                    TapGestureRecognizer.new,
+                    (instance) => instance.onTapUp = _onDiagramTap,
+                  ),
                   // ScaleGestureRecognizer handles pan + pinch zoom.
                   // It enters the gesture arena via the team, so it
                   // automatically accepts when the immediate recognizer wins.
@@ -1154,7 +1253,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// its own (possibly stale) pan here.
   Future<void> _zoomAroundCenter(double delta) async {
     final ctrl = _webViewController;
-    if (ctrl == null) return;
+    if (ctrl == null || !_hasLoadedPage) {
+      _pendingZoomDeltas.add(delta);
+      return;
+    }
 
     // Keep native-side state current for Flutter gesture handling, but let
     // JavaScript apply the toolbar delta to its live zoom. The web platform
@@ -1167,9 +1269,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
 
     await ctrl.evaluateJavascript(
-      source: 'window.setZoom(window.zoomLevel + $delta, '
-          "document.getElementById('viewport').clientWidth / 2, "
-          "document.getElementById('viewport').clientHeight / 2)",
+      source: 'window.applyZoomDeltasAfterFit(${jsonEncode([delta])})',
+    );
+  }
+
+  Future<void> _applyPendingZoomDeltas() async {
+    final ctrl = _webViewController;
+    if (ctrl == null || _pendingZoomDeltas.isEmpty) return;
+
+    final pendingDeltas = List<double>.of(_pendingZoomDeltas);
+    _pendingZoomDeltas.clear();
+    await ctrl.evaluateJavascript(
+      source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
     );
   }
 
@@ -1422,7 +1533,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // pan/zoom, kept alive once created.
           _buildGestureWrapper(
             InAppWebView(
-              key: const Key('mermaid_render_webview'),
+              key: _webViewKey,
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 transparentBackground: true,
@@ -1499,14 +1610,23 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                _hasLoadedPage = true;
                 if (mounted && !_isReady) {
                   setState(() => _isReady = true);
                 }
                 _readyFallbackTimer?.cancel();
+                unawaited(_applyPendingZoomDeltas());
               },
               onReceivedError: (controller, request, error) {
                 _readyFallbackTimer?.cancel();
-                if (mounted && !_isReady) {
+                // WebView creation ends the Flutter loading overlay before
+                // the asset URL finishes navigating. Surface main-frame
+                // failures even after that, but leave web subresource errors
+                // to the iframe's own loading/error UI. Native behavior still
+                // only reports load errors while its initial page is pending.
+                final shouldShowError =
+                    kIsWeb ? request.isForMainFrame == true : !_isReady;
+                if (mounted && shouldShowError) {
                   setState(() {
                     _isReady = true;
                     _errorMessage = '页面加载失败: ${error.description}';

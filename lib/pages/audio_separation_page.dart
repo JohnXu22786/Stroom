@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -92,7 +93,8 @@ Future<void> _runAudioSeparation({
         title: title,
         retryData: null,
       );
-      throttler.updateStep(taskId, 0, running: true);
+      var activeStepIndex = 0;
+      throttler.updateStep(taskId, activeStepIndex, running: true);
 
       try {
         final retryData = await _computeAudioSeparationRetryData(video);
@@ -100,10 +102,11 @@ Future<void> _runAudioSeparation({
 
         final result = await _workerExtract(video.bytes, video.format);
 
-        throttler.updateStep(taskId, 0, completed: true);
-        throttler.updateStep(taskId, 1, running: true);
+        throttler.updateStep(taskId, activeStepIndex, completed: true);
+        activeStepIndex = 1;
+        throttler.updateStep(taskId, activeStepIndex, running: true);
 
-        final filePath = await _saveAudioSeparationFile(
+        final filePath = await saveAudioSeparationFile(
           result.audioBytes,
           hash: result.hash,
           format: result.format,
@@ -115,6 +118,7 @@ Future<void> _runAudioSeparation({
         throttler.updateStep(taskId, 1, completed: true);
         throttler.completeTask(taskId, downloadedFilePath: filePath);
       } catch (e) {
+        throttler.updateStep(taskId, activeStepIndex, failed: true);
         throttler.failTask(taskId, error: '音频提取失败: $e');
       }
     }
@@ -202,13 +206,15 @@ class _BgThrottler {
 
 /// Saves extracted audio bytes to the library and returns the file path.
 /// All parameters are explicitly passed — no dependency on widget state.
-Future<String?> _saveAudioSeparationFile(
+@visibleForTesting
+Future<String?> saveAudioSeparationFile(
   Uint8List audioBytes, {
   required String hash,
   required String format,
   String? displayName,
   String? videoName,
   required String saveFolder,
+  Future<void> Function(AudioRecord)? registerRecord,
 }) async {
   if (audioBytes.isEmpty) {
     throw Exception('提取的音频数据为空');
@@ -231,7 +237,25 @@ Future<String?> _saveAudioSeparationFile(
       sourceText: '',
       folder: saveFolder,
     );
-    await FileManifest.addRecord(record);
+    try {
+      await (registerRecord ?? FileManifest.addRecord)(record);
+    } catch (error, stackTrace) {
+      try {
+        final records = await FileManifest.loadRecordsStrict();
+        final isReferenced = records.any(
+          (existing) => existing.storageFileName == record.storageFileName,
+        );
+        if (!isReferenced &&
+            !await FileManifest.deleteFile(record.storageFileName)) {
+          debugPrint(
+              '[AudioSeparation] Failed to remove unregistered audio file: ${record.storageFileName}');
+        }
+      } catch (cleanupError) {
+        debugPrint(
+            '[AudioSeparation] Failed to check references for ${record.storageFileName}: $cleanupError');
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   });
 
   final filePath = await FileManifest.readFilePath('$hash.$format');

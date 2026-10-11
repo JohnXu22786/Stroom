@@ -73,6 +73,22 @@ Future<T> _awaitWhileFlowActive<T>(
   return result;
 }
 
+Future<T> _startWhileFlowActive<T>(
+  Future<T> Function() startWork,
+  TaskFlowExecutionNotifier execNotifier,
+  String execId,
+  BlockTypeDefinition def,
+) async {
+  if (!isFlowExecutionActive(execNotifier, execId)) {
+    throw BlockExecutionException(
+      '任务流已结束或删除',
+      blockType: def.typeKey.name,
+      blockTitle: def.label,
+    );
+  }
+  return _awaitWhileFlowActive(startWork(), execNotifier, execId, def);
+}
+
 /// Reads a video file and extracts its audio track — all in a background
 /// isolate so the GUI stays responsive even for 100+ MB files.
 Future<Uint8List> _readAndExtractInIsolate(
@@ -173,6 +189,58 @@ Future<void> _waitForAudioFileSaveLockOrFlowEnd(
   }
 }
 
+final Map<String, Future<void>> _audioRecordNameAllocationTails = {};
+
+Future<T> _withAudioRecordNameAllocationLock<T>(
+  String folder,
+  Future<T> Function() operation, {
+  required Future<void> Function(Future<void> previous) waitForPrevious,
+  void Function()? onQueued,
+}) async {
+  final previous = _audioRecordNameAllocationTails[folder];
+  final release = Completer<void>();
+  final tail =
+      previous == null ? release.future : previous.then((_) => release.future);
+  _audioRecordNameAllocationTails[folder] = tail;
+  var previousFinished = previous == null;
+
+  void releaseLock() {
+    if (release.isCompleted) return;
+    release.complete();
+    if (!identical(_audioRecordNameAllocationTails[folder], tail)) return;
+    if (previousFinished) {
+      _audioRecordNameAllocationTails.remove(folder);
+    } else {
+      unawaited(
+        tail.then((_) {
+          if (identical(_audioRecordNameAllocationTails[folder], tail)) {
+            _audioRecordNameAllocationTails.remove(folder);
+          }
+        }),
+      );
+    }
+  }
+
+  if (previous != null) {
+    try {
+      onQueued?.call();
+      final previousReleased = previous.then((_) {
+        previousFinished = true;
+      });
+      await waitForPrevious(previousReleased);
+    } catch (_) {
+      releaseLock();
+      rethrow;
+    }
+  }
+
+  try {
+    return await operation();
+  } finally {
+    releaseLock();
+  }
+}
+
 Future<void> _deleteAudioFileIfUnreferenced(
   String storageName, {
   Future<List<AudioRecord>> Function()? loadRecords,
@@ -203,12 +271,18 @@ Future<String> executeAudioSeparationBlock({
   /// Allows the WebFileStore read wait to be controlled in cancellation tests.
   Future<Uint8List?> Function(String)? readWebFileBytes,
 
+  /// Allows cancellation tests to observe when audio metadata work starts.
+  Future<(String, String)> Function(Uint8List)? computeAudioMeta,
+
   /// Allows cancellation tests to stop between the output write and manifest
   /// insertion.
   Future<void> Function()? onAudioFileWritten,
 
   /// Allows cancellation tests to observe waiting for a same-hash save.
   void Function()? onAudioFileSaveQueued,
+
+  /// Allows tests to observe waiting for a same-folder record name allocation.
+  void Function()? onAudioRecordNameAllocationQueued,
 
   /// Allows cancellation tests to simulate manifest reference lookup failure.
   Future<List<AudioRecord>> Function()? loadAudioRecordsForCleanup,
@@ -238,8 +312,8 @@ Future<String> executeAudioSeparationBlock({
     final bool inputExists;
     if (usesWebFileStore) {
       final readWebFile = readWebFileBytes ?? WebFileStore.read;
-      webVideoBytes = await _awaitWhileFlowActive(
-        readWebFile(input),
+      webVideoBytes = await _startWhileFlowActive(
+        () => readWebFile(input),
         execNotifier,
         execId,
         def,
@@ -331,8 +405,9 @@ Future<String> executeAudioSeparationBlock({
     bgNotifier.updateStep(taskId, 1, running: true);
 
     await _yieldFrame();
-    final meta = await _awaitWhileFlowActive(
-      _computeAudioMetaInBackground(audioBytes),
+    final computeMeta = computeAudioMeta ?? _computeAudioMetaInBackground;
+    final meta = await _startWhileFlowActive(
+      () => computeMeta(audioBytes),
       execNotifier,
       execId,
       def,
@@ -355,59 +430,84 @@ Future<String> executeAudioSeparationBlock({
         await onAudioFileWritten?.call();
 
         final saveFolder = asStringParam(block.params, 'saveFolder', '');
-
-        // Deduplicate the record name — same video extracted twice should
-        // produce "音频分离_video" then "音频分离_video (2)", etc.
-        final existingRecords = await FileManifest.loadRecords();
-        String recordName = title;
-        int dedupIdx = 2;
-        while (existingRecords.any(
-              (r) => r.name == recordName && r.folder == saveFolder,
-            ) &&
-            dedupIdx <= 10000) {
-          recordName = '$title ($dedupIdx)';
-          dedupIdx++;
-        }
-        if (dedupIdx > 10000) {
-          recordName = '$title _${DateTime.now().millisecondsSinceEpoch}';
-        }
-
-        final record = AudioRecord(
-          name: recordName,
-          hash: hash,
-          format: format,
-          createdAt: DateTime.now(),
-          size: audioBytes.length,
-          folder: saveFolder,
-        );
-        // Re-check right before the commit: cancellation may land during the
-        // file write / dedup lookups above.
-        if (!isFlowExecutionActive(execNotifier, execId)) {
-          final storageName = '$hash.$format';
-          await _deleteAudioFileIfUnreferenced(
-            storageName,
-            loadRecords: loadAudioRecordsForCleanup,
-          );
-          throw BlockExecutionException(
-            '任务流已结束或删除',
-            blockType: def.typeKey.name,
-            blockTitle: def.label,
-          );
-        }
+        late final AudioRecord record;
         try {
-          await (addAudioRecord?.call(record) ??
-              FileManifest.addRecord(record));
-        } catch (_) {
-          await _deleteAudioFileIfUnreferenced(
-            record.storageFileName,
-            loadRecords: loadAudioRecordsForCleanup,
+          record = await _withAudioRecordNameAllocationLock(
+            saveFolder,
+            () async {
+              // Deduplicate the record name — same video extracted twice
+              // should produce "音频分离_video" then "音频分离_video (2)",
+              // etc.
+              final existingRecords = await FileManifest.loadRecords();
+              String recordName = title;
+              int dedupIdx = 2;
+              while (existingRecords.any(
+                    (r) => r.name == recordName && r.folder == saveFolder,
+                  ) &&
+                  dedupIdx <= 10000) {
+                recordName = '$title ($dedupIdx)';
+                dedupIdx++;
+              }
+              if (dedupIdx > 10000) {
+                recordName = '$title _${DateTime.now().millisecondsSinceEpoch}';
+              }
+
+              final record = AudioRecord(
+                name: recordName,
+                hash: hash,
+                format: format,
+                createdAt: DateTime.now(),
+                size: audioBytes.length,
+                folder: saveFolder,
+              );
+              // Re-check before committing; cancellation can land while this
+              // flow waits for another same-folder name allocation.
+              if (!isFlowExecutionActive(execNotifier, execId)) {
+                final storageName = '$hash.$format';
+                await _deleteAudioFileIfUnreferenced(
+                  storageName,
+                  loadRecords: loadAudioRecordsForCleanup,
+                );
+                throw BlockExecutionException(
+                  '任务流已结束或删除',
+                  blockType: def.typeKey.name,
+                  blockTitle: def.label,
+                );
+              }
+              try {
+                await (addAudioRecord?.call(record) ??
+                    FileManifest.addRecord(record));
+              } catch (_) {
+                await _deleteAudioFileIfUnreferenced(
+                  record.storageFileName,
+                  loadRecords: loadAudioRecordsForCleanup,
+                );
+                rethrow;
+              }
+              return record;
+            },
+            waitForPrevious: (previous) => _waitForAudioFileSaveLockOrFlowEnd(
+              previous,
+              execNotifier,
+              execId,
+              def,
+            ),
+            onQueued: onAudioRecordNameAllocationQueued,
           );
+        } catch (_) {
+          if (!isFlowExecutionActive(execNotifier, execId)) {
+            await _deleteAudioFileIfUnreferenced(
+              '$hash.$format',
+              loadRecords: loadAudioRecordsForCleanup,
+            );
+          }
           rethrow;
         }
 
-        // Manifest insertion awaits storage, so cancellation can land after the
-        // pre-commit check. Remove only this flow's record in that case; the
-        // manifest preserves a shared file when another record uses its hash.
+        // Manifest insertion awaits storage, so cancellation can land after
+        // the pre-commit check. Remove only this flow's record in that case;
+        // the manifest preserves a shared file when another record uses its
+        // hash.
         Future<void> ensureRecordStillActive() async {
           if (isFlowExecutionActive(execNotifier, execId)) return;
           await FileManifest.deleteRecord(record.id);

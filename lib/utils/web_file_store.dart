@@ -83,15 +83,37 @@ class WebFileStore {
   }
 
   /// 写入文件
-  static Future<void> write(String key, Uint8List data) async {
+  static Future<void> write(String key, Uint8List data,
+      {void Function()? beforeCommit}) async {
     if (_testMode) {
+      beforeCommit?.call();
       _inMemoryStore[key] = Uint8List.fromList(data);
       return;
     }
     final db = await _database;
+    if (beforeCommit == null) {
+      final txn = db.transaction('files', idbModeReadWrite);
+      await txn.objectStore('files').put(data, key);
+      await txn.completed;
+      return;
+    }
+    beforeCommit();
     final txn = db.transaction('files', idbModeReadWrite);
-    await txn.objectStore('files').put(data, key);
-    await txn.completed;
+    // Observe abort errors before issuing the write.
+    final completed = txn.completed;
+    try {
+      await txn.objectStore('files').put(data, key);
+      beforeCommit?.call();
+      await completed;
+    } catch (_) {
+      try {
+        txn.abort();
+      } catch (_) {}
+      try {
+        await completed;
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   /// 将 IndexedDB 读回的任意类型尽量转为 Uint8List
