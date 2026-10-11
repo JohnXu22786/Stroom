@@ -23,8 +23,110 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
+      const [
+        'FFmpeg shared libraries (Linux, Windows, Android, Apple)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/ffmpeg-COPYING.LGPLv2.1',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['libass (Windows, Android, macOS; observed runtime)'],
+      await rootBundle.loadString('assets/vendor/native/libass-COPYING'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['dav1d (macOS framework slice; observed runtime)'],
+      await rootBundle.loadString('assets/vendor/native/dav1d-COPYING'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['mdk-braw (Linux, Windows, macOS; observed runtime plugins)'],
+      await rootBundle.loadString('assets/vendor/native/mdk-braw-LICENSE'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['mdk-r3d (Linux, Windows, macOS; observed runtime plugins)'],
+      await rootBundle.loadString('assets/vendor/native/mdk-r3d-LICENSE'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['LLVM libc++ (Linux, Android)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/llvm-libcxx-LICENSE.TXT',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'desugar_jdk_libs 2.1.4 (Android; GPLv2 with Classpath Exception)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/desugar-2.1.4-LICENSE.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['desugar_jdk_libs 2.1.4 additional licensing information'],
+      await rootBundle.loadString(
+        'assets/vendor/native/desugar-2.1.4-ADDITIONAL_LICENSE_INFO.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'AndroidX, Material, and Kotlinx Coroutines (Android, v0.5.0-rc.1)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/android-maven-runtime-APACHE-2.0.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'iOS release v0.5.0-rc.1 CocoaPods frameworks (MIT; five frameworks)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/ios-cocoapods-MIT-licenses.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['libwebp 1.6.0 (iOS CocoaPods; BSD-3-Clause)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/libwebp-1.6.0-BSD-3-Clause.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'MDK CocoaPods 0.36.0 text (Apple; type Commercial; scope unresolved)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/native/mdk-cocoapods-0.36.0-license-text.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const ['Anki sync protocol schemas (AGPL-3.0-or-later)'],
+      await rootBundle.loadString(
+        'assets/vendor/native/anki-sync-proto-AGPL-3.0-or-later.txt',
+      ),
+    );
+
+    yield LicenseEntryWithLineBreaks(
       const ['Mermaid 11.16.1'],
       await rootBundle.loadString('assets/vendor/mermaid/LICENSE.txt'),
+    );
+
+    yield LicenseEntryWithLineBreaks(
+      const [
+        'Mermaid 11.16.1 dependencies (59 package/version entries)',
+      ],
+      await rootBundle.loadString(
+        'assets/vendor/mermaid/THIRD-PARTY-LICENSES.txt',
+      ),
     );
 
     final mermaidSource =
@@ -39,7 +141,7 @@ void registerBundledAssetLicenses() {
 
     if (bundledNotices.isNotEmpty) {
       yield LicenseEntryWithLineBreaks(
-        const ['Mermaid 11.16.1 bundled dependency notices'],
+        const ['Mermaid 11.16.1 embedded bundled dependency attributions'],
         bundledNotices.join('\n\n'),
       );
     }
