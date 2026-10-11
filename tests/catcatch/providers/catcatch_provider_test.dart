@@ -156,8 +156,9 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
 
 Future<CatCatchTask?> _waitForPersistedTaskForTest(
   Directory directory,
-  String taskId,
-) async {
+  String taskId, {
+  TaskStatus expectedStatus = TaskStatus.failed,
+}) async {
   final file = File('${directory.path}/catcatch/tasks.json');
   final timeout = Stopwatch()..start();
   while (timeout.elapsed < const Duration(seconds: 5)) {
@@ -168,7 +169,7 @@ Future<CatCatchTask?> _waitForPersistedTaskForTest(
         ),
       );
       for (final task in tasks) {
-        if (task.id == taskId && task.status == TaskStatus.failed) {
+        if (task.id == taskId && task.status == expectedStatus) {
           return task;
         }
       }
@@ -694,6 +695,72 @@ void main() {
       expect(servicePlatform.stopCalls, 1);
       expect(servicePlatform.running, isFalse);
       expect(preferences.getBool('background_service_enabled'), isFalse);
+    });
+
+    test('pausing the last task stops temporary service after startup',
+        () async {
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.startEntered = Completer<void>();
+      servicePlatform.releaseStart = Completer<void>();
+      servicePlatform.stopRequested = Completer<void>();
+
+      try {
+        notifier.addTask(
+          'invalid://paused-during-startup',
+          30,
+          taskId: 'paused-during-startup',
+        );
+        await servicePlatform.startEntered!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.pauseTask('paused-during-startup');
+        servicePlatform.releaseStart!.complete();
+
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'paused-during-startup',
+          expectedStatus: TaskStatus.paused,
+        );
+
+        expect(persisted?.status, TaskStatus.paused);
+        expect(notifier.executorStarts, 0);
+        expect(servicePlatform.stopCalls, 1);
+        expect(servicePlatform.running, isFalse);
+        expect(preferences.getBool('background_service_enabled'), isFalse);
+      } finally {
+        if (!servicePlatform.releaseStart!.isCompleted) {
+          servicePlatform.releaseStart!.complete();
+        }
+        await notifier.removeTasksPersisted(['paused-during-startup']);
+      }
+    });
+
+    test('pausing preserves a user-enabled background service', () async {
+      await preferences.setBool('background_service_enabled', true);
+      expect(await startBackgroundService(), isTrue);
+      notifier.setTasksForTest([
+        task('paused-persistent-service').copyWith(status: TaskStatus.running),
+      ]);
+
+      try {
+        notifier.pauseTask('paused-persistent-service');
+        final persisted = await _waitForPersistedTaskForTest(
+          directory,
+          'paused-persistent-service',
+          expectedStatus: TaskStatus.paused,
+        );
+
+        expect(persisted?.status, TaskStatus.paused);
+        expect(servicePlatform.stopCalls, 0);
+        expect(servicePlatform.running, isTrue);
+        expect(preferences.getBool('background_service_enabled'), isTrue);
+      } finally {
+        await notifier.removeTasksPersisted(['paused-persistent-service']);
+      }
     });
 
     test('cleanup queued during confirm-and-continue startup keeps service',
