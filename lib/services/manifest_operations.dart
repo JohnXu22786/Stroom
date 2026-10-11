@@ -61,11 +61,16 @@ class ManifestOperations<T extends FileRecord> {
   @visibleForTesting
   Future<void> Function()? beforeFolderLoadForTesting;
 
+  /// Injects a failure before deleting an audio primary file in focused tests.
+  @visibleForTesting
+  Future<void> Function(String name)? beforeAudioPrimaryDeleteForTesting;
+
   // ---- 判断当前操作哪张表 ------------------------------------------------
 
   bool get _isImageTable => tableName == ManifestTables.imageRecords;
   bool get _isVideoTable => tableName == ManifestTables.videoRecords;
   bool get _isTextTable => tableName == ManifestTables.textRecords;
+  bool get _isAudioTable => tableName == ManifestTables.audioRecords;
 
   /// 缩略图文件名：图片表使用带版本号的 v2 命名（旧版 `_thumb.png`
   /// 是被强制缩放成 256×256 的变形产物，已废弃）；其余表保持原命名。
@@ -171,6 +176,188 @@ class ManifestOperations<T extends FileRecord> {
   /// Native 上 `tts_audio/<hash>.wav`  ↔  Web 上 key = `"tts_audio/<hash>.wav"`
   String _webKey(String fileName) => '$storageDirName/$fileName';
 
+  Future<void> _deleteStoredFile(String name) async {
+    if (_useWebFileStore) {
+      await WebFileStore.delete(_webKey(name));
+    } else {
+      final dir = await _storageDir;
+      final file = File(p.join(dir, name));
+      if (await file.exists()) await file.delete();
+    }
+  }
+
+  Future<bool> _storedFileExists(String name) async {
+    if (_useWebFileStore) return WebFileStore.exists(_webKey(name));
+    final dir = await _storageDir;
+    return File(p.join(dir, name)).exists();
+  }
+
+  Future<Uint8List?> _readStoredFile(String name) async {
+    if (_useWebFileStore) return WebFileStore.read(_webKey(name));
+    final dir = await _storageDir;
+    final file = File(p.join(dir, name));
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  Future<void> _writeStoredFile(String name, Uint8List bytes) async {
+    if (_useWebFileStore) {
+      await WebFileStore.write(_webKey(name), bytes);
+    } else {
+      final dir = await _storageDir;
+      await File(p.join(dir, name)).writeAsBytes(bytes, flush: true);
+    }
+  }
+
+  Future<Map<String, Uint8List>> _snapshotAudioSidecars(
+    Iterable<T> records,
+    Map<String, int> storageCount,
+  ) async {
+    final remainingCount = Map<String, int>.from(storageCount);
+    final sidecarNames = <String>{};
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      remainingCount[storageName] = (remainingCount[storageName] ?? 1) - 1;
+      if (remainingCount[storageName]! <= 0 &&
+          storageName.lastIndexOf('.') != -1) {
+        sidecarNames.add('${hashOf(record)}.txt');
+      }
+    }
+
+    final sidecars = <String, Uint8List>{};
+    for (final name in sidecarNames) {
+      final bytes = await _readStoredFile(name);
+      if (bytes != null) sidecars[name] = bytes;
+    }
+    return sidecars;
+  }
+
+  Future<void> _restoreAudioSidecars(
+    Map<String, Uint8List> sidecars, {
+    Set<String>? hashes,
+  }) async {
+    for (final entry in sidecars.entries) {
+      if (hashes != null &&
+          !hashes.contains(entry.key.substring(0, entry.key.length - 4))) {
+        continue;
+      }
+      try {
+        final currentBytes = await _readStoredFile(entry.key);
+        if (currentBytes == null) {
+          await _writeStoredFile(entry.key, entry.value);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio sidecar after file cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+  }
+
+  Future<List<T>> _recordsWithStoredAudioFiles(
+    Iterable<T> records,
+  ) async {
+    final available = <T>[];
+    for (final record in records) {
+      try {
+        if (await _storedFileExists(storageNameOf(record))) {
+          available.add(record);
+        }
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to check audio file after cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    return available;
+  }
+
+  Future<List<T>> _restoreAudioMetadataAfterFileDeleteFailure(
+    Iterable<T> records,
+  ) async {
+    final restored = <T>[];
+    for (final record in records) {
+      try {
+        await ManifestDatabase.insertRecordWithFolders(
+          recordTable: tableName,
+          record: toMap(record),
+          folderPaths: const [],
+        );
+        restored.add(record);
+      } catch (error, stackTrace) {
+        await AppLogService.error(
+          'ManifestOperations($manifestKey)',
+          'failed to restore audio metadata after file cleanup failure',
+          error,
+          stackTrace,
+        );
+      }
+    }
+    return restored;
+  }
+
+  Future<void> _deleteAudioEntityFiles(T record) async {
+    final storageName = storageNameOf(record);
+    final refCount =
+        _cache!.where((r) => storageNameOf(r) == storageName).length;
+    if (refCount <= 1 && storageName.lastIndexOf('.') == -1) return;
+
+    final hashRefCount =
+        _cache!.where((item) => hashOf(item) == hashOf(record)).length;
+
+    // Delete failure-prone sidecars and thumbnails before the primary audio
+    // bytes, so a cleanup error leaves the audio available for a retry.
+    if (refCount <= 1 && hashRefCount <= 1) {
+      await onExtraDelete?.call(record);
+    }
+    if (hashRefCount <= 1) {
+      await _deleteStoredFile(_thumbFileNameOf(record));
+    }
+    if (refCount <= 1) {
+      await beforeAudioPrimaryDeleteForTesting?.call(storageName);
+      await _deleteStoredFile(storageName);
+    }
+  }
+
+  Future<void> _deleteAudioBatchFiles(
+    List<T> records,
+    Map<String, int> storageCount,
+    Map<String, int> hashCount,
+  ) async {
+    final primaryFilesToDelete = <String>[];
+
+    // Remove sidecars and thumbnails for the whole batch before deleting any
+    // primary audio bytes. If ancillary cleanup fails, every audio file is
+    // still available while the rows are restored for a retry.
+    for (final record in records) {
+      final storageName = storageNameOf(record);
+      storageCount[storageName] = (storageCount[storageName] ?? 1) - 1;
+      final hash = hashOf(record);
+      hashCount[hash] = (hashCount[hash] ?? 1) - 1;
+      final lastStorageReference = storageCount[storageName]! <= 0;
+      final lastHashReference = hashCount[hash]! <= 0;
+      if (lastStorageReference && storageName.lastIndexOf('.') != -1) {
+        if (lastHashReference) await onExtraDelete?.call(record);
+        primaryFilesToDelete.add(storageName);
+      }
+
+      if (lastHashReference) {
+        await _deleteStoredFile(_thumbFileNameOf(record));
+      }
+    }
+
+    for (final name in primaryFilesToDelete) {
+      await beforeAudioPrimaryDeleteForTesting?.call(name);
+      await _deleteStoredFile(name);
+    }
+  }
+
   // ---- Load / Persist ---------------------------------------------------
 
   /// Read authoritative rows without replacing shared record/folder caches.
@@ -237,6 +424,11 @@ class ManifestOperations<T extends FileRecord> {
   }
 
   Future<void> _deleteEntityFiles(T record) async {
+    if (_isAudioTable) {
+      await _deleteAudioEntityFiles(record);
+      return;
+    }
+
     final storageName = storageNameOf(record);
     final refCount =
         _cache!.where((r) => storageNameOf(r) == storageName).length;
@@ -279,6 +471,41 @@ class ManifestOperations<T extends FileRecord> {
       final index = _cache!.indexWhere((r) => r.id == id);
       if (index == -1) return;
       final record = _cache![index];
+      if (_isAudioTable) {
+        final storageName = storageNameOf(record);
+        final refCount =
+            _cache!.where((item) => storageNameOf(item) == storageName).length;
+        final sidecars = preserveFiles
+            ? <String, Uint8List>{}
+            : await _snapshotAudioSidecars(
+                [record],
+                {storageName: refCount},
+              );
+        // Keep audio bytes and the cached row available if metadata persistence
+        // fails, so callers can retry the deletion.
+        await _dbDeleteRecord(id);
+        if (!preserveFiles) {
+          try {
+            await _deleteEntityFiles(record);
+          } catch (error, stackTrace) {
+            final availableRecords =
+                await _recordsWithStoredAudioFiles([record]);
+            await _restoreAudioSidecars(
+              sidecars,
+              hashes: availableRecords.map(hashOf).toSet(),
+            );
+            final restored = await _restoreAudioMetadataAfterFileDeleteFailure(
+              availableRecords,
+            );
+            if (!restored.any((item) => item.id == record.id)) {
+              _cache!.removeWhere((item) => item.id == record.id);
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+        }
+        _cache!.removeAt(index);
+        return;
+      }
       // A caller undoing a just-added record cannot know whether another
       // writer has begun using the same content-addressed file. In that
       // case, remove only its metadata and retain the shared bytes.
@@ -316,6 +543,40 @@ class ManifestOperations<T extends FileRecord> {
         storageCount[sn] = (storageCount[sn] ?? 0) + 1;
         final h = hashOf(r);
         hashCount[h] = (hashCount[h] ?? 0) + 1;
+      }
+
+      final sidecars = _isAudioTable
+          ? await _snapshotAudioSidecars(toDelete, storageCount)
+          : <String, Uint8List>{};
+
+      // Commit audio metadata first so a persistence error leaves its cache and
+      // files available for retry. If later file cleanup fails, restore those
+      // rows so a restart or retry can still find the records.
+      if (_isAudioTable) {
+        await _dbDeleteRecords(ids);
+        try {
+          await _deleteAudioBatchFiles(toDelete, storageCount, hashCount);
+        } catch (error, stackTrace) {
+          final availableRecords = await _recordsWithStoredAudioFiles(toDelete);
+          await _restoreAudioSidecars(
+            sidecars,
+            hashes: availableRecords.map(hashOf).toSet(),
+          );
+          final restored = await _restoreAudioMetadataAfterFileDeleteFailure(
+            availableRecords,
+          );
+          final restoredIds = restored.map((record) => record.id).toSet();
+          _cache = _cache!
+              .where((record) =>
+                  !idSet.contains(record.id) || restoredIds.contains(record.id))
+              .toList();
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        // Preserve mutations to records that survived this batch while file
+        // cleanup was awaiting I/O. Audio updates can update the cache before
+        // their JSON write joins the mutation queue held by this deletion.
+        _cache!.removeWhere((record) => idSet.contains(record.id));
+        return;
       }
 
       for (final r in toDelete) {
