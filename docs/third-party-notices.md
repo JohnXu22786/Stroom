@@ -18,10 +18,11 @@ native runtime downloaded by FVP.
 FVP 0.37.3's [CMake setup](https://github.com/wang-bin/fvp/blob/41dfb5487f835ba321cb73471c2a0a4e62382a6d/cmake/deps.cmake)
 downloads MDK SDK archives from SourceForge's mutable
 [`nightly` directory](https://sourceforge.net/projects/mdk-sdk/files/nightly/)
-unless `FVP_DEPS_URL` is set. Stroom's release workflow does not set that
-override, and this repository does not track `pubspec.lock`. The notices below
-describe runtime packages inspected on 2026-10-11; they do not identify every
-future release artifact or make the downloaded runtime reproducible.
+unless `FVP_DEPS_URL` is set; for Windows x64 it selects
+`mdk-sdk-windows-x64.7z`. Stroom's release workflow does not set that override,
+and this repository does not track `pubspec.lock`. The notices below describe
+runtime packages inspected on 2026-10-11; they do not identify every future
+release artifact or make the downloaded runtime reproducible.
 
 | Native component | Observed runtime scope | License and retained text |
 | --- | --- | --- |
@@ -39,43 +40,91 @@ It is therefore not listed as an Android runtime component. The separate
 has an MIT license, but no separate wrapper artifact was identified in the
 inspected outputs; only the macOS `libdav1d.dylib` is confirmed here.
 
-The inspected Windows SDK also contains `mdk-nvjp2k.dll`. The
-[upstream repository](https://github.com/wang-bin/mdk-nvjp2k) has no standalone
-`LICENSE` file or GitHub license metadata. Its
-[`nvJp2kDecoder.cpp` source at commit `7ab9b30954957cc76763aa8b9ce356015435c4d6`](https://github.com/wang-bin/mdk-nvjp2k/blob/7ab9b30954957cc76763aa8b9ce356015435c4d6/nvJp2kDecoder.cpp)
-contains a header that says “Free for opensource softwares or non-commercial
-use.”, requires retaining the copyright and permission notice, and says the
-file contains source code provided by NVIDIA Corporation. Stroom retains that
-source-file header verbatim at
-`assets/vendor/native/mdk-nvjp2k-source-file-notice.txt`.
+### Windows x64 MDK package and NVJPEG2000 plugin snapshot
 
-That header documents the stated terms for the cited source file; it does not
-establish that the inspected Windows DLL corresponds to that source revision
-or establish the DLL's precise redistribution rights, including terms that
-may apply to NVIDIA-provided code. The DLL's binary distribution terms
-therefore remain unresolved, and it is not represented here as a licensed
-component. This is one reason this notice set does not claim to identify the
-complete MDK runtime.
+The vendor MDK `0.39.0.2635` Windows x64 `.nupkg` artifact downloaded from
+SourceForge's mutable `nightly` directory has SHA-256
+`24ee1dd517ad3950ca952a27875c3a87f6ea4b9bee27c8e549b5c1fd86af6618`. Its
+`mdk.nuspec` declares `<license type="expression">MIT</license>` and links to
+the MIT text. Its README attributes the package to `Copyright (c) 2016-2025
+WangBin`. The package version was not listed in the public nuget.org version
+index on the review date, so this is recorded as the vendor `.nupkg` artifact,
+not as a nuget.org release. The package-level MIT text and attribution are
+registered separately on the in-app license page at
+`assets/vendor/native/mdk-0.39.0.2635-Windows-x64-MIT.txt`.
+
+This `.nupkg` contains `mdk.dll` (SHA-256
+`94b518ce425518170d6f088dd136dfe083f17347cbc5b1d730160060c66f2fa4`) and
+`mdk-nvjp2k.dll` (SHA-256
+`d8101a8340fc09527566c8450d2bab17e772770316790355f093bb9dfc3ba0fc`). The
+inspected FVP Windows x64 SDK archive (SHA-256
+`e5ade9203fe5fd0e7526ec23bd89926318d073f0d36ef474865b4e6bc3447bd0`)
+contains byte-identical copies of both DLLs. The plugin PDB names MDK's
+`plugins/nvjp2k` build path. The public `mdk-nvjp2k` Actions include successful
+run `38029681028` at source commit
+[`7ab9b30954957cc76763aa8b9ce356015435c4d6`](https://github.com/wang-bin/mdk-nvjp2k/tree/7ab9b30954957cc76763aa8b9ce356015435c4d6).
+These are source/build provenance, not a reproducible attestation tying every
+mutable-nightly byte to that commit: the run's live artifact
+`mdk-nvjp2k-windows-2025-vs2026` (`11661711442`) could not be downloaded here
+because the HTTPS tunnel returned 403.
+
+The FVP/MDK runtime distributions reviewed here also contain separately
+licensed components listed in the table above, including FFmpeg, libass,
+`mdk-braw`, and `mdk-r3d`. The Windows package-level MIT declaration does not
+replace those component-specific notices.
+
+The source at that commit has no standalone repository `LICENSE` file or
+GitHub license metadata. Its `nvJp2kDecoder.cpp` header says “Free for
+opensource softwares or non-commercial use.”, requires retaining the copyright
+and permission notice, and identifies NVIDIA-provided source. Stroom keeps
+that exact source-file header at
+`assets/vendor/native/mdk-nvjp2k-source-file-notice.txt` as a separate notice;
+it is not relabeled as the `.nupkg`'s MIT license.
+
+Static PE inspection of `mdk-nvjp2k.dll` shows imports of `nvjpeg2k_0.dll`,
+`cudart64_12.dll`, and `mdk.dll`. Neither NVIDIA DLL is present in the
+inspected `.nupkg` or FVP SDK archive. NVIDIA's
+[nvJPEG2000 license supplement](https://docs.nvidia.com/cuda/nvjpeg2000/license.html)
+limits nvJPEG2000 to systems with NVIDIA GPUs, permits distribution of its
+listed runtime files under that Agreement, and requires the notice “This
+software contains source code provided by NVIDIA Corporation.” The retained
+source-file header includes that notice. The CUDA and nvJPEG2000 runtime DLLs
+are outside this Windows package snapshot and must be considered under
+NVIDIA's supplement if supplied by a deployment; the package-level MIT entry
+does not cover those external files. The inspected Windows `.nupkg` declaration
+is evidence for this dated package snapshot only, not a complete or
+reproducible all-platform MDK runtime bill of materials.
 
 ### MDK runtime terms and commercial use
 
-The MDK core is binary-only in the inspected SDK packages, and the public MDK
+The inspected MDK SDK packages contain a binary-only core, and the public MDK
 SDK repository has no `LICENSE` file or GitHub license metadata. MDK's
 [README](https://github.com/wang-bin/mdk-sdk/blob/f038eb2c67141e6d71ef067f11a9a3c68dd5ab95/README.md)
-says Flutter users may use the bundled key without charge, including when
-shipping commercial software. That addresses use and fees for the Flutter
-integration; it does not provide the binary core's source or establish terms
-for every platform archive.
+says Flutter users may use the bundled key without charge and ship commercial
+software; it also says open-source projects may be commercial. This expressly
+permits commercial Flutter applications such as Stroom. It does not provide
+the binary core's source or make the Windows `.nupkg` package-level MIT
+declaration apply to other platform artifacts or future nightly contents.
 
 The official [`mdk` 0.36.0 CocoaPods specification](https://cdn.jsdelivr.net/cocoa/Specs/5/1/3/mdk/0.36.0/mdk.podspec.json)
 labels its license type `Commercial`, while the embedded license text grants
 permission to use, modify, distribute, sublicense, and sell with the copyright
 and permission notice retained. That exact text is shown on the in-app page
 and stored at `assets/vendor/native/mdk-cocoapods-0.36.0-license-text.txt`.
-This is evidence about that CocoaPods metadata, not proof that all platform
-SDK archives have the same terms. The exact scope and source availability of
-the MDK core remain unresolved; these findings do not establish an AGPL
-conflict or a prohibition on commercial use.
+This is evidence about the Apple CocoaPods 0.36.0 metadata, not proof that all
+platform SDK archives have the same terms. Apple and Linux nightly SDK README
+files also repeat MDK's commercial Flutter/open-source permission language,
+and the extracted README text SHA-256 values are:
+
+- Apple: `db2f6936bbbc92e91a957b0e1ffc1b87ffa6c954be1b20151f095051b3c9a3d0`
+- Linux: `60855cad5f59067e1d1062308ce997e566f88eb280764d10c8ca76912cbdfb3a`
+
+These README statements are evidence of use permission, but they are not the
+Windows `.nupkg` and do not supply its MIT package metadata. The Windows
+package declaration is therefore not generalized to those platform runtimes.
+The inspected MDK core remains binary-only; the cited sources do not establish
+that its binaries are source-available. These scoped findings do not establish
+an AGPL conflict or a prohibition on commercial use.
 
 ### Anki protocol schemas
 

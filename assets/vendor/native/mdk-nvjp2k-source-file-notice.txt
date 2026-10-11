@@ -12,8 +12,19 @@
  */
 
 Source: https://github.com/wang-bin/mdk-nvjp2k/blob/7ab9b30954957cc76763aa8b9ce356015435c4d6/nvJp2kDecoder.cpp
-Scope: This is the source-file header at the cited commit. The inspected Windows
-SDK includes mdk-nvjp2k.dll, but its correspondence to this source revision
-and its precise binary redistribution terms are unconfirmed. This header does
-not establish the DLL's distribution rights, including any terms applicable
-to NVIDIA-provided code.
+Scope: This is the source-file header at the cited commit. The inspected MDK
+0.39.0.2635 Windows x64 vendor .nupkg declares package-level MIT and contains
+mdk-nvjp2k.dll; that declaration is shown in a separate in-app license entry.
+The plugin PDB names MDK's plugins/nvjp2k build path, and public Actions
+include a successful run at the cited source commit. These facts support
+provenance but do not attest that every byte of the mutable-nightly binary was
+reproducibly built from that source revision; the run's artifact download
+returned HTTP 403 through this environment's HTTPS tunnel.
+
+Static PE inspection shows imports of nvjpeg2k_0.dll and cudart64_12.dll, in
+addition to mdk.dll. Neither NVIDIA runtime DLL is present in the inspected
+vendor .nupkg or FVP Windows x64 SDK archive. NVIDIA's nvJPEG2000 license
+supplement applies to its runtime files on NVIDIA GPU systems and requires the
+NVIDIA source notice included above. Those external runtime files are outside
+the inspected MDK package snapshot and its package-level MIT entry. This
+source-file notice remains separate; it is not relabeled as MIT.
