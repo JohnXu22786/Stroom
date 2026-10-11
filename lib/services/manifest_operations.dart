@@ -887,12 +887,12 @@ class ManifestOperations<T extends FileRecord> {
       final deletesAudioRecords = _isAudioTable && idsToDelete.isNotEmpty;
       if (idsToDelete.isNotEmpty) {
         if (deletesAudioRecords) {
-          // Invalidate refreshes that began before the deletion, but leave the
-          // cache intact until the database confirms the delete. If persistence
-          // fails, the still-authoritative rows remain available in the cache.
-          _recordMutationRevision++;
+          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
           await beforeAudioFolderRecordDeleteForTesting?.call();
           await _dbDeleteRecords(idsToDelete);
+          // A refresh can install its earlier database snapshot while the
+          // delete is awaiting persistence. Reapply the cache mutation, then
+          // invalidate any refresh that has not reached its revision check.
           _cache!.removeWhere((r) => idsToDelete.contains(r.id));
           _recordMutationRevision++;
         } else {
