@@ -720,6 +720,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
+  bool _hasWebRetryTimeoutError = false;
+  String? _webRetryUrl;
+  int _webRetryGeneration = 0;
+
+  String _resolveWebUrl(String url) => Uri.base.resolve(url).toString();
 
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
@@ -812,21 +817,31 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
+      final isPendingWebRetry = kIsWeb &&
+          !_isReady &&
+          _webViewController != null &&
+          (_readyFallbackTimer?.isActive ?? false);
+      final isTimedOutWebRetry = kIsWeb &&
+          _hasWebRetryTimeoutError &&
+          _webRetryUrl != null &&
+          _webViewController != null;
+      final shouldRearmWebRetry = isPendingWebRetry || isTimedOutWebRetry;
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
       // stays alive the code change goes through loadData below. (The
       // source-code toggle keeps the WebView mounted — see [build].)
       _initialHtml = null;
-      // On web the loading state is managed INSIDE the iframe (the asset
-      // template shows a hint until the diagram is rendered), so _isReady
-      // stays true and the Flutter overlay never appears there. On native
+      // Ordinary web source updates use the iframe's own loading hint. A
+      // retained-view retry instead keeps Flutter's overlay until its
+      // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb) {
+      if (!kIsWeb || shouldRearmWebRetry) {
         _isReady = false;
       }
       _hasLoadedPage = false;
       _errorMessage = null;
+      _hasWebRetryTimeoutError = false;
       _showSourceCode = false;
       _zoomLevel = 1.0;
       _pendingZoomDeltas.clear();
@@ -838,7 +853,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         // controller and give the remounted platform view a fresh creation
         // deadline, so a failed remount still reaches the error state.
         _webViewController = null;
+        _webRetryUrl = null;
         _armWebViewCreationFallback();
+      }
+      if (shouldRearmWebRetry) {
+        _armReadyFallback(showNavigationTimeoutError: true);
       }
       _loadMermaidCode();
     }
@@ -872,22 +891,27 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   /// Arms a fallback timer that force-ends the loading state after 3s if
-  /// [onLoadStop] has not fired yet (native platforms only). The loading
-  /// overlay must never spin forever: whatever the WebView does (rendered,
-  /// blank, or errored), the overlay is removed so the user sees the
-  /// actual iframe content (which shows its own loading hint or error
-  /// message from the HTML template).
-  void _armReadyFallback() {
+  /// [onLoadStop] has not fired yet. Web retries show an error because a
+  /// failed navigation leaves no iframe loading UI to recover the preview.
+  void _armReadyFallback({bool showNavigationTimeoutError = false}) {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && !_isReady && _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] onLoadStop did not fire within 3s, '
-            'force-ending the loading state');
+            'ending the loading state');
         setState(() {
           _isReady = true;
-          _canApplyZoomCommands = true;
+          if (showNavigationTimeoutError) {
+            _errorMessage = '页面加载超时，请重试';
+            _hasWebRetryTimeoutError = true;
+          } else {
+            _canApplyZoomCommands = true;
+            _hasWebRetryTimeoutError = false;
+          }
         });
-        unawaited(_applyPendingZoomDeltas());
+        if (!showNavigationTimeoutError) {
+          unawaited(_applyPendingZoomDeltas());
+        }
       }
     });
   }
@@ -905,11 +929,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // with the code as a query parameter. A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
-      // No ready-fallback is armed: the iframe manages its own loading
-      // state (the template hides its hint the moment the diagram renders).
-      ctrl.loadUrl(
-          urlRequest: URLRequest(
-              url: WebUri(MermaidRenderWidget.buildWebAssetUrl(code))));
+      // The iframe manages its own initial loading state; retained-view
+      // retries arm a Flutter fallback separately in [_retry].
+      final baseUrl = MermaidRenderWidget.buildWebAssetUrl(code);
+      final isTrackedRetry =
+          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
+      final url = isTrackedRetry
+          ? '$baseUrl&attempt=${++_webRetryGeneration}'
+          : baseUrl;
+      if (isTrackedRetry) {
+        _webRetryUrl = _resolveWebUrl(url);
+      }
+      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
       return;
     }
 
@@ -942,6 +973,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final webViewWasNeverCreated = _webViewController == null;
     setState(() {
       _errorMessage = null;
+      _hasWebRetryTimeoutError = false;
       _isReady = false;
       if (webViewWasNeverCreated) {
         _webViewKey = UniqueKey();
@@ -952,6 +984,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // the retry attempt and remount its platform view so creation is
       // attempted again. Re-arming also reports another failed mount.
       _armWebViewCreationFallback();
+    } else if (kIsWeb) {
+      // A web retry reuses the existing view, so it will not receive another
+      // onWebViewCreated callback to restore readiness if navigation stalls.
+      _armReadyFallback(showNavigationTimeoutError: true);
     }
     _loadMermaidCode();
   }
@@ -1604,7 +1640,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       if (mounted) {
                         final msg =
                             args.isNotEmpty ? args[0].toString() : '未知错误';
-                        setState(() => _errorMessage = msg);
+                        setState(() {
+                          _errorMessage = msg;
+                          _hasWebRetryTimeoutError = false;
+                        });
                       }
                     },
                   );
@@ -1635,16 +1674,33 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                if (kIsWeb &&
+                    _webRetryUrl != null &&
+                    (url == null ||
+                        _resolveWebUrl(url.toString()) != _webRetryUrl)) {
+                  return;
+                }
                 _hasLoadedPage = true;
                 _canApplyZoomCommands = true;
-                if (mounted && !_isReady) {
-                  setState(() => _isReady = true);
+                if (mounted && (!_isReady || _hasWebRetryTimeoutError)) {
+                  setState(() {
+                    _isReady = true;
+                    if (_hasWebRetryTimeoutError) {
+                      _errorMessage = null;
+                      _hasWebRetryTimeoutError = false;
+                    }
+                  });
                 }
                 _readyFallbackTimer?.cancel();
                 unawaited(_applyPendingZoomDeltas());
               },
               onReceivedError: (controller, request, error) {
-                _readyFallbackTimer?.cancel();
+                if (kIsWeb &&
+                    request.isForMainFrame == true &&
+                    _webRetryUrl != null &&
+                    _resolveWebUrl(request.url.toString()) != _webRetryUrl) {
+                  return;
+                }
                 // WebView creation ends the Flutter loading overlay before
                 // the asset URL finishes navigating. Surface main-frame
                 // failures even after that, but leave web subresource errors
@@ -1654,9 +1710,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 final shouldShowError =
                     kIsWeb ? request.isForMainFrame == true : !_hasLoadedPage;
                 if (mounted && shouldShowError) {
+                  _readyFallbackTimer?.cancel();
                   setState(() {
                     _isReady = true;
                     _errorMessage = '页面加载失败: ${error.description}';
+                    _hasWebRetryTimeoutError = false;
                   });
                 }
               },
