@@ -817,18 +817,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
-      final isPendingWebRetry =
-          kIsWeb &&
+      final isPendingWebRetry = kIsWeb &&
           !_isReady &&
           _webViewController != null &&
           (_readyFallbackTimer?.isActive ?? false);
-      final isTimedOutWebRetry =
-          kIsWeb &&
+      final isTimedOutWebRetry = kIsWeb &&
           _hasWebRetryTimeoutError &&
           _webRetryUrl != null &&
           _webViewController != null;
-      final shouldRearmWebRetry =
-          isPendingWebRetry || isTimedOutWebRetry;
+      final shouldRearmWebRetry = isPendingWebRetry || isTimedOutWebRetry;
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
@@ -943,9 +940,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (isTrackedRetry) {
         _webRetryUrl = _resolveWebUrl(url);
       }
-      ctrl.loadUrl(
-          urlRequest: URLRequest(
-              url: WebUri(url)));
+      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
       return;
     }
 
