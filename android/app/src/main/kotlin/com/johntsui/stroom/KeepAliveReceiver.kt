@@ -179,9 +179,13 @@ class KeepAliveReceiver : BroadcastReceiver() {
             return scheduled
         }
 
-        private fun scheduleAlarmNow(context: Context, intervalMs: Long): Boolean {
+        private fun scheduleAlarmNow(
+            context: Context,
+            intervalMs: Long,
+            generationToReuse: Long? = null,
+        ): Boolean {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val generation = nextAlarmGeneration(context) ?: run {
+            val generation = generationToReuse ?: nextAlarmGeneration(context) ?: run {
                 Log.e(TAG, "Failed to persist keep-alive alarm generation")
                 return false
             }
@@ -343,7 +347,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
             }
         }
 
-        private fun claimAlarmDelivery(context: Context, intent: Intent): Boolean {
+        private fun claimAlarmDelivery(
+            context: Context,
+            intent: Intent,
+        ): AlarmGenerationClaimResult {
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             return synchronized(ALARM_GENERATION_LOCK) {
                 val keepAliveActive = prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
@@ -356,14 +363,16 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     // Accept a previously scheduled alarm from an older app version once.
                     currentGeneration
                 }
-                val invalidatedGeneration = claimAlarmDeliveryGeneration(
+                claimAlarmDeliveryGeneration(
                     scheduledGeneration = scheduledGeneration,
                     currentGeneration = currentGeneration,
                     keepAliveActive = keepAliveActive,
-                ) ?: return@synchronized false
-                prefs.edit()
-                    .putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, invalidatedGeneration)
-                    .commit()
+                    persistGeneration = { generation ->
+                        prefs.edit()
+                            .putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation)
+                            .commit()
+                    },
+                )
             }
         }
 
@@ -441,11 +450,29 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     cancelAlarm(context)
                     return
                 }
-                if (!claimAlarmDelivery(context, intent)) {
-                    // Exact and backup alarms share a generation. If both were
-                    // already queued, only the first delivery may handle it.
-                    Log.d(TAG, "Ignoring stale or duplicate keep-alive alarm delivery")
-                    return
+                when (claimAlarmDelivery(context, intent)) {
+                    AlarmGenerationClaimResult.CLAIMED -> Unit
+                    AlarmGenerationClaimResult.STALE -> {
+                        // Exact and backup alarms share a generation. If both
+                        // were already queued, only the first handles delivery.
+                        Log.d(TAG, "Ignoring stale or duplicate keep-alive alarm delivery")
+                        return
+                    }
+                    AlarmGenerationClaimResult.PERSISTENCE_FAILED -> {
+                        // The generation was restored in memory. Re-arm the same
+                        // token so it remains valid even if generation persistence
+                        // is still failing; preserve the selected cadence/backoff.
+                        Log.w(TAG, "Failed to persist keep-alive alarm claim")
+                        val failures = prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0)
+                        val interval = if (failures >= MAX_CONSECUTIVE_FAILURES) {
+                            FAILURE_BACKOFF_INTERVAL_MS
+                        } else {
+                            KEEP_ALIVE_INTERVAL_MS
+                        }
+                        val generation = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                        scheduleReceiverAlarm(context, interval, generationToReuse = generation)
+                        return
+                    }
                 }
                 // Remove the paired alarm before rearming to avoid a second
                 // wake-up for this interval.
@@ -507,7 +534,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
     }
 
     /** Retry a failed receiver-driven rearm once after a short delay. */
-    private fun scheduleReceiverAlarm(context: Context, intervalMs: Long) {
+    private fun scheduleReceiverAlarm(
+        context: Context,
+        intervalMs: Long,
+        generationToReuse: Long? = null,
+    ) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         fun currentInterval(): Long = if (
             prefs.getInt(KEY_KEEP_ALIVE_FAILURES, 0) >= MAX_CONSECUTIVE_FAILURES
@@ -516,8 +547,25 @@ class KeepAliveReceiver : BroadcastReceiver() {
         } else {
             KEEP_ALIVE_INTERVAL_MS
         }
+        val isStillActive = {
+            prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
+                prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
+                prefs.getBoolean(KEY_WATCHDOG_ENABLED, true) &&
+                (generationToReuse == null ||
+                    prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L) == generationToReuse)
+        }
         val scheduleAtInterval: (Long) -> Boolean = { interval ->
-            val scheduled = scheduleAlarm(context, interval)
+            val scheduled = if (generationToReuse != null) {
+                synchronized(ALARM_GENERATION_LOCK) {
+                    if (isStillActive()) {
+                        scheduleAlarmNow(context, interval, generationToReuse)
+                    } else {
+                        false
+                    }
+                }
+            } else {
+                scheduleAlarm(context, interval)
+            }
             if (!scheduled) {
                 Log.w(TAG, "Keep-alive receiver scheduling failed")
             }
@@ -527,11 +575,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
         scheduleAlarmWithRetry(
             schedule = { scheduleAtInterval(intervalMs) },
             retrySchedule = { scheduleAtInterval(currentInterval()) },
-            isStillActive = {
-                prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) &&
-                    prefs.getBoolean(KEY_SERVICE_ENABLED, false) &&
-                    prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
-            },
+            isStillActive = isStillActive,
             retryLater = { retry ->
                 val pendingResult = goAsync()
                 val retryPosted = Handler(Looper.getMainLooper()).postDelayed(
