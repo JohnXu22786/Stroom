@@ -121,8 +121,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     final lines = code.trimLeft().split('\n');
     var isFirstContentLine = true;
     var insideFrontmatter = false;
+    var insideInitDirective = false;
     for (final rawLine in lines) {
       final line = rawLine.trim();
+      if (insideInitDirective) {
+        insideInitDirective = !line.endsWith('}%%');
+        continue;
+      }
+      if (line.startsWith('%%{init:')) {
+        insideInitDirective = !line.endsWith('}%%');
+        continue;
+      }
       // Skip %% comment lines and %%{init} directive lines
       if (line.isEmpty || line.startsWith('%%')) continue;
 
