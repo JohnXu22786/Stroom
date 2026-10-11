@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -78,11 +79,17 @@ Finder _navTab(String label) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  final originalWebViewPlatform = InAppWebViewPlatform.instance;
 
   setUp(() async {
+    InAppWebViewPlatform.instance = _NavigationWebViewPlatform();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+  });
+
+  tearDown(() {
+    InAppWebViewPlatform.instance = originalWebViewPlatform;
   });
 
   group('Main page navigation (4 buttons, state preservation)', () {
@@ -666,4 +673,45 @@ void main() {
       expect(find.byKey(const Key('files_page')), findsOneWidget);
     });
   });
+}
+
+class _NavigationWebViewPlatform extends InAppWebViewPlatform {
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+          PlatformInAppWebViewWidgetCreationParams params) =>
+      _NavigationWebView(params);
+}
+
+class _NavigationWebView extends PlatformInAppWebViewWidget {
+  final _controller = _NavigationWebViewController();
+
+  _NavigationWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(_controller) as T;
+
+  @override
+  void dispose() {}
+}
+
+class _NavigationWebViewController extends PlatformInAppWebViewController {
+  _NavigationWebViewController()
+      : super.implementation(
+            const PlatformInAppWebViewControllerCreationParams(id: 0));
+
+  @override
+  Future<dynamic> evaluateJavascript(
+      {required String source, ContentWorld? contentWorld}) async =>
+      null;
+
+  @override
+  void addJavaScriptHandler(
+      {required String handlerName, required Function callback}) {}
+
+  @override
+  void dispose({bool isKeepAlive = false}) {}
 }
