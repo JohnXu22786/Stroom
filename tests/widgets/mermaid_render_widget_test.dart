@@ -130,14 +130,14 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=8&code='));
+      expect(url, contains('mermaid_render.html?v=9&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=8?')));
+      expect(url, isNot(contains('v=9?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=8');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=9');
     });
 
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
@@ -542,7 +542,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v8');
+      expect(templateVersion, 'v9');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -607,7 +607,11 @@ void main() {
       expect(find.byIcon(Icons.zoom_in), findsOneWidget);
       await tester.tap(find.byIcon(Icons.zoom_in));
       await tester.pump();
-      expect(fakeController.evaluatedScripts, isEmpty);
+      expect(
+        fakeController.evaluatedScripts,
+        isEmpty,
+        reason: 'horizontal-only Ctrl+wheel should not send a zoom command',
+      );
 
       webView.params.onWebViewCreated!(controller);
       await tester.pump();
@@ -773,7 +777,7 @@ void main() {
     });
 
     testWidgets(
-        'Ctrl+wheel zoom requires vertical input and does not scroll parent',
+        'Ctrl+wheel zoom before fit survives auto-fit and does not scroll parent',
         (tester) async {
       final previousPlatform = InAppWebViewPlatform.instance;
       final platform = _MermaidWebViewPlatform();
@@ -795,6 +799,7 @@ void main() {
                     mermaidCode: 'graph TD\nA-->B',
                     height: 200,
                     showToolbar: false,
+                    showZoomControls: true,
                   ),
                   const SizedBox(height: 1000),
                 ],
@@ -817,13 +822,19 @@ void main() {
         fakeController,
       );
       webView.params.onWebViewCreated!(controller);
-      webView.params.onLoadStop?.call(controller, null);
       await tester.pump();
 
-      int zoomCallCount() => fakeController.evaluatedScripts
-          .where((script) => script.contains('window.setZoom'))
-          .length;
+      final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+      fakeController.viewportSize = widgetRect.size;
+      final localWheelCenters = [
+        Offset(widgetRect.width * 0.25, widgetRect.height * 0.25),
+        Offset(widgetRect.width * 0.75, widgetRect.height * 0.75),
+      ];
 
+      // Toolbar and wheel inputs arrive while the WebView exists but has not
+      // reported that its JavaScript zoom commands are ready.
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendEventToBinding(
         PointerScrollEvent(
@@ -834,28 +845,65 @@ void main() {
       );
       await tester.pump();
 
-      expect(
-        zoomCallCount(),
-        0,
-        reason:
-            'Ctrl+horizontal-only wheel should not zoom the Mermaid diagram',
-      );
+      expect(fakeController.evaluatedScripts, isEmpty);
 
-      await tester.sendEventToBinding(
-        PointerScrollEvent(
-          position: tester.getCenter(find.byType(MermaidRenderWidget)),
-          kind: PointerDeviceKind.mouse,
-          scrollDelta: const Offset(0, 20),
-        ),
-      );
-      await tester.pump();
+      for (final localCenter in localWheelCenters) {
+        await tester.sendEventToBinding(
+          PointerScrollEvent(
+            position: widgetRect.topLeft + localCenter,
+            kind: PointerDeviceKind.mouse,
+            scrollDelta: const Offset(0, -20),
+          ),
+        );
+        await tester.pump();
+      }
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
       expect(
-        zoomCallCount(),
-        1,
-        reason: 'Ctrl+wheel should still zoom the Mermaid diagram',
+        fakeController.evaluatedScripts,
+        isEmpty,
+        reason: 'zoom commands should wait until the WebView reports readiness',
       );
+      expect(
+        fakeController.zoomLevel,
+        1.0,
+        reason: 'pre-fit wheel input must not mutate the unfit zoom state',
+      );
+
+      webView.params.onLoadStop?.call(controller, null);
+      await tester.pump();
+      expect(fakeController.evaluatedScripts, hasLength(1));
+      expect(
+        fakeController.evaluatedScripts.single,
+        contains('window.applyZoomOperationsAfterFit('),
+      );
+
+      fakeController.simulateJsFitToViewport(0.8);
+      expect(
+        fakeController.zoomLevel,
+        closeTo(1.1, 0.0001),
+        reason: 'toolbar and wheel steps should apply on top of the fitted zoom',
+      );
+      expect(
+        fakeController.wheelZoomAnchors,
+        localWheelCenters,
+        reason: 'queued wheel zooms must preserve their individual cursor anchors',
+      );
+      double anchor(
+        double pan,
+        double center,
+        double oldZoom,
+        double newZoom,
+      ) =>
+          center - (center - pan) * (newZoom / oldZoom);
+      var expectedPanX = anchor(0, widgetRect.width / 2, 0.8, 0.9);
+      var expectedPanY = anchor(0, widgetRect.height / 2, 0.8, 0.9);
+      expectedPanX = anchor(expectedPanX, localWheelCenters[0].dx, 0.9, 1.0);
+      expectedPanY = anchor(expectedPanY, localWheelCenters[0].dy, 0.9, 1.0);
+      expectedPanX = anchor(expectedPanX, localWheelCenters[1].dx, 1.0, 1.1);
+      expectedPanY = anchor(expectedPanY, localWheelCenters[1].dy, 1.0, 1.1);
+      expect(fakeController.panX, closeTo(expectedPanX, 0.0001));
+      expect(fakeController.panY, closeTo(expectedPanY, 0.0001));
       expect(
         scrollController.offset,
         closeTo(0, 0.1),
@@ -2154,23 +2202,54 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
-  final _pendingZoomDeltas = <double>[];
+  final List<({double delta, double? centerX, double? centerY})>
+      _pendingZoomOperations = [];
+  final wheelZoomAnchors = <Offset>[];
   final loadedUrls = <WebUri>[];
+  Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
+  double panX = 0;
+  double panY = 0;
   bool _fitComplete = false;
 
   void simulateJsFitToViewport(double fittedZoom) {
     zoomLevel = fittedZoom;
+    panX = 0;
+    panY = 0;
     _fitComplete = true;
-    _applyPendingZoomDeltas();
+    _applyPendingZoomOperations();
   }
 
-  void _applyPendingZoomDeltas() {
+  void _applyPendingZoomOperations() {
     if (!_fitComplete) return;
-    for (final delta in _pendingZoomDeltas) {
-      zoomLevel = (zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    for (final operation in _pendingZoomOperations) {
+      final centerX = operation.centerX ?? viewportSize.width / 2;
+      final centerY = operation.centerY ?? viewportSize.height / 2;
+      final newZoom = (zoomLevel + operation.delta)
+          .clamp(0.1, 10.0)
+          .toDouble();
+      if (newZoom == zoomLevel) continue;
+      panX = centerX - (centerX - panX) * (newZoom / zoomLevel);
+      panY = centerY - (centerY - panY) * (newZoom / zoomLevel);
+      zoomLevel = newZoom;
+      if (operation.centerX != null && operation.centerY != null) {
+        wheelZoomAnchors.add(Offset(centerX, centerY));
+      }
     }
-    _pendingZoomDeltas.clear();
+    _pendingZoomOperations.clear();
+  }
+
+  void _queueZoomOperation({
+    required double delta,
+    double? centerX,
+    double? centerY,
+  }) {
+    _pendingZoomOperations.add((
+      delta: delta,
+      centerX: centerX,
+      centerY: centerY,
+    ));
+    _applyPendingZoomOperations();
   }
 
   _MermaidWebViewController()
@@ -2216,6 +2295,41 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final zoomOperations = RegExp(
+      r'window\.applyZoomOperationsAfterFit\((\[[\s\S]*\])\)',
+    ).firstMatch(source);
+    if (zoomOperations != null) {
+      final operations = jsonDecode(zoomOperations.group(1)!) as List<dynamic>;
+      for (final operation in operations.cast<Map<String, dynamic>>()) {
+        final delta = (operation['delta'] as num).toDouble();
+        if (operation['kind'] == 'wheel') {
+          _queueZoomOperation(
+            delta: delta,
+            centerX: (operation['centerX'] as num).toDouble(),
+            centerY: (operation['centerY'] as num).toDouble(),
+          );
+        } else if (operation['kind'] == 'toolbar') {
+          _queueZoomOperation(delta: delta);
+        }
+      }
+      return;
+    }
+
+    final queuedWheelZoom = RegExp(
+      r'window\.applyWheelZoomAfterFit\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)',
+    ).firstMatch(source);
+    if (queuedWheelZoom != null) {
+      final delta = double.parse(queuedWheelZoom.group(1)!);
+      final centerX = double.parse(queuedWheelZoom.group(2)!);
+      final centerY = double.parse(queuedWheelZoom.group(3)!);
+      _queueZoomOperation(
+        delta: delta,
+        centerX: centerX,
+        centerY: centerY,
+      );
+      return;
+    }
+
     final deferredZoom = RegExp(
       r'window\.applyZoomDeltasAfterFit\(\[([^\]]*)\]\)',
     ).firstMatch(source);
@@ -2223,8 +2337,9 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       final deltas = RegExp(r'-?\d+(?:\.\d+)?')
           .allMatches(deferredZoom.group(1)!)
           .map((match) => double.parse(match.group(0)!));
-      _pendingZoomDeltas.addAll(deltas);
-      _applyPendingZoomDeltas();
+      for (final delta in deltas) {
+        _queueZoomOperation(delta: delta);
+      }
       return;
     }
 
