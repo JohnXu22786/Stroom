@@ -84,7 +84,7 @@ Future<void> _runAudioSeparation({
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
   Future<({Uint8List audioBytes, String hash, String format})> Function(
-      SelectedVideo video)?
+          SelectedVideo video)?
       workerExtract,
 }) async {
   final throttler = _BgThrottler(bgNotifier);
@@ -132,6 +132,7 @@ Future<void> _runAudioSeparation({
           displayName: title,
           videoName: video.name,
           saveFolder: saveFolder,
+          shouldSave: isTaskLive,
         );
         if (!isTaskLive()) continue;
 
@@ -157,7 +158,8 @@ Future<void> runAudioSeparationForTesting({
   required BackgroundTaskNotifier bgNotifier,
   required String saveFolder,
   required Future<({Uint8List audioBytes, String hash, String format})>
-      Function(SelectedVideo video) workerExtract,
+          Function(SelectedVideo video)
+      workerExtract,
 }) =>
     _runAudioSeparation(
       videos: videos,
@@ -204,14 +206,17 @@ class _BgThrottler {
 
   void updateStep(String taskId, int index,
           {bool? completed, bool? running, bool? failed, bool? skipped}) =>
-      _enqueue(taskId, () => _notifier.updateStep(taskId, index,
-          completed: completed,
-          running: running,
-          failed: failed,
-          skipped: skipped));
+      _enqueue(
+          taskId,
+          () => _notifier.updateStep(taskId, index,
+              completed: completed,
+              running: running,
+              failed: failed,
+              skipped: skipped));
 
-  void completeTask(String taskId, {String? downloadedFilePath}) =>
-      _enqueue(taskId, () => _notifier.completeTask(taskId,
+  void completeTask(String taskId, {String? downloadedFilePath}) => _enqueue(
+      taskId,
+      () => _notifier.completeTask(taskId,
           downloadedFilePath: downloadedFilePath));
 
   void failTask(String taskId, {String? error}) =>
@@ -257,6 +262,7 @@ Future<String?> saveAudioSeparationFile(
   String? displayName,
   String? videoName,
   required String saveFolder,
+  bool Function()? shouldSave,
   Future<void> Function(AudioRecord)? registerRecord,
 }) async {
   if (audioBytes.isEmpty) {
@@ -267,43 +273,68 @@ Future<String?> saveAudioSeparationFile(
   final effectiveVideoName = videoName ?? '视频音频';
   final name =
       displayName ?? '音频分离_${p.basenameWithoutExtension(effectiveVideoName)}';
+  final record = AudioRecord(
+    name: name,
+    hash: hash,
+    format: format,
+    createdAt: timestamp,
+    size: audioBytes.length,
+    sourceText: '',
+    folder: saveFolder,
+  );
 
+  var skipped = false;
   await FileManifest.withStorageFileSaveLock('$hash.$format', () async {
+    if (shouldSave != null && !shouldSave()) {
+      skipped = true;
+      return;
+    }
     await FileManifest.writeFile('$hash.$format', audioBytes);
-
-    final record = AudioRecord(
-      name: name,
-      hash: hash,
-      format: format,
-      createdAt: timestamp,
-      size: audioBytes.length,
-      sourceText: '',
-      folder: saveFolder,
-    );
+    if (shouldSave != null && !shouldSave()) {
+      skipped = true;
+      await _deleteUnreferencedAudioFile(record);
+      return;
+    }
     try {
       await (registerRecord ?? FileManifest.addRecord)(record);
-    } catch (error, stackTrace) {
-      try {
-        final records = await FileManifest.loadRecordsStrict();
-        final isReferenced = records.any(
-          (existing) => existing.storageFileName == record.storageFileName,
-        );
-        if (!isReferenced &&
-            !await FileManifest.deleteFile(record.storageFileName)) {
+      if (shouldSave != null && !shouldSave()) {
+        skipped = true;
+        try {
+          await FileManifest.deleteRecord(record.id, preserveFiles: true);
+        } catch (cleanupError) {
           debugPrint(
-              '[AudioSeparation] Failed to remove unregistered audio file: ${record.storageFileName}');
+              '[AudioSeparation] Failed to remove cancelled record ${record.id}: $cleanupError');
         }
-      } catch (cleanupError) {
-        debugPrint(
-            '[AudioSeparation] Failed to check references for ${record.storageFileName}: $cleanupError');
+        await _deleteUnreferencedAudioFile(record);
       }
+    } catch (error, stackTrace) {
+      await _deleteUnreferencedAudioFile(record);
       Error.throwWithStackTrace(error, stackTrace);
     }
   });
 
+  if (skipped) return null;
+
   final filePath = await FileManifest.readFilePath('$hash.$format');
 
   return filePath;
+}
+
+Future<void> _deleteUnreferencedAudioFile(AudioRecord record) async {
+  try {
+    final records = await FileManifest.loadRecordsStrict();
+    final isReferenced = records.any(
+      (existing) => existing.storageFileName == record.storageFileName,
+    );
+    if (!isReferenced &&
+        !await FileManifest.deleteFile(record.storageFileName)) {
+      debugPrint(
+          '[AudioSeparation] Failed to remove unregistered audio file: ${record.storageFileName}');
+    }
+  } catch (cleanupError) {
+    debugPrint(
+        '[AudioSeparation] Failed to check references for ${record.storageFileName}: $cleanupError');
+  }
 }
 
 class _AudioSeparationPageState extends ConsumerState<AudioSeparationPage> {

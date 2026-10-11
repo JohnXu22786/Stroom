@@ -142,4 +142,82 @@ void main() {
       'completed_audio_task.wav',
     );
   });
+
+  test('save skips output if the task is removed while waiting for its lock',
+      () async {
+    final lockAcquired = Completer<void>();
+    final releaseLock = Completer<void>();
+    const storageName = 'cancelled_audio_task.wav';
+
+    final lock = FileManifest.withStorageFileSaveLock(storageName, () async {
+      lockAcquired.complete();
+      await releaseLock.future;
+    });
+    await lockAcquired.future;
+
+    var taskIsLive = true;
+    final save = saveAudioSeparationFile(
+      Uint8List.fromList([9, 10, 11]),
+      hash: 'cancelled_audio_task',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => taskIsLive,
+    );
+    taskIsLive = false;
+    releaseLock.complete();
+
+    await lock;
+    expect(await save, isNull);
+    expect(await FileManifest.readFile(storageName), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
+
+  test('save removes its file if the task is removed during the write',
+      () async {
+    var checks = 0;
+    var registered = false;
+
+    final filePath = await saveAudioSeparationFile(
+      Uint8List.fromList([12, 13, 14]),
+      hash: 'removed_during_write',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => ++checks == 1,
+      registerRecord: (_) async => registered = true,
+    );
+
+    expect(filePath, isNull);
+    expect(registered, isFalse);
+    expect(await FileManifest.readFile('removed_during_write.wav'), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
+
+  test('save removes its record if the task is removed during registration',
+      () async {
+    final registrationStarted = Completer<void>();
+    final finishRegistration = Completer<void>();
+    var taskIsLive = true;
+
+    final save = saveAudioSeparationFile(
+      Uint8List.fromList([15, 16, 17]),
+      hash: 'removed_during_registration',
+      format: 'wav',
+      saveFolder: '',
+      shouldSave: () => taskIsLive,
+      registerRecord: (record) async {
+        registrationStarted.complete();
+        await finishRegistration.future;
+        await FileManifest.addRecord(record);
+      },
+    );
+
+    await registrationStarted.future;
+    taskIsLive = false;
+    finishRegistration.complete();
+
+    expect(await save, isNull);
+    expect(
+        await FileManifest.readFile('removed_during_registration.wav'), isNull);
+    expect(await FileManifest.loadRecords(), isEmpty);
+  });
 }
