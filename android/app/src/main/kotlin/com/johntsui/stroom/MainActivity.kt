@@ -245,7 +245,7 @@ class MainActivity : FlutterActivity() {
                     } else {
                         KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS
                     }
-                    result.success(KeepAliveReceiver.scheduleAlarm(this, interval))
+                    result.success(KeepAliveReceiver.scheduleRearmAlarm(this, interval))
                 }
                 "stopKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: stop requested from Dart")

@@ -20,3 +20,15 @@ internal fun scheduleAlarmWithRetry(
     }
     return false
 }
+
+internal fun scheduleAlarmWithRetryAtInterval(
+    intervalMs: Long,
+    scheduleAtInterval: (Long) -> Boolean,
+    isStillActive: () -> Boolean,
+    retryLater: (() -> Unit) -> Unit,
+): Boolean = scheduleAlarmWithRetry(
+    schedule = { scheduleAtInterval(intervalMs) },
+    retrySchedule = { scheduleAtInterval(intervalMs) },
+    isStillActive = isStillActive,
+    retryLater = retryLater,
+)
