@@ -123,6 +123,42 @@ Uint8List _buildWav({
   return bytes;
 }
 
+Uint8List _buildNoisyWav({required int seconds, int sampleRate = 1}) {
+  final wav = _buildWav(seconds: seconds, sampleRate: sampleRate);
+  final data = ByteData.view(wav.buffer);
+  var state = 0x12345678;
+  for (var i = 0; i < seconds * sampleRate; i++) {
+    state = (state * 1103515245 + 12345) & 0x7fffffff;
+    data.setInt16(44 + i * 2, (state & 0xffff) - 32768, Endian.little);
+  }
+  return wav;
+}
+
+int _wavPcmDataSize(Uint8List wav) {
+  expect(_indexOfSequence(wav, 'RIFF'.codeUnits), 0);
+  expect(String.fromCharCodes(wav.sublist(36, 40)), 'data');
+  return ByteData.sublistView(wav).getUint32(40, Endian.little);
+}
+
+int _multipartWavPcmDataSize(Uint8List body) {
+  final riffIndex = _indexOfSequence(body, 'RIFF'.codeUnits);
+  expect(riffIndex, isNonNegative, reason: 'request must include its WAV part');
+  final wav = ByteData.sublistView(body, riffIndex, riffIndex + 44);
+  return wav.getUint32(40, Endian.little);
+}
+
+void _expectChunkCoverage(AsrResult result, int requestCount, double duration) {
+  final chunks = result.chunks;
+  expect(chunks, isNotNull);
+  expect(chunks, hasLength(requestCount));
+  final expectedChunks = chunks!;
+  expect(expectedChunks.first.startSeconds, 0);
+  for (var i = 1; i < expectedChunks.length; i++) {
+    expect(expectedChunks[i].startSeconds, expectedChunks[i - 1].endSeconds);
+  }
+  expect(expectedChunks.last.endSeconds, closeTo(duration, 1e-9));
+}
+
 Uint8List _appendJunkChunk(Uint8List wav, int payloadBytes) {
   final paddedPayloadBytes = payloadBytes + payloadBytes % 2;
   final result = Uint8List(wav.length + 8 + paddedPayloadBytes);
@@ -422,8 +458,9 @@ void main() {
 
       // The request body includes multipart fields and boundaries, so the
       // measured transport budget can require more than three PCM chunks.
+      final sourceAudio = _buildWav(seconds: 10);
       final result = await service.transcribe(
-        audioBytes: _buildWav(seconds: 10),
+        audioBytes: sourceAudio,
         audioFormat: 'wav',
       );
 
@@ -442,6 +479,13 @@ void main() {
           lessThanOrEqualTo(64 * 1024),
         );
       }
+      final uploadedPcmBytes = adapter.requests.fold<int>(
+        0,
+        (sum, request) =>
+            sum + _multipartWavPcmDataSize(request['bodyBytes'] as Uint8List),
+      );
+      expect(uploadedPcmBytes, _wavPcmDataSize(sourceAudio));
+      _expectChunkCoverage(result, adapter.requests.length, 10);
     });
 
     test('chunked transcription throws when every chunk fails', () async {
@@ -490,8 +534,9 @@ void main() {
           dio: testDio(adapter),
         );
 
+        final sourceAudio = _buildWav(seconds: 10);
         final result = await service.transcribe(
-          audioBytes: _buildWav(seconds: 10),
+          audioBytes: sourceAudio,
           audioFormat: 'wav',
         );
 
@@ -511,6 +556,104 @@ void main() {
           (adapter.requests.single['bodyBytes'] as Uint8List).length,
           lessThanOrEqualTo(64 * 1024),
         );
+      },
+    );
+
+    test(
+      'fallbackMethod=all reaches generic after a Base64 provider failure',
+      () async {
+        final audioBytes = _buildNoisyWav(seconds: 1, sampleRate: 120);
+        final base64BodyBytes = utf8
+            .encode(
+              jsonEncode({
+                'model': 'whisper-1',
+                'response_format': 'json',
+                'file': base64Encode(audioBytes),
+              }),
+            )
+            .length;
+        final measurementAdapter = _RouteAdapter();
+        measurementAdapter.onPost('/audio/transcriptions', (options, body) {
+          return ok('measure compressed body');
+        });
+        final measurementService = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 64 * 1024,
+            compression: 'flac',
+            fallbackMethod: 'none',
+          ),
+          dio: testDio(measurementAdapter),
+        );
+        await measurementService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
+        final fullCompressedBodyBytes =
+            (measurementAdapter.requests.single['bodyBytes'] as Uint8List)
+                .length;
+        expect(
+          fullCompressedBodyBytes,
+          greaterThan(base64BodyBytes),
+          reason: 'the compressed whole-file request must trigger fallback',
+        );
+
+        final adapter = _RouteAdapter();
+        var requestNumber = 0;
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          requestNumber++;
+          return requestNumber == 1
+              ? err500()
+              : ok('generic chunk $requestNumber');
+        });
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: base64BodyBytes,
+            compression: 'flac',
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDio(adapter),
+        );
+
+        final result = await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
+
+        expect(adapter.requests, hasLength(10));
+        final specificRequest = adapter.requests.first;
+        expect(specificRequest['contentType'], contains('application/json'));
+        expect(
+          (specificRequest['bodyBytes'] as Uint8List).length,
+          base64BodyBytes,
+        );
+        final specificBody = jsonDecode(specificRequest['bodyString'] as String)
+            as Map<String, dynamic>;
+        expect(base64Decode(specificBody['file'] as String), audioBytes);
+
+        final genericRequests = adapter.requests.skip(1).toList();
+        expect(genericRequests, hasLength(9));
+        for (final request in genericRequests) {
+          expect(request['contentType'], contains('multipart/form-data'));
+          final requestBytes = request['bodyBytes'] as Uint8List;
+          expect(requestBytes.length, lessThanOrEqualTo(base64BodyBytes));
+          expect(
+              _indexOfSequence(requestBytes, 'fLaC'.codeUnits), isNonNegative);
+        }
+        expect(
+          result.text,
+          List.generate(
+            9,
+            (index) => 'generic chunk ${index + 2}',
+          ).join(' '),
+        );
+        _expectChunkCoverage(result, 9, 1);
       },
     );
 
@@ -844,8 +987,9 @@ void main() {
           dio: testDio(adapter),
         );
 
+        final sourceAudio = _buildWav(seconds: 10);
         final result = await service.transcribe(
-          audioBytes: _buildWav(seconds: 10),
+          audioBytes: sourceAudio,
           audioFormat: 'wav',
         );
 
@@ -876,9 +1020,30 @@ void main() {
             reason: 'complete JSON body must stay within the configured budget',
           );
         }
+        final uploadedPcmBytes = adapter.requests.fold<int>(
+          0,
+          (sum, request) {
+            final body = jsonDecode(request['bodyString'] as String)
+                as Map<String, dynamic>;
+            final chunk = Uint8List.fromList(
+              base64Decode(body['file'] as String),
+            );
+            return sum + _wavPcmDataSize(chunk);
+          },
+        );
+        expect(uploadedPcmBytes, _wavPcmDataSize(sourceAudio));
+        _expectChunkCoverage(result, adapter.requests.length, 10);
       },
     );
 
+    const expectedChunkCounts = {
+      'flac/silence': 4,
+      'flac/fixedDuration': 4,
+      'flac/fixedSize': 21,
+      'adpcm/silence': 8,
+      'adpcm/fixedDuration': 8,
+      'adpcm/fixedSize': 21,
+    };
     for (final codec in ['flac', 'adpcm']) {
       for (final method in ['silence', 'fixedDuration', 'fixedSize']) {
         test(
@@ -909,8 +1074,16 @@ void main() {
               audioFormat: 'wav',
             );
 
-            expect(adapter.requests.length, greaterThan(1));
-            expect(result.text, contains('$codec $method 1'));
+            final expectedChunkCount = expectedChunkCounts['$codec/$method']!;
+            expect(adapter.requests, hasLength(expectedChunkCount));
+            expect(
+              result.text,
+              List.generate(
+                expectedChunkCount,
+                (index) => '$codec $method ${index + 1}',
+              ).join(' '),
+            );
+            _expectChunkCoverage(result, expectedChunkCount, 10);
             for (final request in adapter.requests) {
               final requestBytes = request['bodyBytes'] as Uint8List;
               expect(

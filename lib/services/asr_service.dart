@@ -1895,9 +1895,17 @@ class AsrService {
     var cueNumber = 1;
     for (final segment in timedSegments) {
       if (format == 'srt') lines.add('$cueNumber');
+      final startSeconds = segment.startSeconds!;
+      final endSeconds = segment.endSeconds!;
+      final startMilliseconds = (startSeconds * 1000).round();
+      final roundedEndMilliseconds = (endSeconds * 1000).round();
+      final endMilliseconds = endSeconds > startSeconds &&
+              roundedEndMilliseconds <= startMilliseconds
+          ? startMilliseconds + 1
+          : roundedEndMilliseconds;
       lines.add(
-        '${_formatSubtitleTime(segment.startSeconds!, format)} --> '
-        '${_formatSubtitleTime(segment.endSeconds!, format)}',
+        '${_formatSubtitleTime(startMilliseconds, format)} --> '
+        '${_formatSubtitleTime(endMilliseconds, format)}',
       );
       lines.add(segment.text);
       lines.add('');
@@ -1939,8 +1947,7 @@ class AsrService {
     return mpegts <= BigInt.from(8589934591);
   }
 
-  String _formatSubtitleTime(double seconds, String format) {
-    final totalMilliseconds = (seconds * 1000).round();
+  String _formatSubtitleTime(int totalMilliseconds, String format) {
     final hours = totalMilliseconds ~/ 3600000;
     final minutes = (totalMilliseconds ~/ 60000) % 60;
     final wholeSeconds = (totalMilliseconds ~/ 1000) % 60;
