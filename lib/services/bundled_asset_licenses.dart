@@ -59,7 +59,9 @@ void registerBundledAssetLicenses() {
     );
 
     yield LicenseEntryWithLineBreaks(
-      const ['desugar_jdk_libs 2.1.4 (Android; GPLv2 with Classpath Exception)'],
+      const [
+        'desugar_jdk_libs 2.1.4 (Android; GPLv2 with Classpath Exception)',
+      ],
       await rootBundle.loadString(
         'assets/vendor/native/desugar-2.1.4-LICENSE.txt',
       ),
