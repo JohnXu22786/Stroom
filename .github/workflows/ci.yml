@@ -77,6 +77,10 @@ jobs:
           echo "### Changed lib/ files vs tests/ coverage ###"
           echo ""
           UNCOVERED=0
+          if ! CHANGED_LIB_FILES="$(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/*.dart' 'lib/**/*.dart')"; then
+            echo "Unable to determine changed lib files against $BASE_SHA."
+            exit 1
+          fi
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
@@ -123,7 +127,7 @@ jobs:
                 fi
               fi
             fi
-          done < <(git diff --diff-filter=ACMRT --name-only "$BASE_SHA" -- 'lib/*.dart' 'lib/**/*.dart')
+          done <<< "$CHANGED_LIB_FILES"
           echo ""
           if [ "$UNCOVERED" -eq 0 ]; then
             echo "All changed files have matching tests. (But check that existing tests cover new logic.)"
