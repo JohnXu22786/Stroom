@@ -242,7 +242,9 @@ def main() -> int:
 
     print(f"Running {args.suite}: {len(test_files)} test files")
     return subprocess.run(
-        ["flutter", "test", *test_files], cwd=REPO_ROOT, check=False
+        ["flutter", "test", *(f"tests/{path}" for path in test_files)],
+        cwd=REPO_ROOT,
+        check=False,
     ).returncode
 
 
