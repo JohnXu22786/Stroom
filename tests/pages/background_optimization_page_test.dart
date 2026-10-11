@@ -108,6 +108,38 @@ class _FailingDesktopCloseMinimizePreferenceStore
   }
 }
 
+class _FailingRecoveryPreferenceStore extends InMemorySharedPreferencesStore {
+  _FailingRecoveryPreferenceStore(
+    Map<String, Object> data, {
+    required Set<String> failedKeys,
+  })  : _failedKeys = failedKeys,
+        super.withData(data);
+
+  final Set<String> _failedKeys;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && _failedKeys.contains(key)) {
+      return Future<bool>.value(false);
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+Future<SharedPreferencesStorePlatform> _failRecoveryPreferenceWrites(
+  SharedPreferences preferences, {
+  required Map<String, Object> data,
+  required Set<String> failedKeys,
+}) async {
+  final originalStore = SharedPreferencesStorePlatform.instance;
+  SharedPreferencesStorePlatform.instance = _FailingRecoveryPreferenceStore(
+    data,
+    failedKeys: failedKeys,
+  );
+  await preferences.reload();
+  return originalStore;
+}
+
 /// Records method calls made on the keep-alive method channel.
 final List<MethodCall> keepAliveCalls = [];
 
@@ -757,6 +789,89 @@ void main() {
         reason: 're-enabling the watchdog while the service runs must arm '
             'the native keep-alive alarm',
       );
+    });
+
+    testWidgets('watchdog remains off when enabling its preference fails',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        data: const {
+          'flutter.background_service_watchdog': false,
+          'flutter.background_service_cold_start_restore': false,
+        },
+        failedKeys: const {'flutter.background_service_watchdog'},
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      expect(prefs.getBool('background_service_watchdog'), isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+        reason: 'a rejected enable must not act on an unsaved watchdog choice',
+      );
+      expect(mock._isRunning, isTrue);
+    });
+
+    testWidgets(
+        'cold-start restore remains off when enabling its preference fails',
+        (tester) async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _failRecoveryPreferenceWrites(
+        prefs,
+        data: const {
+          'flutter.background_service_watchdog': false,
+          'flutter.background_service_cold_start_restore': false,
+        },
+        failedKeys: const {'flutter.background_service_cold_start_restore'},
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('冷启动自动恢复'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      expect(prefs.getBool('background_service_cold_start_restore'), isFalse);
     });
   });
   group('BackgroundOptimizationPage - keep-alive strategy toggles', () {
