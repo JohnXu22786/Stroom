@@ -935,8 +935,8 @@ void main() {
             )
             .length;
 
-        for (final (pointer, kind, jitter) in
-            <(int, PointerDeviceKind, Offset)>[
+        for (final (pointer, kind, jitter)
+            in <(int, PointerDeviceKind, Offset)>[
           (1, PointerDeviceKind.touch, const Offset(5, 3)),
           (2, PointerDeviceKind.mouse, const Offset(0.5, 0.5)),
         ]) {
