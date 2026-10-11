@@ -120,6 +120,8 @@ void main() {
       addTearDown(() => InAppWebViewPlatform.instance =
           previousPlatform ?? _ZoomTrackingWebViewPlatform());
 
+      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -135,9 +137,8 @@ void main() {
       );
       await tester.tap(find.text('Open preview'));
       await tester.pump();
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
       await tester.pump();
 
       final webView = platform.webView!;
