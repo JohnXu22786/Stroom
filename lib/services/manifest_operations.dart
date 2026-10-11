@@ -55,11 +55,15 @@ class ManifestOperations<T extends FileRecord> {
   List<T>? _cache;
   bool _dirty = false;
   Set<String> _folderCache = {};
-  int _recordRegistrationRevision = 0;
+  int _recordMutationRevision = 0;
 
   /// Pauses a forced refresh between reading records and reading folders.
   @visibleForTesting
   Future<void> Function()? beforeFolderLoadForTesting;
+
+  /// Pauses audio folder deletion before deleting its record rows in tests.
+  @visibleForTesting
+  Future<void> Function()? beforeAudioFolderRecordDeleteForTesting;
 
   /// Injects a failure before deleting an audio primary file in focused tests.
   @visibleForTesting
@@ -370,7 +374,7 @@ class ManifestOperations<T extends FileRecord> {
   }) async {
     if (_cache != null && !_dirty && !forceRefresh) return _cache!;
 
-    final revision = _recordRegistrationRevision;
+    final revision = _recordMutationRevision;
     try {
       final rows = await _dbGetAllRecords();
       final records = rows.map((m) => fromMap(m)).toList();
@@ -378,7 +382,7 @@ class ManifestOperations<T extends FileRecord> {
       final folders =
           (await ManifestDatabase.getAllFolders(recordTable: tableName))
               .toSet();
-      if (_recordRegistrationRevision == revision) {
+      if (_recordMutationRevision == revision) {
         _cache = records;
         _folderCache = folders;
         _dirty = false;
@@ -388,10 +392,10 @@ class ManifestOperations<T extends FileRecord> {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'loadRecords failed', e);
       if (throwOnError) {
-        if (_recordRegistrationRevision == revision) _dirty = true;
+        if (_recordMutationRevision == revision) _dirty = true;
         rethrow;
       }
-      if (_recordRegistrationRevision == revision) {
+      if (_recordMutationRevision == revision) {
         _cache = [];
         _folderCache = {};
         _dirty = false;
@@ -415,7 +419,7 @@ class ManifestOperations<T extends FileRecord> {
       );
       _cache!.add(record);
       _folderCache.addAll(folders);
-      _recordRegistrationRevision++;
+      _recordMutationRevision++;
     } catch (e, st) {
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'addRecord failed', e, st);
@@ -500,10 +504,12 @@ class ManifestOperations<T extends FileRecord> {
             if (!restored.any((item) => item.id == record.id)) {
               _cache!.removeWhere((item) => item.id == record.id);
             }
+            _recordMutationRevision++;
             Error.throwWithStackTrace(error, stackTrace);
           }
         }
         _cache!.removeAt(index);
+        _recordMutationRevision++;
         return;
       }
       // A caller undoing a just-added record cannot know whether another
@@ -570,12 +576,14 @@ class ManifestOperations<T extends FileRecord> {
               .where((record) =>
                   !idSet.contains(record.id) || restoredIds.contains(record.id))
               .toList();
+          _recordMutationRevision++;
           Error.throwWithStackTrace(error, stackTrace);
         }
         // Preserve mutations to records that survived this batch while file
         // cleanup was awaiting I/O. Audio updates can update the cache before
         // their JSON write joins the mutation queue held by this deletion.
         _cache!.removeWhere((record) => idSet.contains(record.id));
+        _recordMutationRevision++;
         return;
       }
 
@@ -876,11 +884,21 @@ class ManifestOperations<T extends FileRecord> {
         }
       }
 
-      _cache!.removeWhere((r) => idsToDelete.contains(r.id));
-
-      // Delete records from DB
+      final deletesAudioRecords = _isAudioTable && idsToDelete.isNotEmpty;
       if (idsToDelete.isNotEmpty) {
-        await _dbDeleteRecords(idsToDelete);
+        if (deletesAudioRecords) {
+          // Invalidate refreshes that began before the deletion, but leave the
+          // cache intact until the database confirms the delete. If persistence
+          // fails, the still-authoritative rows remain available in the cache.
+          _recordMutationRevision++;
+          await beforeAudioFolderRecordDeleteForTesting?.call();
+          await _dbDeleteRecords(idsToDelete);
+          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+          _recordMutationRevision++;
+        } else {
+          _cache!.removeWhere((r) => idsToDelete.contains(r.id));
+          await _dbDeleteRecords(idsToDelete);
+        }
       }
     } catch (e, st) {
       await AppLogService.error(
