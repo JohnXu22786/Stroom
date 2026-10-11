@@ -691,7 +691,14 @@ class _BackgroundOptimizationPageState
             }
             if (mounted) setState(() => _watchdogEnabled = v);
             if (v && _isServiceRunning) {
-              await startBackgroundService();
+              final started = await startBackgroundService();
+              if (!started && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('看门狗激活失败，后台服务保活状态未确认'),
+                  ),
+                );
+              }
             } else if (!v) {
               disableKeepAlive();
             }
