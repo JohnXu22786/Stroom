@@ -1022,8 +1022,8 @@ class ManifestOperations<T extends FileRecord> {
   Future<void> _ensureFolderPathTracked(String folderPath) async {
     for (final p in _folderPathAndAncestors(folderPath)) {
       if (!_folderCache.contains(p)) {
-        _folderCache.add(p);
         await ManifestDatabase.insertFolder(p, recordTable: tableName);
+        _folderCache.add(p);
       }
     }
   }

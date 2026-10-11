@@ -2853,6 +2853,54 @@ void main() {
       expect(records.first.folder, equals('x/y/z'));
     });
 
+    testWidgets('moveRecord retries folder persistence after insert failure',
+        (WidgetTester t) async {
+      final record = AudioRecord(
+        id: 'audio_move_folder_retry',
+        name: 'tts',
+        hash: 'hash_move_folder_retry',
+        format: 'wav',
+        createdAt: DateTime(2024),
+        size: 4,
+      );
+      await FileManifest.addRecord(record);
+
+      const targetFolder = 'audio_move_retry/child/grandchild';
+      const failedPath = 'audio_move_retry/child';
+      final failure = StateError('injected folder persistence failure');
+      var shouldFail = true;
+      ManifestDatabase.beforeFolderInsertForTesting = (path) {
+        if (shouldFail && path == failedPath) {
+          shouldFail = false;
+          throw failure;
+        }
+      };
+
+      await expectLater(
+        FileManifest.moveRecord(record.id, targetFolder),
+        throwsA(same(failure)),
+      );
+      expect(
+        await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords),
+        isNot(contains(failedPath)),
+        reason: 'the failed folder insert must be absent from durable storage',
+      );
+
+      await FileManifest.moveRecord(record.id, targetFolder);
+
+      expect(
+        await ManifestDatabase.getAllFolders(
+            recordTable: ManifestTables.audioRecords),
+        containsAll([
+          'audio_move_retry',
+          failedPath,
+          targetFolder,
+        ]),
+        reason: 'retry must persist every target ancestor',
+      );
+    });
+
     testWidgets('addFolder ignores empty and whitespace names',
         (WidgetTester t) async {
       await TextManifest.addFolder('');

@@ -3,7 +3,6 @@ package com.johntsui.stroom
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,13 +82,16 @@ class KeepAliveScheduleTest {
             val handledDeliveries = mutableListOf<String>()
 
             for (delivery in deliveryOrder) {
-                val invalidatedGeneration = claimAlarmDeliveryGeneration(
+                val result = claimAlarmDeliveryGeneration(
                     scheduledGeneration = 17L,
                     currentGeneration = currentGeneration,
                     keepAliveActive = true,
+                    persistGeneration = { generation ->
+                        currentGeneration = generation
+                        true
+                    },
                 )
-                if (invalidatedGeneration != null) {
-                    currentGeneration = invalidatedGeneration
+                if (result == AlarmGenerationClaimResult.CLAIMED) {
                     handledDeliveries += delivery
                 }
             }
@@ -100,14 +102,55 @@ class KeepAliveScheduleTest {
     }
 
     @Test
+    fun failedClaimCommitRestoresGenerationSoPairedAlarmCanRecover() {
+        var currentGeneration = 17L
+        var failedClaimCommit = false
+        val persistGeneration: (Long) -> Boolean = { generation ->
+            // SharedPreferences updates its in-memory value even when commit() fails.
+            currentGeneration = generation
+            if (generation == 18L && !failedClaimCommit) {
+                failedClaimCommit = true
+                false
+            } else {
+                true
+            }
+        }
+
+        val firstDelivery = claimAlarmDeliveryGeneration(
+            scheduledGeneration = 17L,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = persistGeneration,
+        )
+
+        assertEquals(AlarmGenerationClaimResult.PERSISTENCE_FAILED, firstDelivery)
+        assertEquals(17L, currentGeneration)
+
+        val pairedBackup = claimAlarmDeliveryGeneration(
+            scheduledGeneration = 17L,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = persistGeneration,
+        )
+
+        assertEquals(AlarmGenerationClaimResult.CLAIMED, pairedBackup)
+        assertEquals(18L, currentGeneration)
+    }
+
+    @Test
     fun explicitStopRejectsQueuedAlarmGeneration() {
-        assertNull(
+        var persistAttempted = false
+
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
             claimAlarmDeliveryGeneration(
                 scheduledGeneration = 17L,
                 currentGeneration = 17L,
                 keepAliveActive = false,
+                persistGeneration = { persistAttempted = true; true },
             ),
         )
+        assertFalse(persistAttempted)
     }
 
     @Test
