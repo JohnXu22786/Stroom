@@ -25,7 +25,8 @@ void main() {
       expect(packageText, isNot(contains('NVIDIA Corporation')));
 
       const sourceNoticeLabel =
-          'mdk-nvjp2k source-file notice (Windows x64; separate from package MIT; '
+          'mdk-nvjp2k source-file notice (Windows x64; '
+          'separate from package MIT; '
           'NVIDIA source and external runtime scope)';
       final sourceNoticeEntry = entries.singleWhere(
         (entry) => entry.packages.contains(sourceNoticeLabel),
