@@ -618,6 +618,7 @@ class _AudioTrackInfo {
   final List<int>
       chunkOffsets; // absolute file offset of each chunk (from stco/co64)
   final List<int> sampleToChunkMap; // samples per chunk for each chunk index
+  final Set<int>? includedSampleIndices;
 
   _AudioTrackInfo({
     required this.trackId,
@@ -630,11 +631,27 @@ class _AudioTrackInfo {
     required this.sampleSizes,
     required this.chunkOffsets,
     required this.sampleToChunkMap,
+    required this.includedSampleIndices,
   });
 }
 
 /// Type for an stsc entry: (firstChunk, samplesPerChunk)
 typedef _StscEntry = (int, int, int);
+typedef _SttsEntry = (int, int);
+
+class _EditListEntry {
+  final int segmentDuration;
+  final int mediaTime;
+  final int mediaRateInteger;
+  final int mediaRateFraction;
+
+  const _EditListEntry({
+    required this.segmentDuration,
+    required this.mediaTime,
+    required this.mediaRateInteger,
+    required this.mediaRateFraction,
+  });
+}
 
 class _AudioSampleDescription {
   final String codec;
@@ -686,6 +703,7 @@ class _Mp4Demuxer {
 
   final Uint8List _data;
   int _offset = 0;
+  int? _movieTimescale;
 
   _Mp4Demuxer(this._data);
 
@@ -720,6 +738,7 @@ class _Mp4Demuxer {
 
       if (moovOffset < 0 || mdatOffset < 0) return null;
 
+      _movieTimescale = _readMovieTimescale(moovOffset);
       _offset = moovOffset + 8;
       final moovEnd = moovOffset + _boxSizeAt(moovOffset);
 
@@ -768,11 +787,14 @@ class _Mp4Demuxer {
     int channels = 0;
     int bitsPerSample = 16;
     Uint8List? audioSpecificConfig;
+    int mediaTimescale = 0;
     final sampleDescriptions = <_AudioSampleDescription?>[];
     int sampleCount = 0;
     List<int> sampleSizes = [];
     List<int> chunkOffsets = [];
     final stscEntries = <_StscEntry>[];
+    final sampleTimingEntries = <_SttsEntry>[];
+    List<_EditListEntry>? editListEntries;
 
     while (_offset < trackEnd) {
       final childStart = _offset;
@@ -787,6 +809,24 @@ class _Mp4Demuxer {
         _offset += 4; // modification time
         trackId = _readUint32();
         _offset = childStart + childSize;
+      } else if (childType == 'edts') {
+        final edtsEnd = childStart + childSize;
+        var editOffset = childStart + 8;
+        while (editOffset + 8 <= edtsEnd) {
+          final editSize = _uint32At(editOffset);
+          if (editSize < 8 || editOffset + editSize > edtsEnd) return null;
+          final editType = String.fromCharCodes(
+            _data.sublist(editOffset + 4, editOffset + 8),
+          );
+          if (editType == 'elst') {
+            if (editListEntries != null) return null;
+            editListEntries = _parseEditListEntries(editOffset, editSize);
+            if (editListEntries == null) return null;
+          }
+          editOffset += editSize;
+        }
+        if (editOffset != edtsEnd) return null;
+        _offset = edtsEnd;
       } else if (childType == 'mdia') {
         final mdiaEnd = childStart + childSize;
 
@@ -795,7 +835,10 @@ class _Mp4Demuxer {
           final mcSize = _readUint32();
           final mcType = _readString(4);
 
-          if (mcType == 'hdlr') {
+          if (mcType == 'mdhd') {
+            mediaTimescale = _readTimescale(mcStart, mcSize) ?? 0;
+            _offset = mcStart + mcSize;
+          } else if (mcType == 'hdlr') {
             _offset += 4; // version + flags
             _offset += 4; // component type
             handlerType = _readString(4);
@@ -888,8 +931,10 @@ class _Mp4Demuxer {
                     final entryCount = _readUint32();
                     int total = 0;
                     for (var i = 0; i < entryCount; i++) {
-                      total += _readUint32(); // sample count
-                      _offset += 4; // sample duration
+                      final count = _readUint32();
+                      final duration = _readUint32();
+                      total += count;
+                      sampleTimingEntries.add((count, duration));
                     }
                     sampleCount = total;
                   } else if (scType == 'stsc') {
@@ -994,6 +1039,14 @@ class _Mp4Demuxer {
     channels = selectedDescription.channels;
     bitsPerSample = selectedDescription.bitsPerSample;
     audioSpecificConfig = selectedDescription.audioSpecificConfig;
+    final includedSampleIndices = codec == 'mp4a'
+        ? _sampleIndicesForEditList(
+            editListEntries,
+            sampleTimingEntries,
+            sampleSizes.length,
+            mediaTimescale,
+          )
+        : null;
 
     return _AudioTrackInfo(
       trackId: trackId,
@@ -1006,7 +1059,121 @@ class _Mp4Demuxer {
       sampleSizes: sampleSizes,
       chunkOffsets: chunkOffsets,
       sampleToChunkMap: sampleToChunk,
+      includedSampleIndices: includedSampleIndices,
     );
+  }
+
+  int? _readMovieTimescale(int moovOffset) {
+    final moovEnd = moovOffset + _boxSizeAt(moovOffset);
+    var childOffset = moovOffset + 8;
+    while (childOffset + 8 <= moovEnd) {
+      final childSize = _uint32At(childOffset);
+      if (childSize < 8 || childOffset + childSize > moovEnd) return null;
+      final childType = String.fromCharCodes(
+        _data.sublist(childOffset + 4, childOffset + 8),
+      );
+      if (childType == 'mvhd') {
+        return _readTimescale(childOffset, childSize);
+      }
+      childOffset += childSize;
+    }
+    return null;
+  }
+
+  int? _readTimescale(int boxStart, int boxSize) {
+    if (boxStart + boxSize > _data.length || boxSize < 24) return null;
+    final version = _data[boxStart + 8];
+    final timescaleOffset = switch (version) {
+      0 => boxStart + 20,
+      1 => boxStart + 28,
+      _ => -1,
+    };
+    if (timescaleOffset < 0 || timescaleOffset + 4 > boxStart + boxSize) {
+      return null;
+    }
+    final timescale = _uint32At(timescaleOffset);
+    return timescale > 0 ? timescale : null;
+  }
+
+  List<_EditListEntry>? _parseEditListEntries(int boxStart, int boxSize) {
+    final boxEnd = boxStart + boxSize;
+    if (boxEnd > _data.length || boxSize < 16) return null;
+    final version = _data[boxStart + 8];
+    final entryCount = _uint32At(boxStart + 12);
+    final entries = <_EditListEntry>[];
+    var entryOffset = boxStart + 16;
+
+    for (var i = 0; i < entryCount; i++) {
+      if (version == 0) {
+        if (entryOffset + 12 > boxEnd) return null;
+        entries.add(_EditListEntry(
+          segmentDuration: _uint32At(entryOffset),
+          mediaTime: _int32At(entryOffset + 4),
+          mediaRateInteger: _int16At(entryOffset + 8),
+          mediaRateFraction: _int16At(entryOffset + 10),
+        ));
+        entryOffset += 12;
+      } else if (version == 1) {
+        if (entryOffset + 20 > boxEnd) return null;
+        entries.add(_EditListEntry(
+          segmentDuration: _uint64At(entryOffset),
+          mediaTime: _int64At(entryOffset + 8),
+          mediaRateInteger: _int16At(entryOffset + 16),
+          mediaRateFraction: _int16At(entryOffset + 18),
+        ));
+        entryOffset += 20;
+      } else {
+        return null;
+      }
+    }
+
+    return entryOffset == boxEnd ? entries : null;
+  }
+
+  Set<int>? _sampleIndicesForEditList(
+    List<_EditListEntry>? entries,
+    List<_SttsEntry> sampleTimingEntries,
+    int sampleCount,
+    int mediaTimescale,
+  ) {
+    if (entries == null) return null;
+    if (entries.isEmpty) return <int>{};
+    final movieTimescale = _movieTimescale;
+    if (movieTimescale == null || movieTimescale <= 0 || mediaTimescale <= 0) {
+      return <int>{};
+    }
+
+    final mediaRanges = <(int, int)>[];
+    for (final entry in entries) {
+      if (entry.mediaTime == -1 || entry.segmentDuration == 0) continue;
+      final mediaRate =
+          entry.mediaRateInteger * 0x10000 + entry.mediaRateFraction;
+      if (entry.mediaTime < 0 || mediaRate <= 0) {
+        return <int>{};
+      }
+      final mediaDuration =
+          (entry.segmentDuration * mediaTimescale * mediaRate +
+                  movieTimescale * 0x10000 -
+                  1) ~/
+              (movieTimescale * 0x10000);
+      mediaRanges.add((entry.mediaTime, entry.mediaTime + mediaDuration));
+    }
+
+    final includedSampleIndices = <int>{};
+    var sampleIndex = 0;
+    var mediaTime = 0;
+    for (final (count, duration) in sampleTimingEntries) {
+      for (var i = 0; i < count && sampleIndex < sampleCount; i++) {
+        if (mediaRanges.any(
+          (range) => mediaTime >= range.$1 && mediaTime < range.$2,
+        )) {
+          includedSampleIndices.add(sampleIndex);
+        }
+        mediaTime += duration;
+        sampleIndex++;
+      }
+    }
+    return includedSampleIndices;
   }
 
   _Mp4aDecoderConfig? _readMp4aDecoderConfig(
@@ -1114,6 +1281,22 @@ class _Mp4Demuxer {
       (_data[offset + 2] << 8) |
       _data[offset + 3];
 
+  int _int16At(int offset) {
+    final value = (_data[offset] << 8) | _data[offset + 1];
+    return value >= 0x8000 ? value - 0x10000 : value;
+  }
+
+  int _int32At(int offset) {
+    final value = _uint32At(offset);
+    return value >= 0x80000000 ? value - 0x100000000 : value;
+  }
+
+  int _uint64At(int offset) =>
+      _uint32At(offset) * 0x100000000 + _uint32At(offset + 4);
+
+  int _int64At(int offset) =>
+      _int32At(offset) * 0x100000000 + _uint32At(offset + 4);
+
   /// Extract audio frames from mdat box using sample table metadata.
   /// Returns individual frames with their raw data.
   List<_AudioFrame> extractAudioFrames(_AudioTrackInfo track) {
@@ -1122,6 +1305,7 @@ class _Mp4Demuxer {
     }
 
     final frames = <_AudioFrame>[];
+    final includedSampleIndices = track.includedSampleIndices;
     int sampleIdx = 0;
 
     for (var chunkIdx = 0;
@@ -1145,7 +1329,9 @@ class _Mp4Demuxer {
         }
 
         final fileOffset = chunkMdatOffset + offsetInChunk;
-        if (fileOffset + sampleSize <= _data.length) {
+        if (fileOffset + sampleSize <= _data.length &&
+            (includedSampleIndices == null ||
+                includedSampleIndices.contains(sampleIdx))) {
           frames.add(_AudioFrame(
             Uint8List.sublistView(_data, fileOffset, fileOffset + sampleSize),
           ));

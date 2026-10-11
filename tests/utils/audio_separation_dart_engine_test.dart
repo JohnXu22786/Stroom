@@ -603,11 +603,24 @@ void main() {
       List<Uint8List> additionalAudioSpecificConfigs = const [],
       int sampleDescriptionIndex = 1,
       List<int>? sampleDescriptionIndicesPerChunk,
+      List<Uint8List>? sourceFrames,
+      int? editListMediaTime,
+      int? editListSegmentDuration,
+      int editListMediaRateInteger = 1,
+      int editListMediaRateFraction = 0,
     }) {
-      final audioFrames = [
-        Uint8List.fromList([0x11, 0x22, 0x33]),
-        Uint8List.fromList([0x44, 0x55, 0x66]),
-      ];
+      final audioFrames = sourceFrames ??
+          <Uint8List>[
+            Uint8List.fromList([0x11, 0x22, 0x33]),
+            Uint8List.fromList([0x44, 0x55, 0x66]),
+          ];
+      if ((editListMediaTime == null) != (editListSegmentDuration == null)) {
+        throw ArgumentError(
+          'An edit list needs both a media time and duration.',
+        );
+      }
+      final mediaDuration = audioFrames.length * samplesPerFrame;
+      final movieDuration = editListSegmentDuration ?? mediaDuration;
 
       Uint8List descriptor(int tag, List<int> body) {
         var remaining = body.length;
@@ -751,6 +764,15 @@ void main() {
           ...stco,
         ]);
         final minf = _buildBox('minf', stbl);
+        final mdhd = _buildBox('mdhd', [
+          0, 0, 0, 0, // version + flags
+          ..._u32be(0), // creation time
+          ..._u32be(0), // modification time
+          ..._u32be(sampleRate),
+          ..._u32be(mediaDuration),
+          ..._u16be(0x55C4), // und
+          ..._u16be(0), // predefined
+        ]);
         final hdlr = _buildBox('hdlr', [
           0, 0, 0, 0, // version + flags
           ..._u32be(0), // pre-defined
@@ -758,14 +780,67 @@ void main() {
           ...List.filled(12, 0), // reserved
           0, // name terminator
         ]);
-        final mdia = _buildBox('mdia', [...hdlr, ...minf]);
+        final mdia = _buildBox('mdia', [...mdhd, ...hdlr, ...minf]);
+        final matrix = [
+          for (final value in [
+            0x00010000,
+            0,
+            0,
+            0,
+            0x00010000,
+            0,
+            0,
+            0,
+            0x40000000,
+          ])
+            ..._i32be(value),
+        ];
+        final mvhd = _buildBox('mvhd', [
+          0, 0, 0, 0, // version + flags
+          ..._u32be(0), // creation time
+          ..._u32be(0), // modification time
+          ..._u32be(sampleRate), // movie timescale
+          ..._u32be(movieDuration),
+          ..._u32be(0x00010000), // rate
+          ..._u16be(0x0100), // volume
+          ..._u16be(0), // reserved
+          ..._u32be(0), // reserved
+          ..._u32be(0), // reserved
+          ...matrix,
+          ...List.filled(24, 0), // predefined
+          ..._u32be(2), // next track ID
+        ]);
         final tkhd = _buildBox('tkhd', [
           0, 0, 0, 7, // version + flags
           ..._u32be(0), // creation time
           ..._u32be(0), // modification time
           ..._u32be(1), // track ID
+          ..._u32be(0), // reserved
+          ..._u32be(movieDuration),
+          ..._u64be(0), // reserved
+          ..._u16be(0), // layer
+          ..._u16be(0), // alternate group
+          ..._u16be(0x0100), // volume
+          ..._u16be(0), // reserved
+          ...matrix,
+          ..._u32be(0), // width
+          ..._u32be(0), // height
         ]);
-        return _buildBox('moov', _buildBox('trak', [...tkhd, ...mdia]));
+        final edts = editListMediaTime == null
+            ? <int>[]
+            : _buildBox(
+                'edts',
+                _buildBox('elst', [
+                  0, 0, 0, 0, // version + flags
+                  ..._u32be(1), // entry count
+                  ..._u32be(editListSegmentDuration!),
+                  ..._i32be(editListMediaTime),
+                  ..._u16be(editListMediaRateInteger),
+                  ..._u16be(editListMediaRateFraction),
+                ]),
+              );
+        final trak = _buildBox('trak', [...tkhd, ...edts, ...mdia]);
+        return _buildBox('moov', [...mvhd, ...trak]);
       }
 
       final ftyp = _buildBox('ftyp', [
@@ -790,6 +865,85 @@ void main() {
         ..add(mdat);
       return result.toBytes();
     }
+
+    Uint8List audioDataFromMp4(Uint8List data) {
+      final mdatTypeOffset = _findFourCc(data, 'mdat');
+      expect(mdatTypeOffset, greaterThanOrEqualTo(4));
+      final mdatStart = mdatTypeOffset - 4;
+      final mdatEnd = mdatStart + _readUint32BE(data, mdatStart);
+      return Uint8List.fromList(data.sublist(mdatTypeOffset + 4, mdatEnd));
+    }
+
+    test('honors AAC edit-list trims around encoder priming', () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]), // encoder priming
+        Uint8List.fromList([0x44, 0x55, 0x66]), // retained audio
+        Uint8List.fromList([0x77, 0x88, 0x99]), // beyond the edit segment
+      ];
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: sourceFrames,
+        editListMediaTime: 1024,
+        editListSegmentDuration: 1024,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      expect(audioDataFromMp4(result), sourceFrames[1]);
+    });
+
+    test('honors positive non-unit AAC edit-list rates', () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]), // before the media interval
+        Uint8List.fromList([0x44, 0x55, 0x66]), // inside the media interval
+        Uint8List.fromList([0x77, 0x88, 0x99]), // after the media interval
+      ];
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: sourceFrames,
+        editListMediaTime: 1024,
+        editListSegmentDuration: 512,
+        editListMediaRateInteger: 2,
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      expect(audioDataFromMp4(result), sourceFrames[1]);
+    });
+
+    test(
+      'preserves every AAC frame when the source has no edit list',
+      () async {
+        final sourceFrames = [
+          Uint8List.fromList([0x11, 0x22, 0x33]),
+          Uint8List.fromList([0x44, 0x55, 0x66]),
+          Uint8List.fromList([0x77, 0x88, 0x99]),
+        ];
+        final mp4Bytes = buildMinimalMp4WithAacAudio(
+          asc: Uint8List.fromList([0x12, 0x10]),
+          sampleRate: 44100,
+          sourceFrames: sourceFrames,
+        );
+
+        final result = await engine.extractAudio(
+          videoBytes: mp4Bytes,
+          videoFormat: 'mp4',
+        );
+
+        expect(
+          audioDataFromMp4(result),
+          Uint8List.fromList(sourceFrames.expand((frame) => frame).toList()),
+        );
+      },
+    );
 
     test(
       'rejects a truncated trailing moov with oversized stbl without hanging',
