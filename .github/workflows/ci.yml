@@ -7,19 +7,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Keep metadata-only edits out of the code workflow's pending slot. This
-  # preserves a queued run for a commit or base-branch retarget.
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata' || 'code' }}
-  # A title/body-only edit gets its own short validation workflow and must not
-  # cancel a code run. Retargeting a PR changes `changes.base` and still
-  # cancels the prior run so the new base is checked.
-  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+  # Let each pull request event finish its complete CI run, including metadata edits.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   # Small JavaScript checks for the integrated components share one Node job.
   components:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (component scripts skipped)' || 'Component Integration scripts' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Component Integration scripts"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +29,7 @@ jobs:
       - run: node --test tests/catcatch/js_hook_script_test.cjs
 
   format:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (format skipped)' || 'Format Check' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Format Check"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,10 +45,7 @@ jobs:
 
   # Keep the required branch-protection check name for static analysis.
   quality:
-    # The prior Static Analysis result remains attached to the unchanged head
-    # SHA during metadata-only edits; base retargets use this formal name.
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (code checks skipped)' || 'Static Analysis' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Static Analysis"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -198,8 +189,7 @@ jobs:
   # Kotlin sources in their standalone JVM build instead of building the full
   # Flutter Android app and its plugins for four helper tests.
   app-runtime-jvm:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (JVM tests skipped)' || 'Application Runtime (Kotlin/JVM)' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Application Runtime (Kotlin/JVM)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -215,8 +205,7 @@ jobs:
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (tests skipped: {0})', matrix.label) || format('Tests ({0})', matrix.label) }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Tests (${{ matrix.label }})"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

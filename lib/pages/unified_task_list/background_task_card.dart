@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/ocr_batch_execution.dart';
 import '../../providers/background_task_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/text_provider.dart';
@@ -176,7 +177,11 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: _buildDetailContent(
-                      widget.task, colorScheme, ref, hasRawData),
+                    widget.task,
+                    colorScheme,
+                    ref,
+                    hasRawData,
+                  ),
                 ),
               ],
             ),
@@ -230,6 +235,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         // Step chain timeline — always visible in expanded mode
         const SizedBox(height: 10),
         _buildStepTimeline(task, cs),
+        if (task.ocrPageOutcomes.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildOcrPageOutcomes(task, cs),
+        ],
 
         // Error message for failed tasks
         if (task.status == TaskStatus.failed && task.error != null) ...[
@@ -305,7 +314,104 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       context: context,
       rawRequest: task.rawRequest,
       rawResponse: task.rawResponse,
+      isOcrDiagnostics: task.type == BackgroundTaskType.ocr,
     );
+  }
+
+  Widget _buildOcrPageOutcomes(BackgroundTask task, ColorScheme cs) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '逐张识别',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final outcome in task.ocrPageOutcomes) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                _ocrPageOutcomeIcon(outcome.status, cs),
+                const SizedBox(width: 8),
+                Text(
+                  '第 ' + (outcome.imageIndex + 1).toString() + ' 张',
+                  style: TextStyle(fontSize: 12, color: cs.onSurface),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _ocrPageOutcomeLabel(outcome.status),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: outcome.status == OcrPageOutcomeStatus.failed ||
+                            outcome.status == OcrPageOutcomeStatus.incomplete
+                        ? Colors.red
+                        : cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (outcome.error != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, bottom: 3),
+              child: Text(
+                outcome.error!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.red,
+                  height: 1.35,
+                ),
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _ocrPageOutcomeIcon(OcrPageOutcomeStatus status, ColorScheme cs) {
+    switch (status) {
+      case OcrPageOutcomeStatus.pending:
+        return Icon(Icons.circle_outlined, size: 15, color: cs.outline);
+      case OcrPageOutcomeStatus.running:
+        return SizedBox(
+          width: 15,
+          height: 15,
+          child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+        );
+      case OcrPageOutcomeStatus.succeeded:
+        return const Icon(
+          Icons.check_circle_outline,
+          size: 15,
+          color: Colors.green,
+        );
+      case OcrPageOutcomeStatus.incomplete:
+      case OcrPageOutcomeStatus.failed:
+        return const Icon(Icons.error_outline, size: 15, color: Colors.red);
+      case OcrPageOutcomeStatus.cancelled:
+        return Icon(Icons.cancel_outlined, size: 15, color: cs.outline);
+    }
+  }
+
+  String _ocrPageOutcomeLabel(OcrPageOutcomeStatus status) {
+    switch (status) {
+      case OcrPageOutcomeStatus.pending:
+        return '待识别';
+      case OcrPageOutcomeStatus.running:
+        return '识别中';
+      case OcrPageOutcomeStatus.succeeded:
+        return '已完成';
+      case OcrPageOutcomeStatus.incomplete:
+        return '结果不完整';
+      case OcrPageOutcomeStatus.failed:
+        return '识别失败';
+      case OcrPageOutcomeStatus.cancelled:
+        return '已取消';
+    }
   }
 
   Widget _buildStepTimeline(BackgroundTask task, ColorScheme colorScheme) {
@@ -316,10 +422,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Text(
           '等待开始...',
-          style: TextStyle(
-            fontSize: 12,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
         ),
       );
     }
@@ -437,7 +540,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
   }
 
   Widget _buildActionButtons(
-      BackgroundTask task, ColorScheme cs, WidgetRef ref) {
+    BackgroundTask task,
+    ColorScheme cs,
+    WidgetRef ref,
+  ) {
     // Chat tasks have no standalone page (they run inside a flow) — the
     // 立即开始/重试 buttons would be dead taps, so hide them.
     final hasRetryPage =
@@ -502,8 +608,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
               ref.read(backgroundTasksProvider.notifier).removeTask(task.id);
             },
             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-            label: const Text('删除',
-                style: TextStyle(fontSize: 13, color: Colors.red)),
+            label: const Text(
+              '删除',
+              style: TextStyle(fontSize: 13, color: Colors.red),
+            ),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: const Size(48, 48),
@@ -536,16 +644,18 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => OcrPage(retryData: task.retryData),
+            builder: (_) => OcrPage(
+              retryData: task.retryData,
+              retryTaskId: task.id,
+              retryPageOutcomes: task.ocrPageOutcomes,
+            ),
           ),
         );
         break;
       case BackgroundTaskType.asr:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => AsrPage(retryData: task.retryData),
-          ),
+          MaterialPageRoute(builder: (_) => AsrPage(retryData: task.retryData)),
         );
         break;
       case BackgroundTaskType.audioSeparation:
