@@ -161,7 +161,10 @@ class OcrService {
         requestId: _lastRequestId,
         errorType: _lastErrorType ?? error?.runtimeType.toString(),
         data: lastResponseData,
-        excludedValues: [config.apiKey],
+        excludedValues: {
+          config.apiKey,
+          ...OcrDiagnosticSnapshot.credentialValuesFromUrl(lastRequestUrl),
+        },
       );
 
   /// Mask API key for display, showing only first 8 chars and last 4 chars.
@@ -267,9 +270,14 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
-              OcrDiagnosticSnapshot.requestIdFromData(response.data);
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+            response.headers.map,
+            excludedValues: [config.apiKey],
+          ) ??
+          OcrDiagnosticSnapshot.requestIdFromData(
+            response.data,
+            excludedValues: [config.apiKey],
+          );
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
@@ -348,9 +356,14 @@ class OcrService {
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
       lastResponseHeaders = response.headers.map;
-      _lastRequestId =
-          OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
-              OcrDiagnosticSnapshot.requestIdFromData(response.data);
+      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+            response.headers.map,
+            excludedValues: [config.apiKey],
+          ) ??
+          OcrDiagnosticSnapshot.requestIdFromData(
+            response.data,
+            excludedValues: [config.apiKey],
+          );
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
@@ -427,9 +440,14 @@ class OcrService {
     }
     lastResponseStatusCode = e.response?.statusCode;
     lastResponseHeaders = e.response?.headers.map;
-    _lastRequestId =
-        OcrDiagnosticSnapshot.requestIdFromHeaders(e.response?.headers.map) ??
-            OcrDiagnosticSnapshot.requestIdFromData(e.response?.data);
+    _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+          e.response?.headers.map,
+          excludedValues: [config.apiKey],
+        ) ??
+        OcrDiagnosticSnapshot.requestIdFromData(
+          e.response?.data,
+          excludedValues: [config.apiKey],
+        );
     _lastErrorType = e.type.name;
   }
 

@@ -116,6 +116,18 @@ class OcrRetryImage {
 /// been copied to app storage.
 class OcrRetrySnapshot {
   static const currentVersion = 2;
+  static const _snapshotFields = {
+    'type',
+    'version',
+    'modelRef',
+    'images',
+    'modelIndex',
+    'instructionContent',
+    'instructionIndex',
+    'saveFolder',
+  };
+  static const _modelRefFields = {'configId', 'modelId'};
+  static const _imageFields = {'storageRef', 'format', 'name', 'bytes'};
 
   final int? version;
   final String? configId;
@@ -125,10 +137,12 @@ class OcrRetrySnapshot {
   final String? instructionContent;
   final String saveFolder;
   final List<OcrRetryImage> images;
+  final List<int> imageEntryIndices;
   final bool isLegacy;
   final bool hasInvalidImages;
   final bool hasInvalidImageMetadata;
   final bool hasInlineImageData;
+  final bool hasUnknownFields;
   final int imageEntryCount;
 
   const OcrRetrySnapshot._({
@@ -140,10 +154,12 @@ class OcrRetrySnapshot {
     required this.instructionContent,
     required this.saveFolder,
     required this.images,
+    required this.imageEntryIndices,
     required this.isLegacy,
     required this.hasInvalidImages,
     required this.hasInvalidImageMetadata,
     required this.hasInlineImageData,
+    required this.hasUnknownFields,
     required this.imageEntryCount,
   });
 
@@ -165,10 +181,14 @@ class OcrRetrySnapshot {
         instructionContent: instructionContent,
         saveFolder: saveFolder,
         images: List.unmodifiable(images),
+        imageEntryIndices: List.unmodifiable(
+          List<int>.generate(images.length, (index) => index),
+        ),
         isLegacy: false,
         hasInvalidImages: false,
         hasInvalidImageMetadata: false,
         hasInlineImageData: images.any((image) => image.bytes != null),
+        hasUnknownFields: false,
         imageEntryCount: images.length,
       );
 
@@ -180,26 +200,63 @@ class OcrRetrySnapshot {
     final modelRef = rawModelRef is Map
         ? Map<String, dynamic>.from(rawModelRef)
         : const <String, dynamic>{};
+    var hasUnknownFields = map.keys.any(
+      (key) => key is! String || !_snapshotFields.contains(key),
+    );
+    if ((version == currentVersion && !map.containsKey('type')) ||
+        (map.containsKey('type') && map['type'] != 'ocr') ||
+        (map.containsKey('modelRef') && rawModelRef is! Map) ||
+        (map.containsKey('modelIndex') &&
+            map['modelIndex'] != null &&
+            map['modelIndex'] is! int) ||
+        (map.containsKey('instructionIndex') &&
+            map['instructionIndex'] != null &&
+            map['instructionIndex'] is! int) ||
+        (map.containsKey('instructionContent') &&
+            map['instructionContent'] != null &&
+            map['instructionContent'] is! String) ||
+        (map.containsKey('saveFolder') &&
+            map['saveFolder'] != null &&
+            map['saveFolder'] is! String)) {
+      hasUnknownFields = true;
+    }
+    if (rawModelRef is Map) {
+      hasUnknownFields |= rawModelRef.keys.any(
+        (key) => key is! String || !_modelRefFields.contains(key),
+      );
+      for (final field in _modelRefFields) {
+        final value = rawModelRef[field];
+        if (value != null && _nonEmptyString(value) == null) {
+          hasUnknownFields = true;
+        }
+      }
+    }
     final configId = _nonEmptyString(modelRef['configId']);
     final modelId = _nonEmptyString(modelRef['modelId']);
     final rawImages = map['images'];
     final images = <OcrRetryImage>[];
+    final imageEntryIndices = <int>[];
     var hasInvalidImages = false;
     var hasInvalidImageMetadata = false;
     var hasInlineImageData = false;
     final imageEntryCount = rawImages is List ? rawImages.length : 0;
     if (rawImages is List) {
-      for (final rawImage in rawImages) {
+      for (var index = 0; index < rawImages.length; index++) {
+        final rawImage = rawImages[index];
         if (rawImage is! Map) {
           hasInvalidImages = true;
           continue;
         }
         try {
           final imageMap = Map<String, dynamic>.from(rawImage);
+          hasUnknownFields |= imageMap.keys.any(
+            (key) => !_imageFields.contains(key),
+          );
           hasInlineImageData |= imageMap.containsKey('bytes');
           hasInvalidImageMetadata |= imageMap['format'] is! String ||
               (imageMap['name'] != null && imageMap['name'] is! String);
           images.add(OcrRetryImage.fromMap(imageMap));
+          imageEntryIndices.add(index);
         } catch (_) {
           hasInvalidImages = true;
         }
@@ -229,10 +286,12 @@ class OcrRetrySnapshot {
       saveFolder:
           map['saveFolder'] is String ? map['saveFolder'] as String : '',
       images: List.unmodifiable(images),
+      imageEntryIndices: List.unmodifiable(imageEntryIndices),
       isLegacy: isLegacy,
       hasInvalidImages: hasInvalidImages,
       hasInvalidImageMetadata: hasInvalidImageMetadata,
       hasInlineImageData: hasInlineImageData,
+      hasUnknownFields: hasUnknownFields,
       imageEntryCount: imageEntryCount,
     );
   }
@@ -242,6 +301,7 @@ class OcrRetrySnapshot {
       hasInvalidImages ||
       hasInvalidImageMetadata ||
       hasInlineImageData ||
+      hasUnknownFields ||
       images.any((image) => image.storageRef == null);
 
   Map<String, dynamic> toMap() {

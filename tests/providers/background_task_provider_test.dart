@@ -55,6 +55,7 @@ void main() {
       testDir = await Directory.systemTemp.createTemp('bg_task_test_');
       BackgroundTaskNotifier.debugStorageDirectoryOverride = testDir.path;
       OcrRetryStorage.debugBeforeCacheWrite = null;
+      BackgroundTaskNotifier.debugBeforeOcrCacheDelete = null;
       BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
       // iOS 常驻任务桥接默认关闭（测试机非 iOS）。
       IosContinuedTaskService.debugForceSupported = false;
@@ -63,6 +64,7 @@ void main() {
     tearDown(() async {
       BackgroundTaskNotifier.debugStorageDirectoryOverride = null;
       BackgroundTaskNotifier.debugBeforeOcrCacheCleanup = null;
+      BackgroundTaskNotifier.debugBeforeOcrCacheDelete = null;
       BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
       OcrRetryStorage.debugBeforeCacheWrite = null;
       IosContinuedTaskService.debugForceSupported = false;
@@ -706,6 +708,7 @@ void main() {
         for (final entry in [
           ('full', 'Bearer $apiKey'),
           ('masked', 'Bearer opaque-p...e-92'),
+          ('unicode ellipsis', 'Bearer opaque-p…e-92'),
         ]) {
           final task = taskFor('legacy-ocr-secret-model-${entry.$1}', entry.$2);
           final retryData = task.retryData!;
@@ -749,6 +752,83 @@ void main() {
       expect(snapshot.instructionContent, 'Read the document carefully');
       expect(jsonEncode(task.toMap()), contains('Read the document carefully'));
     });
+
+    test(
+      'current OCR retry snapshots drop unknown fields before later writes',
+      () async {
+        WebFileStore.enableTestMode();
+        const taskId = 'current-v2-with-unknown-inline-data';
+        const apiKey = 'unsupported-v2-credential-155';
+        final imageBytes = Uint8List.fromList([
+          0x89,
+          0x50,
+          0x4e,
+          0x47,
+          0x0d,
+          0x0a,
+          0x1a,
+          0x0a,
+          1,
+          2,
+          3,
+        ]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+            instructionContent: 'Read the document carefully',
+          ),
+        );
+        final imageEntries = retryData['images'] as List<dynamic>;
+        final imageEntry = Map<String, dynamic>.from(imageEntries.single as Map)
+          ..['imageData'] = 'data:image/png;base64,${base64Encode(imageBytes)}';
+        imageEntries[0] = imageEntry;
+        retryData['apiKey'] = apiKey;
+        final cacheReference = imageEntry['storageRef'] as String;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'Current OCR retry with ignored extensions',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [
+                {'label': 'OCR', 'status': 'pending'},
+              ],
+              'retryData': retryData,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          notifier.updateStep(taskId, 0, completed: true);
+          await notifier.pendingPersistence;
+
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          final persistedTask = persisted.single as Map<String, dynamic>;
+          final persistedRetry =
+              persistedTask['retryData'] as Map<String, dynamic>;
+          final encodedRetry = jsonEncode(persistedRetry);
+          expect(encodedRetry, isNot(contains(apiKey)));
+          expect(encodedRetry, isNot(contains('imageData')));
+          expect(encodedRetry, isNot(contains('data:image/png;base64')));
+          expect(persistedRetry['version'], OcrRetrySnapshot.currentVersion);
+          final persistedImage =
+              (persistedRetry['images'] as List).single as Map;
+          expect(persistedImage['storageRef'], cacheReference);
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
 
     test(
       'restore defers legacy retry persistence until cache migration succeeds',
@@ -1333,6 +1413,50 @@ void main() {
       expect(persisted, isNot(contains(apiKey)));
     });
 
+    test('legacy OCR diagnostics exclude credentials from request URLs', () {
+      const credentials = [
+        (
+          'https://ocr.test/v1?key=opaque-query-secret-87',
+          'opaque-query-secret-87'
+        ),
+        (
+          'https://user:oauth-userinfo-secret@ocr.test/v1',
+          'oauth-userinfo-secret'
+        ),
+        (
+          'https://ocr.test/v1?access_token=opaque-token-secret-87',
+          'opaque-token-secret-87'
+        ),
+        (
+          'https://ocr.test/v1?secretKey=opaque-secret-key-191',
+          'opaque-secret-key-191'
+        ),
+        (
+          'https://ocr.test/v1?privateKey=opaque-private-key-191',
+          'opaque-private-key-191'
+        ),
+      ];
+
+      for (final (url, credential) in credentials) {
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-url-credential',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {'url': url},
+          'rawResponse': {
+            'statusCode': 401,
+            'requestId': credential,
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.rawResponse, {'statusCode': 401});
+        expect(persisted, isNot(contains(credential)), reason: url);
+      }
+    });
+
     test('OCR task persistence omits image-shaped request IDs', () {
       const png =
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC';
@@ -1428,6 +1552,70 @@ void main() {
       },
     );
 
+    test('legacy OCR auth-token header excludes echoed request IDs', () {
+      const apiToken = 'req-private-value-123';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-auth-token-echo',
+        'type': 'ocr',
+        'title': 'legacy OCR request',
+        'status': 'failed',
+        'error': 'OCR request failed: $apiToken',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'steps': [
+          {
+            'label': 'OCR request',
+            'status': 'failed',
+            'error': 'OCR request failed: $apiToken',
+          },
+        ],
+        'rawRequest': {
+          'url': 'https://api.example.com/v1/chat/completions',
+          'method': 'POST',
+          'headers': {'X-Auth-Token': apiToken},
+          'body': {
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {
+                    'type': 'image_url',
+                    'image_url': {
+                      'url': 'data:image/png;base64,aGVsbG8=',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        'rawResponse': {
+          'statusCode': 503,
+          'data': {
+            'request_id': apiToken,
+            'requestId': 'req-safe-auth-fallback-123',
+          },
+        },
+      });
+      final serializedTask = task.toMap();
+      final persistedSnapshot = jsonEncode(serializedTask);
+
+      expect(persistedSnapshot, isNot(contains(apiToken)));
+      expect(task.retryData, isNotNull);
+      expect(task.rawResponse, {
+        'statusCode': 503,
+        'requestId': 'req-safe-auth-fallback-123',
+      });
+      expect(serializedTask['error'], 'OCR 错误详情已隐藏');
+      expect(serializedTask['steps'], [
+        {
+          'label': 'OCR request',
+          'status': 'failed',
+          'error': 'OCR 错误详情已隐藏',
+        },
+      ]);
+      expect(persistedSnapshot, contains('req-safe-auth-fallback-123'));
+    });
+
     test('legacy diagnostics fall back after an unsafe request ID field', () {
       final task = BackgroundTask.fromMap({
         'id': 'legacy-ocr-request-id-fallback',
@@ -1450,6 +1638,37 @@ void main() {
         'requestId': 'req-safe-123',
       });
       expect(jsonEncode(task.toMap()), contains('req-safe-123'));
+    });
+
+    test('legacy diagnostics skip excluded ID before a later safe candidate',
+        () {
+      const apiKey = 'opaque-user-secret-87';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-excluded-request-id-fallback',
+        'type': 'ocr',
+        'title': 'legacy OCR response',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'rawRequest': {
+          'headers': {'Authorization': 'Bearer $apiKey'},
+        },
+        'rawResponse': {
+          'statusCode': 503,
+          'data': {
+            'request_id': apiKey,
+            'requestId': 'req-safe-after-key',
+            'id': 'chatcmpl-later-safe-id',
+          },
+        },
+      });
+      final persisted = jsonEncode(task.toMap());
+
+      expect(task.rawResponse, {
+        'statusCode': 503,
+        'requestId': 'req-safe-after-key',
+      });
+      expect(persisted, contains('req-safe-after-key'));
+      expect(persisted, isNot(contains(apiKey)));
     });
 
     test('legacy OCR diagnostics exclude masked credentials from host', () {
@@ -1498,6 +1717,97 @@ void main() {
       final persisted = jsonEncode(task.toMap());
 
       expect(task.rawResponse, {'statusCode': 401, 'requestId': 'request-123'});
+      expect(persisted, isNot(contains(apiKey)));
+    });
+
+    test(
+      'legacy OCR diagnostics exclude secret and private key header echoes',
+      () {
+        for (final entry in [
+          ('X-Secret-Key', 'opaque-user-secret-192'),
+          ('X-Private-Key', 'opaque-private-value-192'),
+        ]) {
+          final task = BackgroundTask.fromMap({
+            'id': 'legacy-ocr-${entry.$1}',
+            'type': 'ocr',
+            'title': 'legacy OCR request',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'rawRequest': {
+              'headers': {entry.$1: entry.$2},
+              'body': {'messages': 'legacy image request'},
+            },
+            'rawResponse': {
+              'statusCode': 401,
+              'data': {'id': entry.$2},
+            },
+          });
+          final persisted = jsonEncode(task.toMap());
+
+          expect(task.rawResponse, {'statusCode': 401}, reason: entry.$1);
+          expect(persisted, isNot(contains(entry.$2)), reason: entry.$1);
+        }
+      },
+    );
+
+    test(
+      'legacy OCR diagnostics exclude echoed keys from prefix-only auth masks',
+      () {
+        const apiKey = 'opaque-prefix-private-value-179';
+        const safeRequestId = 'req-safe-after-prefix-mask';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-prefix-only-auth-mask',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'headers': {'Authorization': 'Bearer opaque-prefix...'},
+          },
+          'rawResponse': {
+            'statusCode': 503,
+            'data': {
+              'request_id': apiKey,
+              'requestId': safeRequestId,
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.rawResponse, {
+          'statusCode': 503,
+          'requestId': safeRequestId,
+        });
+        expect(persisted, contains(safeRequestId));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test('legacy OCR task persistence excludes short masked auth echoes', () {
+      const apiKey = 'abcd';
+      const safeRequestId = 'req-safe-after-tiny-mask';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-tiny-auth-mask',
+        'type': 'ocr',
+        'title': '旧版 OCR 任务',
+        'status': 'failed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'rawRequest': {
+          'headers': {'Authorization': 'Bearer a***'},
+        },
+        'rawResponse': {
+          'statusCode': 401,
+          'requestId': apiKey,
+          'data': {'requestId': safeRequestId},
+        },
+      });
+      final persisted = jsonEncode(task.toMap());
+
+      expect(task.rawResponse, {
+        'statusCode': 401,
+        'requestId': safeRequestId,
+      });
+      expect(persisted, contains(safeRequestId));
       expect(persisted, isNot(contains(apiKey)));
     });
 
@@ -1655,6 +1965,74 @@ void main() {
     );
 
     test(
+      'legacy OCR task and step errors redact opaque X-Token header values',
+      () {
+        const apiToken = 'private-opaque-header-166';
+        final error = 'Provider rejected credential $apiToken';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-x-token-error',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'error': error,
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [
+            {'label': '请求 OCR', 'status': 'failed', 'error': error},
+          ],
+          'rawRequest': {
+            'url': 'https://api.example.com/v1',
+            'headers': {'X-Token': apiToken},
+          },
+        });
+
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.error, 'OCR 错误详情已隐藏');
+        expect(task.steps.single.error, 'OCR 错误详情已隐藏');
+        expect(persisted, isNot(contains(apiToken)));
+      },
+    );
+
+    test(
+      'later OCR task and step errors retain X-Token exclusions in memory',
+      () {
+        const apiToken = 'private-opaque-header-later-172';
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR后续错误',
+        );
+
+        notifier.setRawDiagnostics(
+          id,
+          rawRequest: {
+            'url': 'https://api.example.com/v1',
+            'headers': {'X-Token': apiToken},
+          },
+        );
+        expect(notifier.state.single.rawRequest, {'host': 'api.example.com'});
+
+        notifier.updateStep(
+          id,
+          0,
+          failed: true,
+          error: 'Provider rejected credential $apiToken',
+        );
+        notifier.failTask(
+          id,
+          error: 'OCR failed with credential $apiToken',
+          rawResponse: {'requestId': apiToken},
+        );
+
+        final task = notifier.state.single;
+        expect(task.error, 'OCR 错误详情已隐藏');
+        expect(task.steps.first.error, 'OCR 错误详情已隐藏');
+        expect(task.rawResponse, isNot(contains('requestId')));
+        expect(jsonEncode(task.toMap()), isNot(contains(apiToken)));
+      },
+    );
+
+    test(
       'legacy OCR task errors filter extracted details against auth keys',
       () {
         const apiKey = 'opaque-user-secret-87';
@@ -1699,6 +2077,49 @@ void main() {
       expect(task.error, 'OCR 错误详情已隐藏');
       expect(task.steps.single.error, 'OCR 错误详情已隐藏');
       expect(jsonEncode(task.toMap()), isNot(contains('private-value')));
+    });
+
+    test('legacy exception OCR refusal text is not persisted', () {
+      const providerText = '发票姓名张三，订单金额 1280 元';
+      const unsafeError = 'Exception: OCR 请求被模型拒绝: $providerText';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-exception-refusal',
+        'type': 'ocr',
+        'title': '旧版 OCR 拒绝响应',
+        'status': 'failed',
+        'error': unsafeError,
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'steps': [
+          {'label': '请求 OCR', 'status': 'failed', 'error': unsafeError},
+        ],
+      });
+      final persisted = jsonEncode(task.toMap());
+
+      expect(task.error, 'OCR 错误详情已隐藏');
+      expect(task.steps.single.error, 'OCR 错误详情已隐藏');
+      expect(persisted, isNot(contains(providerText)));
+      expect(persisted, isNot(contains('Exception:')));
+    });
+
+    test('legacy bare OCR refusal text is not persisted', () {
+      const providerText = '发票姓名张三，订单金额 1280 元';
+      const unsafeError = 'OCR 请求被模型拒绝: $providerText';
+      final task = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-bare-refusal',
+        'type': 'ocr',
+        'title': '旧版 OCR 拒绝响应',
+        'status': 'failed',
+        'error': unsafeError,
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'steps': [
+          {'label': '请求 OCR', 'status': 'failed', 'error': unsafeError},
+        ],
+      });
+      final persisted = jsonEncode(task.toMap());
+
+      expect(task.error, 'OCR 错误详情已隐藏');
+      expect(task.steps.single.error, 'OCR 错误详情已隐藏');
+      expect(persisted, isNot(contains(providerText)));
     });
 
     test('legacy OCR task and step errors redact bare key fields', () {
@@ -2417,7 +2838,92 @@ void main() {
     );
 
     test(
-      'startup cleanup preserves skipped task refs across restarts and later writes',
+      'unknown OCR retry extensions block preserving a skipped task row',
+      () async {
+        WebFileStore.enableTestMode();
+        const taskId = 'skipped-ocr-with-unknown-retry-fields';
+        const apiKey = 'skipped-v2-credential-155';
+        final imageBytes = Uint8List.fromList([
+          0x89,
+          0x50,
+          0x4e,
+          0x47,
+          0x0d,
+          0x0a,
+          0x1a,
+          0x0a,
+          4,
+          5,
+          6,
+        ]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final imageEntries = retryData['images'] as List<dynamic>;
+        final imageEntry = Map<String, dynamic>.from(imageEntries.single as Map)
+          ..['imageData'] = 'data:image/png;base64,${base64Encode(imageBytes)}';
+        imageEntries[0] = imageEntry;
+        retryData['apiKey'] = apiKey;
+        final cacheReference = imageEntry['storageRef'] as String;
+        final skippedRow = {
+          // Missing id keeps the task row skipped, so any retry snapshot must
+          // be safe to preserve byte-for-byte before unrelated task writes.
+          'type': 'ocr',
+          'title': 'Skipped OCR task with unknown retry fields',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': retryData,
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-sibling-with-unknown-retry-row',
+          type: BackgroundTaskType.asr,
+          title: 'Valid sibling',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow, validSibling]));
+        final originalBytes = await file.readAsBytes();
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          writeAttempts++;
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(
+            notifier.state.map((task) => task.id),
+            contains('valid-sibling-with-unknown-retry-row'),
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Do not rewrite the unsafe skipped row',
+            taskId: 'new-task-with-unsafe-skipped-neighbor',
+          );
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById('new-task-with-unsafe-skipped-neighbor'),
+              isNotNull);
+          expect(writeAttempts, 0);
+          expect(await file.readAsBytes(), originalBytes);
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'startup cleanup preserves skipped task refs while later writes persist',
       () async {
         WebFileStore.enableTestMode();
         const taskId = 'malformed-task-entry-cache';
@@ -2454,19 +2960,27 @@ void main() {
         );
 
         final originalSnapshot = await file.readAsBytes();
+        final writtenTaskIds = <String>[];
         try {
           for (var startup = 0; startup < 2; startup++) {
             final notifier = BackgroundTaskNotifier();
             try {
               await notifier.restoreFromPersistence();
 
-              expect(notifier.state.map((task) => task.id), [
-                'valid-task-after-corrupt-entry',
-              ]);
+              expect(
+                notifier.state.map((task) => task.id),
+                containsAll([
+                  'valid-task-after-corrupt-entry',
+                  ...writtenTaskIds,
+                ]),
+              );
               expect(await OcrRetryStorage.read(cacheReference), imageBytes);
-              expect(await file.readAsBytes(), originalSnapshot);
+              if (startup == 0) {
+                expect(await file.readAsBytes(), originalSnapshot);
+              }
 
               final newTaskId = 'new-task-after-partial-restore-$startup';
+              writtenTaskIds.add(newTaskId);
               notifier.addTask(
                 type: BackgroundTaskType.asr,
                 title: 'task after partial restore',
@@ -2478,7 +2992,27 @@ void main() {
                 notifier.state.any((task) => task.id == newTaskId),
                 isTrue,
               );
-              expect(await file.readAsBytes(), originalSnapshot);
+              final persisted = jsonDecode(await file.readAsString()) as List;
+              expect(
+                persisted.whereType<Map>().singleWhere(
+                      (task) => task['title'] == 'corrupt OCR task',
+                    ),
+                {
+                  'type': 'ocr',
+                  'title': 'corrupt OCR task',
+                  'status': 'failed',
+                  'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+                  'steps': [],
+                  'retryData': retryData,
+                },
+              );
+              expect(
+                persisted.whereType<Map>().map((task) => task['id']),
+                containsAll([
+                  'valid-task-after-corrupt-entry',
+                  ...writtenTaskIds,
+                ]),
+              );
               expect(await OcrRetryStorage.read(cacheReference), imageBytes);
             } finally {
               notifier.dispose();
@@ -2487,6 +3021,187 @@ void main() {
           }
         } finally {
           WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'new OCR task persists after safe partial restore and survives restart',
+      () async {
+        WebFileStore.enableTestMode();
+        const skippedTaskId = 'skipped-ocr-task-cache-owner';
+        const newTaskId = 'new-ocr-task-after-safe-partial-restore';
+        final skippedImageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final newImageBytes = Uint8List.fromList([0xff, 0xd8, 0xff, 0xe0]);
+        final skippedRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: skippedTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [
+              OcrRetryImage(bytes: skippedImageBytes, format: 'png'),
+            ],
+          ),
+        );
+        final skippedCacheReference =
+            ((skippedRetryData['images'] as List).single as Map)['storageRef']
+                as String;
+        final newRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: newTaskId,
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: newImageBytes, format: 'jpeg')],
+          ),
+        );
+        final newCacheReference = ((newRetryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final skippedRow = <String, dynamic>{
+          // A missing ID makes this row unparseable, but the provider can
+          // preserve it losslessly alongside ordinary task updates.
+          'type': 'ocr',
+          'title': 'Skipped OCR task with a live cache reference',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [],
+          'retryData': skippedRetryData,
+          'extensionData': {
+            'preserve': [1, 'two', true],
+          },
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-sibling-after-partial-restore',
+          type: BackgroundTaskType.asr,
+          title: 'Valid sibling',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow, validSibling]));
+        final originalBytes = await file.readAsBytes();
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById('valid-sibling-after-partial-restore'),
+              isNotNull);
+          expect(notifier.state.map((task) => task.id), [
+            'valid-sibling-after-partial-restore',
+          ]);
+          expect(await OcrRetryStorage.read(skippedCacheReference),
+              skippedImageBytes);
+          expect(await file.readAsBytes(), originalBytes);
+
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'New task after partial restore',
+            taskId: newTaskId,
+            retryData: newRetryData,
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+
+        final restarted = BackgroundTaskNotifier();
+        try {
+          await restarted.restoreFromPersistence();
+          expect(restarted.taskById(newTaskId), isNotNull);
+          expect(
+            restarted.taskById('valid-sibling-after-partial-restore'),
+            isNotNull,
+          );
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persisted.whereType<Map>().singleWhere(
+                  (row) => row['title'] == skippedRow['title'],
+                ),
+            skippedRow,
+          );
+          expect(
+            persisted.whereType<Map>().any((row) => row['id'] == newTaskId),
+            isTrue,
+          );
+          expect(
+            persisted.whereType<Map>().any(
+                  (row) => row['id'] == 'valid-sibling-after-partial-restore',
+                ),
+            isTrue,
+          );
+          expect(await OcrRetryStorage.read(skippedCacheReference),
+              skippedImageBytes);
+          expect(await OcrRetryStorage.read(newCacheReference), newImageBytes);
+        } finally {
+          restarted.dispose();
+          await restarted.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'partial restore preserves skipped non-OCR retry data on later writes',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final skippedAsrRow = <String, dynamic>{
+          // Missing id makes this a skipped row while retaining a normal ASR
+          // retry payload that the OCR snapshot parser must not interpret.
+          'type': 'asr',
+          'title': 'Skipped ASR task',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {
+            'inputPath': '/recordings/interview.wav',
+            'language': 'zh-CN',
+          },
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-asr-sibling',
+          type: BackgroundTaskType.asr,
+          title: 'Valid ASR task',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        await file.writeAsString(jsonEncode([skippedAsrRow, validSibling]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          expect(notifier.taskById('valid-asr-sibling'), isNotNull);
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'New ASR task after partial restore',
+            taskId: 'new-asr-after-partial-restore',
+          );
+          await notifier.pendingPersistence;
+
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          final preservedAsr = persisted.whereType<Map>().singleWhere(
+                (row) => row['title'] == 'Skipped ASR task',
+              );
+          expect(preservedAsr, skippedAsrRow);
+          expect(
+            persisted.whereType<Map>().any(
+                  (row) => row['id'] == 'new-asr-after-partial-restore',
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+
+        final restarted = BackgroundTaskNotifier();
+        try {
+          await restarted.restoreFromPersistence();
+          expect(
+              restarted.taskById('new-asr-after-partial-restore'), isNotNull);
+          expect(restarted.taskById('valid-asr-sibling'), isNotNull);
+        } finally {
+          restarted.dispose();
+          await restarted.pendingPersistence;
         }
       },
     );
@@ -2646,7 +3361,7 @@ void main() {
     );
 
     test(
-      'partial deletion refuses to rewrite a skipped legacy image snapshot',
+      'unsafe skipped legacy snapshot blocks removal and later task writes',
       () async {
         WebFileStore.enableTestMode();
         const taskId = 'partial-delete-with-legacy-skipped-row';
@@ -2712,9 +3427,35 @@ void main() {
           expect(writeAttempts, 0);
           expect(await file.readAsString(), originalContent);
           expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+
+          const newTaskId = 'task-blocked-by-unsafe-skipped-snapshot';
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Must not overwrite an unsafe partial snapshot',
+            taskId: newTaskId,
+          );
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById(newTaskId), isNotNull);
+          expect(writeAttempts, 0);
+          expect(await file.readAsString(), originalContent);
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
+        }
+
+        final restarted = BackgroundTaskNotifier();
+        try {
+          await restarted.restoreFromPersistence();
+          expect(restarted.taskById(taskId), isNotNull);
+          expect(restarted.taskById('task-blocked-by-unsafe-skipped-snapshot'),
+              isNull);
+          expect(await file.readAsString(), originalContent);
+          expect(await OcrRetryStorage.read(cacheReference), imageBytes);
+        } finally {
+          restarted.dispose();
+          await restarted.pendingPersistence;
           WebFileStore.disableTestMode();
         }
       },
@@ -2956,6 +3697,65 @@ void main() {
         } finally {
           notifier.dispose();
           await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'startup migrates version 2 OCR retry snapshots missing type before cleanup',
+      () async {
+        WebFileStore.enableTestMode();
+        final file = _tasksFileIn(testDir.path);
+        const taskId = 'missing-type-cached-retry';
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final cachedRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: taskId,
+          snapshot: OcrRetrySnapshot.capture(
+            configId: 'saved-config',
+            modelId: 'saved-model',
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final cacheReference =
+            ((cachedRetryData['images'] as List).single as Map)['storageRef'];
+        final missingTypeRetryData = Map<String, dynamic>.from(cachedRetryData)
+          ..remove('type');
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'ocr',
+              'title': 'cached OCR retry missing type',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [],
+              'retryData': missingTypeRetryData,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          await notifier.restoreFromPersistence();
+          await notifier.pendingPersistence;
+
+          final retryData = notifier.state.single.retryData!;
+          expect(
+              await OcrRetryStorage.read(cacheReference as String), imageBytes);
+          expect(retryData['type'], 'ocr');
+          expect(
+            ((retryData['images'] as List).single as Map)['storageRef'],
+            cacheReference,
+          );
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          final persistedRetry = (persisted.single
+              as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+          expect(persistedRetry['type'], 'ocr');
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
         }
       },
     );
@@ -3391,6 +4191,166 @@ void main() {
           );
         } finally {
           if (!resumeCacheWrite.isCompleted) resumeCacheWrite.complete();
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'back-to-back OCR removals preserve cache referenced by a failed snapshot',
+      () async {
+        WebFileStore.enableTestMode();
+        final imageBytes = Uint8List.fromList([31, 32, 33, 34]);
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'queued-shared-cache-seed',
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+          ),
+        );
+        final cacheReference = ((retryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final notifier = BackgroundTaskNotifier();
+        final firstWriteEntered = Completer<void>();
+        final resumeFirstWrite = Completer<void>();
+        var writeCount = 0;
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'first shared-cache task',
+            taskId: 'first-shared-cache-task',
+            retryData: retryData,
+          );
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'second shared-cache task',
+            taskId: 'second-shared-cache-task',
+            retryData: retryData,
+          );
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeCount++;
+            if (writeCount == 1) {
+              firstWriteEntered.complete();
+              await resumeFirstWrite.future;
+            } else if (writeCount == 2) {
+              throw StateError('simulated second removal write failure');
+            }
+          };
+
+          notifier.removeTask('first-shared-cache-task');
+          await firstWriteEntered.future;
+          notifier.removeTask('second-shared-cache-task');
+          expect(notifier.state, isEmpty);
+
+          resumeFirstWrite.complete();
+          await notifier.pendingPersistence;
+
+          final persistedTasks =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persistedTasks.whereType<Map>().any(
+                  (task) => task['id'] == 'second-shared-cache-task',
+                ),
+            isTrue,
+            reason:
+                'the first removal snapshot still references the second task',
+          );
+          expect(
+            await OcrRetryStorage.read(cacheReference),
+            orderedEquals(imageBytes),
+            reason:
+                'a failed later snapshot must not lose a durable task input',
+          );
+        } finally {
+          if (!resumeFirstWrite.isCompleted) resumeFirstWrite.complete();
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'OCR cache deletion serializes with publication of a shared reference',
+      () async {
+        WebFileStore.enableTestMode();
+        final bytes = Uint8List.fromList([21, 22, 23, 24]);
+        final originalRetryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'shared-reference-seed',
+          snapshot: OcrRetrySnapshot.capture(
+            images: [OcrRetryImage(bytes: bytes, format: 'png')],
+          ),
+        );
+        final reference = ((originalRetryData['images'] as List).single
+            as Map)['storageRef'] as String;
+        final deletionEntered = Completer<void>();
+        final resumeDeletion = Completer<void>();
+        BackgroundTaskNotifier.debugBeforeOcrCacheDelete = () async {
+          if (deletionEntered.isCompleted) return;
+          deletionEntered.complete();
+          await resumeDeletion.future;
+        };
+        final notifier = BackgroundTaskNotifier();
+        Future<void>? publication;
+        var publicationFinishedBeforeDeletion = false;
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'task being removed',
+            taskId: 'shared-reference-being-removed',
+            retryData: originalRetryData,
+          );
+          await notifier.pendingPersistence;
+
+          notifier.removeTask('shared-reference-being-removed');
+          await deletionEntered.future;
+
+          publication = OcrRetryStorage.withCacheMaintenanceLock(() async {
+            final sharedRetryData = await OcrRetryStorage.cacheSnapshot(
+              taskId: 'shared-reference-being-published',
+              snapshot: OcrRetrySnapshot.capture(
+                images: [
+                  OcrRetryImage(
+                    bytes: bytes,
+                    storageRef: reference,
+                    format: 'png',
+                  ),
+                ],
+              ),
+            );
+            notifier.addTask(
+              type: BackgroundTaskType.ocr,
+              title: 'task sharing the cache blob',
+              taskId: 'shared-reference-being-published',
+              retryData: sharedRetryData,
+            );
+          });
+          publicationFinishedBeforeDeletion = await Future.any([
+            publication.then((_) => true),
+            Future<bool>.delayed(
+                const Duration(milliseconds: 100), () => false),
+          ]);
+
+          resumeDeletion.complete();
+          await publication;
+          await notifier.pendingPersistence;
+
+          expect(
+            publicationFinishedBeforeDeletion,
+            isFalse,
+            reason: 'cache publication must wait until deletion finishes',
+          );
+          expect(
+            notifier.state.map((task) => task.id),
+            contains('shared-reference-being-published'),
+          );
+          expect(await OcrRetryStorage.read(reference), orderedEquals(bytes));
+        } finally {
+          if (!resumeDeletion.isCompleted) resumeDeletion.complete();
+          if (publication != null) await publication;
           notifier.dispose();
           await notifier.pendingPersistence;
           WebFileStore.disableTestMode();

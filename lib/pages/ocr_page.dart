@@ -1388,16 +1388,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
-            onPressed: () => setState(() {
-              _errorMessage = null;
-              _lastRawRequest = null;
-              _lastRawResponse = null;
-            }),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
+          if (!_retryImagesUnavailable && !_retryImageCountMismatch)
+            IconButton(
+              icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
+              onPressed: () => setState(() {
+                _errorMessage = null;
+                _lastRawRequest = null;
+                _lastRawResponse = null;
+              }),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
         ],
       ),
     );

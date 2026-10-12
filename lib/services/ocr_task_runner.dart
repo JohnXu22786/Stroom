@@ -153,7 +153,10 @@ class OcrTaskRunner {
         final task =
             notifier.state.where((task) => task.id == taskId).firstOrNull;
         if (task != null) {
-          final safeError = OcrDiagnosticSnapshot.safeTaskError(error);
+          final safeError = OcrDiagnosticSnapshot.safeTaskError(
+            error,
+            excludedValues: [config.apiKey],
+          );
           for (var i = 0; i < task.steps.length; i++) {
             if (task.steps[i].running) {
               notifier.updateStep(taskId, i, failed: true, error: safeError);
@@ -168,8 +171,14 @@ class OcrTaskRunner {
               : task.resultIsComplete
                   ? 'OCR结果保存失败: $safeError'
                   : 'OCR结果不完整: $safeError';
+          final safeErrorMessage =
+              OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+                    errorMessage,
+                    excludedValues: [config.apiKey],
+                  ) ??
+                  '';
           notifier.failTask(taskId,
-              error: errorMessage,
+              error: safeErrorMessage,
               rawRequest: service?.diagnosticRequest,
               rawResponse: service?.diagnosticResponse(error: error));
         }

@@ -197,8 +197,18 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     final resp = widget.rawResponse ?? {};
 
     if (widget.isOcrDiagnostics) {
-      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(req) ?? {};
-      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(resp) ?? {};
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
+      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+            req,
+            excludedValues: credentialValues,
+          ) ??
+          {};
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+            resp,
+            excludedValues: credentialValues,
+          ) ??
+          {};
       final diagnostics = <String, dynamic>{
         if (safeRequest['host'] != null) 'host': safeRequest['host'],
         if (safeRequest['method'] != null) 'method': safeRequest['method'],

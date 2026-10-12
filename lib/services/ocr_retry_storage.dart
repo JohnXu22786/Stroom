@@ -69,7 +69,10 @@ class OcrRetryStorage {
     }
 
     return _withTaskWrite(taskId, () async {
-      final cachedImages = <OcrRetryImage>[];
+      final cachedImages = List<OcrRetryImage?>.filled(
+        snapshot.imageEntryCount,
+        null,
+      );
       final previousBytes = <String, Uint8List?>{};
       try {
         final invalidCountWithoutImageEntries =
@@ -79,6 +82,7 @@ class OcrRetryStorage {
             : snapshot.images;
         for (var index = 0; index < imagesToCache.length; index++) {
           final image = imagesToCache[index];
+          final imageEntryIndex = snapshot.imageEntryIndices[index];
           final bytes = image.bytes ??
               (image.storageRef == null ? null : await read(image.storageRef!));
           if (bytes == null || bytes.isEmpty) {
@@ -86,41 +90,40 @@ class OcrRetryStorage {
               'An OCR retry image is missing; select the images again',
             );
           }
+          final imageReference = image.storageRef;
           final preferredReference =
-              image.storageRef ?? _referenceFor(taskId, index);
+              imageReference != null && _isCacheReference(imageReference)
+                  ? imageReference
+                  : _referenceFor(taskId, imageEntryIndex);
           final existingBytes = await read(preferredReference);
           final reference =
               existingBytes != null && !_sameBytes(existingBytes, bytes)
-                  ? _versionedReferenceFor(taskId, index, bytes)
+                  ? _versionedReferenceFor(taskId, imageEntryIndex, bytes)
                   : preferredReference;
           previousBytes[reference] = await _writeIfChanged(reference, bytes);
-          cachedImages.add(
-            OcrRetryImage.reference(
-              storageRef: reference,
-              format: OcrRetryImage.inferFormatFromBytes(bytes) ?? image.format,
-              name: image.name,
-            ),
+          cachedImages[imageEntryIndex] = OcrRetryImage.reference(
+            storageRef: reference,
+            format: OcrRetryImage.inferFormatFromBytes(bytes) ?? image.format,
+            name: image.name,
           );
         }
 
-        final unavailableImageCount = hasIncompleteImages
-            ? (invalidCountWithoutImageEntries
-                ? snapshot.imageEntryCount
-                : missingImageCount)
-            : 0;
-        for (var index = 0; index < unavailableImageCount; index++) {
-          cachedImages.add(
-            OcrRetryImage.reference(
+        if (hasIncompleteImages) {
+          for (var index = 0; index < cachedImages.length; index++) {
+            cachedImages[index] ??= OcrRetryImage.reference(
               storageRef: _missingReferenceFor(taskId, index),
               format: 'jpeg',
-            ),
-          );
+            );
+          }
         }
 
         return OcrRetrySnapshot.capture(
           configId: snapshot.configId,
           modelId: snapshot.modelId,
-          images: cachedImages,
+          images: [
+            for (final image in cachedImages)
+              if (image != null) image,
+          ],
           instructionContent: snapshot.instructionContent,
           saveFolder: snapshot.saveFolder,
           legacyModelIndex: snapshot.legacyModelIndex,
@@ -157,11 +160,12 @@ class OcrRetryStorage {
     return _unavailableSnapshot(
       taskId: taskId,
       imageCount: snapshot.imageEntryCount,
-      preservedImages: [
+      preservedImagesByIndex: {
         if (supportedVersion)
-          for (final image in snapshot.images)
-            if (image.storageRef != null) image,
-      ],
+          for (var index = 0; index < snapshot.images.length; index++)
+            if (snapshot.images[index].storageRef != null)
+              snapshot.imageEntryIndices[index]: snapshot.images[index],
+      },
       configId: snapshot.configId,
       modelId: snapshot.modelId,
       instructionContent: snapshot.instructionContent,
@@ -189,35 +193,41 @@ class OcrRetryStorage {
   static Map<String, dynamic> _unavailableSnapshot({
     required String taskId,
     required int imageCount,
-    List<OcrRetryImage> preservedImages = const [],
+    Map<int, OcrRetryImage> preservedImagesByIndex = const {},
     String? configId,
     String? modelId,
     String? instructionContent,
     String saveFolder = '',
     int? legacyModelIndex,
     int? legacyInstructionIndex,
-  }) =>
-      OcrRetrySnapshot.capture(
-        configId: configId,
-        modelId: modelId,
-        images: [
-          for (final image in preservedImages)
-            OcrRetryImage.reference(
-              storageRef: image.storageRef!,
-              format: image.format,
-              name: image.name,
-            ),
-          for (var index = preservedImages.length; index < imageCount; index++)
-            OcrRetryImage.reference(
-              storageRef: _missingReferenceFor(taskId, index),
-              format: 'jpeg',
-            ),
-        ],
-        instructionContent: instructionContent,
-        saveFolder: saveFolder,
-        legacyModelIndex: legacyModelIndex,
-        legacyInstructionIndex: legacyInstructionIndex,
-      ).toMap();
+  }) {
+    final images = <OcrRetryImage>[];
+    for (var index = 0; index < imageCount; index++) {
+      final preserved = preservedImagesByIndex[index];
+      final storageRef = preserved?.storageRef;
+      images.add(
+        storageRef == null
+            ? OcrRetryImage.reference(
+                storageRef: _missingReferenceFor(taskId, index),
+                format: 'jpeg',
+              )
+            : OcrRetryImage.reference(
+                storageRef: storageRef,
+                format: preserved!.format,
+                name: preserved.name,
+              ),
+      );
+    }
+    return OcrRetrySnapshot.capture(
+      configId: configId,
+      modelId: modelId,
+      images: images,
+      instructionContent: instructionContent,
+      saveFolder: saveFolder,
+      legacyModelIndex: legacyModelIndex,
+      legacyInstructionIndex: legacyInstructionIndex,
+    ).toMap();
+  }
 
   static Future<OcrRetryRestoreResult> restoreImages(
     OcrRetrySnapshot snapshot,

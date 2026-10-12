@@ -4,6 +4,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/utils/ocr_diagnostics.dart';
 
 void main() {
+  test('request URL credentials are recovered for response exclusions', () {
+    const url =
+        'https://user:oauth-userinfo-secret@ocr.test/v1?key=opaque-query-secret-87&access_token=opaque-token-secret-87&author=Alice&language=en';
+    final credentialValues = OcrDiagnosticSnapshot.credentialValuesFromUrl(url);
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'requestId': 'opaque-query-secret-87',
+        'data': {'id': 'oauth-userinfo-secret'},
+      },
+      excludedValues: credentialValues,
+    )!;
+
+    expect(
+        credentialValues,
+        containsAll([
+          'user',
+          'oauth-userinfo-secret',
+          'opaque-query-secret-87',
+          'opaque-token-secret-87',
+        ]));
+    expect(credentialValues, isNot(contains('Alice')));
+    expect(credentialValues, isNot(contains('en')));
+    expect(response, isEmpty);
+  });
+
+  test('request URL extraction recognizes camel case secret key parameters',
+      () {
+    for (final entry in [
+      (
+        'https://ocr.test/v1?secretKey=opaque-secret-key-191',
+        'opaque-secret-key-191',
+      ),
+      (
+        'https://ocr.test/v1?privateKey=opaque-private-key-191',
+        'opaque-private-key-191',
+      ),
+    ]) {
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromUrl(entry.$1);
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'requestId': entry.$2},
+        excludedValues: credentialValues,
+      )!;
+
+      expect(credentialValues, contains(entry.$2), reason: entry.$1);
+      expect(response, isEmpty, reason: entry.$1);
+    }
+  });
+
+  test('request secret and private key headers exclude echoed response IDs',
+      () {
+    for (final entry in [
+      ('X-Secret-Key', 'opaque-user-secret-192'),
+      ('X-Private-Key', 'opaque-private-value-192'),
+    ]) {
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(
+        {
+          'headers': {entry.$1: entry.$2},
+        },
+      );
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'data': {'id': entry.$2},
+        },
+        excludedValues: credentialValues,
+      )!;
+
+      expect(credentialValues, contains(entry.$2), reason: entry.$1);
+      expect(response, {'statusCode': 401}, reason: entry.$1);
+    }
+  });
+
   test(
     'sanitized diagnostics keep request metadata but drop bodies and keys',
     () {
@@ -196,6 +270,33 @@ void main() {
     expect(jsonEncode(response), isNot(contains(pngSignature)));
   });
 
+  test(
+    'finish reasons retain known values and reject arbitrary provider text',
+    () {
+      const providerText = 'JaneDoe19810102';
+      final unsafe = OcrDiagnosticSnapshot.sanitizeResponse({
+        'finishReason': providerText,
+        'durationMs': 842,
+      })!;
+      final safe = OcrDiagnosticSnapshot.sanitizeResponse({
+        'finishReason': 'stop',
+        'durationMs': 842,
+      })!;
+      final truncated = OcrDiagnosticSnapshot.sanitizeResponse({
+        'data': {
+          'choices': [
+            {'finish_reason': 'length'},
+          ],
+        },
+      })!;
+
+      expect(unsafe, {'durationMs': 842});
+      expect(jsonEncode(unsafe), isNot(contains(providerText)));
+      expect(safe, {'finishReason': 'stop', 'durationMs': 842});
+      expect(truncated, {'finishReason': 'length'});
+    },
+  );
+
   test('request IDs reject prose from generic provider id fields', () {
     final response = OcrDiagnosticSnapshot.sanitizeResponse({
       'data': {'id': 'Read the private receipt amount carefully'},
@@ -220,12 +321,149 @@ void main() {
     expect(response, {'requestId': 'req-safe-123'});
   });
 
+  test(
+    'request ID fallback skips candidates matching excluded credentials',
+    () {
+      const apiKey = 'opaque-user-secret-87';
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'data': {
+            'request_id': apiKey,
+            'requestId': 'req-safe-123',
+            'id': 'chatcmpl-later-safe-id',
+          },
+        },
+        excludedValues: [apiKey],
+      )!;
+      final laterId = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'data': {
+            'request_id': 'Read the private receipt amount carefully',
+            'requestId': apiKey,
+            'id': 'chatcmpl-safe-after-excluded-id',
+          },
+        },
+        excludedValues: [apiKey],
+      )!;
+      final laterHeader = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'headers': {
+            'x-request-id': [apiKey],
+            'request-id': ['req-safe-header-after-key'],
+          },
+        },
+        excludedValues: [apiKey],
+      )!;
+      final laterHeaderValue = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'headers': {
+            'x-request-id': [apiKey, 'req-safe-value-after-key'],
+          },
+        },
+        excludedValues: [apiKey],
+      )!;
+
+      expect(response, {'requestId': 'req-safe-123'});
+      expect(laterId, {'requestId': 'chatcmpl-safe-after-excluded-id'});
+      expect(laterHeader, {'requestId': 'req-safe-header-after-key'});
+      expect(laterHeaderValue, {'requestId': 'req-safe-value-after-key'});
+    },
+  );
+
+  test(
+    'request IDs exclude echoes matching a prefix-only masked auth header',
+    () {
+      const apiKey = 'opaque-prefix-private-value-179';
+      const safeRequestId = 'req-safe-after-prefix-mask';
+      final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
+        'Authorization': 'Bearer opaque-prefix...',
+      });
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'data': {
+            'request_id': apiKey,
+            'requestId': safeRequestId,
+          },
+        },
+        excludedValues: excludedValues,
+      )!;
+
+      expect(response, {'requestId': safeRequestId});
+      expect(jsonEncode(response), isNot(contains(apiKey)));
+    },
+  );
+
+  test('request IDs exclude echoes matching a short masked auth header', () {
+    const apiKey = 'abcd123456789';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
+      'Authorization': 'Bearer abcd****',
+    });
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': apiKey,
+      },
+      excludedValues: excludedValues,
+    )!;
+
+    expect(response, {'statusCode': 401});
+    expect(jsonEncode(response), isNot(contains(apiKey)));
+  });
+
+  test('request IDs exclude echoes matching a tiny masked auth header', () {
+    const apiKey = 'abcd';
+    const safeRequestId = 'req-safe-after-tiny-mask';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
+      'Authorization': 'Bearer a***',
+    });
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'statusCode': 401,
+        'requestId': apiKey,
+        'data': {'requestId': safeRequestId},
+      },
+      excludedValues: excludedValues,
+    )!;
+
+    expect(response, {'statusCode': 401, 'requestId': safeRequestId});
+    expect(jsonEncode(response), isNot(contains(apiKey)));
+  });
+
   test('short legacy OCR task errors redact token assignments', () {
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
         'OCR 请求被模型拒绝: token=private-value',
       ),
       'OCR 错误详情已隐藏',
+    );
+  });
+
+  test(
+    'legacy OCR exception refusal text is hidden while safe text remains',
+    () {
+      const refusal = 'Exception: OCR 请求被模型拒绝: 发票姓名张三，订单金额 1280 元';
+
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(refusal),
+        'OCR 错误详情已隐藏',
+      );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError('OCR 图片格式无法识别'),
+        'OCR 图片格式无法识别',
+      );
+    },
+  );
+
+  test('legacy bare OCR refusal text is hidden while safe text remains', () {
+    const refusal = 'OCR 请求被模型拒绝: 发票姓名张三，订单金额 1280 元';
+
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(refusal),
+      'OCR 错误详情已隐藏',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError('OCR 图片格式无法识别'),
+      'OCR 图片格式无法识别',
     );
   });
 
@@ -243,9 +481,7 @@ void main() {
       );
     }
     expect(
-      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-        'OCR 任务因格式问题未完成',
-      ),
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError('OCR 任务因格式问题未完成'),
       'OCR 任务因格式问题未完成',
     );
   });
@@ -303,6 +539,27 @@ void main() {
     expect(sanitized, isNot(contains(credential)));
   });
 
+  test('generated task errors exclude configured credentials', () {
+    const credential = 'Exception';
+    final sanitized = OcrDiagnosticSnapshot.safeTaskError(
+      Exception('request failed'),
+      excludedValues: [credential],
+    );
+
+    expect(sanitized, 'OCR 错误详情已隐藏');
+    expect(sanitized, isNot(contains(credential)));
+  });
+
+  test('fallback task error excludes credentials contained in its label', () {
+    const credential = 'OCR';
+    final sanitized = OcrDiagnosticSnapshot.safeTaskError(
+      Exception('request failed'),
+      excludedValues: [credential],
+    );
+
+    expect(sanitized, isNot(contains(credential)));
+  });
+
   test('response error types honor configured credential exclusions', () {
     const credential = 'connectionTimeout';
     final excluded = OcrDiagnosticSnapshot.sanitizeResponse(
@@ -350,5 +607,45 @@ void main() {
 
     expect(response, isEmpty);
     expect(jsonEncode(response), isNot(contains(apiKey)));
+  });
+
+  test('scalar diagnostic metadata excludes configured credentials', () {
+    final request = OcrDiagnosticSnapshot.sanitizeRequest(
+      {
+        'method': 'POST',
+        'imageCount': 200,
+        'imageBytes': 12000,
+        'durationMs': 842,
+      },
+      excludedValues: ['POST', '200'],
+    )!;
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 200, 'durationMs': 842, 'finishReason': 'stop'},
+      excludedValues: ['200'],
+    )!;
+
+    expect(request, {'durationMs': 842});
+    expect(response, {'finishReason': 'stop', 'durationMs': 842});
+
+    final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+      {'method': 'POST', 'imageCount': 2, 'imageBytes': 120, 'durationMs': 842},
+      excludedValues: ['unrelated-key'],
+    )!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'statusCode': 200, 'durationMs': 842, 'finishReason': 'stop'},
+      excludedValues: ['unrelated-key'],
+    )!;
+
+    expect(safeRequest, {
+      'method': 'POST',
+      'imageCount': 2,
+      'imageBytes': 120,
+      'durationMs': 842,
+    });
+    expect(safeResponse, {
+      'statusCode': 200,
+      'finishReason': 'stop',
+      'durationMs': 842,
+    });
   });
 }

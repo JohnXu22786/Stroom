@@ -671,62 +671,110 @@ void main() {
       },
     );
 
+    testWidgets('legacy migration failure keeps retry inputs in memory', (
+      tester,
+    ) async {
+      final image = _createValidOcrTestImage();
+      final encodedImage = base64Encode(image.bytes);
+      const taskId = 'legacy-page-migration-failure';
+      final legacyRetryData = {
+        'type': 'ocr',
+        'version': 1,
+        'modelRef': {'configId': 'test_ocr', 'modelId': 'gpt-4o'},
+        'instructionContent': 'Read the saved receipt',
+        'images': [
+          {'bytes': encodedImage, 'format': 'png', 'name': 'receipt.png'},
+        ],
+      };
+      final notifier = _InspectableBackgroundTaskNotifier();
+      notifier.setTasksForTest([
+        BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.ocr,
+          title: 'legacy OCR retry',
+          status: TaskStatus.failed,
+          retryData: legacyRetryData,
+        ),
+      ]);
+      var cacheAttempts = 0;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          retryData: legacyRetryData,
+          retryTaskId: taskId,
+          backgroundTasksNotifier: notifier,
+          testRetrySnapshotCacher: (
+              {required taskId, required snapshot}) async {
+            cacheAttempts++;
+            throw StateError('cache write failed');
+          },
+        ),
+      );
+      await _pumpUntil(tester, () => cacheAttempts == 1);
+      await tester.pump();
+
+      expect(cacheAttempts, 1);
+      expect(find.text('已选 1 张图片'), findsOneWidget);
+      final stillLegacy = OcrRetrySnapshot.fromMap(
+        notifier.tasksForTest.single.retryData!,
+      );
+      expect(stillLegacy.version, 1);
+      expect(stillLegacy.instructionContent, 'Read the saved receipt');
+      expect(stillLegacy.images.single.bytes, image.bytes);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets(
-      'legacy migration failure keeps retry inputs in memory',
+      'legacy retry validates unknown image bytes before task publication',
       (tester) async {
-        final image = _createValidOcrTestImage();
-        final encodedImage = base64Encode(image.bytes);
-        const taskId = 'legacy-page-migration-failure';
-        final legacyRetryData = {
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final retryData = {
           'type': 'ocr',
           'version': 1,
-          'modelRef': {'configId': 'test_ocr', 'modelId': 'gpt-4o'},
-          'instructionContent': 'Read the saved receipt',
+          'modelIndex': 0,
           'images': [
-            {'bytes': encodedImage, 'format': 'png', 'name': 'receipt.png'},
+            {
+              'bytes': base64Encode(Uint8List.fromList([1, 2, 3, 4])),
+            },
           ],
         };
-        final notifier = _InspectableBackgroundTaskNotifier();
-        notifier.setTasksForTest([
-          BackgroundTask(
-            id: taskId,
-            type: BackgroundTaskType.ocr,
-            title: 'legacy OCR retry',
-            status: TaskStatus.failed,
-            retryData: legacyRetryData,
-          ),
-        ]);
-        var cacheAttempts = 0;
 
         await tester.pumpWidget(
           _buildTestApp(
             entries: [_createOcrEntry(withModels: true)],
-            retryData: legacyRetryData,
-            retryTaskId: taskId,
             backgroundTasksNotifier: notifier,
-            testRetrySnapshotCacher: (
-                {required taskId, required snapshot}) async {
-              cacheAttempts++;
-              throw StateError('cache write failed');
-            },
+            retryData: retryData,
+            retryTaskId: 'unknown-format-legacy-retry',
+            testImagePayloadPreparer: (bytes) async =>
+                prepareOcrImagePayloadSync(bytes),
           ),
         );
-        await _pumpUntil(
-          tester,
-          () => cacheAttempts == 1,
-        );
-        await tester.pump();
+        await tester.pumpAndSettle();
 
-        expect(cacheAttempts, 1);
-        expect(find.text('已选 1 张图片'), findsOneWidget);
-        final stillLegacy = OcrRetrySnapshot.fromMap(
-          notifier.tasksForTest.single.retryData!,
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('确认此模型'));
+        await tester.pumpAndSettle();
+        final startButton = tester.widget<FilledButton>(
+          find.ancestor(
+            of: find.text('开始识别'),
+            matching: find.byType(FilledButton),
+          ),
         );
-        expect(stillLegacy.version, 1);
-        expect(stillLegacy.instructionContent, 'Read the saved receipt');
-        expect(stillLegacy.images.single.bytes, image.bytes);
+        expect(startButton.onPressed, isNotNull);
+        await tester.tap(find.text('开始识别'));
+        await tester.pumpAndSettle();
 
-        await tester.pumpWidget(const SizedBox.shrink());
+        expect(find.text('原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试'), findsOneWidget);
+        expect(notifier.tasksForTest, isEmpty);
+        final blockedStartButton = tester.widget<FilledButton>(
+          find.ancestor(
+            of: find.text('开始识别'),
+            matching: find.byType(FilledButton),
+          ),
+        );
+        expect(blockedStartButton.onPressed, isNull);
       },
     );
 
@@ -1008,6 +1056,35 @@ void main() {
         final notifier = _InspectableBackgroundTaskNotifier();
         final replacementBytes = _createValidOcrTestImage().bytes;
         var gallerySelections = 0;
+
+        Future<void> closeRecoveryBannerIfDismissible(String message) async {
+          final messageFinder = find.text(message);
+          final errorColor = Theme.of(
+            tester.element(messageFinder),
+          ).colorScheme.errorContainer;
+          final bannerFinder = find.ancestor(
+            of: messageFinder,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Container && widget.color == errorColor,
+            ),
+          );
+          expect(bannerFinder, findsOneWidget);
+          final dismissButton = find.descendant(
+            of: bannerFinder,
+            matching: find.byIcon(Icons.close),
+          );
+          if (dismissButton.evaluate().isNotEmpty) {
+            await tester.tap(dismissButton);
+            await tester.pumpAndSettle();
+          }
+          expect(
+            messageFinder,
+            findsOneWidget,
+            reason:
+                'a blocked retry must keep its image-recovery guidance visible',
+          );
+        }
+
         try {
           final stored = await tester.runAsync(
             () => OcrRetryStorage.cacheSnapshot(
@@ -1068,6 +1145,9 @@ void main() {
                 .toList()
                 .toString(),
           );
+          await closeRecoveryBannerIfDismissible(
+            '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试',
+          );
           final startButton = tester.widget<FilledButton>(
             find.ancestor(
               of: find.text('开始识别'),
@@ -1091,6 +1171,7 @@ void main() {
 
           await selectOneImage();
           expect(find.text('已选 1 张图片'), findsOneWidget);
+          await closeRecoveryBannerIfDismissible('请重新选择全部 2 张图片后重试');
           final partialReselectButton = tester.widget<FilledButton>(
             find.ancestor(
               of: find.text('开始识别'),

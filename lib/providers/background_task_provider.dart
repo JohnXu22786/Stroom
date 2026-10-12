@@ -115,9 +115,13 @@ class BgTaskStep {
 // ============================================================================
 
 Map<String, dynamic>? _sanitizeOcrTaskRequest(
-  Map<String, dynamic>? rawRequest,
-) {
-  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
   Map<String, dynamic>? safeSource = _removeMaskedOcrDiagnosticValues(
     rawRequest,
     credentialValues,
@@ -137,9 +141,13 @@ Map<String, dynamic>? _sanitizeOcrTaskRequest(
 
 Map<String, dynamic>? _sanitizeOcrTaskResponse(
   Map<String, dynamic>? rawResponse,
-  Map<String, dynamic>? rawRequest,
-) {
-  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
   final safeSource = _removeMaskedOcrDiagnosticValues(
     rawResponse,
     credentialValues,
@@ -201,8 +209,15 @@ Map<String, dynamic>? _removeMaskedOcrDiagnosticValues(
   return safeSource;
 }
 
-String? _sanitizeOcrTaskError(String? error, Map<String, dynamic>? rawRequest) {
-  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+String? _sanitizeOcrTaskError(
+  String? error,
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
   if (error != null &&
       _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
     return 'OCR 错误详情已隐藏';
@@ -268,32 +283,8 @@ String? _legacyOcrModelId(Map<String, dynamic>? rawRequest) {
 
 Iterable<String> _legacyOcrCredentialValues(
   Map<String, dynamic>? rawRequest,
-) sync* {
-  final headers = rawRequest?['headers'];
-  if (headers is! Map) return;
-  final credentialHeader = RegExp(
-    r'(?:authorization|api.?key|access.?token|refresh.?token|client.?secret|password|cookie)',
-    caseSensitive: false,
-  );
-  for (final entry in headers.entries) {
-    if (entry.key is! String ||
-        !credentialHeader.hasMatch(entry.key as String)) {
-      continue;
-    }
-    final rawValues = entry.value is List ? entry.value as List : [entry.value];
-    for (final rawValue in rawValues) {
-      if (rawValue is! String) continue;
-      final value = rawValue.trim();
-      if (value.isEmpty) continue;
-      yield value;
-      final token = RegExp(
-        r'^(?:Bearer|Basic)\s+(.+)$',
-        caseSensitive: false,
-      ).firstMatch(value)?.group(1)?.trim();
-      if (token != null && token.isNotEmpty) yield token;
-    }
-  }
-}
+) =>
+    OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
 bool _legacyOcrTextContainsCredential(
   String text,
@@ -316,10 +307,10 @@ bool _legacyOcrTextContainsMaskedCredential(
   // edges before preserving any persisted text or diagnostic value.
   final compactedText = text.replaceAll(RegExp(r'\s+'), '');
   for (final value in credentialValues) {
-    final ellipsis = value.indexOf('...');
-    if (ellipsis >= 0) {
-      final prefix = value.substring(0, ellipsis);
-      final suffix = value.substring(ellipsis + 3);
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis != null) {
+      final prefix = value.substring(0, ellipsis.start);
+      final suffix = value.substring(ellipsis.end);
       if (prefix.isNotEmpty &&
           suffix.isNotEmpty &&
           RegExp(
@@ -443,6 +434,7 @@ class BackgroundTask {
       rawRequest; // Raw request data for error diagnostics
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
+  final List<String> _ocrDiagnosticCredentialValues;
   final Map<String, dynamic>?
       retryData; // Retry data to pre-populate form when retrying
 
@@ -465,8 +457,13 @@ class BackgroundTask {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     this.retryData,
+    Iterable<String> ocrDiagnosticCredentialValues = const [],
   })  : error = type == BackgroundTaskType.ocr
-            ? _sanitizeOcrTaskError(error, rawRequest)
+            ? _sanitizeOcrTaskError(
+                error,
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
             : error,
         steps = type == BackgroundTaskType.ocr
             ? steps
@@ -474,16 +471,33 @@ class BackgroundTask {
                   (step) => BgTaskStep(
                     label: step.label,
                     status: step.status,
-                    error: _sanitizeOcrTaskError(step.error, rawRequest),
+                    error: _sanitizeOcrTaskError(
+                      step.error,
+                      rawRequest,
+                      additionalCredentialValues: ocrDiagnosticCredentialValues,
+                    ),
                   ),
                 )
                 .toList(growable: false)
             : steps,
+        _ocrDiagnosticCredentialValues = type == BackgroundTaskType.ocr
+            ? List<String>.unmodifiable({
+                ..._legacyOcrCredentialValues(rawRequest),
+                ...ocrDiagnosticCredentialValues,
+              })
+            : const [],
         rawRequest = type == BackgroundTaskType.ocr
-            ? _sanitizeOcrTaskRequest(rawRequest)
+            ? _sanitizeOcrTaskRequest(
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
             : rawRequest,
         rawResponse = type == BackgroundTaskType.ocr
-            ? _sanitizeOcrTaskResponse(rawResponse, rawRequest)
+            ? _sanitizeOcrTaskResponse(
+                rawResponse,
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
             : rawResponse,
         createdAt = createdAt ?? DateTime.now();
 
@@ -534,6 +548,7 @@ class BackgroundTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
+      ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
   }
@@ -656,6 +671,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   @visibleForTesting
   static Future<void> Function()? debugBeforeOcrCacheCleanup;
+
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeOcrCacheDelete;
 
   @visibleForTesting
   static Future<void> Function()? debugBeforeTaskSnapshotWrite;
@@ -962,18 +980,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<void> _deleteUnreferencedOcrCache(Set<String> candidates) async {
     if (candidates.isEmpty) return;
-    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
-    final referenced = <String>{
-      for (final task in tasks)
-        if (task.type == BackgroundTaskType.ocr)
-          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      ..._referencesFromSkippedTaskEntries(),
-    };
     try {
-      await OcrRetryStorage.deleteUnreferenced(
-        candidates: candidates,
-        referenced: referenced,
-      );
+      await OcrRetryStorage.withCacheMaintenanceLock(() async {
+        await debugBeforeOcrCacheDelete?.call();
+        final referenced = await _ocrCacheReferencesForCleanup();
+        if (referenced == null) return;
+        await OcrRetryStorage.deleteUnreferenced(
+          candidates: candidates,
+          referenced: referenced,
+        );
+      });
     } catch (error) {
       debugPrint('[BackgroundTaskNotifier] OCR cache cleanup failed: $error');
     }
@@ -983,14 +999,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (_taskSnapshotIncomplete) return;
     try {
       await OcrRetryStorage.withCacheMaintenanceLock(() async {
-        final tasks = mounted ? state : (_disposedSnapshot ?? const []);
-        final referenced = <String>{
-          for (final task in tasks)
-            if (task.type == BackgroundTaskType.ocr)
-              ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-        };
         final beforeCleanup = debugBeforeOcrCacheCleanup;
         if (beforeCleanup != null) await beforeCleanup();
+        final referenced = await _ocrCacheReferencesForCleanup();
+        if (referenced == null) return;
         await OcrRetryStorage.cleanupUnreferencedCache(referenced: referenced);
       });
     } catch (error) {
@@ -1177,7 +1189,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
   Future<bool> _persistTasks() {
-    if (_taskSnapshotIncomplete) return Future<bool>.value(false);
+    final preserveSkippedEntries = _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
     if (barrier != null) {
       if (!mounted && _disposedPersistence != null) {
@@ -1189,7 +1201,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         await barrier.future;
         final snapshot = mounted ? state : _disposedSnapshot;
         if (snapshot == null) return false;
-        return _writeSnapshotNow(snapshot, dirOverride);
+        return _writeSnapshotNow(
+          snapshot,
+          dirOverride,
+          preserveSkippedEntries: preserveSkippedEntries,
+        );
       });
       _pendingWrite = deferred.then<void>((_) {});
       if (!mounted) _disposedPersistence = _pendingWrite;
@@ -1198,11 +1214,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!mounted) {
       final snapshot = _disposedSnapshot;
       if (snapshot == null) return Future<bool>.value(false);
-      final write = _writeSnapshot(snapshot);
+      final write = _writeSnapshot(
+        snapshot,
+        preserveSkippedEntries: preserveSkippedEntries,
+      );
       _disposedPersistence ??= write.then<void>((_) {});
       return write;
     }
-    return _writeSnapshot(state);
+    return _writeSnapshot(
+      state,
+      preserveSkippedEntries: preserveSkippedEntries,
+    );
   }
 
   Future<bool> _writeSnapshot(
@@ -1250,15 +1272,32 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   Future<bool> _writeSnapshotNow(
     List<BackgroundTask> snapshot,
-    String? dirOverride,
-  ) {
-    if (_taskSnapshotIncomplete) return Future<bool>.value(false);
+    String? dirOverride, {
+    bool preserveSkippedEntries = false,
+  }) {
+    final canPreserveSkippedEntries = _taskSnapshotIncomplete &&
+        preserveSkippedEntries &&
+        _canSafelyPreserveSkippedEntries(snapshot);
+    if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
+      return Future<bool>.value(false);
+    }
+    final skippedEntries = canPreserveSkippedEntries
+        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
+        : const <dynamic>[];
     if (_hasCacheMigrations(snapshot)) {
       return OcrRetryStorage.withCacheMaintenanceLock(
-        () => _writePreparedSnapshot(snapshot, dirOverride),
+        () => _writePreparedSnapshot(
+          snapshot,
+          dirOverride,
+          preservedEntries: skippedEntries,
+        ),
       );
     }
-    return _writePreparedSnapshot(snapshot, dirOverride);
+    return _writePreparedSnapshot(
+      snapshot,
+      dirOverride,
+      preservedEntries: skippedEntries,
+    );
   }
 
   Future<bool> _writePreparedSnapshot(
@@ -1306,6 +1345,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           }
         }
       }
+      final entryType = entry['type'];
+      if (entryType != BackgroundTaskType.ocr.name) {
+        if (BackgroundTaskType.values.any((type) => type.name == entryType)) {
+          continue;
+        }
+        return false;
+      }
       final retryData = entry['retryData'];
       if (retryData == null) continue;
       if (retryData is! Map) return false;
@@ -1347,9 +1393,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     return true;
   }
 
-  Set<String> _referencesFromSkippedTaskEntries() {
+  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
+    final persisted = await _loadPersistedTasks();
+    if (!persisted.isReadable) return null;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    return {
+      for (final task in tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      for (final task in persisted.tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      ..._referencesFromSkippedTaskEntries(),
+      ..._referencesFromSkippedTaskEntries(persisted.skippedEntries),
+    };
+  }
+
+  Set<String> _referencesFromSkippedTaskEntries([
+    Iterable<dynamic>? entries,
+  ]) {
     final references = <String>{};
-    for (final entry in _skippedTaskEntries) {
+    for (final entry in entries ?? _skippedTaskEntries) {
       if (entry is! Map) continue;
       final retryData = entry['retryData'];
       if (retryData is! Map) continue;

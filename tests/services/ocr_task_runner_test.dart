@@ -158,6 +158,106 @@ void main() {
     expect(adapter.closed, isTrue);
   });
 
+  test('persisted diagnostics exclude a key matching HTTP status', () async {
+    const apiKey = '200';
+    final credentialRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config.copyWith(apiKey: apiKey),
+      images: [(input, 'png')],
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = credentialRunner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    await running;
+    await notifier.pendingPersistence;
+
+    final diagnostics = notifier.state.single.rawResponse!;
+    expect(diagnostics['statusCode'], isNull);
+    expect(diagnostics['finishReason'], 'stop');
+    expect(jsonEncode(diagnostics), isNot(contains(apiKey)));
+    final persistedFile = File(
+      '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+    );
+    final persistedTask =
+        (jsonDecode(await persistedFile.readAsString()) as List)
+            .cast<Map<String, dynamic>>()
+            .single;
+    final persistedDiagnostics = jsonEncode(persistedTask['rawResponse']);
+    expect(persistedDiagnostics, isNot(contains(apiKey)));
+  });
+
+  for (final apiKey in ['Exception', 'OCR']) {
+    test(
+      'configured API key $apiKey is absent from task snapshots',
+      () async {
+        final emittedSnapshots = <String>[];
+        notifier.addListener((tasks) {
+          if (tasks.isNotEmpty) {
+            emittedSnapshots.add(jsonEncode(tasks.single.toMap()));
+          }
+        }, fireImmediately: false);
+        final failingRunner = OcrTaskRunner(
+          taskId: id,
+          notifier: notifier,
+          config: _config.copyWith(apiKey: apiKey),
+          images: [(input, 'png')],
+          title: 'owned',
+          folder: 'captured folder',
+          serviceFactory: (config) => OcrService(
+            config: config,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
+          writeText: TextManifest.writeText,
+          onSaved: () {},
+        );
+
+        final running = failingRunner.run();
+        final request = await adapter.requested.future;
+        adapter.response.completeError(
+          DioException(
+            requestOptions: request,
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: request,
+              statusCode: 401,
+              data: {'error': 'unauthorized'},
+            ),
+          ),
+        );
+        await running;
+        await notifier.pendingPersistence;
+
+        expect(emittedSnapshots, isNotEmpty);
+        expect(
+          emittedSnapshots.every((snapshot) => !snapshot.contains(apiKey)),
+          isTrue,
+          reason: 'every state transition is queued for task persistence',
+        );
+        final task = notifier.state.single;
+        expect(task.error, isNot(contains(apiKey)));
+        expect(
+          task.steps.map((step) => step.error ?? '').join(' '),
+          isNot(contains(apiKey)),
+        );
+        final taskFile = File(
+          '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+        );
+        expect(await taskFile.exists(), isTrue);
+        expect(await taskFile.readAsString(), isNot(contains(apiKey)));
+      },
+    );
+  }
+
   test('text file write failure keeps the result and does not report success',
       () async {
     failNextFileWrite = true;

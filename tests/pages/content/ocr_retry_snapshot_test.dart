@@ -49,6 +49,35 @@ void main() {
       expect(restored.images.every((image) => image.bytes == null), isTrue);
     });
 
+    test('current snapshots with unknown fields require migration', () {
+      const reference =
+          'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin';
+      const credential = 'unexpected-v2-credential';
+      final imageBody = 'data:image/png;base64,${base64Encode([1, 2, 3, 4])}';
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': OcrRetrySnapshot.currentVersion,
+        'modelRef': {
+          'configId': 'config-1',
+          'modelId': 'model-1',
+          'credential': credential,
+        },
+        'images': [
+          {
+            'storageRef': reference,
+            'format': 'png',
+            'embeddedImage': imageBody,
+          },
+        ],
+        'apiKey': credential,
+      });
+
+      expect(snapshot.needsMigration, isTrue);
+      final sanitized = jsonEncode(snapshot.toMap());
+      expect(sanitized, isNot(contains(credential)));
+      expect(sanitized, isNot(contains(imageBody)));
+    });
+
     test('current snapshots with malformed entries require migration', () {
       final snapshot = OcrRetrySnapshot.fromMap({
         'type': 'ocr',

@@ -58,6 +58,44 @@ void main() {
   });
 
   test(
+    'invalid supplied references cannot overwrite unrelated web files',
+    () async {
+      const unrelatedReference = 'attachments/keep.bin';
+      final unrelatedBytes = Uint8List.fromList([9, 9, 9]);
+      final imageBytes = Uint8List.fromList([1, 2, 3, 4]);
+      await WebFileStore.write(unrelatedReference, unrelatedBytes);
+
+      Map<String, dynamic>? stored;
+      Object? failure;
+      try {
+        stored = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'invalid-reference-cache',
+          snapshot: OcrRetrySnapshot.capture(
+            images: [
+              OcrRetryImage(
+                bytes: imageBytes,
+                storageRef: unrelatedReference,
+                format: 'png',
+              ),
+            ],
+          ),
+        );
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(await WebFileStore.read(unrelatedReference), unrelatedBytes);
+      expect(failure, isNull);
+      final reference =
+          ((stored!['images'] as List).single as Map)['storageRef'] as String;
+
+      expect(reference, startsWith('ocr_retry_cache/'));
+      expect(await OcrRetryStorage.read(reference), imageBytes);
+      expect(await WebFileStore.read(unrelatedReference), unrelatedBytes);
+    },
+  );
+
+  test(
     'malformed cache format is inferred from readable bytes and keeps its reference',
     () async {
       final pngBytes = base64Decode(
@@ -104,6 +142,80 @@ void main() {
         );
         expect(await OcrRetryStorage.read(reference), pngBytes);
       }
+    },
+  );
+
+  test(
+    'legacy images with unknown bytes keep their cache ref without a guessed format',
+    () async {
+      final bytes = Uint8List.fromList([1, 2, 3, 4]);
+      for (final metadata in <Map<String, dynamic>>[
+        const {},
+        {
+          'format': ['png'],
+        },
+      ]) {
+        final snapshot = OcrRetrySnapshot.fromMap({
+          'type': 'ocr',
+          'version': 1,
+          'images': [
+            {'bytes': base64Encode(bytes), ...metadata},
+          ],
+        });
+
+        final legacyRestore = await OcrRetryStorage.restoreImages(snapshot);
+        expect(legacyRestore.images.single.bytes, bytes);
+        expect(legacyRestore.images.single.format, isEmpty);
+
+        final cached = await OcrRetryStorage.cacheSnapshot(
+          taskId: 'unknown-format-migration',
+          snapshot: snapshot,
+        );
+        final image = (cached['images'] as List).single as Map;
+        final reference = image['storageRef'] as String;
+        expect(image['format'], '');
+
+        final migratedRestore = await OcrRetryStorage.restoreImages(
+          OcrRetrySnapshot.fromMap(cached),
+        );
+        expect(migratedRestore.images.single.bytes, bytes);
+        expect(migratedRestore.images.single.format, isEmpty);
+        expect(await OcrRetryStorage.read(reference), bytes);
+      }
+    },
+  );
+
+  test(
+    'version 2 snapshot missing type migrates before cache cleanup',
+    () async {
+      final imageBytes = Uint8List.fromList([3, 1, 4, 1, 5]);
+      final cached = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'missing-type-cache',
+        snapshot: OcrRetrySnapshot.capture(
+          images: [OcrRetryImage(bytes: imageBytes, format: 'png')],
+        ),
+      );
+      final originalImage = (cached['images'] as List).single as Map;
+      final reference = originalImage['storageRef'] as String;
+      final missingType = Map<String, dynamic>.from(cached)..remove('type');
+      final snapshot = OcrRetrySnapshot.fromMap(missingType);
+
+      expect(snapshot.needsMigration, isTrue);
+
+      final migrated = await OcrRetryStorage.cacheSnapshot(
+        taskId: 'missing-type-cache',
+        snapshot: snapshot,
+      );
+      expect(migrated['type'], 'ocr');
+      expect(
+        ((migrated['images'] as List).single as Map)['storageRef'],
+        reference,
+      );
+
+      await OcrRetryStorage.cleanupUnreferencedCache(
+        referenced: OcrRetryStorage.referencesFromSnapshot(migrated),
+      );
+      expect(await OcrRetryStorage.read(reference), imageBytes);
     },
   );
 
@@ -264,13 +376,27 @@ void main() {
       snapshot: damaged,
       allowIncompleteImages: true,
     );
+    final migratedImages = (migrated['images'] as List).cast<Map>();
     final references = OcrRetryStorage.referencesFromSnapshot(migrated);
     final restored = await OcrRetryStorage.restoreImages(
       OcrRetrySnapshot.fromMap(migrated),
     );
 
     expect(references, contains(survivingReference));
+    expect(migratedImages, hasLength(2));
+    expect(migratedImages[0]['storageRef'], isNot(survivingReference));
+    expect(migratedImages[1]['storageRef'], survivingReference);
     expect(restored.images.single.bytes, secondBytes);
+
+    final unavailable = OcrRetryStorage.unavailableSnapshot(
+      taskId: 'mixed-cache-identity',
+      snapshot: damaged,
+    );
+    final unavailableImages = (unavailable['images'] as List).cast<Map>();
+    expect(unavailableImages, hasLength(2));
+    expect(unavailableImages[0]['storageRef'], isNot(survivingReference));
+    expect(unavailableImages[1]['storageRef'], survivingReference);
+
     await OcrRetryStorage.deleteUnreferenced(
       candidates: {survivingReference},
       referenced: references,
