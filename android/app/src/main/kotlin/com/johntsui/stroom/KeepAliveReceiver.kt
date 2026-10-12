@@ -310,11 +310,9 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private fun nextAlarmGeneration(context: Context): Long? {
             val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             return synchronized(ALARM_GENERATION_LOCK) {
-                val generation = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L) + 1L
-                if (prefs.edit().putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation).commit()) {
-                    generation
-                } else {
-                    null
+                val currentGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                persistNextAlarmGeneration(currentGeneration) { generation ->
+                    prefs.edit().putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation).commit()
                 }
             }
         }

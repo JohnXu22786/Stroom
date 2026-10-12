@@ -8,9 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+
+List<String> _requirementIds(String code) {
+  final matches = RegExp(
+    r'^[ \t]*id:[ \t]*([^\s]+)[ \t]*$',
+    multiLine: true,
+  ).allMatches(code);
+  return matches.map((match) => match.group(1)!).toList();
+}
 
 /// Builds the test app. [initialShowPreview] defaults to false to avoid
 /// InAppWebView platform not being initialized in test environment.
@@ -1119,6 +1128,50 @@ sequenceDiagram
       final controller = tester.widget<TextField>(textField).controller;
       expect(controller?.text, contains('NewNode'));
     });
+
+    testWidgets(
+      'adding a requirement to the default diagram assigns a unique ID',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: MermaidTemplates.getTemplate('requirement'),
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(_requirementIds(textField.controller!.text), ['1', '2']);
+      },
+    );
+
+    testWidgets(
+      'repeated requirement insertions assign distinct IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: MermaidTemplates.getTemplate('requirement'),
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+        await tester.tap(find.text('添加需求'));
+        await tester.pump();
+
+        final textField = tester.widget<TextField>(
+          find.byType(TextField).first,
+        );
+        expect(_requirementIds(textField.controller!.text), ['1', '2', '3']);
+      },
+    );
 
     testWidgets(
       'snippet insertion preserves final line without trailing newline',
