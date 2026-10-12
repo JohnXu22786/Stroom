@@ -9,8 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 import 'mermaid_preview_dialog_web_controls_test_dom_stub.dart'
-    if (dart.library.html)
-        'mermaid_preview_dialog_web_controls_test_dom_web.dart' as previewDom;
+    if (dart.library.html) 'mermaid_preview_dialog_web_controls_test_dom_web.dart'
+    as previewDom;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +33,6 @@ void main() {
           attempt++) {
         await tester.pump(const Duration(milliseconds: 25));
       }
-
       const overlayKey = ValueKey('mermaid-preview-web-controls');
       expect(find.byKey(overlayKey), findsOneWidget);
       final domSnapshot = previewDom.controlsSnapshot();
@@ -47,6 +46,7 @@ void main() {
         'Mermaid 预览',
         reason: domSnapshot,
       );
+      expect(previewDom.previewIframeReceivesPointer(), isTrue);
       expect(
         previewDom.controlReceivesPointer('zoom-in'),
         isTrue,
@@ -59,7 +59,8 @@ void main() {
       );
 
       final stack = tester.widget<Stack>(
-        find.ancestor(of: find.byKey(overlayKey), matching: find.byType(Stack))
+        find
+            .ancestor(of: find.byKey(overlayKey), matching: find.byType(Stack))
             .first,
       );
       final webViewIndex = stack.children.indexWhere(

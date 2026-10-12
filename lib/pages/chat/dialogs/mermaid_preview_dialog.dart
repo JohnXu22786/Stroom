@@ -520,6 +520,7 @@ class _MermaidPreviewDialogContentState
                     onClose: () => Navigator.pop(context),
                     backgroundColor: cs.surfaceContainerHighest,
                     foregroundColor: cs.onSurface,
+                    topInset: MediaQuery.of(context).padding.top + 4,
                   ),
                 ),
               )

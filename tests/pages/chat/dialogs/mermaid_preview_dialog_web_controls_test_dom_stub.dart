@@ -6,6 +6,8 @@ String? controlTitle() => null;
 
 String controlsSnapshot() => '<web controls are only available in a browser>';
 
+bool previewIframeReceivesPointer() => false;
+
 String pointerHitTargetDescription(String action) =>
     'Cannot hit-test "$action" outside a browser';
 

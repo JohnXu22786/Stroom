@@ -48,17 +48,6 @@ jobs:
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
-      - name: Show Dart formatting diff
-        if: failure()
-        run: |
-          dart format --language-version=3.0 \
-            lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart \
-            tests/pages/chat/dialogs/mermaid_preview_dialog_web_controls_test_dom_web.dart \
-            tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
-          git --no-pager diff -- \
-            lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart \
-            tests/pages/chat/dialogs/mermaid_preview_dialog_web_controls_test_dom_web.dart \
-            tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
 
   # Keep the required branch-protection check name for static analysis.
   quality:

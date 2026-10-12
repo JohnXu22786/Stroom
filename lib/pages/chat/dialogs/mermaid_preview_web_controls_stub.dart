@@ -7,5 +7,6 @@ Widget buildMermaidPreviewWebControls({
   required VoidCallback onClose,
   required Color backgroundColor,
   required Color foregroundColor,
+  required double topInset,
 }) =>
     SizedBox.shrink(key: key);

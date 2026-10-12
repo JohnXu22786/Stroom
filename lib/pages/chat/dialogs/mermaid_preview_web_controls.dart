@@ -9,6 +9,7 @@ Widget buildMermaidPreviewWebControls({
   required VoidCallback onClose,
   required Color backgroundColor,
   required Color foregroundColor,
+  required double topInset,
 }) =>
     platform.buildMermaidPreviewWebControls(
       key: key,
@@ -17,4 +18,5 @@ Widget buildMermaidPreviewWebControls({
       onClose: onClose,
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
+      topInset: topInset,
     );

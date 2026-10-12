@@ -2,12 +2,8 @@
 
 import 'dart:async';
 import 'dart:html' as html;
-import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/widgets.dart';
-
-const _mermaidControlsViewType = 'stroom-mermaid-preview-controls';
-bool _viewFactoryRegistered = false;
 
 Widget buildMermaidPreviewWebControls({
   Key? key,
@@ -16,6 +12,7 @@ Widget buildMermaidPreviewWebControls({
   required VoidCallback onClose,
   required Color backgroundColor,
   required Color foregroundColor,
+  required double topInset,
 }) =>
     _MermaidPreviewWebControls(
       key: key,
@@ -24,6 +21,7 @@ Widget buildMermaidPreviewWebControls({
       onClose: onClose,
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
+      topInset: topInset,
     );
 
 class _MermaidPreviewWebControls extends StatefulWidget {
@@ -32,6 +30,7 @@ class _MermaidPreviewWebControls extends StatefulWidget {
   final VoidCallback onClose;
   final Color backgroundColor;
   final Color foregroundColor;
+  final double topInset;
 
   const _MermaidPreviewWebControls({
     super.key,
@@ -40,6 +39,7 @@ class _MermaidPreviewWebControls extends StatefulWidget {
     required this.onClose,
     required this.backgroundColor,
     required this.foregroundColor,
+    required this.topInset,
   });
 
   @override
@@ -55,33 +55,11 @@ class _MermaidPreviewWebControlsState
   @override
   void initState() {
     super.initState();
-    if (!_viewFactoryRegistered) {
-      ui_web.platformViewRegistry.registerViewFactory(
-        _mermaidControlsViewType,
-        _createElement,
-      );
-      _viewFactoryRegistered = true;
-    }
-  }
-
-  static html.DivElement _createElement(int _) {
-    final root = html.DivElement()
+    final element = html.DivElement()
       ..setAttribute('data-mermaid-preview-controls', 'true');
-    root.style
-      ..display = 'block'
-      ..position = 'relative'
-      ..width = '100%'
-      ..height = '100%'
-      ..setProperty('pointer-events', 'none');
-
-    return root;
-  }
-
-  void _onPlatformViewCreated(int viewId) {
-    if (!mounted) return;
-    _element =
-        ui_web.platformViewRegistry.getViewById(viewId) as html.DivElement;
-    _renderControls(_element!);
+    _element = element;
+    _renderControls(element);
+    html.document.body!.append(element);
   }
 
   void _renderControls(html.DivElement root) {
@@ -90,6 +68,15 @@ class _MermaidPreviewWebControlsState
     }
     _clickSubscriptions.clear();
     root.children.clear();
+    root.style
+      ..display = 'block'
+      ..position = 'fixed'
+      ..top = '${widget.topInset}px'
+      ..left = '0'
+      ..right = '0'
+      ..height = '44px'
+      ..zIndex = '2147483647'
+      ..setProperty('pointer-events', 'none');
 
     final bar = html.DivElement();
     bar.style
@@ -185,9 +172,8 @@ class _MermaidPreviewWebControlsState
       ..height = '40px'
       ..border = '0'
       ..borderRadius = circular ? '50%' : '20px'
-      ..backgroundColor = circular
-          ? _rgba(widget.backgroundColor, 0.85)
-          : 'transparent'
+      ..backgroundColor =
+          circular ? _rgba(widget.backgroundColor, 0.85) : 'transparent'
       ..color = _rgba(widget.foregroundColor, 1)
       ..fontSize = circular ? '24px' : '21px'
       ..lineHeight = '1'
@@ -205,10 +191,7 @@ class _MermaidPreviewWebControlsState
   }
 
   @override
-  Widget build(BuildContext context) => HtmlElementView(
-        viewType: _mermaidControlsViewType,
-        onPlatformViewCreated: _onPlatformViewCreated,
-      );
+  Widget build(BuildContext context) => const SizedBox.expand();
 
   @override
   void didUpdateWidget(covariant _MermaidPreviewWebControls oldWidget) {
@@ -222,6 +205,7 @@ class _MermaidPreviewWebControlsState
     for (final subscription in _clickSubscriptions) {
       unawaited(subscription.cancel());
     }
+    _element?.remove();
     _element = null;
     super.dispose();
   }
