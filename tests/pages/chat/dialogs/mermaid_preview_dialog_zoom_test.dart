@@ -8,9 +8,60 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
+import 'mermaid_preview_dialog_web_controls_test_dom_stub.dart'
+    if (dart.library.html)
+        'mermaid_preview_dialog_web_controls_test_dom_web.dart'
+    as previewDom;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'renders clickable HTML controls above the fullscreen web preview',
+    (tester) async {
+      if (!kIsWeb) return;
+
+      final preview = await _openPreviewWithEarlyControls(tester);
+      final controller = preview.webView.controller;
+      controller.zoomHelperAvailable = true;
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+      preview.webView.params.onLoadStop!(preview.controller, null);
+      await tester.pump();
+
+      const overlayKey = ValueKey('mermaid-preview-web-controls');
+      expect(find.byKey(overlayKey), findsOneWidget);
+      expect(previewDom.controlLabels(), ['缩小', '放大', '关闭预览']);
+      expect(previewDom.controlTitle(), 'Mermaid 预览');
+      expect(previewDom.controlReceivesPointer('zoom-in'), isTrue);
+      expect(previewDom.controlReceivesPointer('close'), isTrue);
+
+      final stack = tester.widget<Stack>(
+        find.ancestor(of: find.byKey(overlayKey), matching: find.byType(Stack))
+            .first,
+      );
+      final webViewIndex = stack.children.indexWhere(
+        (child) => child is InAppWebView,
+      );
+      final overlayIndex = stack.children.indexWhere(
+        (child) => child is Positioned && child.child.key == overlayKey,
+      );
+      expect(webViewIndex, greaterThanOrEqualTo(0));
+      expect(overlayIndex, greaterThan(webViewIndex));
+
+      previewDom.clickControl('zoom-in');
+      await tester.pump();
+      expect(controller.zoomLevel, closeTo(1.1, 0.0001));
+
+      previewDom.clickControl('zoom-out');
+      await tester.pump();
+      expect(controller.zoomLevel, closeTo(1.0, 0.0001));
+
+      previewDom.clickControl('close');
+      await tester.pumpAndSettle();
+      expect(find.byKey(overlayKey), findsNothing);
+    },
+  );
 
   testWidgets(
     'queues zoom tapped before WebView creation until the page is ready',
@@ -363,7 +414,7 @@ class _ZoomTrackingWebView extends PlatformInAppWebViewWidget {
   _ZoomTrackingWebView(super.params) : super.implementation();
 
   @override
-  Widget build(BuildContext context) => const SizedBox.expand();
+  Widget build(BuildContext context) => previewDom.fakeWebViewLayer();
 
   @override
   T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
