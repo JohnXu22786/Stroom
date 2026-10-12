@@ -992,7 +992,7 @@ class _Mp4Demuxer {
                 while (_offset < stblEnd) {
                   if (_offset + 8 > _data.length) return null;
                   final scStart = _offset;
-                  _readUint32(); // box size (advances offset)
+                  final scSize = _readUint32(); // box size
                   final scType = _readString(4);
 
                   if (scType == 'stsd') {
@@ -1087,14 +1087,25 @@ class _Mp4Demuxer {
                           .add((firstChunk, spc, sampleDescriptionIndex));
                     }
                   } else if (scType == 'stsz') {
+                    final stszEnd = scStart + scSize;
+                    if (scSize < 20 ||
+                        stszEnd > stblEnd ||
+                        stszEnd > _data.length) {
+                      return null;
+                    }
                     _offset += 4; // version + flags
                     final sampleSize = _readUint32();
                     sampleCount = _readUint32();
                     if (sampleSize == 0) {
+                      final entryCapacity = (scSize - 20) ~/ 4;
+                      if (sampleCount > entryCapacity) return null;
                       for (var i = 0; i < sampleCount; i++) {
                         sampleSizes.add(_readUint32());
                       }
                     } else {
+                      if (sampleCount > _data.length ~/ sampleSize) {
+                        return null;
+                      }
                       sampleSizes = List.filled(sampleCount, sampleSize);
                     }
                   } else if (scType == 'stco') {
