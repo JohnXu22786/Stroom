@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride, kIsWeb, TargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -1098,6 +1099,223 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         scrollController.dispose();
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'native source updates ignore stale completion before current load errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final previousTargetPlatform = debugDefaultTargetPlatformOverride;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+        late final Map<String, bool> androidState;
+        late final Map<String, bool> windowsState;
+
+        try {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          final platform = _MermaidWebViewPlatform();
+          InAppWebViewPlatform.instance = platform;
+          final webView = await _mountReadyMermaidWidget(
+            tester,
+            platform,
+            const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          );
+          final controller =
+              webView.controllerFromPlatform<InAppWebViewController>(
+                  webView.controller);
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final previousLoadUrl =
+              webView.controller.loadedDataBaseUrls.single ??
+                  WebUri('about:blank');
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final currentLoadUrl = webView.controller.loadedDataBaseUrls.last ??
+              WebUri('about:blank');
+
+          final loadingVisibleBeforeStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+          webView.params.onLoadStop?.call(controller, previousLoadUrl);
+          await tester.pump();
+          final loadingVisibleAfterStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          const errorMessage = '页面加载失败: Could not connect to host';
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: currentLoadUrl, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Could not connect to host',
+            ),
+          );
+          await tester.pump();
+
+          androidState = {
+            'loading overlay before stale completion':
+                loadingVisibleBeforeStaleCompletion,
+            'loading overlay after stale completion':
+                loadingVisibleAfterStaleCompletion,
+            'current load error': find.text(errorMessage).evaluate().isNotEmpty,
+            'retry action': find.text('重试').evaluate().isNotEmpty,
+          };
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          final windowsPlatform = _MermaidWebViewPlatform();
+          InAppWebViewPlatform.instance = windowsPlatform;
+          await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+              ),
+            ),
+          );
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          });
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.pump();
+
+          final previousWebView = windowsPlatform.webView!;
+          final previousController =
+              previousWebView.controllerFromPlatform<InAppWebViewController>(
+                  previousWebView.controller);
+          // Keep the initial document pending so its readiness fallback is
+          // still active when the source update remounts the Windows view.
+          previousWebView.params.onWebViewCreated!(previousController);
+          await tester.pump();
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final firstPendingWebView = windowsPlatform.webView!;
+          final firstPendingController = firstPendingWebView
+              .controllerFromPlatform<InAppWebViewController>(
+                  firstPendingWebView.controller);
+          final firstPendingViewKey =
+              tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final currentWebView = windowsPlatform.webView!;
+          final currentController =
+              currentWebView.controllerFromPlatform<InAppWebViewController>(
+                  currentWebView.controller);
+          final currentViewKey =
+              tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+          final viewRekeyedForPendingSourceUpdate =
+              firstPendingViewKey != currentViewKey;
+
+          // The replacement view has not delivered onWebViewCreated. The old
+          // readiness deadline must not resolve the new view's loading state.
+          await tester.pump(const Duration(seconds: 3));
+          final windowsLoadingVisibleAfterPreviousFallback =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          currentWebView.params.onWebViewCreated!(currentController);
+          await tester.pump();
+
+          // A pending view superseded by the second source update may still
+          // finish creating. Its late controller and document must stay stale.
+          firstPendingWebView.params.onWebViewCreated!(firstPendingController);
+          await tester.pump();
+          firstPendingWebView.params.onLoadStop?.call(
+            firstPendingController,
+            null,
+          );
+          await tester.pump();
+          final windowsLoadingVisibleAfterStalePendingViewCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          previousWebView.params.onLoadStop?.call(previousController, null);
+          await tester.pump();
+          final windowsLoadingVisibleAfterStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          currentWebView.params.onReceivedError!(
+            currentController,
+            WebResourceRequest(
+              url: WebUri('about:blank'),
+              isForMainFrame: true,
+            ),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Could not connect to host',
+            ),
+          );
+          await tester.pump();
+          windowsState = {
+            'view remounted for source update':
+                !identical(previousWebView, currentWebView),
+            'view rekeyed for update while creation was pending':
+                viewRekeyedForPendingSourceUpdate,
+            'loading overlay after previous readiness fallback':
+                windowsLoadingVisibleAfterPreviousFallback,
+            'loading overlay after stale pending-view completion':
+                windowsLoadingVisibleAfterStalePendingViewCompletion,
+            'loading overlay after stale completion':
+                windowsLoadingVisibleAfterStaleCompletion,
+            'current load error': find.text(errorMessage).evaluate().isNotEmpty,
+            'retry action': find.text('重试').evaluate().isNotEmpty,
+          };
+          await tester.pumpWidget(const SizedBox.shrink());
+        } finally {
+          debugDefaultTargetPlatformOverride = previousTargetPlatform;
+        }
+
+        expect(
+          {
+            'loadData generation guard': androidState,
+            'Windows view guard': windowsState
+          },
+          {
+            'loadData generation guard': {
+              'loading overlay before stale completion': true,
+              'loading overlay after stale completion': true,
+              'current load error': true,
+              'retry action': true,
+            },
+            'Windows view guard': {
+              'view remounted for source update': true,
+              'view rekeyed for update while creation was pending': true,
+              'loading overlay after previous readiness fallback': true,
+              'loading overlay after stale pending-view completion': true,
+              'loading overlay after stale completion': true,
+              'current load error': true,
+              'retry action': true,
+            },
+          },
+        );
+        expect(tester.takeException(), isNull);
       },
       skip: kIsWeb,
     );
@@ -2232,6 +2450,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       _pendingZoomOperations = [];
   final wheelZoomAnchors = <Offset>[];
   final loadedUrls = <WebUri>[];
+  final loadedDataBaseUrls = <WebUri?>[];
   Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
   double panX = 0;
@@ -2304,7 +2523,9 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     WebUri? historyUrl,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
-  }) async {}
+  }) async {
+    loadedDataBaseUrls.add(baseUrl);
+  }
 
   @override
   void addJavaScriptHandler({
