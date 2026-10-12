@@ -31,6 +31,7 @@ class _BackgroundOptimizationPageState
   Color _platformColor = Colors.grey;
   String _platformVersion = '';
   bool _isServiceRunning = false;
+  bool _isServiceStatusUnknown = false;
   String _optimizationStatus = '';
   bool _isCheckingService = true;
   bool _isOperating = false;
@@ -166,6 +167,7 @@ class _BackgroundOptimizationPageState
       // 桌面/Web 没有前台服务：直接给出平台对应的真实状态，
       // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
+      _isServiceStatusUnknown = false;
       if (isDesktopPlatform()) {
         _optimizationStatus = DesktopAppService.instance.isTrayReady
             ? '桌面端使用托盘驻留保活'
@@ -177,9 +179,11 @@ class _BackgroundOptimizationPageState
       try {
         final service = FlutterBackgroundService();
         _isServiceRunning = await service.isRunning();
+        _isServiceStatusUnknown = false;
         _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
       } catch (_) {
         _isServiceRunning = false;
+        _isServiceStatusUnknown = true;
         _optimizationStatus = '无法检测后台服务状态';
       }
     }
@@ -693,6 +697,15 @@ class _BackgroundOptimizationPageState
             if (v && _isServiceRunning) {
               final started = await startBackgroundService();
               if (!started && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('看门狗激活失败，后台服务保活状态未确认'),
+                  ),
+                );
+              }
+            } else if (v && _isServiceStatusUnknown) {
+              final rearmed = await rearmBackgroundServiceWatchdog();
+              if (!rearmed && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('看门狗激活失败，后台服务保活状态未确认'),
