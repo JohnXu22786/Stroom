@@ -269,7 +269,7 @@ class OcrService {
       lastResponseHeaders = response.headers.map;
       _lastRequestId =
           OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
-          OcrDiagnosticSnapshot.requestIdFromData(response.data);
+              OcrDiagnosticSnapshot.requestIdFromData(response.data);
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
@@ -321,7 +321,8 @@ class OcrService {
       // per official docs), then the optional instruction text last.
       final contents = <Map<String, dynamic>>[
         for (final (bytes, format) in imageBytesList)
-          _buildImageContent('data:image/$format;base64,${base64Encode(bytes)}'),
+          _buildImageContent(
+              'data:image/$format;base64,${base64Encode(bytes)}'),
       ];
       final instruction = config.effectiveUserInstruction;
       if (instruction.isNotEmpty) {
@@ -349,7 +350,7 @@ class OcrService {
       lastResponseHeaders = response.headers.map;
       _lastRequestId =
           OcrDiagnosticSnapshot.requestIdFromHeaders(response.headers.map) ??
-          OcrDiagnosticSnapshot.requestIdFromData(response.data);
+              OcrDiagnosticSnapshot.requestIdFromData(response.data);
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
@@ -428,7 +429,7 @@ class OcrService {
     lastResponseHeaders = e.response?.headers.map;
     _lastRequestId =
         OcrDiagnosticSnapshot.requestIdFromHeaders(e.response?.headers.map) ??
-        OcrDiagnosticSnapshot.requestIdFromData(e.response?.data);
+            OcrDiagnosticSnapshot.requestIdFromData(e.response?.data);
     _lastErrorType = e.type.name;
   }
 

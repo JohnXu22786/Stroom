@@ -87,11 +87,9 @@ void main() {
   test('credential-shaped values are dropped from request ID fields', () {
     final googleApiKey = 'AIza${List.filled(35, 'a').join()}';
     const openAiProjectKey = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
-    const anthropicApiKey =
-        'sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890';
+    const anthropicApiKey = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890';
     const groqApiKey = 'gsk_abcdefghijklmnopqrstuvwxyz1234567890';
-    const openRouterApiKey =
-        'sk-or-v1-abcdefghijklmnopqrstuvwxyz1234567890';
+    const openRouterApiKey = 'sk-or-v1-abcdefghijklmnopqrstuvwxyz1234567890';
     final request = OcrDiagnosticSnapshot.sanitizeRequest({
       'requestId': googleApiKey,
     })!;
@@ -169,6 +167,59 @@ void main() {
     expect(jsonEncode(response), isNot(contains(imageDataUri)));
   });
 
+  test('bare PNG base64 is dropped from request ID fields', () {
+    const png =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC';
+    final request = OcrDiagnosticSnapshot.sanitizeRequest({
+      'headers': {'x-request-id': png},
+    })!;
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'headers': {'x-request-id': png},
+      'data': {'id': png},
+    })!;
+
+    expect(request, isEmpty);
+    expect(response, isEmpty);
+    expect(jsonEncode([request, response]), isNot(contains(png)));
+  });
+
+  test('short embedded image signatures are dropped from metadata fields', () {
+    const pngSignature = 'iVBORw0KGgo';
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'statusCode': 503,
+      'requestId': 'req-$pngSignature',
+      'finishReason': pngSignature,
+      'errorType': pngSignature,
+    })!;
+
+    expect(response, {'statusCode': 503});
+    expect(jsonEncode(response), isNot(contains(pngSignature)));
+  });
+
+  test('request IDs reject prose from generic provider id fields', () {
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'data': {'id': 'Read the private receipt amount carefully'},
+    })!;
+    final opaqueId = OcrDiagnosticSnapshot.sanitizeResponse({
+      'data': {'id': 'chatcmpl-123abc_xyz'},
+    })!;
+
+    expect(response, isEmpty);
+    expect(opaqueId, {'requestId': 'chatcmpl-123abc_xyz'});
+  });
+
+  test('request ID fallback validates each provider field independently', () {
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'data': {
+        'request_id': 'Read the private receipt amount carefully',
+        'requestId': 'req-safe-123',
+        'id': 'chatcmpl-later-safe-id',
+      },
+    })!;
+
+    expect(response, {'requestId': 'req-safe-123'});
+  });
+
   test('short legacy OCR task errors redact token assignments', () {
     expect(
       OcrDiagnosticSnapshot.sanitizeStoredTaskError(
@@ -176,6 +227,95 @@ void main() {
       ),
       'OCR 错误详情已隐藏',
     );
+  });
+
+  test('short bare base64 image bodies are hidden from legacy task errors', () {
+    const imageBodies = [
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/1s8AAAAASUVORK5CYII=',
+      'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==',
+    ];
+
+    for (final imageBody in imageBodies) {
+      expect(imageBody.length, lessThan(160));
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(imageBody),
+        'OCR 错误详情已隐藏',
+      );
+    }
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 任务因格式问题未完成',
+      ),
+      'OCR 任务因格式问题未完成',
+    );
+  });
+
+  test('short bare image bodies are hidden inside legacy refusal text', () {
+    const imageBodies = [
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/1s8AAAAASUVORK5CYII=',
+      'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/v89WAAAAA==',
+    ];
+
+    for (final imageBody in imageBodies) {
+      final wrappedBody = imageBody.replaceAllMapped(
+        RegExp(r'.{1,4}'),
+        (match) => '${match.group(0)} ',
+      );
+      final refusal = 'Exception: OCR 请求被模型拒绝: $wrappedBody';
+      expect(refusal.length, lessThan(160));
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(refusal),
+        'OCR 错误详情已隐藏',
+      );
+    }
+  });
+
+  test('legacy task error details exclude recovered credentials', () {
+    const apiKey = 'opaque-user-secret-87';
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 请求失败 HTTP 503 finish_reason=$apiKey',
+      excludedValues: [apiKey],
+    )!;
+
+    expect(sanitized, contains('HTTP 503'));
+    expect(sanitized, isNot(contains(apiKey)));
+    expect(sanitized, isNot(contains('finish_reason=')));
+  });
+
+  test('legacy task error details exclude an unsafe HTTP status token', () {
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 请求失败 HTTP 503',
+      excludedValues: ['503'],
+    )!;
+
+    expect(sanitized, 'OCR 错误详情已隐藏');
+    expect(sanitized, isNot(contains('503')));
+  });
+
+  test('safe Dio error types still honor recovered credential exclusions', () {
+    const credential = 'connectionTimeout';
+    final sanitized = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+      'OCR 请求失败（$credential）',
+      excludedValues: [credential],
+    )!;
+
+    expect(sanitized, 'OCR 错误详情已隐藏');
+    expect(sanitized, isNot(contains(credential)));
+  });
+
+  test('response error types honor configured credential exclusions', () {
+    const credential = 'connectionTimeout';
+    final excluded = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'errorType': credential},
+      excludedValues: [credential],
+    )!;
+    final safe = OcrDiagnosticSnapshot.sanitizeResponse(
+      {'errorType': credential},
+      excludedValues: ['unrelated-secret'],
+    )!;
+
+    expect(excluded, isEmpty);
+    expect(safe, {'errorType': credential});
   });
 
   test('request IDs redact credential fields with underscore prefixes', () {

@@ -32,10 +32,7 @@ class OcrDiagnosticSnapshot {
   }) {
     if (source == null) return null;
     final safeRequestId = includeRequestId
-        ? _safeRequestId(
-              source['requestId'],
-              excludedValues: excludedValues,
-            ) ??
+        ? _safeRequestId(source['requestId'], excludedValues: excludedValues) ??
             _safeRequestId(
               requestIdFromHeaders(source['headers']),
               excludedValues: excludedValues,
@@ -43,9 +40,9 @@ class OcrDiagnosticSnapshot {
         : null;
     final result = <String, dynamic>{
       if (_safeHost(
-            source['host'] ?? source['url'],
-            excludedValues: excludedValues,
-          )
+        source['host'] ?? source['url'],
+        excludedValues: excludedValues,
+      )
           case final host?)
         'host': host,
       if (_safeMethod(source['method']) case final method?) 'method': method,
@@ -69,10 +66,7 @@ class OcrDiagnosticSnapshot {
     if (source == null) return null;
     final data = source['data'];
     final safeRequestId = includeRequestId
-        ? _safeRequestId(
-              source['requestId'],
-              excludedValues: excludedValues,
-            ) ??
+        ? _safeRequestId(source['requestId'], excludedValues: excludedValues) ??
             _safeRequestId(
               requestIdFromHeaders(source['headers']),
               excludedValues: excludedValues,
@@ -84,10 +78,10 @@ class OcrDiagnosticSnapshot {
         : null;
     final safeFinishReason = includeFinishReason
         ? _safeReason(
-                source['finishReason'] ?? source['finish_reason'],
-                excludedValues: excludedValues,
-              ) ??
-              _finishReasonFromData(data, excludedValues: excludedValues)
+              source['finishReason'] ?? source['finish_reason'],
+              excludedValues: excludedValues,
+            ) ??
+            _finishReasonFromData(data, excludedValues: excludedValues)
         : null;
     final result = <String, dynamic>{
       if (_smallInt(source['statusCode']) ?? _smallInt(source['status'])
@@ -97,7 +91,11 @@ class OcrDiagnosticSnapshot {
       if (safeRequestId != null) 'requestId': safeRequestId,
       if (_smallInt(source['durationMs']) case final duration?)
         'durationMs': duration,
-      if (_safeErrorType(source['errorType']) case final errorType?)
+      if (_safeErrorType(
+        source['errorType'],
+        excludedValues: excludedValues,
+      )
+          case final errorType?)
         'errorType': errorType,
     };
     return _bounded(result);
@@ -110,17 +108,15 @@ class OcrDiagnosticSnapshot {
     required int? durationMs,
     required String? requestId,
     Iterable<String> excludedValues = const [],
-  }) => sanitizeRequest(
-    {
-      'url': url,
-      'method': 'POST',
-      'imageCount': imageCount,
-      'imageBytes': imageBytes,
-      'durationMs': durationMs,
-      'requestId': requestId,
-    },
-    excludedValues: excludedValues,
-  )!;
+  }) =>
+      sanitizeRequest({
+        'url': url,
+        'method': 'POST',
+        'imageCount': imageCount,
+        'imageBytes': imageBytes,
+        'durationMs': durationMs,
+        'requestId': requestId,
+      }, excludedValues: excludedValues)!;
 
   static Map<String, dynamic> response({
     required int? statusCode,
@@ -130,17 +126,15 @@ class OcrDiagnosticSnapshot {
     required String? errorType,
     Map<String, dynamic>? data,
     Iterable<String> excludedValues = const [],
-  }) => sanitizeResponse(
-    {
-      'statusCode': statusCode,
-      'finishReason': finishReason,
-      'durationMs': durationMs,
-      'requestId': requestId,
-      'errorType': errorType,
-      'data': data,
-    },
-    excludedValues: excludedValues,
-  )!;
+  }) =>
+      sanitizeResponse({
+        'statusCode': statusCode,
+        'finishReason': finishReason,
+        'durationMs': durationMs,
+        'requestId': requestId,
+        'errorType': errorType,
+        'data': data,
+      }, excludedValues: excludedValues)!;
 
   static String? requestIdFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return null;
@@ -149,9 +143,8 @@ class OcrDiagnosticSnapshot {
           !_requestIdHeaders.contains((entry.key as String).toLowerCase())) {
         continue;
       }
-      final value = entry.value is List
-          ? (entry.value as List).firstOrNull
-          : entry.value;
+      final value =
+          entry.value is List ? (entry.value as List).firstOrNull : entry.value;
       final safe = _safeRequestId(value);
       if (safe != null) return safe;
     }
@@ -160,9 +153,11 @@ class OcrDiagnosticSnapshot {
 
   static String? requestIdFromData(dynamic data) {
     if (data is! Map) return null;
-    return _safeRequestId(
-      data['request_id'] ?? data['requestId'] ?? data['id'],
-    );
+    for (final field in ['request_id', 'requestId', 'id']) {
+      final safe = _safeRequestId(data[field]);
+      if (safe != null) return safe;
+    }
+    return null;
   }
 
   /// Avoid storing provider-controlled exception text that can echo secrets.
@@ -183,19 +178,22 @@ class OcrDiagnosticSnapshot {
     Iterable<String> excludedValues = const [],
   }) {
     if (value == null || value.isEmpty) return value;
+    final credentialValues = excludedValues.toList(growable: false);
     final safeDioType = RegExp(
       r'^OCR 请求失败（([a-zA-Z]+)）$',
     ).firstMatch(value)?.group(1);
-    if (DioExceptionType.values.any((type) => type.name == safeDioType)) {
+    if (DioExceptionType.values.any((type) => type.name == safeDioType) &&
+        !containsCredential(value, excludedValues: credentialValues)) {
       return value;
     }
     final containsProviderBody = RegExp(
-      r'(?:DioException|Exception:\s*请求失败|请求失败\s*[（(]|data:image/|base64,)',
-      caseSensitive: false,
-    ).hasMatch(value);
+          r'(?:DioException|Exception:\s*请求失败|请求失败\s*[（(]|data:image/|base64,)',
+          caseSensitive: false,
+        ).hasMatch(value) ||
+        _isShortEncodedImageBody(value);
     final containsCredentialValue = containsCredential(
       value,
-      excludedValues: excludedValues,
+      excludedValues: credentialValues,
     );
     if (value.length <= _maxTextLength &&
         !containsProviderBody &&
@@ -203,17 +201,21 @@ class OcrDiagnosticSnapshot {
       return value;
     }
 
+    final statusCode = RegExp(
+      r'\bHTTP\s+([1-5]\d{2})\b',
+      caseSensitive: false,
+    ).firstMatch(value)?.group(1);
     final details = <String>[
-      if (RegExp(r'\bHTTP\s+([1-5]\d{2})\b', caseSensitive: false)
-              .firstMatch(value)
-          case final status?)
-        'HTTP ${status.group(1)}',
+      if (statusCode != null &&
+          !containsCredential(statusCode, excludedValues: credentialValues))
+        'HTTP $statusCode',
       if (_safeReason(
-            RegExp(
-              r'finish[_ ]reason\s*=\s*([a-zA-Z0-9_-]{1,48})',
-              caseSensitive: false,
-            ).firstMatch(value)?.group(1),
-          )
+        RegExp(
+          r'finish[_ ]reason\s*=\s*([a-zA-Z0-9_-]{1,48})',
+          caseSensitive: false,
+        ).firstMatch(value)?.group(1),
+        excludedValues: credentialValues,
+      )
           case final finishReason?)
         'finish_reason=$finishReason',
     ];
@@ -238,6 +240,65 @@ class OcrDiagnosticSnapshot {
         _credentialValue.hasMatch(compacted) ||
         _containsExcludedValue(value, excluded) ||
         _containsExcludedValue(compacted, compactedExcluded);
+  }
+
+  /// Recognize short, bare base64 image bodies in legacy task errors without
+  /// treating arbitrary base64-looking user text as an image payload.
+  static bool _isShortEncodedImageBody(String value) {
+    if (value.length > _maxTextLength) return false;
+    final compacted = value.replaceAll(RegExp(r'\s+'), '');
+    final candidates = RegExp(r'[A-Za-z0-9+/=]{8,}').allMatches(compacted);
+    return candidates.any(
+      (match) => _matchesEncodedImageBody(match.group(0)!),
+    );
+  }
+
+  static bool _matchesEncodedImageBody(String value) {
+    if (!RegExp(r'^[A-Za-z0-9+/]+={0,2}$').hasMatch(value)) return false;
+    final unpadded = value.replaceFirst(RegExp(r'=+$'), '');
+    if (unpadded.length % 4 == 1 ||
+        (value.contains('=') && value.length % 4 != 0)) {
+      return false;
+    }
+    final padded = unpadded.padRight(
+      unpadded.length + ((4 - unpadded.length % 4) % 4),
+      '=',
+    );
+    try {
+      final bytes = base64Decode(padded);
+      if (base64Encode(bytes).replaceFirst(RegExp(r'=+$'), '') != unpadded) {
+        return false;
+      }
+      bool matches(List<int> signature, {int offset = 0}) =>
+          bytes.length >= offset + signature.length &&
+          List.generate(signature.length, (index) => index).every(
+            (index) => bytes[offset + index] == signature[index],
+          );
+
+      return matches([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+          matches([0xff, 0xd8, 0xff]) ||
+          matches([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+          matches([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]) ||
+          (matches([0x52, 0x49, 0x46, 0x46]) &&
+              matches([0x57, 0x45, 0x42, 0x50], offset: 8)) ||
+          matches([0x42, 0x4d]) ||
+          matches([0x49, 0x49, 0x2a, 0x00]) ||
+          matches([0x4d, 0x4d, 0x00, 0x2a]) ||
+          matches([0x00, 0x00, 0x01, 0x00]) ||
+          (matches([0x66, 0x74, 0x79, 0x70], offset: 4) &&
+              [
+                [0x68, 0x65, 0x69, 0x63],
+                [0x68, 0x65, 0x69, 0x78],
+                [0x68, 0x65, 0x76, 0x63],
+                [0x68, 0x65, 0x76, 0x78],
+                [0x6d, 0x69, 0x66, 0x31],
+                [0x6d, 0x73, 0x66, 0x31],
+                [0x61, 0x76, 0x69, 0x66],
+                [0x61, 0x76, 0x69, 0x73],
+              ].any((brand) => matches(brand, offset: 8)));
+    } on FormatException {
+      return false;
+    }
   }
 
   static Map<String, dynamic> _bounded(Map<String, dynamic> value) {
@@ -266,8 +327,8 @@ class OcrDiagnosticSnapshot {
     final host = uri?.host.isNotEmpty == true
         ? uri!.host
         : RegExp(r'^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$').hasMatch(value)
-        ? value
-        : null;
+            ? value
+            : null;
     if (host == null) return null;
     if (_credentialValue.hasMatch(host) ||
         _containsExcludedValue(host, excludedValues)) {
@@ -295,8 +356,11 @@ class OcrDiagnosticSnapshot {
   }) {
     if (value is! String) return null;
     final cleaned = value.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
-    if (cleaned.isEmpty || cleaned.length > _maxTextLength) return null;
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,159}$').hasMatch(cleaned)) {
+      return null;
+    }
     if (RegExp(r'data:image/', caseSensitive: false).hasMatch(cleaned) ||
+        _isShortEncodedImageBody(cleaned) ||
         containsCredential(cleaned, excludedValues: excludedValues)) {
       return null;
     }
@@ -311,6 +375,7 @@ class OcrDiagnosticSnapshot {
     final reason = value.trim();
     return reason.isNotEmpty &&
             RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(reason) &&
+            !_isShortEncodedImageBody(reason) &&
             !containsCredential(reason, excludedValues: excludedValues)
         ? reason
         : null;
@@ -327,10 +392,16 @@ class OcrDiagnosticSnapshot {
     );
   }
 
-  static String? _safeErrorType(dynamic value) {
+  static String? _safeErrorType(
+    dynamic value, {
+    Iterable<String> excludedValues = const [],
+  }) {
     if (value is! String || value.length > 48) return null;
     final type = value.trim();
-    return type.isNotEmpty && RegExp(r'^[a-zA-Z0-9_.-]+$').hasMatch(type)
+    return type.isNotEmpty &&
+            RegExp(r'^[a-zA-Z0-9_.-]+$').hasMatch(type) &&
+            !_isShortEncodedImageBody(type) &&
+            !containsCredential(type, excludedValues: excludedValues)
         ? type
         : null;
   }

@@ -21,7 +21,8 @@ Dio _mockDioWithSuccess(
 class _SuccessInterceptor extends Interceptor {
   final dynamic _data;
   final Map<String, List<String>> _headers;
-  _SuccessInterceptor(this._data, {Map<String, List<String>> headers = const {}})
+  _SuccessInterceptor(this._data,
+      {Map<String, List<String>> headers = const {}})
       : _headers = headers;
 
   @override
@@ -566,8 +567,8 @@ void main() {
             expect(jsonEncode(request), isNot(contains(apiKey)));
             expect(service.lastRequestBody, isNull);
             expect(
-              service
-                  .diagnosticResponse(error: const FormatException())['durationMs'],
+              service.diagnosticResponse(
+                  error: const FormatException())['durationMs'],
               isA<int>(),
             );
           }
@@ -1400,6 +1401,56 @@ void main() {
         expect(service.diagnosticResponse()['requestId'], isNull);
       });
 
+      test('success diagnostics omit image signatures in provider metadata',
+          () async {
+        const pngSignature = 'iVBORw0KGgo';
+        final dio = _mockDioWithSuccess({
+          'id': 'req-$pngSignature',
+          'choices': [
+            {
+              'message': {'content': 'test text'},
+              'finish_reason': pngSignature,
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+          imageFormat: 'jpeg',
+        );
+
+        final diagnostic = service.diagnosticResponse();
+        expect(diagnostic['statusCode'], 200);
+        expect(diagnostic['requestId'], isNull);
+        expect(diagnostic['finishReason'], isNull);
+        expect(jsonEncode(diagnostic), isNot(contains(pngSignature)));
+      });
+
+      test(
+        'success diagnostics fall back from an unsafe request ID field',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'request_id': 'Read the private receipt amount carefully',
+            'requestId': 'req-safe-123',
+            'id': 'chatcmpl-later-safe-id',
+            'choices': [
+              {
+                'message': {'content': 'test text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+            imageFormat: 'jpeg',
+          );
+
+          expect(service.diagnosticResponse()['requestId'], 'req-safe-123');
+        },
+      );
+
       test('diagnostic host excludes the configured API key', () async {
         const apiKey = 'opaque-user-secret-87';
         final dio = _mockDioWithSuccess({
@@ -1428,7 +1479,8 @@ void main() {
         expect(jsonEncode(diagnostic), isNot(contains(apiKey)));
       });
 
-      test('diagnostic finish reason excludes the configured API key', () async {
+      test('diagnostic finish reason excludes the configured API key',
+          () async {
         const apiKey = 'opaque-user-secret-87';
         final dio = _mockDioWithSuccess({
           'choices': [

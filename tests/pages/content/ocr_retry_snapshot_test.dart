@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 
@@ -28,8 +30,8 @@ void main() {
       );
 
       final serialized = snapshot.toMap();
-      final images = (serialized['images'] as List)
-          .cast<Map<String, dynamic>>();
+      final images =
+          (serialized['images'] as List).cast<Map<String, dynamic>>();
 
       expect(serialized['version'], OcrRetrySnapshot.currentVersion);
       expect(serialized['modelRef'], {
@@ -65,6 +67,58 @@ void main() {
       expect(snapshot.hasInvalidImages, isTrue);
       expect(snapshot.imageEntryCount, 2);
       expect(snapshot.needsMigration, isTrue);
+    });
+
+    test('invalid optional metadata does not discard valid images', () {
+      const reference =
+          'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin';
+      const bytes = [1, 2, 3, 4];
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': 2,
+        'modelRef': {'configId': 'config-1', 'modelId': 'model-1'},
+        'images': [
+          {
+            'bytes': base64Encode(bytes),
+            'format': 7,
+            'name': {'invalid': 'type'},
+          },
+          {
+            'storageRef': reference,
+            'format': ['png'],
+            'name': 9,
+          },
+        ],
+      });
+
+      expect(snapshot.hasInvalidImages, isFalse);
+      expect(snapshot.hasInvalidImageMetadata, isTrue);
+      expect(snapshot.needsMigration, isTrue);
+      expect(snapshot.images, hasLength(2));
+      expect(snapshot.images.first.bytes?.toList(), bytes);
+      expect(snapshot.images.first.format, '');
+      expect(snapshot.images.first.name, isNull);
+      expect(snapshot.images.last.storageRef, reference);
+      expect(snapshot.images.last.format, '');
+      expect(snapshot.images.last.name, isNull);
+    });
+
+    test('infers format from valid inline bytes when metadata is malformed',
+        () {
+      final pngBytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC',
+      );
+      final snapshot = OcrRetrySnapshot.fromMap({
+        'type': 'ocr',
+        'version': 2,
+        'images': [
+          {'bytes': base64Encode(pngBytes), 'format': 7},
+        ],
+      });
+
+      expect(snapshot.hasInvalidImageMetadata, isTrue);
+      expect(snapshot.images.single.bytes, pngBytes);
+      expect(snapshot.images.single.format, 'png');
     });
   });
 }

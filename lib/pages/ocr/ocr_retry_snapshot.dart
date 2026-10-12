@@ -39,23 +39,67 @@ class OcrRetryImage {
   static bool isValidStorageReference(String reference) =>
       _storageReferencePattern.hasMatch(reference);
 
+  /// Infers a format hint from encoded bytes; OCR preparation still validates.
+  static String? inferFormatFromBytes(Uint8List bytes) {
+    bool startsWith(List<int> signature) {
+      if (bytes.length < signature.length) return false;
+      for (var index = 0; index < signature.length; index++) {
+        if (bytes[index] != signature[index]) return false;
+      }
+      return true;
+    }
+
+    if (startsWith(const [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+      return 'png';
+    }
+    if (startsWith(const [0xff, 0xd8, 0xff])) return 'jpeg';
+    if (startsWith(ascii.encode('GIF87a')) ||
+        startsWith(ascii.encode('GIF89a'))) {
+      return 'gif';
+    }
+    if (bytes.length >= 12 &&
+        startsWith(ascii.encode('RIFF')) &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'webp';
+    }
+    return null;
+  }
+
   factory OcrRetryImage.fromMap(Map<String, dynamic> map) {
     final encoded = map['bytes'];
     final storageRef = map['storageRef'];
-    if (encoded is String && storageRef == null) {
-      return OcrRetryImage(
-        bytes: base64Decode(encoded),
-        format: map['format'] as String? ?? 'jpeg',
-        name: map['name'] as String?,
-      );
+    final format = map['format'];
+    final name = map['name'];
+    // Unknown metadata stays unknown instead of mislabeling image bytes.
+    final safeFormat = format is String ? format : '';
+    final safeName = name is String ? name : null;
+    final hasValidStorageRef =
+        storageRef is String && isValidStorageReference(storageRef);
+    if (encoded is String) {
+      try {
+        final bytes = base64Decode(encoded);
+        if (bytes.isNotEmpty) {
+          return OcrRetryImage(
+            bytes: bytes,
+            format: inferFormatFromBytes(bytes) ?? safeFormat,
+            name: safeName,
+          );
+        }
+        if (!hasValidStorageRef) {
+          throw const FormatException('OCR retry image body is empty');
+        }
+      } on FormatException {
+        if (!hasValidStorageRef) rethrow;
+      }
     }
-    if (storageRef is String &&
-        isValidStorageReference(storageRef) &&
-        encoded == null) {
+    if (hasValidStorageRef) {
       return OcrRetryImage.reference(
         storageRef: storageRef,
-        format: map['format'] as String? ?? 'jpeg',
-        name: map['name'] as String?,
+        format: safeFormat,
+        name: safeName,
       );
     }
     throw const FormatException(
@@ -83,6 +127,8 @@ class OcrRetrySnapshot {
   final List<OcrRetryImage> images;
   final bool isLegacy;
   final bool hasInvalidImages;
+  final bool hasInvalidImageMetadata;
+  final bool hasInlineImageData;
   final int imageEntryCount;
 
   const OcrRetrySnapshot._({
@@ -96,6 +142,8 @@ class OcrRetrySnapshot {
     required this.images,
     required this.isLegacy,
     required this.hasInvalidImages,
+    required this.hasInvalidImageMetadata,
+    required this.hasInlineImageData,
     required this.imageEntryCount,
   });
 
@@ -107,19 +155,22 @@ class OcrRetrySnapshot {
     String saveFolder = '',
     int? legacyModelIndex,
     int? legacyInstructionIndex,
-  }) => OcrRetrySnapshot._(
-    version: currentVersion,
-    configId: configId,
-    modelId: modelId,
-    legacyModelIndex: legacyModelIndex,
-    legacyInstructionIndex: legacyInstructionIndex,
-    instructionContent: instructionContent,
-    saveFolder: saveFolder,
-    images: List.unmodifiable(images),
-    isLegacy: false,
-    hasInvalidImages: false,
-    imageEntryCount: images.length,
-  );
+  }) =>
+      OcrRetrySnapshot._(
+        version: currentVersion,
+        configId: configId,
+        modelId: modelId,
+        legacyModelIndex: legacyModelIndex,
+        legacyInstructionIndex: legacyInstructionIndex,
+        instructionContent: instructionContent,
+        saveFolder: saveFolder,
+        images: List.unmodifiable(images),
+        isLegacy: false,
+        hasInvalidImages: false,
+        hasInvalidImageMetadata: false,
+        hasInlineImageData: images.any((image) => image.bytes != null),
+        imageEntryCount: images.length,
+      );
 
   factory OcrRetrySnapshot.fromMap(Map<String, dynamic> map) {
     final rawVersion = map['version'];
@@ -134,6 +185,8 @@ class OcrRetrySnapshot {
     final rawImages = map['images'];
     final images = <OcrRetryImage>[];
     var hasInvalidImages = false;
+    var hasInvalidImageMetadata = false;
+    var hasInlineImageData = false;
     final imageEntryCount = rawImages is List ? rawImages.length : 0;
     if (rawImages is List) {
       for (final rawImage in rawImages) {
@@ -142,9 +195,11 @@ class OcrRetrySnapshot {
           continue;
         }
         try {
-          images.add(
-            OcrRetryImage.fromMap(Map<String, dynamic>.from(rawImage)),
-          );
+          final imageMap = Map<String, dynamic>.from(rawImage);
+          hasInlineImageData |= imageMap.containsKey('bytes');
+          hasInvalidImageMetadata |= imageMap['format'] is! String ||
+              (imageMap['name'] != null && imageMap['name'] is! String);
+          images.add(OcrRetryImage.fromMap(imageMap));
         } catch (_) {
           hasInvalidImages = true;
         }
@@ -163,20 +218,21 @@ class OcrRetrySnapshot {
       modelId: modelId,
       legacyModelIndex:
           supportedVersion && !hasStableModelRef && map['modelIndex'] is int
-          ? map['modelIndex'] as int
-          : null,
+              ? map['modelIndex'] as int
+              : null,
       legacyInstructionIndex: supportedVersion && map['instructionIndex'] is int
           ? map['instructionIndex'] as int
           : null,
       instructionContent: map['instructionContent'] is String
           ? map['instructionContent'] as String
           : null,
-      saveFolder: map['saveFolder'] is String
-          ? map['saveFolder'] as String
-          : '',
+      saveFolder:
+          map['saveFolder'] is String ? map['saveFolder'] as String : '',
       images: List.unmodifiable(images),
       isLegacy: isLegacy,
       hasInvalidImages: hasInvalidImages,
+      hasInvalidImageMetadata: hasInvalidImageMetadata,
+      hasInlineImageData: hasInlineImageData,
       imageEntryCount: imageEntryCount,
     );
   }
@@ -184,6 +240,8 @@ class OcrRetrySnapshot {
   bool get needsMigration =>
       version != currentVersion ||
       hasInvalidImages ||
+      hasInvalidImageMetadata ||
+      hasInlineImageData ||
       images.any((image) => image.storageRef == null);
 
   Map<String, dynamic> toMap() {

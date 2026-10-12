@@ -28,7 +28,8 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
-    testWidgets('OCR diagnostics show safe summary fields only', (tester) async {
+    testWidgets('OCR diagnostics show safe summary fields only',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
