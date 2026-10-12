@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'mermaid_preview_web_controls_stub.dart'
-    if (dart.library.html) 'mermaid_preview_web_controls_web.dart'
-    as platform;
+    if (dart.library.html) 'mermaid_preview_web_controls_web.dart' as platform;
 
 Widget buildMermaidPreviewWebControls({
   Key? key,

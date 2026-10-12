@@ -10,8 +10,7 @@ import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 import 'mermaid_preview_dialog_web_controls_test_dom_stub.dart'
     if (dart.library.html)
-        'mermaid_preview_dialog_web_controls_test_dom_web.dart'
-    as previewDom;
+        'mermaid_preview_dialog_web_controls_test_dom_web.dart' as previewDom;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

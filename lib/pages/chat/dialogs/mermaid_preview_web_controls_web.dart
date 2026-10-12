@@ -79,7 +79,8 @@ class _MermaidPreviewWebControlsState
 
   void _onPlatformViewCreated(int viewId) {
     if (!mounted) return;
-    _element = ui_web.platformViewRegistry.getViewById(viewId) as html.DivElement;
+    _element =
+        ui_web.platformViewRegistry.getViewById(viewId) as html.DivElement;
     _renderControls(_element!);
   }
 
