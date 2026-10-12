@@ -2,7 +2,6 @@ name: CI Checks
 
 on:
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
@@ -18,7 +17,7 @@ concurrency:
 jobs:
   # Small JavaScript checks for the integrated components share one Node job.
   components:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (component scripts skipped)' || 'Component Integration scripts' }}"
+    name: "Component Integration scripts"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     steps:
@@ -34,7 +33,7 @@ jobs:
       - run: node --test tests/catcatch/js_hook_script_test.cjs
 
   format:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (format skipped)' || 'Format Check' }}"
+    name: "Format Check"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     steps:
@@ -51,24 +50,29 @@ jobs:
 
   # Keep the required branch-protection check name for static analysis.
   quality:
-    # The prior Static Analysis result remains attached to the unchanged head
-    # SHA during metadata-only edits; base retargets use this formal name.
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (code checks skipped)' || 'Static Analysis' }}"
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
+    name: "Static Analysis"
     runs-on: ubuntu-latest
     steps:
+      - name: Skip analysis for PR metadata edits
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null }}
+        run: echo "Static analysis is unchanged by a PR title or body edit."
       - uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
         with:
           fetch-depth: 0
       - uses: subosito/flutter-action@v2
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
         with:
           flutter-version: 3.44.9
           cache: true
           pub-cache: true
       - run: flutter pub get
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
       - name: Run Dart analyzer
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
+        if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
         run: |
           EVENT_BASE_SHA="${{ github.event.pull_request.base.sha }}"
           if [ -z "$EVENT_BASE_SHA" ]; then
@@ -193,7 +197,7 @@ jobs:
   # Kotlin sources in their standalone JVM build instead of building the full
   # Flutter Android app and its plugins for four helper tests.
   app-runtime-jvm:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'PR metadata edit (JVM tests skipped)' || 'Application Runtime (Kotlin/JVM)' }}"
+    name: "Application Runtime (Kotlin/JVM)"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     steps:
@@ -210,7 +214,7 @@ jobs:
 
   # ── Functional test suites ────────────────────────────────────────────────
   test:
-    name: "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('PR metadata edit (tests skipped: {0})', matrix.label) || format('Tests ({0})', matrix.label) }}"
+    name: "Tests (${{ matrix.label }})"
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     strategy:
