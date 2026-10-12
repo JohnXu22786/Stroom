@@ -64,6 +64,20 @@ internal fun claimAlarmDeliveryGeneration(
     }
 }
 
+internal fun persistNextAlarmGeneration(
+    currentGeneration: Long,
+    persistGeneration: (Long) -> Boolean,
+): Long? {
+    val nextGeneration = currentGeneration + 1L
+    return if (persistGeneration(nextGeneration)) {
+        nextGeneration
+    } else {
+        // SharedPreferences changes its in-memory map even when commit() fails.
+        persistGeneration(currentGeneration)
+        null
+    }
+}
+
 internal fun scheduleWithActiveIntent(
     persistActiveIntent: () -> Boolean,
     schedule: () -> Boolean,
