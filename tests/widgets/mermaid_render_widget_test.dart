@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride, kIsWeb, TargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -1098,6 +1099,162 @@ void main() {
 
         await tester.pumpWidget(const SizedBox.shrink());
         scrollController.dispose();
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'native source updates ignore stale completion before current load errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final previousTargetPlatform = debugDefaultTargetPlatformOverride;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+        late final Map<String, bool> androidState;
+        late final Map<String, bool> windowsState;
+
+        try {
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          final platform = _MermaidWebViewPlatform();
+          InAppWebViewPlatform.instance = platform;
+          final webView = await _mountReadyMermaidWidget(
+            tester,
+            platform,
+            const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          );
+          final controller =
+              webView.controllerFromPlatform<InAppWebViewController>(
+                  webView.controller);
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final previousLoadUrl =
+              webView.controller.loadedDataBaseUrls.single ??
+                  WebUri('about:blank');
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final currentLoadUrl = webView.controller.loadedDataBaseUrls.last ??
+              WebUri('about:blank');
+
+          final loadingVisibleBeforeStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+          webView.params.onLoadStop?.call(controller, previousLoadUrl);
+          await tester.pump();
+          final loadingVisibleAfterStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          const errorMessage = '页面加载失败: Could not connect to host';
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: currentLoadUrl, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Could not connect to host',
+            ),
+          );
+          await tester.pump();
+
+          androidState = {
+            'loading overlay before stale completion':
+                loadingVisibleBeforeStaleCompletion,
+            'loading overlay after stale completion':
+                loadingVisibleAfterStaleCompletion,
+            'current load error': find.text(errorMessage).evaluate().isNotEmpty,
+            'retry action': find.text('重试').evaluate().isNotEmpty,
+          };
+
+          await tester.pumpWidget(const SizedBox.shrink());
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          final windowsPlatform = _MermaidWebViewPlatform();
+          InAppWebViewPlatform.instance = windowsPlatform;
+          final previousWebView = await _mountReadyMermaidWidget(
+            tester,
+            windowsPlatform,
+            const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          );
+          final previousController =
+              previousWebView.controllerFromPlatform<InAppWebViewController>(
+                  previousWebView.controller);
+
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+              ),
+            ),
+          );
+          await tester.pump();
+          final currentWebView = windowsPlatform.webView!;
+          final currentController =
+              currentWebView.controllerFromPlatform<InAppWebViewController>(
+                  currentWebView.controller);
+          currentWebView.params.onWebViewCreated!(currentController);
+          await tester.pump();
+
+          previousWebView.params.onLoadStop?.call(previousController, null);
+          await tester.pump();
+          final windowsLoadingVisibleAfterStaleCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          currentWebView.params.onReceivedError!(
+            currentController,
+            WebResourceRequest(
+              url: WebUri('about:blank'),
+              isForMainFrame: true,
+            ),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Could not connect to host',
+            ),
+          );
+          await tester.pump();
+          windowsState = {
+            'view remounted for source update':
+                !identical(previousWebView, currentWebView),
+            'loading overlay after stale completion':
+                windowsLoadingVisibleAfterStaleCompletion,
+            'current load error': find.text(errorMessage).evaluate().isNotEmpty,
+            'retry action': find.text('重试').evaluate().isNotEmpty,
+          };
+          await tester.pumpWidget(const SizedBox.shrink());
+        } finally {
+          debugDefaultTargetPlatformOverride = previousTargetPlatform;
+        }
+
+        expect(
+          {
+            'loadData generation guard': androidState,
+            'Windows view guard': windowsState
+          },
+          {
+            'loadData generation guard': {
+              'loading overlay before stale completion': true,
+              'loading overlay after stale completion': true,
+              'current load error': true,
+              'retry action': true,
+            },
+            'Windows view guard': {
+              'view remounted for source update': true,
+              'loading overlay after stale completion': true,
+              'current load error': true,
+              'retry action': true,
+            },
+          },
+        );
+        expect(tester.takeException(), isNull);
       },
       skip: kIsWeb,
     );
@@ -2232,6 +2389,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       _pendingZoomOperations = [];
   final wheelZoomAnchors = <Offset>[];
   final loadedUrls = <WebUri>[];
+  final loadedDataBaseUrls = <WebUri?>[];
   Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
   double panX = 0;
@@ -2304,7 +2462,9 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     WebUri? historyUrl,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
-  }) async {}
+  }) async {
+    loadedDataBaseUrls.add(baseUrl);
+  }
 
   @override
   void addJavaScriptHandler({

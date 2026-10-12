@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -806,6 +807,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   bool _hasWebRetryTimeoutError = false;
   String? _webRetryUrl;
   int _webRetryGeneration = 0;
+  int _nativeLoadGeneration = 0;
+  WebUri? _nativeLoadBaseUrl;
 
   String _resolveWebUrl(String url) => Uri.base.resolve(url).toString();
 
@@ -1028,11 +1031,29 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
+    if (defaultTargetPlatform == TargetPlatform.windows && code.isNotEmpty) {
+      // Windows WebView2 ignores loadData's baseUrl, so replacing the view
+      // gives each source update a distinct controller for callback checks.
+      _webViewController = null;
+      _webViewKey = UniqueKey();
+      _armWebViewCreationFallback();
+      return;
+    }
+
+    // Native loadData completions carry their document's base URL. Give each
+    // HTML document a distinct URL so a late completion from an older load can
+    // be ignored.
+    final nativeLoadBaseUrl = WebUri(
+      'https://mermaid.invalid/load/${++_nativeLoadGeneration}/',
+    );
+    _nativeLoadBaseUrl = nativeLoadBaseUrl;
+
     if (code.isEmpty) {
       ctrl.loadData(
         data: _emptyPlaceholderHtml,
         mimeType: 'text/html',
         encoding: 'utf8',
+        baseUrl: nativeLoadBaseUrl,
       );
       return;
     }
@@ -1050,6 +1071,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       data: html,
       mimeType: 'text/html',
       encoding: 'utf8',
+      baseUrl: nativeLoadBaseUrl,
     );
   }
 
@@ -1731,6 +1753,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     ),
               onWebViewCreated: (ctrl) {
                 _webViewController = ctrl;
+                if (!kIsWeb) _nativeLoadBaseUrl = null;
                 // On web the iframe manages its own loading state (the
                 // asset template shows a hint until the diagram renders),
                 // so the widget is immediately ready and no fallback timer
@@ -1793,6 +1816,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                if (!kIsWeb &&
+                    (ctrl != _webViewController ||
+                        (_nativeLoadBaseUrl != null &&
+                            url?.toString() !=
+                                _nativeLoadBaseUrl.toString()))) {
+                  return;
+                }
                 if (kIsWeb &&
                     _webRetryUrl != null &&
                     (url == null ||
