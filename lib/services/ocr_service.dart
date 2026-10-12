@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
+import '../models/ocr_batch_execution.dart';
 
 import '../utils/http_utils.dart';
 import '../utils/http_timeout.dart';
@@ -26,6 +27,7 @@ class OcrConfig {
 
   /// Custom parameters that the user defined
   final List<CustomParam> customParams;
+  final int requestSizeBudgetBytes;
 
   const OcrConfig({
     this.model = 'gpt-4o',
@@ -34,6 +36,7 @@ class OcrConfig {
     this.systemPrompt,
     this.typeConfig = const {},
     this.customParams = const [],
+    this.requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
   });
 
   /// Returns the configured endpoint with surrounding whitespace removed.
@@ -66,6 +69,7 @@ class OcrConfig {
     String? systemPrompt,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
+    int? requestSizeBudgetBytes,
   }) =>
       OcrConfig(
         model: model ?? this.model,
@@ -74,6 +78,8 @@ class OcrConfig {
         systemPrompt: systemPrompt ?? this.systemPrompt,
         typeConfig: typeConfig ?? this.typeConfig,
         customParams: customParams ?? this.customParams,
+        requestSizeBudgetBytes:
+            requestSizeBudgetBytes ?? this.requestSizeBudgetBytes,
       );
 }
 
@@ -111,6 +117,24 @@ class OcrResult {
 ///
 /// The response follows the standard OpenAI chat completion format.
 enum OcrRequestStage { uploading, waiting, parsing }
+
+class OcrRequestTooLargeException implements Exception {
+  final int encodedBytes;
+  final int budgetBytes;
+
+  const OcrRequestTooLargeException({
+    required this.encodedBytes,
+    required this.budgetBytes,
+  });
+
+  @override
+  String toString() =>
+      'OCR 请求的 JSON 大小为 ' +
+      encodedBytes.toString() +
+      ' 字节，超过 ' +
+      budgetBytes.toString() +
+      ' 字节上限';
+}
 
 class OcrService {
   final OcrConfig config;
@@ -212,6 +236,27 @@ class OcrService {
   /// Dio receive timeout, exposed for diagnostic and testing.
   Duration? get receiveTimeout => _dio.options.receiveTimeout;
 
+  /// Measure the exact UTF-8 JSON body used for a request without sending it.
+  int encodedRequestSizeBytes({
+    required List<(Uint8List bytes, String format)> imageBytesList,
+  }) {
+    if (imageBytesList.isEmpty) {
+      throw ArgumentError('imageBytesList must not be empty');
+    }
+    final contents = <Map<String, dynamic>>[
+      for (final (bytes, format) in imageBytesList)
+        _buildImageContent(
+          'data:image/' + format + ';base64,' + base64Encode(bytes),
+        ),
+    ];
+    final instruction = config.effectiveUserInstruction;
+    if (instruction.isNotEmpty) {
+      contents.add({'type': 'text', 'text': instruction});
+    }
+    final body = _buildRequestBody(contents);
+    return _encodedBodyLength(body);
+  }
+
   /// Close the underlying client when this service owns its lifetime.
   void close({bool force = false}) => _dio.close(force: force);
 
@@ -252,12 +297,13 @@ class OcrService {
       }
 
       final body = _buildRequestBody(contents);
+      final encodedBytes = _ensureRequestWithinSizeBudget(body);
 
       lastRequestBody = body;
       final response = await _dio.post(
         lastRequestUrl!,
         data: body,
-        options: _requestOptions(body),
+        options: _requestOptions(encodedBytes: encodedBytes),
         cancelToken: cancelToken,
         onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
@@ -338,12 +384,13 @@ class OcrService {
       }
 
       final body = _buildRequestBody(contents);
+      final encodedBytes = _ensureRequestWithinSizeBudget(body);
 
       lastRequestBody = body;
       final response = await _dio.post(
         lastRequestUrl!,
         data: body,
-        options: _requestOptions(body),
+        options: _requestOptions(encodedBytes: encodedBytes),
         cancelToken: cancelToken,
         onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
@@ -412,9 +459,29 @@ class OcrService {
     _lastDurationMs = stopwatch.elapsedMilliseconds;
   }
 
-  Options _requestOptions(Map<String, dynamic> body) => Options(
-        sendTimeout: _sendTimeoutOverride ??
-            sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
+  int _encodedBodyLength(Map<String, dynamic> body) =>
+      utf8.encode(jsonEncode(body)).length;
+
+  int _ensureRequestWithinSizeBudget(Map<String, dynamic> body) {
+    if (config.requestSizeBudgetBytes <= 0) {
+      throw ArgumentError.value(
+        config.requestSizeBudgetBytes,
+        'requestSizeBudgetBytes',
+        'OCR request size budget must be greater than zero',
+      );
+    }
+    final encodedBytes = _encodedBodyLength(body);
+    if (encodedBytes > config.requestSizeBudgetBytes) {
+      throw OcrRequestTooLargeException(
+        encodedBytes: encodedBytes,
+        budgetBytes: config.requestSizeBudgetBytes,
+      );
+    }
+    return encodedBytes;
+  }
+
+  Options _requestOptions({required int encodedBytes}) => Options(
+        sendTimeout: _sendTimeoutOverride ?? sendTimeoutForBytes(encodedBytes),
         receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
       );
 

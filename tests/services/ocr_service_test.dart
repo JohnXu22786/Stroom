@@ -177,6 +177,78 @@ void main() {
           throwsArgumentError,
         );
       });
+      test(
+        'encoded JSON request budget accepts its boundary and rejects one byte over before send',
+        () async {
+          final bytes = Uint8List.fromList([1, 2, 3, 4]);
+          final baseConfig = _testOcrConfig.copyWith(
+            typeConfig: {'userInstruction': '识别页码：一'},
+          );
+          final measuringService = OcrService(config: baseConfig);
+          final encodedBytes = measuringService.encodedRequestSizeBytes(
+            imageBytesList: [(bytes, 'png')],
+          );
+          measuringService.close();
+
+          expect(encodedBytes, greaterThan(0));
+          expect(
+            const OcrConfig(
+              apiKey: 'key',
+              host: 'https://ocr.test',
+            ).requestSizeBudgetBytes,
+            20 * 1024 * 1024,
+          );
+
+          var requests = 0;
+          Dio dioForRequests() => Dio()
+            ..interceptors.add(
+              _InterceptorWithCallback(
+                callback: (options, handler) {
+                  requests++;
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'choices': [
+                          {
+                            'message': {'content': 'page text'},
+                          },
+                        ],
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+
+          final boundaryService = OcrService(
+            config: baseConfig.copyWith(requestSizeBudgetBytes: encodedBytes),
+            dio: dioForRequests(),
+          );
+          await boundaryService.recognize(
+            imageBytes: bytes,
+            imageFormat: 'png',
+          );
+          expect(requests, 1);
+
+          final overBudgetService = OcrService(
+            config: baseConfig.copyWith(
+              requestSizeBudgetBytes: encodedBytes - 1,
+            ),
+            dio: dioForRequests(),
+          );
+          await expectLater(
+            overBudgetService.recognize(imageBytes: bytes, imageFormat: 'png'),
+            throwsA(isA<OcrRequestTooLargeException>()),
+          );
+          expect(
+            requests,
+            1,
+            reason: 'oversized JSON must be rejected preflight',
+          );
+        },
+      );
     });
 
     group('OcrService response parsing', () {

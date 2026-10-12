@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -53,6 +54,73 @@ class _ControlledAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) => closed = true;
+}
+
+class _OutOfOrderAdapter implements HttpClientAdapter {
+  final List<int> requestedImageIds = [];
+  final Map<int, RequestOptions> requestOptionsByImageId = {};
+  final Map<int, Completer<ResponseBody>> _responses = {};
+  final firstRequest = Completer<void>();
+  final twoRequests = Completer<void>();
+  final threeRequests = Completer<void>();
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) {
+    final body = options.data as Map;
+    final content = (body['messages'] as List)[1]['content'] as List;
+    final dataUri = content.first['image_url']['url'] as String;
+    final imageId = base64Decode(
+      dataUri.substring(dataUri.indexOf(',') + 1),
+    ).first;
+    requestedImageIds.add(imageId);
+    requestOptionsByImageId[imageId] = options;
+    if (requestedImageIds.length == 1 && !firstRequest.isCompleted) {
+      firstRequest.complete();
+    }
+    if (requestedImageIds.length == 2 && !twoRequests.isCompleted) {
+      twoRequests.complete();
+    }
+    if (requestedImageIds.length == 3 && !threeRequests.isCompleted) {
+      threeRequests.complete();
+    }
+    return _responses.putIfAbsent(imageId, Completer<ResponseBody>.new).future;
+  }
+
+  void complete(
+    int imageId, {
+    required String text,
+    int statusCode = 200,
+    String finishReason = 'stop',
+  }) {
+    final data = statusCode >= 400
+        ? {
+            'error': {'message': text},
+          }
+        : {
+            'choices': [
+              {
+                'message': {'content': text},
+                'finish_reason': finishReason,
+              },
+            ],
+          };
+    _responses[imageId]!.complete(
+      ResponseBody.fromString(
+        jsonEncode(data),
+        statusCode,
+        headers: {
+          Headers.contentTypeHeader: ['application/json'],
+        },
+      ),
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 void main() {
@@ -157,6 +225,438 @@ void main() {
     expect((await TextManifest.loadRecords()).single.folder, 'captured folder');
     expect(adapter.closed, isTrue);
   });
+
+  test(
+    'joint mode remains the default and sends every image in one request',
+    () async {
+      final jointRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+        ],
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) =>
+            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = jointRunner.run();
+      final request = await adapter.requested.future;
+      final content =
+          ((request.data as Map)['messages'] as List)[1]['content'] as List;
+      expect(content, hasLength(2));
+      adapter.succeed();
+      await running;
+      expect(adapter.calls, 1);
+    },
+  );
+
+  test(
+    'per-image outcomes retain page order when requests finish out of order',
+    () async {
+      final outOfOrderAdapter = _OutOfOrderAdapter();
+      final pageRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+          (Uint8List.fromList([3]), 'png'),
+        ],
+        imageNames: ['first.png', 'second.png', 'third.png'],
+        executionMode: OcrBatchMode.perImage,
+        perImageConcurrency: 2,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) => OcrService(
+          config: config,
+          dio: Dio()..httpClientAdapter = outOfOrderAdapter,
+        ),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = pageRunner.run();
+      await outOfOrderAdapter.twoRequests.future.timeout(
+        const Duration(seconds: 2),
+      );
+      outOfOrderAdapter.complete(2, text: 'failed page', statusCode: 500);
+      await outOfOrderAdapter.threeRequests.future.timeout(
+        const Duration(seconds: 2),
+      );
+      outOfOrderAdapter.complete(3, text: 'third page text');
+      outOfOrderAdapter.complete(1, text: 'first page text');
+      await running;
+
+      final task = notifier.state.single;
+      expect(outOfOrderAdapter.requestedImageIds, [1, 2, 3]);
+      expect(task.status, TaskStatus.failed);
+      expect(task.resultIsComplete, isFalse);
+      expect(task.result, contains('--- 第 1 张图片：first.png ---'));
+      expect(task.result, contains('--- 第 3 张图片：third.png ---'));
+      expect(
+        task.result!.indexOf('first page text'),
+        lessThan(task.result!.indexOf('third page text')),
+      );
+      expect(task.ocrPageOutcomes.map((outcome) => outcome.status), [
+        OcrPageOutcomeStatus.succeeded,
+        OcrPageOutcomeStatus.failed,
+        OcrPageOutcomeStatus.succeeded,
+      ]);
+      expect(task.error, contains('第 2 张'));
+
+      await notifier.pendingPersistence;
+      final persistedFile = File(
+        '${directory.path}${Platform.pathSeparator}background${Platform.pathSeparator}tasks.json',
+      );
+      final persistedTask =
+          (jsonDecode(await persistedFile.readAsString()) as List)
+              .cast<Map<String, dynamic>>()
+              .single;
+      final restoredTask = BackgroundTask.fromMap(persistedTask);
+      expect(
+        restoredTask.ocrPageOutcomes.map((outcome) => outcome.imageIndex),
+        [0, 1, 2],
+      );
+      expect(restoredTask.ocrPageOutcomes.map((outcome) => outcome.status), [
+        OcrPageOutcomeStatus.succeeded,
+        OcrPageOutcomeStatus.failed,
+        OcrPageOutcomeStatus.succeeded,
+      ]);
+    },
+  );
+
+  test('failed empty per-image batch stays incomplete', () async {
+    final emptyFailedAdapter = _OutOfOrderAdapter();
+    final emptyFailedRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = emptyFailedAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = emptyFailedRunner.run();
+    await emptyFailedAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    emptyFailedAdapter.complete(1, text: '', statusCode: 500);
+    emptyFailedAdapter.complete(2, text: '', statusCode: 500);
+    await running;
+
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.result, '');
+    expect(task.resultIsComplete, isFalse);
+    expect(task.error, contains('结果不完整'));
+    expect(task.steps[3].status, BgStepStatus.failed);
+    expect(task.ocrPageOutcomes.map((outcome) => outcome.status), [
+      OcrPageOutcomeStatus.failed,
+      OcrPageOutcomeStatus.failed,
+    ]);
+  });
+
+  test('queued per-image requests prevent aggregate stages from completing',
+      () async {
+    final stagedAdapter = _OutOfOrderAdapter();
+    final parsingWithQueuedPage = Completer<List<BgTaskStep>>();
+    notifier.addListener((tasks) {
+      final task = tasks.single;
+      if (!parsingWithQueuedPage.isCompleted &&
+          task.ocrPageOutcomes.length == 2 &&
+          task.ocrPageOutcomes[0].status == OcrPageOutcomeStatus.running &&
+          task.ocrPageOutcomes[1].status == OcrPageOutcomeStatus.pending &&
+          task.steps[3].status == BgStepStatus.running) {
+        parsingWithQueuedPage.complete(List.unmodifiable(task.steps));
+      }
+    }, fireImmediately: false);
+    final stagedRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 1,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = stagedAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = stagedRunner.run();
+    await stagedAdapter.firstRequest.future.timeout(
+      const Duration(seconds: 2),
+    );
+    stagedAdapter.complete(1, text: 'first page');
+    final stepsWhileSecondPageIsQueued =
+        await parsingWithQueuedPage.future.timeout(const Duration(seconds: 2));
+    await stagedAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    stagedAdapter.complete(2, text: 'second page');
+    await running;
+
+    expect(stepsWhileSecondPageIsQueued[1].status, BgStepStatus.pending);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(
+      notifier.state.single.steps.map((step) => step.status),
+      everyElement(BgStepStatus.completed),
+    );
+  });
+
+  test('concurrent per-image requests keep upload progress visible', () async {
+    final progressAdapter = _OutOfOrderAdapter();
+    final progressRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = progressAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = progressRunner.run();
+    await progressAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+
+    progressAdapter.requestOptionsByImageId[1]!.onSendProgress!(10, 10);
+    expect(notifier.state.single.steps[2].running, isTrue);
+
+    progressAdapter.requestOptionsByImageId[2]!.onSendProgress!(5, 10);
+    final uploadStep = notifier.state.single.steps[1];
+    expect(uploadStep.running, isTrue);
+    expect(uploadStep.label, contains('第 2/2 张图片'));
+
+    progressAdapter.complete(1, text: 'first page text');
+    progressAdapter.complete(2, text: 'second page text');
+    await running;
+    expect(notifier.state.single.status, TaskStatus.completed);
+  });
+
+  test('out-of-order page success preserves failure diagnostics', () async {
+    final diagnosticsAdapter = _OutOfOrderAdapter();
+    final failedPagePublished = Completer<void>();
+    notifier.addListener((tasks) {
+      if (!failedPagePublished.isCompleted &&
+          tasks.single.ocrPageOutcomes.any(
+            (outcome) => outcome.status == OcrPageOutcomeStatus.failed,
+          )) {
+        failedPagePublished.complete();
+      }
+    }, fireImmediately: false);
+    final diagnosticRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = diagnosticsAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = diagnosticRunner.run();
+    await diagnosticsAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    diagnosticsAdapter.complete(
+      2,
+      text: 'failed page response',
+      statusCode: 500,
+    );
+    await failedPagePublished.future.timeout(const Duration(seconds: 2));
+    diagnosticsAdapter.complete(1, text: 'successful page response');
+    await running;
+
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.rawResponse?['statusCode'], 500);
+  });
+
+  test('request failure diagnostics take precedence over incomplete pages',
+      () async {
+    final diagnosticsAdapter = _OutOfOrderAdapter();
+    final incompletePagePublished = Completer<void>();
+    notifier.addListener((tasks) {
+      if (!incompletePagePublished.isCompleted &&
+          tasks.single.ocrPageOutcomes.any(
+            (outcome) => outcome.status == OcrPageOutcomeStatus.incomplete,
+          )) {
+        incompletePagePublished.complete();
+      }
+    }, fireImmediately: false);
+    final diagnosticRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = diagnosticsAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = diagnosticRunner.run();
+    await diagnosticsAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    diagnosticsAdapter.complete(
+      1,
+      text: 'incomplete page response',
+      finishReason: 'length',
+    );
+    await incompletePagePublished.future.timeout(const Duration(seconds: 2));
+    diagnosticsAdapter.complete(
+      2,
+      text: 'failed page response',
+      statusCode: 500,
+    );
+    await running;
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.rawResponse?['statusCode'], 500);
+  });
+
+  test('retry reuses completed pages and requests only failed pages', () async {
+    final retryRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      imageNames: ['first.png', 'second.png'],
+      executionMode: OcrBatchMode.perImage,
+      initialPageOutcomes: [
+        const OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.succeeded,
+          text: 'retained first page',
+        ),
+        const OcrPageOutcome(
+          imageIndex: 1,
+          status: OcrPageOutcomeStatus.failed,
+          error: 'temporary failure',
+        ),
+      ],
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) =>
+          OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = retryRunner.run();
+    final request = await adapter.requested.future;
+    final content =
+        ((request.data as Map)['messages'] as List)[1]['content'] as List;
+    expect(content.single['image_url']['url'], 'data:image/png;base64,Ag==');
+    adapter.succeed();
+    await running;
+
+    expect(adapter.calls, 1);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(notifier.state.single.result, contains('retained first page'));
+    expect(notifier.state.single.result, contains('owned text'));
+  });
+
+  test(
+    'canceling per-image work prevents queued requests from starting',
+    () async {
+      final queuedRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+          (Uint8List.fromList([3]), 'png'),
+        ],
+        executionMode: OcrBatchMode.perImage,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) =>
+            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = queuedRunner.run();
+      final request = await adapter.requested.future;
+      notifier.cancelTask(id);
+      expect(request.cancelToken!.isCancelled, isTrue);
+      adapter.succeed();
+      await running;
+
+      expect(adapter.calls, 1);
+      expect(saves, 0);
+      expect(
+        notifier.state.single.ocrPageOutcomes.every(
+          (outcome) =>
+              outcome.status != OcrPageOutcomeStatus.pending &&
+              outcome.status != OcrPageOutcomeStatus.running,
+        ),
+        isTrue,
+      );
+    },
+  );
 
   test('persisted diagnostics exclude a key matching HTTP status', () async {
     const apiKey = '200';
@@ -272,6 +772,57 @@ void main() {
     expect(await TextManifest.loadRecords(), isEmpty);
     expect(task.downloadedFilePath, isNull);
     expect(adapter.calls, 1);
+  });
+
+  test('empty reused result remains retryable after a save failure', () async {
+    failNextFileWrite = true;
+    final emptyRetryRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [(input, 'png')],
+      executionMode: OcrBatchMode.perImage,
+      initialPageOutcomes: const [
+        OcrPageOutcome(
+          imageIndex: 0,
+          status: OcrPageOutcomeStatus.succeeded,
+          text: '',
+        ),
+      ],
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        saves++;
+        if (failNextFileWrite) {
+          failNextFileWrite = false;
+          throw const FileSystemException('injected text write failure');
+        }
+        beforeCommit?.call();
+        return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+      },
+    );
+
+    await emptyRetryRunner.run();
+
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.result, '');
+    expect(notifier.state.single.error, startsWith('OCR结果保存失败:'));
+    expect(await TextManifest.loadRecords(), isEmpty);
+
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+    );
+    await saver.retryTaskResult();
+
+    expect(adapter.calls, 0);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(notifier.state.single.result, '');
+    expect((await TextManifest.loadRecords()).single.size, 0);
   });
 
   test('a returned file path without published text cannot complete the task',
