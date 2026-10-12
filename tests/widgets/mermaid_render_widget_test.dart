@@ -1212,6 +1212,10 @@ void main() {
             ),
           );
           await tester.pump();
+          final firstPendingWebView = windowsPlatform.webView!;
+          final firstPendingController = firstPendingWebView
+              .controllerFromPlatform<InAppWebViewController>(
+                  firstPendingWebView.controller);
           final firstPendingViewKey =
               tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
           await tester.pumpWidget(
@@ -1240,6 +1244,18 @@ void main() {
           currentWebView.params.onWebViewCreated!(currentController);
           await tester.pump();
 
+          // A pending view superseded by the second source update may still
+          // finish creating. Its late controller and document must stay stale.
+          firstPendingWebView.params.onWebViewCreated!(firstPendingController);
+          await tester.pump();
+          firstPendingWebView.params.onLoadStop?.call(
+            firstPendingController,
+            null,
+          );
+          await tester.pump();
+          final windowsLoadingVisibleAfterStalePendingViewCompletion =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
           previousWebView.params.onLoadStop?.call(previousController, null);
           await tester.pump();
           final windowsLoadingVisibleAfterStaleCompletion =
@@ -1264,6 +1280,8 @@ void main() {
                 viewRekeyedForPendingSourceUpdate,
             'loading overlay after previous readiness fallback':
                 windowsLoadingVisibleAfterPreviousFallback,
+            'loading overlay after stale pending-view completion':
+                windowsLoadingVisibleAfterStalePendingViewCompletion,
             'loading overlay after stale completion':
                 windowsLoadingVisibleAfterStaleCompletion,
             'current load error': find.text(errorMessage).evaluate().isNotEmpty,
@@ -1290,6 +1308,7 @@ void main() {
               'view remounted for source update': true,
               'view rekeyed for update while creation was pending': true,
               'loading overlay after previous readiness fallback': true,
+              'loading overlay after stale pending-view completion': true,
               'loading overlay after stale completion': true,
               'current load error': true,
               'retry action': true,

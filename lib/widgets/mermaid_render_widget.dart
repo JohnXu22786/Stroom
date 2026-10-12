@@ -1728,6 +1728,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // ---- Render mode: WebView + overlays + button row ----
     final showLoading = !_isReady && _errorMessage == null;
     final showErrorOverlay = _errorMessage != null;
+    final currentWebViewKey = _webViewKey;
 
     return _buildBorderedContainer(
       height: effectiveHeight,
@@ -1738,7 +1739,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // pan/zoom, kept alive once created.
           _buildGestureWrapper(
             InAppWebView(
-              key: _webViewKey,
+              key: currentWebViewKey,
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 transparentBackground: true,
@@ -1755,6 +1756,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       encoding: 'utf8',
                     ),
               onWebViewCreated: (ctrl) {
+                if (currentWebViewKey != _webViewKey) return;
                 _webViewController = ctrl;
                 if (!kIsWeb) _nativeLoadBaseUrl = null;
                 // On web the iframe manages its own loading state (the
