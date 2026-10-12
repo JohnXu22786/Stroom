@@ -1006,10 +1006,22 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void _loadMermaidCode() {
     _hasLoadedPage = false;
     _canApplyZoomCommands = false;
+    final code = widget.mermaidCode.trim();
+
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.windows &&
+        code.isNotEmpty) {
+      // Windows WebView2 ignores loadData's baseUrl, so replacing the view
+      // gives each source update a distinct controller for callback checks.
+      _readyFallbackTimer?.cancel();
+      _webViewController = null;
+      _webViewKey = UniqueKey();
+      _armWebViewCreationFallback();
+      return;
+    }
+
     final ctrl = _webViewController;
     if (ctrl == null) return;
-
-    final code = widget.mermaidCode.trim();
 
     if (kIsWeb) {
       // Web: load the bundled asset template (same origin, no CDN request)
@@ -1028,16 +1040,6 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         _webRetryUrl = _resolveWebUrl(url);
       }
       ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-      return;
-    }
-
-    if (defaultTargetPlatform == TargetPlatform.windows && code.isNotEmpty) {
-      // Windows WebView2 ignores loadData's baseUrl, so replacing the view
-      // gives each source update a distinct controller for callback checks.
-      _readyFallbackTimer?.cancel();
-      _webViewController = null;
-      _webViewKey = UniqueKey();
-      _armWebViewCreationFallback();
       return;
     }
 

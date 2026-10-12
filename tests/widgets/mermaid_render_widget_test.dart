@@ -1212,10 +1212,24 @@ void main() {
             ),
           );
           await tester.pump();
+          final firstPendingViewKey =
+              tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+              ),
+            ),
+          );
+          await tester.pump();
           final currentWebView = windowsPlatform.webView!;
           final currentController =
               currentWebView.controllerFromPlatform<InAppWebViewController>(
                   currentWebView.controller);
+          final currentViewKey =
+              tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+          final viewRekeyedForPendingSourceUpdate =
+              firstPendingViewKey != currentViewKey;
 
           // The replacement view has not delivered onWebViewCreated. The old
           // readiness deadline must not resolve the new view's loading state.
@@ -1246,6 +1260,8 @@ void main() {
           windowsState = {
             'view remounted for source update':
                 !identical(previousWebView, currentWebView),
+            'view rekeyed for update while creation was pending':
+                viewRekeyedForPendingSourceUpdate,
             'loading overlay after previous readiness fallback':
                 windowsLoadingVisibleAfterPreviousFallback,
             'loading overlay after stale completion':
@@ -1272,6 +1288,7 @@ void main() {
             },
             'Windows view guard': {
               'view remounted for source update': true,
+              'view rekeyed for update while creation was pending': true,
               'loading overlay after previous readiness fallback': true,
               'loading overlay after stale completion': true,
               'current load error': true,
