@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -21,17 +22,26 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 void showMermaidPreviewDialog({
   required BuildContext context,
   required String mermaidCode,
+  bool showControlsBeforeWebViewReadyForTesting = false,
 }) {
   showDialog(
     context: context,
-    builder: (ctx) => _MermaidPreviewDialogContent(mermaidCode: mermaidCode),
+    builder: (ctx) => _MermaidPreviewDialogContent(
+      mermaidCode: mermaidCode,
+      showControlsBeforeWebViewReadyForTesting:
+          showControlsBeforeWebViewReadyForTesting,
+    ),
   );
 }
 
 class _MermaidPreviewDialogContent extends StatefulWidget {
   final String mermaidCode;
+  final bool showControlsBeforeWebViewReadyForTesting;
 
-  const _MermaidPreviewDialogContent({required this.mermaidCode});
+  const _MermaidPreviewDialogContent({
+    required this.mermaidCode,
+    this.showControlsBeforeWebViewReadyForTesting = false,
+  });
 
   @override
   State<_MermaidPreviewDialogContent> createState() =>
@@ -44,6 +54,11 @@ class _MermaidPreviewDialogContentState
   bool _isLoading = true;
   bool _hasError = false;
   double _zoomLevel = 1.0;
+  bool _canApplyZoomDeltasAfterFit = false;
+  bool _checkingZoomReadiness = false;
+  bool _zoomReadinessCheckRequested = false;
+  bool _flushingPendingZoomDeltas = false;
+  final List<double> _pendingZoomDeltas = [];
 
   /// Bundled mermaid.js source, inlined into the render template so the
   /// diagram renders fully offline on every platform (no CDN request).
@@ -57,6 +72,7 @@ class _MermaidPreviewDialogContentState
   /// unavailable). Without it the loading overlay could spin forever while
   /// the WebView actually rendered (or failed to render) underneath.
   Timer? _readyFallbackTimer;
+  Timer? _zoomReadinessRetryTimer;
 
   @override
   void initState() {
@@ -66,6 +82,9 @@ class _MermaidPreviewDialogContentState
       // overlay, no asset pre-load (the asset template loads
       // mermaid.min.js itself) — the diagram appears when rendered.
       _isLoading = false;
+      _mermaidJsLoading = false;
+      _armReadyFallback();
+    } else if (widget.showControlsBeforeWebViewReadyForTesting) {
       _mermaidJsLoading = false;
       _armReadyFallback();
     } else {
@@ -89,6 +108,7 @@ class _MermaidPreviewDialogContentState
   @override
   void dispose() {
     _readyFallbackTimer?.cancel();
+    _zoomReadinessRetryTimer?.cancel();
     _webViewController = null;
     super.dispose();
   }
@@ -110,6 +130,7 @@ class _MermaidPreviewDialogContentState
         debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
             '3s, force-ending the loading state');
         setState(() => _isLoading = false);
+        unawaited(_checkZoomReadiness());
       }
     });
   }
@@ -154,18 +175,129 @@ class _MermaidPreviewDialogContentState
   }
 
   Future<void> _zoomAroundCenter(double delta) async {
+    final controller = _webViewController;
+    final canApplyZoomDeltas =
+        controller != null && _canApplyZoomDeltasAfterFit;
+
     // Keep native state current for other dialog behavior, but let JS apply
     // the button delta to its live zoom. On web the JS callback bridge is
     // unsupported, so the cached Flutter zoom can be stale after auto-fit.
     if (!kIsWeb) {
       final target = (_zoomLevel + delta).clamp(0.1, 10.0);
-      if (target == _zoomLevel) return;
+      // The page's fit can update after its helper exists, so the cached
+      // level may still be stale at either boundary. Always let JavaScript
+      // apply and clamp the relative delta against its live zoom.
       _zoomLevel = target;
     }
 
-    await _webViewController?.evaluateJavascript(
+    if (!canApplyZoomDeltas || _flushingPendingZoomDeltas) {
+      _pendingZoomDeltas.add(delta);
+      if (controller != null && !canApplyZoomDeltas) {
+        unawaited(_checkZoomReadiness());
+      }
+      return;
+    }
+
+    await controller.evaluateJavascript(
       source: 'window.applyZoomDeltasAfterFit([$delta])',
     );
+  }
+
+  Future<void> _flushPendingZoomDeltas(
+    InAppWebViewController controller,
+  ) async {
+    if (_pendingZoomDeltas.isEmpty || _flushingPendingZoomDeltas) return;
+
+    final deltas = List<double>.of(_pendingZoomDeltas);
+    _flushingPendingZoomDeltas = true;
+    try {
+      await controller.evaluateJavascript(
+        source: 'window.applyZoomDeltasAfterFit(${jsonEncode(deltas)})',
+      );
+      if (controller == _webViewController) {
+        _pendingZoomDeltas.removeRange(0, deltas.length);
+      }
+    } catch (_) {
+      if (controller == _webViewController) {
+        _canApplyZoomDeltasAfterFit = false;
+        _scheduleZoomReadinessRetry();
+      }
+    } finally {
+      _flushingPendingZoomDeltas = false;
+      final currentController = _webViewController;
+      if (mounted &&
+          currentController != null &&
+          _canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        unawaited(_flushPendingZoomDeltas(currentController));
+      }
+    }
+  }
+
+  Future<void> _checkZoomReadiness() async {
+    final controller = _webViewController;
+    if (controller == null || _hasError) return;
+    if (_canApplyZoomDeltasAfterFit) {
+      _zoomReadinessRetryTimer?.cancel();
+      _zoomReadinessRetryTimer = null;
+      return;
+    }
+    _zoomReadinessRetryTimer?.cancel();
+    _zoomReadinessRetryTimer = null;
+    if (_checkingZoomReadiness) {
+      _zoomReadinessCheckRequested = true;
+      return;
+    }
+
+    _checkingZoomReadiness = true;
+    try {
+      final result = await controller.evaluateJavascript(
+        source: "typeof window.applyZoomDeltasAfterFit === 'function'",
+      );
+      if (!mounted ||
+          controller != _webViewController ||
+          !(result == true || result == 'true')) {
+        return;
+      }
+
+      _canApplyZoomDeltasAfterFit = true;
+      await _flushPendingZoomDeltas(controller);
+    } catch (_) {
+      // The page may still be loading. Queued deltas schedule another
+      // readiness check; later taps can also request an immediate check.
+    } finally {
+      final shouldRetry = _zoomReadinessCheckRequested;
+      _zoomReadinessCheckRequested = false;
+      _checkingZoomReadiness = false;
+      if (shouldRetry &&
+          mounted &&
+          !_hasError &&
+          !_canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        unawaited(_checkZoomReadiness());
+      } else if (mounted &&
+          !_hasError &&
+          !_canApplyZoomDeltasAfterFit &&
+          _pendingZoomDeltas.isNotEmpty) {
+        _scheduleZoomReadinessRetry();
+      }
+    }
+  }
+
+  void _scheduleZoomReadinessRetry() {
+    if (!mounted ||
+        _hasError ||
+        _webViewController == null ||
+        _canApplyZoomDeltasAfterFit ||
+        _pendingZoomDeltas.isEmpty ||
+        (_zoomReadinessRetryTimer?.isActive ?? false)) {
+      return;
+    }
+
+    _zoomReadinessRetryTimer = Timer(const Duration(milliseconds: 500), () {
+      _zoomReadinessRetryTimer = null;
+      unawaited(_checkZoomReadiness());
+    });
   }
 
   static const _emptyPlaceholderHtml = '''
@@ -195,7 +327,9 @@ class _MermaidPreviewDialogContentState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final showControls = !_isLoading && !_hasError;
+    final showControls =
+        (!_isLoading || widget.showControlsBeforeWebViewReadyForTesting) &&
+            !_hasError;
 
     return PopScope(
       canPop: false,
@@ -236,11 +370,17 @@ class _MermaidPreviewDialogContentState
                   _readyFallbackTimer?.cancel();
                   final hadError = _hasError;
                   _webViewController = ctrl;
+                  _canApplyZoomDeltasAfterFit = false;
+                  _zoomReadinessRetryTimer?.cancel();
+                  _zoomReadinessRetryTimer = null;
                   if (hadError && mounted) {
                     setState(() {
                       _hasError = false;
                       _isLoading = !kIsWeb;
                     });
+                  }
+                  if (_pendingZoomDeltas.isNotEmpty) {
+                    unawaited(_checkZoomReadiness());
                   }
                   // Give a created native WebView its own load-stop fallback
                   // window, separate from the deadline for platform creation.
@@ -287,12 +427,18 @@ class _MermaidPreviewDialogContentState
                 },
                 onLoadStop: (ctrl, url) {
                   _readyFallbackTimer?.cancel();
+                  _zoomReadinessRetryTimer?.cancel();
+                  _zoomReadinessRetryTimer = null;
+                  _canApplyZoomDeltasAfterFit = true;
+                  unawaited(_flushPendingZoomDeltas(ctrl));
                   if (mounted) {
                     setState(() => _isLoading = false);
                   }
                 },
                 onReceivedError: (controller, request, error) {
                   _readyFallbackTimer?.cancel();
+                  _zoomReadinessRetryTimer?.cancel();
+                  _zoomReadinessRetryTimer = null;
                   if (mounted) {
                     setState(() {
                       _isLoading = false;

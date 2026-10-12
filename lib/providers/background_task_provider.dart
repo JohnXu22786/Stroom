@@ -10,7 +10,10 @@ import 'package:path/path.dart' as p;
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/ios_continued_task_service.dart';
+import '../services/ocr_retry_storage.dart';
+import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
+import '../utils/ocr_diagnostics.dart';
 import 'task_provider.dart';
 
 // ============================================================================
@@ -111,6 +114,301 @@ class BgTaskStep {
 // Background Task Model
 // ============================================================================
 
+Map<String, dynamic>? _sanitizeOcrTaskRequest(
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
+  Map<String, dynamic>? safeSource = _removeMaskedOcrDiagnosticValues(
+    rawRequest,
+    credentialValues,
+  );
+  final endpoint = safeSource?['host'] ?? safeSource?['url'];
+  if (endpoint is String &&
+      _legacyOcrTextContainsCredential(endpoint, credentialValues)) {
+    safeSource = Map<String, dynamic>.from(safeSource!)
+      ..remove('host')
+      ..remove('url');
+  }
+  return OcrDiagnosticSnapshot.sanitizeRequest(
+    safeSource,
+    excludedValues: credentialValues,
+  );
+}
+
+Map<String, dynamic>? _sanitizeOcrTaskResponse(
+  Map<String, dynamic>? rawResponse,
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
+  final safeSource = _removeMaskedOcrDiagnosticValues(
+    rawResponse,
+    credentialValues,
+    includeResponseData: true,
+  );
+  return OcrDiagnosticSnapshot.sanitizeResponse(
+    safeSource,
+    excludedValues: credentialValues,
+  );
+}
+
+Map<String, dynamic>? _removeMaskedOcrDiagnosticValues(
+  Map<String, dynamic>? source,
+  Iterable<String> credentialValues, {
+  bool includeResponseData = false,
+}) {
+  if (source == null) return null;
+  final safeSource = Map<String, dynamic>.from(source);
+  bool matchesMaskedCredential(dynamic value) =>
+      value is String &&
+      _legacyOcrTextContainsMaskedCredential(value, credentialValues);
+
+  for (final field in ['requestId', 'finishReason', 'finish_reason']) {
+    if (matchesMaskedCredential(safeSource[field])) safeSource.remove(field);
+  }
+
+  final headers = safeSource['headers'];
+  if (headers is Map) {
+    final safeHeaders = Map<dynamic, dynamic>.from(headers);
+    for (final entry in headers.entries) {
+      if (entry.key is! String) continue;
+      final requestId = OcrDiagnosticSnapshot.requestIdFromHeaders({
+        entry.key: entry.value,
+      });
+      if (requestId != null && matchesMaskedCredential(requestId)) {
+        safeHeaders.remove(entry.key);
+      }
+    }
+    safeSource['headers'] = safeHeaders;
+  }
+
+  final data = safeSource['data'];
+  if (includeResponseData && data is Map) {
+    final safeData = Map<dynamic, dynamic>.from(data);
+    for (final field in ['request_id', 'requestId', 'id']) {
+      if (matchesMaskedCredential(safeData[field])) safeData.remove(field);
+    }
+    final choices = safeData['choices'];
+    if (choices is List && choices.isNotEmpty && choices.first is Map) {
+      final firstChoice = Map<dynamic, dynamic>.from(choices.first as Map);
+      if (matchesMaskedCredential(firstChoice['finish_reason'])) {
+        firstChoice.remove('finish_reason');
+        final safeChoices = List<dynamic>.from(choices)..[0] = firstChoice;
+        safeData['choices'] = safeChoices;
+      }
+    }
+    safeSource['data'] = safeData;
+  }
+  return safeSource;
+}
+
+String? _sanitizeOcrTaskError(
+  String? error,
+  Map<String, dynamic>? rawRequest, {
+  Iterable<String> additionalCredentialValues = const [],
+}) {
+  final credentialValues = <String>{
+    ..._legacyOcrCredentialValues(rawRequest),
+    ...additionalCredentialValues,
+  }.toList();
+  if (error != null &&
+      _legacyOcrTextContainsMaskedCredential(error, credentialValues)) {
+    return 'OCR 错误详情已隐藏';
+  }
+  return OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+    error,
+    excludedValues: credentialValues,
+  );
+}
+
+Map<String, dynamic> _unavailableOcrRetryData(
+  String taskId,
+  OcrRetrySnapshot snapshot,
+) =>
+    OcrRetryStorage.unavailableSnapshot(taskId: taskId, snapshot: snapshot);
+
+const _maxRecoverableLegacyOcrImageCount = 1000;
+
+int? _legacyOcrImageCount(Map<String, dynamic>? rawRequest) {
+  if (rawRequest == null) return null;
+  final storedCount = rawRequest['imageCount'];
+  if (storedCount is int &&
+      storedCount > 0 &&
+      storedCount <= _maxRecoverableLegacyOcrImageCount) {
+    return storedCount;
+  }
+
+  final body = rawRequest['body'];
+  if (body is! Map || body['messages'] is! List) return null;
+  var imageCount = 0;
+  for (final message in body['messages'] as List) {
+    if (message is! Map || message['content'] is! List) continue;
+    for (final part in message['content'] as List) {
+      if (part is Map &&
+          (part['type'] == 'image_url' ||
+              part['type'] == 'image' ||
+              part.containsKey('image_url'))) {
+        imageCount++;
+      }
+    }
+  }
+  return imageCount > 0 && imageCount <= _maxRecoverableLegacyOcrImageCount
+      ? imageCount
+      : null;
+}
+
+String? _legacyOcrModelId(Map<String, dynamic>? rawRequest) {
+  final body = rawRequest?['body'];
+  final modelId = body is Map ? body['model'] : null;
+  if (modelId is! String) return null;
+  final value = modelId.trim();
+  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) ||
+      RegExp(
+        r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
+        caseSensitive: false,
+      ).hasMatch(value) ||
+      _legacyOcrTextContainsCredential(value, credentialValues)) {
+    return null;
+  }
+  return value;
+}
+
+Iterable<String> _legacyOcrCredentialValues(
+  Map<String, dynamic>? rawRequest,
+) =>
+    OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
+
+bool _legacyOcrTextContainsCredential(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  if (OcrDiagnosticSnapshot.containsCredential(
+    text,
+    excludedValues: credentialValues,
+  )) {
+    return true;
+  }
+  return _legacyOcrTextContainsMaskedCredential(text, credentialValues);
+}
+
+bool _legacyOcrTextContainsMaskedCredential(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  // Legacy request headers may contain only a masked key; compare its visible
+  // edges before preserving any persisted text or diagnostic value.
+  final compactedText = text.replaceAll(RegExp(r'\s+'), '');
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis != null) {
+      final prefix = value.substring(0, ellipsis.start);
+      final suffix = value.substring(ellipsis.end);
+      if (prefix.isNotEmpty &&
+          suffix.isNotEmpty &&
+          RegExp(
+            '${RegExp.escape(prefix)}\\S+${RegExp.escape(suffix)}',
+          ).hasMatch(compactedText)) {
+        return true;
+      }
+      continue;
+    }
+    final mask = value.indexOf('*');
+    if (mask < 0) continue;
+    final prefix = value.substring(0, mask);
+    // A very short visible prefix is too common to identify a credential in
+    // free text; the general credential-shape checks above still redact
+    // explicit assignments and recognizable tokens.
+    if (prefix.length >= 4 &&
+        RegExp('${RegExp.escape(prefix)}\\S{1,12}').hasMatch(compactedText)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
+  final body = rawRequest?['body'];
+  if (body is! Map || body['messages'] is! List) return null;
+  final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
+  final textParts = <String>[];
+  for (final message in body['messages'] as List) {
+    if (message is! Map ||
+        message['role'] != 'user' ||
+        message['content'] is! List) {
+      continue;
+    }
+    for (final part in message['content'] as List) {
+      if (part is Map && part['type'] == 'text' && part['text'] is String) {
+        final text = part['text'] as String;
+        if (!_legacyOcrTextContainsCredential(text, credentialValues)) {
+          textParts.add(text);
+        }
+      }
+    }
+  }
+  if (textParts.isEmpty) return null;
+  final instruction = textParts.join('\n');
+  if (instruction.length > 10000 ||
+      RegExp(
+        r'(?:data:image/|base64,)',
+        caseSensitive: false,
+      ).hasMatch(instruction) ||
+      _legacyOcrTextContainsCredential(instruction, credentialValues)) {
+    return null;
+  }
+  return instruction;
+}
+
+Map<String, dynamic>? _unavailableRetryDataFromLegacyRequest(
+  String taskId,
+  Map<String, dynamic>? rawRequest,
+) {
+  final imageCount = _legacyOcrImageCount(rawRequest);
+  final modelId = _legacyOcrModelId(rawRequest);
+  final instructionContent = _legacyOcrInstructionContent(rawRequest);
+  if (imageCount == null && modelId == null && instructionContent == null) {
+    return null;
+  }
+  return OcrRetryStorage.unavailableSnapshotForCount(
+    taskId: taskId,
+    imageCount: imageCount ?? 0,
+    modelId: modelId,
+    instructionContent: instructionContent,
+  );
+}
+
+Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
+  final taskId = map['id'] as String;
+  final rawRetryData = map['retryData'];
+  if (rawRetryData is Map) {
+    try {
+      return Map<String, dynamic>.from(rawRetryData);
+    } catch (_) {
+      // Fall through to a safe unavailable snapshot instead of dropping task.
+    }
+  }
+  if (map['type'] != BackgroundTaskType.ocr.name) return null;
+
+  final rawRequest = map['rawRequest'];
+  final request =
+      rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
+  return _unavailableRetryDataFromLegacyRequest(taskId, request) ??
+      (rawRetryData == null
+          ? null
+          : OcrRetryStorage.unavailableSnapshotForCount(
+              taskId: taskId,
+              imageCount: 0,
+            ));
+}
+
 /// A task model for OCR, ASR, and Audio Separation operations.
 /// Uses a step chain (like CatCatch downloads) to show execution progress
 /// without quantifying with percentages. Steps are task-type-specific.
@@ -136,6 +434,7 @@ class BackgroundTask {
       rawRequest; // Raw request data for error diagnostics
   final Map<String, dynamic>?
       rawResponse; // Raw response data for error diagnostics
+  final List<String> _ocrDiagnosticCredentialValues;
   final Map<String, dynamic>?
       retryData; // Retry data to pre-populate form when retrying
 
@@ -149,16 +448,58 @@ class BackgroundTask {
     this.resultFolder = '',
     this.partialSaveRequested = false,
     this.resultSavedAsPartial = false,
-    this.error,
+    String? error,
     DateTime? createdAt,
     this.completedAt,
     this.statusChangedAt,
-    this.steps = const [],
+    List<BgTaskStep> steps = const [],
     this.downloadedFilePath,
-    this.rawRequest,
-    this.rawResponse,
+    Map<String, dynamic>? rawRequest,
+    Map<String, dynamic>? rawResponse,
     this.retryData,
-  }) : createdAt = createdAt ?? DateTime.now();
+    Iterable<String> ocrDiagnosticCredentialValues = const [],
+  })  : error = type == BackgroundTaskType.ocr
+            ? _sanitizeOcrTaskError(
+                error,
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
+            : error,
+        steps = type == BackgroundTaskType.ocr
+            ? steps
+                .map(
+                  (step) => BgTaskStep(
+                    label: step.label,
+                    status: step.status,
+                    error: _sanitizeOcrTaskError(
+                      step.error,
+                      rawRequest,
+                      additionalCredentialValues: ocrDiagnosticCredentialValues,
+                    ),
+                  ),
+                )
+                .toList(growable: false)
+            : steps,
+        _ocrDiagnosticCredentialValues = type == BackgroundTaskType.ocr
+            ? List<String>.unmodifiable({
+                ..._legacyOcrCredentialValues(rawRequest),
+                ...ocrDiagnosticCredentialValues,
+              })
+            : const [],
+        rawRequest = type == BackgroundTaskType.ocr
+            ? _sanitizeOcrTaskRequest(
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
+            : rawRequest,
+        rawResponse = type == BackgroundTaskType.ocr
+            ? _sanitizeOcrTaskResponse(
+                rawResponse,
+                rawRequest,
+                additionalCredentialValues: ocrDiagnosticCredentialValues,
+              )
+            : rawResponse,
+        createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
     TaskStatus? status,
@@ -207,6 +548,7 @@ class BackgroundTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
+      ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
   }
@@ -262,7 +604,7 @@ class BackgroundTask {
         downloadedFilePath: map['downloadedFilePath'] as String?,
         rawRequest: map['rawRequest'] as Map<String, dynamic>?,
         rawResponse: map['rawResponse'] as Map<String, dynamic>?,
-        retryData: map['retryData'] as Map<String, dynamic>?,
+        retryData: _retryDataFromTaskMap(map),
       );
 }
 
@@ -326,6 +668,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// AppStorage 目录，异步写入链可能跨测试交错，导致读脏数据）。
   @visibleForTesting
   static String? debugStorageDirectoryOverride;
+
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeOcrCacheCleanup;
+
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeOcrCacheDelete;
+
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeTaskSnapshotWrite;
 
   BackgroundTaskNotifier() : super([]);
 
@@ -551,9 +902,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   /// Remove a task from the list.
   void removeTask(String taskId) {
+    if (_taskSnapshotIncomplete) {
+      if (!state.any((task) => task.id == taskId)) return;
+      // Keep the task visible until a partial snapshot can be safely written,
+      // so the UI cannot claim a deletion that will return on restart.
+      unawaited(removeTasksPersisted([taskId]));
+      return;
+    }
     _cancellations.remove(taskId)?.call();
+    final removed = state.where((task) => task.id == taskId).firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
-    _persistTasks();
+    if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
+      final references = OcrRetryStorage.referencesFromSnapshot(
+        removed!.retryData,
+      );
+      _persistOcrTaskRemoval(references);
+    } else {
+      _persistTasks();
+    }
     _syncIosContinuedTask();
   }
 
@@ -572,8 +938,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final gate = Completer<void>();
     _removalBarrier = gate;
     try {
+      final removedTasks =
+          state.where((task) => removedIds.contains(task.id)).toList();
       final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
-      if (!await _writeSnapshot(proposed)) return false;
+      if (!await _writeSnapshot(
+        proposed,
+        preserveSkippedEntries: _taskSnapshotIncomplete,
+      )) {
+        return false;
+      }
+      final cacheCandidates = <String>{
+        for (final task in removedTasks)
+          if (task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      };
+      final currentTasks = mounted ? state : (_disposedSnapshot ?? const []);
+      cacheCandidates.addAll({
+        for (final task in currentTasks)
+          if (removedIds.contains(task.id) &&
+              task.type == BackgroundTaskType.ocr)
+            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      });
       if (mounted) {
         state = state.where((t) => !removedIds.contains(t.id)).toList();
         _syncIosContinuedTask();
@@ -585,11 +970,73 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             ?.where((task) => !removedIds.contains(task.id))
             .toList();
       }
+      await _deleteUnreferencedOcrCache(cacheCandidates);
       return true;
     } finally {
       _removalBarrier = null;
       gate.complete();
     }
+  }
+
+  Future<void> _deleteUnreferencedOcrCache(Set<String> candidates) async {
+    if (candidates.isEmpty) return;
+    try {
+      await OcrRetryStorage.withCacheMaintenanceLock(() async {
+        await debugBeforeOcrCacheDelete?.call();
+        final referenced = await _ocrCacheReferencesForCleanup();
+        if (referenced == null) return;
+        await OcrRetryStorage.deleteUnreferenced(
+          candidates: candidates,
+          referenced: referenced,
+        );
+      });
+    } catch (error) {
+      debugPrint('[BackgroundTaskNotifier] OCR cache cleanup failed: $error');
+    }
+  }
+
+  Future<void> _cleanupOrphanedOcrCache() async {
+    if (_taskSnapshotIncomplete) return;
+    try {
+      await OcrRetryStorage.withCacheMaintenanceLock(() async {
+        final beforeCleanup = debugBeforeOcrCacheCleanup;
+        if (beforeCleanup != null) await beforeCleanup();
+        final referenced = await _ocrCacheReferencesForCleanup();
+        if (referenced == null) return;
+        await OcrRetryStorage.cleanupUnreferencedCache(referenced: referenced);
+      });
+    } catch (error) {
+      debugPrint('[BackgroundTaskNotifier] OCR cache sweep failed: $error');
+    }
+  }
+
+  Future<void> _persistOcrTaskRemoval(Set<String> references) {
+    final barrier = _removalBarrier;
+    if (barrier == null) {
+      final write = _writeSnapshot(state);
+      return _pendingWrite = write.then<void>((saved) async {
+        if (saved) {
+          await _deleteUnreferencedOcrCache(references);
+          await _cleanupOrphanedOcrCache();
+        }
+      });
+    }
+
+    final previous = _pendingWrite ?? Future<void>.value();
+    final dirOverride = debugStorageDirectoryOverride;
+    final deferred = previous.then((_) async {
+      await barrier.future;
+      final snapshot = mounted ? state : _disposedSnapshot;
+      if (snapshot == null) return;
+      final saved = await _writeSnapshotNow(snapshot, dirOverride);
+      if (saved) {
+        await _deleteUnreferencedOcrCache(references);
+        await _cleanupOrphanedOcrCache();
+      }
+    });
+    _pendingWrite = deferred;
+    if (!mounted) _disposedPersistence = deferred;
+    return deferred;
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -732,62 +1179,373 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Completer<void>? _removalBarrier;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
+  // Preserve the authoritative file after a partial restore; later state
+  // mutations must not serialize only the tasks that could be parsed.
+  bool _taskSnapshotIncomplete = false;
+  bool _taskSnapshotCanPreserveSkippedEntries = false;
+  List<dynamic> _skippedTaskEntries = const [];
 
   /// Wait for queued task writes before releasing their storage directory.
   Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
-  Future<void> _persistTasks() {
+  Future<bool> _persistTasks() {
+    final preserveSkippedEntries = _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
     if (barrier != null) {
       if (!mounted && _disposedPersistence != null) {
-        return _disposedPersistence!;
+        return _disposedPersistence!.then((_) => false);
       }
       final previous = _pendingWrite ?? Future<void>.value();
       final dirOverride = debugStorageDirectoryOverride;
       final deferred = previous.then((_) async {
         await barrier.future;
         final snapshot = mounted ? state : _disposedSnapshot;
-        if (snapshot != null) {
-          await _writeSnapshotNow(snapshot, dirOverride);
-        }
+        if (snapshot == null) return false;
+        return _writeSnapshotNow(
+          snapshot,
+          dirOverride,
+          preserveSkippedEntries: preserveSkippedEntries,
+        );
       });
-      _pendingWrite = deferred;
-      if (!mounted) _disposedPersistence = deferred;
+      _pendingWrite = deferred.then<void>((_) {});
+      if (!mounted) _disposedPersistence = _pendingWrite;
       return deferred;
     }
     if (!mounted) {
       final snapshot = _disposedSnapshot;
-      if (snapshot == null) return Future<void>.value();
-      return _disposedPersistence ??= _writeSnapshot(snapshot).then((_) {});
+      if (snapshot == null) return Future<bool>.value(false);
+      final write = _writeSnapshot(
+        snapshot,
+        preserveSkippedEntries: preserveSkippedEntries,
+      );
+      _disposedPersistence ??= write.then<void>((_) {});
+      return write;
     }
-    return _writeSnapshot(state).then((_) {});
+    return _writeSnapshot(
+      state,
+      preserveSkippedEntries: preserveSkippedEntries,
+    );
   }
 
-  Future<bool> _writeSnapshot(List<BackgroundTask> snapshot) {
-    // 在进入异步写入前捕获当前状态的完整快照。
-    final data = snapshot.map((t) => t.toMap()).toList();
+  Future<bool> _writeSnapshot(
+    List<BackgroundTask> snapshot, {
+    bool preserveSkippedEntries = false,
+  }) {
+    final canPreserveSkippedEntries = _taskSnapshotIncomplete &&
+        preserveSkippedEntries &&
+        _canSafelyPreserveSkippedEntries(snapshot);
+    if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
+      return Future<bool>.value(false);
+    }
+    final skippedEntries = canPreserveSkippedEntries
+        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
+        : const <dynamic>[];
     // 同样在调用时捕获持久化目录覆盖值：写入链可能延迟到调用之后
     // 才真正执行，若此时再解析目录，测试 teardown 已重置覆盖值，
     // 残留写入会落到共享的正式目录（跨测试污染）。
     final dirOverride = debugStorageDirectoryOverride;
     // 串行化写入：每次写入排在上一次写入完成之后。
     final write = (_pendingWrite ?? Future<void>.value()).then((_) async {
-      return _writeSnapshotData(data, dirOverride);
+      if (_taskSnapshotIncomplete &&
+          (!canPreserveSkippedEntries ||
+              !_canSafelyPreserveSkippedEntries(snapshot))) {
+        return false;
+      }
+      if (_hasCacheMigrations(snapshot)) {
+        return OcrRetryStorage.withCacheMaintenanceLock(
+          () => _writePreparedSnapshot(
+            snapshot,
+            dirOverride,
+            preservedEntries: skippedEntries,
+          ),
+        );
+      }
+      return _writePreparedSnapshot(
+        snapshot,
+        dirOverride,
+        preservedEntries: skippedEntries,
+      );
     });
     _pendingWrite = write.then<void>((_) {});
     return write;
   }
 
-  Future<void> _writeSnapshotNow(
+  Future<bool> _writeSnapshotNow(
     List<BackgroundTask> snapshot,
-    String? dirOverride,
+    String? dirOverride, {
+    bool preserveSkippedEntries = false,
+  }) {
+    final canPreserveSkippedEntries = _taskSnapshotIncomplete &&
+        preserveSkippedEntries &&
+        _canSafelyPreserveSkippedEntries(snapshot);
+    if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
+      return Future<bool>.value(false);
+    }
+    final skippedEntries = canPreserveSkippedEntries
+        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
+        : const <dynamic>[];
+    if (_hasCacheMigrations(snapshot)) {
+      return OcrRetryStorage.withCacheMaintenanceLock(
+        () => _writePreparedSnapshot(
+          snapshot,
+          dirOverride,
+          preservedEntries: skippedEntries,
+        ),
+      );
+    }
+    return _writePreparedSnapshot(
+      snapshot,
+      dirOverride,
+      preservedEntries: skippedEntries,
+    );
+  }
+
+  Future<bool> _writePreparedSnapshot(
+    List<BackgroundTask> snapshot,
+    String? dirOverride, {
+    List<dynamic> preservedEntries = const [],
+  }) async {
+    final prepared = await _prepareOcrRetriesForPersistence(snapshot);
+    if (prepared == null) return false;
+    _publishPreparedRetrySnapshots(snapshot, prepared);
+    final data = <dynamic>[
+      ...prepared.map((task) => task.toMap()),
+      ...preservedEntries,
+    ];
+    return _writeSnapshotData(data, dirOverride);
+  }
+
+  bool _canSafelyPreserveSkippedEntries(List<BackgroundTask> snapshot) {
+    if (!_taskSnapshotCanPreserveSkippedEntries ||
+        !_canSafelySerializeKnownTasks(snapshot)) {
+      return false;
+    }
+    for (final entry in _skippedTaskEntries) {
+      if (entry is! Map) return false;
+      if (entry.keys.any((key) => key is! String) ||
+          entry.containsKey('rawRequest') ||
+          entry.containsKey('rawResponse')) {
+        return false;
+      }
+      final error = entry['error'];
+      if (error != null &&
+          (error is! String || _sanitizeOcrTaskError(error, null) != error)) {
+        return false;
+      }
+      final rawSteps = entry['steps'];
+      if (rawSteps != null) {
+        if (rawSteps is! List) return false;
+        for (final rawStep in rawSteps) {
+          if (rawStep is! Map) continue;
+          final stepError = rawStep['error'];
+          if (stepError != null &&
+              (stepError is! String ||
+                  _sanitizeOcrTaskError(stepError, null) != stepError)) {
+            return false;
+          }
+        }
+      }
+      final entryType = entry['type'];
+      if (entryType != BackgroundTaskType.ocr.name) {
+        if (BackgroundTaskType.values.any((type) => type.name == entryType)) {
+          continue;
+        }
+        return false;
+      }
+      final retryData = entry['retryData'];
+      if (retryData == null) continue;
+      if (retryData is! Map) return false;
+      try {
+        final retrySnapshot = OcrRetrySnapshot.fromMap(
+          Map<String, dynamic>.from(retryData),
+        );
+        if (retrySnapshot.version != OcrRetrySnapshot.currentVersion ||
+            retrySnapshot.needsMigration ||
+            retrySnapshot.hasInvalidImages ||
+            retrySnapshot.images.any((image) => image.bytes != null)) {
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _canSafelySerializeKnownTasks(List<BackgroundTask> snapshot) {
+    for (final task in snapshot) {
+      if (task.type != BackgroundTaskType.ocr || task.retryData == null) {
+        continue;
+      }
+      try {
+        final retrySnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+        if (retrySnapshot.version != OcrRetrySnapshot.currentVersion ||
+            retrySnapshot.needsMigration ||
+            retrySnapshot.hasInvalidImages ||
+            retrySnapshot.hasInvalidImageMetadata ||
+            retrySnapshot.images.any((image) => image.bytes != null)) {
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<Set<String>?> _ocrCacheReferencesForCleanup() async {
+    final persisted = await _loadPersistedTasks();
+    if (!persisted.isReadable) return null;
+    final tasks = mounted ? state : (_disposedSnapshot ?? const []);
+    return {
+      for (final task in tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      for (final task in persisted.tasks)
+        if (task.type == BackgroundTaskType.ocr)
+          ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+      ..._referencesFromSkippedTaskEntries(),
+      ..._referencesFromSkippedTaskEntries(persisted.skippedEntries),
+    };
+  }
+
+  Set<String> _referencesFromSkippedTaskEntries([
+    Iterable<dynamic>? entries,
+  ]) {
+    final references = <String>{};
+    for (final entry in entries ?? _skippedTaskEntries) {
+      if (entry is! Map) continue;
+      final retryData = entry['retryData'];
+      if (retryData is! Map) continue;
+      try {
+        references.addAll(
+          OcrRetryStorage.referencesFromSnapshot(
+            Map<String, dynamic>.from(retryData),
+          ),
+        );
+      } catch (_) {
+        // Unknown persisted data must never expand the set of deletable paths.
+      }
+    }
+    return references;
+  }
+
+  bool _hasCacheMigrations(List<BackgroundTask> snapshot) {
+    for (final task in snapshot) {
+      if (task.type != BackgroundTaskType.ocr || task.retryData == null) {
+        continue;
+      }
+      try {
+        final retrySnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+        final canMigrateVersion = retrySnapshot.isLegacy ||
+            retrySnapshot.version == 1 ||
+            retrySnapshot.version == OcrRetrySnapshot.currentVersion;
+        if (canMigrateVersion && retrySnapshot.needsMigration) return true;
+      } catch (_) {
+        // Malformed data is sanitized by the prepare step without cache I/O.
+      }
+    }
+    return false;
+  }
+
+  Future<List<BackgroundTask>?> _prepareOcrRetriesForPersistence(
+    List<BackgroundTask> snapshot,
   ) async {
-    final data = snapshot.map((task) => task.toMap()).toList();
-    await _writeSnapshotData(data, dirOverride);
+    final prepared = List<BackgroundTask>.of(snapshot);
+    for (var index = 0; index < prepared.length; index++) {
+      final task = prepared[index];
+      if (task.type != BackgroundTaskType.ocr || task.retryData == null) {
+        continue;
+      }
+
+      OcrRetrySnapshot retrySnapshot;
+      try {
+        retrySnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+      } catch (error) {
+        debugPrint(
+          '[BackgroundTaskNotifier] Dropping malformed OCR retry data for ${task.id}: $error',
+        );
+        prepared[index] = task.copyWith(clearRetryData: true);
+        continue;
+      }
+
+      final canMigrateVersion = retrySnapshot.isLegacy ||
+          retrySnapshot.version == 1 ||
+          retrySnapshot.version == OcrRetrySnapshot.currentVersion;
+      if (!canMigrateVersion) {
+        prepared[index] = task.copyWith(
+          retryData: _unavailableOcrRetryData(task.id, retrySnapshot),
+        );
+        continue;
+      }
+      if (!retrySnapshot.needsMigration) continue;
+
+      try {
+        final retryData = await OcrRetryStorage.cacheSnapshot(
+          taskId: task.id,
+          snapshot: retrySnapshot,
+          allowIncompleteImages: retrySnapshot.hasInvalidImages,
+        );
+        prepared[index] = task.copyWith(retryData: retryData);
+      } catch (error) {
+        debugPrint(
+          '[BackgroundTaskNotifier] Failed to migrate OCR retry data for ${task.id}: $error',
+        );
+        if (retrySnapshot.images.any(
+          (image) => image.bytes?.isNotEmpty ?? false,
+        )) {
+          // Keep valid legacy inputs in memory and on disk until the cache
+          // write works. This also preserves valid entries in a mixed snapshot
+          // while unavailable placeholders are prepared for invalid siblings.
+          // The caller skips this entire tasks.json update so a progress change
+          // cannot rewrite the inline image payload.
+          return null;
+        }
+        prepared[index] = task.copyWith(
+          retryData: _unavailableOcrRetryData(task.id, retrySnapshot),
+        );
+      }
+    }
+    return prepared;
+  }
+
+  void _publishPreparedRetrySnapshots(
+    List<BackgroundTask> original,
+    List<BackgroundTask> prepared,
+  ) {
+    final changed = <String, BackgroundTask>{};
+    final originalById = {for (final task in original) task.id: task};
+    for (var index = 0; index < original.length; index++) {
+      final before = original[index];
+      final after = prepared[index];
+      if (before.id != after.id ||
+          identical(before.retryData, after.retryData)) {
+        continue;
+      }
+      changed[before.id] = after;
+    }
+    if (changed.isEmpty) return;
+
+    List<BackgroundTask> update(List<BackgroundTask> current) =>
+        current.map((task) {
+          final before = originalById[task.id];
+          final after = changed[task.id];
+          if (before == null ||
+              after == null ||
+              !identical(task.retryData, before.retryData)) {
+            return task;
+          }
+          return task.copyWith(retryData: after.retryData);
+        }).toList(growable: false);
+
+    if (mounted) state = update(state);
+    if (_disposedSnapshot != null) {
+      _disposedSnapshot = update(_disposedSnapshot!);
+    }
   }
 
   Future<bool> _writeSnapshotData(
-    List<Map<String, dynamic>> data,
+    List<dynamic> data,
     String? dirOverride,
   ) async {
     try {
@@ -806,17 +1564,40 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// 半截 JSON，下次启动恢复时整个文件解析失败、任务全部丢失。
   /// （写入链已串行化，不存在并发写同一文件的竞态。）
   Future<void> _writeTasksFile(File file, String data) async {
+    await debugBeforeTaskSnapshotWrite?.call();
     await AtomicFile.writeString(file, data);
   }
 
-  Future<List<BackgroundTask>> _loadPersistedTasks() async {
+  Future<
+      ({
+        List<BackgroundTask> tasks,
+        bool isComplete,
+        bool isReadable,
+        List<dynamic> skippedEntries,
+      })> _loadPersistedTasks() async {
     try {
       final file = await _tasksFile();
-      if (!await file.exists()) return [];
+      if (!await file.exists()) {
+        return (
+          tasks: <BackgroundTask>[],
+          isComplete: true,
+          isReadable: true,
+          skippedEntries: <dynamic>[],
+        );
+      }
       final content = await file.readAsString();
-      if (content.isEmpty) return [];
+      if (content.isEmpty) {
+        return (
+          tasks: <BackgroundTask>[],
+          isComplete: false,
+          isReadable: false,
+          skippedEntries: <dynamic>[],
+        );
+      }
       final list = jsonDecode(content) as List;
       final tasks = <BackgroundTask>[];
+      final skippedEntries = <dynamic>[];
+      var isComplete = true;
       for (final m in list) {
         try {
           tasks.add(
@@ -825,15 +1606,27 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         } catch (e) {
           // 单个损坏条目不应导致整个恢复失败：跳过并继续，
           // 保证其余有效任务仍能恢复。
+          isComplete = false;
+          skippedEntries.add(m);
           debugPrint(
             '[BackgroundTaskNotifier] Skipping corrupt task entry: $e',
           );
         }
       }
-      return tasks;
+      return (
+        tasks: tasks,
+        isComplete: isComplete,
+        isReadable: true,
+        skippedEntries: skippedEntries,
+      );
     } catch (e) {
       debugPrint('[BackgroundTaskNotifier] Failed to load persisted tasks: $e');
-      return [];
+      return (
+        tasks: <BackgroundTask>[],
+        isComplete: false,
+        isReadable: false,
+        skippedEntries: <dynamic>[],
+      );
     }
   }
 
@@ -854,15 +1647,55 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Running tasks are marked as failed since they can't be resumed.
   /// Waiting tasks are kept as waiting (they haven't started yet).
   Future<void> restoreFromPersistence() async {
-    final tasks = await _loadPersistedTasks();
-    if (tasks.isEmpty) return;
-    final restored = [
-      for (final task in tasks)
-        if (task.status == TaskStatus.running)
-          task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
-        else
-          task,
-    ];
+    final loaded = await _loadPersistedTasks();
+    _taskSnapshotIncomplete = !loaded.isComplete;
+    _taskSnapshotCanPreserveSkippedEntries =
+        loaded.isReadable && !loaded.isComplete;
+    _skippedTaskEntries = loaded.skippedEntries;
+    final tasks = loaded.tasks;
+    if (tasks.isEmpty) {
+      if (loaded.isComplete) await _cleanupOrphanedOcrCache();
+      return;
+    }
+    final restored = <BackgroundTask>[];
+    for (var task in tasks) {
+      // A partial task list is not authoritative enough to publish retry-data
+      // sanitation: a later deletion may be refused, leaving the old snapshot
+      // on disk. Keep each parsed task's retry data unchanged until the full
+      // task file can be durably rewritten.
+      if (loaded.isComplete &&
+          task.type == BackgroundTaskType.ocr &&
+          task.retryData != null) {
+        OcrRetrySnapshot? parsedSnapshot;
+        try {
+          parsedSnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+          final canMigrateVersion = parsedSnapshot.isLegacy ||
+              parsedSnapshot.version == 1 ||
+              parsedSnapshot.version == OcrRetrySnapshot.currentVersion;
+          if (parsedSnapshot.hasInvalidImages && !canMigrateVersion) {
+            task = task.copyWith(
+              retryData: _unavailableOcrRetryData(task.id, parsedSnapshot),
+            );
+          }
+        } catch (error) {
+          if (parsedSnapshot != null) {
+            task = task.copyWith(
+              retryData: _unavailableOcrRetryData(task.id, parsedSnapshot),
+            );
+          } else {
+            task = task.copyWith(clearRetryData: true);
+          }
+          debugPrint(
+            '[BackgroundTaskNotifier] Failed to migrate OCR retry data for ${task.id}: $error',
+          );
+        }
+      }
+      restored.add(
+        task.status == TaskStatus.running
+            ? task.copyWith(status: TaskStatus.failed, error: '应用重启，已中断')
+            : task,
+      );
+    }
     // Merge with existing state (in case tasks were added before restore completes)
     state = [
       for (final t in restored)
@@ -871,9 +1704,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     ];
     // 将"运行中 → 已中断"的状态回写到磁盘，
     // 使持久化文件与内存状态保持一致（否则下次启动会重复标记）。
-    _persistTasks();
+    // A partial parse cannot safely replace the authoritative file: skipped
+    // entries may still own retry-cache references.
+    final snapshotSaved = loaded.isComplete && await _persistTasks();
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
+    if (loaded.isComplete && snapshotSaved) {
+      await _cleanupOrphanedOcrCache();
+    }
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );

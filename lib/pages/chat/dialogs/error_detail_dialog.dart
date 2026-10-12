@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/format_chat_error.dart';
+import '../../../utils/ocr_diagnostics.dart';
 
 /// Represents a selectable data section within the detail dialog.
 class _DataSection {
@@ -27,12 +28,14 @@ void showDataDetailDialog({
   required BuildContext context,
   required Map<String, dynamic>? rawRequest,
   required Map<String, dynamic>? rawResponse,
+  bool isOcrDiagnostics = false,
 }) {
   showDialog(
     context: context,
     builder: (ctx) => _DataDetailDialogContent(
       rawRequest: rawRequest,
       rawResponse: rawResponse,
+      isOcrDiagnostics: isOcrDiagnostics,
     ),
   );
 }
@@ -40,10 +43,12 @@ void showDataDetailDialog({
 class _DataDetailDialogContent extends StatefulWidget {
   final Map<String, dynamic>? rawRequest;
   final Map<String, dynamic>? rawResponse;
+  final bool isOcrDiagnostics;
 
   const _DataDetailDialogContent({
     required this.rawRequest,
     required this.rawResponse,
+    required this.isOcrDiagnostics,
   });
 
   @override
@@ -190,6 +195,50 @@ class _DataDetailDialogContentState extends State<_DataDetailDialogContent> {
     final sections = <_DataSection>[];
     final req = widget.rawRequest ?? {};
     final resp = widget.rawResponse ?? {};
+
+    if (widget.isOcrDiagnostics) {
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest(req);
+      final safeRequest = OcrDiagnosticSnapshot.sanitizeRequest(
+            req,
+            excludedValues: credentialValues,
+          ) ??
+          {};
+      final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse(
+            resp,
+            excludedValues: credentialValues,
+          ) ??
+          {};
+      final diagnostics = <String, dynamic>{
+        if (safeRequest['host'] != null) 'host': safeRequest['host'],
+        if (safeRequest['method'] != null) 'method': safeRequest['method'],
+        if (safeRequest['imageCount'] != null)
+          'imageCount': safeRequest['imageCount'],
+        if (safeRequest['imageBytes'] != null)
+          'imageBytes': safeRequest['imageBytes'],
+        if (safeResponse['requestId'] ?? safeRequest['requestId']
+            case final id?)
+          'requestId': id,
+        if (safeResponse['statusCode'] != null)
+          'statusCode': safeResponse['statusCode'],
+        if (safeResponse['finishReason'] != null)
+          'finishReason': safeResponse['finishReason'],
+        if (safeResponse['durationMs'] ?? safeRequest['durationMs']
+            case final duration?)
+          'durationMs': duration,
+        if (safeResponse['errorType'] != null)
+          'errorType': safeResponse['errorType'],
+      };
+      if (diagnostics.isEmpty) return sections;
+      return [
+        _DataSection(
+          id: 'ocr_diagnostics',
+          label: 'OCR Diagnostics',
+          icon: Icons.info_outline,
+          value: diagnostics,
+        ),
+      ];
+    }
 
     // 1. Request URL
     if (req.containsKey('url') && req['url'] != null) {
