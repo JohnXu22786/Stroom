@@ -1034,6 +1034,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (defaultTargetPlatform == TargetPlatform.windows && code.isNotEmpty) {
       // Windows WebView2 ignores loadData's baseUrl, so replacing the view
       // gives each source update a distinct controller for callback checks.
+      _readyFallbackTimer?.cancel();
       _webViewController = null;
       _webViewKey = UniqueKey();
       _armWebViewCreationFallback();

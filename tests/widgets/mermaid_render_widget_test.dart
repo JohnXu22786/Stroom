@@ -1180,14 +1180,29 @@ void main() {
           debugDefaultTargetPlatformOverride = TargetPlatform.windows;
           final windowsPlatform = _MermaidWebViewPlatform();
           InAppWebViewPlatform.instance = windowsPlatform;
-          final previousWebView = await _mountReadyMermaidWidget(
-            tester,
-            windowsPlatform,
-            const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+          await tester.pumpWidget(
+            const MaterialApp(
+              home: Scaffold(
+                body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+              ),
+            ),
           );
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          });
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 600));
+          await tester.pump();
+
+          final previousWebView = windowsPlatform.webView!;
           final previousController =
               previousWebView.controllerFromPlatform<InAppWebViewController>(
                   previousWebView.controller);
+          // Keep the initial document pending so its readiness fallback is
+          // still active when the source update remounts the Windows view.
+          previousWebView.params.onWebViewCreated!(previousController);
+          await tester.pump();
 
           await tester.pumpWidget(
             const MaterialApp(
@@ -1201,6 +1216,13 @@ void main() {
           final currentController =
               currentWebView.controllerFromPlatform<InAppWebViewController>(
                   currentWebView.controller);
+
+          // The replacement view has not delivered onWebViewCreated. The old
+          // readiness deadline must not resolve the new view's loading state.
+          await tester.pump(const Duration(seconds: 3));
+          final windowsLoadingVisibleAfterPreviousFallback =
+              find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
           currentWebView.params.onWebViewCreated!(currentController);
           await tester.pump();
 
@@ -1224,6 +1246,8 @@ void main() {
           windowsState = {
             'view remounted for source update':
                 !identical(previousWebView, currentWebView),
+            'loading overlay after previous readiness fallback':
+                windowsLoadingVisibleAfterPreviousFallback,
             'loading overlay after stale completion':
                 windowsLoadingVisibleAfterStaleCompletion,
             'current load error': find.text(errorMessage).evaluate().isNotEmpty,
@@ -1248,6 +1272,7 @@ void main() {
             },
             'Windows view guard': {
               'view remounted for source update': true,
+              'loading overlay after previous readiness fallback': true,
               'loading overlay after stale completion': true,
               'current load error': true,
               'retry action': true,
