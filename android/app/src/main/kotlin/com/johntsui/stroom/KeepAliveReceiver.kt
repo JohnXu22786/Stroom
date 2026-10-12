@@ -37,7 +37,8 @@ import id.flutter.flutter_background_service.BackgroundService
  *   requestIgnoreBatteryOptimizations).
  * - When an exact alarm is scheduled, keep a distinct inexact backup one
  *   minute later. Android removes exact alarms silently on permission revoke;
- *   the first delivery cancels its paired alarm and schedules the next pair.
+ *   a delivery replaces the pair when rearming succeeds and retains a pending
+ *   pair member as recovery if replacement scheduling fails.
  * - Pre-M (API < 23): repeating alarm.
  * - The alarm is a one-shot that re-schedules itself on every fire, so a
  *   single failed firing (e.g. ForegroundServiceStartNotAllowedException
@@ -196,6 +197,12 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 ALARM_REQUEST_CODE,
                 generation,
             )
+            updateExistingPendingIntentGeneration(
+                context,
+                ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
+                REVOCATION_BACKUP_REQUEST_CODE,
+                generation,
+            )
             val triggerAt = SystemClock.elapsedRealtime() + intervalMs
             return scheduleWithExactRevocationFallback(
                 canScheduleExact = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -226,15 +233,32 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             REVOCATION_BACKUP_REQUEST_CODE,
                             generation,
                         )
-                        alarmManager.setAndAllowWhileIdle(
-                            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                            revocationBackupTriggerAt(triggerAt),
-                            backupPendingIntent,
+                        val backupTriggerAt = revocationBackupTriggerAt(triggerAt)
+                        val scheduled = scheduleCompatibleRevocationBackup(
+                            supportsAllowWhileIdle = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M,
+                            scheduleAllowWhileIdle = {
+                                alarmManager.setAndAllowWhileIdle(
+                                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                    backupTriggerAt,
+                                    backupPendingIntent,
+                                )
+                                true
+                            },
+                            scheduleLegacy = {
+                                alarmManager.set(
+                                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                    backupTriggerAt,
+                                    backupPendingIntent,
+                                )
+                                true
+                            },
                         )
-                        Log.i(TAG, "Keep-alive exact-alarm revocation backup scheduled")
-                        true
+                        if (scheduled) {
+                            Log.i(TAG, "Keep-alive revocation backup scheduled")
+                        }
+                        scheduled
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to schedule exact-alarm revocation backup", e)
+                        Log.e(TAG, "Failed to schedule keep-alive revocation backup", e)
                         false
                     }
                 },
@@ -392,6 +416,25 @@ class KeepAliveReceiver : BroadcastReceiver() {
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, flags)
         }
+
+        private fun updateExistingPendingIntentGeneration(
+            context: Context,
+            action: String,
+            requestCode: Int,
+            generation: Long,
+        ) {
+            val intent = Intent(context, KeepAliveReceiver::class.java).apply {
+                this.action = action
+                putExtra(EXTRA_KEEP_ALIVE_ALARM_GENERATION, generation)
+            }
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE or
+                    PendingIntent.FLAG_UPDATE_CURRENT
+            } else {
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            PendingIntent.getBroadcast(context, requestCode, intent, flags)
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -472,9 +515,9 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         return
                     }
                 }
-                // Remove the paired alarm before rearming to avoid a second
-                // wake-up for this interval.
-                cancelScheduledAlarms(context)
+                val claimedGeneration = prefs.getLong(KEY_KEEP_ALIVE_ALARM_GENERATION, 0L)
+                // Preserve any still-pending paired alarm until a replacement
+                // succeeds; its generation token is updated during scheduling.
                 if (!prefs.getBoolean(KEY_KEEP_ALIVE_ACTIVE, false) ||
                     !prefs.getBoolean(KEY_SERVICE_ENABLED, false) ||
                     !prefs.getBoolean(KEY_WATCHDOG_ENABLED, true)
@@ -509,7 +552,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 if (startSucceeded) {
                     // 成功（服务已在运行或已启动）：重置连续失败计数。
                     prefs.edit().putInt(KEY_KEEP_ALIVE_FAILURES, 0).apply()
-                    scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
+                    scheduleReceiverAlarm(
+                        context,
+                        KEEP_ALIVE_INTERVAL_MS,
+                        generationToReuse = claimedGeneration,
+                    )
                 } else {
                     // 连续失败达到阈值后进入退避周期，避免看门狗持续
                     // 唤醒设备做无效尝试。计数封顶，避免无限增长。
@@ -522,9 +569,17 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             "Keep-alive start failed $failures times consecutively — " +
                                 "backing off to ${FAILURE_BACKOFF_INTERVAL_MS / 60000}min interval"
                         )
-                        scheduleReceiverAlarm(context, FAILURE_BACKOFF_INTERVAL_MS)
+                        scheduleReceiverAlarm(
+                            context,
+                            FAILURE_BACKOFF_INTERVAL_MS,
+                            generationToReuse = claimedGeneration,
+                        )
                     } else {
-                        scheduleReceiverAlarm(context, KEEP_ALIVE_INTERVAL_MS)
+                        scheduleReceiverAlarm(
+                            context,
+                            KEEP_ALIVE_INTERVAL_MS,
+                            generationToReuse = claimedGeneration,
+                        )
                     }
                 }
             }

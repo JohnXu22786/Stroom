@@ -14,6 +14,16 @@ internal const val KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS = 60_000L
 internal fun revocationBackupTriggerAt(exactTriggerAt: Long): Long =
     exactTriggerAt + KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS
 
+internal fun scheduleCompatibleRevocationBackup(
+    supportsAllowWhileIdle: Boolean,
+    scheduleAllowWhileIdle: () -> Boolean,
+    scheduleLegacy: () -> Boolean,
+): Boolean = if (supportsAllowWhileIdle) {
+    scheduleAllowWhileIdle()
+} else {
+    scheduleLegacy()
+}
+
 internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
@@ -21,9 +31,19 @@ internal fun scheduleWithExactRevocationFallback(
     cancelRevocationFallback: () -> Unit,
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
-    if (canScheduleExact && scheduleExact() && scheduleRevocationFallback()) return true
-    cancelRevocationFallback()
-    return scheduleInexactPrimary()
+    val exactScheduled = canScheduleExact && scheduleExact()
+    if (exactScheduled && scheduleRevocationFallback()) return true
+
+    if (scheduleInexactPrimary()) {
+        cancelRevocationFallback()
+        return true
+    }
+
+    // Keep any already queued backup alive if the replacement primary failed.
+    // When there was no backup, make one last bounded attempt to leave a future
+    // receiver delivery that can recover the watchdog.
+    val fallbackScheduled = scheduleRevocationFallback()
+    return fallbackScheduled
 }
 
 internal fun claimAlarmDeliveryGeneration(
