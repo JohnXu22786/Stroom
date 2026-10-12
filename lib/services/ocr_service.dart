@@ -507,7 +507,7 @@ class OcrService {
     }
     lastResponseStatusCode = e.response?.statusCode;
     lastResponseHeaders = e.response?.headers.map;
-      _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
+    _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
           e.response?.headers.map,
           excludedValues: [config.apiKey],
         ) ??

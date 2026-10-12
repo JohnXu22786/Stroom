@@ -1321,7 +1321,8 @@ void main() {
             .widgetList<DropdownButton<int>>(find.byType(DropdownButton<int>))
             .toList();
         expect(selectors, hasLength(2));
-        expect(selectors.every((selector) => selector.onChanged == null), isTrue);
+        expect(
+            selectors.every((selector) => selector.onChanged == null), isTrue);
       },
     );
 
@@ -2711,18 +2712,17 @@ void main() {
               ),
             ],
             backgroundTasksNotifier: taskNotifier,
-            testRetryImageRestorer: (snapshot) async =>
-                OcrRetryRestoreResult(
-                  images: [
-                    for (final image in snapshot.images)
-                      OcrRetryImage(
-                        bytes: image.bytes!,
-                        format: image.format,
-                        name: image.name,
-                      ),
-                  ],
-                  missingImageCount: 0,
-                ),
+            testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
+              images: [
+                for (final image in snapshot.images)
+                  OcrRetryImage(
+                    bytes: image.bytes!,
+                    format: image.format,
+                    name: image.name,
+                  ),
+              ],
+              missingImageCount: 0,
+            ),
             testRetrySnapshotCacher:
                 ({required taskId, required snapshot}) async => retryData,
           ),
@@ -2835,7 +2835,10 @@ void main() {
 
         await tester.tap(find.text('取消').last);
         await pumpDialogTransition();
-        expect(find.text('0.0002 MiB'), findsOneWidget);
+        expect(
+          find.byTooltip('请求 JSON 上限：0.0002 MiB'),
+          findsOneWidget,
+        );
         expect(taskNotifier.tasksForTest, isEmpty);
       },
     );

@@ -31,11 +31,11 @@ class OcrPageOutcome {
       status == OcrPageOutcomeStatus.succeeded && text != null;
 
   Map<String, dynamic> toMap() => {
-    'imageIndex': imageIndex,
-    'status': status.name,
-    if (text != null) 'text': text,
-    if (error != null) 'error': error,
-  };
+        'imageIndex': imageIndex,
+        'status': status.name,
+        if (text != null) 'text': text,
+        if (error != null) 'error': error,
+      };
 
   static OcrPageOutcome? fromMap(dynamic value) {
     if (value is! Map) return null;

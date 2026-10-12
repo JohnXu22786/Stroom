@@ -184,7 +184,8 @@ class OcrRetrySnapshot {
     int requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
     int? legacyModelIndex,
     int? legacyInstructionIndex,
-  }) => OcrRetrySnapshot._(
+  }) =>
+      OcrRetrySnapshot._(
         version: currentVersion,
         configId: configId,
         modelId: modelId,
@@ -251,8 +252,8 @@ class OcrRetrySnapshot {
     final rawPerImageConcurrency = map['perImageConcurrency'];
     final perImageConcurrency =
         rawPerImageConcurrency is int && rawPerImageConcurrency >= 1
-        ? rawPerImageConcurrency.clamp(1, 2).toInt()
-        : 1;
+            ? rawPerImageConcurrency.clamp(1, 2).toInt()
+            : 1;
     if (rawPerImageConcurrency != null &&
         (rawPerImageConcurrency is! int ||
             rawPerImageConcurrency < 1 ||
@@ -262,8 +263,8 @@ class OcrRetrySnapshot {
     final rawRequestSizeBudgetBytes = map['requestSizeBudgetBytes'];
     final requestSizeBudgetBytes =
         rawRequestSizeBudgetBytes is int && rawRequestSizeBudgetBytes > 0
-        ? rawRequestSizeBudgetBytes
-        : defaultOcrRequestSizeBudgetBytes;
+            ? rawRequestSizeBudgetBytes
+            : defaultOcrRequestSizeBudgetBytes;
     if (rawRequestSizeBudgetBytes != null &&
         (rawRequestSizeBudgetBytes is! int || rawRequestSizeBudgetBytes <= 0)) {
       hasUnknownFields = true;
@@ -307,8 +308,7 @@ class OcrRetrySnapshot {
             (key) => !_imageFields.contains(key),
           );
           hasInlineImageData |= imageMap.containsKey('bytes');
-          hasInvalidImageMetadata |=
-              imageMap['format'] is! String ||
+          hasInvalidImageMetadata |= imageMap['format'] is! String ||
               (imageMap['name'] != null && imageMap['name'] is! String);
           images.add(OcrRetryImage.fromMap(imageMap));
           imageEntryIndices.add(index);
@@ -339,9 +339,8 @@ class OcrRetrySnapshot {
       instructionContent: map['instructionContent'] is String
           ? map['instructionContent'] as String
           : null,
-      saveFolder: map['saveFolder'] is String
-          ? map['saveFolder'] as String
-          : '',
+      saveFolder:
+          map['saveFolder'] is String ? map['saveFolder'] as String : '',
       batchMode: batchMode,
       perImageConcurrency: perImageConcurrency,
       requestSizeBudgetBytes: requestSizeBudgetBytes,

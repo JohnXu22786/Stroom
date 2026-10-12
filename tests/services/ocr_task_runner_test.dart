@@ -60,6 +60,7 @@ class _OutOfOrderAdapter implements HttpClientAdapter {
   final List<int> requestedImageIds = [];
   final Map<int, RequestOptions> requestOptionsByImageId = {};
   final Map<int, Completer<ResponseBody>> _responses = {};
+  final firstRequest = Completer<void>();
   final twoRequests = Completer<void>();
   final threeRequests = Completer<void>();
 
@@ -77,6 +78,9 @@ class _OutOfOrderAdapter implements HttpClientAdapter {
     ).first;
     requestedImageIds.add(imageId);
     requestOptionsByImageId[imageId] = options;
+    if (requestedImageIds.length == 1 && !firstRequest.isCompleted) {
+      firstRequest.complete();
+    }
     if (requestedImageIds.length == 2 && !twoRequests.isCompleted) {
       twoRequests.complete();
     }
@@ -118,7 +122,6 @@ class _OutOfOrderAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
-
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -328,6 +331,103 @@ void main() {
       ]);
     },
   );
+
+  test('failed empty per-image batch stays incomplete', () async {
+    final emptyFailedAdapter = _OutOfOrderAdapter();
+    final emptyFailedRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = emptyFailedAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = emptyFailedRunner.run();
+    await emptyFailedAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    emptyFailedAdapter.complete(1, text: '', statusCode: 500);
+    emptyFailedAdapter.complete(2, text: '', statusCode: 500);
+    await running;
+
+    final task = notifier.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.result, '');
+    expect(task.resultIsComplete, isFalse);
+    expect(task.error, contains('结果不完整'));
+    expect(task.steps[3].status, BgStepStatus.failed);
+    expect(task.ocrPageOutcomes.map((outcome) => outcome.status), [
+      OcrPageOutcomeStatus.failed,
+      OcrPageOutcomeStatus.failed,
+    ]);
+  });
+
+  test('queued per-image requests prevent aggregate stages from completing',
+      () async {
+    final stagedAdapter = _OutOfOrderAdapter();
+    final parsingWithQueuedPage = Completer<List<BgTaskStep>>();
+    notifier.addListener((tasks) {
+      final task = tasks.single;
+      if (!parsingWithQueuedPage.isCompleted &&
+          task.ocrPageOutcomes.length == 2 &&
+          task.ocrPageOutcomes[0].status == OcrPageOutcomeStatus.running &&
+          task.ocrPageOutcomes[1].status == OcrPageOutcomeStatus.pending &&
+          task.steps[3].status == BgStepStatus.running) {
+        parsingWithQueuedPage.complete(List.unmodifiable(task.steps));
+      }
+    }, fireImmediately: false);
+    final stagedRunner = OcrTaskRunner(
+      taskId: id,
+      notifier: notifier,
+      config: _config,
+      images: [
+        (Uint8List.fromList([1]), 'png'),
+        (Uint8List.fromList([2]), 'png'),
+      ],
+      executionMode: OcrBatchMode.perImage,
+      perImageConcurrency: 1,
+      title: 'owned',
+      folder: 'captured folder',
+      serviceFactory: (config) => OcrService(
+        config: config,
+        dio: Dio()..httpClientAdapter = stagedAdapter,
+      ),
+      writeText: TextManifest.writeText,
+      onSaved: () {},
+    );
+
+    final running = stagedRunner.run();
+    await stagedAdapter.firstRequest.future.timeout(
+      const Duration(seconds: 2),
+    );
+    stagedAdapter.complete(1, text: 'first page');
+    final stepsWhileSecondPageIsQueued =
+        await parsingWithQueuedPage.future.timeout(const Duration(seconds: 2));
+    await stagedAdapter.twoRequests.future.timeout(
+      const Duration(seconds: 2),
+    );
+    stagedAdapter.complete(2, text: 'second page');
+    await running;
+
+    expect(stepsWhileSecondPageIsQueued[1].status, BgStepStatus.pending);
+    expect(notifier.state.single.status, TaskStatus.completed);
+    expect(
+      notifier.state.single.steps.map((step) => step.status),
+      everyElement(BgStepStatus.completed),
+    );
+  });
 
   test('concurrent per-image requests keep upload progress visible', () async {
     final progressAdapter = _OutOfOrderAdapter();

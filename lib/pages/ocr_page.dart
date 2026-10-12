@@ -359,9 +359,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         ),
       );
-      _batchMode = _hasReusablePageResults
-          ? OcrBatchMode.perImage
-          : snapshot.batchMode;
+      _batchMode =
+          _hasReusablePageResults ? OcrBatchMode.perImage : snapshot.batchMode;
       _perImageConcurrency = snapshot.perImageConcurrency;
       _requestSizeBudgetMiBController.text =
           (snapshot.requestSizeBudgetBytes / (1024 * 1024))
@@ -456,6 +455,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         title: const Text('文字识别'),
         centerTitle: true,
         actions: [
+          IconButton(
+            key: const Key('ocr_request_budget_mib'),
+            tooltip: '请求 JSON 上限：${_requestSizeBudgetMiBController.text} MiB',
+            onPressed: _isProcessing ? null : _editRequestSizeBudget,
+            icon: const Icon(Icons.data_usage_outlined),
+          ),
           if (_selectedImages.length > 1 &&
               !_isProcessing &&
               !_isRetryImagesLoading &&
@@ -718,7 +723,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     onChanged: _hasReusablePageResults
                         ? null
                         : (idx) {
-                            if (idx == null || idx >= modelOptions.length) return;
+                            if (idx == null || idx >= modelOptions.length)
+                              return;
                             setState(() {
                               _selectModelOption(modelOptions[idx], idx);
                               _errorMessage = null;
@@ -903,6 +909,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Widget _buildBatchOptions(ColorScheme cs) {
+    if (_selectedImages.length < 2) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Container(
@@ -915,86 +923,59 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_selectedImages.length > 1) ...[
-              Row(
-                children: [
-                  Text(
-                    '批量方式',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SegmentedButton<OcrBatchMode>(
-                      key: const Key('ocr_batch_mode'),
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: OcrBatchMode.joint,
-                          label: Text('合并识别'),
-                        ),
-                        ButtonSegment(
-                          value: OcrBatchMode.perImage,
-                          label: Text('逐张识别'),
-                        ),
-                      ],
-                      selected: {_batchMode},
-                      onSelectionChanged:
-                          _isProcessing || _hasReusablePageResults
-                          ? null
-                          : (selection) {
-                              if (selection.isEmpty) return;
-                              setState(() {
-                                _batchMode = selection.first;
-                                _errorMessage = null;
-                              });
-                            },
-                    ),
-                  ),
-                  if (_batchMode == OcrBatchMode.perImage)
-                    PopupMenuButton<int>(
-                      key: const Key('ocr_per_image_concurrency'),
-                      enabled: !_isProcessing,
-                      tooltip: '最多 2 张同时请求',
-                      onSelected: (concurrency) =>
-                          setState(() => _perImageConcurrency = concurrency),
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 1, child: Text('1 张同时请求')),
-                        PopupMenuItem(value: 2, child: Text('2 张同时请求')),
-                      ],
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('并发 $_perImageConcurrency'),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-            if (_selectedImages.length > 1) const SizedBox(height: 4),
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    '请求 JSON 上限',
-                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                Text(
+                  '批量方式',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
                   ),
                 ),
-                SizedBox(
-                  width: 112,
-                  height: 38,
-                  child: OutlinedButton(
-                    key: const Key('ocr_request_budget_mib'),
-                    onPressed: _isProcessing ? null : _editRequestSizeBudget,
-                    child: Text(
-                      '${_requestSizeBudgetMiBController.text} MiB',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SegmentedButton<OcrBatchMode>(
+                    key: const Key('ocr_batch_mode'),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: OcrBatchMode.joint,
+                        label: Text('合并识别'),
+                      ),
+                      ButtonSegment(
+                        value: OcrBatchMode.perImage,
+                        label: Text('逐张识别'),
+                      ),
+                    ],
+                    selected: {_batchMode},
+                    onSelectionChanged: _isProcessing || _hasReusablePageResults
+                        ? null
+                        : (selection) {
+                            if (selection.isEmpty) return;
+                            setState(() {
+                              _batchMode = selection.first;
+                              _errorMessage = null;
+                            });
+                          },
+                  ),
+                ),
+                if (_batchMode == OcrBatchMode.perImage)
+                  PopupMenuButton<int>(
+                    key: const Key('ocr_per_image_concurrency'),
+                    enabled: !_isProcessing,
+                    tooltip: '最多 2 张同时请求',
+                    onSelected: (concurrency) =>
+                        setState(() => _perImageConcurrency = concurrency),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 1, child: Text('1 张同时请求')),
+                      PopupMenuItem(value: 2, child: Text('2 张同时请求')),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('并发 $_perImageConcurrency'),
                     ),
                   ),
-                ),
               ],
             ),
             if (_hasReusablePageResults) ...[
@@ -1021,9 +1002,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isImageSelectionLocked
-                        ? null
-                        : _showCameraChoicePanel,
+                    onPressed:
+                        _isImageSelectionLocked ? null : _showCameraChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -2245,9 +2225,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     var budgetBytes = initialBudgetBytes;
 
-    final imageBytesList = images
-        .map((image) => (image.bytes, image.format))
-        .toList();
+    final imageBytesList =
+        images.map((image) => (image.bytes, image.format)).toList();
     final reusablePageIndices = _retryPageOutcomes
         .where((outcome) => outcome.canReuseResult)
         .map((outcome) => outcome.imageIndex)
@@ -2287,8 +2266,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final choice = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
-        canSwitchToPerImage:
-            _batchMode == OcrBatchMode.joint &&
+        canSwitchToPerImage: _batchMode == OcrBatchMode.joint &&
             images.length > 1 &&
             !_hasReusablePageResults,
       );

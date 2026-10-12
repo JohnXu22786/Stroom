@@ -190,7 +190,8 @@ class OcrRetryStorage {
     required int imageCount,
     String? modelId,
     String? instructionContent,
-  }) => _unavailableSnapshot(
+  }) =>
+      _unavailableSnapshot(
         taskId: taskId,
         imageCount: imageCount,
         modelId: modelId,
@@ -350,9 +351,8 @@ class OcrRetryStorage {
   }
 
   static String _missingReferenceFor(String taskId, int index) {
-    final hash = sha256
-        .convert(utf8.encode('missing:$taskId:$index'))
-        .toString();
+    final hash =
+        sha256.convert(utf8.encode('missing:$taskId:$index')).toString();
     return '$_cacheDirectoryName/$hash.bin';
   }
 

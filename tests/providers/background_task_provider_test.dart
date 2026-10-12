@@ -654,7 +654,7 @@ void main() {
         });
 
         final retryData = task.retryData!;
-        expect(retryData['version'], 2);
+        expect(retryData['version'], OcrRetrySnapshot.currentVersion);
         expect(retryData['modelRef'], {'modelId': 'vision-model'});
         expect(
           retryData['instructionContent'],
@@ -3676,7 +3676,7 @@ void main() {
           final restored = notifier.state.single;
           final retryData = restored.retryData;
           expect(retryData, isNotNull);
-          expect(retryData!['version'], 2);
+          expect(retryData!['version'], OcrRetrySnapshot.currentVersion);
           expect(retryData['modelRef'], {
             'configId': 'saved-config',
             'modelId': 'saved-model',
@@ -3943,7 +3943,10 @@ void main() {
           final restored = notifier.state.single;
           final snapshot = OcrRetrySnapshot.fromMap(restored.retryData!);
 
-          expect(restored.retryData!['version'], 2);
+          expect(
+            restored.retryData!['version'],
+            OcrRetrySnapshot.currentVersion,
+          );
           expect(snapshot.imageEntryCount, 1);
           expect(snapshot.legacyModelIndex, isNull);
           expect(snapshot.legacyInstructionIndex, isNull);

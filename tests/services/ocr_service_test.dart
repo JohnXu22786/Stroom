@@ -249,7 +249,6 @@ void main() {
           );
         },
       );
-
     });
 
     group('OcrService response parsing', () {

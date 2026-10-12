@@ -347,8 +347,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
                   _ocrPageOutcomeLabel(outcome.status),
                   style: TextStyle(
                     fontSize: 12,
-                    color:
-                        outcome.status == OcrPageOutcomeStatus.failed ||
+                    color: outcome.status == OcrPageOutcomeStatus.failed ||
                             outcome.status == OcrPageOutcomeStatus.incomplete
                         ? Colors.red
                         : cs.onSurfaceVariant,

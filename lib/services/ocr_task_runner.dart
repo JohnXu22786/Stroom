@@ -68,9 +68,8 @@ class OcrTaskRunner {
           typeConfig: Map<String, dynamic>.from(
             jsonDecode(jsonEncode(config.typeConfig)) as Map,
           ),
-          customParams: config.customParams
-              .map((param) => param.copy())
-              .toList(),
+          customParams:
+              config.customParams.map((param) => param.copy()).toList(),
         ),
         images = List.unmodifiable(
           images.map((image) => (Uint8List.fromList(image.$1), image.$2)),
@@ -154,10 +153,14 @@ class OcrTaskRunner {
     if (task == null || task.steps.length < 4) return;
 
     final activeStages = _perImageRequestStages.values.toList();
+    final hasPendingPages = task.ocrPageOutcomes.any(
+      (outcome) => outcome.status == OcrPageOutcomeStatus.pending,
+    );
     final steps = List<BgTaskStep>.of(task.steps);
     for (var index = 0; index <= 3; index++) {
       final running = activeStages.contains(index);
-      final completed = activeStages.every((stage) => stage > index);
+      final completed =
+          !hasPendingPages && activeStages.every((stage) => stage > index);
       final status = running
           ? BgStepStatus.running
           : completed
@@ -235,16 +238,28 @@ class OcrTaskRunner {
         incompleteMessage = message;
       }
       _checkActive();
-      if (result.isComplete || result.text.isNotEmpty) {
-        notifier.setResult(
-          taskId,
-          result.text,
-          isComplete: result.isComplete,
-          folder: folder,
-        );
-      }
+      notifier.setResult(
+        taskId,
+        result.text,
+        isComplete: result.isComplete,
+        folder: folder,
+      );
       if (!result.isComplete) {
-        notifier.updateStep(taskId, 3, completed: true);
+        final hasFailedPage = executionMode == OcrBatchMode.perImage &&
+            notifier.state.any(
+              (task) =>
+                  task.id == taskId &&
+                  task.ocrPageOutcomes.any(
+                    (outcome) => outcome.status == OcrPageOutcomeStatus.failed,
+                  ),
+            );
+        notifier.updateStep(
+          taskId,
+          3,
+          completed: !hasFailedPage,
+          failed: hasFailedPage,
+          error: hasFailedPage ? incompleteMessage : null,
+        );
         taskSpecificFailure = incompleteMessage;
         throw Exception(
           incompleteMessage ??
@@ -264,9 +279,8 @@ class OcrTaskRunner {
     } catch (error) {
       // A removed/disposed task must never be recreated by late callbacks.
       if (!_cancelToken.isCancelled && notifier.mounted) {
-        final task = notifier.state
-            .where((task) => task.id == taskId)
-            .firstOrNull;
+        final task =
+            notifier.state.where((task) => task.id == taskId).firstOrNull;
         if (task != null) {
           final safeError = taskSpecificFailure == null
               ? error is OcrRequestTooLargeException
@@ -276,10 +290,10 @@ class OcrTaskRunner {
                       excludedValues: [config.apiKey],
                     )
               : OcrDiagnosticSnapshot.sanitizeStoredTaskError(
-                      taskSpecificFailure,
-                      excludedValues: [config.apiKey],
-                    ) ??
-                    'OCR 部分页面未完成';
+                    taskSpecificFailure,
+                    excludedValues: [config.apiKey],
+                  ) ??
+                  'OCR 部分页面未完成';
           for (var i = 0; i < task.steps.length; i++) {
             if (task.steps[i].running) {
               notifier.updateStep(taskId, i, failed: true, error: safeError);
@@ -287,8 +301,7 @@ class OcrTaskRunner {
               notifier.updateStep(taskId, i, skipped: true);
             }
           }
-          final service =
-              _failedDiagnosticService ??
+          final service = _failedDiagnosticService ??
               _incompleteDiagnosticService ??
               _diagnosticService ??
               _service;
@@ -413,8 +426,8 @@ class OcrTaskRunner {
             error: result.isComplete
                 ? null
                 : 'OCR 返回了不完整结果（finish_reason=' +
-                      (result.finishReason ?? 'unknown') +
-                      '）',
+                    (result.finishReason ?? 'unknown') +
+                    '）',
           );
         } catch (error) {
           if (_cancelToken.isCancelled) {
@@ -471,27 +484,24 @@ class OcrTaskRunner {
   }
 
   String _combinedPageText(List<OcrPageOutcome> outcomes) => outcomes
-      .where((outcome) => outcome.text?.isNotEmpty == true)
-      .map((outcome) {
+          .where((outcome) => outcome.text?.isNotEmpty == true)
+          .map((outcome) {
         final name = imageNames[outcome.imageIndex]?.trim();
         final label = name == null || name.isEmpty
             ? '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片'
             : '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片：' + name;
         return '--- ' + label + ' ---\n' + outcome.text!;
-      })
-      .join('\n\n');
+      }).join('\n\n');
 
   String _pageFailureMessage(List<OcrPageOutcome> outcomes) {
     final failures = outcomes
         .where((outcome) => outcome.status != OcrPageOutcomeStatus.succeeded)
         .map((outcome) {
-          final label = '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片';
-          final state = outcome.status == OcrPageOutcomeStatus.incomplete
-              ? '结果不完整'
-              : '识别失败';
-          return label + state;
-        })
-        .join('；');
+      final label = '第 ' + (outcome.imageIndex + 1).toString() + ' 张图片';
+      final state =
+          outcome.status == OcrPageOutcomeStatus.incomplete ? '结果不完整' : '识别失败';
+      return label + state;
+    }).join('；');
     return '部分图片 OCR 未完成：' + failures;
   }
 }
