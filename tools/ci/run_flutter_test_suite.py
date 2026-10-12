@@ -114,6 +114,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "providers/background_task_provider_test.dart",
         "providers/ocr*_test.dart",
         "providers/tts_save_cancellation_test.dart",
+        "utils/ocr_diagnostics_test.dart",
         "utils/audio*_test.dart",
         "utils/ocr_image_payload_test.dart",
         "utils/image_send_compressor_test.dart",

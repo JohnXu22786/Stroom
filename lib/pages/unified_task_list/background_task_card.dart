@@ -305,6 +305,7 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       context: context,
       rawRequest: task.rawRequest,
       rawResponse: task.rawResponse,
+      isOcrDiagnostics: task.type == BackgroundTaskType.ocr,
     );
   }
 
@@ -536,7 +537,10 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => OcrPage(retryData: task.retryData),
+            builder: (_) => OcrPage(
+              retryData: task.retryData,
+              retryTaskId: task.id,
+            ),
           ),
         );
         break;
