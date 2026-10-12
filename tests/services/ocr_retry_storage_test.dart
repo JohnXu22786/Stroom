@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ocr_retry_storage.dart';
@@ -28,7 +29,8 @@ void main() {
     } catch (_) {}
   });
 
-  test('version 2 stores cached references and restores image bytes', () async {
+  test('current snapshot stores execution settings and restores image bytes',
+      () async {
     final bytes = Uint8List.fromList([1, 2, 3, 4]);
     final snapshot = OcrRetrySnapshot.capture(
       configId: 'config-1',
@@ -36,6 +38,9 @@ void main() {
       images: [OcrRetryImage(bytes: bytes, format: 'png', name: 'scan.png')],
       instructionContent: 'receipt text',
       saveFolder: 'receipts',
+      batchMode: OcrBatchMode.perImage,
+      perImageConcurrency: 2,
+      requestSizeBudgetBytes: 7 * 1024 * 1024,
     );
 
     final stored = await OcrRetryStorage.cacheSnapshot(
@@ -47,7 +52,7 @@ void main() {
       OcrRetrySnapshot.fromMap(stored),
     );
 
-    expect(stored['version'], 2);
+    expect(stored['version'], OcrRetrySnapshot.currentVersion);
     expect(imageMap.keys.toSet(), {'storageRef', 'format', 'name'});
     expect(imageMap['storageRef'], startsWith('ocr_retry_cache/'));
     expect(imageMap.containsKey('bytes'), isFalse);
@@ -55,6 +60,9 @@ void main() {
     expect(restored.images.single.bytes, bytes);
     expect(stored['instructionContent'], 'receipt text');
     expect(stored['saveFolder'], 'receipts');
+    expect(stored['batchMode'], OcrBatchMode.perImage.name);
+    expect(stored['perImageConcurrency'], 2);
+    expect(stored['requestSizeBudgetBytes'], 7 * 1024 * 1024);
   });
 
   test(
@@ -197,7 +205,12 @@ void main() {
       );
       final originalImage = (cached['images'] as List).single as Map;
       final reference = originalImage['storageRef'] as String;
-      final missingType = Map<String, dynamic>.from(cached)..remove('type');
+      final version2 = Map<String, dynamic>.from(cached)
+        ..['version'] = 2
+        ..remove('batchMode')
+        ..remove('perImageConcurrency')
+        ..remove('requestSizeBudgetBytes');
+      final missingType = version2..remove('type');
       final snapshot = OcrRetrySnapshot.fromMap(missingType);
 
       expect(snapshot.needsMigration, isTrue);
@@ -207,6 +220,13 @@ void main() {
         snapshot: snapshot,
       );
       expect(migrated['type'], 'ocr');
+      expect(migrated['version'], OcrRetrySnapshot.currentVersion);
+      expect(migrated['batchMode'], OcrBatchMode.joint.name);
+      expect(migrated['perImageConcurrency'], 1);
+      expect(
+        migrated['requestSizeBudgetBytes'],
+        defaultOcrRequestSizeBudgetBytes,
+      );
       expect(
         ((migrated['images'] as List).single as Map)['storageRef'],
         reference,
@@ -682,8 +702,13 @@ void main() {
           instructionContent: 'saved prompt',
         ),
       );
+      final version2Snapshot = Map<String, dynamic>.from(validSnapshot)
+        ..['version'] = 2
+        ..remove('batchMode')
+        ..remove('perImageConcurrency')
+        ..remove('requestSizeBudgetBytes');
       final malformedSnapshot = <String, dynamic>{
-        ...validSnapshot,
+        ...version2Snapshot,
         'images': [
           ...(validSnapshot['images'] as List),
           {'bytes': '$encodedBytes!!!', 'format': 'png'},
