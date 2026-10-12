@@ -649,6 +649,11 @@ Future<bool> _rearmKeepAlive() async {
   }
 }
 
+/// Re-arms the native watchdog without querying or starting the service.
+///
+/// Use this when service status is unknown but recovery should remain armed.
+Future<bool> rearmBackgroundServiceWatchdog() => _rearmKeepAlive();
+
 Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {

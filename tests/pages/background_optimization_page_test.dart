@@ -35,6 +35,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  int startCallCount = 0;
 
   void setServiceRunning(bool running) {
     _isRunning = running;
@@ -66,6 +67,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   @override
   Future<bool> start() async {
+    startCallCount++;
     if (_throwOnStart) {
       throw 'Simulated start error';
     }
@@ -788,6 +790,51 @@ void main() {
         isTrue,
         reason: 're-enabling the watchdog while the service runs must arm '
             'the native keep-alive alarm',
+      );
+    });
+
+    testWidgets('re-arms the watchdog when service status cannot be checked',
+        (tester) async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheck(true);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock._isRunning, isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'enabling the watchdog after an unknown status must attempt '
+            'to restore the native recovery schedule',
       );
     });
 
