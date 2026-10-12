@@ -48,6 +48,17 @@ jobs:
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
+      - name: Show Dart formatting diff
+        if: failure()
+        run: |
+          dart format --language-version=3.0 \
+            lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart \
+            tests/pages/chat/dialogs/mermaid_preview_dialog_web_controls_test_dom_web.dart \
+            tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
+          git --no-pager diff -- \
+            lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart \
+            tests/pages/chat/dialogs/mermaid_preview_dialog_web_controls_test_dom_web.dart \
+            tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
 
   # Keep the required branch-protection check name for static analysis.
   quality:
@@ -108,6 +119,11 @@ jobs:
                 ;;
               lib/services/data_integrity_json_parser_web.dart)
                 test_f="tests/startup/startup_check_service_web.dart"
+                ;;
+              lib/pages/chat/dialogs/mermaid_preview_web_controls.dart|\
+              lib/pages/chat/dialogs/mermaid_preview_web_controls_stub.dart|\
+              lib/pages/chat/dialogs/mermaid_preview_web_controls_web.dart)
+                test_f="tests/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart"
                 ;;
               *)
                 test_f="tests/${file#lib/}"
@@ -251,7 +267,7 @@ jobs:
         run: python3 tools/ci/run_flutter_test_suite.py "${{ matrix.suite }}"
       - name: Run Mermaid preview web controls regression
         if: matrix.suite == 'chat-ai-ui'
-        run: flutter test --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
+        run: flutter test --reporter expanded --platform chrome --plain-name 'renders clickable HTML controls above the fullscreen web preview' test/pages/chat/dialogs/mermaid_preview_dialog_zoom_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Web startup checks in Chrome

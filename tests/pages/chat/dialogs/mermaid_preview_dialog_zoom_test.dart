@@ -28,12 +28,35 @@ void main() {
       preview.webView.params.onLoadStop!(preview.controller, null);
       await tester.pump();
 
+      for (var attempt = 0;
+          attempt < 20 && previewDom.controlLabels().isEmpty;
+          attempt++) {
+        await tester.pump(const Duration(milliseconds: 25));
+      }
+
       const overlayKey = ValueKey('mermaid-preview-web-controls');
       expect(find.byKey(overlayKey), findsOneWidget);
-      expect(previewDom.controlLabels(), ['缩小', '放大', '关闭预览']);
-      expect(previewDom.controlTitle(), 'Mermaid 预览');
-      expect(previewDom.controlReceivesPointer('zoom-in'), isTrue);
-      expect(previewDom.controlReceivesPointer('close'), isTrue);
+      final domSnapshot = previewDom.controlsSnapshot();
+      expect(
+        previewDom.controlLabels(),
+        ['缩小', '放大', '关闭预览'],
+        reason: domSnapshot,
+      );
+      expect(
+        previewDom.controlTitle(),
+        'Mermaid 预览',
+        reason: domSnapshot,
+      );
+      expect(
+        previewDom.controlReceivesPointer('zoom-in'),
+        isTrue,
+        reason: previewDom.pointerHitTargetDescription('zoom-in'),
+      );
+      expect(
+        previewDom.controlReceivesPointer('close'),
+        isTrue,
+        reason: previewDom.pointerHitTargetDescription('close'),
+      );
 
       final stack = tester.widget<Stack>(
         find.ancestor(of: find.byKey(overlayKey), matching: find.byType(Stack))

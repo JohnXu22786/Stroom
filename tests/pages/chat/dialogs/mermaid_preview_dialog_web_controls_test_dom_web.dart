@@ -21,6 +21,25 @@ String? controlTitle() => html.document
     .querySelector('[data-mermaid-preview-controls-title]')
     ?.text;
 
+String controlsSnapshot() =>
+    html.document.querySelector('[data-mermaid-preview-controls]')?.outerHtml ??
+    '<controls layer not mounted>';
+
+String pointerHitTargetDescription(String action) {
+  final button = html.document.querySelector(
+    '[data-mermaid-preview-controls] button[data-action="$action"]',
+  );
+  if (button is! html.ButtonElement) {
+    return 'No "$action" button; ${controlsSnapshot()}';
+  }
+  final rect = button.getBoundingClientRect();
+  final hitTarget = html.document.elementFromPoint(
+    (rect.left + rect.width / 2).round(),
+    (rect.top + rect.height / 2).round(),
+  );
+  return 'button=$button rect=$rect; hitTarget=${hitTarget?.outerHtml}';
+}
+
 bool controlReceivesPointer(String action) {
   final button = html.document.querySelector(
     '[data-mermaid-preview-controls] button[data-action="$action"]',

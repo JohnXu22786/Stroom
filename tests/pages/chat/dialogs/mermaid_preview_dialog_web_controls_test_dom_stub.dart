@@ -4,6 +4,11 @@ List<String> controlLabels() => const [];
 
 String? controlTitle() => null;
 
+String controlsSnapshot() => '<web controls are only available in a browser>';
+
+String pointerHitTargetDescription(String action) =>
+    'Cannot hit-test "$action" outside a browser';
+
 bool controlReceivesPointer(String action) => false;
 
 void clickControl(String action) {}
