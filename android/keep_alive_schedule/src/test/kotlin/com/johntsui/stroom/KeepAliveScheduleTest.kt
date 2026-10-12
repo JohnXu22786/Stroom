@@ -138,6 +138,50 @@ class KeepAliveScheduleTest {
     }
 
     @Test
+    fun failedGenerationCommitRetryKeepsPreviousAlarmGenerationUsable() {
+        var currentGeneration = 41L
+        var scheduleAttempts = 0
+        val retryQueue = mutableListOf<() -> Unit>()
+        val schedule = {
+            scheduleAttempts++
+            persistNextAlarmGeneration(currentGeneration) { generation ->
+                // SharedPreferences updates memory before commit() can fail.
+                currentGeneration = generation
+                false
+            } != null
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = schedule,
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(1, scheduleAttempts)
+        assertEquals(41L, currentGeneration)
+
+        retryQueue.single().invoke()
+
+        assertEquals(2, scheduleAttempts)
+        assertEquals(41L, currentGeneration)
+
+        val priorAlarmClaim = claimAlarmDeliveryGeneration(
+            scheduledGeneration = 41L,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = { generation ->
+                currentGeneration = generation
+                true
+            },
+        )
+
+        assertEquals(AlarmGenerationClaimResult.CLAIMED, priorAlarmClaim)
+        assertEquals(42L, currentGeneration)
+    }
+
+    @Test
     fun explicitStopRejectsQueuedAlarmGeneration() {
         var persistAttempted = false
 
