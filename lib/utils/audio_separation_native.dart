@@ -226,15 +226,22 @@ class AudioSeparationEngine {
     final samplesPerFrame = _samplesPerAacFrame(asc, sampleRate);
     final duration = sampleCount * samplesPerFrame;
     final outputEditList = track.outputEditList;
-    final movieTimescale = outputEditList == null
-        ? sampleRate
-        : track.movieTimescale;
+    final movieTimescale =
+        outputEditList == null ? sampleRate : track.movieTimescale;
     final movieDuration = outputEditList == null
         ? duration
         : outputEditList.fold<int>(
             0,
             (total, entry) => total + entry.segmentDuration,
           );
+    final usesVersion1MovieHeaders = movieDuration > 0xFFFFFFFF;
+    final usesVersion1EditList = outputEditList?.any(
+          (entry) =>
+              entry.segmentDuration > 0xFFFFFFFF ||
+              entry.mediaTime < -0x80000000 ||
+              entry.mediaTime > 0x7FFFFFFF,
+        ) ??
+        false;
 
     // stsd entry size: mp4a base (36 for v0, 52 for v1), optional srat box,
     // and esds box.
@@ -259,14 +266,14 @@ class AudioSeparationEngine {
     const hdlrSize = 33;
     final mdiaSize = 8 + mdhdSize + hdlrSize + minfSize;
 
-    const tkhdSize = 92;
-    final elstSize = outputEditList == null
-        ? 0
-        : 16 + outputEditList.length * 12;
+    final tkhdSize = usesVersion1MovieHeaders ? 104 : 92;
+    final elstEntrySize = usesVersion1EditList ? 20 : 12;
+    final elstSize =
+        outputEditList == null ? 0 : 16 + outputEditList.length * elstEntrySize;
     final edtsSize = outputEditList == null ? 0 : 8 + elstSize;
     final trakSize = 8 + tkhdSize + edtsSize + mdiaSize;
 
-    const mvhdSize = 108;
+    final mvhdSize = usesVersion1MovieHeaders ? 120 : 108;
     final moovSize = 8 + mvhdSize + trakSize;
 
     // ftyp: header(8) + major(4) + minor(4) + 3 compatible brands(12) = 28
@@ -294,11 +301,23 @@ class AudioSeparationEngine {
 
     // mvhd
     _writeBoxHeader(buf, mvhdSize, 'mvhd');
-    _writeU32be(buf, 0); // version=0, flags=0
-    _writeU32be(buf, 0); // creation_time
-    _writeU32be(buf, 0); // modification_time
+    _writeU32be(
+      buf,
+      usesVersion1MovieHeaders ? 0x01000000 : 0,
+    ); // version + flags
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, 0); // creation_time
+      _writeU64be(buf, 0); // modification_time
+    } else {
+      _writeU32be(buf, 0); // creation_time
+      _writeU32be(buf, 0); // modification_time
+    }
     _writeU32be(buf, movieTimescale); // timescale
-    _writeU32be(buf, movieDuration); // duration
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, movieDuration); // duration
+    } else {
+      _writeU32be(buf, movieDuration); // duration
+    }
     _writeU32be(buf, 0x00010000); // rate (1.0 fixed-point)
     _writeU16be(buf, 0x0100); // volume (1.0)
     _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // reserved(10)
@@ -317,12 +336,24 @@ class AudioSeparationEngine {
 
     // tkhd
     _writeBoxHeader(buf, tkhdSize, 'tkhd');
-    _writeU32be(buf, 0x00000007); // version=0, flags=0x000007 (enabled)
-    _writeU32be(buf, 0); // creation_time
-    _writeU32be(buf, 0); // modification_time
+    _writeU32be(
+      buf,
+      (usesVersion1MovieHeaders ? 0x01000000 : 0) | 0x00000007,
+    ); // version + enabled flags
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, 0); // creation_time
+      _writeU64be(buf, 0); // modification_time
+    } else {
+      _writeU32be(buf, 0); // creation_time
+      _writeU32be(buf, 0); // modification_time
+    }
     _writeU32be(buf, 1); // track_id
     _writeU32be(buf, 0); // reserved
-    _writeU32be(buf, movieDuration); // duration
+    if (usesVersion1MovieHeaders) {
+      _writeU64be(buf, movieDuration); // duration
+    } else {
+      _writeU32be(buf, movieDuration); // duration
+    }
     _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
     _writeU16be(buf, 0); // layer
     _writeU16be(buf, 0); // alternate_group
@@ -338,11 +369,19 @@ class AudioSeparationEngine {
     if (outputEditList != null) {
       _writeBoxHeader(buf, edtsSize, 'edts');
       _writeBoxHeader(buf, elstSize, 'elst');
-      _writeU32be(buf, 0); // version=0, flags=0
+      _writeU32be(
+        buf,
+        usesVersion1EditList ? 0x01000000 : 0,
+      ); // version + flags
       _writeU32be(buf, outputEditList.length);
       for (final entry in outputEditList) {
-        _writeU32be(buf, entry.segmentDuration);
-        _writeU32be(buf, entry.mediaTime);
+        if (usesVersion1EditList) {
+          _writeU64be(buf, entry.segmentDuration);
+          _writeU64be(buf, entry.mediaTime);
+        } else {
+          _writeU32be(buf, entry.segmentDuration);
+          _writeU32be(buf, entry.mediaTime);
+        }
         _writeU16be(buf, entry.mediaRateInteger);
         _writeU16be(buf, entry.mediaRateFraction);
       }
@@ -551,6 +590,12 @@ class AudioSeparationEngine {
     buf.addByte((v >> 16) & 0xFF);
     buf.addByte((v >> 8) & 0xFF);
     buf.addByte(v & 0xFF);
+  }
+
+  /// Write a 64-bit big-endian integer.
+  static void _writeU64be(BytesBuilder buf, int v) {
+    _writeU32be(buf, (v >> 32) & 0xFFFFFFFF);
+    _writeU32be(buf, v & 0xFFFFFFFF);
   }
 
   /// Write a 16-bit big-endian integer.

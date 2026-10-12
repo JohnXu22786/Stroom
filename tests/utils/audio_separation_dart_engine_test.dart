@@ -31,6 +31,9 @@ int _readUint32BE(Uint8List data, int offset) {
       data[offset + 3];
 }
 
+int _readUint64BE(Uint8List data, int offset) =>
+    _readUint32BE(data, offset) * 0x100000000 + _readUint32BE(data, offset + 4);
+
 Uint8List _buildBox(String type, List<int> body) {
   final bytes = BytesBuilder();
   bytes.add(_buildBoxHeader(body.length + 8, type));
@@ -648,6 +651,14 @@ void main() {
       final movieDuration = edits == null
           ? mediaDuration
           : edits.fold<int>(0, (duration, edit) => duration + edit.$1);
+      final hasWideMovieDuration = movieDuration > 0xFFFFFFFF;
+      final hasWideEditList = edits?.any((edit) {
+            final (segmentDuration, mediaTime) = edit;
+            return segmentDuration > 0xFFFFFFFF ||
+                mediaTime < -0x80000000 ||
+                mediaTime > 0x7FFFFFFF;
+          }) ??
+          false;
 
       Uint8List descriptor(int tag, List<int> body) {
         var remaining = body.length;
@@ -823,11 +834,14 @@ void main() {
             ..._i32be(value),
         ];
         final mvhd = _buildBox('mvhd', [
-          0, 0, 0, 0, // version + flags
-          ..._u32be(0), // creation time
-          ..._u32be(0), // modification time
+          hasWideMovieDuration ? 1 : 0, 0, 0, 0, // version + flags
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
           ..._u32be(sampleRate), // movie timescale
-          ..._u32be(movieDuration),
+          if (hasWideMovieDuration)
+            ..._u64be(movieDuration)
+          else
+            ..._u32be(movieDuration),
           ..._u32be(0x00010000), // rate
           ..._u16be(0x0100), // volume
           ..._u16be(0), // reserved
@@ -838,12 +852,15 @@ void main() {
           ..._u32be(2), // next track ID
         ]);
         final tkhd = _buildBox('tkhd', [
-          0, 0, 0, 7, // version + flags
-          ..._u32be(0), // creation time
-          ..._u32be(0), // modification time
+          hasWideMovieDuration ? 1 : 0, 0, 0, 7, // version + flags
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
+          if (hasWideMovieDuration) ..._u64be(0) else ..._u32be(0),
           ..._u32be(1), // track ID
           ..._u32be(0), // reserved
-          ..._u32be(movieDuration),
+          if (hasWideMovieDuration)
+            ..._u64be(movieDuration)
+          else
+            ..._u32be(movieDuration),
           ..._u64be(0), // reserved
           ..._u16be(0), // layer
           ..._u16be(0), // alternate group
@@ -858,11 +875,17 @@ void main() {
             : _buildBox(
                 'edts',
                 _buildBox('elst', [
-                  0, 0, 0, 0, // version + flags
+                  hasWideEditList ? 1 : 0, 0, 0, 0, // version + flags
                   ..._u32be(edits.length), // entry count
                   for (final (segmentDuration, mediaTime) in edits) ...[
-                    ..._u32be(segmentDuration),
-                    ..._i32be(mediaTime),
+                    if (hasWideEditList)
+                      ..._u64be(segmentDuration)
+                    else
+                      ..._u32be(segmentDuration),
+                    if (hasWideEditList)
+                      ..._u64be(mediaTime)
+                    else
+                      ..._i32be(mediaTime),
                     ..._u16be(editListMediaRateInteger),
                     ..._u16be(editListMediaRateFraction),
                   ],
@@ -1049,6 +1072,57 @@ void main() {
         audioDataFromMp4(result),
         Uint8List.fromList([...sourceFrames[0], ...sourceFrames[2]]),
       );
+    });
+
+    test('preserves long empty AAC edit durations', () async {
+      const emptyDuration = 0x100000000;
+      final sourceFrame = Uint8List.fromList([0x11, 0x22, 0x33]);
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: [sourceFrame],
+        editListEntries: [
+          (emptyDuration, -1),
+          (1024, 0),
+        ],
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final elstTypeOffset = _findFourCc(result, 'elst');
+      expect(_readUint32BE(result, elstTypeOffset + 4), 0x01000000);
+      expect(_readUint64BE(result, elstTypeOffset + 12), emptyDuration);
+      expect(_readUint32BE(result, elstTypeOffset + 20), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 24), 0xFFFFFFFF);
+      expect(_readUint64BE(result, elstTypeOffset + 32), 1024);
+      expect(_readUint64BE(result, elstTypeOffset + 40), 0);
+
+      final expectedMovieDuration = emptyDuration + 1024;
+      final mvhdTypeOffset = _findFourCc(result, 'mvhd');
+      expect(_readUint32BE(result, mvhdTypeOffset + 4), 0x01000000);
+      expect(_readUint64BE(result, mvhdTypeOffset + 28), expectedMovieDuration);
+      final tkhdTypeOffset = _findFourCc(result, 'tkhd');
+      expect(_readUint32BE(result, tkhdTypeOffset - 4), 104);
+      expect(_readUint32BE(result, tkhdTypeOffset + 4), 0x01000007);
+      expect(_readUint64BE(result, tkhdTypeOffset + 32), expectedMovieDuration);
+      final mdhdTypeOffset = _findFourCc(result, 'mdhd');
+      expect(_readUint32BE(result, mdhdTypeOffset + 4), 0);
+      expect(_readUint32BE(result, mdhdTypeOffset + 20), 1024);
+
+      final moovStart = _readUint32BE(result, 0);
+      final moovSize = _readUint32BE(result, moovStart);
+      final declaredMdatStart = moovStart + moovSize;
+      final actualMdatStart = _findFourCc(result, 'mdat') - 4;
+      expect(declaredMdatStart, actualMdatStart);
+      final stcoTypeOffset = _findFourCc(result, 'stco');
+      expect(
+        _readUint32BE(result, stcoTypeOffset + 12),
+        actualMdatStart + 8,
+      );
+      expect(audioDataFromMp4(result), sourceFrame);
     });
 
     test(
