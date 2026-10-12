@@ -623,6 +623,7 @@ void main() {
       List<Uint8List>? sourceFrames,
       int? editListMediaTime,
       int? editListSegmentDuration,
+      List<(int, int)>? editListEntries,
       int editListMediaRateInteger = 1,
       int editListMediaRateFraction = 0,
     }) {
@@ -636,8 +637,17 @@ void main() {
           'An edit list needs both a media time and duration.',
         );
       }
+      if (editListEntries != null && editListMediaTime != null) {
+        throw ArgumentError('Specify either edit-list form, not both.');
+      }
+      final edits = editListEntries ??
+          (editListMediaTime == null
+              ? null
+              : [(editListSegmentDuration!, editListMediaTime)]);
       final mediaDuration = audioFrames.length * samplesPerFrame;
-      final movieDuration = editListSegmentDuration ?? mediaDuration;
+      final movieDuration = edits == null
+          ? mediaDuration
+          : edits.fold<int>(0, (duration, edit) => duration + edit.$1);
 
       Uint8List descriptor(int tag, List<int> body) {
         var remaining = body.length;
@@ -843,17 +853,19 @@ void main() {
           ..._u32be(0), // width
           ..._u32be(0), // height
         ]);
-        final edts = editListMediaTime == null
+        final edts = edits == null
             ? <int>[]
             : _buildBox(
                 'edts',
                 _buildBox('elst', [
                   0, 0, 0, 0, // version + flags
-                  ..._u32be(1), // entry count
-                  ..._u32be(editListSegmentDuration!),
-                  ..._i32be(editListMediaTime),
-                  ..._u16be(editListMediaRateInteger),
-                  ..._u16be(editListMediaRateFraction),
+                  ..._u32be(edits.length), // entry count
+                  for (final (segmentDuration, mediaTime) in edits) ...[
+                    ..._u32be(segmentDuration),
+                    ..._i32be(mediaTime),
+                    ..._u16be(editListMediaRateInteger),
+                    ..._u16be(editListMediaRateFraction),
+                  ],
                 ]),
               );
         final trak = _buildBox('trak', [...tkhd, ...edts, ...mdia]);
@@ -991,6 +1003,52 @@ void main() {
       );
 
       expect(audioDataFromMp4(result), sourceFrames[1]);
+    });
+
+    test('preserves empty AAC edit durations around media edits', () async {
+      final sourceFrames = [
+        Uint8List.fromList([0x11, 0x22, 0x33]),
+        Uint8List.fromList([0x44, 0x55, 0x66]), // excluded by the edit list
+        Uint8List.fromList([0x77, 0x88, 0x99]),
+      ];
+      final mp4Bytes = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+        sourceFrames: sourceFrames,
+        editListEntries: [
+          (512, -1), // leading silence
+          (1024, 0),
+          (512, -1), // intervening silence
+          (1024, 2048),
+        ],
+      );
+
+      final result = await engine.extractAudio(
+        videoBytes: mp4Bytes,
+        videoFormat: 'mp4',
+      );
+
+      final elstTypeOffset = _findFourCc(result, 'elst');
+      expect(elstTypeOffset, greaterThanOrEqualTo(0));
+      expect(_readUint32BE(result, elstTypeOffset + 8), 4);
+      expect(_readUint32BE(result, elstTypeOffset + 12), 512);
+      expect(_readUint32BE(result, elstTypeOffset + 16), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 24), 1024);
+      expect(_readUint32BE(result, elstTypeOffset + 28), 0);
+      expect(_readUint32BE(result, elstTypeOffset + 36), 512);
+      expect(_readUint32BE(result, elstTypeOffset + 40), 0xFFFFFFFF);
+      expect(_readUint32BE(result, elstTypeOffset + 48), 1024);
+      expect(_readUint32BE(result, elstTypeOffset + 52), 1024);
+      final mvhdTypeOffset = _findFourCc(result, 'mvhd');
+      expect(_readUint32BE(result, mvhdTypeOffset + 20), 3072);
+      final tkhdTypeOffset = _findFourCc(result, 'tkhd');
+      expect(_readUint32BE(result, tkhdTypeOffset + 24), 3072);
+      final mdhdTypeOffset = _findFourCc(result, 'mdhd');
+      expect(_readUint32BE(result, mdhdTypeOffset + 20), 2048);
+      expect(
+        audioDataFromMp4(result),
+        Uint8List.fromList([...sourceFrames[0], ...sourceFrames[2]]),
+      );
     });
 
     test(

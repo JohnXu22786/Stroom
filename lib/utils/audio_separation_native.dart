@@ -225,6 +225,16 @@ class AudioSeparationEngine {
     // ---------- Pre-compute box sizes ----------
     final samplesPerFrame = _samplesPerAacFrame(asc, sampleRate);
     final duration = sampleCount * samplesPerFrame;
+    final outputEditList = track.outputEditList;
+    final movieTimescale = outputEditList == null
+        ? sampleRate
+        : track.movieTimescale;
+    final movieDuration = outputEditList == null
+        ? duration
+        : outputEditList.fold<int>(
+            0,
+            (total, entry) => total + entry.segmentDuration,
+          );
 
     // stsd entry size: mp4a base (36 for v0, 52 for v1), optional srat box,
     // and esds box.
@@ -250,7 +260,11 @@ class AudioSeparationEngine {
     final mdiaSize = 8 + mdhdSize + hdlrSize + minfSize;
 
     const tkhdSize = 92;
-    final trakSize = 8 + tkhdSize + mdiaSize;
+    final elstSize = outputEditList == null
+        ? 0
+        : 16 + outputEditList.length * 12;
+    final edtsSize = outputEditList == null ? 0 : 8 + elstSize;
+    final trakSize = 8 + tkhdSize + edtsSize + mdiaSize;
 
     const mvhdSize = 108;
     final moovSize = 8 + mvhdSize + trakSize;
@@ -283,8 +297,8 @@ class AudioSeparationEngine {
     _writeU32be(buf, 0); // version=0, flags=0
     _writeU32be(buf, 0); // creation_time
     _writeU32be(buf, 0); // modification_time
-    _writeU32be(buf, sampleRate); // timescale
-    _writeU32be(buf, duration); // duration
+    _writeU32be(buf, movieTimescale); // timescale
+    _writeU32be(buf, movieDuration); // duration
     _writeU32be(buf, 0x00010000); // rate (1.0 fixed-point)
     _writeU16be(buf, 0x0100); // volume (1.0)
     _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // reserved(10)
@@ -308,7 +322,7 @@ class AudioSeparationEngine {
     _writeU32be(buf, 0); // modification_time
     _writeU32be(buf, 1); // track_id
     _writeU32be(buf, 0); // reserved
-    _writeU32be(buf, duration); // duration
+    _writeU32be(buf, movieDuration); // duration
     _writeBytes(buf, [0, 0, 0, 0, 0, 0, 0, 0]); // reserved(8)
     _writeU16be(buf, 0); // layer
     _writeU16be(buf, 0); // alternate_group
@@ -320,6 +334,19 @@ class AudioSeparationEngine {
     }
     _writeU32be(buf, 0); // width
     _writeU32be(buf, 0); // height
+
+    if (outputEditList != null) {
+      _writeBoxHeader(buf, edtsSize, 'edts');
+      _writeBoxHeader(buf, elstSize, 'elst');
+      _writeU32be(buf, 0); // version=0, flags=0
+      _writeU32be(buf, outputEditList.length);
+      for (final entry in outputEditList) {
+        _writeU32be(buf, entry.segmentDuration);
+        _writeU32be(buf, entry.mediaTime);
+        _writeU16be(buf, entry.mediaRateInteger);
+        _writeU16be(buf, entry.mediaRateFraction);
+      }
+    }
 
     // mdia
     _writeBoxHeader(buf, mdiaSize, 'mdia');
@@ -645,6 +672,8 @@ class _AudioTrackInfo {
       chunkOffsets; // absolute file offset of each chunk (from stco/co64)
   final List<int> sampleToChunkMap; // samples per chunk for each chunk index
   final Set<int>? includedSampleIndices;
+  final List<_EditListEntry>? outputEditList;
+  final int movieTimescale;
 
   _AudioTrackInfo({
     required this.trackId,
@@ -658,6 +687,8 @@ class _AudioTrackInfo {
     required this.chunkOffsets,
     required this.sampleToChunkMap,
     required this.includedSampleIndices,
+    required this.outputEditList,
+    required this.movieTimescale,
   });
 }
 
@@ -677,6 +708,13 @@ class _EditListEntry {
     required this.mediaRateInteger,
     required this.mediaRateFraction,
   });
+}
+
+class _EditListSelection {
+  final Set<int> sampleIndices;
+  final List<_EditListEntry>? outputEditList;
+
+  const _EditListSelection(this.sampleIndices, this.outputEditList);
 }
 
 class _AudioSampleDescription {
@@ -1095,12 +1133,14 @@ class _Mp4Demuxer {
     channels = selectedDescription.channels;
     bitsPerSample = selectedDescription.bitsPerSample;
     audioSpecificConfig = selectedDescription.audioSpecificConfig;
-    final includedSampleIndices = codec == 'mp4a'
-        ? _sampleIndicesForEditList(
+    final editListSelection = codec == 'mp4a'
+        ? _selectSamplesForEditList(
             editListEntries,
             sampleTimingEntries,
             sampleSizes.length,
             mediaTimescale,
+            sampleRate,
+            audioSpecificConfig,
           )
         : null;
 
@@ -1115,7 +1155,9 @@ class _Mp4Demuxer {
       sampleSizes: sampleSizes,
       chunkOffsets: chunkOffsets,
       sampleToChunkMap: sampleToChunk,
-      includedSampleIndices: includedSampleIndices,
+      includedSampleIndices: editListSelection?.sampleIndices,
+      outputEditList: editListSelection?.outputEditList,
+      movieTimescale: _movieTimescale ?? sampleRate,
     );
   }
 
@@ -1186,26 +1228,32 @@ class _Mp4Demuxer {
     return entryOffset == boxEnd ? entries : null;
   }
 
-  Set<int>? _sampleIndicesForEditList(
+  _EditListSelection? _selectSamplesForEditList(
     List<_EditListEntry>? entries,
     List<_SttsEntry> sampleTimingEntries,
     int sampleCount,
     int mediaTimescale,
+    int sampleRate,
+    Uint8List? audioSpecificConfig,
   ) {
     if (entries == null) return null;
-    if (entries.isEmpty) return <int>{};
+    if (entries.isEmpty) return const _EditListSelection(<int>{}, null);
     final movieTimescale = _movieTimescale;
     if (movieTimescale == null || movieTimescale <= 0 || mediaTimescale <= 0) {
-      return <int>{};
+      return const _EditListSelection(<int>{}, null);
     }
+    final hasEmptyEdit = entries.any((entry) => entry.mediaTime == -1);
 
-    final mediaRanges = <(int, int)>[];
+    final mediaRanges = <(int, int)?>[];
     for (final entry in entries) {
-      if (entry.mediaTime == -1 || entry.segmentDuration == 0) continue;
+      if (entry.mediaTime == -1 || entry.segmentDuration == 0) {
+        mediaRanges.add(null);
+        continue;
+      }
       final mediaRate =
           entry.mediaRateInteger * 0x10000 + entry.mediaRateFraction;
       if (entry.mediaTime < 0 || mediaRate <= 0) {
-        return <int>{};
+        return const _EditListSelection(<int>{}, null);
       }
       final mediaDuration =
           (entry.segmentDuration * mediaTimescale * mediaRate +
@@ -1216,12 +1264,24 @@ class _Mp4Demuxer {
     }
 
     final includedSampleIndices = <int>{};
+    final firstSampleIndexByEdit = List<int?>.filled(entries.length, null);
     var sampleIndex = 0;
     var mediaTime = 0;
     for (final (count, duration) in sampleTimingEntries) {
       for (var i = 0; i < count && sampleIndex < sampleCount; i++) {
-        if (mediaRanges.any(
-          (range) => mediaTime >= range.$1 && mediaTime < range.$2,
+        if (hasEmptyEdit) {
+          for (var editIndex = 0; editIndex < mediaRanges.length; editIndex++) {
+            final range = mediaRanges[editIndex];
+            if (range != null &&
+                mediaTime >= range.$1 &&
+                mediaTime < range.$2) {
+              includedSampleIndices.add(sampleIndex);
+              firstSampleIndexByEdit[editIndex] ??= sampleIndex;
+            }
+          }
+        } else if (mediaRanges.any(
+          (range) =>
+              range != null && mediaTime >= range.$1 && mediaTime < range.$2,
         )) {
           includedSampleIndices.add(sampleIndex);
         }
@@ -1229,7 +1289,55 @@ class _Mp4Demuxer {
         sampleIndex++;
       }
     }
-    return includedSampleIndices;
+
+    if (!hasEmptyEdit) {
+      return _EditListSelection(includedSampleIndices, null);
+    }
+
+    final samplesPerFrame = audioSpecificConfig == null
+        ? 1024
+        : _samplesPerAacFrame(audioSpecificConfig, sampleRate);
+    final outputMediaTimes = <int, int>{};
+    final selectedSampleIndices = includedSampleIndices.toList()..sort();
+    for (var outputIndex = 0;
+        outputIndex < selectedSampleIndices.length;
+        outputIndex++) {
+      outputMediaTimes[selectedSampleIndices[outputIndex]] =
+          outputIndex * samplesPerFrame;
+    }
+
+    final outputEditList = <_EditListEntry>[];
+    for (var editIndex = 0; editIndex < entries.length; editIndex++) {
+      final entry = entries[editIndex];
+      if (entry.segmentDuration == 0) continue;
+      if (entry.mediaTime == -1) {
+        outputEditList.add(_EditListEntry(
+          segmentDuration: entry.segmentDuration,
+          mediaTime: -1,
+          mediaRateInteger: 1,
+          mediaRateFraction: 0,
+        ));
+        continue;
+      }
+
+      final firstSampleIndex = firstSampleIndexByEdit[editIndex];
+      if (firstSampleIndex == null) {
+        outputEditList.add(_EditListEntry(
+          segmentDuration: entry.segmentDuration,
+          mediaTime: -1,
+          mediaRateInteger: 1,
+          mediaRateFraction: 0,
+        ));
+        continue;
+      }
+      outputEditList.add(_EditListEntry(
+        segmentDuration: entry.segmentDuration,
+        mediaTime: outputMediaTimes[firstSampleIndex]!,
+        mediaRateInteger: entry.mediaRateInteger,
+        mediaRateFraction: entry.mediaRateFraction,
+      ));
+    }
+    return _EditListSelection(includedSampleIndices, outputEditList);
   }
 
   _Mp4aDecoderConfig? _readMp4aDecoderConfig(
