@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 
 void main() {
@@ -47,6 +48,28 @@ void main() {
       expect(restored.configId, 'config-stable-2');
       expect(restored.modelId, 'model-stable-7');
       expect(restored.images.every((image) => image.bytes == null), isTrue);
+    });
+
+    test('round-trips batch mode, concurrency, and request budget', () {
+      const reference =
+          'ocr_retry_cache/0000000000000000000000000000000000000000000000000000000000000000.bin';
+      final snapshot = OcrRetrySnapshot.capture(
+        configId: 'config-1',
+        modelId: 'model-1',
+        images: const [
+          OcrRetryImage.reference(storageRef: reference, format: 'png'),
+        ],
+        batchMode: OcrBatchMode.perImage,
+        perImageConcurrency: 2,
+        requestSizeBudgetBytes: 7 * 1024 * 1024,
+      );
+
+      final restored = OcrRetrySnapshot.fromMap(snapshot.toMap());
+
+      expect(restored.batchMode, OcrBatchMode.perImage);
+      expect(restored.perImageConcurrency, 2);
+      expect(restored.requestSizeBudgetBytes, 7 * 1024 * 1024);
+      expect(restored.needsMigration, isFalse);
     });
 
     test('current snapshots with unknown fields require migration', () {

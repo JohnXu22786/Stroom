@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../models/ocr_batch_execution.dart';
+
 /// One source image captured for a standalone OCR retry.
 ///
 /// New snapshots keep a storage reference. [bytes] is populated only while
@@ -110,12 +112,11 @@ class OcrRetryImage {
 
 /// Versioned, OCR-only retry inputs.
 ///
-/// Version 2 stores image references, never image bodies or provider
-/// credentials. Version 1 and unversioned snapshots remain readable so
-/// existing retry tasks can be opened and migrated after their images have
-/// been copied to app storage.
+/// Version 3 retains batch execution settings. Image references, never image
+/// bodies or provider credentials, are stored from version 2 onward. Version 1
+/// and unversioned snapshots remain readable for migration.
 class OcrRetrySnapshot {
-  static const currentVersion = 2;
+  static const currentVersion = 3;
   static const _snapshotFields = {
     'type',
     'version',
@@ -125,6 +126,9 @@ class OcrRetrySnapshot {
     'instructionContent',
     'instructionIndex',
     'saveFolder',
+    'batchMode',
+    'perImageConcurrency',
+    'requestSizeBudgetBytes',
   };
   static const _modelRefFields = {'configId', 'modelId'};
   static const _imageFields = {'storageRef', 'format', 'name', 'bytes'};
@@ -136,6 +140,9 @@ class OcrRetrySnapshot {
   final int? legacyInstructionIndex;
   final String? instructionContent;
   final String saveFolder;
+  final OcrBatchMode batchMode;
+  final int perImageConcurrency;
+  final int requestSizeBudgetBytes;
   final List<OcrRetryImage> images;
   final List<int> imageEntryIndices;
   final bool isLegacy;
@@ -153,6 +160,9 @@ class OcrRetrySnapshot {
     required this.legacyInstructionIndex,
     required this.instructionContent,
     required this.saveFolder,
+    required this.batchMode,
+    required this.perImageConcurrency,
+    required this.requestSizeBudgetBytes,
     required this.images,
     required this.imageEntryIndices,
     required this.isLegacy,
@@ -169,6 +179,9 @@ class OcrRetrySnapshot {
     required List<OcrRetryImage> images,
     String? instructionContent,
     String saveFolder = '',
+    OcrBatchMode batchMode = OcrBatchMode.joint,
+    int perImageConcurrency = 1,
+    int requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
     int? legacyModelIndex,
     int? legacyInstructionIndex,
   }) =>
@@ -180,6 +193,11 @@ class OcrRetrySnapshot {
         legacyInstructionIndex: legacyInstructionIndex,
         instructionContent: instructionContent,
         saveFolder: saveFolder,
+        batchMode: batchMode,
+        perImageConcurrency: perImageConcurrency.clamp(1, 2).toInt(),
+        requestSizeBudgetBytes: requestSizeBudgetBytes > 0
+            ? requestSizeBudgetBytes
+            : defaultOcrRequestSizeBudgetBytes,
         images: List.unmodifiable(images),
         imageEntryIndices: List.unmodifiable(
           List<int>.generate(images.length, (index) => index),
@@ -218,6 +236,43 @@ class OcrRetrySnapshot {
         (map.containsKey('saveFolder') &&
             map['saveFolder'] != null &&
             map['saveFolder'] is! String)) {
+      hasUnknownFields = true;
+    }
+    final rawBatchMode = map['batchMode'];
+    final batchMode = switch (rawBatchMode) {
+      'perImage' => OcrBatchMode.perImage,
+      'joint' || null => OcrBatchMode.joint,
+      _ => OcrBatchMode.joint,
+    };
+    if (rawBatchMode != null &&
+        rawBatchMode != OcrBatchMode.joint.name &&
+        rawBatchMode != OcrBatchMode.perImage.name) {
+      hasUnknownFields = true;
+    }
+    final rawPerImageConcurrency = map['perImageConcurrency'];
+    final perImageConcurrency =
+        rawPerImageConcurrency is int && rawPerImageConcurrency >= 1
+            ? rawPerImageConcurrency.clamp(1, 2).toInt()
+            : 1;
+    if (rawPerImageConcurrency != null &&
+        (rawPerImageConcurrency is! int ||
+            rawPerImageConcurrency < 1 ||
+            rawPerImageConcurrency > 2)) {
+      hasUnknownFields = true;
+    }
+    final rawRequestSizeBudgetBytes = map['requestSizeBudgetBytes'];
+    final requestSizeBudgetBytes =
+        rawRequestSizeBudgetBytes is int && rawRequestSizeBudgetBytes > 0
+            ? rawRequestSizeBudgetBytes
+            : defaultOcrRequestSizeBudgetBytes;
+    if (rawRequestSizeBudgetBytes != null &&
+        (rawRequestSizeBudgetBytes is! int || rawRequestSizeBudgetBytes <= 0)) {
+      hasUnknownFields = true;
+    }
+    if (version == currentVersion &&
+        (!map.containsKey('batchMode') ||
+            !map.containsKey('perImageConcurrency') ||
+            !map.containsKey('requestSizeBudgetBytes'))) {
       hasUnknownFields = true;
     }
     if (rawModelRef is Map) {
@@ -265,7 +320,8 @@ class OcrRetrySnapshot {
       hasInvalidImages = true;
     }
 
-    final supportedVersion = isLegacy || version == 1 || version == 2;
+    final supportedVersion =
+        isLegacy || version == 1 || version == 2 || version == 3;
     if (!supportedVersion) hasInvalidImages = true;
     final hasStableModelRef = configId != null && modelId != null;
 
@@ -285,6 +341,9 @@ class OcrRetrySnapshot {
           : null,
       saveFolder:
           map['saveFolder'] is String ? map['saveFolder'] as String : '',
+      batchMode: batchMode,
+      perImageConcurrency: perImageConcurrency,
+      requestSizeBudgetBytes: requestSizeBudgetBytes,
       images: List.unmodifiable(images),
       imageEntryIndices: List.unmodifiable(imageEntryIndices),
       isLegacy: isLegacy,
@@ -323,6 +382,9 @@ class OcrRetrySnapshot {
       if (legacyInstructionIndex != null)
         'instructionIndex': legacyInstructionIndex,
       'saveFolder': saveFolder,
+      'batchMode': batchMode.name,
+      'perImageConcurrency': perImageConcurrency,
+      'requestSizeBudgetBytes': requestSizeBudgetBytes,
     };
   }
 

@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 
+import '../models/ocr_batch_execution.dart';
 import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/web_file_store.dart';
@@ -126,6 +127,9 @@ class OcrRetryStorage {
           ],
           instructionContent: snapshot.instructionContent,
           saveFolder: snapshot.saveFolder,
+          batchMode: snapshot.batchMode,
+          perImageConcurrency: snapshot.perImageConcurrency,
+          requestSizeBudgetBytes: snapshot.requestSizeBudgetBytes,
           legacyModelIndex: snapshot.legacyModelIndex,
           legacyInstructionIndex: snapshot.legacyInstructionIndex,
         ).toMap();
@@ -156,6 +160,7 @@ class OcrRetryStorage {
   }) {
     final supportedVersion = snapshot.isLegacy ||
         snapshot.version == 1 ||
+        snapshot.version == 2 ||
         snapshot.version == OcrRetrySnapshot.currentVersion;
     return _unavailableSnapshot(
       taskId: taskId,
@@ -170,6 +175,9 @@ class OcrRetryStorage {
       modelId: snapshot.modelId,
       instructionContent: snapshot.instructionContent,
       saveFolder: snapshot.saveFolder,
+      batchMode: snapshot.batchMode,
+      perImageConcurrency: snapshot.perImageConcurrency,
+      requestSizeBudgetBytes: snapshot.requestSizeBudgetBytes,
       legacyModelIndex: snapshot.legacyModelIndex,
       legacyInstructionIndex: snapshot.legacyInstructionIndex,
     );
@@ -198,6 +206,9 @@ class OcrRetryStorage {
     String? modelId,
     String? instructionContent,
     String saveFolder = '',
+    OcrBatchMode batchMode = OcrBatchMode.joint,
+    int perImageConcurrency = 1,
+    int requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
     int? legacyModelIndex,
     int? legacyInstructionIndex,
   }) {
@@ -224,6 +235,9 @@ class OcrRetryStorage {
       images: images,
       instructionContent: instructionContent,
       saveFolder: saveFolder,
+      batchMode: batchMode,
+      perImageConcurrency: perImageConcurrency,
+      requestSizeBudgetBytes: requestSizeBudgetBytes,
       legacyModelIndex: legacyModelIndex,
       legacyInstructionIndex: legacyInstructionIndex,
     ).toMap();

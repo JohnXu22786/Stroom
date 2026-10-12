@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
+import '../models/ocr_batch_execution.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/ios_continued_task_service.dart';
@@ -281,9 +282,7 @@ String? _legacyOcrModelId(Map<String, dynamic>? rawRequest) {
   return value;
 }
 
-Iterable<String> _legacyOcrCredentialValues(
-  Map<String, dynamic>? rawRequest,
-) =>
+Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
 
 bool _legacyOcrTextContainsCredential(
@@ -409,6 +408,17 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
             ));
 }
 
+List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
+  if (rawOutcomes is! List) return const [];
+  final outcomes = <OcrPageOutcome>[];
+  for (final rawOutcome in rawOutcomes) {
+    final outcome = OcrPageOutcome.fromMap(rawOutcome);
+    if (outcome != null) outcomes.add(outcome);
+  }
+  outcomes.sort((a, b) => a.imageIndex.compareTo(b.imageIndex));
+  return List.unmodifiable(outcomes);
+}
+
 /// A task model for OCR, ASR, and Audio Separation operations.
 /// Uses a step chain (like CatCatch downloads) to show execution progress
 /// without quantifying with percentages. Steps are task-type-specific.
@@ -437,6 +447,7 @@ class BackgroundTask {
   final List<String> _ocrDiagnosticCredentialValues;
   final Map<String, dynamic>?
       retryData; // Retry data to pre-populate form when retrying
+  final List<OcrPageOutcome> ocrPageOutcomes;
 
   BackgroundTask({
     required this.id,
@@ -457,6 +468,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     this.retryData,
+    List<OcrPageOutcome> ocrPageOutcomes = const [],
     Iterable<String> ocrDiagnosticCredentialValues = const [],
   })  : error = type == BackgroundTaskType.ocr
             ? _sanitizeOcrTaskError(
@@ -499,6 +511,22 @@ class BackgroundTask {
                 additionalCredentialValues: ocrDiagnosticCredentialValues,
               )
             : rawResponse,
+        ocrPageOutcomes = type == BackgroundTaskType.ocr
+            ? List.unmodifiable(
+                ocrPageOutcomes.map(
+                  (outcome) => OcrPageOutcome(
+                    imageIndex: outcome.imageIndex,
+                    status: outcome.status,
+                    text: outcome.text,
+                    error: _sanitizeOcrTaskError(
+                      outcome.error,
+                      rawRequest,
+                      additionalCredentialValues: ocrDiagnosticCredentialValues,
+                    ),
+                  ),
+                ),
+              )
+            : const [],
         createdAt = createdAt ?? DateTime.now();
 
   BackgroundTask copyWith({
@@ -516,6 +544,7 @@ class BackgroundTask {
     Map<String, dynamic>? rawRequest,
     Map<String, dynamic>? rawResponse,
     Map<String, dynamic>? retryData,
+    List<OcrPageOutcome>? ocrPageOutcomes,
     bool clearError = false,
     bool clearCompletedAt = false,
     bool clearDownloadedFilePath = false,
@@ -548,6 +577,7 @@ class BackgroundTask {
           : (downloadedFilePath ?? this.downloadedFilePath),
       rawRequest: clearRawRequest ? null : (rawRequest ?? this.rawRequest),
       rawResponse: clearRawResponse ? null : (rawResponse ?? this.rawResponse),
+      ocrPageOutcomes: ocrPageOutcomes ?? this.ocrPageOutcomes,
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
@@ -573,6 +603,9 @@ class BackgroundTask {
         if (rawRequest != null) 'rawRequest': rawRequest,
         if (rawResponse != null) 'rawResponse': rawResponse,
         if (retryData != null) 'retryData': retryData,
+        if (ocrPageOutcomes.isNotEmpty)
+          'ocrPageOutcomes':
+              ocrPageOutcomes.map((outcome) => outcome.toMap()).toList(),
       };
 
   factory BackgroundTask.fromMap(Map<String, dynamic> map) => BackgroundTask(
@@ -596,8 +629,9 @@ class BackgroundTask {
             : null,
         steps: (map['steps'] as List?)
                 ?.map(
-                  (s) =>
-                      BgTaskStep.fromMap(Map<String, dynamic>.from(s as Map)),
+                  (s) => BgTaskStep.fromMap(
+                    Map<String, dynamic>.from(s as Map),
+                  ),
                 )
                 .toList() ??
             [],
@@ -605,6 +639,9 @@ class BackgroundTask {
         rawRequest: map['rawRequest'] as Map<String, dynamic>?,
         rawResponse: map['rawResponse'] as Map<String, dynamic>?,
         retryData: _retryDataFromTaskMap(map),
+        ocrPageOutcomes: _ocrPageOutcomesFromTaskMap(
+          map['ocrPageOutcomes'],
+        ),
       );
 }
 
@@ -796,6 +833,20 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         error: t.error,
       );
     }).toList();
+    _persistTasks();
+  }
+
+  /// Persist ordered per-image status so task cards and retries keep context.
+  void setOcrPageOutcomes(String taskId, List<OcrPageOutcome> outcomes) {
+    final ordered = outcomes.toList()
+      ..sort((a, b) => a.imageIndex.compareTo(b.imageIndex));
+    state = state
+        .map(
+          (task) => task.id == taskId
+              ? task.copyWith(ocrPageOutcomes: List.unmodifiable(ordered))
+              : task,
+        )
+        .toList();
     _persistTasks();
   }
 
@@ -1409,9 +1460,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     };
   }
 
-  Set<String> _referencesFromSkippedTaskEntries([
-    Iterable<dynamic>? entries,
-  ]) {
+  Set<String> _referencesFromSkippedTaskEntries([Iterable<dynamic>? entries]) {
     final references = <String>{};
     for (final entry in entries ?? _skippedTaskEntries) {
       if (entry is! Map) continue;
@@ -1439,6 +1488,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         final retrySnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
         final canMigrateVersion = retrySnapshot.isLegacy ||
             retrySnapshot.version == 1 ||
+            retrySnapshot.version == 2 ||
             retrySnapshot.version == OcrRetrySnapshot.currentVersion;
         if (canMigrateVersion && retrySnapshot.needsMigration) return true;
       } catch (_) {
@@ -1471,6 +1521,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
       final canMigrateVersion = retrySnapshot.isLegacy ||
           retrySnapshot.version == 1 ||
+          retrySnapshot.version == 2 ||
           retrySnapshot.version == OcrRetrySnapshot.currentVersion;
       if (!canMigrateVersion) {
         prepared[index] = task.copyWith(
@@ -1671,6 +1722,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           parsedSnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
           final canMigrateVersion = parsedSnapshot.isLegacy ||
               parsedSnapshot.version == 1 ||
+              parsedSnapshot.version == 2 ||
               parsedSnapshot.version == OcrRetrySnapshot.currentVersion;
           if (parsedSnapshot.hasInvalidImages && !canMigrateVersion) {
             task = task.copyWith(
