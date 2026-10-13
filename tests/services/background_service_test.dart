@@ -1205,6 +1205,76 @@ void main() {
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
     });
 
+    test('rearmKeepAliveOnResume serializes watchdog rearm with explicit stop',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
+
+      final firstRearmStarted = Completer<void>();
+      final releaseFirstRearm = Completer<void>();
+      final resumeRearmStarted = Completer<void>();
+      final releaseResumeRearm = Completer<void>();
+      final stopKeepAliveStarted = Completer<void>();
+      var rearmCount = 0;
+      var watchdogArmed = false;
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'rearmKeepAlive') {
+            rearmCount++;
+            if (rearmCount == 1) {
+              firstRearmStarted.complete();
+              await releaseFirstRearm.future;
+            } else if (rearmCount == 2) {
+              resumeRearmStarted.complete();
+              await releaseResumeRearm.future;
+            }
+            watchdogArmed = true;
+          } else if (methodCall.method == 'stopKeepAlive') {
+            stopKeepAliveStarted.complete();
+            watchdogArmed = false;
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        final recovery = rearmBackgroundServiceWatchdog();
+        await firstRearmStarted.future;
+
+        final resume = rearmKeepAliveOnResume();
+        // Let the unlocked resume path pass its enabled-intent check and pause
+        // at the second rearm while the first operation still holds the lock.
+        await Future<void>.delayed(Duration.zero);
+        final stop = stopBackgroundService();
+        releaseFirstRearm.complete();
+
+        await resumeRearmStarted.future;
+        await Future<void>.delayed(Duration.zero);
+        final stopReachedNativeCancellation = stopKeepAliveStarted.isCompleted;
+        releaseResumeRearm.complete();
+        await Future.wait([recovery, resume, stop]);
+
+        expect(
+          watchdogArmed,
+          isFalse,
+          reason: 'a completed explicit stop must leave no watchdog alarm '
+              'armed',
+        );
+        expect(
+          stopReachedNativeCancellation,
+          isFalse,
+          reason: 'stop must wait until the resume rearm releases the '
+              'lifecycle lock',
+        );
+      });
+    });
+
     test('rearmKeepAliveOnResume proceeds when enabled preference read fails',
         () async {
       registerMockPlatform();
