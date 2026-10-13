@@ -649,6 +649,21 @@ Future<bool> _rearmKeepAlive() async {
   }
 }
 
+/// Re-arms the native watchdog without querying or starting the service.
+///
+/// Recovery is scheduled only while the user's persistent service intent is
+/// enabled. The intent check shares the lifecycle lock with explicit stops.
+/// Returns true when recovery is not needed or scheduling succeeds.
+Future<bool> rearmBackgroundServiceWatchdog() =>
+    _withServiceLifecycleLock(() async {
+      if (!await _isBackgroundServiceEnabled(
+        assumeEnabledOnReadError: true,
+      )) {
+        return true;
+      }
+      return _rearmKeepAlive();
+    });
+
 Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
