@@ -978,7 +978,7 @@ for (const [templateName, templateSource] of mouseGestureTargets) {
     const harness = createMouseGestureHarness(mouseGestureScript);
 
     harness.dispatch('mousedown', {clientX: 10, clientY: 20});
-    harness.dispatch('mousemove', {clientX: 11, clientY: 20});
+    harness.dispatch('mousemove', {clientX: 25, clientY: 40});
     harness.dispatch('mouseup');
     assert.equal(harness.timerCount, 1, 'pan suppression should be temporary');
 
@@ -991,6 +991,22 @@ for (const [templateName, templateSource] of mouseGestureTargets) {
     assert.equal(harness.mermaidTargetClicks, 1);
   });
 }
+
+test('web mouse click after slight pointer jitter reaches Mermaid', () => {
+  const harness = createMouseGestureHarness(
+    extractMouseGestureScript('web', webTemplateSource),
+  );
+
+  harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+  harness.dispatch('mousemove', {clientX: 11, clientY: 20});
+  harness.dispatch('mouseup');
+
+  assert.deepEqual(harness.dispatch('click'), {
+    defaultPrevented: false,
+    propagationStopped: false,
+  }, 'a click after slight pointer jitter must reach Mermaid');
+  assert.equal(harness.mermaidTargetClicks, 1);
+});
 
 test('web pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
   const harness = createTouchGestureHarness(extractTouchGestureScript());
