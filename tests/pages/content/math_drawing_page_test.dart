@@ -568,6 +568,7 @@ class _DelayedEditorController extends PlatformInAppWebViewController {
   void emit(Map<String, dynamic> message) {
     _handler?.call([message]);
   }
+
   @override
   Future<dynamic> evaluateJavascript(
       {required String source, ContentWorld? contentWorld}) async {
@@ -581,6 +582,7 @@ class _DelayedEditorController extends PlatformInAppWebViewController {
       required JavaScriptHandlerCallback callback}) {
     _handler = callback;
   }
+
   @override
   void dispose({bool isKeepAlive = false}) {}
 }

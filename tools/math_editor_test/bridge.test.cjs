@@ -139,19 +139,12 @@ test('legacy inverse trig names remain operators in plain and mixed source', asy
   } finally { dom.window.close(); }
 });
 
-test('post-render growth reports the formula and error-panel height', async () => {
+test('MathLive rendered growth does not publish a row height', async () => {
   const {dom, field, bridge} = await editor();
   try {
     bridge.setSource('x',1);
-    const messages = [];
-    dom.window.flutter_inappwebview = {callHandler: (_, payload) => messages.push(payload)};
-    const observer = dom.window.__resizeObservers.find(o => o.targets.has(field));
-    assert.ok(observer, 'The wrapper must observe the host after asynchronous math layout');
     field.getBoundingClientRect = () => ({height:140});
-    dom.window.document.getElementById('problem').getBoundingClientRect = () => ({height:12});
-    observer.callback([]);
-    assert.equal(messages.at(-1).height,152);
-    assert.equal(messages.at(-1).latex,'x');
+    assert.equal(Object.hasOwn(bridge.snapshot(),'height'),false);
   } finally { dom.window.close(); }
 });
 

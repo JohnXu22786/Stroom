@@ -387,8 +387,8 @@ class MathFormulaFieldState extends State<MathFormulaField>
                                   '暂不支持此语法，请切换源码',
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 11, color: cs.error),
+                                  style:
+                                      TextStyle(fontSize: 11, color: cs.error),
                                 ),
                               ),
                             ),
