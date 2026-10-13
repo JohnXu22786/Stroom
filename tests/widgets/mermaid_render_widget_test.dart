@@ -1687,6 +1687,81 @@ void main() {
     );
 
     testWidgets(
+      'web source updates keep queued zoom until current load completes',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->B',
+                showZoomControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final previousUrl = webView.controller.loadedUrls.last;
+        webView.params.onLoadStop?.call(controller, previousUrl);
+        await tester.pump();
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->C',
+                showZoomControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final currentUrl = webView.controller.loadedUrls.last;
+        expect(currentUrl, isNot(previousUrl));
+
+        final scriptCountBeforeQueuedZoom =
+            webView.controller.evaluatedScripts.length;
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          hasLength(scriptCountBeforeQueuedZoom),
+          reason: 'zoom waits for the active source document to load',
+        );
+
+        webView.params.onLoadStop?.call(controller, previousUrl);
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          hasLength(scriptCountBeforeQueuedZoom),
+          reason: 'a superseded source completion must not flush queued zoom',
+        );
+
+        webView.params.onLoadStop?.call(controller, currentUrl);
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          contains(predicate<String>((script) =>
+              script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
       'web source updates ignore stale errors and surface current errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
