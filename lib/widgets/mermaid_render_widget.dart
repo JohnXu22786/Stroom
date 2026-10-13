@@ -855,8 +855,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
   bool _hasWebRetryTimeoutError = false;
+  // Tracks ordinary navigations too, so their late main-frame errors are stale.
+  String? _webLoadUrl;
   String? _webRetryUrl;
   int _webRetryGeneration = 0;
+  int _webSourceUpdateGeneration = 0;
   int _nativeLoadGeneration = 0;
   WebUri? _nativeLoadBaseUrl;
 
@@ -1087,9 +1090,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
       final url = isTrackedRetry
           ? '$baseUrl&attempt=${++_webRetryGeneration}'
-          : baseUrl;
+          : _webLoadUrl != null
+              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
+              : baseUrl;
+      _webLoadUrl = _resolveWebUrl(url);
       if (isTrackedRetry) {
-        _webRetryUrl = _resolveWebUrl(url);
+        _webRetryUrl = _webLoadUrl;
       }
       ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
       return;
@@ -1923,11 +1929,19 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 unawaited(_applyPendingZoomOperations());
               },
               onReceivedError: (controller, request, error) {
-                if (kIsWeb &&
-                    request.isForMainFrame == true &&
-                    _webRetryUrl != null &&
-                    _resolveWebUrl(request.url.toString()) != _webRetryUrl) {
+                if (controller != _webViewController) return;
+                if (request.isForMainFrame == true &&
+                    !kIsWeb &&
+                    _nativeLoadBaseUrl != null &&
+                    request.url.toString() != _nativeLoadBaseUrl.toString()) {
                   return;
+                }
+                if (kIsWeb && request.isForMainFrame == true) {
+                  final requestUrl = _resolveWebUrl(request.url.toString());
+                  if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
+                      (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
+                    return;
+                  }
                 }
                 // WebView creation ends the Flutter loading overlay before
                 // the asset URL finishes navigating. Surface main-frame
