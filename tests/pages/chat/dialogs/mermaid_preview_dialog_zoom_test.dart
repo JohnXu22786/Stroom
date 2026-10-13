@@ -87,6 +87,50 @@ void main() {
   );
 
   testWidgets(
+    'keeps the preview after subresource errors but shows main-frame errors',
+    (tester) async {
+      final preview = await _openPreviewWithEarlyControls(tester);
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+      preview.webView.params.onLoadStop!(preview.controller, null);
+      await tester.pump();
+
+      expect(find.text('加载失败'), findsNothing);
+
+      preview.webView.params.onReceivedError!(
+        preview.controller,
+        WebResourceRequest(
+          url: WebUri('https://example.com/diagram-image.png'),
+          isForMainFrame: false,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'image request failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('加载失败'), findsNothing);
+
+      preview.webView.params.onReceivedError!(
+        preview.controller,
+        WebResourceRequest(
+          url: WebUri('https://example.com/diagram.html'),
+          isForMainFrame: true,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'document request failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('加载失败'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'queues zoom tapped before WebView creation until the page is ready',
     (tester) async {
       final preview = await _openPreviewWithEarlyControls(tester);
