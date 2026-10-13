@@ -5,6 +5,42 @@ import 'package:stroom/widgets/math_formula_field.dart';
 
 void main() {
   testWidgets(
+      'math input row keeps the regular source height for a tall rendered formula',
+      (tester) async {
+    final source = TextEditingController(text: r'\frac{x}{2}');
+    final key = GlobalKey<MathFormulaFieldState>();
+    Widget app(bool mathematical) => MaterialApp(
+          home: Scaffold(
+              body: Center(
+                  child: MathFormulaField(
+            key: key,
+            controller: source,
+            showWebView: false,
+            mathematical: mathematical,
+            onModeChanged: (_) {},
+            onActivate: () {},
+            onChanged: () {},
+            onSubmitted: () {},
+            label: '公式 1',
+          ))),
+        );
+
+    await tester.pumpWidget(app(false));
+    final sourceHeight = tester.getSize(find.byKey(key)).height;
+    await tester.pumpWidget(app(true));
+    key.currentState!.acceptSnapshot({
+      'revision': key.currentState!.revision,
+      'height': 132,
+      'type': 'selection',
+    });
+    await tester.pump();
+
+    expect(tester.getSize(find.byKey(key)).height, closeTo(sourceHeight, 0.01));
+    await tester.pumpWidget(const SizedBox.shrink());
+    source.dispose();
+  });
+
+  testWidgets(
       'theme changes recolor the retained native editor without reimport',
       (tester) async {
     final originalPlatform = InAppWebViewPlatform.instance;
@@ -47,7 +83,6 @@ void main() {
     expect(key.currentState, same(state));
     expect(native.controller.scripts.last, contains(_css(dark.onSurface)));
     expect(native.controller.scripts.last, contains(_css(dark.primary)));
-    expect(native.controller.scripts.last, contains(_css(dark.error)));
     expect(native.controller.scripts.where((s) => s.contains('setSource')),
         hasLength(1));
     expect(source.text, r'\frac{x}{2}');

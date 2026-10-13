@@ -189,10 +189,11 @@ class _DelayedRejectedWatchdogWriteStore
 }
 
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
-    SharedPreferences preferences) async {
+    SharedPreferences preferences,
+    {bool initiallyEnabled = false}) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
-    'flutter.background_service_enabled': false,
+    'flutter.background_service_enabled': initiallyEnabled,
   });
   await preferences.reload();
   return originalStore;
@@ -336,6 +337,83 @@ void main() {
 
       // Verify the enabled state was cleared
       expect(prefs.getBool('background_service_enabled'), isFalse);
+    });
+
+    test('stopBackgroundService persists stop intent before disabling watchdog',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      var enabledWhenWatchdogDisabled = true;
+
+      // Model a process restart at the boundary where the native watchdog is
+      // disabled. The cold-start decision must already see the durable stop.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'stopKeepAlive') {
+            await prefs.reload();
+            enabledWhenWatchdogDisabled =
+                prefs.getBool('background_service_enabled') ?? true;
+            resetBackgroundServiceLifecycleStateForTesting();
+            await restoreBackgroundServiceOnColdStart();
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+      });
+
+      expect(enabledWhenWatchdogDisabled, isFalse);
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a cold start at watchdog cancellation must not restore the '
+            'explicitly stopped service',
+      );
+    });
+
+    test(
+        'stopBackgroundService does not cancel watchdog when persistence fails',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(
+        prefs,
+        initiallyEnabled: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isFalse,
+        reason: 'a rejected stop intent must not leave the persisted enabled '
+            'state without watchdog recovery',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
     });
 
     test(
@@ -1125,6 +1203,76 @@ void main() {
       // 补武装不得清零失败计数（持久失败环境下看门狗应保持退避）。
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: 'resume 是补武装场景，不得使用带计数清零的 startKeepAlive');
+    });
+
+    test('rearmKeepAliveOnResume serializes watchdog rearm with explicit stop',
+        () async {
+      registerMockPlatform();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      await prefs.setBool('background_service_watchdog', true);
+
+      final firstRearmStarted = Completer<void>();
+      final releaseFirstRearm = Completer<void>();
+      final resumeRearmStarted = Completer<void>();
+      final releaseResumeRearm = Completer<void>();
+      final stopKeepAliveStarted = Completer<void>();
+      var rearmCount = 0;
+      var watchdogArmed = false;
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'rearmKeepAlive') {
+            rearmCount++;
+            if (rearmCount == 1) {
+              firstRearmStarted.complete();
+              await releaseFirstRearm.future;
+            } else if (rearmCount == 2) {
+              resumeRearmStarted.complete();
+              await releaseResumeRearm.future;
+            }
+            watchdogArmed = true;
+          } else if (methodCall.method == 'stopKeepAlive') {
+            stopKeepAliveStarted.complete();
+            watchdogArmed = false;
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        final recovery = rearmBackgroundServiceWatchdog();
+        await firstRearmStarted.future;
+
+        final resume = rearmKeepAliveOnResume();
+        // Let the unlocked resume path pass its enabled-intent check and pause
+        // at the second rearm while the first operation still holds the lock.
+        await Future<void>.delayed(Duration.zero);
+        final stop = stopBackgroundService();
+        releaseFirstRearm.complete();
+
+        await resumeRearmStarted.future;
+        await Future<void>.delayed(Duration.zero);
+        final stopReachedNativeCancellation = stopKeepAliveStarted.isCompleted;
+        releaseResumeRearm.complete();
+        await Future.wait([recovery, resume, stop]);
+
+        expect(
+          watchdogArmed,
+          isFalse,
+          reason: 'a completed explicit stop must leave no watchdog alarm '
+              'armed',
+        );
+        expect(
+          stopReachedNativeCancellation,
+          isFalse,
+          reason: 'stop must wait until the resume rearm releases the '
+              'lifecycle lock',
+        );
+      });
     });
 
     test('rearmKeepAliveOnResume proceeds when enabled preference read fails',

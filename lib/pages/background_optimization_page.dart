@@ -31,6 +31,7 @@ class _BackgroundOptimizationPageState
   Color _platformColor = Colors.grey;
   String _platformVersion = '';
   bool _isServiceRunning = false;
+  bool _isServiceStatusUnknown = false;
   String _optimizationStatus = '';
   bool _isCheckingService = true;
   bool _isOperating = false;
@@ -47,6 +48,7 @@ class _BackgroundOptimizationPageState
 
   // ── Desktop: minimize on close ──────────────────────────────────────
   bool _closeMinimizeEnabled = true;
+  int _closeMinimizeChangeVersion = 0;
 
   @override
   void initState() {
@@ -78,6 +80,7 @@ class _BackgroundOptimizationPageState
   }
 
   Future<void> _loadStrategyToggles() async {
+    final closeMinimizeChangeVersion = _closeMinimizeChangeVersion;
     final w = await isWatchdogEnabled();
     final c = await isColdStartRestoreEnabled();
     final b = await isBatteryReminderEnabled();
@@ -93,7 +96,9 @@ class _BackgroundOptimizationPageState
         _watchdogEnabled = w;
         _coldStartRestoreEnabled = c;
         _batteryReminderEnabled = b;
-        _closeMinimizeEnabled = closeMinimize;
+        if (closeMinimizeChangeVersion == _closeMinimizeChangeVersion) {
+          _closeMinimizeEnabled = closeMinimize;
+        }
       });
     }
   }
@@ -166,10 +171,15 @@ class _BackgroundOptimizationPageState
       // 桌面/Web 没有前台服务：直接给出平台对应的真实状态，
       // 不要调用仅 Android/iOS 可用的插件（会抛异常显示误导性文案）。
       _isServiceRunning = false;
+      _isServiceStatusUnknown = false;
       if (isDesktopPlatform()) {
-        _optimizationStatus = DesktopAppService.instance.isTrayReady
-            ? '桌面端使用托盘驻留保活'
-            : '桌面端托盘暂不可用，关闭窗口将直接退出';
+        final closeMinimizeChangeVersion = _closeMinimizeChangeVersion;
+        final closeMinimize = await isDesktopCloseMinimizeEnabled();
+        if (!mounted) return;
+        if (closeMinimizeChangeVersion == _closeMinimizeChangeVersion) {
+          _closeMinimizeEnabled = closeMinimize;
+        }
+        _optimizationStatus = _getDesktopOptimizationStatus();
       } else {
         _optimizationStatus = '当前平台不支持后台服务';
       }
@@ -177,9 +187,11 @@ class _BackgroundOptimizationPageState
       try {
         final service = FlutterBackgroundService();
         _isServiceRunning = await service.isRunning();
+        _isServiceStatusUnknown = false;
         _optimizationStatus = _isServiceRunning ? '后台服务运行中' : '后台服务未启动';
       } catch (_) {
         _isServiceRunning = false;
+        _isServiceStatusUnknown = true;
         _optimizationStatus = '无法检测后台服务状态';
       }
     }
@@ -189,6 +201,16 @@ class _BackgroundOptimizationPageState
         _isCheckingService = false;
       });
     }
+  }
+
+  String _getDesktopOptimizationStatus() {
+    if (!DesktopAppService.instance.isTrayReady) {
+      return '桌面端托盘暂不可用，关闭窗口将直接退出';
+    }
+    if (!_closeMinimizeEnabled) {
+      return '桌面端关闭窗口时退出应用';
+    }
+    return '桌面端使用托盘驻留保活';
   }
 
   // ── Battery Optimization Check ───────────────────────────────────────
@@ -690,16 +712,16 @@ class _BackgroundOptimizationPageState
               return;
             }
             if (mounted) setState(() => _watchdogEnabled = v);
-            if (v && _isServiceRunning) {
-              final started = await startBackgroundService();
-              if (!started && mounted) {
+            if (v) {
+              final activated = await rearmBackgroundServiceWatchdog();
+              if (!activated && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('看门狗激活失败，后台服务保活状态未确认'),
                   ),
                 );
               }
-            } else if (!v) {
+            } else {
               disableKeepAlive();
             }
           },
@@ -886,7 +908,11 @@ class _BackgroundOptimizationPageState
                 _ensureWindowCloseIntercepted();
                 final saved = await setDesktopCloseMinimizeEnabled(v);
                 if (!saved || !mounted) return;
-                setState(() => _closeMinimizeEnabled = v);
+                setState(() {
+                  _closeMinimizeChangeVersion++;
+                  _closeMinimizeEnabled = v;
+                  _optimizationStatus = _getDesktopOptimizationStatus();
+                });
               },
             ),
             const Divider(height: 1, indent: 16, endIndent: 16),
@@ -1133,6 +1159,10 @@ class _BackgroundOptimizationPageState
               'libayatana-appindicator3-dev），关闭窗口将直接退出应用。';
         }
         return '桌面平台托盘暂不可用，关闭窗口将直接退出应用。';
+      }
+      if (!_closeMinimizeEnabled) {
+        return '桌面平台已设置为关闭窗口时退出：关闭窗口后应用会按现有退出确认流程处理并退出，'
+            '不会在托盘继续运行。';
       }
       if (defaultTargetPlatform == TargetPlatform.linux) {
         // Linux appindicator 左键点击弹出的是菜单而非恢复窗口事件，

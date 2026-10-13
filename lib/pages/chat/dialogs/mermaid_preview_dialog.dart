@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:stroom/pages/chat/dialogs/mermaid_preview_web_controls.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 /// Full-screen dialog that renders Mermaid diagram code in a full-size
@@ -436,6 +437,7 @@ class _MermaidPreviewDialogContentState
                   }
                 },
                 onReceivedError: (controller, request, error) {
+                  if (request.isForMainFrame == false) return;
                   _readyFallbackTimer?.cancel();
                   _zoomReadinessRetryTimer?.cancel();
                   _zoomReadinessRetryTimer = null;
@@ -505,7 +507,25 @@ class _MermaidPreviewDialogContentState
 
             // Top bar with title, zoom controls, and close button
             // Only show controls when WebView is ready and no error
-            if (showControls)
+            if (showControls && kIsWeb)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 4,
+                left: 0,
+                right: 0,
+                child: SizedBox(
+                  key: const ValueKey('mermaid-preview-web-controls'),
+                  height: 44,
+                  child: buildMermaidPreviewWebControls(
+                    onZoomOut: _zoomOut,
+                    onZoomIn: _zoomIn,
+                    onClose: () => Navigator.pop(context),
+                    backgroundColor: cs.surfaceContainerHighest,
+                    foregroundColor: cs.onSurface,
+                    topInset: MediaQuery.of(context).padding.top + 4,
+                  ),
+                ),
+              )
+            else if (showControls)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 4,
                 left: 0,

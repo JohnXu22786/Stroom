@@ -76,6 +76,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
         private const val KEY_KEEP_ALIVE_ALARM_GENERATION = "keep_alive_alarm_generation"
         private const val EXTRA_KEEP_ALIVE_ALARM_GENERATION = "keep_alive_alarm_generation"
         private val ALARM_GENERATION_LOCK = Any()
+        private val ALARM_DELIVERY_GENERATION_CLAIMS = AlarmDeliveryGenerationClaims()
 
         // 默认看门狗间隔（MainActivity 的 rearmKeepAlive 需要读取）。
         const val KEEP_ALIVE_INTERVAL_MS = KeepAliveScheduleIntervals.KEEP_ALIVE_INTERVAL_MS
@@ -262,9 +263,6 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         false
                     }
                 },
-                cancelRevocationFallback = {
-                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE_REVOCATION_BACKUP, REVOCATION_BACKUP_REQUEST_CODE)
-                },
                 scheduleInexactPrimary = {
                     try {
                         // setAndAllowWhileIdle requires no permission; the system may
@@ -385,7 +383,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     // Accept a previously scheduled alarm from an older app version once.
                     currentGeneration
                 }
-                claimAlarmDeliveryGeneration(
+                ALARM_DELIVERY_GENERATION_CLAIMS.claim(
                     scheduledGeneration = scheduledGeneration,
                     currentGeneration = currentGeneration,
                     keepAliveActive = keepAliveActive,

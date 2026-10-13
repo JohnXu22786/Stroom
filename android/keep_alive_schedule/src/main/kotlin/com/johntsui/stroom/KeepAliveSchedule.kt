@@ -28,15 +28,25 @@ internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
     scheduleRevocationFallback: () -> Boolean,
-    cancelRevocationFallback: () -> Unit,
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
     val exactScheduled = canScheduleExact && scheduleExact()
-    if (exactScheduled && scheduleRevocationFallback()) return true
+    if (exactScheduled) {
+        if (scheduleRevocationFallback()) return true
+
+        // The exact primary is already queued with its PendingIntent. Retrying
+        // it as inexact would replace the foreground-service-eligible alarm.
+        // Retry only the missing backup; a failed retry remains eligible for
+        // the caller's bounded scheduling retry.
+        return scheduleRevocationFallback()
+    }
 
     if (scheduleInexactPrimary()) {
-        cancelRevocationFallback()
-        return true
+        // Keep a same-generation recovery delivery in case this one-shot is
+        // consumed and the process stops before the receiver can rearm it. The
+        // caller also needs the backup result to retry if only the primary was
+        // successfully scheduled.
+        return scheduleRevocationFallback()
     }
 
     // Keep any already queued backup alive if the replacement primary failed.
@@ -81,6 +91,45 @@ internal fun claimAlarmDeliveryGeneration(
         // disk-write failure. Restore the token so the paired alarm can retry.
         persistGeneration(currentGeneration)
         AlarmGenerationClaimResult.PERSISTENCE_FAILED
+    }
+}
+
+/**
+ * Tracks claims for this process so a paired alarm left one generation behind
+ * by process death can recover without admitting a same-process duplicate.
+ */
+internal class AlarmDeliveryGenerationClaims {
+    private var lastClaimedGeneration: Long? = null
+
+    fun claim(
+        scheduledGeneration: Long,
+        currentGeneration: Long,
+        keepAliveActive: Boolean,
+        persistGeneration: (Long) -> Boolean,
+    ): AlarmGenerationClaimResult {
+        if (!keepAliveActive) return AlarmGenerationClaimResult.STALE
+
+        if (scheduledGeneration == currentGeneration) {
+            val result = claimAlarmDeliveryGeneration(
+                scheduledGeneration = scheduledGeneration,
+                currentGeneration = currentGeneration,
+                keepAliveActive = keepAliveActive,
+                persistGeneration = persistGeneration,
+            )
+            if (result == AlarmGenerationClaimResult.CLAIMED) {
+                lastClaimedGeneration = scheduledGeneration
+            }
+            return result
+        }
+
+        val isInterruptedClaimRecovery = scheduledGeneration == currentGeneration - 1L &&
+            scheduledGeneration != lastClaimedGeneration
+        if (!isInterruptedClaimRecovery) return AlarmGenerationClaimResult.STALE
+
+        // Reuse currentGeneration: the receiver updates the pending alarm token
+        // while rearming, and a paired delivery can recover after process death.
+        lastClaimedGeneration = scheduledGeneration
+        return AlarmGenerationClaimResult.CLAIMED
     }
 }
 

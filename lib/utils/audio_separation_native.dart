@@ -826,6 +826,7 @@ class _Mp4Demuxer {
   };
 
   final Uint8List _data;
+  final List<(int, int)> _mdatPayloadRanges = [];
   int _offset = 0;
   int? _movieTimescale;
 
@@ -846,9 +847,9 @@ class _Mp4Demuxer {
   _AudioTrackInfo? findAudioTrack() {
     try {
       _offset = 0;
+      _mdatPayloadRanges.clear();
 
       int moovOffset = -1;
-      int mdatOffset = -1;
 
       while (_offset < _data.length) {
         final boxStart = _offset;
@@ -861,17 +862,19 @@ class _Mp4Demuxer {
           boxSize = _readUint64();
         }
 
+        final boxHeaderEnd = _offset;
         if (boxType == 'moov') {
           moovOffset = boxStart;
         } else if (boxType == 'mdat') {
-          mdatOffset = boxStart;
+          final boxEnd = boxSize == 0 ? _data.length : boxStart + boxSize;
+          _mdatPayloadRanges.add((boxHeaderEnd, boxEnd));
         }
 
         if (boxSize == 0) break;
         _offset = boxStart + boxSize;
       }
 
-      if (moovOffset < 0 || mdatOffset < 0) return null;
+      if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
 
       _movieTimescale = _readMovieTimescale(moovOffset);
       _offset = moovOffset + 8;
@@ -992,8 +995,12 @@ class _Mp4Demuxer {
                 while (_offset < stblEnd) {
                   if (_offset + 8 > _data.length) return null;
                   final scStart = _offset;
-                  _readUint32(); // box size (advances offset)
+                  final scSize = _readUint32(); // box size
                   final scType = _readString(4);
+                  final scEnd = scStart + scSize;
+                  if (scSize < 8 || scEnd > stblEnd || scEnd > _data.length) {
+                    return null;
+                  }
 
                   if (scType == 'stsd') {
                     _offset += 4; // version + flags
@@ -1087,14 +1094,25 @@ class _Mp4Demuxer {
                           .add((firstChunk, spc, sampleDescriptionIndex));
                     }
                   } else if (scType == 'stsz') {
+                    final stszEnd = scStart + scSize;
+                    if (scSize < 20 ||
+                        stszEnd > stblEnd ||
+                        stszEnd > _data.length) {
+                      return null;
+                    }
                     _offset += 4; // version + flags
                     final sampleSize = _readUint32();
                     sampleCount = _readUint32();
                     if (sampleSize == 0) {
+                      final entryCapacity = (scSize - 20) ~/ 4;
+                      if (sampleCount > entryCapacity) return null;
                       for (var i = 0; i < sampleCount; i++) {
                         sampleSizes.add(_readUint32());
                       }
                     } else {
+                      if (sampleCount > _data.length ~/ sampleSize) {
+                        return null;
+                      }
                       sampleSizes = List.filled(sampleCount, sampleSize);
                     }
                   } else if (scType == 'stco') {
@@ -1112,7 +1130,7 @@ class _Mp4Demuxer {
                       chunkOffsets.add((high << 32) | low);
                     }
                   } else {
-                    _offset = scStart + _boxSizeAt(scStart);
+                    _offset = scEnd;
                   }
                 }
               } else {
@@ -1538,11 +1556,16 @@ class _Mp4Demuxer {
         }
 
         final fileOffset = chunkMdatOffset + offsetInChunk;
-        if (fileOffset + sampleSize <= _data.length &&
+        final sampleEnd = fileOffset + sampleSize;
+        final isInMdatPayload = _mdatPayloadRanges.any(
+          (range) => fileOffset >= range.$1 && sampleEnd <= range.$2,
+        );
+        if (sampleEnd <= _data.length &&
+            isInMdatPayload &&
             (includedSampleIndices == null ||
                 includedSampleIndices.contains(sampleIdx))) {
           frames.add(_AudioFrame(
-            Uint8List.sublistView(_data, fileOffset, fileOffset + sampleSize),
+            Uint8List.sublistView(_data, fileOffset, sampleEnd),
           ));
         }
         sampleIdx++;

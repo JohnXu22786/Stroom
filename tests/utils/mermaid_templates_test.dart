@@ -10,19 +10,36 @@ void main() {
   });
 
   group('MermaidTemplates - requirement diagram relationships', () {
-    test('uses direction arrows in the template and relationship snippets', () {
-      final template = MermaidTemplates.getTemplate('requirement');
-      expect(template, contains('用户登录 - satisfies -> 登录页面'));
-      expect(template, contains('用户登录 - verifiedBy -> 认证服务'));
+    test(
+      'uses supported element-to-requirement relationships in the template',
+      () {
+        final template = MermaidTemplates.getTemplate('requirement');
+        expect(template, contains('登录页面 - satisfies -> 用户登录'));
+        expect(template, contains('认证服务 - verifies -> 用户登录'));
+        expect(template, isNot(contains('verifiedBy')));
+      },
+    );
 
-      final snippets = MermaidTemplates.getSnippets('requirement');
-      expect(
-        snippets.map((snippet) => snippet.$2),
-        containsAll([
-          '  需求A - satisfies -> 元素B',
-          '  需求A - verifiedBy -> 元素B',
-        ]),
-      );
+    test('relationship snippet connects declared template nodes', () {
+      final template = MermaidTemplates.getTemplate('requirement');
+      final relationshipSnippet = MermaidTemplates.getSnippets('requirement')
+          .singleWhere((snippet) => snippet.$1 == '添加关联')
+          .$2;
+
+      expect(template, contains('requirement 用户登录 {'));
+      expect(template, contains('element 登录页面 {'));
+      expect(relationshipSnippet, '  登录页面 - satisfies -> 用户登录');
+    });
+
+    test('verification snippet connects declared template nodes', () {
+      final template = MermaidTemplates.getTemplate('requirement');
+      final verificationSnippet = MermaidTemplates.getSnippets('requirement')
+          .singleWhere((snippet) => snippet.$1 == '添加验证')
+          .$2;
+
+      expect(template, contains('requirement 用户登录 {'));
+      expect(template, contains('element 认证服务 {'));
+      expect(verificationSnippet, '  认证服务 - verifies -> 用户登录');
     });
   });
 

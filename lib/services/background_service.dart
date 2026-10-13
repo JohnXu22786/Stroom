@@ -301,8 +301,8 @@ Future<void> _requestNotificationPermissionIfNeeded() async {
 
 /// 停止后台服务。
 ///
-/// 返回 `true` 表示停止流程成功执行（服务已停止或原本未运行）。
-/// 若停止在 5 秒内未确认，返回 `false` 并保留用户启用状态及看门狗。
+/// 返回 `true` 表示服务已停止（或原本未运行）且禁用意图已持久化。
+/// 若停止未确认或禁用意图无法持久化，返回 `false`。
 Future<bool> stopBackgroundService() =>
     _withServiceLifecycleLock(_stopBackgroundService);
 
@@ -312,14 +312,11 @@ Future<bool> _stopBackgroundService() async {
     final service = FlutterBackgroundService();
     await _requestServiceStopAndWait(service);
     await AppLogService.info('BackgroundService', '后台服务已停止');
-    // 先取消 AlarmManager 看门狗，再持久化 enabled=false：
-    // 顺序反了的话，若进程在这两步之间被杀，系统重启后会重新
-    // 调度看门狗去复活一个用户已明确停止的服务。
-    await _disableKeepAlive();
-    // Clear the persisted enabled state so the service is not
-    // auto-restored on the next cold start.
+    // 先持久化 enabled=false，再取消 AlarmManager 看门狗：
+    // 如果进程在这两步之间被杀，冷启动恢复也会读到已关闭意图。
     _explicitUserEnabledInProcess = false;
-    await _setServiceEnabledPreference(false);
+    if (!await _setServiceEnabledPreference(false)) return false;
+    await _disableKeepAlive();
     return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
@@ -480,7 +477,15 @@ Future<bool> _setServiceEnabledPreference(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setBool(_backgroundServiceEnabledKey, enabled);
-    if (!saved) throw StateError('SharedPreferences rejected service state.');
+    if (!saved) {
+      if (!enabled) {
+        // setBool updates the legacy cache before writing. Reload to confirm
+        // that a rejected write did not leave a persisted enabled intent.
+        await prefs.reload();
+        if (prefs.getBool(_backgroundServiceEnabledKey) != true) return true;
+      }
+      throw StateError('SharedPreferences rejected service state.');
+    }
     return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to save service enabled state: $e');
@@ -649,6 +654,21 @@ Future<bool> _rearmKeepAlive() async {
   }
 }
 
+/// Re-arms the native watchdog without querying or starting the service.
+///
+/// Recovery is scheduled only while the user's persistent service intent is
+/// enabled. The intent check shares the lifecycle lock with explicit stops.
+/// Returns true when recovery is not needed or scheduling succeeds.
+Future<bool> rearmBackgroundServiceWatchdog() =>
+    _withServiceLifecycleLock(() async {
+      if (!await _isBackgroundServiceEnabled(
+        assumeEnabledOnReadError: true,
+      )) {
+        return true;
+      }
+      return _rearmKeepAlive();
+    });
+
 Future<void> _disableKeepAlive() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
@@ -744,17 +764,19 @@ Future<void> requestScheduleExactAlarm() async {
 Future<void> rearmKeepAliveOnResume() async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
   try {
-    if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: true)) {
-      return;
-    }
-    // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
-    // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
-    // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部
-    // 已检查。若用冷启动开关门控 resume 补武装，看门狗开启的用户在
-    // 精确闹钟被系统撤销后会永久失去看门狗（resume 是唯一的补武装
-    // 时机），而且已武装的闹钟触发时只检查 background_service_enabled，
-    // 并不会因为冷启动开关而停止复活服务。
-    await _rearmKeepAlive();
+    await _withServiceLifecycleLock(() async {
+      if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: true)) {
+        return;
+      }
+      // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
+      // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
+      // 恢复路径；看门狗开关（isWatchdogEnabled）在 _rearmKeepAlive 内部
+      // 已检查。若用冷启动开关门控 resume 补武装，看门狗开启的用户在
+      // 精确闹钟被系统撤销后会永久失去看门狗（resume 是唯一的补武装
+      // 时机），而且已武装的闹钟触发时只检查 background_service_enabled，
+      // 并不会因为冷启动开关而停止复活服务。
+      await _rearmKeepAlive();
+    });
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');
   }

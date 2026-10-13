@@ -23,7 +23,6 @@ class KeepAliveScheduleTest {
             canScheduleExact = true,
             scheduleExact = { operations += "exact"; true },
             scheduleRevocationFallback = { operations += "backup"; true },
-            cancelRevocationFallback = { operations += "cancel-backup" },
             scheduleInexactPrimary = { operations += "inexact-primary"; true },
         )
 
@@ -32,47 +31,173 @@ class KeepAliveScheduleTest {
     }
 
     @Test
-    fun unavailableOrDeniedExactSchedulingKeepsOnlyTheInexactPrimaryAlarm() {
+    fun unavailableOrDeniedExactSchedulingKeepsInexactPrimaryAndRecoveryBackup() {
         val operations = mutableListOf<String>()
 
         val scheduled = scheduleWithExactRevocationFallback(
             canScheduleExact = false,
             scheduleExact = { operations += "exact"; true },
             scheduleRevocationFallback = { operations += "backup"; true },
-            cancelRevocationFallback = { operations += "cancel-backup" },
             scheduleInexactPrimary = { operations += "inexact-primary"; true },
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("inexact-primary", "cancel-backup"), operations)
+        assertEquals(listOf("inexact-primary", "backup"), operations)
 
         operations.clear()
         val exactAttemptFailed = scheduleWithExactRevocationFallback(
             canScheduleExact = true,
             scheduleExact = { operations += "exact"; false },
             scheduleRevocationFallback = { operations += "backup"; true },
-            cancelRevocationFallback = { operations += "cancel-backup" },
             scheduleInexactPrimary = { operations += "inexact-primary"; true },
         )
 
         assertTrue(exactAttemptFailed)
-        assertEquals(listOf("exact", "inexact-primary", "cancel-backup"), operations)
+        assertEquals(listOf("exact", "inexact-primary", "backup"), operations)
     }
 
     @Test
-    fun failedRevocationBackupFallsBackToOneInexactPrimaryAlarm() {
+    fun failedInexactRecoveryBackupKeepsBoundedRetryEligible() {
+        val operations = mutableListOf<String>()
+        val retryQueue = mutableListOf<() -> Unit>()
+        var backupAttempts = 0
+        var retryScheduleSucceeded = false
+        val schedule = {
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = false,
+                scheduleExact = { operations += "exact"; true },
+                scheduleRevocationFallback = {
+                    operations += "backup"
+                    ++backupAttempts > 1
+                },
+                scheduleInexactPrimary = { operations += "inexact-primary"; true },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = {
+                retryScheduleSucceeded = schedule()
+                retryScheduleSucceeded
+            },
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(1, retryQueue.size)
+
+        retryQueue.single().invoke()
+
+        assertTrue(retryScheduleSucceeded)
+        assertEquals(listOf("inexact-primary", "backup", "inexact-primary", "backup"), operations)
+    }
+
+    @Test
+    fun inexactPairRecoversAcrossEitherDeliveryOrderAndProcessRestart() {
+        var currentGeneration = 17L
+        var primaryGeneration: Long? = null
+        var backupGeneration: Long? = null
         val operations = mutableListOf<String>()
 
         val scheduled = scheduleWithExactRevocationFallback(
-            canScheduleExact = true,
+            canScheduleExact = false,
             scheduleExact = { operations += "exact"; true },
-            scheduleRevocationFallback = { operations += "backup"; false },
-            cancelRevocationFallback = { operations += "cancel-backup" },
-            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+            scheduleRevocationFallback = {
+                operations += "backup"
+                backupGeneration = currentGeneration
+                true
+            },
+            scheduleInexactPrimary = {
+                operations += "inexact-primary"
+                primaryGeneration = currentGeneration
+                true
+            },
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("exact", "backup", "inexact-primary", "cancel-backup"), operations)
+        assertEquals(listOf("inexact-primary", "backup"), operations)
+        val scheduledPrimaryGeneration = checkNotNull(primaryGeneration)
+        val scheduledBackupGeneration = checkNotNull(backupGeneration)
+        assertEquals(scheduledPrimaryGeneration, scheduledBackupGeneration)
+
+        for (backupFiresFirst in listOf(false, true)) {
+            currentGeneration = 17L
+            val firstGeneration = if (backupFiresFirst) {
+                scheduledBackupGeneration
+            } else {
+                scheduledPrimaryGeneration
+            }
+            val pendingGeneration = if (backupFiresFirst) {
+                scheduledPrimaryGeneration
+            } else {
+                scheduledBackupGeneration
+            }
+            val firstProcessClaims = AlarmDeliveryGenerationClaims()
+            val persistGeneration: (Long) -> Boolean = { generation ->
+                currentGeneration = generation
+                true
+            }
+
+            assertEquals(
+                AlarmGenerationClaimResult.CLAIMED,
+                firstProcessClaims.claim(
+                    scheduledGeneration = firstGeneration,
+                    currentGeneration = currentGeneration,
+                    keepAliveActive = true,
+                    persistGeneration = persistGeneration,
+                ),
+            )
+            assertEquals(18L, currentGeneration)
+
+            // The still-pending paired delivery is stale in-process but can
+            // recover after process death before receiver rearming.
+            assertEquals(
+                AlarmGenerationClaimResult.STALE,
+                firstProcessClaims.claim(
+                    scheduledGeneration = pendingGeneration,
+                    currentGeneration = currentGeneration,
+                    keepAliveActive = true,
+                    persistGeneration = persistGeneration,
+                ),
+            )
+            assertEquals(
+                AlarmGenerationClaimResult.CLAIMED,
+                AlarmDeliveryGenerationClaims().claim(
+                    scheduledGeneration = pendingGeneration,
+                    currentGeneration = currentGeneration,
+                    keepAliveActive = true,
+                    persistGeneration = persistGeneration,
+                ),
+            )
+            assertEquals(18L, currentGeneration)
+        }
+    }
+
+    @Test
+    fun failedRevocationBackupDoesNotReplaceSuccessfulExactPrimary() {
+        val operations = mutableListOf<String>()
+        var primarySchedule: String? = null
+        var backupAttempts = 0
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = true,
+            scheduleExact = { operations += "exact"; primarySchedule = "exact"; true },
+            scheduleRevocationFallback = {
+                operations += "backup"
+                ++backupAttempts > 1
+            },
+            scheduleInexactPrimary = {
+                operations += "inexact-primary"
+                primarySchedule = "inexact"
+                true
+            },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("exact", "backup", "backup"), operations)
+        assertEquals("exact", primarySchedule)
     }
 
     @Test
@@ -83,7 +208,6 @@ class KeepAliveScheduleTest {
             canScheduleExact = false,
             scheduleExact = { operations += "exact"; true },
             scheduleRevocationFallback = { operations += "backup"; true },
-            cancelRevocationFallback = { operations += "cancel-backup" },
             scheduleInexactPrimary = { operations += "inexact-primary"; false },
         )
 
@@ -99,12 +223,11 @@ class KeepAliveScheduleTest {
             canScheduleExact = true,
             scheduleExact = { operations += "exact"; true },
             scheduleRevocationFallback = { operations += "backup"; false },
-            cancelRevocationFallback = { operations += "cancel-backup" },
             scheduleInexactPrimary = { operations += "inexact-primary"; false },
         )
 
         assertFalse(scheduled)
-        assertEquals(listOf("exact", "backup", "inexact-primary", "backup"), operations)
+        assertEquals(listOf("exact", "backup", "backup"), operations)
     }
 
     @Test
@@ -526,7 +649,6 @@ class KeepAliveScheduleTest {
                 canScheduleExact = false,
                 scheduleExact = { false },
                 scheduleRevocationFallback = { false },
-                cancelRevocationFallback = { backupPending = false },
                 scheduleInexactPrimary = { false },
             )
         }
@@ -559,5 +681,54 @@ class KeepAliveScheduleTest {
         )
 
         assertEquals(AlarmGenerationClaimResult.CLAIMED, backupDelivery)
+    }
+
+    @Test
+    fun pendingBackupRecoversAfterProcessRestartBeforeItsGenerationIsUpdated() {
+        var currentGeneration = 17L
+        var backupGeneration = currentGeneration
+        fun claim(
+            processClaims: AlarmDeliveryGenerationClaims,
+            scheduledGeneration: Long,
+        ) = processClaims.claim(
+            scheduledGeneration = scheduledGeneration,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = { currentGeneration = it; true },
+        )
+
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(AlarmDeliveryGenerationClaims(), currentGeneration),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(17L, backupGeneration)
+
+        // Simulate process death after claim persistence and before the backup
+        // PendingIntent's token is updated; the replacement process has no
+        // in-memory record of the first delivery.
+        val restartedProcessClaims = AlarmDeliveryGenerationClaims()
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration),
+        )
+
+        // Rearming updates the pending backup to the current generation, so
+        // its next delivery remains valid and the paired alarm is still claimed once.
+        backupGeneration = currentGeneration
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration),
+        )
+        assertEquals(19L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration),
+        )
     }
 }

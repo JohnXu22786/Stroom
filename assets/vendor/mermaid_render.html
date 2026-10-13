@@ -247,6 +247,12 @@
       }
     };
 
+    window.addEventListener('resize', function() {
+      if (!fitComplete) return;
+      var viewport = document.getElementById('viewport');
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
+      window.fitToViewport();
+    });
 
     var isDragging = false;
     var dragStartX = 0;
@@ -254,6 +260,7 @@
     var panStartX = 0;
     var panStartY = 0;
     var hasDragged = false;
+    var dragSlop = 4;
     var suppressClickAfterPan = false;
     var suppressClickTimer = null;
 
@@ -277,11 +284,13 @@
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
-        if (e.clientX !== dragStartX || e.clientY !== dragStartY) {
+        var deltaX = e.clientX - dragStartX;
+        var deltaY = e.clientY - dragStartY;
+        if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
           hasDragged = true;
         }
-        panX = panStartX + (e.clientX - dragStartX);
-        panY = panStartY + (e.clientY - dragStartY);
+        panX = panStartX + deltaX;
+        panY = panStartY + deltaY;
         updateTransform();
         notifyTransform();
         e.preventDefault();
@@ -367,12 +376,19 @@
     }, { passive: false });
 
     document.addEventListener('touchend', function(e) {
-      lastTouchDist = 0;
       if (e.touches.length === 1) {
+        lastTouchDist = 0;
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
         touchPanStartX = panX;
         touchPanStartY = panY;
+      } else if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      } else {
+        lastTouchDist = 0;
       }
     });
 

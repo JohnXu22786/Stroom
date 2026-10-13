@@ -387,6 +387,7 @@ void main() {
       String codec = 'raw ',
       int sampleRate = 44100,
       int bitsPerSample = 16,
+      bool useCo64 = false,
     }) {
       final bytesPerSample = (bitsPerSample + 7) ~/ 8;
       final audioDataLen = pcmFrames * bytesPerSample;
@@ -421,15 +422,13 @@ void main() {
 
       // ----- Offset tracking -----
       // ftyp = 24 bytes (0-23): [8 header + 4+4+4+4 content]
-      // moov = 309 bytes (24-332):
-      //   8 (moov header) + trak[8 (header) + 92 (tkhd) + 201 (mdia)]
-      // mdat starts at 24 + 309 = 333
-      // audio data starts at 333 + 8 = 341
+      // moov is 309 bytes with stco or 313 bytes with co64.
       const ftypSize = 24;
-      const moovSize = 309;
-      const trakSize = 301;
-      const mdiaSize = 201;
-      const audioDataOffset = ftypSize + moovSize + 8; // = 341
+      final offsetTableExtraSize = useCo64 ? 4 : 0;
+      final moovSize = 309 + offsetTableExtraSize;
+      final trakSize = 301 + offsetTableExtraSize;
+      final mdiaSize = 201 + offsetTableExtraSize;
+      final audioDataOffset = ftypSize + moovSize + 8;
 
       // Write moov box
       bytes.add(_buildBoxHeader(moovSize, 'moov'));
@@ -477,11 +476,11 @@ void main() {
       bytes.addByte(0); // null name
 
       // minf
-      const minfSize = 160;
+      final minfSize = 160 + offsetTableExtraSize;
       bytes.add(_buildBoxHeader(minfSize, 'minf'));
 
       // stbl
-      const stblSize = 152;
+      final stblSize = 152 + offsetTableExtraSize;
       bytes.add(_buildBoxHeader(stblSize, 'stbl'));
 
       // stsd
@@ -520,12 +519,14 @@ void main() {
       bytes.add(_u32be(bytesPerSample)); // constant bytes per sample
       bytes.add(_u32be(pcmFrames)); // sample_count
 
-      // stco
-      bytes.add(_buildBoxHeader(20, 'stco'));
+      // stco / co64
+      final offsetTableType = useCo64 ? 'co64' : 'stco';
+      bytes.add(_buildBoxHeader(useCo64 ? 24 : 20, offsetTableType));
       bytes.add(_u32be(0)); // version=0, flags=0
       bytes.add(_u32be(1)); // entry_count = 1
-      bytes.add(
-          _u32be(audioDataOffset)); // chunk_offset (absolute file position!)
+      bytes.add(useCo64
+          ? _u64be(audioDataOffset)
+          : _u32be(audioDataOffset)); // absolute file position
 
       // ----- mdat box -----
       bytes.add(_buildBoxHeader(8 + audioData.length, 'mdat'));
@@ -918,6 +919,32 @@ void main() {
       return result.toBytes();
     }
 
+    Uint8List buildVariableStszWithCount(int sampleCount) {
+      final valid = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+      );
+      final stszStart = _findFourCc(valid, 'stsz') - 4;
+      final stszSize = _readUint32BE(valid, stszStart);
+      final stcoStart = _findFourCc(valid, 'stco') - 4;
+      final stcoSize = _readUint32BE(valid, stcoStart);
+      expect(stszStart + stszSize, stcoStart);
+
+      final reordered = Uint8List.fromList([
+        ...valid.sublist(0, stszStart),
+        ...valid.sublist(stcoStart, stcoStart + stcoSize),
+        ...valid.sublist(stszStart, stszStart + stszSize),
+        ...valid.sublist(stcoStart + stcoSize),
+      ]);
+      final stszTypeOffset = _findFourCc(reordered, 'stsz');
+      reordered.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(sampleCount),
+      );
+      return reordered;
+    }
+
     Uint8List audioDataFromMp4(Uint8List data) {
       final mdatTypeOffset = _findFourCc(data, 'mdat');
       expect(mdatTypeOffset, greaterThanOrEqualTo(4));
@@ -1151,6 +1178,59 @@ void main() {
       },
     );
 
+    test('rejects a constant-size sample count beyond file capacity', () async {
+      final malformed = Uint8List.fromList(
+        buildMinimalMp4WithPcmAudio(pcmFrames: 2),
+      );
+      final stszTypeOffset = _findFourCc(malformed, 'stsz');
+      malformed.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(1000),
+      );
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects stco and co64 sample chunks outside mdat payload', () async {
+      for (final useCo64 in [false, true]) {
+        final malformed = Uint8List.fromList(
+          buildMinimalMp4WithPcmAudio(pcmFrames: 2, useCo64: useCo64),
+        );
+        final offsetTableType = useCo64 ? 'co64' : 'stco';
+        final offsetTableTypeOffset = _findFourCc(malformed, offsetTableType);
+        malformed.setRange(
+          offsetTableTypeOffset + 12,
+          offsetTableTypeOffset + (useCo64 ? 20 : 16),
+          useCo64 ? _u64be(8) : _u32be(8), // ftyp payload, still in the file
+        );
+
+        await expectLater(
+          engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+          throwsA(
+            isA<Exception>().having(
+              (error) => error.toString(),
+              'message',
+              'Exception: No audio data extracted',
+            ),
+          ),
+        );
+      }
+    });
+
+    test('rejects a variable-size sample count beyond its stsz entries',
+        () async {
+      final malformed = buildVariableStszWithCount(1000);
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
     test(
       'rejects a truncated trailing moov with oversized stbl without hanging',
       () async {
@@ -1183,6 +1263,32 @@ void main() {
         expect(result, equals('Exception: No audio track found in video'));
       },
     );
+
+    test('rejects a zero-sized unknown stbl child without hanging', () async {
+      final malformed = buildMinimalMp4WithPcmAudio(pcmFrames: 2);
+      final stblHeader = _findFourCc(malformed, 'stbl') - 4;
+      final childHeader = stblHeader + 8;
+      malformed.setRange(childHeader, childHeader + 4, _u32be(0));
+      malformed.setRange(childHeader + 4, childHeader + 8, _fourCc('free'));
+
+      final response = ReceivePort();
+      final isolate = await Isolate.spawn(_extractAudioInIsolateForTesting, [
+        response.sendPort,
+        malformed,
+      ]);
+      final Object? result;
+      try {
+        result = await response.first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => 'timed-out',
+        );
+      } finally {
+        isolate.kill(priority: Isolate.immediate);
+        response.close();
+      }
+
+      expect(result, equals('Exception: No audio track found in video'));
+    });
 
     test('preserves HE-AAC/SBR config and output frame timing', () async {
       // Cover AOT 5 and the backward-compatible AOT 2 + sync-extension form.

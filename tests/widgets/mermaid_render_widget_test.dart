@@ -20,46 +20,65 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MermaidRenderWidget - bundled JavaScript loading', () {
-    test('concurrent callers await the shared bundled asset load', () async {
-      final assetBytes = await rootBundle.load(
-        MermaidRenderWidget.bundledMermaidJsAsset,
-      );
-      final assetLoad = Completer<ByteData>();
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      var assetLoadCount = 0;
-      messenger.setMockMessageHandler('flutter/assets', (message) async {
-        final assetKey = utf8.decode(
-          message!.buffer.asUint8List(
-            message.offsetInBytes,
-            message.lengthInBytes,
-          ),
+    test(
+      'failed asset reads retry while concurrent callers share the load',
+      () async {
+        final assetBytes = await rootBundle.load(
+          MermaidRenderWidget.bundledMermaidJsAsset,
         );
-        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
-          return null;
-        }
-        assetLoadCount++;
-        return assetLoad.future;
-      });
-      addTearDown(() {
-        messenger.setMockMessageHandler('flutter/assets', null);
-      });
+        final successfulAssetLoad = Completer<ByteData>();
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        var assetLoadCount = 0;
+        messenger.setMockMessageHandler('flutter/assets', (message) async {
+          final assetKey = utf8.decode(
+            message!.buffer.asUint8List(
+              message.offsetInBytes,
+              message.lengthInBytes,
+            ),
+          );
+          if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+            return null;
+          }
+          assetLoadCount++;
+          if (assetLoadCount == 1) {
+            return null;
+          }
+          return successfulAssetLoad.future;
+        });
+        addTearDown(() {
+          messenger.setMockMessageHandler('flutter/assets', null);
+        });
 
-      final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
-      final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
-      await Future<void>.delayed(Duration.zero);
-      assetLoad.complete(assetBytes);
+        expect(await MermaidRenderWidget.loadBundledMermaidJs(), isNull);
+        expect(assetLoadCount, 1);
 
-      final loadedSources = await Future.wait([firstLoad, secondLoad]);
-      expect(loadedSources, hasLength(2));
-      expect(loadedSources.first, isNotNull);
-      expect(
-        identical(loadedSources.last, loadedSources.first),
-        isTrue,
-        reason: 'concurrent callers should receive the shared loaded source',
-      );
-      expect(assetLoadCount, 1);
-    });
+        final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
+        final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
+        await Future<void>.delayed(Duration.zero);
+        successfulAssetLoad.complete(assetBytes);
+
+        final loadedSources = await Future.wait([firstLoad, secondLoad]);
+        expect(loadedSources, hasLength(2));
+        expect(loadedSources.first, isNotNull);
+        expect(
+          identical(loadedSources.last, loadedSources.first),
+          isTrue,
+          reason: 'concurrent callers should receive the shared loaded source',
+        );
+        expect(assetLoadCount, 2);
+
+        expect(
+          await MermaidRenderWidget.loadBundledMermaidJs(),
+          loadedSources.first,
+        );
+        expect(
+          assetLoadCount,
+          2,
+          reason: 'successful results should stay cached',
+        );
+      },
+    );
   });
 
   group('MermaidRenderWidget - buildMermaidHtml', () {
@@ -287,11 +306,14 @@ void main() {
       expect(html, contains('onTransformChanged'));
     });
 
-    test('HTML includes window.setPanZoom for Flutter-driven pan/zoom', () {
+    test('HTML queues native gesture transforms until after the first fit', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('window.setPanZoom = function(x, y, level)'),
-          reason:
-              'the inline widget drives pan/zoom from Flutter via setPanZoom');
+      expect(
+        html,
+        contains(
+          'window.applyGestureTransformAfterFit = function(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY)',
+        ),
+      );
     });
 
     test('HTML includes fitToViewport for auto-fit after render', () {
@@ -327,9 +349,9 @@ void main() {
       expect(html, contains('panX = panStartX + (e.clientX - dragStartX)'));
       expect(html, contains('panX = touchPanStartX'));
       // Exactly one notify per mutation path: setZoom, fitToViewport,
-      // mouse-drag pan, touch pan. This pins the notify calls to the
-      // pan handlers (not just to the zoom/fit paths).
-      expect('notifyTransform();'.allMatches(html).length, 4);
+      // native pan/pinch, mouse-drag pan, touch pan. This pins the notify
+      // calls to the transform handlers (not just to zoom and fit paths).
+      expect('notifyTransform();'.allMatches(html).length, 5);
     });
 
     test('fitToViewport uses contain-fit (min ratio) and centers the diagram',
@@ -942,6 +964,204 @@ void main() {
     });
 
     testWidgets(
+      'native pan and pinch before first fit survive auto-fit',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final fakeController = webView.controller;
+        final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+        fakeController.viewportSize = widgetRect.size;
+
+        // onLoadStop has completed, but Mermaid's asynchronous render and
+        // first fit have not. Exercise both native scale-gesture updates in
+        // that interval, when their pan/pinch state can be overwritten.
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(35, -12),
+        );
+        await tester.pump();
+
+        final center = widgetRect.center;
+        final firstFinger = await tester.startGesture(
+          center - const Offset(30, 0),
+          pointer: 5,
+        );
+        final secondFinger = await tester.startGesture(
+          center + const Offset(30, 0),
+          pointer: 6,
+        );
+        await tester.pump();
+        await firstFinger.moveTo(center - const Offset(60, 0));
+        await secondFinger.moveTo(center + const Offset(60, 0));
+        await tester.pump();
+        await firstFinger.up();
+        await secondFinger.up();
+        await tester.pump();
+
+        expect(
+          fakeController.gestureTransformCalls,
+          isNotEmpty,
+          reason: 'native gestures must reach the page before its first fit',
+        );
+        expect(
+          fakeController.gestureTransformCalls.any(
+            (operation) =>
+                operation.scale == 1 &&
+                (operation.panDeltaX != 0 || operation.panDeltaY != 0),
+          ),
+          isTrue,
+          reason: 'the pre-fit drag should be sent as a relative pan',
+        );
+        expect(
+          fakeController.gestureTransformCalls.any(
+            (operation) => operation.scale > 1,
+          ),
+          isTrue,
+          reason: 'the pre-fit pinch should be sent as a relative scale',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'pinch continuing across first fit uses the latest transform baseline',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+          supportsJavaScriptHandlers: true,
+        );
+        final fakeController = webView.controller;
+        final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+        fakeController.viewportSize = widgetRect.size;
+        final center = widgetRect.center;
+        final firstFinger = await tester.startGesture(
+          center - const Offset(30, 0),
+          pointer: 7,
+        );
+        final secondFinger = await tester.startGesture(
+          center + const Offset(30, 0),
+          pointer: 8,
+        );
+        await tester.pump();
+
+        await firstFinger.moveTo(center - const Offset(60, 0));
+        await secondFinger.moveTo(center + const Offset(60, 0));
+        await tester.pump();
+
+        // The gesture remains active while the asynchronous first fit resets
+        // JS state and replays its queued transforms into the fitted view.
+        fakeController.simulateJsFitToViewport(0.8);
+        final fittedGestureScale = fakeController.zoomLevel / 0.8;
+        expect(fittedGestureScale, greaterThan(1.5));
+        final callsBeforeContinuation =
+            fakeController.gestureTransformCalls.length;
+
+        await firstFinger.moveTo(center - const Offset(90, 0));
+        await secondFinger.moveTo(center + const Offset(90, 0));
+        await tester.pump();
+
+        final continuingScales = fakeController.gestureTransformCalls
+            .skip(callsBeforeContinuation)
+            .map((operation) => operation.scale);
+        final combinedScale = continuingScales.fold<double>(
+          1,
+          (scale, updateScale) => scale * updateScale,
+        );
+        expect(
+          combinedScale,
+          closeTo(3 / fittedGestureScale, 0.0001),
+          reason:
+              'continued pinch deltas must be based on the latest cumulative gesture scale after fit',
+        );
+
+        await firstFinger.up();
+        await secondFinger.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'pre-fit pinch scale is not clamped against the default Flutter zoom',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+        );
+        final fakeController = webView.controller;
+        final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+        fakeController.viewportSize = widgetRect.size;
+        final center = widgetRect.center;
+        final firstFinger = await tester.startGesture(
+          center - const Offset(30, 0),
+          pointer: 9,
+        );
+        final secondFinger = await tester.startGesture(
+          center + const Offset(30, 0),
+          pointer: 10,
+        );
+        await tester.pump();
+
+        await firstFinger.moveTo(center - const Offset(330, 0));
+        await secondFinger.moveTo(center + const Offset(330, 0));
+        await tester.pump();
+
+        fakeController.simulateJsFitToViewport(0.5);
+        expect(
+          fakeController.zoomLevel,
+          closeTo(5.5, 0.001),
+          reason:
+              'the raw 11x pinch must be replayed against the fitted 0.5x zoom',
+        );
+
+        await firstFinger.up();
+        await secondFinger.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'a stationary native diagram tap forwards one WebView click',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -1083,8 +1303,8 @@ void main() {
         expect(scrollController.offset, closeTo(0, 0.1));
         expect(
           webView.controller.evaluatedScripts,
-          contains(predicate<String>(
-              (script) => script.contains('window.setPanZoom('))),
+          contains(predicate<String>((script) =>
+              script.contains('window.applyGestureTransformAfterFit('))),
         );
         expect(
           webView.controller.evaluatedScripts.where(
@@ -1104,7 +1324,7 @@ void main() {
     );
 
     testWidgets(
-      'native source updates ignore stale completion before current load errors',
+      'native source updates ignore stale errors and completion before current load errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
         final previousTargetPlatform = debugDefaultTargetPlatformOverride;
@@ -1155,6 +1375,22 @@ void main() {
           await tester.pump();
           final loadingVisibleAfterStaleCompletion =
               find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: previousLoadUrl, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Stale load failed',
+            ),
+          );
+          await tester.pump();
+          expect(
+            find.text('页面加载失败: Stale load failed'),
+            findsNothing,
+            reason: 'an earlier source must not replace the current preview',
+          );
+          expect(find.text('重试'), findsNothing);
 
           const errorMessage = '页面加载失败: Could not connect to host';
           webView.params.onReceivedError!(
@@ -1443,6 +1679,78 @@ void main() {
         await tester.pump();
 
         expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web source updates ignore stale errors and surface current errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final previousUrl = webView.controller.loadedUrls.last;
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ' graph TD\nA-->B '),
+            ),
+          ),
+        );
+        await tester.pump();
+        final currentUrl = webView.controller.loadedUrls.last;
+        expect(
+          MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+          MermaidRenderWidget.buildWebAssetUrl(' graph TD\nA-->B '),
+          reason: 'whitespace-only source changes share the same rendered URL',
+        );
+        expect(currentUrl, isNot(previousUrl));
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: previousUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale load failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载失败: Stale load failed'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: currentUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current load failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载失败: Current load failed'), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -2399,7 +2707,11 @@ void main() {
 }
 
 Future<_MermaidWebView> _mountReadyMermaidWidget(
-    WidgetTester tester, _MermaidWebViewPlatform platform, Widget body) async {
+  WidgetTester tester,
+  _MermaidWebViewPlatform platform,
+  Widget body, {
+  bool supportsJavaScriptHandlers = false,
+}) async {
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
   await tester.runAsync(() async {
@@ -2410,6 +2722,7 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   await tester.pump();
 
   final webView = platform.webView!;
+  webView.controller.supportsJavaScriptHandlers = supportsJavaScriptHandlers;
   final controller = webView.controllerFromPlatform<InAppWebViewController>(
     webView.controller,
   );
@@ -2430,6 +2743,7 @@ class _MermaidWebViewPlatform extends InAppWebViewPlatform {
 
 class _MermaidWebView extends PlatformInAppWebViewWidget {
   final controller = _MermaidWebViewController();
+  InAppWebViewController? _controllerWrapper;
 
   _MermaidWebView(super.params) : super.implementation();
 
@@ -2437,8 +2751,12 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
   Widget build(BuildContext context) => const SizedBox.expand();
 
   @override
-  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
-      params.controllerFromPlatform!(controller) as T;
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) {
+    // The real plugin reuses one wrapper for callbacks from each platform view.
+    final wrapper = _controllerWrapper ??=
+        params.controllerFromPlatform!(controller) as InAppWebViewController;
+    return wrapper as T;
+  }
 
   @override
   void dispose() {}
@@ -2448,13 +2766,25 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
   final List<({double delta, double? centerX, double? centerY})>
       _pendingZoomOperations = [];
+  final gestureTransformCalls = <({
+    int gestureId,
+    double scale,
+    double panDeltaX,
+    double panDeltaY,
+    double? centerX,
+    double? centerY,
+  })>[];
   final wheelZoomAnchors = <Offset>[];
   final loadedUrls = <WebUri>[];
   final loadedDataBaseUrls = <WebUri?>[];
+  final _javascriptHandlers = <String, JavaScriptHandlerCallback>{};
   Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
   double panX = 0;
   double panY = 0;
+  int? _activeNativeGestureId;
+  double _nativeGestureZoomLevel = 1.0;
+  bool supportsJavaScriptHandlers = false;
   bool _fitComplete = false;
 
   void simulateJsFitToViewport(double fittedZoom) {
@@ -2462,7 +2792,43 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     panX = 0;
     panY = 0;
     _fitComplete = true;
+    _activeNativeGestureId = null;
+    _nativeGestureZoomLevel = fittedZoom;
     _applyPendingZoomOperations();
+    for (final operation in gestureTransformCalls) {
+      _applyGestureTransform(operation);
+    }
+    _javascriptHandlers['onTransformChanged']?.call([
+      zoomLevel,
+      panX,
+      panY,
+    ]);
+  }
+
+  void _applyGestureTransform(
+    ({
+      int gestureId,
+      double scale,
+      double panDeltaX,
+      double panDeltaY,
+      double? centerX,
+      double? centerY,
+    }) operation,
+  ) {
+    if (_activeNativeGestureId != operation.gestureId) {
+      _activeNativeGestureId = operation.gestureId;
+      _nativeGestureZoomLevel = zoomLevel;
+    }
+    panX += operation.panDeltaX;
+    panY += operation.panDeltaY;
+    final oldZoom = zoomLevel;
+    _nativeGestureZoomLevel *= operation.scale;
+    zoomLevel = _nativeGestureZoomLevel.clamp(0.1, 10.0).toDouble();
+    final appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1.0;
+    if (operation.centerX != null && operation.centerY != null) {
+      panX = operation.centerX! - (operation.centerX! - panX) * appliedScale;
+      panY = operation.centerY! - (operation.centerY! - panY) * appliedScale;
+    }
   }
 
   void _applyPendingZoomOperations() {
@@ -2471,10 +2837,16 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       final centerX = operation.centerX ?? viewportSize.width / 2;
       final centerY = operation.centerY ?? viewportSize.height / 2;
       final newZoom = (zoomLevel + operation.delta).clamp(0.1, 10.0).toDouble();
-      if (newZoom == zoomLevel) continue;
+      if (newZoom == zoomLevel) {
+        _activeNativeGestureId = null;
+        _nativeGestureZoomLevel = zoomLevel;
+        continue;
+      }
       panX = centerX - (centerX - panX) * (newZoom / zoomLevel);
       panY = centerY - (centerY - panY) * (newZoom / zoomLevel);
       zoomLevel = newZoom;
+      _activeNativeGestureId = null;
+      _nativeGestureZoomLevel = zoomLevel;
       if (operation.centerX != null && operation.centerY != null) {
         wheelZoomAnchors.add(Offset(centerX, centerY));
       }
@@ -2531,8 +2903,12 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   void addJavaScriptHandler({
     required String handlerName,
     required JavaScriptHandlerCallback callback,
-  }) =>
+  }) {
+    if (!supportsJavaScriptHandlers) {
       throw UnimplementedError('JavaScript handlers are unavailable on web');
+    }
+    _javascriptHandlers[handlerName] = callback;
+  }
 
   @override
   Future<dynamic> evaluateJavascript({
@@ -2572,6 +2948,24 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
         centerX: centerX,
         centerY: centerY,
       );
+      return;
+    }
+
+    final gestureTransform = RegExp(
+      r'window\.applyGestureTransformAfterFit\((\d+),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(null|-?\d+(?:\.\d+)?),\s*(null|-?\d+(?:\.\d+)?)\)',
+    ).firstMatch(source);
+    if (gestureTransform != null) {
+      double? optionalDouble(String value) =>
+          value == 'null' ? null : double.parse(value);
+      gestureTransformCalls.add((
+        gestureId: int.parse(gestureTransform.group(1)!),
+        scale: double.parse(gestureTransform.group(2)!),
+        panDeltaX: double.parse(gestureTransform.group(3)!),
+        panDeltaY: double.parse(gestureTransform.group(4)!),
+        centerX: optionalDouble(gestureTransform.group(5)!),
+        centerY: optionalDouble(gestureTransform.group(6)!),
+      ));
+      if (_fitComplete) _applyGestureTransform(gestureTransformCalls.last);
       return;
     }
 

@@ -515,5 +515,94 @@ void main() {
         reason: 'Non-dot-prefixed temp file should be deleted for paused task',
       );
     });
+
+    test('preserves media files while another task still uses them', () async {
+      const fileName = 'test_video.mp4';
+      final removedTask = createTask(
+        id: 'removed-sharing-task',
+        status: TaskStatus.paused,
+        selectedMedia: createMedia(),
+        downloadedFilePath: p.join(
+          appDir,
+          'catcatch',
+          'downloads',
+          'unique.mp4',
+        ),
+      );
+      final remainingTask = createTask(
+        id: 'remaining-sharing-task',
+        status: TaskStatus.running,
+        selectedMedia: createMedia(),
+      );
+
+      await createTempFiles(removedTask.id, fileName);
+      await createTempFiles(remainingTask.id, fileName);
+
+      final downloadDir = Directory(p.join(appDir, 'catcatch', 'downloads'));
+      final noDotTemp = File(p.join(
+        downloadDir.path,
+        '$fileName${DefaultRules.tempFileSuffix}',
+      ));
+      final dotTemp = File(p.join(
+        downloadDir.path,
+        '.$fileName${DefaultRules.tempFileSuffix}',
+      ));
+      final downloadFile = File(p.join(downloadDir.path, fileName));
+      final mergedFile = File(p.join(downloadDir.path, 'test_video_merged.ts'));
+      final partsDir = Directory(
+        p.join(downloadDir.path, '.test_video_merged.ts_parts'),
+      );
+      final convertedFile =
+          File(p.join(appDir, 'catcatch', 'converted', fileName));
+      final removedProgress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        '${removedTask.id}_dl_progress.json',
+      ));
+      final remainingProgress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        '${remainingTask.id}_dl_progress.json',
+      ));
+      final uniqueDownload = File(removedTask.downloadedFilePath!);
+
+      await dotTemp.writeAsString('shared dot temp');
+      await downloadFile.writeAsString('shared download');
+      await mergedFile.writeAsString('shared merged');
+      await partsDir.create(recursive: true);
+      await File(p.join(partsDir.path, 'part_0')).writeAsString('shared part');
+      await uniqueDownload.writeAsString('removed task download');
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        removedTask,
+        appDirPath: appDir,
+        remainingTasks: [remainingTask],
+      );
+
+      expect(removedProgress.existsSync(), isFalse);
+      expect(remainingProgress.existsSync(), isTrue);
+      expect(uniqueDownload.existsSync(), isFalse);
+      expect(noDotTemp.existsSync(), isTrue);
+      expect(dotTemp.existsSync(), isTrue);
+      expect(downloadFile.existsSync(), isTrue);
+      expect(mergedFile.existsSync(), isTrue);
+      expect(partsDir.existsSync(), isTrue);
+      expect(convertedFile.existsSync(), isTrue);
+
+      await CatCatchNotifier.cleanupTaskFiles(
+        remainingTask,
+        appDirPath: appDir,
+      );
+
+      expect(remainingProgress.existsSync(), isFalse);
+      expect(noDotTemp.existsSync(), isFalse);
+      expect(dotTemp.existsSync(), isFalse);
+      expect(downloadFile.existsSync(), isFalse);
+      expect(mergedFile.existsSync(), isFalse);
+      expect(partsDir.existsSync(), isFalse);
+      expect(convertedFile.existsSync(), isFalse);
+    });
   });
 }
