@@ -19,10 +19,15 @@ class _ControlledDocuments extends PathProviderPlatform {
   final releaseRestorePath = Completer<void>();
   final secondPathStarted = Completer<void>();
   final releaseSecondPath = Completer<void>();
+  bool failNextPathRequest = false;
   int pathRequests = 0;
 
   @override
   Future<String?> getApplicationDocumentsPath() async {
+    if (failNextPathRequest) {
+      failNextPathRequest = false;
+      throw StateError('controlled path failure');
+    }
     switch (++pathRequests) {
       case 1:
         restorePathStarted.complete();
@@ -37,6 +42,8 @@ class _ControlledDocuments extends PathProviderPlatform {
 
 class _RestoreRaceNotifier extends CatCatchNotifier {
   _RestoreRaceNotifier(super.ref);
+
+  void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
 
   @override
   Future<bool> startBackgroundServiceForTask() async => true;
@@ -98,6 +105,268 @@ void main() {
     AppStorage.resetCache();
     await directory.delete(recursive: true);
   });
+
+  test(
+    'restore retains removals made after a failed read for the next retry',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final task = _task(
+        id: 'removed-after-failed-restore',
+        url: 'https://example.com/removed.mp4',
+      );
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      const unreadableSnapshot = '[{not-json}]';
+      await tasksFile.writeAsString(unreadableSnapshot);
+      notifier.setTasksForTest([task]);
+
+      final failedRestore = notifier.restoreUnfinishedTasks();
+      await documents.restorePathStarted.future;
+      documents.releaseRestorePath.complete();
+      await failedRestore;
+
+      notifier.removeTask(task.id);
+      await tasksFile.writeAsString(jsonEncode([task.toMap()]));
+      await notifier.restoreUnfinishedTasks();
+      await notifier.removeTasksPersisted(['persistence-barrier']);
+
+      expect(container.read(catcatchTasksProvider), isEmpty);
+      expect(jsonDecode(await tasksFile.readAsString()), isEmpty);
+    },
+  );
+
+  test(
+    'snapshot queued during restore is replaced with reconciled state',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final storedTask = _task(
+        id: 'stored-before-snapshot',
+        url: 'https://example.com/stored.mp4',
+      );
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      await tasksFile.writeAsString(jsonEncode([storedTask.toMap()]));
+
+      final firstRestore = notifier.restoreUnfinishedTasks();
+      try {
+        await documents.restorePathStarted.future;
+        notifier.failAllRunningTasks(error: 'application shutdown');
+        await Future.any([
+          documents.secondPathStarted.future,
+          notifier.waitForTaskSnapshotWritesForTesting(),
+        ]);
+
+        documents.releaseRestorePath.complete();
+        await firstRestore;
+        expect(
+          container.read(catcatchTasksProvider).map((task) => task.id),
+          ['stored-before-snapshot'],
+        );
+
+        documents.releaseSecondPath.complete();
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        expect(
+          container.read(catcatchTasksProvider).map((task) => task.id),
+          ['stored-before-snapshot'],
+        );
+        final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+        expect(
+          persisted.map((entry) => (entry as Map)['id']),
+          ['stored-before-snapshot'],
+        );
+      } finally {
+        if (!documents.releaseRestorePath.isCompleted) {
+          documents.releaseRestorePath.complete();
+        }
+        if (!documents.releaseSecondPath.isCompleted) {
+          documents.releaseSecondPath.complete();
+        }
+        await firstRestore;
+        await notifier.waitForTaskSnapshotWritesForTesting();
+      }
+    },
+  );
+
+  test(
+    'successful replacement snapshot clears a deferred-write marker',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final storedTask = _task(
+        id: 'stored-before-deferred-write',
+        url: 'https://example.com/stored.mp4',
+      );
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      await tasksFile.writeAsString(jsonEncode([storedTask.toMap()]));
+
+      final firstRestore = notifier.restoreUnfinishedTasks();
+      try {
+        await documents.restorePathStarted.future;
+        notifier.failAllRunningTasks(error: 'application shutdown');
+        await Future.any([
+          documents.secondPathStarted.future,
+          notifier.waitForTaskSnapshotWritesForTesting(),
+        ]);
+
+        documents.releaseRestorePath.complete();
+        await firstRestore;
+        documents.releaseSecondPath.complete();
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        expect(
+          container.read(catcatchTasksProvider).map((task) => task.id),
+          ['stored-before-deferred-write'],
+        );
+
+        AppStorage.resetCache();
+        documents.failNextPathRequest = true;
+        notifier.setTasksForTest([]);
+        notifier.failAllRunningTasks(error: 'application shutdown');
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        expect(
+          container.read(catcatchTasksProvider),
+          isEmpty,
+        );
+        expect(
+          (jsonDecode(await tasksFile.readAsString()) as List)
+              .map((entry) => (entry as Map)['id']),
+          ['stored-before-deferred-write'],
+        );
+
+        await notifier.restoreUnfinishedTasks();
+
+        expect(container.read(catcatchTasksProvider), isEmpty);
+      } finally {
+        if (!documents.releaseRestorePath.isCompleted) {
+          documents.releaseRestorePath.complete();
+        }
+        if (!documents.releaseSecondPath.isCompleted) {
+          documents.releaseSecondPath.complete();
+        }
+        await firstRestore;
+        await notifier.waitForTaskSnapshotWritesForTesting();
+      }
+    },
+  );
+
+  test(
+    'restore loads persisted tasks after deferring a pending snapshot write',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final storedTask = _task(
+        id: 'stored-before-mutation',
+        url: 'https://example.com/stored.mp4',
+      );
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      await tasksFile.writeAsString(jsonEncode([storedTask.toMap()]));
+
+      notifier.addTask(
+        'https://example.com/concurrent-add.mp4',
+        30,
+        taskId: 'concurrent-add',
+      );
+      await documents.restorePathStarted.future;
+      final restore = notifier.restoreUnfinishedTasks();
+      try {
+        documents.releaseRestorePath.complete();
+        await restore;
+        await notifier.removeTasksPersisted(['persistence-barrier']);
+
+        final expectedIds = {'stored-before-mutation', 'concurrent-add'};
+        expect(
+          container.read(catcatchTasksProvider).map((task) => task.id).toSet(),
+          expectedIds,
+        );
+        final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+        expect(
+          persisted.map((entry) => (entry as Map)['id']).toSet(),
+          expectedIds,
+        );
+      } finally {
+        if (!documents.releaseRestorePath.isCompleted) {
+          documents.releaseRestorePath.complete();
+        }
+        await restore;
+        await notifier.removeTasksPersisted(['persistence-barrier']);
+      }
+    },
+  );
+
+  test(
+    'failed restore preserves stored bytes through mutation and retry',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      const unreadableSnapshot = '[{not-json}]';
+      await tasksFile.writeAsString(unreadableSnapshot);
+      final inMemoryTask = _task(
+        id: 'in-memory-before-restore',
+        url: 'https://example.com/current.mp4',
+      );
+      notifier.setTasksForTest([inMemoryTask]);
+
+      final failedRestore = notifier.restoreUnfinishedTasks();
+      await documents.restorePathStarted.future;
+      documents.releaseRestorePath.complete();
+      await failedRestore;
+
+      expect(
+        container.read(catcatchTasksProvider).map((task) => task.id),
+        ['in-memory-before-restore'],
+      );
+
+      notifier.addTask(
+        'https://example.com/added-after-failure.mp4',
+        30,
+        taskId: 'added-after-failure',
+      );
+      await notifier.restoreUnfinishedTasks();
+      expect(await tasksFile.readAsString(), unreadableSnapshot);
+
+      final recoveredStoredTask = _task(
+        id: 'stored-task',
+        url: 'https://example.com/stored.mp4',
+      );
+      final storedVersionOfAddedTask = _task(
+        id: 'added-after-failure',
+        url: 'https://example.com/persisted-version.mp4',
+      );
+      await tasksFile.writeAsString(
+        jsonEncode([
+          recoveredStoredTask.toMap(),
+          storedVersionOfAddedTask.toMap(),
+        ]),
+      );
+
+      await notifier.restoreUnfinishedTasks();
+      await notifier.removeTasksPersisted(['persistence-barrier']);
+
+      final tasks = container.read(catcatchTasksProvider);
+      expect(
+        tasks.map((task) => task.id).toSet(),
+        {'in-memory-before-restore', 'added-after-failure', 'stored-task'},
+      );
+      expect(
+        tasks.where((task) => task.id == 'added-after-failure'),
+        hasLength(1),
+      );
+      expect(
+        tasks.singleWhere((task) => task.id == 'added-after-failure').url,
+        'https://example.com/added-after-failure.mp4',
+      );
+
+      final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+      expect(persisted, hasLength(3));
+      expect(
+        persisted.map((entry) => (entry as Map)['id']).toSet(),
+        {'in-memory-before-restore', 'added-after-failure', 'stored-task'},
+      );
+    },
+  );
 
   test(
     'restore keeps a concurrent task and prefers its in-memory version',
