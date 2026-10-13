@@ -994,6 +994,10 @@ class _Mp4Demuxer {
                   final scStart = _offset;
                   final scSize = _readUint32(); // box size
                   final scType = _readString(4);
+                  final scEnd = scStart + scSize;
+                  if (scSize < 8 || scEnd > stblEnd || scEnd > _data.length) {
+                    return null;
+                  }
 
                   if (scType == 'stsd') {
                     _offset += 4; // version + flags
@@ -1123,7 +1127,7 @@ class _Mp4Demuxer {
                       chunkOffsets.add((high << 32) | low);
                     }
                   } else {
-                    _offset = scStart + _boxSizeAt(scStart);
+                    _offset = scEnd;
                   }
                 }
               } else {

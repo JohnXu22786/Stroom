@@ -1237,6 +1237,32 @@ void main() {
       },
     );
 
+    test('rejects a zero-sized unknown stbl child without hanging', () async {
+      final malformed = buildMinimalMp4WithPcmAudio(pcmFrames: 2);
+      final stblHeader = _findFourCc(malformed, 'stbl') - 4;
+      final childHeader = stblHeader + 8;
+      malformed.setRange(childHeader, childHeader + 4, _u32be(0));
+      malformed.setRange(childHeader + 4, childHeader + 8, _fourCc('free'));
+
+      final response = ReceivePort();
+      final isolate = await Isolate.spawn(_extractAudioInIsolateForTesting, [
+        response.sendPort,
+        malformed,
+      ]);
+      final Object? result;
+      try {
+        result = await response.first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => 'timed-out',
+        );
+      } finally {
+        isolate.kill(priority: Isolate.immediate);
+        response.close();
+      }
+
+      expect(result, equals('Exception: No audio track found in video'));
+    });
+
     test('preserves HE-AAC/SBR config and output frame timing', () async {
       // Cover AOT 5 and the backward-compatible AOT 2 + sync-extension form.
       final configs = [
