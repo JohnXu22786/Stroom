@@ -385,12 +385,25 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Returns null if the asset cannot be loaded — the caller then lets the
   /// template fall back to its CDN loader.
   static Future<String?> loadBundledMermaidJs() {
-    return _bundledMermaidJsLoad ??= _loadBundledMermaidJs();
+    final cachedLoad = _bundledMermaidJsLoad;
+    if (cachedLoad != null) {
+      return cachedLoad;
+    }
+
+    late final Future<String?> load;
+    load = _loadBundledMermaidJs().then((source) {
+      if (source == null && identical(_bundledMermaidJsLoad, load)) {
+        _bundledMermaidJsLoad = null;
+      }
+      return source;
+    });
+    _bundledMermaidJsLoad = load;
+    return load;
   }
 
   static Future<String?> _loadBundledMermaidJs() async {
     try {
-      return await rootBundle.loadString(bundledMermaidJsAsset);
+      return await rootBundle.loadString(bundledMermaidJsAsset, cache: false);
     } catch (e) {
       debugPrint(
         '[MermaidRenderWidget] Failed to load bundled mermaid.js '

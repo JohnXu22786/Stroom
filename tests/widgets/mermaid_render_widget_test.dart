@@ -20,46 +20,65 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MermaidRenderWidget - bundled JavaScript loading', () {
-    test('concurrent callers await the shared bundled asset load', () async {
-      final assetBytes = await rootBundle.load(
-        MermaidRenderWidget.bundledMermaidJsAsset,
-      );
-      final assetLoad = Completer<ByteData>();
-      final messenger =
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-      var assetLoadCount = 0;
-      messenger.setMockMessageHandler('flutter/assets', (message) async {
-        final assetKey = utf8.decode(
-          message!.buffer.asUint8List(
-            message.offsetInBytes,
-            message.lengthInBytes,
-          ),
+    test(
+      'failed asset reads retry while concurrent callers share the load',
+      () async {
+        final assetBytes = await rootBundle.load(
+          MermaidRenderWidget.bundledMermaidJsAsset,
         );
-        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
-          return null;
-        }
-        assetLoadCount++;
-        return assetLoad.future;
-      });
-      addTearDown(() {
-        messenger.setMockMessageHandler('flutter/assets', null);
-      });
+        final successfulAssetLoad = Completer<ByteData>();
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        var assetLoadCount = 0;
+        messenger.setMockMessageHandler('flutter/assets', (message) async {
+          final assetKey = utf8.decode(
+            message!.buffer.asUint8List(
+              message.offsetInBytes,
+              message.lengthInBytes,
+            ),
+          );
+          if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+            return null;
+          }
+          assetLoadCount++;
+          if (assetLoadCount == 1) {
+            return null;
+          }
+          return successfulAssetLoad.future;
+        });
+        addTearDown(() {
+          messenger.setMockMessageHandler('flutter/assets', null);
+        });
 
-      final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
-      final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
-      await Future<void>.delayed(Duration.zero);
-      assetLoad.complete(assetBytes);
+        expect(await MermaidRenderWidget.loadBundledMermaidJs(), isNull);
+        expect(assetLoadCount, 1);
 
-      final loadedSources = await Future.wait([firstLoad, secondLoad]);
-      expect(loadedSources, hasLength(2));
-      expect(loadedSources.first, isNotNull);
-      expect(
-        identical(loadedSources.last, loadedSources.first),
-        isTrue,
-        reason: 'concurrent callers should receive the shared loaded source',
-      );
-      expect(assetLoadCount, 1);
-    });
+        final firstLoad = MermaidRenderWidget.loadBundledMermaidJs();
+        final secondLoad = MermaidRenderWidget.loadBundledMermaidJs();
+        await Future<void>.delayed(Duration.zero);
+        successfulAssetLoad.complete(assetBytes);
+
+        final loadedSources = await Future.wait([firstLoad, secondLoad]);
+        expect(loadedSources, hasLength(2));
+        expect(loadedSources.first, isNotNull);
+        expect(
+          identical(loadedSources.last, loadedSources.first),
+          isTrue,
+          reason: 'concurrent callers should receive the shared loaded source',
+        );
+        expect(assetLoadCount, 2);
+
+        expect(
+          await MermaidRenderWidget.loadBundledMermaidJs(),
+          loadedSources.first,
+        );
+        expect(
+          assetLoadCount,
+          2,
+          reason: 'successful results should stay cached',
+        );
+      },
+    );
   });
 
   group('MermaidRenderWidget - buildMermaidHtml', () {
