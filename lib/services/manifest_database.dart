@@ -48,6 +48,10 @@ class ManifestDatabase {
   @visibleForTesting
   static Future<void> Function()? beforeWebDataSaveForTesting;
 
+  /// Runs immediately before JSON manifest data is read in tests.
+  @visibleForTesting
+  static Future<void> Function()? beforeWebDataReadForTesting;
+
   /// Enable test mode — all operations use in-memory JSON storage
   /// (same code path as web), avoiding sqflite native dependencies.
   /// Also switches [WebFileStore] to in-memory mode so no IndexedDB
@@ -661,16 +665,12 @@ class ManifestDatabase {
   static Future<Map<String, dynamic>> _loadWebData() async {
     if (_webData != null) return _webData!;
 
-    try {
-      final raw = await WebFileStore.read(_webStoreKey);
-      if (raw != null && raw.isNotEmpty) {
-        final text = utf8Decode(raw);
-        _webData = jsonDecode(text) as Map<String, dynamic>;
-      } else {
-        _webData = emptyWebData();
-      }
-    } catch (e) {
-      debugPrint('ManifestDatabase._loadWebData error: $e');
+    await beforeWebDataReadForTesting?.call();
+    final raw = await WebFileStore.read(_webStoreKey);
+    if (raw != null && raw.isNotEmpty) {
+      final text = utf8Decode(raw);
+      _webData = jsonDecode(text) as Map<String, dynamic>;
+    } else {
       _webData = emptyWebData();
     }
     await _migrateOldVideoRecordsJson();
