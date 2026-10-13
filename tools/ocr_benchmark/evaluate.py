@@ -181,14 +181,27 @@ def _is_credential_like_setting_name(key: str) -> bool:
     return (
         normalized_key in SECRET_SETTING_KEYS
         or (
+            normalized_key.endswith("s")
+            and normalized_key[:-1] in SECRET_SETTING_KEYS
+        )
+        or (
             len(key_parts) > 1
             and re.fullmatch(r"key\d*", key_parts[-1], re.IGNORECASE) is not None
         )
         or (
-            "token" in lower_key_parts
+            any(part in {"token", "tokens"} for part in lower_key_parts)
             and any(
                 part
                 in {
+                    "api",
+                    "access",
+                    "auth",
+                    "bearer",
+                    "client",
+                    "oauth",
+                    "refresh",
+                    "service",
+                    "session",
                     "value",
                     "secret",
                     "credential",
@@ -201,6 +214,7 @@ def _is_credential_like_setting_name(key: str) -> bool:
             )
         )
         or normalized_key.startswith("auth")
+        or "auth" in lower_key_parts
         or normalized_key.endswith("token")
         or any(
             marker in normalized_key
@@ -337,18 +351,46 @@ def _table_rows(
     expected_column_count: int | None = None,
     *,
     allow_tsv: bool = False,
+    matching_rows: set[tuple[str, ...]] | None = None,
+    allow_unframed_shape_without_context: bool = False,
 ) -> list[tuple[str, ...]]:
     def parse_rows(
-        column_count: int | None, *, infer_optional_trailing_pipe: bool = False
+        column_count: int | None,
+        *,
+        infer_optional_trailing_pipe: bool = False,
+        require_table_row_shape: bool = False,
     ) -> list[tuple[str, ...]]:
+        lines = value.splitlines()
+
+        def is_unframed_pipe_row(line: str) -> bool:
+            stripped = line.strip()
+            if (
+                "|" not in stripped
+                or stripped.startswith("|")
+                or stripped.endswith("|")
+                or not re.search(r"\s\|\s", stripped)
+            ):
+                return False
+            cells = tuple(normalize_text(cell) for cell in stripped.split("|"))
+            return column_count is None or len(cells) == column_count
+
         rows = []
-        for line in value.splitlines():
+        for line_index, line in enumerate(lines):
             if "|" not in line:
                 if allow_tsv and "\t" in line:
                     cells = tuple(normalize_text(cell) for cell in line.split("\t"))
                     rows.append(cells)
                 continue
             stripped = line.strip()
+            has_table_row_shape = (
+                stripped.startswith("|")
+                or stripped.endswith("|")
+                or re.search(r"\s\|\s", stripped)
+            )
+            first_cell = stripped.split("|", maxsplit=1)[0].strip()
+            has_prose_label = re.match(
+                r"\w+(?:\s+\w+)*:\s+\S", first_cell
+            ) is not None
             raw_cells = stripped.split("|")
             has_leading_pipe = stripped.startswith("|")
             has_trailing_pipe = stripped.endswith("|")
@@ -366,17 +408,64 @@ def _table_rows(
             cells = [normalize_text(cell) for cell in raw_cells]
             if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
                 continue
-            rows.append(tuple(cells))
+            normalized_cells = tuple(cells)
+            has_unframed_table_context = any(
+                0 <= neighbor_index < len(lines)
+                and is_unframed_pipe_row(lines[neighbor_index])
+                for neighbor_index in (line_index - 1, line_index + 1)
+            )
+            if (
+                require_table_row_shape
+                and not has_table_row_shape
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and has_prose_label
+                and not (has_leading_pipe or has_trailing_pipe)
+                and normalized_cells not in (matching_rows or set())
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and not (has_leading_pipe or has_trailing_pipe)
+                and normalized_cells not in (matching_rows or set())
+                and not has_unframed_table_context
+                and not (
+                    allow_unframed_shape_without_context
+                    and has_table_row_shape
+                )
+            ):
+                continue
+            rows.append(normalized_cells)
         return rows
 
     if expected_column_count is not None:
-        return parse_rows(expected_column_count)
+        return parse_rows(
+            expected_column_count, require_table_row_shape=True
+        )
 
     rows = parse_rows(None, infer_optional_trailing_pipe=True)
     if not rows:
         return rows
     column_count = max(len(row) for row in rows)
     return parse_rows(column_count)
+
+
+def _is_table_separator_row(value: str, expected_column_count: int) -> bool:
+    stripped = value.strip()
+    if "|" not in stripped:
+        return False
+    raw_cells = stripped.split("|")
+    if stripped.startswith("|"):
+        raw_cells = raw_cells[1:]
+    if stripped.endswith("|"):
+        raw_cells = raw_cells[:-1]
+    cells = [normalize_text(cell) for cell in raw_cells]
+    return len(cells) == expected_column_count and all(
+        re.fullmatch(r":?-{3,}:?", cell) for cell in cells
+    )
 
 
 def _table_matches(expected: str, actual: str, output_format: str) -> bool:
@@ -386,7 +475,10 @@ def _table_matches(expected: str, actual: str, output_format: str) -> bool:
         return normalize_text(expected) in normalize_text(actual)
     expected_column_count = max(len(row) for row in expected_rows)
     actual_rows = _table_rows(
-        actual, expected_column_count, allow_tsv=allow_tsv
+        actual,
+        expected_column_count,
+        allow_tsv=allow_tsv,
+        matching_rows=set(expected_rows),
     )
     return actual_rows == expected_rows
 
@@ -581,11 +673,19 @@ def _plain_text_for_cer(
     if output_format == "plain_text" and table_text:
         annotated_table_rows = set(_table_rows(table_text))
         if annotated_table_rows:
+            expected_column_count = max(map(len, annotated_table_rows))
             lines = []
             for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-                parsed_rows = _table_rows(line)
-                if parsed_rows and any(
-                    row in annotated_table_rows for row in parsed_rows
+                if _is_table_separator_row(line, expected_column_count):
+                    continue
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_unframed_shape_without_context=True,
+                )
+                if any(
+                    len(row) == expected_column_count for row in parsed_rows
                 ):
                     line = line.replace("|", " ")
                 lines.append(line)
@@ -775,23 +875,54 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         if not tokens:
             return False
         token = tokens[0] if from_right else tokens[-1]
-        token_without_punctuation = token[:-1]
-        is_date_with_punctuation = (
-            len(tokens) > 1
-            and unicodedata.category(token[-1]).startswith("P")
-            and re.fullmatch(
-                r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}",
+        if not from_right and (
+            re.fullmatch(r"\d+[.)]", token)
+            or re.fullmatch(r"第\d+[\u3400-\u9fff]+", token)
+        ):
+            return False
+        has_trailing_punctuation = unicodedata.category(token[-1]).startswith("P")
+        token_without_punctuation = (
+            token[:-1] if has_trailing_punctuation else token
+        )
+        is_numeric_date = (
+            re.fullmatch(
+                r"(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|"
+                r"\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})",
                 token_without_punctuation,
             )
             is not None
         )
+        is_date_in_prose = is_numeric_date and (
+            len(tokens) == 1
+            or (
+                from_right
+                and not is_formula_term(tokens[1])
+            )
+            or (
+                not from_right
+                and not is_formula_term(tokens[-2])
+            )
+        )
         if (
             not from_right
-            and len(tokens) > 1
-            and unicodedata.category(token[-1]).startswith("P")
-            and not is_formula_term(tokens[-2])
-            and (token_without_punctuation.isdigit() or is_date_with_punctuation)
+            and (
+                is_date_in_prose
+                or (
+                    len(tokens) > 1
+                    and not is_formula_term(tokens[-2])
+                    and token_without_punctuation.isdigit()
+                )
+            )
         ):
+            return False
+        if (
+            from_right
+            and len(tokens) > 1
+            and re.fullmatch(r"\d+(?:[.,]\d+)?", token_without_punctuation)
+            and not is_formula_term(tokens[1])
+        ):
+            return False
+        if from_right and is_date_in_prose:
             return False
         if not is_formula_term(token):
             return False
@@ -1097,7 +1228,7 @@ def compare_reports(
 def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read fixture manifest: {error}") from error
     if not isinstance(manifest, dict):
         raise EvaluationError("fixture manifest must be an object")
@@ -1156,7 +1287,7 @@ def verify_fixtures(manifest_path: Path) -> dict[str, Any]:
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise EvaluationError(f"cannot read {path}: {error}") from error
     if not isinstance(value, dict):
         raise EvaluationError(f"{path} must contain a JSON object")

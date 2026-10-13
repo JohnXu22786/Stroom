@@ -65,6 +65,9 @@ Normalization and metric definitions:
   golden-text code points across pages. For `markdown` and `table` output, the
   evaluator removes headings, list/blockquote markers, annotated table pipes
   and separator rows, links, and inline emphasis/code markup before scoring.
+  For `plain_text`, rows with the annotated column shape have table pipes
+  normalized even when cell text differs; label-style prose and inline math are
+  preserved.
   Intraword underscores are preserved as text rather than stripped as emphasis.
   It applies table-pipe normalization to both the golden and returned text. For
   `markdown`, `table`, and `latex`, it removes paired inline/display math
@@ -86,9 +89,11 @@ Normalization and metric definitions:
 - Table fidelity compares the annotated rows and cells in sequence. It ignores
   optional outer Markdown pipes and Markdown separator rows, while preserving
   empty cells according to the annotated column count. For `plain_text`, it
-  also accepts tab-separated table rows. A valid Markdown table is not
-  penalized for its formatting row. It remains a text check, not semantic table
-  parsing. Formula fidelity compares the
+  also accepts tab-separated table rows. An unframed pipe row must match an
+  annotated row or have neighboring same-width table rows; labeled prose such
+  as `Set relation: x | y` is not counted as a row. A valid Markdown table is
+  not penalized for its formatting row. It remains a text check, not semantic
+  table parsing. Formula fidelity compares the
   annotated formula as a complete span after whitespace compaction and Unicode
   superscript normalization; surrounding prose is allowed, but adjacent math
   operators are not. For `markdown`, `table`, and `latex`, it
