@@ -437,6 +437,7 @@ class _MermaidPreviewDialogContentState
                   }
                 },
                 onReceivedError: (controller, request, error) {
+                  if (request.isForMainFrame == false) return;
                   _readyFallbackTimer?.cancel();
                   _zoomReadinessRetryTimer?.cancel();
                   _zoomReadinessRetryTimer = null;
