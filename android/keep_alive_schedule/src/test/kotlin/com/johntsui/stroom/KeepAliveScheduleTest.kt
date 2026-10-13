@@ -138,18 +138,28 @@ class KeepAliveScheduleTest {
     }
 
     @Test
-    fun failedRevocationBackupFallsBackToOneInexactPrimaryAlarm() {
+    fun failedRevocationBackupDoesNotReplaceSuccessfulExactPrimary() {
         val operations = mutableListOf<String>()
+        var primarySchedule: String? = null
+        var backupAttempts = 0
 
         val scheduled = scheduleWithExactRevocationFallback(
             canScheduleExact = true,
-            scheduleExact = { operations += "exact"; true },
-            scheduleRevocationFallback = { operations += "backup"; false },
-            scheduleInexactPrimary = { operations += "inexact-primary"; true },
+            scheduleExact = { operations += "exact"; primarySchedule = "exact"; true },
+            scheduleRevocationFallback = {
+                operations += "backup"
+                ++backupAttempts > 1
+            },
+            scheduleInexactPrimary = {
+                operations += "inexact-primary"
+                primarySchedule = "inexact"
+                true
+            },
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("exact", "backup", "inexact-primary", "backup"), operations)
+        assertEquals(listOf("exact", "backup", "backup"), operations)
+        assertEquals("exact", primarySchedule)
     }
 
     @Test
@@ -179,7 +189,7 @@ class KeepAliveScheduleTest {
         )
 
         assertFalse(scheduled)
-        assertEquals(listOf("exact", "backup", "inexact-primary", "backup"), operations)
+        assertEquals(listOf("exact", "backup", "backup"), operations)
     }
 
     @Test

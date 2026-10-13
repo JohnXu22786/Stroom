@@ -31,7 +31,15 @@ internal fun scheduleWithExactRevocationFallback(
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
     val exactScheduled = canScheduleExact && scheduleExact()
-    if (exactScheduled && scheduleRevocationFallback()) return true
+    if (exactScheduled) {
+        if (scheduleRevocationFallback()) return true
+
+        // The exact primary is already queued with its PendingIntent. Retrying
+        // it as inexact would replace the foreground-service-eligible alarm.
+        // Retry only the missing backup; a failed retry remains eligible for
+        // the caller's bounded scheduling retry.
+        return scheduleRevocationFallback()
+    }
 
     if (scheduleInexactPrimary()) {
         // Keep a same-generation recovery delivery in case this one-shot is
