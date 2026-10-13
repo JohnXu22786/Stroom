@@ -52,6 +52,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   Completer<void>? _removalBarrier;
   List<CatCatchTask>? _disposedSnapshot;
   Future<bool>? _disposedPersistence;
+  int _activeTaskRestorations = 0;
+  final Set<String> _removedTaskIdsDuringRestore = {};
+
+  bool get _restoringTasks => _activeTaskRestorations > 0;
 
   CatCatchNotifier(this.ref) : super([]);
 
@@ -94,6 +98,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       createdAt: DateTime.now(),
       metadata: metadata,
     );
+    _removedTaskIdsDuringRestore.remove(id);
     state = [...state, task];
     unawaited(_persistTasks());
 
@@ -230,6 +235,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 删除任务
   void removeTask(String id) {
+    if (_restoringTasks) _removedTaskIdsDuringRestore.add(id);
+
     // 如果任务正在运行，取消
     final cancelToken = _cancelTokens.remove(id);
     if (cancelToken != null && !cancelToken.isCancelled) {
@@ -259,6 +266,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     try {
       final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
       if (!await _writeSnapshot(proposed)) return false;
+      if (_restoringTasks) _removedTaskIdsDuringRestore.addAll(removedIds);
       if (cleanupGeneration > _persistedServiceCleanupGeneration) {
         _persistedServiceCleanupGeneration = cleanupGeneration;
       }
@@ -550,9 +558,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 恢复所有持久化的任务（应用启动时调用）
   Future<void> restoreUnfinishedTasks() async {
+    if (_activeTaskRestorations == 0) _removedTaskIdsDuringRestore.clear();
+    _activeTaskRestorations++;
     try {
       final tasks = await _loadPersistedTasks();
       if (tasks.isEmpty) return;
+
+      final removedTaskIds = Set<String>.of(_removedTaskIdsDuringRestore);
 
       // 迁移旧数据：userSelecting 中但 detectedMedia 为空的任务标记为失败
       final migrated = [
@@ -574,20 +586,40 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
             task,
       ];
 
-      // 加载全部任务，running 的改为 paused，其余保持原样（包括 failed 中的原始错误）
+      // The current state may have changed while loading. Keep its latest
+      // version for matching IDs and append concurrent tasks after the file
+      // snapshot, while still normalizing tasks restored after a process restart.
+      final currentTasks = <String, CatCatchTask>{
+        for (final task in state)
+          if (!removedTaskIds.contains(task.id)) task.id: task,
+      };
+      final restoredTasks = <String, CatCatchTask>{};
+      for (final task in migrated) {
+        if (removedTaskIds.contains(task.id)) continue;
+        restoredTasks.putIfAbsent(
+          task.id,
+          () => task.status == TaskStatus.running
+              ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+              : task,
+        );
+      }
+
+      final hadConcurrentChanges = state.isNotEmpty || removedTaskIds.isNotEmpty;
       state = [
-        for (final task in migrated)
-          if (task.status == TaskStatus.running)
-            task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
-          else
-            task,
+        for (final task in restoredTasks.values)
+          currentTasks.remove(task.id) ?? task,
+        ...currentTasks.values,
       ];
+      if (hadConcurrentChanges) unawaited(_persistTasks());
 
       debugPrint(
         '[CatCatchNotifier] Restored ${tasks.length} tasks from persistence',
       );
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to restore tasks: $e');
+    } finally {
+      _activeTaskRestorations--;
+      if (_activeTaskRestorations == 0) _removedTaskIdsDuringRestore.clear();
     }
   }
 
