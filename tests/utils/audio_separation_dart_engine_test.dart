@@ -918,6 +918,32 @@ void main() {
       return result.toBytes();
     }
 
+    Uint8List buildVariableStszWithCount(int sampleCount) {
+      final valid = buildMinimalMp4WithAacAudio(
+        asc: Uint8List.fromList([0x12, 0x10]),
+        sampleRate: 44100,
+      );
+      final stszStart = _findFourCc(valid, 'stsz') - 4;
+      final stszSize = _readUint32BE(valid, stszStart);
+      final stcoStart = _findFourCc(valid, 'stco') - 4;
+      final stcoSize = _readUint32BE(valid, stcoStart);
+      expect(stszStart + stszSize, stcoStart);
+
+      final reordered = Uint8List.fromList([
+        ...valid.sublist(0, stszStart),
+        ...valid.sublist(stcoStart, stcoStart + stcoSize),
+        ...valid.sublist(stszStart, stszStart + stszSize),
+        ...valid.sublist(stcoStart + stcoSize),
+      ]);
+      final stszTypeOffset = _findFourCc(reordered, 'stsz');
+      reordered.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(sampleCount),
+      );
+      return reordered;
+    }
+
     Uint8List audioDataFromMp4(Uint8List data) {
       final mdatTypeOffset = _findFourCc(data, 'mdat');
       expect(mdatTypeOffset, greaterThanOrEqualTo(4));
@@ -1150,6 +1176,33 @@ void main() {
         );
       },
     );
+
+    test('rejects a constant-size sample count beyond file capacity', () async {
+      final malformed = Uint8List.fromList(
+        buildMinimalMp4WithPcmAudio(pcmFrames: 2),
+      );
+      final stszTypeOffset = _findFourCc(malformed, 'stsz');
+      malformed.setRange(
+        stszTypeOffset + 12,
+        stszTypeOffset + 16,
+        _u32be(1000),
+      );
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('rejects a variable-size sample count beyond its stsz entries',
+        () async {
+      final malformed = buildVariableStszWithCount(1000);
+
+      await expectLater(
+        engine.extractAudio(videoBytes: malformed, videoFormat: 'mp4'),
+        throwsA(isA<Exception>()),
+      );
+    });
 
     test(
       'rejects a truncated trailing moov with oversized stbl without hanging',
