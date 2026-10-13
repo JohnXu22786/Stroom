@@ -332,6 +332,74 @@ void main() {
 // Editing snapshots are asynchronous on native WebViews. Exercise the page
 // with the bridge boundary rather than constructing a platform view in tests.
 void editorInteractionTests() {
+  testWidgets(
+      'a tap bridge event reopens the keyboard after dismissal without a new focus event',
+      (tester) async {
+    final platform = await _delayedEditors(tester, rows: 1);
+    final editor = platform.activeEditors.single.controller;
+    editor.emit({'type': 'focus', 'revision': 0});
+    await tester.pumpAndSettle();
+    expect(find.text('下一项'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('收起数学键盘'));
+    await tester.pumpAndSettle();
+    expect(find.text('下一项'), findsNothing);
+
+    editor.emit({'type': 'tap', 'revision': 0});
+    await tester.pumpAndSettle();
+    expect(find.text('下一项'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('switching a lower source row to math mode keeps it visible',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(_buildTestApp());
+    await tester.pumpAndSettle();
+
+    for (var i = 1; i < 6; i++) {
+      await tester.tap(find.byTooltip('添加公式'));
+      await tester.pumpAndSettle();
+    }
+
+    final lastField = find.byType(MathFormulaField).last;
+    await tester.ensureVisible(lastField);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('切换到数学键盘').last);
+    await tester.pumpAndSettle();
+
+    final formulaViewport = tester.getRect(find.byType(ListView).first);
+    final lastRow = tester.getRect(lastField);
+    expect(lastRow.top, greaterThanOrEqualTo(formulaViewport.top));
+    expect(lastRow.bottom, lessThanOrEqualTo(formulaViewport.bottom));
+    expect(find.text('下一项'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unsupported syntax warning stays visible in the fixed math row',
+      (tester) async {
+    final platform = await _delayedEditors(tester, rows: 1);
+    final editor = platform.activeEditors.single.controller;
+    final row = find.byType(MathFormulaField).first;
+    final rowHeight = tester.getSize(row).height;
+
+    editor.emit({
+      'type': 'selection',
+      'revision': 0,
+      'sequence': 1,
+      'errors': ['unexpected-command'],
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂不支持此语法，请切换源码'), findsOneWidget);
+    expect(tester.getSize(row).height, closeTo(rowHeight, 0.01));
+    expect(rowHeight, closeTo(48, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('pending deletion keeps a later confirmation tied to its formula',
       (tester) async {
     final platform = await _delayedEditors(tester, rows: 3);
@@ -492,9 +560,15 @@ class _DelayedEditor extends PlatformInAppWebViewWidget {
 
 class _DelayedEditorController extends PlatformInAppWebViewController {
   Future<void>? snapshotGate;
+  JavaScriptHandlerCallback? _handler;
   _DelayedEditorController()
       : super.implementation(
             const PlatformInAppWebViewControllerCreationParams(id: 0));
+
+  void emit(Map<String, dynamic> message) {
+    _handler?.call([message]);
+  }
+
   @override
   Future<dynamic> evaluateJavascript(
       {required String source, ContentWorld? contentWorld}) async {
@@ -505,7 +579,10 @@ class _DelayedEditorController extends PlatformInAppWebViewController {
   @override
   void addJavaScriptHandler(
       {required String handlerName,
-      required JavaScriptHandlerCallback callback}) {}
+      required JavaScriptHandlerCallback callback}) {
+    _handler = callback;
+  }
+
   @override
   void dispose({bool isKeepAlive = false}) {}
 }
