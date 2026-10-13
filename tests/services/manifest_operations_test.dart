@@ -22,12 +22,17 @@ void main() {
     ManifestDatabase.beforeFolderInsertForTesting = null;
     ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     ManifestDatabase.beforeWebDataSaveForTesting = null;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     FileManifest.onWaitingForAudioHashFileSaveForTesting = null;
     FileManifest.beforeAudioPrimaryDeleteForTesting = null;
     FileManifest.invalidateCache();
     ImageManifest.invalidateCache();
     TextManifest.invalidateCache();
     VideoManifest.invalidateCache();
+  });
+
+  tearDown(() {
+    ManifestDatabase.beforeWebDataReadForTesting = null;
   });
 
   // ====================================================================
@@ -545,6 +550,56 @@ void main() {
       expect(await ImageManifest.readFile(record.storagePath), isNull);
       expect(
           await WebFileStore.exists('pictures/${record.storagePath}'), isFalse);
+    });
+  });
+
+  group('Web manifest read failures', () {
+    test('a failed initial read can be retried without losing the manifest',
+        () async {
+      final seededManifest = emptyWebData()
+        ..[ManifestTables.audioRecords] = [
+          <String, dynamic>{
+            'id': 'read-failure-audio',
+            'name': 'kept audio',
+            'hash': 'read-failure-hash',
+            'format': 'wav',
+            'createdAt': '2024-01-01T00:00:00.000Z',
+            'modifiedAt': '2024-01-01T00:00:00.000Z',
+            'size': 3,
+            'folder': '',
+            'sourceText': 'kept metadata',
+            'duration': 1,
+          },
+        ]
+        ..['retained_metadata'] = {'source': 'existing manifest'};
+      final originalBytes = Uint8List.fromList(
+        utf8.encode(jsonEncode(seededManifest)),
+      );
+      await WebFileStore.write('manifest_database_data', originalBytes);
+
+      final failure = StateError('injected Web manifest read failure');
+      var failureInjected = false;
+      ManifestDatabase.beforeWebDataReadForTesting = () async {
+        failureInjected = true;
+        ManifestDatabase.beforeWebDataReadForTesting = null;
+        throw failure;
+      };
+
+      await expectLater(
+        ManifestDatabase.getAllAudioRecords(),
+        throwsA(same(failure)),
+      );
+      expect(failureInjected, isTrue);
+
+      final records = await ManifestDatabase.getAllAudioRecords();
+      expect(records.map((record) => record['id']), ['read-failure-audio']);
+      expect(
+        await WebFileStore.read('manifest_database_data'),
+        orderedEquals(originalBytes),
+      );
+
+      await ManifestDatabase.clearAllData();
+      expect(await ManifestDatabase.getAllAudioRecords(), isEmpty);
     });
   });
 
