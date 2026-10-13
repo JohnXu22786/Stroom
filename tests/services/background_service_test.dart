@@ -339,8 +339,46 @@ void main() {
       expect(prefs.getBool('background_service_enabled'), isFalse);
     });
 
+    test('stopBackgroundService persists stop intent before disabling watchdog',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+      var enabledWhenWatchdogDisabled = true;
+
+      // Model a process restart at the boundary where the native watchdog is
+      // disabled. The cold-start decision must already see the durable stop.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'stopKeepAlive') {
+            await prefs.reload();
+            enabledWhenWatchdogDisabled =
+                prefs.getBool('background_service_enabled') ?? true;
+            resetBackgroundServiceLifecycleStateForTesting();
+            await restoreBackgroundServiceOnColdStart();
+          }
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+      });
+
+      expect(enabledWhenWatchdogDisabled, isFalse);
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a cold start at watchdog cancellation must not restore the '
+            'explicitly stopped service',
+      );
+    });
+
     test(
-        'stopBackgroundService reports persistence failure without rearming keep-alive',
+        'stopBackgroundService does not cancel watchdog when persistence fails',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(true);
@@ -364,7 +402,9 @@ void main() {
       expect(mock._isRunning, isFalse);
       expect(
         keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
-        isTrue,
+        isFalse,
+        reason: 'a rejected stop intent must not leave the persisted enabled '
+            'state without watchdog recovery',
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'startKeepAlive'),

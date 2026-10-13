@@ -312,14 +312,11 @@ Future<bool> _stopBackgroundService() async {
     final service = FlutterBackgroundService();
     await _requestServiceStopAndWait(service);
     await AppLogService.info('BackgroundService', '后台服务已停止');
-    // 先取消 AlarmManager 看门狗，再持久化 enabled=false：
-    // 顺序反了的话，若进程在这两步之间被杀，系统重启后会重新
-    // 调度看门狗去复活一个用户已明确停止的服务。
-    await _disableKeepAlive();
-    // Clear the persisted enabled state so the service is not
-    // auto-restored on the next cold start.
+    // 先持久化 enabled=false，再取消 AlarmManager 看门狗：
+    // 如果进程在这两步之间被杀，冷启动恢复也会读到已关闭意图。
     _explicitUserEnabledInProcess = false;
     if (!await _setServiceEnabledPreference(false)) return false;
+    await _disableKeepAlive();
     return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
