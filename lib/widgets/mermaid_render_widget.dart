@@ -1933,8 +1933,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 if (request.isForMainFrame == true &&
                     !kIsWeb &&
                     _nativeLoadBaseUrl != null &&
-                    request.url.toString() !=
-                        _nativeLoadBaseUrl.toString()) {
+                    request.url.toString() != _nativeLoadBaseUrl.toString()) {
                   return;
                 }
                 if (kIsWeb && request.isForMainFrame == true) {
