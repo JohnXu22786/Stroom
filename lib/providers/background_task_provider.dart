@@ -423,6 +423,11 @@ List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
 /// Uses a step chain (like CatCatch downloads) to show execution progress
 /// without quantifying with percentages. Steps are task-type-specific.
 class BackgroundTask {
+  static final Expando<Object> _generationTokens = Expando<Object>();
+
+  static Object _generationTokenFor(BackgroundTask task) =>
+      _generationTokens[task] ??= Object();
+
   final String id;
   final BackgroundTaskType type;
   final String title;
@@ -557,7 +562,7 @@ class BackgroundTask {
         (status != null && status != this.status
             ? DateTime.now()
             : this.statusChangedAt);
-    return BackgroundTask(
+    final copy = BackgroundTask(
       id: id,
       type: type,
       title: title,
@@ -581,6 +586,8 @@ class BackgroundTask {
       ocrDiagnosticCredentialValues: _ocrDiagnosticCredentialValues,
       retryData: clearRetryData ? null : (retryData ?? this.retryData),
     );
+    _generationTokens[copy] = _generationTokenFor(this);
+    return copy;
   }
 
   Map<String, dynamic> toMap() => {
@@ -1001,6 +1008,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     try {
       final removedTasks =
           state.where((task) => removedIds.contains(task.id)).toList();
+      // Keep only the generation that existed when removal began. Updates
+      // preserve this token, while addTask creates a new one for reused IDs.
+      final removedTaskGenerations = {
+        for (final task in removedTasks)
+          (task.id, BackgroundTask._generationTokenFor(task)),
+      };
+      bool isNotRemovedTaskGeneration(BackgroundTask task) =>
+          !removedTaskGenerations
+              .contains((task.id, BackgroundTask._generationTokenFor(task)));
       final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
       if (!await _writeSnapshot(
         proposed,
@@ -1027,15 +1043,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
       });
       if (mounted) {
-        state = state.where((t) => !removedIds.contains(t.id)).toList();
+        state = state.where(isNotRemovedTaskGeneration).toList();
         _syncIosContinuedTask();
       }
       if (!mounted) {
         // Deferred ordinary writes own this snapshot after disposal. Only a
         // successful removal may remove these IDs from its final flush.
-        _disposedSnapshot = _disposedSnapshot
-            ?.where((task) => !removedIds.contains(task.id))
-            .toList();
+        _disposedSnapshot =
+            _disposedSnapshot?.where(isNotRemovedTaskGeneration).toList();
       }
       await _deleteUnreferencedOcrCache(cacheCandidates);
       return true;

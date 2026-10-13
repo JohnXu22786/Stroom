@@ -4873,6 +4873,99 @@ void main() {
       },
     );
     test(
+      'batch removal preserves a same-ID re-add and removes other requested tasks',
+      () async {
+        const taskId = 're-added-during-batch-removal-write';
+        const otherTaskId = 'removed-during-batch-removal-write';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Persisted before batch removal',
+          startImmediately: false,
+          taskId: taskId,
+        );
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Another persisted task to remove',
+          startImmediately: false,
+          taskId: otherTaskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final writeStarted = Completer<void>();
+        final resumeWrite = Completer<void>();
+        var writeCount = 0;
+
+        final notifier = BackgroundTaskNotifier();
+        final reloaded = BackgroundTaskNotifier();
+        Future<bool>? removal;
+        try {
+          await notifier.restoreFromPersistence();
+          await notifier.pendingPersistence;
+          expect(notifier.taskById(taskId), isNotNull);
+          expect(notifier.taskById(otherTaskId), isNotNull);
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            if (writeCount++ != 0) return;
+            writeStarted.complete();
+            await resumeWrite.future;
+          };
+          removal = notifier.removeTasksPersisted([taskId, otherTaskId]);
+          await writeStarted.future;
+          notifier.setSteps(taskId, notifier.taskById(taskId)!.steps);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Replacement task with the same ID',
+            startImmediately: false,
+            taskId: taskId,
+          );
+
+          resumeWrite.complete();
+          expect(await removal, isTrue);
+          await notifier.pendingPersistence;
+
+          expect(
+            notifier.taskById(taskId)?.title,
+            'Replacement task with the same ID',
+          );
+          expect(
+            notifier.state.where((task) => task.id == taskId),
+            hasLength(1),
+          );
+          expect(notifier.taskById(otherTaskId), isNull);
+          final persisted =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persisted.whereType<Map>().map((row) => row['id']),
+            [taskId],
+          );
+          expect(
+            persisted.whereType<Map>().single['title'],
+            'Replacement task with the same ID',
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          await reloaded.restoreFromPersistence();
+          await reloaded.pendingPersistence;
+          expect(
+            reloaded.taskById(taskId)?.title,
+            'Replacement task with the same ID',
+          );
+          expect(reloaded.taskById(otherTaskId), isNull);
+        } finally {
+          if (!resumeWrite.isCompleted) resumeWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          reloaded.dispose();
+          await reloaded.pendingPersistence;
+        }
+      },
+    );
+    test(
       'later pre-restore write retains removals after a failed removal write',
       () async {
         const removedTaskId = 'removed-before-failed-write';
