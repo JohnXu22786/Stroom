@@ -15,10 +15,14 @@ import 'package:window_manager/window_manager.dart' show windowManager;
 class RecordingChannelMock {
   final List<MethodCall> calls = [];
   Object? throwError;
+  String? throwOnMethod;
 
   Future<Object?> handler(MethodCall call) async {
     calls.add(call);
-    if (throwError != null) throw throwError!;
+    if (throwError != null &&
+        (throwOnMethod == null || throwOnMethod == call.method)) {
+      throw throwError!;
+    }
     return true;
   }
 }
@@ -387,6 +391,81 @@ void main() {
       expect(
         windowManager.listeners.contains(DesktopAppService.instance),
         isFalse,
+      );
+    });
+
+    test('close remains handled when tray rollback cannot clear interception',
+        () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.initialize();
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        mocks['window_manager']!
+          ..throwOnMethod = 'setPreventClose'
+          ..throwError = 'close interception could not be cleared';
+
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+
+        expect(
+          windowManager.listeners.contains(DesktopAppService.instance),
+          isTrue,
+          reason: 'the listener must stay registered while native close '
+              'interception may still be active',
+        );
+
+        await _emitWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      expect(
+        windowCalls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false),
+        isTrue,
+      );
+      expect(exitCodes, [0]);
+      expect(_calledWith(windowCalls, 'hide'), isFalse,
+          reason: 'a missing tray cannot be used as a minimize destination');
+      expect(_calledWith(windowCalls, 'close'), isFalse,
+          reason: 'native close must not be replayed while interception may '
+              'still be active');
+      expect(_calledWith(windowCalls, 'destroy'), isTrue);
+    });
+
+    test(
+        'pending close is honored when tray rollback cannot clear interception',
+        () async {
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        await DesktopAppService.instance.initialize();
+        await _emitWindowClose();
+
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        mocks['window_manager']!
+          ..throwOnMethod = 'setPreventClose'
+          ..throwError = 'close interception could not be cleared';
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      expect(exitCodes, [0],
+          reason: 'the close request captured before tray setup must be '
+              'honored through the close-to-quit fallback');
+      expect(_calledWith(windowCalls, 'close'), isFalse,
+          reason: 'native close must not be replayed while interception may '
+              'still be active');
+      expect(_calledWith(windowCalls, 'hide'), isFalse);
+      expect(
+        windowManager.listeners.contains(DesktopAppService.instance),
+        isTrue,
+        reason: 'failed native reset must not remove the only close listener',
       );
     });
 
