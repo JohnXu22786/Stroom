@@ -603,7 +603,41 @@ void main() {
 
         // The desktop description must mention the tray-resident behavior
         // (also present in the close-minimize toggle's detail text).
+        expect(find.text('桌面端使用托盘驻留保活'), findsOneWidget);
+        expect(find.textContaining('桌面平台已启用托盘驻留'), findsOneWidget);
         expect(find.textContaining('系统托盘'), findsWidgets);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets(
+        'desktop platforms explain close-to-quit with a ready tray when close-minimize is disabled',
+        (tester) async {
+      registerMockPlatform();
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': false});
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await makeTrayReady();
+        expect(DesktopAppService.instance.isTrayReady, isTrue);
+
+        tester.view.physicalSize = const Size(1080, 4000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pumpAndSettle();
+
+        expect(find.text('桌面端关闭窗口时退出应用'), findsOneWidget);
+        expect(
+          find.textContaining('关闭窗口后应用会按现有退出确认流程处理并退出'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('桌面平台已启用托盘驻留'), findsNothing);
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.instance.resetForTesting();
@@ -1411,6 +1445,8 @@ void main() {
         await tester.pumpWidget(_buildTestApp());
         await tester.pumpAndSettle();
 
+        expect(find.text('桌面端使用托盘驻留保活'), findsOneWidget);
+
         // The desktop card has exactly one SwitchListTile.
         await tester.tap(find.byType(SwitchListTile).first);
         await tester.pumpAndSettle();
@@ -1423,6 +1459,11 @@ void main() {
               .widget<SwitchListTile>(find.byType(SwitchListTile).first)
               .value,
           isFalse,
+        );
+        expect(find.text('桌面端关闭窗口时退出应用'), findsOneWidget);
+        expect(
+          find.textContaining('关闭窗口后应用会按现有退出确认流程处理并退出'),
+          findsOneWidget,
         );
         // ...but the close interception must NEVER be released:
         // releasing it would let the native layer destroy the window
