@@ -189,10 +189,11 @@ class _DelayedRejectedWatchdogWriteStore
 }
 
 Future<SharedPreferencesStorePlatform> _rejectEnabledPreferenceWrites(
-    SharedPreferences preferences) async {
+    SharedPreferences preferences,
+    {bool initiallyEnabled = false}) async {
   final originalStore = SharedPreferencesStorePlatform.instance;
   SharedPreferencesStorePlatform.instance = _FailingEnabledPreferenceStore({
-    'flutter.background_service_enabled': false,
+    'flutter.background_service_enabled': initiallyEnabled,
   });
   await preferences.reload();
   return originalStore;
@@ -336,6 +337,43 @@ void main() {
 
       // Verify the enabled state was cleared
       expect(prefs.getBool('background_service_enabled'), isFalse);
+    });
+
+    test(
+        'stopBackgroundService reports persistence failure without rearming keep-alive',
+        () async {
+      final mock = registerMockPlatform();
+      mock.setServiceRunning(true);
+
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(
+        prefs,
+        initiallyEnabled: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+        await rearmKeepAliveOnResume();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isTrue,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'startKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+      );
     });
 
     test(
