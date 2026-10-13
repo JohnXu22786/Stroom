@@ -24,6 +24,13 @@ const fitFunction = dartSource.match(
   /window\.fitToViewport\s*=\s*function\(\)\s*\{([\s\S]*?)^    \};/m,
 );
 assert.ok(fitFunction, 'Could not find the native fitToViewport function');
+const webFitFunction = webTemplateSource.match(
+  /^    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
+);
+assert.ok(webFitFunction, 'Could not find the web fitToViewport function');
+const webResizeFitListener = webTemplateSource.match(
+  /^    window\.addEventListener\('resize', function\(\) \{[\s\S]*?^    \}\);/m,
+);
 
 const reportErrorTargets = [
   ['native', dartSource],
@@ -514,6 +521,69 @@ test('fitToViewport retries once the zero-sized viewport is laid out', () => {
 
   dispatchResize();
   assert.equal(notifications, 1, 'the resize retry should only run once');
+});
+
+test('web fitToViewport refits after the viewport resizes', () => {
+  const viewport = {clientWidth: 200, clientHeight: 100};
+  const svg = {
+    getBBox: () => ({width: 100, height: 50}),
+    setAttribute: () => {},
+  };
+  const container = {querySelector: () => svg};
+  const listeners = new Map();
+  const transforms = [];
+  let notifications = 0;
+  const window = {
+    addEventListener: (type, listener) => {
+      const registered = listeners.get(type) || [];
+      registered.push(listener);
+      listeners.set(type, registered);
+    },
+    removeEventListener: (type, listener) => {
+      listeners.set(
+        type,
+        (listeners.get(type) || []).filter((registered) => registered !== listener),
+      );
+    },
+  };
+  const context = {
+    window,
+    document: {
+      getElementById: (id) =>
+        id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+    },
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    fitComplete: false,
+    pendingZoomOperations: [],
+    updateTransform: () => transforms.push([context.zoomLevel, context.panX, context.panY]),
+    notifyTransform: () => notifications++,
+  };
+
+  vm.runInNewContext(
+    [webFitFunction[0], webResizeFitListener?.[0]].filter(Boolean).join('\n'),
+    context,
+  );
+  const dispatchResize = () => {
+    for (const listener of [...(listeners.get('resize') || [])]) {
+      listener();
+    }
+  };
+
+  window.fitToViewport();
+  assert.deepEqual(transforms, [[2, 0, 0]]);
+
+  viewport.clientWidth = 100;
+  viewport.clientHeight = 200;
+  dispatchResize();
+  assert.deepEqual(transforms, [[2, 0, 0], [1, 0, 75]]);
+
+  viewport.clientHeight = 100;
+  dispatchResize();
+  assert.deepEqual(transforms, [[2, 0, 0], [1, 0, 75], [1, 0, 25]]);
+  assert.equal(notifications, 3);
+  assert.equal((listeners.get('resize') || []).length, 1);
 });
 
 test('native and web templates apply queued zoom after auto-fit', () => {

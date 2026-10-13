@@ -247,6 +247,12 @@
       }
     };
 
+    window.addEventListener('resize', function() {
+      if (!fitComplete) return;
+      var viewport = document.getElementById('viewport');
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
+      window.fitToViewport();
+    });
 
     var isDragging = false;
     var dragStartX = 0;
