@@ -476,6 +476,8 @@ MERMAID_CODE_PLACEHOLDER
     var panY = 0;
     var fitComplete = false;
     var pendingZoomOperations = [];
+    var activeNativeGestureId = null;
+    var nativeGestureZoomLevel = 1;
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -517,18 +519,55 @@ MERMAID_CODE_PLACEHOLDER
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
       }
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
       updateTransform();
       notifyTransform();
     };
 
-    // Sets absolute pan offset and zoom level in a single call. Used by the
-    // inline widget, which tracks pan/zoom on the Flutter side and computes
-    // the zoom anchor (finger position / preview center) itself.
+    // Sets absolute pan offset and zoom level in a single call for callers
+    // that track the complete transform outside this page.
     window.setPanZoom = function(x, y, level) {
       panX = x;
       panY = y;
       zoomLevel = Math.max(0.1, Math.min(10, level));
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
       updateTransform();
+    };
+
+    // Applies a pan/pinch transform from the native Flutter gesture layer.
+    // Before the first fit, retain it as a relative transform so the fit can
+    // establish its base zoom and center before replaying the gesture.
+    window.applyGestureTransformAfterFit = function(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY) {
+      if (!fitComplete) {
+        pendingZoomOperations.push({
+          kind: 'gesture',
+          gestureId: gestureId,
+          scale: scale,
+          panDeltaX: panDeltaX,
+          panDeltaY: panDeltaY,
+          centerX: centerX,
+          centerY: centerY
+        });
+        return;
+      }
+      if (activeNativeGestureId !== gestureId) {
+        activeNativeGestureId = gestureId;
+        nativeGestureZoomLevel = zoomLevel;
+      }
+      panX += panDeltaX;
+      panY += panDeltaY;
+      var oldZoom = zoomLevel;
+      nativeGestureZoomLevel *= scale;
+      zoomLevel = Math.max(0.1, Math.min(10, nativeGestureZoomLevel));
+      var appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1;
+      if (centerX !== null && centerY !== null) {
+        panX = centerX - (centerX - panX) * appliedScale;
+        panY = centerY - (centerY - panY) * appliedScale;
+      }
+      updateTransform();
+      notifyTransform();
     };
 
     window.applyZoomDeltasAfterFit = function(deltas) {
@@ -628,6 +667,8 @@ MERMAID_CODE_PLACEHOLDER
       zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
+      activeNativeGestureId = null;
+      nativeGestureZoomLevel = zoomLevel;
       updateTransform();
       notifyTransform();
       fitComplete = true;
@@ -635,7 +676,16 @@ MERMAID_CODE_PLACEHOLDER
       pendingZoomOperations = [];
       for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
         var zoomOperation = zoomOperations[zoomIndex];
-        if (zoomOperation.anchored) {
+        if (zoomOperation.kind === 'gesture') {
+          window.applyGestureTransformAfterFit(
+            zoomOperation.gestureId,
+            zoomOperation.scale,
+            zoomOperation.panDeltaX,
+            zoomOperation.panDeltaY,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else if (zoomOperation.anchored) {
           window.setZoom(
             zoomLevel + zoomOperation.delta,
             zoomOperation.centerX,
@@ -855,9 +905,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   double _panX = 0;
   double _panY = 0;
 
-  /// Values captured at the start of a scale gesture, used to compute
-  /// cumulative zoom and relative pan deltas.
-  double _gestureStartZoom = 1.0;
+  /// Cumulative scale reported by Flutter at the previous update. Keeping
+  /// this separate from zoom lets an active pinch continue across a JS fit
+  /// notification that changes [_zoomLevel].
+  double _lastGestureScale = 1.0;
+  int _nativeGestureId = 0;
 
   @override
   void initState() {
@@ -1105,9 +1157,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   // Gesture handling (mouse/trackpad pan and zoom at the Flutter level)
   // ---------------------------------------------------------------------------
 
-  /// Captures the current zoom level at the start of a scale gesture.
+  /// Resets the cumulative scale baseline at the start of each gesture.
   void _onScaleStart(ScaleStartDetails details) {
-    _gestureStartZoom = _zoomLevel;
+    _nativeGestureId++;
+    _lastGestureScale = 1.0;
   }
 
   /// Handles mouse drag (pan) and touchpad pinch (zoom). The scale gesture
@@ -1126,18 +1179,25 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _panX += details.focalPointDelta.dx;
     _panY += details.focalPointDelta.dy;
 
-    // Zoom: compute new zoom level from cumulative scale factor
-    // (details.scale is 1.0 for single-pointer drag, changes for pinch)
-    final hasZoom = details.scale != 1.0;
+    // Flutter reports scale cumulatively from the start of the gesture. Use
+    // only the change since the prior update so a fit notification can safely
+    // replace the current zoom while the gesture remains active.
+    final gestureScale = details.scale / _lastGestureScale;
+    _lastGestureScale = details.scale;
+    final hasZoom = gestureScale != 1.0;
+    double? centerX;
+    double? centerY;
     if (hasZoom) {
-      final newZoom = (_gestureStartZoom * details.scale).clamp(0.1, 10.0);
+      final newZoom = (_zoomLevel * gestureScale).clamp(0.1, 10.0);
       final renderBox = context.findRenderObject() as RenderBox?;
       if (renderBox != null && renderBox.hasSize) {
         final localPos = renderBox.globalToLocal(details.focalPoint);
+        centerX = localPos.dx.clamp(0.0, renderBox.size.width);
+        centerY = localPos.dy.clamp(0.0, renderBox.size.height);
         _applyZoomAnchored(
           newZoom: newZoom,
-          centerX: localPos.dx.clamp(0.0, renderBox.size.width),
-          centerY: localPos.dy.clamp(0.0, renderBox.size.height),
+          centerX: centerX,
+          centerY: centerY,
         );
       } else {
         _zoomLevel = newZoom;
@@ -1147,7 +1207,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // Batch pan and zoom in a single evaluateJavascript call to avoid
     // multiple expensive platform channel round-trips per gesture frame
     // and prevent race conditions between separate pan/zoom calls.
-    _syncPanZoomToWebView();
+    _sendGestureTransformToWebView(
+      gestureId: _nativeGestureId,
+      scale: gestureScale,
+      panDeltaX: details.focalPointDelta.dx,
+      panDeltaY: details.focalPointDelta.dy,
+      centerX: centerX,
+      centerY: centerY,
+    );
   }
 
   /// Handles mouse wheel zoom with Ctrl/Meta modifier.
@@ -1250,11 +1317,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _panY = centerY - (centerY - _panY) * (newZoom / oldZoom);
   }
 
-  /// Pushes the Flutter-tracked pan/zoom state to the WebView in a single
-  /// evaluateJavascript call.
-  void _syncPanZoomToWebView() {
+  /// Sends a relative native pan/pinch update to the WebView in one call.
+  void _sendGestureTransformToWebView({
+    required int gestureId,
+    required double scale,
+    required double panDeltaX,
+    required double panDeltaY,
+    required double? centerX,
+    required double? centerY,
+  }) {
     _webViewController?.evaluateJavascript(
-      source: 'window.setPanZoom($_panX, $_panY, $_zoomLevel);',
+      source: 'window.applyGestureTransformAfterFit($gestureId, $scale, '
+          '$panDeltaX, $panDeltaY, $centerX, $centerY);',
     );
   }
 
@@ -1309,7 +1383,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// All gestures are communicated to the WebView via [evaluateJavascript]
   /// calls (see [_onDiagramTap], [_onScaleUpdate], [_onPointerSignal] and
   /// [_zoomAroundCenter]), so the inline widget owns pan/zoom state and
-  /// sends it to the page via `window.setPanZoom`.
+  /// sends native gesture transforms to the page after its first fit.
   ///
   /// Note: the inline HTML template is the SAME template used by the
   /// full-screen dialog ([MermaidRenderWidget.buildMermaidHtml], with full

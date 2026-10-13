@@ -529,6 +529,158 @@ test('native and web templates apply queued zoom after auto-fit', () => {
   }
 });
 
+test('native pre-fit pan and pinch transforms apply after the first fit', () => {
+  const extract = (pattern, description) => {
+    const match = dartSource.match(pattern);
+    assert.ok(match, `Could not find ${description} in the native template`);
+    return match[0];
+  };
+  const state = extract(
+    /    var fitComplete = false;\s*var pendingZoomOperations = \[\];\s*var activeNativeGestureId = null;\s*var nativeGestureZoomLevel = 1/,
+    'queued transform state',
+  );
+  const setZoom = extract(
+    /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+    'setZoom',
+  );
+  const applyGestureTransform = extract(
+    /    window\.applyGestureTransformAfterFit = function\(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY\) \{[\s\S]*?^    \};/m,
+    'applyGestureTransformAfterFit',
+  );
+  const applyZoomDeltas = extract(
+    /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+    'applyZoomDeltasAfterFit',
+  );
+  const fit = extract(
+    /    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
+    'fitToViewport',
+  );
+
+  const viewport = {clientWidth: 200, clientHeight: 100};
+  const svg = {
+    getBBox: () => ({width: 100, height: 50}),
+    setAttribute: () => {},
+  };
+  const container = {querySelector: () => svg};
+  const context = {
+    window: {},
+    document: {
+      getElementById: (id) =>
+        id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+    },
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    fitComplete: false,
+    pendingZoomOperations: [],
+    activeNativeGestureId: null,
+    nativeGestureZoomLevel: 1,
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+  vm.runInNewContext(
+    `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    context,
+  );
+
+  context.window.applyGestureTransformAfterFit(1, 1, 20, -10, null, null);
+  context.window.applyZoomDeltasAfterFit([0.1]);
+  context.window.applyGestureTransformAfterFit(1, 1.5, 0, 0, 100, 50);
+  assert.equal(context.zoomLevel, 1, 'pre-fit inputs must wait for the first fit');
+  assert.equal(context.pendingZoomOperations.length, 3);
+
+  context.window.fitToViewport();
+  assert.ok(Math.abs(context.zoomLevel - 3.15) < 1e-9);
+  assert.equal(context.panX, -26);
+  assert.equal(context.panY, -44.5);
+  assert.equal(context.pendingZoomOperations.length, 0);
+
+  context.window.applyGestureTransformAfterFit(1, 1, 7, 4, null, null);
+  assert.ok(
+    Math.abs(context.zoomLevel - 3.15) < 1e-9,
+    'post-fit pan should keep the current zoom',
+  );
+  assert.equal(context.panX, -19);
+  assert.equal(context.panY, -40.5);
+
+  const clampedViewport = {clientWidth: 200, clientHeight: 100};
+  const clampedSvg = {
+    getBBox: () => ({width: 20, height: 10}),
+    setAttribute: () => {},
+  };
+  const clampedContainer = {querySelector: () => clampedSvg};
+  const clampedContext = {
+    window: {},
+    document: {
+      getElementById: (id) =>
+        id === 'viewport' ? clampedViewport : id === 'diagram-container' ? clampedContainer : null,
+    },
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    fitComplete: false,
+    pendingZoomOperations: [],
+    activeNativeGestureId: null,
+    nativeGestureZoomLevel: 1,
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+  vm.runInNewContext(
+    `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    clampedContext,
+  );
+
+  clampedContext.window.applyGestureTransformAfterFit(2, 2, 0, 0, 100, 50);
+  clampedContext.window.fitToViewport();
+  assert.equal(clampedContext.zoomLevel, 10);
+  assert.equal(clampedContext.panX, 0, 'a clamped stationary pinch keeps its anchor');
+  assert.equal(clampedContext.panY, 0, 'a clamped stationary pinch keeps its anchor');
+
+  const contextForSvg = (targetSvg) => {
+    const targetContainer = {querySelector: () => targetSvg};
+    const targetContext = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? clampedViewport : id === 'diagram-container' ? targetContainer : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      fitComplete: false,
+      pendingZoomOperations: [],
+      activeNativeGestureId: null,
+      nativeGestureZoomLevel: 1,
+      updateTransform: () => {},
+      notifyTransform: () => {},
+    };
+    vm.runInNewContext(
+      `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+      targetContext,
+    );
+    return targetContext;
+  };
+
+  const fittedContext = contextForSvg({
+    getBBox: () => ({width: 400, height: 200}),
+    setAttribute: () => {},
+  });
+  fittedContext.window.applyGestureTransformAfterFit(3, 5, 0, 0, 100, 50);
+  fittedContext.window.applyGestureTransformAfterFit(3, 2.2, 0, 0, 100, 50);
+  fittedContext.window.fitToViewport();
+  assert.equal(fittedContext.zoomLevel, 5.5);
+
+  const boundedContext = contextForSvg({
+    getBBox: () => ({width: 200, height: 100}),
+    setAttribute: () => {},
+  });
+  boundedContext.window.applyGestureTransformAfterFit(4, 5, 0, 0, 100, 50);
+  boundedContext.window.applyGestureTransformAfterFit(4, 2.6, 0, 0, 100, 50);
+  boundedContext.window.applyGestureTransformAfterFit(4, 11 / 13, 0, 0, 100, 50);
+  boundedContext.window.fitToViewport();
+  assert.equal(boundedContext.zoomLevel, 10);
+});
+
 const webLibraryLoader = webTemplateSource.match(
   /^    var TEMPLATE_VERSION = '[^']+';[\s\S]*?^    \}\)\(\);/m,
 );
