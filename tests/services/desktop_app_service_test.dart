@@ -246,6 +246,51 @@ void main() {
       expect(labels, contains('退出 Stroom'));
     });
 
+    test('macOS keeps close interception when tray setup succeeds', () async {
+      SharedPreferences.setMockInitialValues({'desktop_close_minimize': true});
+      final mocks = registerChannelMocks();
+      final exitCodes = <int>[];
+      DesktopAppService.exitApp = exitCodes.add;
+      await withDesktopPlatform(TargetPlatform.macOS, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+        DesktopAppService.instance.onWindowClose();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      });
+
+      expect(DesktopAppService.instance.isTrayReady, isTrue);
+      expect(
+        mocks['window_manager']!.calls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == true),
+        isTrue,
+        reason:
+            'closing the window must still be intercepted while the tray is ready',
+      );
+      expect(
+          windowManager.listeners.contains(DesktopAppService.instance), isTrue);
+      expect(_calledWith(mocks['window_manager']!.calls, 'hide'), isTrue);
+      expect(exitCodes, isEmpty);
+    });
+
+    test('macOS tray failure allows closing the last window to exit', () async {
+      final mocks = registerChannelMocks();
+      mocks['tray_manager']!.throwError = 'tray unavailable';
+      await withDesktopPlatform(TargetPlatform.macOS, () async {
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      expect(
+        mocks['window_manager']!.calls.any((call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false),
+        isTrue,
+        reason:
+            'without a tray, macOS must be allowed to close the last window',
+      );
+      expect(windowManager.listeners.contains(DesktopAppService.instance),
+          isFalse);
+    });
+
     test('setupTrayAndCloseBehavior is idempotent', () async {
       final mocks = registerChannelMocks();
       await withDesktopPlatform(TargetPlatform.windows, () async {
