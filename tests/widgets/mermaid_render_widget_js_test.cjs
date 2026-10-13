@@ -122,6 +122,58 @@ function createMouseGestureHarness(mouseGestureScript) {
   };
 }
 
+function extractTouchGestureScript() {
+  const start = webTemplateSource.indexOf('    // Touch events for mobile pan');
+  assert.notEqual(start, -1, 'Could not find web touch gesture handlers');
+  const end = webTemplateSource.indexOf(
+    '    // Asset version: the mermaid code arrives via the ?code= query',
+    start,
+  );
+  assert.notEqual(end, -1, 'Could not find the end of web touch gesture handlers');
+  return webTemplateSource.slice(start, end);
+}
+
+function createTouchGestureHarness(touchGestureScript) {
+  const listeners = new Map();
+  const zoomCalls = [];
+  const viewport = {
+    getBoundingClientRect: () => ({left: 10, top: 20}),
+  };
+  const context = {
+    document: {
+      addEventListener: (type, listener) => {
+        const registered = listeners.get(type) || [];
+        registered.push(listener);
+        listeners.set(type, registered);
+      },
+      getElementById: (id) => id === 'viewport' ? viewport : null,
+    },
+    window: {
+      setZoom: (...args) => zoomCalls.push(args),
+    },
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+  vm.runInNewContext(touchGestureScript, context);
+
+  function dispatch(type, touches) {
+    let defaultPrevented = false;
+    const event = {
+      touches,
+      preventDefault: () => { defaultPrevented = true; },
+    };
+    for (const listener of listeners.get(type) || []) {
+      listener(event);
+    }
+    return {defaultPrevented};
+  }
+
+  return {dispatch, zoomCalls};
+}
+
 for (const [templateName, templateSource] of reportErrorTargets) {
   const reportErrorFunction = templateSource.match(
     /function reportError\(msg\)\s*\{([\s\S]*?)^    \}/m,
@@ -869,3 +921,25 @@ for (const [templateName, templateSource] of mouseGestureTargets) {
     assert.equal(harness.mermaidTargetClicks, 1);
   });
 }
+
+test('web pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
+  const harness = createTouchGestureHarness(extractTouchGestureScript());
+  const twoTouches = [
+    {clientX: 10, clientY: 10},
+    {clientX: 30, clientY: 10},
+  ];
+
+  harness.dispatch('touchstart', twoTouches);
+  harness.dispatch('touchstart', [
+    ...twoTouches,
+    {clientX: 50, clientY: 10},
+  ]);
+  harness.dispatch('touchend', twoTouches);
+  const move = harness.dispatch('touchmove', [
+    {clientX: 10, clientY: 10},
+    {clientX: 32, clientY: 10},
+  ]);
+
+  assert.equal(move.defaultPrevented, true);
+  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10]]);
+});
