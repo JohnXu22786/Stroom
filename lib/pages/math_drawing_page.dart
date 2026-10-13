@@ -107,26 +107,36 @@ class _MathDrawingPageState extends State<MathDrawingPage>
       _activeFormula = formula;
       _keyboardVisible = mathematical;
     });
+    if (mathematical) {
+      _ensureFormulaVisible(formula);
+    }
     unawaited(SharedPreferences.getInstance()
         .then((prefs) => prefs.setBool(_modePreference, mathematical)));
+  }
+
+  void _ensureFormulaVisible(_FormulaState formula) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final rowContext = formula.rowKey.currentContext;
+      if (mounted && rowContext != null) {
+        Scrollable.ensureVisible(rowContext,
+            alignment: 0, duration: const Duration(milliseconds: 120));
+      }
+    });
   }
 
   void _activateFormula(_FormulaState formula) {
     if (!_mathMode) return;
     _modeTouched = true;
-    FocusManager.instance.primaryFocus?.unfocus();
-    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    final keyboardWasHidden = !_keyboardVisible;
+    if (!keyboardWasHidden && _activeFormula == formula) return;
     setState(() {
       _activeFormula = formula;
       _keyboardVisible = true;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final rowContext = formula.rowKey.currentContext;
-      if (mounted && rowContext != null) {
-        Scrollable.ensureVisible(rowContext,
-            alignment: 0.5, duration: const Duration(milliseconds: 120));
-      }
-    });
+    if (keyboardWasHidden) {
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    }
+    _ensureFormulaVisible(formula);
   }
 
   Future<void> _flushEditors() async {

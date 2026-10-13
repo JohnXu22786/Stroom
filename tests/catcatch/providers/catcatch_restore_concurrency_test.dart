@@ -20,10 +20,16 @@ class _ControlledDocuments extends PathProviderPlatform {
   final secondPathStarted = Completer<void>();
   final releaseSecondPath = Completer<void>();
   bool failNextPathRequest = false;
+  int? failPathRequestAttempt;
+  int pathRequestAttempts = 0;
   int pathRequests = 0;
 
   @override
   Future<String?> getApplicationDocumentsPath() async {
+    final attempt = ++pathRequestAttempts;
+    if (attempt == failPathRequestAttempt) {
+      throw StateError('controlled path failure');
+    }
     if (failNextPathRequest) {
       failNextPathRequest = false;
       throw StateError('controlled path failure');
@@ -71,6 +77,73 @@ CatCatchTask _task({
       steps: steps,
       createdAt: DateTime(2025, 1, 1),
     );
+
+Future<void> _expectAutomaticRetry({
+  required ProviderContainer container,
+  required _RestoreRaceNotifier notifier,
+  required _ControlledDocuments documents,
+  required File tasksFile,
+  required String currentTaskId,
+  required String currentTaskUrl,
+  required String storedTaskId,
+  required String removedTaskId,
+}) async {
+  final recovered = Completer<void>();
+  final subscription = container.listen<List<CatCatchTask>>(
+    catcatchTasksProvider,
+    (_, tasks) {
+      if (tasks.any(
+            (task) => task.id == currentTaskId && task.url == currentTaskUrl,
+          ) &&
+          tasks.any((task) => task.id == storedTaskId) &&
+          tasks.every((task) => task.id != removedTaskId)) {
+        if (!recovered.isCompleted) recovered.complete();
+      }
+    },
+  );
+
+  try {
+    await documents.restorePathStarted.future.timeout(
+      const Duration(seconds: 5),
+    );
+    documents.releaseRestorePath.complete();
+    documents.releaseSecondPath.complete();
+
+    await recovered.future.timeout(const Duration(seconds: 5));
+    await notifier.waitForTaskSnapshotWritesForTesting();
+
+    final tasks = container.read(catcatchTasksProvider);
+    expect(
+      tasks.map((task) => task.id).toSet(),
+      {currentTaskId, storedTaskId},
+    );
+    expect(
+      tasks.singleWhere((task) => task.id == currentTaskId).url,
+      currentTaskUrl,
+    );
+
+    final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+    expect(
+      persisted.map((entry) => (entry as Map)['id']).toSet(),
+      {currentTaskId, storedTaskId},
+    );
+    expect(
+      persisted
+          .map((entry) => CatCatchTask.fromMap(entry as Map<String, dynamic>))
+          .singleWhere((task) => task.id == currentTaskId)
+          .url,
+      currentTaskUrl,
+    );
+  } finally {
+    if (!documents.releaseRestorePath.isCompleted) {
+      documents.releaseRestorePath.complete();
+    }
+    if (!documents.releaseSecondPath.isCompleted) {
+      documents.releaseSecondPath.complete();
+    }
+    subscription.close();
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -292,6 +365,116 @@ void main() {
         await restore;
         await notifier.removeTasksPersisted(['persistence-barrier']);
       }
+    },
+  );
+
+  test(
+    'automatically retries a transient restore failure and persists reconciled state',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      final persistedCurrentTask = _task(
+        id: 'current-task',
+        url: 'https://example.com/persisted-version.mp4',
+      );
+      final storedTask = _task(
+        id: 'stored-task',
+        url: 'https://example.com/stored.mp4',
+      );
+      final removedTask = _task(
+        id: 'removed-task',
+        url: 'https://example.com/removed.mp4',
+      );
+      final originalSnapshot = jsonEncode([
+        persistedCurrentTask.toMap(),
+        storedTask.toMap(),
+        removedTask.toMap(),
+      ]);
+      await tasksFile.writeAsString(originalSnapshot);
+      notifier.setTasksForTest([persistedCurrentTask]);
+      documents.failNextPathRequest = true;
+
+      final currentTask = _task(
+        id: 'current-task',
+        url: 'https://example.com/current-version.mp4',
+      );
+      final recovery = _expectAutomaticRetry(
+        container: container,
+        notifier: notifier,
+        documents: documents,
+        tasksFile: tasksFile,
+        currentTaskId: currentTask.id,
+        currentTaskUrl: currentTask.url,
+        storedTaskId: storedTask.id,
+        removedTaskId: removedTask.id,
+      );
+
+      await notifier.restoreUnfinishedTasks();
+      expect(await tasksFile.readAsString(), originalSnapshot);
+      notifier.setTasksForTest([currentTask]);
+      notifier.removeTask(removedTask.id);
+      await recovery;
+    },
+  );
+
+  test(
+    'automatically retries restore after a queued task snapshot write fails',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final tasksFile = File('${persistedDirectory.path}/tasks.json');
+      final storedTask = _task(
+        id: 'stored-task-after-write-failure',
+        url: 'https://example.com/stored.mp4',
+      );
+      final currentTask = _task(
+        id: 'current-task-after-write-failure',
+        url: 'https://example.com/current.mp4',
+      );
+      final removedTask = _task(
+        id: 'removed-task-after-write-failure',
+        url: 'https://example.com/removed.mp4',
+      );
+      final originalSnapshot = jsonEncode([
+        currentTask.toMap(),
+        storedTask.toMap(),
+        removedTask.toMap(),
+      ]);
+      await tasksFile.writeAsString(originalSnapshot);
+
+      final initialTask = _task(
+        id: currentTask.id,
+        url: 'https://example.com/initial.mp4',
+      );
+      notifier.setTasksForTest([initialTask, removedTask]);
+      documents.failPathRequestAttempt = 2;
+      notifier.removeTask(removedTask.id);
+      await notifier.waitForTaskSnapshotWritesForTesting();
+      expect(await tasksFile.readAsString(), originalSnapshot);
+      await notifier.restoreUnfinishedTasks();
+      expect(
+        container.read(catcatchTasksProvider).map((task) => task.id),
+        [initialTask.id],
+      );
+
+      final updatedCurrentTask = _task(
+        id: initialTask.id,
+        url: 'https://example.com/updated.mp4',
+      );
+      final recovery = _expectAutomaticRetry(
+        container: container,
+        notifier: notifier,
+        documents: documents,
+        tasksFile: tasksFile,
+        currentTaskId: updatedCurrentTask.id,
+        currentTaskUrl: updatedCurrentTask.url,
+        storedTaskId: storedTask.id,
+        removedTaskId: removedTask.id,
+      );
+
+      notifier.setTasksForTest([updatedCurrentTask]);
+      await recovery;
     },
   );
 

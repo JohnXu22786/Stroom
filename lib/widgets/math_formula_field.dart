@@ -51,6 +51,11 @@ class MathFormulaField extends StatefulWidget {
 
 class MathFormulaFieldState extends State<MathFormulaField>
     with AutomaticKeepAliveClientMixin {
+  // The math container adds a one-pixel border on both sides; keep the full
+  // row at the same 48dp height as the source TextField.
+  static const double _formulaInputHeight = 46;
+  static const double _formulaRowHeight = 48;
+
   @override
   bool get wantKeepAlive => true;
   InAppWebViewController? _web;
@@ -58,12 +63,12 @@ class MathFormulaFieldState extends State<MathFormulaField>
   Future<void> _pending = Future.value();
   bool _ready = false;
   bool _receiving = false;
+  bool _hasUnsupportedSyntax = false;
   int _revision = 0;
   int _sequence = -1;
   String _lastSource = '';
   String? _failure;
   ColorScheme? _colorScheme;
-  double _height = 48;
   String _location = '公式';
   String get location => _location;
   int get revision => _revision;
@@ -95,7 +100,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
       await _web!.evaluateJavascript(
           source:
               'window.stroomMath.theme(${jsonEncode(css(colors.onSurface))},'
-              '${jsonEncode(css(colors.primary))},${jsonEncode(css(colors.error))})');
+              '${jsonEncode(css(colors.primary))})');
     });
   }
 
@@ -152,6 +157,13 @@ class MathFormulaFieldState extends State<MathFormulaField>
       if (sequence < _sequence) return;
       _sequence = sequence;
     }
+    final errors = snapshot['errors'];
+    if (errors is List) {
+      final hasErrors = errors.isNotEmpty;
+      if (hasErrors != _hasUnsupportedSyntax) {
+        setState(() => _hasUnsupportedSyntax = hasErrors);
+      }
+    }
     if (snapshot['location'] is String && snapshot['location'] != _location) {
       _location = snapshot['location'];
       widget.onCaretChanged?.call();
@@ -166,11 +178,6 @@ class MathFormulaFieldState extends State<MathFormulaField>
       );
       _receiving = false;
       widget.onChanged();
-    }
-    final height = snapshot['height'];
-    if (height is num) {
-      final next = height.toDouble().clamp(48.0, 180.0);
-      if ((next - _height).abs() > 1) setState(() => _height = next);
     }
   }
 
@@ -277,6 +284,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
       Offstage(
           offstage: !widget.mathematical,
           child: Container(
+            height: _formulaRowHeight,
             decoration: BoxDecoration(
               color: widget.fillColor ?? cs.surfaceContainerLow,
               border: Border.all(color: cs.outline),
@@ -285,7 +293,7 @@ class MathFormulaFieldState extends State<MathFormulaField>
             child: Row(children: [
               Expanded(
                   child: SizedBox(
-                height: _height,
+                height: _formulaInputHeight,
                 child: !widget.showWebView || !MathFormulaField.supported
                     ? GestureDetector(
                         behavior: HitTestBehavior.opaque,
@@ -325,8 +333,11 @@ class MathFormulaFieldState extends State<MathFormulaField>
                                       Map<String, dynamic>.from(args[0] as Map);
                                   acceptSnapshot(message);
                                   if (message['revision'] == _revision &&
-                                      message['type'] == 'focus' &&
-                                      widget.mathematical) widget.onActivate();
+                                      (message['type'] == 'focus' ||
+                                          message['type'] == 'tap') &&
+                                      widget.mathematical) {
+                                    widget.onActivate();
+                                  }
                                   if (message['type'] == 'submit')
                                     widget.onSubmitted();
                                   return null;
@@ -364,6 +375,24 @@ class MathFormulaFieldState extends State<MathFormulaField>
                                       child: Text(_failure!,
                                           style: TextStyle(
                                               fontSize: 12, color: cs.error)))),
+                        if (_hasUnsupportedSyntax)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: Container(
+                                alignment: Alignment.centerLeft,
+                                color: cs.surfaceContainerLow,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 4),
+                                child: Text(
+                                  '暂不支持此语法，请切换源码',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      TextStyle(fontSize: 11, color: cs.error),
+                                ),
+                              ),
+                            ),
+                          ),
                       ]),
               )),
               toggle
