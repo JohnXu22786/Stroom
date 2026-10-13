@@ -375,15 +375,13 @@ void main() {
       expect(
         closeIndex,
         greaterThan(guardDisabledIndex),
-        reason:
-            'the saved close must be replayed after native interception is '
+        reason: 'the saved close must be replayed after native interception is '
             'disabled',
       );
       expect(
         windowCalls.where((call) => call.method == 'hide'),
         isEmpty,
-        reason:
-            'tray failure must use native close instead of hiding without '
+        reason: 'tray failure must use native close instead of hiding without '
             'a tray',
       );
       expect(
