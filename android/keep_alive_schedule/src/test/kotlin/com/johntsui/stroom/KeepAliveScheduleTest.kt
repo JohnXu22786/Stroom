@@ -57,6 +57,44 @@ class KeepAliveScheduleTest {
     }
 
     @Test
+    fun failedInexactRecoveryBackupKeepsBoundedRetryEligible() {
+        val operations = mutableListOf<String>()
+        val retryQueue = mutableListOf<() -> Unit>()
+        var backupAttempts = 0
+        var retryScheduleSucceeded = false
+        val schedule = {
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = false,
+                scheduleExact = { operations += "exact"; true },
+                scheduleRevocationFallback = {
+                    operations += "backup"
+                    ++backupAttempts > 1
+                },
+                scheduleInexactPrimary = { operations += "inexact-primary"; true },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = {
+                retryScheduleSucceeded = schedule()
+                retryScheduleSucceeded
+            },
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(1, retryQueue.size)
+
+        retryQueue.single().invoke()
+
+        assertTrue(retryScheduleSucceeded)
+        assertEquals(listOf("inexact-primary", "backup", "inexact-primary", "backup"), operations)
+    }
+
+    @Test
     fun inexactPairRecoversAcrossEitherDeliveryOrderAndProcessRestart() {
         var currentGeneration = 17L
         var primaryGeneration: Long? = null

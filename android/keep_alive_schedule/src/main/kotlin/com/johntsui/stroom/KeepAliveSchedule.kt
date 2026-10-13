@@ -43,9 +43,10 @@ internal fun scheduleWithExactRevocationFallback(
 
     if (scheduleInexactPrimary()) {
         // Keep a same-generation recovery delivery in case this one-shot is
-        // consumed and the process stops before the receiver can rearm it.
-        scheduleRevocationFallback()
-        return true
+        // consumed and the process stops before the receiver can rearm it. The
+        // caller also needs the backup result to retry if only the primary was
+        // successfully scheduled.
+        return scheduleRevocationFallback()
     }
 
     // Keep any already queued backup alive if the replacement primary failed.
