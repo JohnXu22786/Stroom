@@ -281,18 +281,38 @@ class _MermaidLoadingWidget extends StatelessWidget {
 /// the legacy whole-stream fallback).
 ///
 /// Shares the fence-completion detection of mermaid/html blocks
-/// ([isStreamingMermaidTail]), including its known limitation: a CLOSED
-/// block whose trimmed content is identical to the still-open tail's
-/// content is indistinguishable and keeps counting as generating until the
-/// tail diverges or the stream ends.
+/// ([isStreamingMermaidTail]). Mermaid builders supply [mermaidFenceIndex]
+/// to distinguish identical blocks by their source order; calls without an
+/// index retain the content-based comparison.
 bool isCodeBlockStillGenerating({
   required bool isStreaming,
   String? streamingText,
+  int? mermaidFenceIndex,
   required String code,
+}) {
+  return _isCodeBlockStillGenerating(
+    isStreaming: isStreaming,
+    streamingText: streamingText,
+    mermaidFenceIndex: mermaidFenceIndex,
+    code: code,
+  );
+}
+
+bool _isCodeBlockStillGenerating({
+  required bool isStreaming,
+  String? streamingText,
+  int? mermaidFenceIndex,
+  required String code,
+  _MermaidFenceInfo? fenceInfo,
 }) {
   if (!isStreaming) return false;
   if (streamingText == null) return true;
-  return isStreamingMermaidTail(code, streamingText);
+  if (streamingText.isEmpty) return false;
+  return _isStreamingMermaidTailWithInfo(
+    code,
+    fenceInfo ?? _unclosedFenceInfo(streamingText),
+    mermaidFenceIndex: mermaidFenceIndex,
+  );
 }
 
 /// Builds a code block widget for the given [code] and [language].
@@ -322,19 +342,23 @@ Widget _buildCodeBlock(
   PreConfig preConfig, {
   bool isStreaming = false,
   String? streamingText,
+  int? mermaidFenceIndex,
+  _MermaidFenceInfo? fenceInfo,
 }) {
   if (language.toLowerCase() == 'mermaid') {
     // During streaming, show a loading animation only while the block's
     // fence is still open. The markdown parser strips backtick fences from
     // the code content and swallows the rest of the document into an
-    // unclosed fence, so completion is detected by comparing the builder's
-    // code with the still-open trailing tail (see [unclosedFenceTail]).
+    // unclosed fence, so completion is detected by matching the builder's
+    // Mermaid-fence position and code with the still-open trailing fence.
     // Callers that cannot provide the streaming text (streamingText ==
     // null) keep the legacy behavior: loading for the whole stream.
-    if (isCodeBlockStillGenerating(
+    if (_isCodeBlockStillGenerating(
       isStreaming: isStreaming,
       streamingText: streamingText,
+      mermaidFenceIndex: mermaidFenceIndex,
       code: code,
+      fenceInfo: fenceInfo,
     )) {
       return const _MermaidLoadingWidget();
     }
@@ -348,10 +372,11 @@ Widget _buildCodeBlock(
     return HtmlCodeBlockWidget(
       htmlCode: code,
       language: language,
-      isStreaming: isCodeBlockStillGenerating(
+      isStreaming: _isCodeBlockStillGenerating(
         isStreaming: isStreaming,
         streamingText: streamingText,
         code: code,
+        fenceInfo: fenceInfo,
       ),
     );
   }
@@ -365,16 +390,17 @@ Widget _buildCodeBlock(
   // isStreaming=true, which makes it auto-scroll to its bottom edge while
   // generating and animate back to the top once its fence closes. Closed
   // blocks in the same message are untouched (each block owns its own
-  // auto-scroll state), except for the known limitations of the check
-  // itself (streamingText == null treats every block as generating; two
+  // auto-scroll state), except for the known limitations of the unindexed
+  // check (streamingText == null treats every block as generating; two
   // identical blocks, see [isStreamingMermaidTail]).
   return CodeBlockSourceView(
     code: code,
     language: language,
-    isStreaming: isCodeBlockStillGenerating(
+    isStreaming: _isCodeBlockStillGenerating(
       isStreaming: isStreaming,
       streamingText: streamingText,
       code: code,
+      fenceInfo: fenceInfo,
     ),
   );
 }
@@ -395,33 +421,240 @@ Widget _buildCodeBlock(
 /// info string. Line endings are normalized the same way the parser
 /// normalizes them (`\r\n` / `\r` → `\n`).
 String? unclosedFenceTail(String text) {
+  return _unclosedFenceInfo(text).tail;
+}
+
+typedef _MermaidFenceInfo = ({
+  String? tail,
+  int? mermaidFenceIndex,
+  int mermaidFenceCount,
+  int mermaidFenceQuoteDepth,
+  int mermaidFenceInnerQuoteDepth,
+  int mermaidFenceListIndent,
+  int mermaidFenceIndent,
+});
+
+_MermaidFenceInfo _unclosedFenceInfo(String text) {
   final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   final lines = normalized.split('\n');
   var inFence = false;
   String? fenceChar;
   var fenceLength = 0;
+  var fenceQuoteDepth = 0;
+  var fenceInnerQuoteDepth = 0;
+  var fenceListIndent = 0;
+  final listContentIndents = <int>[];
+  var listQuoteDepth = 0;
+  var listInnerQuoteDepth = 0;
+  var mermaidFenceCount = 0;
+  int? openMermaidFenceIndex;
+  var openMermaidFenceQuoteDepth = 0;
+  var openMermaidFenceInnerQuoteDepth = 0;
+  var openMermaidFenceListIndent = 0;
+  var openMermaidFenceIndent = 0;
+  RegExp? htmlBlockTerminator;
+  var htmlBlockUntilBlank = false;
+  var htmlBlockQuoteDepth = 0;
+  var htmlBlockListIndent = 0;
+  var htmlBlockInnerQuoteDepth = 0;
+  var paragraphOpen = false;
   var tailStart = 0;
   var offset = 0;
+
+  void clearHtmlBlock() {
+    htmlBlockTerminator = null;
+    htmlBlockUntilBlank = false;
+    htmlBlockQuoteDepth = 0;
+    htmlBlockListIndent = 0;
+    htmlBlockInnerQuoteDepth = 0;
+  }
+
+  void clearFence() {
+    inFence = false;
+    fenceChar = null;
+    fenceLength = 0;
+    fenceQuoteDepth = 0;
+    fenceInnerQuoteDepth = 0;
+    fenceListIndent = 0;
+    openMermaidFenceIndex = null;
+    openMermaidFenceQuoteDepth = 0;
+    openMermaidFenceInnerQuoteDepth = 0;
+    openMermaidFenceListIndent = 0;
+    openMermaidFenceIndent = 0;
+  }
+
   for (final line in lines) {
     final trimmed = line.trimRight();
+    if (htmlBlockTerminator != null || htmlBlockUntilBlank) {
+      final htmlContainer = _stripActiveContainerPrefixes(
+        trimmed,
+        htmlBlockQuoteDepth,
+        htmlBlockListIndent,
+        htmlBlockInnerQuoteDepth,
+      );
+      if (htmlContainer.matches) {
+        if (htmlBlockTerminator != null) {
+          if (htmlBlockTerminator!.hasMatch(htmlContainer.line)) {
+            clearHtmlBlock();
+          }
+        } else if (htmlContainer.line.trim().isEmpty) {
+          clearHtmlBlock();
+        }
+        paragraphOpen = false;
+        offset += line.length + 1;
+        continue;
+      }
+      clearHtmlBlock();
+      paragraphOpen = false;
+    }
     if (inFence) {
-      if (_isClosingFenceLine(trimmed, fenceChar!, fenceLength)) {
-        inFence = false;
+      final fenceContainer = _stripActiveContainerPrefixes(
+        trimmed,
+        fenceQuoteDepth,
+        fenceListIndent,
+        fenceInnerQuoteDepth,
+      );
+      if (fenceContainer.matches) {
+        if (_isClosingFenceLine(
+          fenceContainer.line,
+          fenceChar!,
+          fenceLength,
+        )) {
+          clearFence();
+        }
+        paragraphOpen = false;
+        offset += line.length + 1;
+        continue;
       }
+      clearFence();
+      paragraphOpen = false;
+    }
+
+    final quotedLine = _stripLeadingBlockQuotes(trimmed);
+    if (quotedLine.depth != listQuoteDepth) {
+      final lazyParagraphContinuation =
+          quotedLine.depth < listQuoteDepth && paragraphOpen;
+      listQuoteDepth = quotedLine.depth;
+      listContentIndents.clear();
+      listInnerQuoteDepth = 0;
+      if (!lazyParagraphContinuation) paragraphOpen = false;
+    }
+    var listContainerIndent =
+        listContentIndents.isEmpty ? 0 : listContentIndents.last;
+    var listContent = quotedLine.line;
+    if (listContent.trim().isNotEmpty) {
+      final lineIndent = _leadingIndentColumns(listContent);
+      while (listContentIndents.isNotEmpty &&
+          lineIndent < listContentIndents.last &&
+          !(paragraphOpen &&
+              _isLazyListParagraphContinuation(
+                listContent,
+                listContentIndents.last,
+              ))) {
+        listContentIndents.removeLast();
+      }
+      listContainerIndent =
+          listContentIndents.isEmpty ? 0 : listContentIndents.last;
+      listContent = _stripListItemIndent(listContent, listContainerIndent);
+    }
+    final listLine = _stripListItemPrefix(
+      listContent,
+      paragraphOpen: paragraphOpen,
+      sourceColumnOffset: listContainerIndent,
+    );
+    final listItemIndent = listContainerIndent + listLine.indent;
+    if (listLine.indent > 0) paragraphOpen = false;
+    if (listLine.indent > 0 &&
+        (listContentIndents.isEmpty ||
+            listItemIndent > listContentIndents.last)) {
+      listContentIndents.add(listItemIndent);
+    }
+    final innerQuotedLine = _stripLeadingBlockQuotes(listLine.line);
+    if (innerQuotedLine.depth != listInnerQuoteDepth) {
+      final lazyParagraphContinuation =
+          innerQuotedLine.depth < listInnerQuoteDepth && paragraphOpen;
+      listInnerQuoteDepth = innerQuotedLine.depth;
+      if (!lazyParagraphContinuation) paragraphOpen = false;
+    }
+    final htmlBlock = _htmlBlockStart(innerQuotedLine.line);
+    if (htmlBlock != null &&
+        (htmlBlock.canInterruptParagraph || !paragraphOpen)) {
+      paragraphOpen = false;
+      htmlBlockQuoteDepth = quotedLine.depth;
+      htmlBlockListIndent = listItemIndent;
+      htmlBlockInnerQuoteDepth = innerQuotedLine.depth;
+      if (htmlBlock.untilBlank) {
+        htmlBlockUntilBlank = true;
+      } else if (!htmlBlock.terminator!.hasMatch(innerQuotedLine.line)) {
+        htmlBlockTerminator = htmlBlock.terminator;
+      } else {
+        htmlBlockQuoteDepth = 0;
+        htmlBlockListIndent = 0;
+        htmlBlockInnerQuoteDepth = 0;
+      }
+      offset += line.length + 1;
+      continue;
+    }
+    final opening = _openingFence(innerQuotedLine.line);
+    if (opening != null) {
+      paragraphOpen = false;
+      inFence = true;
+      fenceChar = opening.fenceChar;
+      fenceLength = opening.fenceLength;
+      fenceQuoteDepth = quotedLine.depth;
+      fenceInnerQuoteDepth = innerQuotedLine.depth;
+      fenceListIndent = listItemIndent;
+      if (_isMermaidFenceLanguage(
+        opening.infoString,
+        fenceChar: opening.fenceChar,
+        fenceLength: opening.fenceLength,
+      )) {
+        openMermaidFenceIndex = mermaidFenceCount++;
+        openMermaidFenceQuoteDepth = quotedLine.depth;
+        openMermaidFenceInnerQuoteDepth = innerQuotedLine.depth;
+        openMermaidFenceListIndent = listItemIndent;
+        openMermaidFenceIndent = opening.indent;
+      } else {
+        openMermaidFenceIndex = null;
+        openMermaidFenceQuoteDepth = 0;
+        openMermaidFenceInnerQuoteDepth = 0;
+        openMermaidFenceListIndent = 0;
+        openMermaidFenceIndent = 0;
+      }
+      // Content starts after the fence line and its newline.
+      tailStart = offset + line.length + 1;
     } else {
-      final opening = _openingFence(trimmed);
-      if (opening != null) {
-        inFence = true;
-        fenceChar = opening.fenceChar;
-        fenceLength = opening.fenceLength;
-        // Content starts after the fence line and its newline.
-        tailStart = offset + line.length + 1;
-      }
+      paragraphOpen =
+          !_isParagraphBoundaryLine(
+                innerQuotedLine.line,
+                paragraphOpen: paragraphOpen,
+              ) &&
+              innerQuotedLine.line.trim().isNotEmpty;
     }
     offset += line.length + 1;
   }
-  if (!inFence) return null;
-  return tailStart >= normalized.length ? '' : normalized.substring(tailStart);
+  if (!inFence) {
+    return (
+      tail: null,
+      mermaidFenceIndex: null,
+      mermaidFenceCount: mermaidFenceCount,
+      mermaidFenceQuoteDepth: 0,
+      mermaidFenceInnerQuoteDepth: 0,
+      mermaidFenceListIndent: 0,
+      mermaidFenceIndent: 0,
+    );
+  }
+  final tail =
+      tailStart >= normalized.length ? '' : normalized.substring(tailStart);
+  return (
+    tail: tail,
+    mermaidFenceIndex: openMermaidFenceIndex,
+    mermaidFenceCount: mermaidFenceCount,
+    mermaidFenceQuoteDepth: openMermaidFenceQuoteDepth,
+    mermaidFenceInnerQuoteDepth: openMermaidFenceInnerQuoteDepth,
+    mermaidFenceListIndent: openMermaidFenceListIndent,
+    mermaidFenceIndent: openMermaidFenceIndent,
+  );
 }
 
 /// True when [code] is the still-open trailing fenced code block of the
@@ -431,19 +664,209 @@ String? unclosedFenceTail(String text) {
 /// pass `null` when the text is unavailable (falls back to the legacy
 /// always-loading behavior in [_buildCodeBlock]).
 ///
-/// Known limitation: the comparison is content-based, so a CLOSED block
-/// whose trimmed content is identical to the still-open tail's content
-/// (e.g. two identical diagrams in one message where the second is still
-/// streaming) keeps the loading placeholder until the open fence closes
-/// or the stream ends. This is transient and rare; the builder has no
-/// positional information to distinguish the blocks.
-bool isStreamingMermaidTail(String code, String? text) {
+/// When supplied, [mermaidFenceIndex] identifies this Mermaid block in
+/// document order, so an earlier block with identical content is not
+/// mistaken for the open tail. Calls without an index retain the
+/// content-based check for compatibility.
+bool isStreamingMermaidTail(
+  String code,
+  String? text, {
+  int? mermaidFenceIndex,
+}) {
   if (text == null || text.isEmpty) return false;
-  final tail = unclosedFenceTail(text);
-  return tail != null && code.trim() == tail.trim();
+  return _isStreamingMermaidTailWithInfo(
+    code,
+    _unclosedFenceInfo(text),
+    mermaidFenceIndex: mermaidFenceIndex,
+  );
 }
 
-({String fenceChar, int fenceLength})? _openingFence(String line) {
+bool _isStreamingMermaidTailWithInfo(
+  String code,
+  _MermaidFenceInfo fenceInfo, {
+  int? mermaidFenceIndex,
+}) {
+  var tail = fenceInfo.tail;
+  if (mermaidFenceIndex != null &&
+      mermaidFenceIndex == fenceInfo.mermaidFenceIndex) {
+    tail = _stripFenceContainerPrefix(
+      tail!,
+      fenceInfo.mermaidFenceQuoteDepth,
+      fenceInfo.mermaidFenceListIndent,
+      fenceInfo.mermaidFenceInnerQuoteDepth,
+      fenceInfo.mermaidFenceIndent,
+    );
+  }
+  if (tail == null || code.trim() != tail.trim()) return false;
+  return mermaidFenceIndex == null ||
+      mermaidFenceIndex == fenceInfo.mermaidFenceIndex;
+}
+
+bool _isMermaidFenceLanguage(
+  String infoString, {
+  required String fenceChar,
+  required int fenceLength,
+}) {
+  final info = infoString.trim();
+  if (info.isEmpty) return false;
+  if (info.contains('&')) {
+    // FencedCodeBlockSyntax decodes HTML character references in the first
+    // info-string word before CodeBlockNode derives its language. Reuse the
+    // Markdown parser for entity-bearing tokens so the scanner counts the
+    // same Mermaid blocks as the builder. Keep the source fence marker because
+    // CommonMark allows backticks in a tilde-fence info string.
+    final fenceMarker = List.filled(fenceLength, fenceChar).join();
+    final parsed =
+        m.Document(encodeHtml: false).parseLines(['$fenceMarker$info']);
+    for (final node in parsed) {
+      if (node is! m.Element || node.tag != 'pre') continue;
+      final children = node.children;
+      if (children == null || children.isEmpty || children.first is! m.Element) {
+        continue;
+      }
+      final codeClass = (children.first as m.Element).attributes['class'];
+      if (codeClass != null && codeClass.startsWith('language-')) {
+        return codeClass
+                .substring('language-'.length)
+                .split('-')
+                .last
+                .trim()
+                .toLowerCase() ==
+            'mermaid';
+      }
+      return false;
+    }
+    return false;
+  }
+  final firstSpace = info.indexOf(' ');
+  final firstWord = firstSpace == -1 ? info : info.substring(0, firstSpace);
+  return firstWord.split('-').last.trim().toLowerCase() == 'mermaid';
+}
+
+final _htmlRawTagStart = RegExp(
+  r'^ {0,3}<(?:pre|script|style|textarea)(?:\s|>|$)',
+  caseSensitive: false,
+);
+final _htmlCommentStart = RegExp(r'^ {0,3}<!--');
+final _htmlProcessingInstructionStart = RegExp(r'^ {0,3}<\?');
+final _htmlDeclarationStart = RegExp(r'^ {0,3}<![a-z]', caseSensitive: false);
+final _htmlCdataStart = RegExp(r'^ {0,3}<!\[CDATA\[');
+final _htmlBlockTagStart = RegExp(
+  r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|'
+  r'caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|'
+  r'figcaption|figure|footer|form|frame|frameset|h1|h2|h3|h4|h5|h6|head|'
+  r'header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|'
+  r'optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|'
+  r'thead|title|tr|track|ul)(?:\s|>|/>|$)',
+  caseSensitive: false,
+);
+final _standaloneHtmlTag = RegExp(
+  r'''^ {0,3}(?:<[a-zA-Z][a-zA-Z0-9-]*(?:\s+[a-zA-Z_:][a-zA-Z0-9._:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*?'|"[^"]*?"))?)*\s*/?>|</[a-zA-Z][a-zA-Z0-9-]*\s*>)\s*$''',
+  caseSensitive: false,
+);
+
+({RegExp? terminator, bool untilBlank, bool canInterruptParagraph})?
+    _htmlBlockStart(String line) {
+  if (_htmlRawTagStart.hasMatch(line)) {
+    return (
+      terminator: RegExp(
+        r'</(?:pre|script|style|textarea)>',
+        caseSensitive: false,
+      ),
+      untilBlank: false,
+      canInterruptParagraph: true,
+    );
+  }
+  if (_htmlCommentStart.hasMatch(line)) {
+    return (
+      terminator: RegExp(r'-->'),
+      untilBlank: false,
+      canInterruptParagraph: true,
+    );
+  }
+  if (_htmlProcessingInstructionStart.hasMatch(line)) {
+    return (
+      terminator: RegExp(r'\?>'),
+      untilBlank: false,
+      canInterruptParagraph: true,
+    );
+  }
+  if (_htmlDeclarationStart.hasMatch(line)) {
+    return (
+      terminator: RegExp(r'>'),
+      untilBlank: false,
+      canInterruptParagraph: true,
+    );
+  }
+  if (_htmlCdataStart.hasMatch(line)) {
+    return (
+      terminator: RegExp(r'\]\]>'),
+      untilBlank: false,
+      canInterruptParagraph: true,
+    );
+  }
+  if (_htmlBlockTagStart.hasMatch(line)) {
+    return (terminator: null, untilBlank: true, canInterruptParagraph: true);
+  }
+  if (_standaloneHtmlTag.hasMatch(line)) {
+    return (terminator: null, untilBlank: true, canInterruptParagraph: false);
+  }
+  return null;
+}
+
+bool _isParagraphBoundaryLine(
+  String line, {
+  required bool paragraphOpen,
+}) {
+  if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
+  if (RegExp(r'^ {0,3}#{1,6}(?:[ \t]|$)').hasMatch(line) ||
+      _thematicBreakLine.hasMatch(line)) {
+    return true;
+  }
+  return paragraphOpen &&
+      RegExp(r'^ {0,3}(?:=+|-+)[ \t]*$').hasMatch(line);
+}
+
+final _thematicBreakLine = RegExp(
+  r'^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$',
+);
+
+String _stripFenceContainerPrefix(
+  String text,
+  int quoteDepth,
+  int listIndent,
+  int innerQuoteDepth,
+  int fenceIndent,
+) {
+  if (quoteDepth == 0 &&
+      listIndent == 0 &&
+      innerQuoteDepth == 0 &&
+      fenceIndent == 0) {
+    return text;
+  }
+  return text
+      .split('\n')
+      .map((line) {
+        final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+        final listStripped =
+            _stripListItemIndent(outerQuoteStripped, listIndent);
+        final innerQuoteStripped =
+            _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+        return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
+      })
+      .join('\n');
+}
+
+String _stripFenceContentIndent(String line, int indent) {
+  var spaces = 0;
+  while (spaces < indent && spaces < line.length && line[spaces] == ' ') {
+    spaces++;
+  }
+  return line.substring(spaces);
+}
+
+({String fenceChar, int fenceLength, String infoString, int indent})?
+    _openingFence(String line) {
   // CommonMark allows 1-3 leading spaces on fences.
   final stripped = _stripUpTo3Spaces(line);
   if (stripped.length < 3) return null;
@@ -456,7 +879,244 @@ bool isStreamingMermaidTail(String code, String? text) {
   if (run < 3) return null;
   // CommonMark: backtick fences cannot have backticks in the info string.
   if (char == '`' && stripped.substring(run).contains('`')) return null;
-  return (fenceChar: char, fenceLength: run);
+  return (
+    fenceChar: char,
+    fenceLength: run,
+    infoString: stripped.substring(run),
+    indent: line.length - stripped.length,
+  );
+}
+
+({String line, int depth}) _stripLeadingBlockQuotes(String line) {
+  var remaining = line;
+  var depth = 0;
+  while (true) {
+    final stripped = _stripOneBlockQuotePrefix(remaining);
+    if (!stripped.matched) {
+      return (line: remaining, depth: depth);
+    }
+    remaining = stripped.line;
+    depth++;
+  }
+}
+
+String _stripBlockQuoteDepth(String line, int depth) {
+  var remaining = line;
+  for (var quote = 0; quote < depth; quote++) {
+    final stripped = _stripOneBlockQuotePrefix(remaining);
+    if (!stripped.matched) {
+      return line;
+    }
+    remaining = stripped.line;
+  }
+  return remaining;
+}
+
+({String line, bool matches}) _stripActiveContainerPrefixes(
+  String line,
+  int quoteDepth,
+  int listIndent,
+  int innerQuoteDepth,
+) {
+  final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+  if (quoteDepth > 0 && outerQuoteStripped == line) {
+    return (line: line, matches: false);
+  }
+  final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
+  final blankLineInList =
+      listIndent > 0 && outerQuoteStripped.trim().isEmpty;
+  if (listIndent > 0 &&
+      listStripped == outerQuoteStripped &&
+      !blankLineInList) {
+    return (line: line, matches: false);
+  }
+  final innerQuoteStripped =
+      _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+  if (innerQuoteDepth > 0 && innerQuoteStripped == listStripped) {
+    return (line: line, matches: false);
+  }
+  return (line: innerQuoteStripped, matches: true);
+}
+
+({String line, bool matched}) _stripOneBlockQuotePrefix(String line) {
+  var markerIndex = 0;
+  while (markerIndex < line.length &&
+      markerIndex < 3 &&
+      line[markerIndex] == ' ') {
+    markerIndex++;
+  }
+  if (markerIndex >= line.length || line[markerIndex] != '>') {
+    return (line: line, matched: false);
+  }
+
+  var consumed = markerIndex + 1;
+  if (consumed < line.length &&
+      (line[consumed] == ' ' || line[consumed] == '\t')) {
+    consumed++;
+  }
+  return (
+    // The Markdown parser strips each quote prefix into a new child line.
+    // Any remaining tab therefore expands from column zero of that line.
+    line: _expandLeadingTabs(line.substring(consumed), 0),
+    matched: true,
+  );
+}
+
+String _expandLeadingTabs(String line, int column) {
+  var index = 0;
+  final expanded = StringBuffer();
+  while (index < line.length &&
+      (line[index] == ' ' || line[index] == '\t')) {
+    if (line[index] == '\t') {
+      final nextColumn = (column ~/ 4 + 1) * 4;
+      expanded.write(List.filled(nextColumn - column, ' ').join());
+      column = nextColumn;
+    } else {
+      expanded.write(' ');
+      column++;
+    }
+    index++;
+  }
+  expanded.write(line.substring(index));
+  return expanded.toString();
+}
+
+({String line, int indent}) _stripListItemPrefix(
+  String line, {
+  bool paragraphOpen = false,
+  int sourceColumnOffset = 0,
+}) {
+  if (_thematicBreakLine.hasMatch(line)) return (line: line, indent: 0);
+
+  var markerStart = 0;
+  var markerStartIndent = 0;
+  while (markerStart < line.length &&
+      (line[markerStart] == ' ' || line[markerStart] == '\t')) {
+    final nextIndent = _indentColumnsAfter(
+          line,
+          markerStart,
+          sourceColumnOffset + markerStartIndent,
+        ) -
+        sourceColumnOffset;
+    if (nextIndent > 3) return (line: line, indent: 0);
+    markerStartIndent = nextIndent;
+    markerStart++;
+  }
+  if (markerStart >= line.length) return (line: line, indent: 0);
+
+  var markerEnd = markerStart;
+  final first = line[markerStart];
+  if (first == '-' || first == '+' || first == '*') {
+    markerEnd++;
+  } else if (RegExp(r'[0-9]').hasMatch(first)) {
+    final numberStart = markerStart;
+    while (markerEnd < line.length &&
+        markerEnd - markerStart < 9 &&
+        RegExp(r'[0-9]').hasMatch(line[markerEnd])) {
+      markerEnd++;
+    }
+    if (paragraphOpen && line.substring(numberStart, markerEnd) != '1') {
+      return (line: line, indent: 0);
+    }
+    if (markerEnd >= line.length ||
+        (line[markerEnd] != '.' && line[markerEnd] != ')')) {
+      return (line: line, indent: 0);
+    }
+    markerEnd++;
+  } else {
+    return (line: line, indent: 0);
+  }
+
+  var separatorEnd = markerEnd;
+  var separatorIndent = markerStartIndent + markerEnd - markerStart;
+  while (separatorEnd < line.length &&
+      (line[separatorEnd] == ' ' || line[separatorEnd] == '\t')) {
+    separatorIndent = _indentColumnsAfter(
+          line,
+          separatorEnd,
+          sourceColumnOffset + separatorIndent,
+        ) -
+        sourceColumnOffset;
+    separatorEnd++;
+  }
+  if (separatorEnd == markerEnd) return (line: line, indent: 0);
+
+  final markerIndent = markerStartIndent + markerEnd - markerStart;
+  final separatorColumns = separatorIndent - markerIndent;
+  final consumesWholeSeparator = separatorColumns <= 4;
+  final consumedSeparator = consumesWholeSeparator
+      ? separatorEnd - markerEnd
+      : 1;
+  final consumed = markerEnd + consumedSeparator;
+  final consumedIndent = consumesWholeSeparator
+      ? separatorIndent
+      : markerIndent + 1;
+  var contentLine = line.substring(consumed);
+  if (!consumesWholeSeparator) {
+    if (line[markerEnd] == '\t') {
+      final markerEndColumn = sourceColumnOffset + markerIndent;
+      final tabWidth =
+          _indentColumnsAfter(line, markerEnd, markerEndColumn) -
+              markerEndColumn;
+      contentLine =
+          '${List.filled(tabWidth - 1, ' ').join()}$contentLine';
+    }
+    contentLine = _expandLeadingTabs(
+      contentLine,
+      sourceColumnOffset + consumedIndent,
+    );
+  }
+  return (
+    line: contentLine,
+    indent: consumedIndent,
+  );
+}
+
+String _stripListItemIndent(String line, int indent) {
+  if (indent == 0) return line;
+  var index = 0;
+  var columns = 0;
+  while (index < line.length &&
+      columns < indent &&
+      (line[index] == ' ' || line[index] == '\t')) {
+    columns = _indentColumnsAfter(line, index, columns);
+    index++;
+  }
+  if (columns < indent) return line;
+  final remainingIndent = List.filled(columns - indent, ' ').join();
+  return _expandLeadingTabs('$remainingIndent${line.substring(index)}', indent);
+}
+
+bool _isLazyListParagraphContinuation(String line, int listIndent) {
+  final listContent = _stripListItemIndent(line, listIndent);
+  final listLine = _stripListItemPrefix(
+    listContent,
+    paragraphOpen: true,
+    sourceColumnOffset: listIndent,
+  );
+  if (listLine.indent > 0 ||
+      _stripLeadingBlockQuotes(listLine.line).depth > 0 ||
+      _openingFence(listLine.line) != null ||
+      _isParagraphBoundaryLine(listLine.line, paragraphOpen: true)) {
+    return false;
+  }
+  final htmlBlock = _htmlBlockStart(listLine.line);
+  return htmlBlock == null || !htmlBlock.canInterruptParagraph;
+}
+
+int _leadingIndentColumns(String line) {
+  var index = 0;
+  var columns = 0;
+  while (index < line.length &&
+      (line[index] == ' ' || line[index] == '\t')) {
+    columns = _indentColumnsAfter(line, index, columns);
+    index++;
+  }
+  return columns;
+}
+
+int _indentColumnsAfter(String line, int index, int columns) {
+  return line[index] == '\t' ? (columns ~/ 4 + 1) * 4 : columns + 1;
 }
 
 String _stripUpTo3Spaces(String line) {
@@ -509,6 +1169,11 @@ PreConfig codeBlockPreConfig({
       borderRadius: BorderRadius.all(Radius.circular(8.0)),
     ),
   );
+  final streamingFenceInfo = isStreaming && streamingText != null
+      ? _unclosedFenceInfo(streamingText)
+      : null;
+  final mermaidFenceCount = streamingFenceInfo?.mermaidFenceCount ?? 0;
+  var nextMermaidFenceIndex = 0;
   // Use a builder so mermaid and html code blocks get rendered via WebView
   // while all other code blocks still get syntax highlighting.
   return PreConfig(
@@ -519,13 +1184,25 @@ PreConfig codeBlockPreConfig({
     textStyle: baseConfig.textStyle,
     styleNotMatched: baseConfig.styleNotMatched,
     language: baseConfig.language,
-    builder: (code, language) => _buildCodeBlock(
-      code,
-      language,
-      baseConfig,
-      isStreaming: isStreaming,
-      streamingText: streamingText,
-    ),
+    builder: (code, language) {
+      int? mermaidFenceIndex;
+      if (language.trim().toLowerCase() == 'mermaid') {
+        if (mermaidFenceCount > 0 &&
+            nextMermaidFenceIndex >= mermaidFenceCount) {
+          nextMermaidFenceIndex = 0;
+        }
+        mermaidFenceIndex = nextMermaidFenceIndex++;
+      }
+      return _buildCodeBlock(
+        code,
+        language,
+        baseConfig,
+        isStreaming: isStreaming,
+        streamingText: streamingText,
+        mermaidFenceIndex: mermaidFenceIndex,
+        fenceInfo: streamingFenceInfo,
+      );
+    },
   );
 }
 
