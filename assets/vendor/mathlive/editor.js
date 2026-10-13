@@ -1,7 +1,6 @@
 /* Stroom bridge. Drafts stay verbatim until the first mathematical edit. */
 (() => {
   const field = document.getElementById('formula');
-  const problem = document.getElementById('problem');
   const navigation = window.stroomNavigation(field);
   MathLive.MathfieldElement.fontsDirectory = new URL('./fonts', document.baseURI).href;
   MathLive.MathfieldElement.soundsDirectory = null;
@@ -165,7 +164,7 @@
     // Plot/toggle immediately after an insertion still sees that insertion.
     observeChanges();
     return {revision, sequence, latex: edited ? editedLatex(field.getValue('latex')) : original,
-      edited, location:navigation.location(), height: field.getBoundingClientRect().height + problem.getBoundingClientRect().height,
+      edited, location:navigation.location(),
       errors: field.errors.map(e => e.code), canUndo: field.canUndo(), canRedo: field.canRedo()};
   }
   function send(type) {
@@ -173,11 +172,8 @@
       window.flutter_inappwebview.callHandler('StroomMathEditor', {type, ...snapshot()});
     }
   }
-  function showProblem() {
-    const bad = field.errors.length > 0;
-    field.readOnly = bad;
-    problem.style.display = bad ? 'block' : 'none';
-    problem.textContent = bad ? '此源码含暂不支持或未完成的语法，请用右侧按钮切换源码修正。原文已保留。' : '';
+  function updateReadOnly() {
+    field.readOnly = field.errors.length > 0;
   }
   window.stroomMath = {
     setSource(source, version) {
@@ -191,17 +187,16 @@
         if (version === 0) field.resetUndo();
       }
       importing = false;
-      showProblem();
+      updateReadOnly();
       return snapshot();
     },
     snapshot,
     selectedLatex() { return editedLatex(field.getValue(field.selection, 'latex')); },
     activate() { field.focus(); return snapshot(); },
     blur() { field.blur(); return snapshot(); },
-    theme(ink, accent, error) {
+    theme(ink, accent) {
       document.documentElement.style.setProperty('--ink', ink);
       document.documentElement.style.setProperty('--accent', accent);
-      document.documentElement.style.setProperty('--error', error);
     },
     command(kind, value) {
       if (field.readOnly) return snapshot();
@@ -219,13 +214,11 @@
     send('input');
   });
   field.addEventListener('focus', () => send('focus'));
+  field.addEventListener('pointerdown', event => {
+    if (event.button === 0) send('tap');
+  });
   field.addEventListener('selection-change', () => send('selection'));
   field.addEventListener('move-out', event => event.preventDefault());
-  // Rendering and font loading can finish after a command returns. Observe
-  // actual layout rather than measuring only the pre-render command snapshot.
-  const sizeObserver = new ResizeObserver(() => send('resize'));
-  sizeObserver.observe(field);
-  sizeObserver.observe(problem);
   field.addEventListener('mount', () => {
     // MathLive's hidden textarea must never summon the system IME here.
     const keyboardSink = field.shadowRoot.querySelector('[part=keyboard-sink]');
