@@ -715,6 +715,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   @visibleForTesting
   static Future<void> Function()? debugBeforeTaskSnapshotWrite;
 
+  @visibleForTesting
+  static Future<void> Function()? debugBeforeTaskSnapshotRead;
+
+  @visibleForTesting
+  static Future<void> Function()? debugAfterTaskSnapshotRead;
+
   BackgroundTaskNotifier() : super([]);
 
   @override
@@ -743,6 +749,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? taskId,
   }) {
     final id = taskId ?? _uuid.v4();
+    _pendingRestoreTaskRemovals.remove(id);
+    _pendingTaskRemovalReconciliations.remove(id);
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
@@ -755,7 +763,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       retryData: retryData,
     );
     state = [task, ...state];
-    _persistTasks();
+    _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
     return id;
   }
@@ -960,6 +968,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       unawaited(removeTasksPersisted([taskId]));
       return;
     }
+    final removalToken = _recordPendingRestoreTaskRemoval(taskId);
+    _pendingTaskRemovalReconciliations[taskId] = removalToken;
     _cancellations.remove(taskId)?.call();
     final removed = state.where((task) => task.id == taskId).firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
@@ -967,9 +977,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final references = OcrRetryStorage.referencesFromSnapshot(
         removed!.retryData,
       );
-      _persistOcrTaskRemoval(references);
+      _persistOcrTaskRemoval(taskId, references);
     } else {
-      _persistTasks();
+      _persistTasks(excludedPersistedTaskIds: {taskId});
     }
     _syncIosContinuedTask();
   }
@@ -995,8 +1005,14 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (!await _writeSnapshot(
         proposed,
         preserveSkippedEntries: _taskSnapshotIncomplete,
+        excludedPersistedTaskIds: removedIds,
       )) {
         return false;
+      }
+      if (_restoreBarrier != null) {
+        for (final id in removedIds) {
+          _recordPendingRestoreTaskRemoval(id);
+        }
       }
       final cacheCandidates = <String>{
         for (final task in removedTasks)
@@ -1061,10 +1077,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
-  Future<void> _persistOcrTaskRemoval(Set<String> references) {
+  Future<void> _persistOcrTaskRemoval(
+    String taskId,
+    Set<String> references,
+  ) {
     final barrier = _removalBarrier;
     if (barrier == null) {
-      final write = _writeSnapshot(state);
+      final write = _writeSnapshot(
+        state,
+        excludedPersistedTaskIds: {taskId},
+      );
       return _pendingWrite = write.then<void>((saved) async {
         if (saved) {
           await _deleteUnreferencedOcrCache(references);
@@ -1079,7 +1101,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       await barrier.future;
       final snapshot = mounted ? state : _disposedSnapshot;
       if (snapshot == null) return;
-      final saved = await _writeSnapshotNow(snapshot, dirOverride);
+      final saved = await _writeSnapshotNow(
+        snapshot,
+        dirOverride,
+        excludedPersistedTaskIds: {taskId},
+      );
       if (saved) {
         await _deleteUnreferencedOcrCache(references);
         await _cleanupOrphanedOcrCache();
@@ -1228,6 +1254,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// 交错导致旧快照覆盖新快照（步骤更新非常频繁，竞态窗口真实存在）。
   Future<void>? _pendingWrite;
   Completer<void>? _removalBarrier;
+  Completer<void>? _restoreBarrier;
+  int _restoreGeneration = 0;
+  final Map<String, Object> _pendingRestoreTaskRemovals = <String, Object>{};
+  final Map<String, Object> _pendingTaskRemovalReconciliations =
+      <String, Object>{};
+  Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
   // Preserve the authoritative file after a partial restore; later state
@@ -1236,26 +1268,49 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   bool _taskSnapshotCanPreserveSkippedEntries = false;
   List<dynamic> _skippedTaskEntries = const [];
 
+  Object _recordPendingRestoreTaskRemoval(String taskId) {
+    final token = Object();
+    _pendingRestoreTaskRemovals[taskId] = token;
+    return token;
+  }
+
+  void _clearPendingRestoreTaskRemovals(Map<String, Object> removals) {
+    for (final entry in removals.entries) {
+      if (identical(_pendingRestoreTaskRemovals[entry.key], entry.value)) {
+        _pendingRestoreTaskRemovals.remove(entry.key);
+      }
+    }
+  }
+
   /// Wait for queued task writes before releasing their storage directory.
   Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
-  Future<bool> _persistTasks() {
-    final preserveSkippedEntries = _taskSnapshotIncomplete;
+  Future<bool> _persistTasks({
+    bool preserveSkippedEntries = false,
+    Set<String> excludedPersistedTaskIds = const <String>{},
+  }) {
+    final preserveCurrentSkippedEntries =
+        preserveSkippedEntries || _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
-    if (barrier != null) {
+    final restoreBarrier = _restoreBarrier;
+    if (barrier != null || restoreBarrier != null) {
       if (!mounted && _disposedPersistence != null) {
         return _disposedPersistence!.then((_) => false);
       }
       final previous = _pendingWrite ?? Future<void>.value();
       final dirOverride = debugStorageDirectoryOverride;
       final deferred = previous.then((_) async {
-        await barrier.future;
+        if (barrier != null) await barrier.future;
+        if (restoreBarrier != null) await restoreBarrier.future;
         final snapshot = mounted ? state : _disposedSnapshot;
         if (snapshot == null) return false;
         return _writeSnapshotNow(
           snapshot,
           dirOverride,
-          preserveSkippedEntries: preserveSkippedEntries,
+          preserveSkippedEntries: restoreBarrier != null
+              ? _taskSnapshotIncomplete
+              : preserveCurrentSkippedEntries,
+          excludedPersistedTaskIds: excludedPersistedTaskIds,
         );
       });
       _pendingWrite = deferred.then<void>((_) {});
@@ -1267,54 +1322,40 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (snapshot == null) return Future<bool>.value(false);
       final write = _writeSnapshot(
         snapshot,
-        preserveSkippedEntries: preserveSkippedEntries,
+        preserveSkippedEntries: preserveCurrentSkippedEntries,
+        excludedPersistedTaskIds: excludedPersistedTaskIds,
       );
       _disposedPersistence ??= write.then<void>((_) {});
       return write;
     }
     return _writeSnapshot(
       state,
-      preserveSkippedEntries: preserveSkippedEntries,
+      preserveSkippedEntries: preserveCurrentSkippedEntries,
+      excludedPersistedTaskIds: excludedPersistedTaskIds,
     );
   }
 
   Future<bool> _writeSnapshot(
     List<BackgroundTask> snapshot, {
     bool preserveSkippedEntries = false,
+    Set<String> excludedPersistedTaskIds = const <String>{},
   }) {
-    final canPreserveSkippedEntries = _taskSnapshotIncomplete &&
-        preserveSkippedEntries &&
-        _canSafelyPreserveSkippedEntries(snapshot);
-    if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
+    if (_taskSnapshotIncomplete &&
+        (!preserveSkippedEntries ||
+            !_canSafelyPreserveSkippedEntries(snapshot))) {
       return Future<bool>.value(false);
     }
-    final skippedEntries = canPreserveSkippedEntries
-        ? List<dynamic>.unmodifiable(_skippedTaskEntries)
-        : const <dynamic>[];
     // 同样在调用时捕获持久化目录覆盖值：写入链可能延迟到调用之后
     // 才真正执行，若此时再解析目录，测试 teardown 已重置覆盖值，
     // 残留写入会落到共享的正式目录（跨测试污染）。
     final dirOverride = debugStorageDirectoryOverride;
     // 串行化写入：每次写入排在上一次写入完成之后。
-    final write = (_pendingWrite ?? Future<void>.value()).then((_) async {
-      if (_taskSnapshotIncomplete &&
-          (!canPreserveSkippedEntries ||
-              !_canSafelyPreserveSkippedEntries(snapshot))) {
-        return false;
-      }
-      if (_hasCacheMigrations(snapshot)) {
-        return OcrRetryStorage.withCacheMaintenanceLock(
-          () => _writePreparedSnapshot(
-            snapshot,
-            dirOverride,
-            preservedEntries: skippedEntries,
-          ),
-        );
-      }
-      return _writePreparedSnapshot(
+    final write = (_pendingWrite ?? Future<void>.value()).then((_) {
+      return _writeSnapshotNow(
         snapshot,
         dirOverride,
-        preservedEntries: skippedEntries,
+        preserveSkippedEntries: preserveSkippedEntries,
+        excludedPersistedTaskIds: excludedPersistedTaskIds,
       );
     });
     _pendingWrite = write.then<void>((_) {});
@@ -1325,30 +1366,148 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     List<BackgroundTask> snapshot,
     String? dirOverride, {
     bool preserveSkippedEntries = false,
-  }) {
+    Set<String> excludedPersistedTaskIds = const <String>{},
+  }) async {
+    final excludedTaskIds = <String>{
+      ...excludedPersistedTaskIds,
+      ..._pendingRestoreTaskRemovals.keys,
+      ..._pendingTaskRemovalReconciliations.keys,
+    };
+    final pendingRemovalTokens = Map<String, Object>.of(
+      _pendingRestoreTaskRemovals,
+    );
+    final taskRemovalTokens = Map<String, Object>.of(
+      _pendingTaskRemovalReconciliations,
+    );
+    var currentSnapshot =
+        snapshot.where((task) => !excludedTaskIds.contains(task.id)).toList();
+    var preserveCurrentSkippedEntries = preserveSkippedEntries;
+
+    if (_restoreBarrier != null) {
+      await _waitForRestoreBarrier();
+      final latestSnapshot = mounted ? state : _disposedSnapshot;
+      if (latestSnapshot == null) return false;
+      currentSnapshot = latestSnapshot
+          .where((task) => !excludedTaskIds.contains(task.id))
+          .toList();
+      preserveCurrentSkippedEntries = _taskSnapshotIncomplete;
+    }
+
+    if (_restoreGeneration == 0) {
+      final generationBeforeLoad = _restoreGeneration;
+      final persistedTasks = await _loadPreRestorePersistedTasks(dirOverride);
+      if (generationBeforeLoad != _restoreGeneration ||
+          _restoreBarrier != null) {
+        await _waitForRestoreBarrier();
+        final latestSnapshot = mounted ? state : _disposedSnapshot;
+        if (latestSnapshot == null) return false;
+        currentSnapshot = latestSnapshot
+            .where((task) => !excludedTaskIds.contains(task.id))
+            .toList();
+        preserveCurrentSkippedEntries = _taskSnapshotIncomplete;
+      }
+      if (persistedTasks == null) return false;
+      currentSnapshot = [
+        for (final task in persistedTasks)
+          if (!excludedTaskIds.contains(task.id) &&
+              !currentSnapshot.any((current) => current.id == task.id))
+            task,
+        ...currentSnapshot,
+      ];
+    }
+
     final canPreserveSkippedEntries = _taskSnapshotIncomplete &&
-        preserveSkippedEntries &&
-        _canSafelyPreserveSkippedEntries(snapshot);
+        preserveCurrentSkippedEntries &&
+        _canSafelyPreserveSkippedEntries(currentSnapshot);
     if (_taskSnapshotIncomplete && !canPreserveSkippedEntries) {
-      return Future<bool>.value(false);
+      return false;
     }
     final skippedEntries = canPreserveSkippedEntries
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
-    if (_hasCacheMigrations(snapshot)) {
-      return OcrRetryStorage.withCacheMaintenanceLock(
-        () => _writePreparedSnapshot(
-          snapshot,
-          dirOverride,
-          preservedEntries: skippedEntries,
-        ),
+
+    final saved = _hasCacheMigrations(currentSnapshot)
+        ? await OcrRetryStorage.withCacheMaintenanceLock(
+            () => _writePreparedSnapshot(
+              currentSnapshot,
+              dirOverride,
+              preservedEntries: skippedEntries,
+            ),
+          )
+        : await _writePreparedSnapshot(
+            currentSnapshot,
+            dirOverride,
+            preservedEntries: skippedEntries,
+          );
+    if (saved) {
+      final reconciledTaskIds = <String>{};
+      for (final entry in taskRemovalTokens.entries) {
+        if (identical(
+          _pendingTaskRemovalReconciliations[entry.key],
+          entry.value,
+        )) {
+          reconciledTaskIds.add(entry.key);
+          _pendingTaskRemovalReconciliations.remove(entry.key);
+        }
+      }
+      if (reconciledTaskIds.isNotEmpty) {
+        if (mounted) {
+          state = state
+              .where((task) => !reconciledTaskIds.contains(task.id))
+              .toList();
+        }
+        _disposedSnapshot = _disposedSnapshot
+            ?.where((task) => !reconciledTaskIds.contains(task.id))
+            .toList();
+      }
+      final restoreBarrier = _restoreBarrier;
+      if (restoreBarrier == null || restoreBarrier.isCompleted) {
+        _clearPendingRestoreTaskRemovals(pendingRemovalTokens);
+      }
+      await _removePersistedTasksFromPreRestoreCache(
+        excludedTaskIds,
       );
     }
-    return _writePreparedSnapshot(
-      snapshot,
-      dirOverride,
-      preservedEntries: skippedEntries,
+    return saved;
+  }
+
+  Future<void> _removePersistedTasksFromPreRestoreCache(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    final cached = _preRestorePersistedTasks;
+    if (cached == null) return;
+    final tasks = await cached;
+    if (tasks == null) return;
+    _preRestorePersistedTasks = Future<List<BackgroundTask>?>.value(
+      tasks.where((task) => !ids.contains(task.id)).toList(),
     );
+  }
+
+  Future<void> _waitForRestoreBarrier() async {
+    var barrier = _restoreBarrier;
+    while (barrier != null && !barrier.isCompleted) {
+      await barrier.future;
+      barrier = _restoreBarrier;
+    }
+  }
+
+  Future<List<BackgroundTask>?> _loadPreRestorePersistedTasks(
+    String? dirOverride,
+  ) async {
+    final cached = _preRestorePersistedTasks;
+    if (cached != null) return cached;
+    final loaded = await _loadPersistedTasks(
+      dirOverride: dirOverride,
+      waitForDebugRead: false,
+    );
+    if (!loaded.isReadable) return null;
+    if (!loaded.isComplete) {
+      _taskSnapshotIncomplete = true;
+      _taskSnapshotCanPreserveSkippedEntries = true;
+      _skippedTaskEntries = loaded.skippedEntries;
+    }
+    final tasks = loaded.tasks;
+    _preRestorePersistedTasks = Future<List<BackgroundTask>?>.value(tasks);
+    return tasks;
   }
 
   Future<bool> _writePreparedSnapshot(
@@ -1625,9 +1784,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         bool isComplete,
         bool isReadable,
         List<dynamic> skippedEntries,
-      })> _loadPersistedTasks() async {
+      })> _loadPersistedTasks({
+    String? dirOverride,
+    bool waitForDebugRead = true,
+  }) async {
     try {
-      final file = await _tasksFile();
+      final file = await _tasksFile(dirOverride);
       if (!await file.exists()) {
         return (
           tasks: <BackgroundTask>[],
@@ -1636,7 +1798,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           skippedEntries: <dynamic>[],
         );
       }
+      if (waitForDebugRead) await debugBeforeTaskSnapshotRead?.call();
       final content = await file.readAsString();
+      if (waitForDebugRead) await debugAfterTaskSnapshotRead?.call();
       if (content.isEmpty) {
         return (
           tasks: <BackgroundTask>[],
@@ -1698,14 +1862,39 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Running tasks are marked as failed since they can't be resumed.
   /// Waiting tasks are kept as waiting (they haven't started yet).
   Future<void> restoreFromPersistence() async {
+    final activeRestore = _restoreBarrier;
+    if (activeRestore != null) {
+      await activeRestore.future;
+      await pendingPersistence;
+      return;
+    }
+    final restoreBarrier = Completer<void>();
+    _restoreGeneration++;
+    _restoreBarrier = restoreBarrier;
+    try {
+      await _restorePersistedTasks(restoreBarrier);
+    } finally {
+      _completeRestoreBarrier(restoreBarrier);
+    }
+  }
+
+  Future<void> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
     _taskSnapshotIncomplete = !loaded.isComplete;
     _taskSnapshotCanPreserveSkippedEntries =
         loaded.isReadable && !loaded.isComplete;
     _skippedTaskEntries = loaded.skippedEntries;
     final tasks = loaded.tasks;
+    if (!loaded.isComplete) {
+      // A partial snapshot cannot prove a pending deletion was saved; keep
+      // parsed tasks visible, matching removeTask's partial-write behavior.
+      _pendingRestoreTaskRemovals.clear();
+    }
     if (tasks.isEmpty) {
-      if (loaded.isComplete) await _cleanupOrphanedOcrCache();
+      if (loaded.isComplete) {
+        _pendingRestoreTaskRemovals.clear();
+        await _cleanupOrphanedOcrCache();
+      }
       return;
     }
     final restored = <BackgroundTask>[];
@@ -1748,17 +1937,26 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             : task,
       );
     }
+    final pendingRemovals = Map<String, Object>.of(
+      _pendingRestoreTaskRemovals,
+    );
     // Merge with existing state (in case tasks were added before restore completes)
     state = [
       for (final t in restored)
-        if (!state.any((s) => s.id == t.id)) t,
+        if (!pendingRemovals.containsKey(t.id) &&
+            !state.any((s) => s.id == t.id))
+          t,
       ...state,
     ];
+    if (!restoreBarrier.isCompleted) restoreBarrier.complete();
     // 将"运行中 → 已中断"的状态回写到磁盘，
     // 使持久化文件与内存状态保持一致（否则下次启动会重复标记）。
     // A partial parse cannot safely replace the authoritative file: skipped
     // entries may still own retry-cache references.
     final snapshotSaved = loaded.isComplete && await _persistTasks();
+    if (snapshotSaved) {
+      _clearPendingRestoreTaskRemovals(pendingRemovals);
+    }
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
     if (loaded.isComplete && snapshotSaved) {
@@ -1767,5 +1965,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );
+  }
+
+  void _completeRestoreBarrier(Completer<void> barrier) {
+    if (identical(_restoreBarrier, barrier)) _restoreBarrier = null;
+    if (!barrier.isCompleted) barrier.complete();
   }
 }
