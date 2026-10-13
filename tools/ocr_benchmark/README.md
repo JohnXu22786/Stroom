@@ -84,17 +84,22 @@ Normalization and metric definitions:
   recorded for multi-column fixtures. A missing anchor is an incorrect pair;
   a page with no returned text leaves this metric pending.
 - Table fidelity compares the annotated rows and cells in sequence. It ignores
-  optional leading/trailing Markdown pipes and Markdown separator rows, so a
-  valid Markdown table is not penalized for its formatting row. It remains a
-  text check, not semantic table parsing. Formula fidelity compares the
+  optional outer Markdown pipes and Markdown separator rows, while preserving
+  empty cells according to the annotated column count. For `plain_text`, it
+  also accepts tab-separated table rows. A valid Markdown table is not
+  penalized for its formatting row. It remains a text check, not semantic table
+  parsing. Formula fidelity compares the
   annotated formula as a complete span after whitespace compaction and Unicode
   superscript normalization; surrounding prose is allowed, but adjacent math
   operators are not. For `markdown`, `table`, and `latex`, it
   also removes paired math delimiters and preserves unmatched currency dollar signs,
   and normalizes common notation such as `\int`, `\pi`, `\frac`, and `\sqrt`.
-  Compound fraction operands and compound exponent/subscript groups retain
-  grouping. It does not perform symbolic
-  equivalence. If any
+  Escaped LaTeX text symbols such as `\%`, `\_`, and `\$` are scored as
+  their literal characters.
+  Paired math delimiters may touch CJK text; whitespace directly between CJK
+  text and an annotated formula is ignored. Compound fraction operands and
+  compound exponent/subscript groups retain grouping. It does not perform
+  symbolic equivalence. If any
   eligible page has no returned text, the metric value is null and its pending
   count is reported.
 - Elapsed time is supplied in milliseconds per fixture. Returned tokens means

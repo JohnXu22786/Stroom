@@ -174,13 +174,33 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _is_credential_like_setting_name(key: str) -> bool:
     normalized_key = re.sub(r"[^a-z]", "", key.lower())
-    word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key)
+    word_boundaries = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", key)
+    word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", word_boundaries)
     key_parts = re.findall(r"[A-Za-z0-9]+", word_boundaries)
+    lower_key_parts = [part.lower() for part in key_parts]
     return (
         normalized_key in SECRET_SETTING_KEYS
-        or (len(key_parts) > 1 and key_parts[-1].lower() == "key")
+        or (
+            len(key_parts) > 1
+            and re.fullmatch(r"key\d*", key_parts[-1], re.IGNORECASE) is not None
+        )
+        or (
+            "token" in lower_key_parts
+            and any(
+                part
+                in {
+                    "value",
+                    "secret",
+                    "credential",
+                    "credentials",
+                    "password",
+                    "response",
+                    "responses",
+                }
+                for part in lower_key_parts
+            )
+        )
         or normalized_key.startswith("auth")
-        or normalized_key.startswith("token")
         or normalized_key.endswith("token")
         or any(
             marker in normalized_key
@@ -222,7 +242,7 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
                 raise EvaluationError(f"{path} keys must be strings")
             if _is_credential_like_setting_name(key):
                 raise EvaluationError(
-                    f"{path} contains a credential-like field name: {key}"
+                    f"{path} contains a credential-like field name"
                 )
             _validate_safe_settings(child, f"{path}.{key}")
     elif isinstance(value, list):
@@ -312,29 +332,62 @@ def _validated_run_and_predictions(
     }, by_id
 
 
-def _table_rows(value: str) -> list[tuple[str, ...]]:
-    rows = []
-    for line in value.splitlines():
-        if "|" not in line:
-            continue
-        stripped = line.strip()
-        raw_cells = stripped.split("|")
-        if stripped.startswith("|"):
-            raw_cells = raw_cells[1:]
-        if stripped.endswith("|"):
-            raw_cells = raw_cells[:-1]
-        cells = [normalize_text(cell) for cell in raw_cells]
-        if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
-            continue
-        rows.append(tuple(cells))
-    return rows
+def _table_rows(
+    value: str,
+    expected_column_count: int | None = None,
+    *,
+    allow_tsv: bool = False,
+) -> list[tuple[str, ...]]:
+    def parse_rows(
+        column_count: int | None, *, infer_optional_trailing_pipe: bool = False
+    ) -> list[tuple[str, ...]]:
+        rows = []
+        for line in value.splitlines():
+            if "|" not in line:
+                if allow_tsv and "\t" in line:
+                    cells = tuple(normalize_text(cell) for cell in line.split("\t"))
+                    rows.append(cells)
+                continue
+            stripped = line.strip()
+            raw_cells = stripped.split("|")
+            has_leading_pipe = stripped.startswith("|")
+            has_trailing_pipe = stripped.endswith("|")
+            if has_leading_pipe:
+                raw_cells = raw_cells[1:]
+            if has_trailing_pipe and (
+                has_leading_pipe
+                or infer_optional_trailing_pipe
+                or (
+                    column_count is not None
+                    and len(raw_cells) - 1 == column_count
+                )
+            ):
+                raw_cells = raw_cells[:-1]
+            cells = [normalize_text(cell) for cell in raw_cells]
+            if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+                continue
+            rows.append(tuple(cells))
+        return rows
+
+    if expected_column_count is not None:
+        return parse_rows(expected_column_count)
+
+    rows = parse_rows(None, infer_optional_trailing_pipe=True)
+    if not rows:
+        return rows
+    column_count = max(len(row) for row in rows)
+    return parse_rows(column_count)
 
 
-def _table_matches(expected: str, actual: str) -> bool:
-    expected_rows = _table_rows(expected)
+def _table_matches(expected: str, actual: str, output_format: str) -> bool:
+    allow_tsv = output_format == "plain_text"
+    expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
     if not expected_rows:
         return normalize_text(expected) in normalize_text(actual)
-    actual_rows = _table_rows(actual)
+    expected_column_count = max(len(row) for row in expected_rows)
+    actual_rows = _table_rows(
+        actual, expected_column_count, allow_tsv=allow_tsv
+    )
     return actual_rows == expected_rows
 
 
@@ -360,10 +413,11 @@ def _strip_latex_markup(value: str) -> str:
         r"(?<!\$)\$\$(.+?)\$\$(?!\$)", compact_math, text, flags=re.DOTALL
     )
     text = re.sub(
-        r"(?<!\\)(?<!\$)\$(?!\$)([^$]+)\$(?!\$)(?=$|[^\w$])",
+        r"(?<!\\)(?<!\$)\$(?!\$)([^$]+)\$(?!\$)(?=$|[^\w$]|[\u3400-\u9fff])",
         compact_math,
         text,
     )
+    text = re.sub(r"\\([#$%&_{}])", r"\1", text)
     text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
     fraction_pattern = re.compile(
         r"\\(?:dfrac|tfrac|frac)\s*\{([^{}]+)\}\s*\{([^{}]+)\}"
@@ -418,6 +472,76 @@ def _normalize_superscript_digits(value: str) -> str:
     )
 
 
+def _strip_markdown_inline_formatting(
+    value: str, formula_text: str | None = None
+) -> str:
+    value = re.sub(r"`(.+?)`", r"\1", value)
+
+    def delimiter_is_escaped(position: int) -> bool:
+        backslash_count = 0
+        position -= 1
+        while position >= 0 and value[position] == "\\":
+            backslash_count += 1
+            position -= 1
+        return backslash_count % 2 == 1
+
+    def strip_emphasis(match: re.Match[str]) -> str:
+        marker, content = match.groups()
+        if delimiter_is_escaped(match.start()) or delimiter_is_escaped(
+            match.end() - len(marker)
+        ):
+            return match.group()
+        if marker != "*" or formula_text is None:
+            return content
+
+        formula_parts = re.split(r"(?<!\\)\*", formula_text)
+        if len(formula_parts) < 3:
+            return content
+
+        compact_content = "".join(content.split())
+        before = value[: match.start()].rstrip()
+        after = value[match.end() :].lstrip()
+        for part_index in range(1, len(formula_parts) - 1):
+            if "".join(formula_parts[part_index].split()) != compact_content:
+                continue
+            previous_operand = "".join(formula_parts[part_index - 1].split())
+            next_operand = "".join(formula_parts[part_index + 1].split())
+            if (
+                previous_operand
+                and next_operand
+                and before.endswith(previous_operand[-1])
+                and after.startswith(next_operand[0])
+            ):
+                return match.group()
+        return content
+
+    value = re.sub(
+        r"(\*\*|~~|\*)(?=\S)(.+?)(?<=\S)\1", strip_emphasis, value
+    )
+
+    def strip_underscore_emphasis(match: re.Match[str]) -> str:
+        marker, content = match.groups()
+        if delimiter_is_escaped(match.start()) or delimiter_is_escaped(
+            match.end() - len(marker)
+        ):
+            return match.group()
+        return content
+
+    return re.sub(
+        r"(?<!\w)(__|_)(?!\s)(.+?)(?<!\s)\1(?!\w)",
+        strip_underscore_emphasis,
+        value,
+    )
+
+
+def _strip_markdown_list_marker(value: str) -> str:
+    return re.sub(r"^\s*(?:[-+*]|\d+[.)])\s+", "", value)
+
+
+def _strip_markdown_blockquote_marker(value: str) -> str:
+    return re.sub(r"^\s*>+\s?", "", value)
+
+
 def _compact_annotated_formula(
     value: str, formula_text: str, output_format: str
 ) -> str:
@@ -436,7 +560,13 @@ def _compact_annotated_formula(
     start = compact_value.index(compact_formula)
     first_character = positions[start]
     last_character = positions[start + len(compact_formula) - 1]
-    return value[:first_character] + compact_formula + value[last_character + 1 :]
+    prefix = re.sub(
+        r"(?<=[\u3400-\u9fff])\s+$", "", value[:first_character]
+    )
+    suffix = re.sub(
+        r"^\s+(?=[\u3400-\u9fff])", "", value[last_character + 1 :]
+    )
+    return prefix + compact_formula + suffix
 
 
 def _plain_text_for_cer(
@@ -444,8 +574,22 @@ def _plain_text_for_cer(
     output_format: str,
     table_text: str | None = None,
     formula_text: str | None = None,
+    *,
+    strip_markdown_markup: bool = False,
 ) -> str:
     text = value
+    if output_format == "plain_text" and table_text:
+        annotated_table_rows = set(_table_rows(table_text))
+        if annotated_table_rows:
+            lines = []
+            for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+                parsed_rows = _table_rows(line)
+                if parsed_rows and any(
+                    row in annotated_table_rows for row in parsed_rows
+                ):
+                    line = line.replace("|", " ")
+                lines.append(line)
+            text = "\n".join(lines)
     if output_format in {"markdown", "table"}:
         source_lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         annotated_table_rows = set(_table_rows(table_text or ""))
@@ -475,14 +619,12 @@ def _plain_text_for_cer(
         for index, line in enumerate(source_lines):
             if index in separator_rows:
                 continue
-            line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
-            line = re.sub(r"^\s*(?:[-+*]|\d+[.)])\s+", "", line)
-            line = re.sub(r"^\s*>+\s?", "", line)
-            line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
-            line = re.sub(r"(\*\*|~~|`|\*)(.+?)\1", r"\2", line)
-            line = re.sub(
-                r"(?<!\w)(__|_)(?!\s)(.+?)(?<!\s)\1(?!\w)", r"\2", line
-            )
+            if strip_markdown_markup:
+                line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+                line = _strip_markdown_blockquote_marker(line)
+                line = _strip_markdown_list_marker(line)
+                line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+                line = _strip_markdown_inline_formatting(line, formula_text)
             if index in table_rows or index in annotated_table_row_indices:
                 line = line.replace("|", " ")
             lines.append(line)
@@ -496,8 +638,24 @@ def _plain_text_for_cer(
     return text
 
 
-def _normalized_formula_text(value: str, output_format: str) -> str:
-    text = normalize_text(value)
+def _normalized_formula_text(
+    value: str,
+    output_format: str,
+    *,
+    strip_markdown_markup: bool = False,
+    formula_text: str | None = None,
+) -> str:
+    text = value
+    if output_format in {"markdown", "table"} and strip_markdown_markup:
+        normalized_lines = (
+            text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        )
+        text = "\n".join(
+            _strip_markdown_list_marker(_strip_markdown_blockquote_marker(line))
+            for line in normalized_lines
+        )
+        text = _strip_markdown_inline_formatting(text, formula_text)
+    text = normalize_text(text)
     if output_format in {"markdown", "table", "latex"}:
         text = _strip_latex_markup(text)
 
@@ -594,13 +752,20 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         "zeta",
     }
 
+    def is_cjk_text_character(character: str) -> bool:
+        return "\u3400" <= character <= "\u9fff"
+
     def is_formula_term(token: str) -> bool:
         latex_command = re.match(r"\\([A-Za-z]+)", token)
         function_name = latex_command.group(1) if latex_command else token
         return (
             any(character.isdigit() for character in token)
             or any(character in left_operators for character in token)
-            or (len(token) == 1 and token.isalpha())
+            or (
+                len(token) == 1
+                and token.isalpha()
+                and not is_cjk_text_character(token)
+            )
             or function_name in math_functions
             or function_name in greek_symbols
         )
@@ -610,6 +775,24 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         if not tokens:
             return False
         token = tokens[0] if from_right else tokens[-1]
+        token_without_punctuation = token[:-1]
+        is_date_with_punctuation = (
+            len(tokens) > 1
+            and unicodedata.category(token[-1]).startswith("P")
+            and re.fullmatch(
+                r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}",
+                token_without_punctuation,
+            )
+            is not None
+        )
+        if (
+            not from_right
+            and len(tokens) > 1
+            and unicodedata.category(token[-1]).startswith("P")
+            and not is_formula_term(tokens[-2])
+            and (token_without_punctuation.isdigit() or is_date_with_punctuation)
+        ):
+            return False
         if not is_formula_term(token):
             return False
         if not from_right and len(token) == 1 and token.isalpha() and len(tokens) > 1:
@@ -621,7 +804,11 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         after = actual[match.end() :]
         if before:
             previous = before[-1]
-            if not previous.isspace() and (previous.isalnum() or previous in "^_"):
+            if (
+                not previous.isspace()
+                and (previous.isalnum() or previous in "^_")
+                and not is_cjk_text_character(previous)
+            ):
                 continue
             previous_non_space = before.rstrip()[-1:]
             if previous_non_space in left_operators:
@@ -632,7 +819,11 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
             if re.match(r"[.,]\d", after):
                 continue
             following = after[0]
-            if not following.isspace() and (following.isalnum() or following in "^_"):
+            if (
+                not following.isspace()
+                and (following.isalnum() or following in "^_")
+                and not is_cjk_text_character(following)
+            ):
                 continue
             next_non_space = after.lstrip()[:1]
             if next_non_space in right_operators:
@@ -660,10 +851,15 @@ def _exact_snippet_metric(
             pending += 1
             continue
         if field == "table_text":
-            matches = _table_matches(fixture[field], text)
+            matches = _table_matches(fixture[field], text, output_format)
         else:
             expected = _canonical_formula(fixture[field], output_format)
-            actual = _normalized_formula_text(text, output_format)
+            actual = _normalized_formula_text(
+                text,
+                output_format,
+                strip_markdown_markup=True,
+                formula_text=fixture[field],
+            )
             matches = _formula_span_matches(expected, actual)
         if matches:
             correct += 1
@@ -786,6 +982,7 @@ def evaluate_predictions(
                 run["output_format"],
                 fixture.get("table_text"),
                 fixture.get("formula_text"),
+                strip_markdown_markup=True,
             )
             if actual_value is not None
             else ""

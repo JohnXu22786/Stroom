@@ -79,22 +79,25 @@ Widget _buildTestApp({
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
   Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
-      testRetryImageRestorer,
+  testRetryImageRestorer,
   Future<Map<String, dynamic>?> Function({
     required String taskId,
     required OcrRetrySnapshot snapshot,
-  })? testRetrySnapshotCacher,
+  })?
+  testRetrySnapshotCacher,
   Future<XFile?> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testCameraPicker,
+  })?
+  testCameraPicker,
   OcrInstructionsNotifier Function(Ref ref)? testInstructionsNotifierBuilder,
   Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testGalleryPicker,
+  })?
+  testGalleryPicker,
 }) {
   return ProviderScope(
     overrides: [
@@ -265,10 +268,10 @@ SelectedImage _createTestImage({int seed = 1}) {
 }
 
 SelectedImage _createValidOcrTestImage() => SelectedImage.fromPayload(
-      payload: prepareOcrImagePayloadSync(
-        img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
-      ),
-    );
+  payload: prepareOcrImagePayloadSync(
+    img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
+  ),
+);
 
 Future<void> _storeAppAlbumImage({
   required String name,
@@ -291,21 +294,20 @@ Map<String, dynamic> _createVersionedRetryData({
   required String modelId,
   String? instructionContent,
   String saveFolder = '',
-}) =>
+}) => {
+  'type': 'ocr',
+  'version': 1,
+  'modelRef': {'configId': configId, 'modelId': modelId},
+  'images': [
     {
-      'type': 'ocr',
-      'version': 1,
-      'modelRef': {'configId': configId, 'modelId': modelId},
-      'images': [
-        {
-          'bytes': base64Encode(_createTestPngBytes()),
-          'format': 'png',
-          'name': 'retry-image.png',
-        },
-      ],
-      if (instructionContent != null) 'instructionContent': instructionContent,
-      'saveFolder': saveFolder,
-    };
+      'bytes': base64Encode(_createTestPngBytes()),
+      'format': 'png',
+      'name': 'retry-image.png',
+    },
+  ],
+  if (instructionContent != null) 'instructionContent': instructionContent,
+  'saveFolder': saveFolder,
+};
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -654,10 +656,10 @@ void main() {
             entries: [_createOcrEntry(withModels: true)],
             testImages: [_createValidOcrTestImage()],
             backgroundTasksNotifier: notifier,
-            testRetrySnapshotCacher: (
-                {required taskId, required snapshot}) async {
-              throw StateError('cache write failed');
-            },
+            testRetrySnapshotCacher:
+                ({required taskId, required snapshot}) async {
+                  throw StateError('cache write failed');
+                },
           ),
         );
         await tester.pumpAndSettle();
@@ -708,11 +710,11 @@ void main() {
           retryData: legacyRetryData,
           retryTaskId: taskId,
           backgroundTasksNotifier: notifier,
-          testRetrySnapshotCacher: (
-              {required taskId, required snapshot}) async {
-            cacheAttempts++;
-            throw StateError('cache write failed');
-          },
+          testRetrySnapshotCacher:
+              ({required taskId, required snapshot}) async {
+                cacheAttempts++;
+                throw StateError('cache write failed');
+              },
         ),
       );
       await _pumpUntil(tester, () => cacheAttempts == 1);
@@ -802,8 +804,9 @@ void main() {
             ),
           ),
         );
-        final sharedReference = (((sharedRetryData!['images'] as List).single
-            as Map)['storageRef'] as String);
+        final sharedReference =
+            (((sharedRetryData!['images'] as List).single as Map)['storageRef']
+                as String);
         final legacyRetryData = {
           'type': 'ocr',
           'version': 1,
@@ -835,16 +838,16 @@ void main() {
             backgroundTasksNotifier: notifier,
             retryData: legacyRetryData,
             retryTaskId: legacyTaskId,
-            testRetrySnapshotCacher: (
-                {required taskId, required snapshot}) async {
-              final result = await OcrRetryStorage.cacheSnapshot(
-                taskId: taskId,
-                snapshot: snapshot,
-              );
-              migrationStarted.complete();
-              await finishMigration.future;
-              return result;
-            },
+            testRetrySnapshotCacher:
+                ({required taskId, required snapshot}) async {
+                  final result = await OcrRetryStorage.cacheSnapshot(
+                    taskId: taskId,
+                    snapshot: snapshot,
+                  );
+                  migrationStarted.complete();
+                  await finishMigration.future;
+                  return result;
+                },
           ),
         );
         await tester.pumpAndSettle();
@@ -968,10 +971,10 @@ void main() {
           backgroundTasksNotifier: notifier,
           testInstructionsNotifierBuilder: (ref) =>
               _InstructionsLoadFailsOnRetryNotifier(
-            ref,
-            loadStarted: loadStarted,
-            finishFirstLoad: finishFirstLoad,
-          ),
+                ref,
+                loadStarted: loadStarted,
+                finishFirstLoad: finishFirstLoad,
+              ),
           testImagePayloadPreparer: (bytes) async =>
               OcrImagePayload(bytes: bytes, format: 'png', width: 1, height: 1),
         ),
@@ -1899,14 +1902,14 @@ void main() {
           entries: [_createOcrEntry(withModels: true)],
           testImages: [_createValidOcrTestImage()],
           backgroundTasksNotifier: notifier,
-          testRetrySnapshotCacher: (
-              {required taskId, required snapshot}) async {
-            capturedSnapshot = snapshot;
-            return OcrRetryStorage.unavailableSnapshot(
-              taskId: taskId,
-              snapshot: snapshot,
-            );
-          },
+          testRetrySnapshotCacher:
+              ({required taskId, required snapshot}) async {
+                capturedSnapshot = snapshot;
+                return OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                );
+              },
         ),
       );
       await tester.pumpAndSettle();
@@ -1949,14 +1952,14 @@ void main() {
             testImages: [_createValidOcrTestImage()],
             ocrInstructions: instructions,
             backgroundTasksNotifier: notifier,
-            testRetrySnapshotCacher: (
-                {required taskId, required snapshot}) async {
-              capturedSnapshot = snapshot;
-              return OcrRetryStorage.unavailableSnapshot(
-                taskId: taskId,
-                snapshot: snapshot,
-              );
-            },
+            testRetrySnapshotCacher:
+                ({required taskId, required snapshot}) async {
+                  capturedSnapshot = snapshot;
+                  return OcrRetryStorage.unavailableSnapshot(
+                    taskId: taskId,
+                    snapshot: snapshot,
+                  );
+                },
           ),
         );
         await tester.pumpAndSettle();
@@ -2285,30 +2288,30 @@ void main() {
                           },
                           testImagePayloadPreparer: (bytes) async =>
                               OcrImagePayload(
-                            bytes: bytes,
-                            format: 'png',
-                            width: 1,
-                            height: 1,
-                          ),
-                          testRetrySnapshotCacher: ({
-                            required taskId,
-                            required snapshot,
-                          }) async =>
-                              OcrRetrySnapshot.capture(
-                            configId: snapshot.configId,
-                            modelId: snapshot.modelId,
-                            images: [
-                              for (final image in snapshot.images)
-                                OcrRetryImage.reference(
-                                  storageRef:
-                                      'ocr_retry_cache/${List.filled(64, 'a').join()}.bin',
-                                  format: image.format,
-                                  name: image.name,
-                                ),
-                            ],
-                            instructionContent: snapshot.instructionContent,
-                            saveFolder: snapshot.saveFolder,
-                          ).toMap(),
+                                bytes: bytes,
+                                format: 'png',
+                                width: 1,
+                                height: 1,
+                              ),
+                          testRetrySnapshotCacher:
+                              ({
+                                required taskId,
+                                required snapshot,
+                              }) async => OcrRetrySnapshot.capture(
+                                configId: snapshot.configId,
+                                modelId: snapshot.modelId,
+                                images: [
+                                  for (final image in snapshot.images)
+                                    OcrRetryImage.reference(
+                                      storageRef:
+                                          'ocr_retry_cache/${List.filled(64, 'a').join()}.bin',
+                                      format: image.format,
+                                      name: image.name,
+                                    ),
+                                ],
+                                instructionContent: snapshot.instructionContent,
+                                saveFolder: snapshot.saveFolder,
+                              ).toMap(),
                         ),
                       ),
                     ),
@@ -2554,8 +2557,7 @@ void main() {
       expect(tc.containsKey('userInstruction'), isFalse);
     });
 
-    test(
-        'default selection removes a legacy per-model instruction from the '
+    test('default selection removes a legacy per-model instruction from the '
         'request copy', () {
       // The request copy inherits the model's stored typeConfig, which may
       // still carry a legacy per-model userInstruction (kept in storage for
