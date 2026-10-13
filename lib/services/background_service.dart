@@ -301,8 +301,8 @@ Future<void> _requestNotificationPermissionIfNeeded() async {
 
 /// 停止后台服务。
 ///
-/// 返回 `true` 表示停止流程成功执行（服务已停止或原本未运行）。
-/// 若停止在 5 秒内未确认，返回 `false` 并保留用户启用状态及看门狗。
+/// 返回 `true` 表示服务已停止（或原本未运行）且禁用意图已持久化。
+/// 若停止未确认或禁用意图无法持久化，返回 `false`。
 Future<bool> stopBackgroundService() =>
     _withServiceLifecycleLock(_stopBackgroundService);
 
@@ -319,7 +319,7 @@ Future<bool> _stopBackgroundService() async {
     // Clear the persisted enabled state so the service is not
     // auto-restored on the next cold start.
     _explicitUserEnabledInProcess = false;
-    await _setServiceEnabledPreference(false);
+    if (!await _setServiceEnabledPreference(false)) return false;
     return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to stop background service: $e');
@@ -480,7 +480,15 @@ Future<bool> _setServiceEnabledPreference(bool enabled) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setBool(_backgroundServiceEnabledKey, enabled);
-    if (!saved) throw StateError('SharedPreferences rejected service state.');
+    if (!saved) {
+      if (!enabled) {
+        // setBool updates the legacy cache before writing. Reload to confirm
+        // that a rejected write did not leave a persisted enabled intent.
+        await prefs.reload();
+        if (prefs.getBool(_backgroundServiceEnabledKey) != true) return true;
+      }
+      throw StateError('SharedPreferences rejected service state.');
+    }
     return true;
   } catch (e) {
     debugPrint('[BackgroundService] Failed to save service enabled state: $e');
