@@ -560,4 +560,55 @@ class KeepAliveScheduleTest {
 
         assertEquals(AlarmGenerationClaimResult.CLAIMED, backupDelivery)
     }
+
+    @Test
+    fun pendingBackupRecoversAfterProcessRestartBeforeItsGenerationIsUpdated() {
+        var currentGeneration = 17L
+        var backupGeneration = currentGeneration
+        fun claim(
+            processClaims: AlarmDeliveryGenerationClaims,
+            scheduledGeneration: Long,
+            isRevocationBackup: Boolean,
+        ) = processClaims.claim(
+            scheduledGeneration = scheduledGeneration,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            isRevocationBackup = isRevocationBackup,
+            persistGeneration = { currentGeneration = it; true },
+        )
+
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(AlarmDeliveryGenerationClaims(), currentGeneration, isRevocationBackup = false),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(17L, backupGeneration)
+
+        // Simulate process death after claim persistence and before the backup
+        // PendingIntent's token is updated; the replacement process has no
+        // in-memory record of the first delivery.
+        val restartedProcessClaims = AlarmDeliveryGenerationClaims()
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+
+        // Rearming updates the pending backup to the current generation, so
+        // its next delivery remains valid and the paired alarm is still claimed once.
+        backupGeneration = currentGeneration
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+        assertEquals(19L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = false),
+        )
+    }
 }
