@@ -22,6 +22,7 @@ class _TestDocuments extends PathProviderPlatform {
   final String path;
   Completer<void>? firstRequestStarted;
   Completer<void>? releaseFirstRequest;
+  Completer<void>? releaseAllRequests;
   int pathRequests = 0;
 
   @override
@@ -32,6 +33,7 @@ class _TestDocuments extends PathProviderPlatform {
       if (started != null && !started.isCompleted) started.complete();
       await releaseFirstRequest?.future;
     }
+    await releaseAllRequests?.future;
     return path;
   }
 }
@@ -1302,6 +1304,68 @@ void main() {
       expect(await start, isTrue);
       expect(servicePlatform.running, isTrue);
       expect(preferences.getBool('background_service_enabled'), isTrue);
+    });
+
+    test(
+        'removal cleanup rechecks owners selected during its async gap',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final tempDownload = File(
+        '${downloadDir.path}/video.mp4.catcatch_tmp',
+      )..writeAsStringSync('partial download');
+      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+        ..writeAsStringSync('removed task artifact');
+      final progressFile = File(
+        '${directory.path}/catcatch/.progress/removed_dl_progress.json',
+      )..createSync(recursive: true);
+
+      documents.firstRequestStarted = Completer<void>();
+      documents.releaseAllRequests = Completer<void>();
+      notifier.setTasksForTest([
+        task('removed').copyWith(
+          selectedMedia: media,
+          downloadedFilePath: unsharedDownload.path,
+        ),
+        task('remaining').copyWith(
+          steps: [StepStatus.running(StepType.userSelecting)],
+        ),
+      ]);
+
+      try {
+        notifier.removeTask('removed');
+        await documents.firstRequestStarted!.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.selectMedia('remaining', media);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(
+          notifier.tasksForTest
+              .singleWhere((current) => current.id == 'remaining')
+              .selectedMedia,
+          media,
+        );
+
+        documents.releaseAllRequests!.complete();
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+
+        expect(await tempDownload.exists(), isTrue);
+        expect(await unsharedDownload.exists(), isFalse);
+        expect(await progressFile.exists(), isFalse);
+      } finally {
+        if (!documents.releaseAllRequests!.isCompleted) {
+          documents.releaseAllRequests!.complete();
+        }
+      }
     });
 
     test('a user start reconciles a timed-out stop before reporting active',

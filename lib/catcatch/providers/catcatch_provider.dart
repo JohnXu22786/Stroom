@@ -349,8 +349,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (task == null) return;
     try {
       final appDirPath = await AppStorage.directory;
+      // Selection can acquire shared paths while directory resolution waits.
+      final currentRemainingTasks =
+          mounted ? state : (_disposedSnapshot ?? remainingTasks);
       await cleanupTaskFiles(task,
-          appDirPath: appDirPath, remainingTasks: remainingTasks);
+          appDirPath: appDirPath, remainingTasks: currentRemainingTasks);
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to clean up task files: $e');
     }
