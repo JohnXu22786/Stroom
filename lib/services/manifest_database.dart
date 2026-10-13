@@ -288,18 +288,30 @@ class ManifestDatabase {
     final existingFolders = await db.query(ManifestTables.folders);
     for (final row in existingFolders) {
       final path = row['path'] as String;
-      await db.insert(ManifestTables.textFolders, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      await db.insert(ManifestTables.audioFolders, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      await db.insert(ManifestTables.imageFolders, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      await db.insert(ManifestTables.videoFolders, {
-        'path': path,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          ManifestTables.textFolders,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          ManifestTables.audioFolders,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          ManifestTables.imageFolders,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(
+          ManifestTables.videoFolders,
+          {
+            'path': path,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     // 删除旧版共享 folders 表（v2 格式不再使用）
     try {
