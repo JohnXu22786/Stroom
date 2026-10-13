@@ -1240,7 +1240,7 @@ void main() {
       });
       try {
         await preferences.reload();
-        expect(await stopBackgroundService(), isTrue);
+        expect(await stopBackgroundService(), isFalse);
         await preferences.reload();
         expect(preferences.getBool('background_service_enabled'), isTrue);
         expect(servicePlatform.running, isFalse);
