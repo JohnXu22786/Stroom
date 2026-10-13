@@ -826,6 +826,7 @@ class _Mp4Demuxer {
   };
 
   final Uint8List _data;
+  final List<(int, int)> _mdatPayloadRanges = [];
   int _offset = 0;
   int? _movieTimescale;
 
@@ -846,9 +847,9 @@ class _Mp4Demuxer {
   _AudioTrackInfo? findAudioTrack() {
     try {
       _offset = 0;
+      _mdatPayloadRanges.clear();
 
       int moovOffset = -1;
-      int mdatOffset = -1;
 
       while (_offset < _data.length) {
         final boxStart = _offset;
@@ -861,17 +862,19 @@ class _Mp4Demuxer {
           boxSize = _readUint64();
         }
 
+        final boxHeaderEnd = _offset;
         if (boxType == 'moov') {
           moovOffset = boxStart;
         } else if (boxType == 'mdat') {
-          mdatOffset = boxStart;
+          final boxEnd = boxSize == 0 ? _data.length : boxStart + boxSize;
+          _mdatPayloadRanges.add((boxHeaderEnd, boxEnd));
         }
 
         if (boxSize == 0) break;
         _offset = boxStart + boxSize;
       }
 
-      if (moovOffset < 0 || mdatOffset < 0) return null;
+      if (moovOffset < 0 || _mdatPayloadRanges.isEmpty) return null;
 
       _movieTimescale = _readMovieTimescale(moovOffset);
       _offset = moovOffset + 8;
@@ -1553,11 +1556,16 @@ class _Mp4Demuxer {
         }
 
         final fileOffset = chunkMdatOffset + offsetInChunk;
-        if (fileOffset + sampleSize <= _data.length &&
+        final sampleEnd = fileOffset + sampleSize;
+        final isInMdatPayload = _mdatPayloadRanges.any(
+          (range) => fileOffset >= range.$1 && sampleEnd <= range.$2,
+        );
+        if (sampleEnd <= _data.length &&
+            isInMdatPayload &&
             (includedSampleIndices == null ||
                 includedSampleIndices.contains(sampleIdx))) {
           frames.add(_AudioFrame(
-            Uint8List.sublistView(_data, fileOffset, fileOffset + sampleSize),
+            Uint8List.sublistView(_data, fileOffset, sampleEnd),
           ));
         }
         sampleIdx++;
