@@ -694,25 +694,18 @@ class _BackgroundOptimizationPageState
               return;
             }
             if (mounted) setState(() => _watchdogEnabled = v);
-            if (v && _isServiceRunning) {
-              final started = await startBackgroundService();
-              if (!started && mounted) {
+            if (v) {
+              final activated = _isServiceRunning
+                  ? await startBackgroundService()
+                  : await rearmBackgroundServiceWatchdog();
+              if (!activated && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('看门狗激活失败，后台服务保活状态未确认'),
                   ),
                 );
               }
-            } else if (v && _isServiceStatusUnknown) {
-              final rearmed = await rearmBackgroundServiceWatchdog();
-              if (!rearmed && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('看门狗激活失败，后台服务保活状态未确认'),
-                  ),
-                );
-              }
-            } else if (!v) {
+            } else {
               disableKeepAlive();
             }
           },
