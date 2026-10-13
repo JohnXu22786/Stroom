@@ -57,6 +57,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   bool _initialized = false;
   bool _windowCloseListenerRegistered = false;
   bool _pendingCloseBeforeTrayReady = false;
+  bool _trayRollbackCloseInterceptionFailed = false;
   bool _trayReady = false;
   bool _quitRequested = false;
   Menu? _menu;
@@ -89,6 +90,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     _initialized = false;
     _windowCloseListenerRegistered = false;
     _pendingCloseBeforeTrayReady = false;
+    _trayRollbackCloseInterceptionFailed = false;
     _trayReady = false;
     _quitRequested = false;
     _confirmInProgress = false;
@@ -157,6 +159,7 @@ class DesktopAppService extends WindowListener with TrayListener {
         _menu = _buildMenu();
         await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
         _trayReady = true;
+        _trayRollbackCloseInterceptionFailed = false;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
         debugPrint('[DesktopAppService] Tray registration failed: $e');
@@ -171,17 +174,31 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
         // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞。
+        var closeInterceptionCleared = false;
         try {
           await windowManager.setPreventClose(false).timeout(_trayTimeout);
+          closeInterceptionCleared = true;
         } catch (_) {}
-        windowManager.removeListener(this);
-        _windowCloseListenerRegistered = false;
+        if (closeInterceptionCleared) {
+          windowManager.removeListener(this);
+          _windowCloseListenerRegistered = false;
+        } else {
+          // Keep the only close listener active and use the no-tray exit
+          // fallback if native interception remains enabled.
+          _trayRollbackCloseInterceptionFailed = true;
+        }
         final replayPendingClose = _pendingCloseBeforeTrayReady;
         _pendingCloseBeforeTrayReady = false;
         if (replayPendingClose) {
-          // The original native close was intercepted and consumed. Replay it
-          // now that interception is disabled so the first click is honored.
-          await windowManager.close().timeout(_trayTimeout);
+          if (closeInterceptionCleared) {
+            // The original native close was intercepted and consumed. Replay
+            // it now that interception is disabled so the first click is honored.
+            await windowManager.close().timeout(_trayTimeout);
+          } else {
+            // Native close may still be intercepted, so honor the pending
+            // request directly through the no-tray exit fallback.
+            await quitApplication();
+          }
         }
         return;
       }
@@ -227,6 +244,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   @override
   void onWindowClose() {
     debugPrint('[DesktopAppService] Window close intercepted');
+    if (_trayRollbackCloseInterceptionFailed) {
+      unawaited(quitApplication());
+      return;
+    }
     // 在托盘注册完成前只阻止原生默认关闭，保持启动窗口可见；隐藏
     // 前必须确保用户已有可用的托盘入口，避免产生无法恢复的幽灵进程。
     if (!_trayReady) {
