@@ -750,6 +750,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }) {
     final id = taskId ?? _uuid.v4();
     _pendingRestoreTaskRemovals.remove(id);
+    _pendingTaskRemovalReconciliations.remove(id);
     final steps = type.stepLabels
         .map((label) => BgTaskStep(label: label, status: BgStepStatus.pending))
         .toList();
@@ -762,7 +763,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       retryData: retryData,
     );
     state = [task, ...state];
-    _persistTasks();
+    _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
     return id;
   }
@@ -967,7 +968,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       unawaited(removeTasksPersisted([taskId]));
       return;
     }
-    _recordPendingRestoreTaskRemoval(taskId);
+    final removalToken = _recordPendingRestoreTaskRemoval(taskId);
+    _pendingTaskRemovalReconciliations[taskId] = removalToken;
     _cancellations.remove(taskId)?.call();
     final removed = state.where((task) => task.id == taskId).firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
@@ -1006,6 +1008,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         excludedPersistedTaskIds: removedIds,
       )) {
         return false;
+      }
+      if (_restoreBarrier != null) {
+        for (final id in removedIds) {
+          _recordPendingRestoreTaskRemoval(id);
+        }
       }
       final cacheCandidates = <String>{
         for (final task in removedTasks)
@@ -1249,7 +1256,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Completer<void>? _removalBarrier;
   Completer<void>? _restoreBarrier;
   int _restoreGeneration = 0;
-  final Map<String, Object> _pendingRestoreTaskRemovals =
+  final Map<String, Object> _pendingRestoreTaskRemovals = <String, Object>{};
+  final Map<String, Object> _pendingTaskRemovalReconciliations =
       <String, Object>{};
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
@@ -1260,8 +1268,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   bool _taskSnapshotCanPreserveSkippedEntries = false;
   List<dynamic> _skippedTaskEntries = const [];
 
-  void _recordPendingRestoreTaskRemoval(String taskId) {
-    _pendingRestoreTaskRemovals[taskId] = Object();
+  Object _recordPendingRestoreTaskRemoval(String taskId) {
+    final token = Object();
+    _pendingRestoreTaskRemovals[taskId] = token;
+    return token;
   }
 
   void _clearPendingRestoreTaskRemovals(Map<String, Object> removals) {
@@ -1276,9 +1286,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<void> get pendingPersistence => _pendingWrite ?? Future<void>.value();
 
   Future<bool> _persistTasks({
+    bool preserveSkippedEntries = false,
     Set<String> excludedPersistedTaskIds = const <String>{},
   }) {
-    final preserveSkippedEntries = _taskSnapshotIncomplete;
+    final preserveCurrentSkippedEntries =
+        preserveSkippedEntries || _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
     final restoreBarrier = _restoreBarrier;
     if (barrier != null || restoreBarrier != null) {
@@ -1297,7 +1309,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           dirOverride,
           preserveSkippedEntries: restoreBarrier != null
               ? _taskSnapshotIncomplete
-              : preserveSkippedEntries,
+              : preserveCurrentSkippedEntries,
           excludedPersistedTaskIds: excludedPersistedTaskIds,
         );
       });
@@ -1310,7 +1322,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       if (snapshot == null) return Future<bool>.value(false);
       final write = _writeSnapshot(
         snapshot,
-        preserveSkippedEntries: preserveSkippedEntries,
+        preserveSkippedEntries: preserveCurrentSkippedEntries,
         excludedPersistedTaskIds: excludedPersistedTaskIds,
       );
       _disposedPersistence ??= write.then<void>((_) {});
@@ -1318,7 +1330,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
     return _writeSnapshot(
       state,
-      preserveSkippedEntries: preserveSkippedEntries,
+      preserveSkippedEntries: preserveCurrentSkippedEntries,
       excludedPersistedTaskIds: excludedPersistedTaskIds,
     );
   }
@@ -1359,13 +1371,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final excludedTaskIds = <String>{
       ...excludedPersistedTaskIds,
       ..._pendingRestoreTaskRemovals.keys,
+      ..._pendingTaskRemovalReconciliations.keys,
     };
     final pendingRemovalTokens = Map<String, Object>.of(
       _pendingRestoreTaskRemovals,
     );
-    var currentSnapshot = snapshot
-        .where((task) => !excludedTaskIds.contains(task.id))
-        .toList();
+    final taskRemovalTokens = Map<String, Object>.of(
+      _pendingTaskRemovalReconciliations,
+    );
+    var currentSnapshot =
+        snapshot.where((task) => !excludedTaskIds.contains(task.id)).toList();
     var preserveCurrentSkippedEntries = preserveSkippedEntries;
 
     if (_restoreBarrier != null) {
@@ -1425,6 +1440,26 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             preservedEntries: skippedEntries,
           );
     if (saved) {
+      final reconciledTaskIds = <String>{};
+      for (final entry in taskRemovalTokens.entries) {
+        if (identical(
+          _pendingTaskRemovalReconciliations[entry.key],
+          entry.value,
+        )) {
+          reconciledTaskIds.add(entry.key);
+          _pendingTaskRemovalReconciliations.remove(entry.key);
+        }
+      }
+      if (reconciledTaskIds.isNotEmpty) {
+        if (mounted) {
+          state = state
+              .where((task) => !reconciledTaskIds.contains(task.id))
+              .toList();
+        }
+        _disposedSnapshot = _disposedSnapshot
+            ?.where((task) => !reconciledTaskIds.contains(task.id))
+            .toList();
+      }
       final restoreBarrier = _restoreBarrier;
       if (restoreBarrier == null || restoreBarrier.isCompleted) {
         _clearPendingRestoreTaskRemovals(pendingRemovalTokens);
@@ -1464,7 +1499,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       dirOverride: dirOverride,
       waitForDebugRead: false,
     );
-    if (!loaded.isComplete || !loaded.isReadable) return null;
+    if (!loaded.isReadable) return null;
+    if (!loaded.isComplete) {
+      _taskSnapshotIncomplete = true;
+      _taskSnapshotCanPreserveSkippedEntries = true;
+      _skippedTaskEntries = loaded.skippedEntries;
+    }
     final tasks = loaded.tasks;
     _preRestorePersistedTasks = Future<List<BackgroundTask>?>.value(tasks);
     return tasks;
