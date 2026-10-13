@@ -84,6 +84,47 @@ internal fun claimAlarmDeliveryGeneration(
     }
 }
 
+/**
+ * Tracks claims for this process so a paired backup left one generation behind
+ * by process death can recover without admitting a same-process duplicate.
+ */
+internal class AlarmDeliveryGenerationClaims {
+    private var lastClaimedGeneration: Long? = null
+
+    fun claim(
+        scheduledGeneration: Long,
+        currentGeneration: Long,
+        keepAliveActive: Boolean,
+        isRevocationBackup: Boolean,
+        persistGeneration: (Long) -> Boolean,
+    ): AlarmGenerationClaimResult {
+        if (!keepAliveActive) return AlarmGenerationClaimResult.STALE
+
+        if (scheduledGeneration == currentGeneration) {
+            val result = claimAlarmDeliveryGeneration(
+                scheduledGeneration = scheduledGeneration,
+                currentGeneration = currentGeneration,
+                keepAliveActive = keepAliveActive,
+                persistGeneration = persistGeneration,
+            )
+            if (result == AlarmGenerationClaimResult.CLAIMED) {
+                lastClaimedGeneration = scheduledGeneration
+            }
+            return result
+        }
+
+        val isInterruptedClaimRecovery = isRevocationBackup &&
+            scheduledGeneration == currentGeneration - 1L &&
+            scheduledGeneration != lastClaimedGeneration
+        if (!isInterruptedClaimRecovery) return AlarmGenerationClaimResult.STALE
+
+        // Reuse currentGeneration: the receiver will update the backup token
+        // while rearming, and another process interruption remains recoverable.
+        lastClaimedGeneration = scheduledGeneration
+        return AlarmGenerationClaimResult.CLAIMED
+    }
+}
+
 internal fun persistNextAlarmGeneration(
     currentGeneration: Long,
     persistGeneration: (Long) -> Boolean,
