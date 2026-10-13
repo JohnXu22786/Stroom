@@ -202,64 +202,7 @@ class ManifestDatabase {
           }
         }
         if (oldVersion < 4) {
-          // V4: 引入每个类型独立的文件夹表，替代共享的 folders 表
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS text_folders (
-              path TEXT PRIMARY KEY
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS audio_folders (
-              path TEXT PRIMARY KEY
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS image_folders (
-              path TEXT PRIMARY KEY
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS video_folders (
-              path TEXT PRIMARY KEY
-            )
-          ''');
-          // 将已有文件夹迁移到四个独立的表
-          try {
-            final existingFolders = await db.query(ManifestTables.folders);
-            for (final row in existingFolders) {
-              final path = row['path'] as String;
-              await db.insert(
-                ManifestTables.textFolders,
-                {'path': path},
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-              await db.insert(
-                ManifestTables.audioFolders,
-                {'path': path},
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-              await db.insert(
-                ManifestTables.imageFolders,
-                {'path': path},
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-              await db.insert(
-                ManifestTables.videoFolders,
-                {'path': path},
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-            }
-          } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v4: migration of legacy folders to per-type tables failed');
-          }
-          // 删除旧版共享 folders 表（v2 格式不再使用）
-          try {
-            await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
-          } catch (_) {
-            await AppLogService.warning('ManifestDatabase',
-                '_initDatabase v4: DROP TABLE ${ManifestTables.folders} failed');
-          }
+          await _migrateLegacyFoldersV4(db);
         }
         if (oldVersion < 5) {
           // V5: 为四类记录表增加修改时间列 modified_at。
@@ -312,6 +255,66 @@ class ManifestDatabase {
     await _migrateOldVideoRecords(db);
     return db;
   }
+
+  static Future<void> _migrateLegacyFoldersV4(Database db) async {
+    // V4: 引入每个类型独立的文件夹表，替代共享的 folders 表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS text_folders (
+        path TEXT PRIMARY KEY
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS audio_folders (
+        path TEXT PRIMARY KEY
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS image_folders (
+        path TEXT PRIMARY KEY
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS video_folders (
+        path TEXT PRIMARY KEY
+      )
+    ''');
+    final legacyFolders = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      [ManifestTables.folders],
+    );
+    if (legacyFolders.isEmpty) return;
+
+    // Let the onUpgrade transaction roll back if any legacy path cannot copy.
+    final existingFolders = await db.query(ManifestTables.folders);
+    for (final row in existingFolders) {
+      final path = row['path'] as String;
+      await db.insert(ManifestTables.textFolders, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(ManifestTables.audioFolders, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(ManifestTables.imageFolders, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert(ManifestTables.videoFolders, {
+        'path': path,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    // 删除旧版共享 folders 表（v2 格式不再使用）
+    try {
+      await db.execute('DROP TABLE IF EXISTS ${ManifestTables.folders}');
+    } catch (_) {
+      await AppLogService.warning(
+        'ManifestDatabase',
+        '_initDatabase v4: DROP TABLE ${ManifestTables.folders} failed',
+      );
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> migrateLegacyFoldersV4ForTesting(Database db) =>
+      _migrateLegacyFoldersV4(db);
 
   static Future<void> _migrateOldVideoRecords(Database db) async {
     try {
