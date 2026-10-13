@@ -9,6 +9,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/ocr_batch_execution.dart';
+import '../models/ocr_output_template.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart';
 import '../providers/background_task_provider.dart';
@@ -83,25 +84,42 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
   return null;
 }
 
-/// Writes the content of the generic instruction at [instructionIndex] into
-/// [typeConfig]['userInstruction'] — the key the OCR service sends as the
-/// user-message text part. Returns the (possibly changed) typeConfig.
+/// Resolves the selected built-in template or generic instruction without
+/// changing its content. Retry snapshots use this value verbatim; request
+/// configuration trims only user-managed instructions.
 ///
-/// Out-of-range or default (-1) selections remove any 'userInstruction'
-/// from the request copy: the request must stay images-only even when the
-/// copied typeConfig still carries a legacy per-model instruction (kept in
-/// storage for the one-shot generic-store migration).
+/// Default (-1), saved retry snapshot (-2), and out-of-range selections
+/// remove any 'userInstruction' from the request copy. The default request
+/// therefore stays images-only even when the copied typeConfig still carries
+/// a legacy per-model instruction.
+@visibleForTesting
+String? selectedOcrInstructionContent(
+  List<OcrInstruction> instructions,
+  int selectionValue,
+) {
+  final template = ocrOutputTemplateForSelection(selectionValue);
+  if (template != null) return template.content;
+  if (selectionValue >= 0 && selectionValue < instructions.length) {
+    return instructions[selectionValue].content;
+  }
+  return null;
+}
+
 @visibleForTesting
 Map<String, dynamic> applySelectedOcrInstruction(
   Map<String, dynamic> typeConfig,
   List<OcrInstruction> instructions,
-  int instructionIndex,
+  int selectionValue,
 ) {
-  if (instructionIndex >= 0 && instructionIndex < instructions.length) {
-    final content = instructions[instructionIndex].content.trim();
-    if (content.isNotEmpty) {
-      typeConfig['userInstruction'] = content;
-    }
+  final selectedContent = selectedOcrInstructionContent(
+    instructions,
+    selectionValue,
+  );
+  final content = ocrOutputTemplateForSelection(selectionValue) == null
+      ? selectedContent?.trim()
+      : selectedContent;
+  if (content != null && content.isNotEmpty) {
+    typeConfig['userInstruction'] = content;
   } else {
     typeConfig.remove('userInstruction');
   }
@@ -133,24 +151,27 @@ class OcrPage extends ConsumerStatefulWidget {
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testCameraPicker;
+  })?
+  testCameraPicker;
   @visibleForTesting
   final Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testGalleryPicker;
+  })?
+  testGalleryPicker;
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
-      testImagePayloadPreparer;
+  testImagePayloadPreparer;
   @visibleForTesting
   final Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
-      testRetryImageRestorer;
+  testRetryImageRestorer;
   @visibleForTesting
   final Future<Map<String, dynamic>?> Function({
     required String taskId,
     required OcrRetrySnapshot snapshot,
-  })? testRetrySnapshotCacher;
+  })?
+  testRetrySnapshotCacher;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -211,8 +232,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _modelSelectionNeedsReselection = false;
   bool _legacyModelConfirmationPending = false;
 
-  /// Index into the generic user instructions, or -1 for the default
-  /// behavior (images only, no instruction).
+  /// Non-negative values index custom instructions; built-in formats use
+  /// stable negative values, while -1 keeps the default images-only request.
   int _selectedInstructionIndex = -1;
 
   /// Instruction index restored from retry data, pending until the generic
@@ -327,8 +348,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     OcrRetryRestoreResult restored;
     try {
-      restored = await (widget.testRetryImageRestorer?.call(snapshot) ??
-          OcrRetryStorage.restoreImages(snapshot));
+      restored =
+          await (widget.testRetryImageRestorer?.call(snapshot) ??
+              OcrRetryStorage.restoreImages(snapshot));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -346,7 +368,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
     if (!mounted) return;
-    final canUseRestoredImages = restored.isComplete &&
+    final canUseRestoredImages =
+        restored.isComplete &&
         !snapshot.hasInvalidImages &&
         snapshot.imageEntryCount > 0;
     setState(() {
@@ -359,8 +382,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           ),
         ),
       );
-      _batchMode =
-          _hasReusablePageResults ? OcrBatchMode.perImage : snapshot.batchMode;
+      _batchMode = _hasReusablePageResults
+          ? OcrBatchMode.perImage
+          : snapshot.batchMode;
       _perImageConcurrency = snapshot.perImageConcurrency;
       _requestSizeBudgetMiBController.text =
           (snapshot.requestSizeBudgetBytes / (1024 * 1024))
@@ -400,14 +424,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   ) async {
     try {
       await OcrRetryStorage.withCacheMaintenanceLock(() async {
-        final retryData = await (widget.testRetrySnapshotCacher?.call(
-              taskId: taskId,
-              snapshot: snapshot,
-            ) ??
-            OcrRetryStorage.cacheSnapshot(
-              taskId: taskId,
-              snapshot: snapshot,
-            ));
+        final retryData =
+            await (widget.testRetrySnapshotCacher?.call(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ) ??
+                OcrRetryStorage.cacheSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ));
         if (!notifier.mounted) return;
         if (!notifier.state.any((task) => task.id == taskId)) {
           await OcrRetryStorage.deleteUnreferenced(
@@ -773,8 +798,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final rawIndex = _retryInstructionSnapshot != null
         ? -2
         : (pending ?? _selectedInstructionIndex);
-    final clamped = rawIndex == -2
-        ? -2
+    final clamped =
+        rawIndex == -2 || ocrOutputTemplateForSelection(rawIndex) != null
+        ? rawIndex
         : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
     if (pending == null &&
         _retryInstructionSnapshot == null &&
@@ -868,6 +894,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                      ...ocrOutputTemplates.map((template) {
+                        return DropdownMenuItem<int>(
+                          value: template.selectionValue,
+                          child: Text(
+                            template.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
                       ...List.generate(instructions.length, (i) {
                         return DropdownMenuItem<int>(
                           value: i,
@@ -1002,8 +1037,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed:
-                        _isImageSelectionLocked ? null : _showCameraChoicePanel,
+                    onPressed: _isImageSelectionLocked
+                        ? null
+                        : _showCameraChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -1063,7 +1099,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     onChanged: _isProcessing
                         ? null
                         : (value) =>
-                            setState(() => _useOriginalImageQuality = value),
+                              setState(() => _useOriginalImageQuality = value),
                   ),
                 ],
               ),
@@ -1125,8 +1161,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight =
-              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
+          final double totalHeight = rowCount > 0
+              ? rowCount * itemSize + (rowCount - 1) * spacing
+              : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -1584,7 +1621,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty ||
+                onPressed:
+                    _selectedImages.isEmpty ||
                         _isProcessing ||
                         _isImageImportPending ||
                         _isRetryImagesLoading ||
@@ -1605,13 +1643,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 label: Text(
                   _isProcessing
                       ? _isPreparingRetryData
-                          ? '保存重试图片...'
-                          : '识别中...'
+                            ? '保存重试图片...'
+                            : '识别中...'
                       : _isRetryImagesLoading
-                          ? '读取重试图片...'
-                          : _isImageImportPending
-                              ? '正在导入图片...'
-                              : '开始识别',
+                      ? '读取重试图片...'
+                      : _isImageImportPending
+                      ? '正在导入图片...'
+                      : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1764,17 +1802,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
-      final file = await (widget.testCameraPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          picker.pickImage(
-            source: ImageSource.camera,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ));
+      final file =
+          await (widget.testCameraPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              picker.pickImage(
+                source: ImageSource.camera,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ));
       if (!mounted ||
           importGeneration != _imageImportGeneration ||
           file == null) {
@@ -1818,18 +1857,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await (widget.testGalleryPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          pickGalleryMedia(
-            GalleryMediaKind.image,
-            context: context,
-            imageQuality: mode.imageQuality,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-          ));
+      final files =
+          await (widget.testGalleryPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              pickGalleryMedia(
+                GalleryMediaKind.image,
+                context: context,
+                imageQuality: mode.imageQuality,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+              ));
       if (!mounted ||
           importGeneration != _imageImportGeneration ||
           files.isEmpty) {
@@ -1871,11 +1911,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
-        _errorMessage = firstError ??
+        _errorMessage =
+            firstError ??
             (_retryImagesUnavailable
                 ? (_requiredRetryImageCount == null
-                    ? _retryUnavailableMessage
-                    : _retryReselectAllMessage(_requiredRetryImageCount!))
+                      ? _retryUnavailableMessage
+                      : _retryReselectAllMessage(_requiredRetryImageCount!))
                 : null);
         _updateRetryImageReselectionState();
       });
@@ -2134,8 +2175,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _errorMessage = imageCountUnknown
           ? _retryImageResetMessage
           : _requiredRetryImageCount == null
-              ? null
-              : _retryReselectAllMessage(_requiredRetryImageCount!);
+          ? null
+          : _retryReselectAllMessage(_requiredRetryImageCount!);
     });
   }
 
@@ -2225,8 +2266,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     var budgetBytes = initialBudgetBytes;
 
-    final imageBytesList =
-        images.map((image) => (image.bytes, image.format)).toList();
+    final imageBytesList = images
+        .map((image) => (image.bytes, image.format))
+        .toList();
     final reusablePageIndices = _retryPageOutcomes
         .where((outcome) => outcome.canReuseResult)
         .map((outcome) => outcome.imageIndex)
@@ -2266,7 +2308,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final choice = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
-        canSwitchToPerImage: _batchMode == OcrBatchMode.joint &&
+        canSwitchToPerImage:
+            _batchMode == OcrBatchMode.joint &&
             images.length > 1 &&
             !_hasReusablePageResults,
       );
@@ -2363,10 +2406,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     setDialogState(() => invalidInput = true);
                     return;
                   }
-                  Navigator.pop(
-                    dialogContext,
-                    (true, _requestSizeBudgetMiBController.text.trim()),
-                  );
+                  Navigator.pop(dialogContext, (
+                    true,
+                    _requestSizeBudgetMiBController.text.trim(),
+                  ));
                 },
                 child: const Text('改用逐张识别'),
               ),
@@ -2469,8 +2512,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           setState(() {
             _retryImagesUnavailable = true;
             _retryImageCountUnknown = retryImageCount == 0;
-            _requiredRetryImageCount =
-                retryImageCount == 0 ? null : retryImageCount;
+            _requiredRetryImageCount = retryImageCount == 0
+                ? null
+                : retryImageCount;
             _isRetryImageReselectionPending = false;
             _errorMessage = retryImageCount == 0
                 ? _retryImageCountUnknownMessage
@@ -2540,8 +2584,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       model: selectedOption.model.modelId,
       requestSizeBudgetBytes: requestSizeBudgetBytes,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      customParams: selectedOption.model.customParams
+          .map((p) => p.copy())
+          .toList(),
     );
 
     // A retry instruction restore may still be pending (the generic list
@@ -2618,11 +2663,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final imageNameList = images.map((img) => img.sourceName).toList();
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
-    final instructionContent = _retryInstructionSnapshot ??
-        ((_selectedInstructionIndex >= 0 &&
-                _selectedInstructionIndex < instructions.length)
-            ? instructions[_selectedInstructionIndex].content
-            : null);
+    final instructionContent =
+        _retryInstructionSnapshot ??
+        selectedOcrInstructionContent(instructions, _selectedInstructionIndex);
     // Store the retry images before publishing the task or starting its
     // request. A failed request can then never expose a retry action while its
     // snapshot is still being written.
@@ -2643,8 +2686,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           effectiveConfig.requestSizeBudgetBytes,
         );
         if (!mounted || !bgNotifier.mounted) {
-          final remainingTasks =
-              bgNotifier.mounted ? bgNotifier.state : const <BackgroundTask>[];
+          final remainingTasks = bgNotifier.mounted
+              ? bgNotifier.state
+              : const <BackgroundTask>[];
           try {
             await OcrRetryStorage.deleteUnreferenced(
               candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
@@ -2725,14 +2769,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       requestSizeBudgetBytes: requestSizeBudgetBytes,
     );
     try {
-      final retryData = await (widget.testRetrySnapshotCacher?.call(
-            taskId: taskId,
-            snapshot: snapshot,
-          ) ??
-          OcrRetryStorage.cacheSnapshot(
-            taskId: taskId,
-            snapshot: snapshot,
-          ));
+      final retryData =
+          await (widget.testRetrySnapshotCacher?.call(
+                taskId: taskId,
+                snapshot: snapshot,
+              ) ??
+              OcrRetryStorage.cacheSnapshot(
+                taskId: taskId,
+                snapshot: snapshot,
+              ));
       return retryData ??
           OcrRetryStorage.unavailableSnapshot(
             taskId: taskId,

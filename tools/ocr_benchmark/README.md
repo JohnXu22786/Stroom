@@ -1,0 +1,114 @@
+# OCR recognition quality benchmark
+
+This directory contains 24 deterministic, synthetic PNG pages and their
+golden transcriptions. The set covers Chinese and English text, dense small
+text, rotated pages, multi-column reading order, tables, formulas, blank
+pages, and low-contrast text. The fixtures contain no private source material.
+
+The checked-in PNG hashes make the evaluation inputs verifiable without an
+image library or network access:
+
+    python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
+    python3 -m unittest discover -s tools/ocr_benchmark -p 'test_*.py' -v
+
+The evaluator does not call a model. It consumes one JSON file of predictions,
+plus the exact model identifier and non-secret recognition settings:
+
+    {
+      "run": {
+        "model_id": "provider/model-version",
+        "output_format": "markdown",
+        "settings": {
+          "temperature": 0,
+          "top_p": 1,
+          "max_tokens": 2048
+        }
+      },
+      "predictions": [
+        {
+          "fixture_id": "mixed-zh-en-01",
+          "text": "会议记录 / Meeting Notes",
+          "elapsed_ms": 850,
+          "returned_tokens": 42
+        }
+      ]
+    }
+
+Include one prediction per fixture for a complete run. A missing fixture or
+null text counts as an omitted page. An empty string on a non-blank fixture
+also counts as omitted; an empty string on a blank fixture is a returned
+prediction. For elapsed-time and token metrics, run each fixture as a separate
+OCR request and record that request's measurements on its fixture row. Do not
+copy one joint-request total to multiple rows; if only run-level measurements
+are available, leave the per-fixture fields null so those metrics remain
+pending. `output_format` is one of `plain_text`, `markdown`, `table`, or
+`latex` and is recorded in the report; if omitted it defaults to `plain_text`.
+
+Run one evaluation or compare a candidate with a baseline using the same
+manifest:
+
+    python3 tools/ocr_benchmark/evaluate.py \
+      --predictions /path/to/candidate.json \
+      --baseline /path/to/baseline.json \
+      --output /path/to/comparison.json
+
+The report includes CER, omitted-page rate, reading-order score, table and
+formula fidelity, total and mean elapsed time, and total and mean returned
+tokens. A comparison labels each measured change as improved, unchanged, or a
+regression. It uses no pass threshold or universal accuracy promise.
+
+Normalization and metric definitions:
+
+- Text is Unicode NFC; CRLF and CR become LF; consecutive whitespace is
+  collapsed to one space and leading/trailing whitespace is removed.
+- CER is code-point Levenshtein edit distance divided by the total normalized
+  golden-text code points across pages. Missing text is evaluated as an empty
+  transcription and therefore contributes deletions.
+- Page omission counts missing prediction rows, null text, or empty text for a
+  non-empty golden page, divided by all fixtures.
+- Reading-order score is the proportion of expected anchor pairs appearing in
+  golden order within the normalized prediction. Anchors are unique fragments
+  recorded for multi-column fixtures. A missing anchor is an incorrect pair;
+  a page with no returned text leaves this metric pending.
+- Table fidelity compares the annotated rows and cells in sequence. It ignores
+  optional leading/trailing Markdown pipes and Markdown separator rows, so a
+  valid Markdown table is not penalized for its formatting row. It remains a
+  text check, not semantic table parsing. Formula fidelity is an exact
+  substring check after Unicode superscript normalization; for `markdown` and
+  `latex` output it also removes math delimiters and common LaTeX spacing and
+  notation commands such as `\int`, `\pi`, and `\frac`. It does not perform
+  symbolic equivalence. If any eligible page has no returned text, the metric
+  value is null and its pending count is reported.
+- Elapsed time is supplied in milliseconds per fixture. Returned tokens means
+  provider-reported completion/output tokens per fixture. If any fixture lacks
+  either measurement, that metric's total and mean are null and the missing
+  page count is reported.
+
+The deterministic self-tests and fixture checks validate the evaluator and
+input set; they do not measure OCR model quality.
+
+## Re-rendering fixtures
+
+The PNGs are already checked in, so evaluation does not need Pillow or fonts.
+To regenerate them, install the pinned optional rendering dependency and
+provide the same Noto Sans CJK font file whose SHA-256 is recorded in
+manifest.json:
+
+    python3 -m pip install -r tools/ocr_benchmark/requirements.txt
+    python3 tools/ocr_benchmark/generate_fixtures.py \
+      --font /path/to/NotoSansCJK-Regular.ttc
+
+The generator uses only the synthetic case definitions in
+generate_fixtures.py; it does not read network or private data. Re-run the
+fixture checks after regeneration:
+
+    python3 tools/ocr_benchmark/evaluate.py --verify-fixtures
+
+## Live benchmark status
+
+**Pending.** This source-only task environment did not expose an authorized OCR
+model configuration, so no live model requests or model scores were produced.
+Provide a sanitized prediction file with the exact model identifier and
+non-secret recognition settings to run the evaluator. The tool rejects
+credential-like setting names and never writes prediction transcripts into its
+report.
