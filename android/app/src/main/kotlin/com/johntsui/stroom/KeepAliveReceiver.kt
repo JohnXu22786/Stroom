@@ -263,9 +263,6 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         false
                     }
                 },
-                cancelRevocationFallback = {
-                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE_REVOCATION_BACKUP, REVOCATION_BACKUP_REQUEST_CODE)
-                },
                 scheduleInexactPrimary = {
                     try {
                         // setAndAllowWhileIdle requires no permission; the system may
@@ -390,7 +387,6 @@ class KeepAliveReceiver : BroadcastReceiver() {
                     scheduledGeneration = scheduledGeneration,
                     currentGeneration = currentGeneration,
                     keepAliveActive = keepAliveActive,
-                    isRevocationBackup = intent.action == ACTION_KEEP_ALIVE_REVOCATION_BACKUP,
                     persistGeneration = { generation ->
                         prefs.edit()
                             .putLong(KEY_KEEP_ALIVE_ALARM_GENERATION, generation)
