@@ -695,9 +695,7 @@ class _BackgroundOptimizationPageState
             }
             if (mounted) setState(() => _watchdogEnabled = v);
             if (v) {
-              final activated = _isServiceRunning
-                  ? await startBackgroundService()
-                  : await rearmBackgroundServiceWatchdog();
+              final activated = await rearmBackgroundServiceWatchdog();
               if (!activated && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(

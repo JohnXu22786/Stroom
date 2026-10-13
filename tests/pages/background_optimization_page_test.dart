@@ -772,7 +772,8 @@ void main() {
       );
     });
 
-    testWidgets('turning the watchdog on while running arms the alarm',
+    testWidgets(
+        'turning the watchdog on for a temporary running service preserves temporary intent',
         (tester) async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(true);
@@ -780,7 +781,10 @@ void main() {
       // Watchdog starts disabled so the toggle can be turned on.
       SharedPreferences.setMockInitialValues({
         'background_service_watchdog': false,
+        'background_service_enabled': false,
+        'background_service_cold_start_restore': false,
       });
+      final prefs = await SharedPreferences.getInstance();
 
       tester.view.physicalSize = const Size(1080, 4000);
       tester.view.devicePixelRatio = 1.0;
@@ -795,11 +799,50 @@ void main() {
       await tester.tap(find.text('AlarmManager 看门狗'));
       await tester.pumpAndSettle();
 
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isFalse);
       expect(
-        keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
+        await stopBackgroundServiceIfNotUserEnabled(),
         isTrue,
-        reason: 're-enabling the watchdog while the service runs must arm '
-            'the native keep-alive alarm',
+        reason: 'CatCatch idle cleanup must still be allowed to stop a '
+            'temporary service after the watchdog is enabled',
+      );
+      expect(mock._isRunning, isFalse);
+    });
+
+    testWidgets(
+        'turning the watchdog on for a persistent running service retains recovery',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+
+      // Watchdog starts disabled so the toggle can be turned on.
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('AlarmManager 看门狗'));
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'enabling the watchdog must retain recovery for a running '
+            'service with persistent user intent',
       );
     });
 
@@ -845,9 +888,9 @@ void main() {
     });
 
     testWidgets(
-        're-arms the watchdog when persisted service intent cannot be read',
+        're-arms the watchdog for a running service when persisted intent cannot be read',
         (tester) async {
-      final mock = registerMockPlatform()..setServiceRunning(false);
+      final mock = registerMockPlatform()..setServiceRunning(true);
       SharedPreferences.setMockInitialValues({
         'background_service_watchdog': false,
         'background_service_enabled': 'unreadable',
@@ -1067,11 +1110,12 @@ void main() {
     });
 
     testWidgets(
-        'reports watchdog activation failure while retaining enabled intent',
+        'reports watchdog re-arm failure while retaining enabled intent',
         (tester) async {
       final mock = registerMockPlatform()..setServiceRunning(true);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('background_service_watchdog', false);
+      await prefs.setBool('background_service_enabled', true);
       await prefs.setBool('background_service_cold_start_restore', false);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1079,7 +1123,7 @@ void main() {
         const MethodChannel('com.johntsui.stroom/keepalive'),
         (MethodCall call) async {
           keepAliveCalls.add(call);
-          return call.method != 'startKeepAlive';
+          return call.method != 'rearmKeepAlive';
         },
       );
 
@@ -1109,7 +1153,7 @@ void main() {
       expect(mock._isRunning, isTrue);
       expect(
         keepAliveCalls.map((call) => call.method),
-        contains('startKeepAlive'),
+        contains('rearmKeepAlive'),
       );
     });
 
