@@ -1305,7 +1305,7 @@ void main() {
     );
 
     testWidgets(
-      'native source updates ignore stale completion before current load errors',
+      'native source updates ignore stale errors and completion before current load errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
         final previousTargetPlatform = debugDefaultTargetPlatformOverride;
@@ -1356,6 +1356,22 @@ void main() {
           await tester.pump();
           final loadingVisibleAfterStaleCompletion =
               find.text('加载渲染引擎...').evaluate().isNotEmpty;
+
+          webView.params.onReceivedError!(
+            controller,
+            WebResourceRequest(url: previousLoadUrl, isForMainFrame: true),
+            WebResourceError(
+              type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+              description: 'Stale load failed',
+            ),
+          );
+          await tester.pump();
+          expect(
+            find.text('页面加载失败: Stale load failed'),
+            findsNothing,
+            reason: 'an earlier source must not replace the current preview',
+          );
+          expect(find.text('重试'), findsNothing);
 
           const errorMessage = '页面加载失败: Could not connect to host';
           webView.params.onReceivedError!(
@@ -1644,6 +1660,78 @@ void main() {
         await tester.pump();
 
         expect(find.text(errorMessage), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web source updates ignore stale errors and surface current errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final previousUrl = webView.controller.loadedUrls.last;
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ' graph TD\nA-->B '),
+            ),
+          ),
+        );
+        await tester.pump();
+        final currentUrl = webView.controller.loadedUrls.last;
+        expect(
+          MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+          MermaidRenderWidget.buildWebAssetUrl(' graph TD\nA-->B '),
+          reason: 'whitespace-only source changes share the same rendered URL',
+        );
+        expect(currentUrl, isNot(previousUrl));
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: previousUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale load failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载失败: Stale load failed'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: currentUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current load failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('页面加载失败: Current load failed'), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -2636,6 +2724,7 @@ class _MermaidWebViewPlatform extends InAppWebViewPlatform {
 
 class _MermaidWebView extends PlatformInAppWebViewWidget {
   final controller = _MermaidWebViewController();
+  InAppWebViewController? _controllerWrapper;
 
   _MermaidWebView(super.params) : super.implementation();
 
@@ -2643,8 +2732,12 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
   Widget build(BuildContext context) => const SizedBox.expand();
 
   @override
-  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
-      params.controllerFromPlatform!(controller) as T;
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) {
+    // The real plugin reuses one wrapper for callbacks from each platform view.
+    final wrapper = _controllerWrapper ??=
+        params.controllerFromPlatform!(controller) as InAppWebViewController;
+    return wrapper as T;
+  }
 
   @override
   void dispose() {}
