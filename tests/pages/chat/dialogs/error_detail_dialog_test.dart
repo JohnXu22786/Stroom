@@ -28,6 +28,277 @@ void main() {
       expect(find.text('No detail data available'), findsOneWidget);
     });
 
+    testWidgets('OCR diagnostics show safe summary fields only',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'api.example.com',
+                  'method': 'POST',
+                  'requestId': 'req-123',
+                  'durationMs': 37,
+                  'imageCount': 2,
+                  'imageBytes': 8192,
+                  'body': {
+                    'Authorization': 'Bearer secret-token',
+                    'image': 'data:image/png;base64,private-image-data',
+                  },
+                },
+                rawResponse: {
+                  'statusCode': 502,
+                  'finishReason': 'length',
+                  'errorType': 'DioException',
+                  'data': {'secret': 'private-response-body'},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Diagnostics'), findsOneWidget);
+      expect(find.text('Request Body'), findsNothing);
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, contains('api.example.com'));
+      expect(displayed.data, contains('req-123'));
+      expect(displayed.data, contains('502'));
+      expect(displayed.data, contains('length'));
+      expect(displayed.data, contains('37'));
+      expect(displayed.data, isNot(contains('secret-token')));
+      expect(displayed.data, isNot(contains('private-image-data')));
+      expect(displayed.data, isNot(contains('private-response-body')));
+    });
+
+    testWidgets('OCR diagnostics exclude credentials embedded in host and ID',
+        (tester) async {
+      const credential = 'opaque-user-secret-173';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'https://$credential.api.test.com/v1',
+                  'headers': {'X-Auth-Token': credential},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, isNot(contains('.api.test.com')));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics exclude credentials embedded in request URL',
+        (tester) async {
+      const credential = 'opaque-secret-key-191';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'url': 'https://ocr.test/v1?secretKey=$credential',
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'opaque-user-secret-174';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'host': 'https://$credential.api.test.com/v1',
+                  'headers': {'Authorization': 'Bearer opaque-u...t-174'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, isNot(contains('.api.test.com')));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact short legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'abcd123456789';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'Authorization': 'Bearer abcd****'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact tiny legacy masked Authorization keys',
+        (tester) async {
+      const credential = 'abcd';
+      const safeRequestId = 'req-safe-after-tiny-mask';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'Authorization': 'Bearer a***'},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'requestId': credential,
+                  'data': {'requestId': safeRequestId},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains(safeRequestId));
+      expect(displayed.data, contains('401'));
+    });
+
+    testWidgets('OCR diagnostics redact echoed secret-key header values',
+        (tester) async {
+      const credential = 'opaque-user-secret-192';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showDataDetailDialog(
+                context: context,
+                rawRequest: {
+                  'headers': {'X-Secret-Key': credential},
+                },
+                rawResponse: {
+                  'statusCode': 401,
+                  'data': {'id': credential},
+                },
+                isOcrDiagnostics: true,
+              ),
+              child: const Text('Show'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OCR Diagnostics'));
+      await tester.pumpAndSettle();
+
+      final displayed =
+          tester.widget<SelectableText>(find.byType(SelectableText));
+      expect(displayed.data, isNot(contains(credential)));
+      expect(displayed.data, contains('401'));
+    });
+
     testWidgets('shows all 6 sections when full data is provided',
         (tester) async {
       await tester.pumpWidget(

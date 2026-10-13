@@ -880,8 +880,11 @@ void main() {
           status: TaskStatus.failed,
           error: 'OCR识别失败',
           createdAt: DateTime(2025, 6, 1),
-          rawRequest: {'url': 'https://api.test.com'},
-          rawResponse: {'statusCode': 400, 'data': 'bad request'},
+          rawRequest: {
+            'host': 'api.test.com',
+            'requestId': 'ocr-request-1',
+          },
+          rawResponse: {'statusCode': 400, 'finishReason': 'stop'},
         ),
       ]);
 
@@ -891,6 +894,11 @@ void main() {
 
       expect(find.text('查看错误详情'), findsOneWidget,
           reason: '有诊断数据的失败任务应显示"查看错误详情"按钮');
+
+      await tester.tap(find.text('查看错误详情'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OCR Diagnostics'), findsOneWidget);
     });
   });
 

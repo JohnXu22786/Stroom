@@ -1,19 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:uuid/uuid.dart';
 
+import '../models/ocr_batch_execution.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart';
 import '../providers/background_task_provider.dart';
 import '../providers/ocr_instructions_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
+import '../services/ocr_retry_storage.dart';
 import '../services/ocr_task_runner.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/ocr_image_payload.dart';
@@ -42,8 +44,14 @@ class _ModelOption {
   final String providerName;
   final String host;
   final String apiKey;
-  const _ModelOption(this.model, this.configId, this.modelRecordId,
-      this.providerName, this.host, this.apiKey);
+  const _ModelOption(
+    this.model,
+    this.configId,
+    this.modelRecordId,
+    this.providerName,
+    this.host,
+    this.apiKey,
+  );
 }
 
 /// Collect all available models with their source provider info from ALL
@@ -73,31 +81,6 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
     }
   }
   return null;
-}
-
-Map<String, dynamic> _buildOcrRetryData({
-  required List<Uint8List> imageBytesList,
-  required List<String> imageFormatList,
-  required List<String?> imageNameList,
-  required String configId,
-  required String modelId,
-  required String? instructionContent,
-  required String saveFolder,
-}) {
-  return OcrRetrySnapshot.capture(
-    configId: configId,
-    modelId: modelId,
-    images: [
-      for (var i = 0; i < imageBytesList.length; i++)
-        OcrRetryImage(
-          bytes: imageBytesList[i],
-          format: imageFormatList[i],
-          name: imageNameList[i],
-        ),
-    ],
-    instructionContent: instructionContent,
-    saveFolder: saveFolder,
-  ).toMap();
 }
 
 /// Writes the content of the generic instruction at [instructionIndex] into
@@ -132,13 +115,18 @@ Map<String, dynamic> applySelectedOcrInstruction(
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage(
-      {super.key,
-      this.testImages,
-      this.retryData,
-      this.testCameraPicker,
-      this.testGalleryPicker,
-      this.testImagePayloadPreparer});
+  const OcrPage({
+    super.key,
+    this.testImages,
+    this.retryData,
+    this.retryTaskId,
+    this.testCameraPicker,
+    this.testGalleryPicker,
+    this.testImagePayloadPreparer,
+    this.testRetryImageRestorer,
+    this.testRetrySnapshotCacher,
+    this.retryPageOutcomes = const [],
+  });
 
   @visibleForTesting
   final Future<XFile?> Function({
@@ -155,6 +143,14 @@ class OcrPage extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
       testImagePayloadPreparer;
+  @visibleForTesting
+  final Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
+      testRetryImageRestorer;
+  @visibleForTesting
+  final Future<Map<String, dynamic>?> Function({
+    required String taskId,
+    required OcrRetrySnapshot snapshot,
+  })? testRetrySnapshotCacher;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -163,18 +159,55 @@ class OcrPage extends ConsumerStatefulWidget {
   /// Retry data to pre-populate the form (images, model, etc.).
   final Map<String, dynamic>? retryData;
 
+  /// Source task ID, used to migrate legacy inline retry images in place.
+  final String? retryTaskId;
+  final List<OcrPageOutcome> retryPageOutcomes;
+
   @override
   ConsumerState<OcrPage> createState() => _OcrPageState();
 }
 
 class _OcrPageState extends ConsumerState<OcrPage> {
+  static const _retryImagesUnavailableMessage =
+      '原始 OCR 图片缓存不可用，请清空并重新选择全部图片后重试';
+  static const _retryImageCountUnknownMessage =
+      '原始 OCR 图片缓存不可用，且无法确认图片数量。请重置后重新选择本次全部图片';
+  static const _retryImageResetMessage = '已重置原重试输入，请重新选择本次 OCR 的全部图片';
+
+  String get _retryUnavailableMessage => _retryImageCountUnknown
+      ? _retryImageCountUnknownMessage
+      : _retryImagesUnavailableMessage;
+
   final List<SelectedImage> _selectedImages = [];
+  late List<OcrPageOutcome> _retryPageOutcomes;
+  final TextEditingController _requestSizeBudgetMiBController =
+      TextEditingController(text: '20');
+  OcrBatchMode _batchMode = OcrBatchMode.joint;
+  int _perImageConcurrency = 1;
   bool _isProcessing = false;
+  bool _isPreparingRetryData = false;
+  bool _isRetryImagesLoading = false;
+  int _pendingImageImports = 0;
+  bool get _isImageImportPending => _pendingImageImports > 0;
+  bool get _hasReusablePageResults =>
+      _retryPageOutcomes.any((outcome) => outcome.canReuseResult);
+  bool get _isImageSelectionLocked =>
+      _isProcessing || _isRetryImagesLoading || _hasReusablePageResults;
+
+  bool _retryImagesUnavailable = false;
+  bool _retryImageCountUnknown = false;
+  int? _requiredRetryImageCount;
+  bool _isRetryImageReselectionPending = false;
+  bool get _retryImageCountMismatch =>
+      _requiredRetryImageCount != null &&
+      _selectedImages.length != _requiredRetryImageCount;
+
   bool _useOriginalImageQuality = false;
   String? _errorMessage;
   int _selectedModelIndex = 0;
   String? _selectedConfigId;
   String? _selectedModelRecordId;
+  String? _retryModelIdHint;
   bool _modelSelectionNeedsReselection = false;
   bool _legacyModelConfirmationPending = false;
 
@@ -200,6 +233,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       widget.testImagePayloadPreparer?.call(bytes) ??
       prepareOcrImagePayload(bytes);
 
+  void _beginImageImport() {
+    if (!mounted) return;
+    setState(() => _pendingImageImports++);
+  }
+
+  void _finishImageImport() {
+    if (!mounted) return;
+    setState(() => _pendingImageImports--);
+  }
+
   OcrImageImportMode get _imageImportMode => _useOriginalImageQuality
       ? OcrImageImportMode.original
       : OcrImageImportMode.standard;
@@ -207,8 +250,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Whether reorder mode is active
   bool _reorderMode = false;
 
-  /// Invalidates app-album batches after a clear or a newer import.
-  int _appAlbumImportGeneration = 0;
+  /// Invalidates pending image imports after a clear or a newer import.
+  int _imageImportGeneration = 0;
 
   /// Index of the image currently being long-press-dragged in grid, or null.
   int? _dragIndex;
@@ -228,34 +271,47 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   @override
   void initState() {
     super.initState();
+    _retryPageOutcomes = List.of(widget.retryPageOutcomes);
     if (widget.testImages != null) {
       _selectedImages.addAll(widget.testImages!);
     }
-    _applyRetryData();
+    _isRetryImagesLoading = widget.retryData != null;
+    if (widget.retryTaskId != null && widget.retryData == null) {
+      _retryImageCountUnknown = true;
+      _retryImagesUnavailable = true;
+      _errorMessage = _retryImageCountUnknownMessage;
+    }
+    unawaited(_applyRetryData());
+  }
+
+  @override
+  void dispose() {
+    _requestSizeBudgetMiBController.dispose();
+    super.dispose();
   }
 
   /// Pre-populate form from retry data if available.
-  void _applyRetryData() {
+  Future<void> _applyRetryData() async {
     final data = widget.retryData;
     if (data == null) return;
     final snapshot = OcrRetrySnapshot.fromMap(data);
-    _selectedImages.addAll(snapshot.images.map((image) => SelectedImage(
-          bytes: image.bytes,
-          format: image.format,
-          sourceName: image.name,
-        )));
+    _retryImageCountUnknown = snapshot.imageEntryCount == 0;
     _saveFolder = snapshot.saveFolder;
 
-    if (snapshot.version == OcrRetrySnapshot.currentVersion) {
+    if (snapshot.version != null &&
+        snapshot.version! > OcrRetrySnapshot.currentVersion) {
+      _selectedModelIndex = -1;
+      _modelSelectionNeedsReselection = true;
+    } else if (snapshot.configId != null && snapshot.modelId != null) {
       _selectedConfigId = snapshot.configId;
       _selectedModelRecordId = snapshot.modelId;
-      _modelSelectionNeedsReselection =
-          snapshot.configId == null || snapshot.modelId == null;
-      if (_modelSelectionNeedsReselection) _selectedModelIndex = -1;
-    } else if (snapshot.isLegacy) {
+    } else if (snapshot.legacyModelIndex != null) {
       _selectedModelIndex = snapshot.legacyModelIndex ?? -1;
-      _modelSelectionNeedsReselection = snapshot.legacyModelIndex == null;
-      _legacyModelConfirmationPending = snapshot.legacyModelIndex != null;
+      _legacyModelConfirmationPending = true;
+    } else if (snapshot.modelId != null &&
+        _isSafeRetryModelHint(snapshot.modelId!)) {
+      _retryModelIdHint = snapshot.modelId;
+      _modelSelectionNeedsReselection = true;
     } else {
       // Unknown future versions are never interpreted as an old index.
       _selectedModelIndex = -1;
@@ -267,6 +323,107 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     } else if (snapshot.legacyInstructionIndex != null) {
       _pendingRetryInstructionIndex = snapshot.legacyInstructionIndex;
       unawaited(_resolvePendingRetryInstruction());
+    }
+
+    OcrRetryRestoreResult restored;
+    try {
+      restored = await (widget.testRetryImageRestorer?.call(snapshot) ??
+          OcrRetryStorage.restoreImages(snapshot));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isRetryImagesLoading = false;
+        _retryImagesUnavailable = true;
+        _retryImageCountUnknown = snapshot.imageEntryCount == 0;
+        if (snapshot.imageEntryCount > 0) {
+          _requiredRetryImageCount = snapshot.imageEntryCount;
+        }
+        _errorMessage = _retryImageCountUnknown
+            ? _retryImageCountUnknownMessage
+            : '原始 OCR 图片缓存无法读取，请清空并重新选择全部图片后重试';
+      });
+      debugPrint('[OCR] Retry image restore failed: $error');
+      return;
+    }
+    if (!mounted) return;
+    final canUseRestoredImages = restored.isComplete &&
+        !snapshot.hasInvalidImages &&
+        snapshot.imageEntryCount > 0;
+    setState(() {
+      _selectedImages.addAll(
+        restored.images.map(
+          (image) => SelectedImage(
+            bytes: image.bytes!,
+            format: image.format,
+            sourceName: image.name,
+          ),
+        ),
+      );
+      _batchMode =
+          _hasReusablePageResults ? OcrBatchMode.perImage : snapshot.batchMode;
+      _perImageConcurrency = snapshot.perImageConcurrency;
+      _requestSizeBudgetMiBController.text =
+          (snapshot.requestSizeBudgetBytes / (1024 * 1024))
+              .toString()
+              .replaceFirst(RegExp(r'\.0$'), '');
+      _isRetryImagesLoading = false;
+      _retryImagesUnavailable = !canUseRestoredImages;
+      _retryImageCountUnknown =
+          !canUseRestoredImages && snapshot.imageEntryCount == 0;
+      if (!canUseRestoredImages && snapshot.imageEntryCount > 0) {
+        _requiredRetryImageCount = snapshot.imageEntryCount;
+      }
+      if (_retryImagesUnavailable) {
+        _errorMessage = _retryImageCountUnknown
+            ? _retryImageCountUnknownMessage
+            : '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试';
+      }
+    });
+
+    if (canUseRestoredImages &&
+        widget.retryTaskId != null &&
+        snapshot.needsMigration) {
+      unawaited(
+        _migrateRetrySnapshot(
+          widget.retryTaskId!,
+          snapshot,
+          ref.read(backgroundTasksProvider.notifier),
+        ),
+      );
+    }
+  }
+
+  Future<void> _migrateRetrySnapshot(
+    String taskId,
+    OcrRetrySnapshot snapshot,
+    BackgroundTaskNotifier notifier,
+  ) async {
+    try {
+      await OcrRetryStorage.withCacheMaintenanceLock(() async {
+        final retryData = await (widget.testRetrySnapshotCacher?.call(
+              taskId: taskId,
+              snapshot: snapshot,
+            ) ??
+            OcrRetryStorage.cacheSnapshot(
+              taskId: taskId,
+              snapshot: snapshot,
+            ));
+        if (!notifier.mounted) return;
+        if (!notifier.state.any((task) => task.id == taskId)) {
+          await OcrRetryStorage.deleteUnreferenced(
+            candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
+            referenced: {
+              for (final task in notifier.state)
+                if (task.type == BackgroundTaskType.ocr)
+                  ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+            },
+          );
+          return;
+        }
+        notifier.setRetryData(taskId, retryData);
+      });
+    } catch (error) {
+      debugPrint('[OCR] Legacy retry image migration failed: $error');
     }
   }
 
@@ -298,7 +455,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         title: const Text('文字识别'),
         centerTitle: true,
         actions: [
-          if (_selectedImages.length > 1 && !_isProcessing)
+          IconButton(
+            key: const Key('ocr_request_budget_mib'),
+            tooltip: '请求 JSON 上限：${_requestSizeBudgetMiBController.text} MiB',
+            onPressed: _isProcessing ? null : _editRequestSizeBudget,
+            icon: const Icon(Icons.data_usage_outlined),
+          ),
+          if (_selectedImages.length > 1 &&
+              !_isProcessing &&
+              !_isRetryImagesLoading &&
+              !_hasReusablePageResults)
             TextButton.icon(
               key: const Key('ocr_sort_btn'),
               onPressed: () {
@@ -315,7 +481,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ),
               label: Text(_reorderMode ? '完成' : '排序'),
             ),
-          if (_selectedImages.isNotEmpty && !_isProcessing && !_reorderMode)
+          if ((_selectedImages.isNotEmpty || _retryImagesUnavailable) &&
+              !_isProcessing &&
+              !_isRetryImagesLoading &&
+              (!_hasReusablePageResults || _retryImagesUnavailable) &&
+              !_reorderMode)
             TextButton.icon(
               onPressed: _clearAll,
               icon: const Icon(Icons.clear_all, size: 18),
@@ -331,13 +501,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           // Instruction selector (below the model selector)
           _buildInstructionSelector(cs),
 
+          // Batch mode and encoded request size limit
+          _buildBatchOptions(cs),
+
           // Photo source buttons
           _buildPhotoSourceBar(cs),
 
           // Image preview area
           Expanded(
             child: _selectedImages.isEmpty
-                ? _buildEmptyState(cs)
+                ? LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: constraints.maxHeight,
+                        ),
+                        child: _buildEmptyState(cs),
+                      ),
+                    ),
+                  )
                 : _buildImageGrid(cs),
           ),
 
@@ -378,7 +560,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return _selectedModelIndex;
   }
 
+  bool _isSafeRetryModelHint(String value) =>
+      RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) &&
+      !RegExp(
+        r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
+        caseSensitive: false,
+      ).hasMatch(value);
+
   String? _modelSelectionMessage(int? selectedIndex) {
+    if (_retryModelIdHint != null && _modelSelectionNeedsReselection) {
+      return '旧任务使用模型 $_retryModelIdHint，请重新选择供应商和模型';
+    }
     if (_legacyModelConfirmationPending) {
       return selectedIndex == null
           ? '旧重试记录中的模型位置无效，请重新选择'
@@ -396,6 +588,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _selectedModelIndex = index;
     _selectedConfigId = option.configId;
     _selectedModelRecordId = option.modelRecordId;
+    _retryModelIdHint = null;
     _modelSelectionNeedsReselection = false;
     _legacyModelConfirmationPending = false;
   }
@@ -412,9 +605,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -455,10 +646,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -487,8 +675,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -529,13 +720,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: (idx) {
-                      if (idx == null || idx >= modelOptions.length) return;
-                      setState(() {
-                        _selectModelOption(modelOptions[idx], idx);
-                        _errorMessage = null;
-                      });
-                    },
+                    onChanged: _hasReusablePageResults
+                        ? null
+                        : (idx) {
+                            if (idx == null || idx >= modelOptions.length)
+                              return;
+                            setState(() {
+                              _selectModelOption(modelOptions[idx], idx);
+                              _errorMessage = null;
+                            });
+                          },
                     items: List.generate(modelOptions.length, (i) {
                       final opt = modelOptions[i];
                       final modelName = opt.model.name.isNotEmpty
@@ -646,16 +840,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurface,
                     ),
-                    onChanged: (idx) {
-                      if (idx == null) return;
-                      setState(() {
-                        _selectedInstructionIndex = idx;
-                        if (idx != -2) _retryInstructionSnapshot = null;
-                        // An explicit user choice wins over a pending
-                        // retry restore.
-                        _pendingRetryInstructionIndex = null;
-                      });
-                    },
+                    onChanged: _hasReusablePageResults
+                        ? null
+                        : (idx) {
+                            if (idx == null) return;
+                            setState(() {
+                              _selectedInstructionIndex = idx;
+                              if (idx != -2) _retryInstructionSnapshot = null;
+                              // An explicit user choice wins over a pending
+                              // retry restore.
+                              _pendingRetryInstructionIndex = null;
+                            });
+                          },
                     items: [
                       const DropdownMenuItem<int>(
                         value: -1,
@@ -698,10 +894,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               // Keep the row height aligned with the model card (the
               // default 48px tap target would inflate the card).
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 32,
-                minHeight: 32,
-              ),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () {
                 showDialog<void>(
                   context: context,
@@ -709,6 +902,89 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 );
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBatchOptions(ColorScheme cs) {
+    if (_selectedImages.length < 2) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '批量方式',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SegmentedButton<OcrBatchMode>(
+                    key: const Key('ocr_batch_mode'),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: OcrBatchMode.joint,
+                        label: Text('合并识别'),
+                      ),
+                      ButtonSegment(
+                        value: OcrBatchMode.perImage,
+                        label: Text('逐张识别'),
+                      ),
+                    ],
+                    selected: {_batchMode},
+                    onSelectionChanged: _isProcessing || _hasReusablePageResults
+                        ? null
+                        : (selection) {
+                            if (selection.isEmpty) return;
+                            setState(() {
+                              _batchMode = selection.first;
+                              _errorMessage = null;
+                            });
+                          },
+                  ),
+                ),
+                if (_batchMode == OcrBatchMode.perImage)
+                  PopupMenuButton<int>(
+                    key: const Key('ocr_per_image_concurrency'),
+                    enabled: !_isProcessing,
+                    tooltip: '最多 2 张同时请求',
+                    onSelected: (concurrency) =>
+                        setState(() => _perImageConcurrency = concurrency),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 1, child: Text('1 张同时请求')),
+                      PopupMenuItem(value: 2, child: Text('2 张同时请求')),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('并发 $_perImageConcurrency'),
+                    ),
+                  ),
+              ],
+            ),
+            if (_hasReusablePageResults) ...[
+              const SizedBox(height: 6),
+              Text(
+                '已完成的页面会保留，重试时只会提交未完成的页面。',
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              ),
+            ],
           ],
         ),
       ),
@@ -726,7 +1002,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing ? null : _showCameraChoicePanel,
+                    onPressed:
+                        _isImageSelectionLocked ? null : _showCameraChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -735,8 +1012,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     icon: const Icon(Icons.camera_alt_outlined, size: 20),
                     label: const Text(
                       '拍照识别',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -746,7 +1025,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing ? null : _showAlbumChoicePanel,
+                    onPressed: _isProcessing || _isRetryImagesLoading
+                        ? null
+                        : _showAlbumChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -755,8 +1036,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     icon: const Icon(Icons.photo_library_outlined, size: 20),
                     label: const Text(
                       '相册选择',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -779,9 +1062,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     value: _useOriginalImageQuality,
                     onChanged: _isProcessing
                         ? null
-                        : (value) => setState(
-                              () => _useOriginalImageQuality = value,
-                            ),
+                        : (value) =>
+                            setState(() => _useOriginalImageQuality = value),
                   ),
                 ],
               ),
@@ -896,6 +1178,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         return LongPressDraggable<int>(
                           data: index,
                           delay: const Duration(milliseconds: 300),
+                          maxSimultaneousDrags: _isImageSelectionLocked ? 0 : 1,
                           onDragStarted: () {
                             setState(() => _dragIndex = index);
                           },
@@ -978,15 +1261,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             cs,
                             isCandidate || isHoverTarget,
                           ),
-                          child: ImageGridItem(
-                            key: ValueKey('ocr_grid_item_$index'),
-                            image: image,
-                            index: index,
-                            totalCount: _selectedImages.length,
-                            isDimmed: isDimmed,
-                            isHoverTarget: isCandidate || isHoverTarget,
-                            onTap: () => _previewImage(index),
-                            onRemove: () => _removeImage(index),
+                          child: IgnorePointer(
+                            ignoring: _isImageSelectionLocked,
+                            child: ImageGridItem(
+                              key: ValueKey('ocr_grid_item_$index'),
+                              image: image,
+                              index: index,
+                              totalCount: _selectedImages.length,
+                              isDimmed: isDimmed,
+                              isHoverTarget: isCandidate || isHoverTarget,
+                              onTap: () => _previewImage(index),
+                              onRemove: () => _removeImage(index),
+                            ),
                           ),
                         );
                       },
@@ -1038,6 +1324,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   void _onGridReorder(int oldIndex, int newIndex) {
+    if (_isImageSelectionLocked) return;
     setState(() {
       if (oldIndex == newIndex) {
         _dragIndex = null;
@@ -1051,6 +1338,28 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _dragIndex = null;
       _dragTargetIndex = null;
     });
+  }
+
+  String _retryReselectAllMessage(int requiredCount) =>
+      '请重新选择全部 $requiredCount 张图片后重试';
+
+  void _updateRetryImageReselectionState() {
+    final requiredCount = _requiredRetryImageCount;
+    if (requiredCount == null) return;
+    if (_isRetryImageReselectionPending) {
+      if (_selectedImages.length == requiredCount) {
+        _isRetryImageReselectionPending = false;
+        _retryImagesUnavailable = false;
+        _errorMessage = null;
+      } else {
+        _retryImagesUnavailable = true;
+        _errorMessage = _retryReselectAllMessage(requiredCount);
+      }
+    } else if (!_retryImagesUnavailable) {
+      _errorMessage = _retryImageCountMismatch
+          ? _retryReselectAllMessage(requiredCount)
+          : null;
+    }
   }
 
   Widget _buildReorderableList(ColorScheme cs) {
@@ -1084,6 +1393,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 children: [
                   ReorderableDragStartListener(
                     index: index,
+                    enabled: !_isImageSelectionLocked,
                     child: Container(
                       width: 36,
                       height: 48,
@@ -1141,7 +1451,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   ),
                   IconButton(
                     icon: Icon(Icons.close, size: 18, color: cs.error),
-                    onPressed: () => _removeImage(index),
+                    onPressed: _isImageSelectionLocked
+                        ? null
+                        : () => _removeImage(index),
                   ),
                 ],
               ),
@@ -1199,16 +1511,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
-            onPressed: () => setState(() {
-              _errorMessage = null;
-              _lastRawRequest = null;
-              _lastRawResponse = null;
-            }),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
+          if (!_retryImagesUnavailable && !_retryImageCountMismatch)
+            IconButton(
+              icon: Icon(Icons.close, color: cs.onErrorContainer, size: 18),
+              onPressed: () => setState(() {
+                _errorMessage = null;
+                _lastRawRequest = null;
+                _lastRawResponse = null;
+              }),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
         ],
       ),
     );
@@ -1271,8 +1584,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
+                onPressed: _selectedImages.isEmpty ||
+                        _isProcessing ||
+                        _isImageImportPending ||
+                        _isRetryImagesLoading ||
+                        _retryImagesUnavailable ||
+                        _retryImageCountMismatch
+                    ? null
+                    : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -1284,7 +1603,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       )
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
-                  _isProcessing ? '识别中...' : '开始识别',
+                  _isProcessing
+                      ? _isPreparingRetryData
+                          ? '保存重试图片...'
+                          : '识别中...'
+                      : _isRetryImagesLoading
+                          ? '读取重试图片...'
+                          : _isImageImportPending
+                              ? '正在导入图片...'
+                              : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -1432,6 +1759,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Take a photo using the system camera.
   Future<void> _takePhotoWithSystemCamera() async {
+    final importGeneration = ++_imageImportGeneration;
+    var importPending = false;
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
@@ -1446,12 +1775,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             maxHeight: mode.maxHeight,
             imageQuality: mode.imageQuality,
           ));
-      if (!mounted || file == null) return;
+      if (!mounted ||
+          importGeneration != _imageImportGeneration ||
+          file == null) {
+        return;
+      }
 
+      _beginImageImport();
+      importPending = true;
       final bytes = await file.readAsBytes();
-      if (!mounted) return;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
       final payload = await _prepareImagePayload(bytes);
-      if (!mounted) return;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
 
       setState(() {
         _selectedImages.add(
@@ -1460,22 +1795,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             // Camera: temp file, no source name
           ),
         );
+        _updateRetryImageReselectionState();
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-          content: Text(
-            e is FormatException ? e.message : '拍照失败: $e',
+      if (mounted && importGeneration == _imageImportGeneration) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is FormatException ? e.message : '拍照失败: $e'),
           ),
-        ));
+        );
       }
+    } finally {
+      if (importPending) _finishImageImport();
     }
   }
 
   /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
+    final importGeneration = ++_imageImportGeneration;
+    var importPending = false;
     try {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
@@ -1492,14 +1830,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             maxWidth: mode.maxWidth,
             maxHeight: mode.maxHeight,
           ));
-      if (!mounted || files.isEmpty) return;
+      if (!mounted ||
+          importGeneration != _imageImportGeneration ||
+          files.isEmpty) {
+        return;
+      }
 
+      _beginImageImport();
+      importPending = true;
       final newImages = <SelectedImage>[];
       String? firstError;
       for (final file in files) {
+        if (!mounted || importGeneration != _imageImportGeneration) return;
         try {
           final bytes = await file.readAsBytes();
+          if (!mounted || importGeneration != _imageImportGeneration) return;
           var payload = await _prepareImagePayload(bytes);
+          if (!mounted || importGeneration != _imageImportGeneration) return;
           if (!SystemPickDirectories.isMobile &&
               mode == OcrImageImportMode.standard) {
             payload = await applyOcrImageImportQuality(
@@ -1508,50 +1855,63 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               maxHeight: mode.maxHeight,
               imageQuality: mode.imageQuality,
             );
+            if (!mounted || importGeneration != _imageImportGeneration) {
+              return;
+            }
           }
-          newImages.add(SelectedImage.fromPayload(
-            payload: payload,
-            sourceName: file.name,
-          ));
+          newImages.add(
+            SelectedImage.fromPayload(payload: payload, sourceName: file.name),
+          );
         } on FormatException catch (error) {
           firstError ??= error.message;
         }
-        if (!mounted) return;
+        if (!mounted || importGeneration != _imageImportGeneration) return;
       }
 
-      if (!mounted) return;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
-        _errorMessage = firstError;
+        _errorMessage = firstError ??
+            (_retryImagesUnavailable
+                ? (_requiredRetryImageCount == null
+                    ? _retryUnavailableMessage
+                    : _retryReselectAllMessage(_requiredRetryImageCount!))
+                : null);
+        _updateRetryImageReselectionState();
       });
       if (firstError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(firstError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(firstError)));
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && importGeneration == _imageImportGeneration) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
+    } finally {
+      if (importPending) _finishImageImport();
     }
   }
 
   /// Pick images from the app's album.
   Future<void> _pickFromAppAlbum() async {
-    final importGeneration = ++_appAlbumImportGeneration;
+    final importGeneration = ++_imageImportGeneration;
+    var importPending = false;
     try {
       final result = await showAppAlbumPickerDialog(context);
       if (!mounted ||
           result == null ||
           result.isEmpty ||
-          importGeneration != _appAlbumImportGeneration) {
+          importGeneration != _imageImportGeneration) {
         return;
       }
+      _beginImageImport();
+      importPending = true;
       var loadedCount = 0;
       for (final entry in result) {
-        if (!mounted || importGeneration != _appAlbumImportGeneration) return;
+        if (!mounted || importGeneration != _imageImportGeneration) return;
         if (await _handleSelectedImage(
           entry.key,
           entry.value,
@@ -1561,7 +1921,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         }
       }
       if (mounted &&
-          importGeneration == _appAlbumImportGeneration &&
+          importGeneration == _imageImportGeneration &&
           loadedCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1571,11 +1931,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         );
       }
     } catch (e) {
-      if (mounted && importGeneration == _appAlbumImportGeneration) {
+      if (mounted && importGeneration == _imageImportGeneration) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
+    } finally {
+      if (importPending) _finishImageImport();
     }
   }
 
@@ -1585,10 +1947,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     Uint8List data, {
     required int importGeneration,
   }) async {
-    if (!mounted || importGeneration != _appAlbumImportGeneration) return false;
+    if (!mounted || importGeneration != _imageImportGeneration) return false;
     try {
       final payload = await _prepareImagePayload(data);
-      if (!mounted || importGeneration != _appAlbumImportGeneration) {
+      if (!mounted || importGeneration != _imageImportGeneration) {
         return false;
       }
       setState(() {
@@ -1598,14 +1960,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             sourceName: fileName, // App album file has original name
           ),
         );
+        _updateRetryImageReselectionState();
       });
       return true;
     } catch (e) {
-      if (mounted && importGeneration == _appAlbumImportGeneration) {
+      if (mounted && importGeneration == _imageImportGeneration) {
         final message = e is FormatException ? e.message : '处理图片失败: $e';
         setState(() => _errorMessage = message);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
       return false;
     }
@@ -1616,6 +1980,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // ==================================================================
 
   void _onReorder(int oldIndex, int newIndex) {
+    if (_isImageSelectionLocked) return;
     setState(() {
       // onReorderItem 的 newIndex 已是移除后的索引，直接使用
       final item = _selectedImages.removeAt(oldIndex);
@@ -1624,7 +1989,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Future<void> _previewImage(int index) async {
-    if (index < 0 || index >= _selectedImages.length) return;
+    if (_isImageSelectionLocked ||
+        index < 0 ||
+        index >= _selectedImages.length) {
+      return;
+    }
 
     // Full-screen preview with left/right swipe paging — the same
     // interaction as the file page's gallery viewer. Pops with the
@@ -1632,10 +2001,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // (which may differ from [index] after swiping).
     final result = await showDialog<({String action, int index})>(
       context: context,
-      builder: (_) => _OcrPreviewDialog(
-        images: _selectedImages,
-        initialIndex: index,
-      ),
+      builder: (_) =>
+          _OcrPreviewDialog(images: _selectedImages, initialIndex: index),
     );
 
     if (result == null || !mounted) return;
@@ -1687,6 +2054,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     Uint8List editedBytes,
   ) async {
     if (!mounted ||
+        _isImageSelectionLocked ||
         !_selectedImages.any((image) => identical(image, currentImage))) {
       return;
     }
@@ -1694,31 +2062,80 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final payload = await _prepareImagePayload(editedBytes);
       if (!mounted) return;
-      final currentIndex =
-          _selectedImages.indexWhere((image) => identical(image, currentImage));
+      final currentIndex = _selectedImages.indexWhere(
+        (image) => identical(image, currentImage),
+      );
       if (currentIndex < 0) return;
       setState(() {
         _selectedImages[currentIndex] = currentImage.withEditedPayload(payload);
       });
     } on FormatException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     }
   }
 
   void _removeImage(int index) {
+    if (_isImageSelectionLocked ||
+        index < 0 ||
+        index >= _selectedImages.length) {
+      return;
+    }
     setState(() {
       _selectedImages.removeAt(index);
+      _updateRetryImageReselectionState();
     });
   }
 
-  void _clearAll() {
-    _appAlbumImportGeneration++;
+  Future<void> _clearAll() async {
+    final resetReusableResults =
+        _retryImagesUnavailable && _hasReusablePageResults;
+    if (_isProcessing ||
+        _isRetryImagesLoading ||
+        (_hasReusablePageResults && !resetReusableResults)) {
+      return;
+    }
+    final imageCountUnknown = _retryImageCountUnknown;
+    if (imageCountUnknown) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: const Key('ocr_unknown_retry_reset_dialog'),
+          title: const Text('无法确认原图片数量'),
+          content: const Text(
+            '原始 OCR 图片缓存不可用，且图片数量无法恢复。确认后会清空旧重试状态，请重新选择本次 OCR 的全部图片。',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('ocr_cancel_unknown_retry_reset'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              key: const Key('ocr_confirm_unknown_retry_reset'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('确认重置并重新选择'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+    }
+    _imageImportGeneration++;
     setState(() {
       _selectedImages.clear();
-      _errorMessage = null;
+      if (resetReusableResults) _retryPageOutcomes.clear();
+      _retryImageCountUnknown = false;
+      _isRetryImageReselectionPending = _requiredRetryImageCount != null;
+      _retryImagesUnavailable = _isRetryImageReselectionPending;
+      _errorMessage = imageCountUnknown
+          ? _retryImageResetMessage
+          : _requiredRetryImageCount == null
+              ? null
+              : _retryReselectAllMessage(_requiredRetryImageCount!);
     });
   }
 
@@ -1726,8 +2143,280 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   // OCR Processing
   // ==================================================================
 
+  int? _requestSizeBudgetBytes(String value) {
+    final mebibytes = double.tryParse(value.trim());
+    if (mebibytes == null || !mebibytes.isFinite || mebibytes <= 0) {
+      return null;
+    }
+    final byteValue = mebibytes * 1024 * 1024;
+    if (!byteValue.isFinite || byteValue > 9007199254740991) return null;
+    final bytes = byteValue.round();
+    return bytes > 0 ? bytes : null;
+  }
+
+  String _formatRequestSizeMib(int bytes) =>
+      (bytes / (1024 * 1024)).toStringAsFixed(2);
+
+  Future<void> _editRequestSizeBudget() async {
+    final previousValue = _requestSizeBudgetMiBController.text;
+    var invalidInput = false;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('请求大小上限'),
+          content: TextField(
+            key: const Key('ocr_request_budget_editor_mib'),
+            controller: _requestSizeBudgetMiBController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'JSON 请求上限',
+              suffixText: 'MiB',
+              border: const OutlineInputBorder(),
+              errorText: invalidInput ? '请输入大于 0 的 MiB 数值' : null,
+            ),
+            onChanged: (_) {
+              if (invalidInput) setDialogState(() => invalidInput = false);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              key: const Key('ocr_save_request_budget'),
+              onPressed: () {
+                if (_requestSizeBudgetBytes(
+                      _requestSizeBudgetMiBController.text,
+                    ) ==
+                    null) {
+                  setDialogState(() => invalidInput = true);
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (accepted != true) {
+      _requestSizeBudgetMiBController.text = previousValue;
+      return;
+    }
+    setState(() => _errorMessage = null);
+  }
+
+  Future<int?> _preflightRequestSize(
+    OcrConfig config,
+    List<SelectedImage> images,
+  ) async {
+    final initialBudgetBytes = _requestSizeBudgetBytes(
+      _requestSizeBudgetMiBController.text,
+    );
+    if (initialBudgetBytes == null) {
+      if (mounted) {
+        setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
+      }
+      return null;
+    }
+    var budgetBytes = initialBudgetBytes;
+
+    final imageBytesList =
+        images.map((image) => (image.bytes, image.format)).toList();
+    final reusablePageIndices = _retryPageOutcomes
+        .where((outcome) => outcome.canReuseResult)
+        .map((outcome) => outcome.imageIndex)
+        .toSet();
+    while (mounted) {
+      final service = OcrService(
+        config: config.copyWith(requestSizeBudgetBytes: budgetBytes),
+      );
+      late final int encodedBytes;
+      try {
+        final requestSizes = _batchMode == OcrBatchMode.joint
+            ? [service.encodedRequestSizeBytes(imageBytesList: imageBytesList)]
+            : [
+                for (var index = 0; index < imageBytesList.length; index++)
+                  if (!reusablePageIndices.contains(index))
+                    service.encodedRequestSizeBytes(
+                      imageBytesList: [imageBytesList[index]],
+                    ),
+              ];
+        encodedBytes = requestSizes.fold<int>(
+          0,
+          (largest, size) => size > largest ? size : largest,
+        );
+      } catch (error) {
+        if (mounted) {
+          setState(() => _errorMessage = '无法检查 OCR 请求，请检查模型参数');
+        }
+        debugPrint(
+          '[OCR] Request size check failed: ' + error.runtimeType.toString(),
+        );
+        return null;
+      } finally {
+        service.close();
+      }
+
+      if (encodedBytes <= budgetBytes) return budgetBytes;
+      final choice = await _showRequestSizeLimitDialog(
+        encodedBytes: encodedBytes,
+        budgetBytes: budgetBytes,
+        canSwitchToPerImage: _batchMode == OcrBatchMode.joint &&
+            images.length > 1 &&
+            !_hasReusablePageResults,
+      );
+      if (!mounted) return null;
+      if (choice == null) {
+        setState(() => _errorMessage = '本次识别已取消；可切换识别方式或提高请求上限后重试。');
+        return null;
+      }
+      if (choice.$1) {
+        final updatedBudget = _requestSizeBudgetBytes(choice.$2 ?? '');
+        if (updatedBudget == null) {
+          setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
+          return null;
+        }
+        _requestSizeBudgetMiBController.text = choice.$2!.trim();
+        budgetBytes = updatedBudget;
+        setState(() {
+          _batchMode = OcrBatchMode.perImage;
+          _errorMessage = null;
+        });
+        continue;
+      }
+
+      final updatedBudget = _requestSizeBudgetBytes(choice.$2 ?? '');
+      if (updatedBudget == null) {
+        setState(() => _errorMessage = '请求上限必须是大于 0 的 MiB 数值');
+        return null;
+      }
+      _requestSizeBudgetMiBController.text = choice.$2!.trim();
+      budgetBytes = updatedBudget;
+    }
+    return null;
+  }
+
+  Future<(bool, String?)?> _showRequestSizeLimitDialog({
+    required int encodedBytes,
+    required int budgetBytes,
+    required bool canSwitchToPerImage,
+  }) async {
+    var invalidInput = false;
+    return await showDialog<(bool, String?)>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('OCR 请求超过大小上限'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '当前 JSON 请求约为 ' +
+                    _formatRequestSizeMib(encodedBytes) +
+                    ' MiB，超过 ' +
+                    _formatRequestSizeMib(budgetBytes) +
+                    ' MiB 上限。',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('ocr_request_budget_dialog_mib'),
+                controller: _requestSizeBudgetMiBController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: '新上限',
+                  suffixText: 'MiB',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (_) {
+                  if (invalidInput) {
+                    setDialogState(() => invalidInput = false);
+                  }
+                },
+              ),
+              if (invalidInput)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    '请输入大于 0 的 MiB 数值',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            if (canSwitchToPerImage)
+              TextButton(
+                key: const Key('ocr_switch_to_per_image'),
+                onPressed: () {
+                  if (_requestSizeBudgetBytes(
+                        _requestSizeBudgetMiBController.text,
+                      ) ==
+                      null) {
+                    setDialogState(() => invalidInput = true);
+                    return;
+                  }
+                  Navigator.pop(
+                    dialogContext,
+                    (true, _requestSizeBudgetMiBController.text.trim()),
+                  );
+                },
+                child: const Text('改用逐张识别'),
+              ),
+            TextButton(
+              key: const Key('ocr_change_request_budget'),
+              onPressed: () {
+                if (_requestSizeBudgetBytes(
+                      _requestSizeBudgetMiBController.text,
+                    ) ==
+                    null) {
+                  setDialogState(() => invalidInput = true);
+                  return;
+                }
+                Navigator.pop(dialogContext, (
+                  false,
+                  _requestSizeBudgetMiBController.text.trim(),
+                ));
+              },
+              child: const Text('更改上限'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _startOcr() async {
     if (_ocrStarting || _isProcessing) return;
+    if (_isImageImportPending) {
+      setState(() => _errorMessage = '请等待图片导入完成后再开始识别');
+      return;
+    }
+    if (_isRetryImagesLoading) {
+      setState(() => _errorMessage = '正在读取重试图片，请稍候');
+      return;
+    }
+    if (_retryImageCountMismatch) {
+      setState(() {
+        _errorMessage = _retryReselectAllMessage(_requiredRetryImageCount!);
+      });
+      return;
+    }
+    if (_retryImagesUnavailable) {
+      setState(() => _errorMessage = _retryUnavailableMessage);
+      return;
+    }
     if (_selectedImages.isEmpty) return;
 
     final modelOptions = _getOcrModelOptions(ref);
@@ -1760,15 +2449,42 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (image.isPrepared) {
           images.add(image);
         } else {
-          images.add(SelectedImage.fromPayload(
-            payload: await _prepareImagePayload(image.bytes),
-            sourceName: image.sourceName,
-          ));
+          images.add(
+            SelectedImage.fromPayload(
+              payload: await _prepareImagePayload(image.bytes),
+              sourceName: image.sourceName,
+            ),
+          );
         }
       }
     } on FormatException catch (error) {
       _ocrStarting = false;
-      if (mounted) setState(() => _errorMessage = error.message);
+      if (mounted) {
+        final retryImageCount = widget.retryData == null
+            ? 0
+            : OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+        if (widget.retryData == null && widget.retryTaskId == null) {
+          setState(() => _errorMessage = error.message);
+        } else {
+          setState(() {
+            _retryImagesUnavailable = true;
+            _retryImageCountUnknown = retryImageCount == 0;
+            _requiredRetryImageCount =
+                retryImageCount == 0 ? null : retryImageCount;
+            _isRetryImageReselectionPending = false;
+            _errorMessage = retryImageCount == 0
+                ? _retryImageCountUnknownMessage
+                : '原始 OCR 图片缓存已丢失或损坏，请清空并重新选择全部图片后重试';
+          });
+        }
+      }
+      return;
+    } catch (error) {
+      _ocrStarting = false;
+      if (mounted) {
+        setState(() => _errorMessage = '处理 OCR 图片失败，请重试');
+      }
+      debugPrint('[OCR] Image preparation failed: ${error.runtimeType}');
       return;
     }
     if (!mounted) return;
@@ -1791,6 +2507,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ..clear()
         ..addAll(images);
       _errorMessage = null;
+      _isProcessing = true;
+      _isPreparingRetryData = true;
     });
     final folder = _saveFolder;
 
@@ -1802,10 +2520,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _selectedModelIndex = modelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
-    final effectiveConfig = OcrConfig(
+    final requestSizeBudgetBytes = _requestSizeBudgetBytes(
+      _requestSizeBudgetMiBController.text,
+    );
+    if (requestSizeBudgetBytes == null) {
+      _ocrStarting = false;
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _isPreparingRetryData = false;
+          _errorMessage = '请求上限必须是大于 0 的 MiB 数值';
+        });
+      }
+      return;
+    }
+    var effectiveConfig = OcrConfig(
       host: selectedOption.host,
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
+      requestSizeBudgetBytes: requestSizeBudgetBytes,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
       customParams:
           selectedOption.model.customParams.map((p) => p.copy()).toList(),
@@ -1818,9 +2551,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     if (_pendingRetryInstructionIndex != null) {
       try {
         await _resolvePendingRetryInstruction();
-      } catch (_) {
+      } catch (error) {
         _ocrStarting = false;
-        rethrow;
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _isPreparingRetryData = false;
+            _errorMessage = '读取识别指令失败，请重试';
+          });
+        }
+        debugPrint('[OCR] Failed to restore retry instruction: $error');
+        return;
       }
     }
 
@@ -1846,6 +2587,23 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
     }
 
+    final effectiveBudgetBytes = await _preflightRequestSize(
+      effectiveConfig,
+      images,
+    );
+    if (!mounted) return;
+    if (effectiveBudgetBytes == null) {
+      _ocrStarting = false;
+      setState(() {
+        _isProcessing = false;
+        _isPreparingRetryData = false;
+      });
+      return;
+    }
+    effectiveConfig = effectiveConfig.copyWith(
+      requestSizeBudgetBytes: effectiveBudgetBytes,
+    );
+
     // Capture every provider and input before navigation. The runner owns
     // copies and never reads this page or WidgetRef after it is removed.
     final bgNotifier = ref.read(backgroundTasksProvider.notifier);
@@ -1858,22 +2616,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final imageBytesList = images.map((img) => img.bytes).toList();
     final imageFormatList = images.map((img) => img.format).toList();
     final imageNameList = images.map((img) => img.sourceName).toList();
-    final taskId = bgNotifier.addTask(
-      type: BackgroundTaskType.ocr,
-      title: title,
-      retryData: null,
-    );
-    final runner = OcrTaskRunner(
-      taskId: taskId,
-      notifier: bgNotifier,
-      config: effectiveConfig,
-      images: images.map((img) => (img.bytes, img.format)).toList(),
-      title: title,
-      folder: folder,
-      onSaved: () => unawaited(textNotifier.loadRecords()),
-    );
-
-    // Step 3: Fire-and-forget retryData computation (only needed for retry).
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
     final instructionContent = _retryInstructionSnapshot ??
@@ -1881,25 +2623,78 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 _selectedInstructionIndex < instructions.length)
             ? instructions[_selectedInstructionIndex].content
             : null);
-    unawaited(_computeOcrRetryData(
-        taskId,
-        imageBytesList,
-        imageFormatList,
-        imageNameList,
-        selectedOption.configId,
-        selectedOption.modelRecordId,
-        instructionContent,
-        folder,
-        bgNotifier));
+    // Store the retry images before publishing the task or starting its
+    // request. A failed request can then never expose a retry action while its
+    // snapshot is still being written.
+    final taskId = const Uuid().v4();
+    final taskPublished = await OcrRetryStorage.withCacheMaintenanceLock(
+      () async {
+        final retryData = await _computeOcrRetryData(
+          taskId,
+          imageBytesList,
+          imageFormatList,
+          imageNameList,
+          selectedOption.configId,
+          selectedOption.modelRecordId,
+          instructionContent,
+          folder,
+          _batchMode,
+          _perImageConcurrency,
+          effectiveConfig.requestSizeBudgetBytes,
+        );
+        if (!mounted || !bgNotifier.mounted) {
+          final remainingTasks =
+              bgNotifier.mounted ? bgNotifier.state : const <BackgroundTask>[];
+          try {
+            await OcrRetryStorage.deleteUnreferenced(
+              candidates: OcrRetryStorage.referencesFromSnapshot(retryData),
+              referenced: {
+                for (final task in remainingTasks)
+                  if (task.type == BackgroundTaskType.ocr)
+                    ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+              },
+            );
+          } catch (error) {
+            debugPrint(
+              '[OCR] Failed to clean an unused retry snapshot: $error',
+            );
+          }
+          return false;
+        }
+        setState(() => _isPreparingRetryData = false);
 
-    _isProcessing = true;
+        bgNotifier.addTask(
+          type: BackgroundTaskType.ocr,
+          title: title,
+          retryData: retryData,
+          taskId: taskId,
+        );
+        return true;
+      },
+    );
+    if (!taskPublished) return;
+
+    final runner = OcrTaskRunner(
+      taskId: taskId,
+      notifier: bgNotifier,
+      config: effectiveConfig,
+      images: images.map((img) => (img.bytes, img.format)).toList(),
+      imageNames: imageNameList,
+      executionMode: _batchMode,
+      perImageConcurrency: _perImageConcurrency,
+      initialPageOutcomes: _retryPageOutcomes,
+      title: title,
+      folder: folder,
+      onSaved: () => unawaited(textNotifier.loadRecords()),
+    );
+
     unawaited(runner.run());
     Navigator.pop(context);
   }
 
-  /// Compute retryData for an OCR task in the background.
-  /// Fire-and-forget — the task can execute without retryData.
-  static Future<void> _computeOcrRetryData(
+  /// Cache task-owned images before starting OCR so a failed request cannot
+  /// be retried while its image snapshot is still being written.
+  Future<Map<String, dynamic>> _computeOcrRetryData(
     String taskId,
     List<Uint8List> imageBytesList,
     List<String> imageFormatList,
@@ -1908,41 +2703,47 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     String modelId,
     String? instructionContent,
     String saveFolder,
-    BackgroundTaskNotifier bgNotifier,
+    OcrBatchMode batchMode,
+    int perImageConcurrency,
+    int requestSizeBudgetBytes,
   ) async {
+    final snapshot = OcrRetrySnapshot.capture(
+      configId: configId,
+      modelId: modelId,
+      images: [
+        for (var index = 0; index < imageBytesList.length; index++)
+          OcrRetryImage(
+            bytes: imageBytesList[index],
+            format: imageFormatList[index],
+            name: imageNameList[index],
+          ),
+      ],
+      instructionContent: instructionContent,
+      saveFolder: saveFolder,
+      batchMode: batchMode,
+      perImageConcurrency: perImageConcurrency,
+      requestSizeBudgetBytes: requestSizeBudgetBytes,
+    );
     try {
-      final retryData = await Isolate.run(() => _buildOcrRetryData(
-            imageBytesList: imageBytesList,
-            imageFormatList: imageFormatList,
-            imageNameList: imageNameList,
-            configId: configId,
-            modelId: modelId,
-            instructionContent: instructionContent,
-            saveFolder: saveFolder,
+      final retryData = await (widget.testRetrySnapshotCacher?.call(
+            taskId: taskId,
+            snapshot: snapshot,
+          ) ??
+          OcrRetryStorage.cacheSnapshot(
+            taskId: taskId,
+            snapshot: snapshot,
           ));
-      if (bgNotifier.mounted &&
-          bgNotifier.state.any((task) => task.id == taskId)) {
-        bgNotifier.setRetryData(taskId, retryData);
-      }
-    } catch (e) {
-      debugPrint('[OCR] Isolate.run failed, falling back to main thread: $e');
-      try {
-        final retryData = _buildOcrRetryData(
-          imageBytesList: imageBytesList,
-          imageFormatList: imageFormatList,
-          imageNameList: imageNameList,
-          configId: configId,
-          modelId: modelId,
-          instructionContent: instructionContent,
-          saveFolder: saveFolder,
-        );
-        if (bgNotifier.mounted &&
-            bgNotifier.state.any((task) => task.id == taskId)) {
-          bgNotifier.setRetryData(taskId, retryData);
-        }
-      } catch (retryError) {
-        debugPrint('[OCR] Failed to compute retryData: $retryError');
-      }
+      return retryData ??
+          OcrRetryStorage.unavailableSnapshot(
+            taskId: taskId,
+            snapshot: snapshot,
+          );
+    } catch (error) {
+      debugPrint('[OCR] Failed to cache retry images: $error');
+      return OcrRetryStorage.unavailableSnapshot(
+        taskId: taskId,
+        snapshot: snapshot,
+      );
     }
   }
 
@@ -2106,10 +2907,7 @@ class _OcrPreviewDialog extends StatefulWidget {
   final List<SelectedImage> images;
   final int initialIndex;
 
-  const _OcrPreviewDialog({
-    required this.images,
-    required this.initialIndex,
-  });
+  const _OcrPreviewDialog({required this.images, required this.initialIndex});
 
   @override
   State<_OcrPreviewDialog> createState() => _OcrPreviewDialogState();
@@ -2179,11 +2977,16 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.broken_image,
-                                  size: 48, color: Colors.white54),
+                              Icon(
+                                Icons.broken_image,
+                                size: 48,
+                                color: Colors.white54,
+                              ),
                               SizedBox(height: 8),
-                              Text('无法加载图片',
-                                  style: TextStyle(color: Colors.white54)),
+                              Text(
+                                '无法加载图片',
+                                style: TextStyle(color: Colors.white54),
+                              ),
                             ],
                           ),
                         );

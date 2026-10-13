@@ -14,6 +14,16 @@ internal const val KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS = 60_000L
 internal fun revocationBackupTriggerAt(exactTriggerAt: Long): Long =
     exactTriggerAt + KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS
 
+internal fun scheduleCompatibleRevocationBackup(
+    supportsAllowWhileIdle: Boolean,
+    scheduleAllowWhileIdle: () -> Boolean,
+    scheduleLegacy: () -> Boolean,
+): Boolean = if (supportsAllowWhileIdle) {
+    scheduleAllowWhileIdle()
+} else {
+    scheduleLegacy()
+}
+
 internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
@@ -21,9 +31,19 @@ internal fun scheduleWithExactRevocationFallback(
     cancelRevocationFallback: () -> Unit,
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
-    if (canScheduleExact && scheduleExact() && scheduleRevocationFallback()) return true
-    cancelRevocationFallback()
-    return scheduleInexactPrimary()
+    val exactScheduled = canScheduleExact && scheduleExact()
+    if (exactScheduled && scheduleRevocationFallback()) return true
+
+    if (scheduleInexactPrimary()) {
+        cancelRevocationFallback()
+        return true
+    }
+
+    // Keep any already queued backup alive if the replacement primary failed.
+    // When there was no backup, make one last bounded attempt to leave a future
+    // receiver delivery that can recover the watchdog.
+    val fallbackScheduled = scheduleRevocationFallback()
+    return fallbackScheduled
 }
 
 internal fun claimAlarmDeliveryGeneration(
@@ -61,6 +81,47 @@ internal fun claimAlarmDeliveryGeneration(
         // disk-write failure. Restore the token so the paired alarm can retry.
         persistGeneration(currentGeneration)
         AlarmGenerationClaimResult.PERSISTENCE_FAILED
+    }
+}
+
+/**
+ * Tracks claims for this process so a paired backup left one generation behind
+ * by process death can recover without admitting a same-process duplicate.
+ */
+internal class AlarmDeliveryGenerationClaims {
+    private var lastClaimedGeneration: Long? = null
+
+    fun claim(
+        scheduledGeneration: Long,
+        currentGeneration: Long,
+        keepAliveActive: Boolean,
+        isRevocationBackup: Boolean,
+        persistGeneration: (Long) -> Boolean,
+    ): AlarmGenerationClaimResult {
+        if (!keepAliveActive) return AlarmGenerationClaimResult.STALE
+
+        if (scheduledGeneration == currentGeneration) {
+            val result = claimAlarmDeliveryGeneration(
+                scheduledGeneration = scheduledGeneration,
+                currentGeneration = currentGeneration,
+                keepAliveActive = keepAliveActive,
+                persistGeneration = persistGeneration,
+            )
+            if (result == AlarmGenerationClaimResult.CLAIMED) {
+                lastClaimedGeneration = scheduledGeneration
+            }
+            return result
+        }
+
+        val isInterruptedClaimRecovery = isRevocationBackup &&
+            scheduledGeneration == currentGeneration - 1L &&
+            scheduledGeneration != lastClaimedGeneration
+        if (!isInterruptedClaimRecovery) return AlarmGenerationClaimResult.STALE
+
+        // Reuse currentGeneration: the receiver will update the backup token
+        // while rearming, and another process interruption remains recoverable.
+        lastClaimedGeneration = scheduledGeneration
+        return AlarmGenerationClaimResult.CLAIMED
     }
 }
 

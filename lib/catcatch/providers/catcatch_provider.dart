@@ -46,12 +46,18 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 当前运行中的取消令牌映射（taskId → CancelToken）
   final Map<String, CancelToken> _cancelTokens = {};
 
-  Future<void>? _pendingWrite;
+  Future<bool>? _pendingWrite;
   int _serviceCleanupGeneration = 0;
   int _persistedServiceCleanupGeneration = 0;
   Completer<void>? _removalBarrier;
   List<CatCatchTask>? _disposedSnapshot;
   Future<bool>? _disposedPersistence;
+  int _activeTaskRestorations = 0;
+  bool _taskRestoreNeedsRetry = false;
+  bool _snapshotWriteDeferred = false;
+  final Set<String> _removedTaskIdsDuringRestore = {};
+
+  bool get _restoringTasks => _activeTaskRestorations > 0;
 
   CatCatchNotifier(this.ref) : super([]);
 
@@ -94,6 +100,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       createdAt: DateTime.now(),
       metadata: metadata,
     );
+    _removedTaskIdsDuringRestore.remove(id);
     state = [...state, task];
     unawaited(_persistTasks());
 
@@ -230,6 +237,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 删除任务
   void removeTask(String id) {
+    if (_restoringTasks || _taskRestoreNeedsRetry) {
+      _removedTaskIdsDuringRestore.add(id);
+    }
+
     // 如果任务正在运行，取消
     final cancelToken = _cancelTokens.remove(id);
     if (cancelToken != null && !cancelToken.isCancelled) {
@@ -258,6 +269,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     _removalBarrier = gate;
     try {
       final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      if (_restoringTasks || _taskRestoreNeedsRetry) {
+        _removedTaskIdsDuringRestore.addAll(removedIds);
+      }
       if (!await _writeSnapshot(proposed)) return false;
       if (cleanupGeneration > _persistedServiceCleanupGeneration) {
         _persistedServiceCleanupGeneration = cleanupGeneration;
@@ -550,9 +564,26 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 恢复所有持久化的任务（应用启动时调用）
   Future<void> restoreUnfinishedTasks() async {
+    _activeTaskRestorations++;
     try {
+      // A previous restore may have queued its reconciled snapshot without
+      // awaiting it. Wait before loading so a later restore cannot read stale
+      // data while that write is still pending.
+      final pendingWrite = _pendingWrite;
+      if (pendingWrite != null &&
+          !await pendingWrite &&
+          !_taskRestoreNeedsRetry &&
+          !_snapshotWriteDeferred) {
+        debugPrint(
+          '[CatCatchNotifier] Skipping restore after a task snapshot write failed',
+        );
+        _taskRestoreNeedsRetry = true;
+        return;
+      }
+
       final tasks = await _loadPersistedTasks();
-      if (tasks.isEmpty) return;
+
+      final removedTaskIds = Set<String>.of(_removedTaskIdsDuringRestore);
 
       // 迁移旧数据：userSelecting 中但 detectedMedia 为空的任务标记为失败
       final migrated = [
@@ -574,20 +605,50 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
             task,
       ];
 
-      // 加载全部任务，running 的改为 paused，其余保持原样（包括 failed 中的原始错误）
+      // The current state may have changed while loading. Keep its latest
+      // version for matching IDs and append concurrent tasks after the file
+      // snapshot, while still normalizing tasks restored after a process restart.
+      final currentTasks = <String, CatCatchTask>{
+        for (final task in state)
+          if (!removedTaskIds.contains(task.id)) task.id: task,
+      };
+      final restoredTasks = <String, CatCatchTask>{};
+      for (final task in migrated) {
+        if (removedTaskIds.contains(task.id)) continue;
+        restoredTasks.putIfAbsent(
+          task.id,
+          () => task.status == TaskStatus.running
+              ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+              : task,
+        );
+      }
+
+      final hadConcurrentChanges =
+          state.isNotEmpty || removedTaskIds.isNotEmpty;
       state = [
-        for (final task in migrated)
-          if (task.status == TaskStatus.running)
-            task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
-          else
-            task,
+        for (final task in restoredTasks.values)
+          currentTasks.remove(task.id) ?? task,
+        ...currentTasks.values,
       ];
+      _taskRestoreNeedsRetry = false;
+      if (hadConcurrentChanges) unawaited(_persistTasks());
 
       debugPrint(
         '[CatCatchNotifier] Restored ${tasks.length} tasks from persistence',
       );
     } catch (e) {
+      _taskRestoreNeedsRetry = true;
       debugPrint('[CatCatchNotifier] Failed to restore tasks: $e');
+    } finally {
+      _activeTaskRestorations--;
+      if (_activeTaskRestorations == 0) {
+        // Keep removals until a safe snapshot lands so a later retry cannot
+        // reintroduce tasks from the older on-disk snapshot.
+        if (_snapshotWriteDeferred && !_taskRestoreNeedsRetry) {
+          _snapshotWriteDeferred = false;
+          unawaited(_persistTasks());
+        }
+      }
     }
   }
 
@@ -923,38 +984,57 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }
 
   Future<bool> _writeSnapshot(List<CatCatchTask> snapshot) {
-    final previous = _pendingWrite ?? Future<void>.value();
+    final deferWhenQueued =
+        _taskRestoreNeedsRetry || _activeTaskRestorations > 0;
+    if (deferWhenQueued) _snapshotWriteDeferred = true;
+    final previous = _pendingWrite?.then<void>((_) {}) ?? Future<void>.value();
     final write = previous.then((_) async {
       try {
         final file = await _tasksFile();
+        if (deferWhenQueued ||
+            _taskRestoreNeedsRetry ||
+            _activeTaskRestorations > 0) {
+          _snapshotWriteDeferred = true;
+          return false;
+        }
         final data = snapshot.map((t) => t.toMap()).toList();
         // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
         await AtomicFile.writeString(file, jsonEncode(data));
+        if (_activeTaskRestorations == 0 && !_taskRestoreNeedsRetry) {
+          _removedTaskIdsDuringRestore.clear();
+          _snapshotWriteDeferred = false;
+        }
         return true;
       } catch (e) {
         debugPrint('[CatCatchNotifier] Failed to persist tasks: $e');
         return false;
       }
     });
-    _pendingWrite = write.then<void>((_) {});
+    _pendingWrite = write;
     return write;
+  }
+
+  /// Waits for queued task snapshots to settle in deterministic tests.
+  @visibleForTesting
+  Future<void> waitForTaskSnapshotWritesForTesting() async {
+    while (true) {
+      final pendingWrite = _pendingWrite;
+      if (pendingWrite == null) return;
+      await pendingWrite;
+      if (identical(pendingWrite, _pendingWrite)) return;
+    }
   }
 
   /// 从本地文件加载任务列表
   Future<List<CatCatchTask>> _loadPersistedTasks() async {
-    try {
-      final file = await _tasksFile();
-      if (!await file.exists()) return [];
-      final content = await file.readAsString();
-      if (content.isEmpty) return [];
-      final list = jsonDecode(content) as List;
-      return list
-          .map((m) => CatCatchTask.fromMap(Map<String, dynamic>.from(m as Map)))
-          .toList();
-    } catch (e) {
-      debugPrint('[CatCatchNotifier] Failed to load persisted tasks: $e');
-      return [];
-    }
+    final file = await _tasksFile();
+    if (!await file.exists()) return [];
+    final content = await file.readAsString();
+    if (content.isEmpty) return [];
+    final list = jsonDecode(content) as List;
+    return list
+        .map((m) => CatCatchTask.fromMap(Map<String, dynamic>.from(m as Map)))
+        .toList();
   }
 
   /// 持久化文件路径

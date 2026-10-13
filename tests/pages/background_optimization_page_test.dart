@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart';
@@ -35,6 +36,8 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _startResult = true;
   bool _throwOnStart = false;
   bool _throwOnCheck = false;
+  Completer<bool>? _serviceStatusCompleter;
+  int startCallCount = 0;
 
   void setServiceRunning(bool running) {
     _isRunning = running;
@@ -56,6 +59,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
     _throwOnCheck = shouldThrow;
   }
 
+  void setServiceStatusCompleter(Completer<bool> completer) {
+    _serviceStatusCompleter = completer;
+  }
+
   @override
   Future<bool> configure({
     required IosConfiguration iosConfiguration,
@@ -66,6 +73,7 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   @override
   Future<bool> start() async {
+    startCallCount++;
     if (_throwOnStart) {
       throw 'Simulated start error';
     }
@@ -77,6 +85,10 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   Future<bool> isServiceRunning() async {
     if (_throwOnCheck) {
       throw 'Simulated check error';
+    }
+    final serviceStatusCompleter = _serviceStatusCompleter;
+    if (serviceStatusCompleter != null) {
+      return serviceStatusCompleter.future;
     }
     return _isRunning;
   }
@@ -788,6 +800,269 @@ void main() {
         isTrue,
         reason: 're-enabling the watchdog while the service runs must arm '
             'the native keep-alive alarm',
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog for a stopped service with enabled persistent intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(find.text('后台服务未启动'), findsOneWidget);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'a stopped but persistently enabled service must regain its '
+            'native recovery schedule when the watchdog is enabled',
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog when persisted service intent cannot be read',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': 'unreadable',
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.get('background_service_enabled'), 'unreadable');
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'an unreadable persisted intent must retain recovery instead '
+            'of reporting success without scheduling the watchdog',
+      );
+    });
+
+    testWidgets(
+        'reports watchdog re-arm failure for an enabled stopped service',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall call) async {
+          keepAliveCalls.add(call);
+          return call.method != 'rearmKeepAlive';
+        },
+      );
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(find.text('看门狗激活失败，后台服务保活状态未确认'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+      );
+    });
+
+    testWidgets(
+        're-arms the watchdog while the initial service status check is pending',
+        (tester) async {
+      final status = Completer<bool>();
+      final mock = registerMockPlatform()
+        ..setServiceRunning(false)
+        ..setServiceStatusCompleter(status);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('正在检测...'), findsOneWidget);
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+      await tester.tap(toggle);
+      await tester.pump();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'the pending first check must not leave persisted recovery '
+            'intent without a native alarm',
+      );
+
+      status.complete(false);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'does not start or re-arm a stopped service with disabled persistent intent',
+        (tester) async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': false,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isFalse);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('rearmKeepAlive')),
+        reason: 'watchdog preference changes must preserve an explicit stop',
+      );
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        isNot(contains('startKeepAlive')),
+      );
+    });
+
+    testWidgets('re-arms the watchdog when service status cannot be checked',
+        (tester) async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheck(true);
+      SharedPreferences.setMockInitialValues({
+        'background_service_watchdog': false,
+        'background_service_enabled': true,
+        'background_service_cold_start_restore': false,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      tester.view.physicalSize = const Size(1080, 5000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pumpAndSettle();
+
+      final toggle = find.ancestor(
+        of: find.text('AlarmManager 看门狗'),
+        matching: find.byType(SwitchListTile),
+      );
+      expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      expect(prefs.getBool('background_service_watchdog'), isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(mock._isRunning, isTrue);
+      expect(mock.startCallCount, 0);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('rearmKeepAlive'),
+        reason: 'enabling the watchdog after an unknown status must attempt '
+            'to restore the native recovery schedule',
       );
     });
 

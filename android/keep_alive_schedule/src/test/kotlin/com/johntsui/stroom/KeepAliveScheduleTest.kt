@@ -44,7 +44,7 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("cancel-backup", "inexact-primary"), operations)
+        assertEquals(listOf("inexact-primary", "cancel-backup"), operations)
 
         operations.clear()
         val exactAttemptFailed = scheduleWithExactRevocationFallback(
@@ -56,7 +56,7 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(exactAttemptFailed)
-        assertEquals(listOf("exact", "cancel-backup", "inexact-primary"), operations)
+        assertEquals(listOf("exact", "inexact-primary", "cancel-backup"), operations)
     }
 
     @Test
@@ -72,7 +72,53 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("exact", "backup", "cancel-backup", "inexact-primary"), operations)
+        assertEquals(listOf("exact", "backup", "inexact-primary", "cancel-backup"), operations)
+    }
+
+    @Test
+    fun failedInexactPrimaryMakesOneLastAttemptToArmRecoveryBackup() {
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = false,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; false },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("inexact-primary", "backup"), operations)
+    }
+
+    @Test
+    fun missingRevocationBackupKeepsBoundedRetryEligibleDespiteExactPrimary() {
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = true,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; false },
+            cancelRevocationFallback = { operations += "cancel-backup" },
+            scheduleInexactPrimary = { operations += "inexact-primary"; false },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(listOf("exact", "backup", "inexact-primary", "backup"), operations)
+    }
+
+    @Test
+    fun preMRevocationBackupUsesLegacyAlarmScheduling() {
+        val operations = mutableListOf<String>()
+
+        val scheduled = scheduleCompatibleRevocationBackup(
+            supportsAllowWhileIdle = false,
+            scheduleAllowWhileIdle = { operations += "allow-while-idle"; false },
+            scheduleLegacy = { operations += "legacy"; true },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("legacy"), operations)
     }
 
     @Test
@@ -450,5 +496,119 @@ class KeepAliveScheduleTest {
         retryQueue.single().invoke()
 
         assertEquals(1, scheduleAttempts)
+    }
+
+    @Test
+    fun exhaustedReceiverRearmKeepsPendingBackupGenerationClaimable() {
+        var currentGeneration = 23L
+        var backupGeneration = currentGeneration
+        var backupPending = true
+        val firstDelivery = claimAlarmDeliveryGeneration(
+            scheduledGeneration = currentGeneration,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = { generation ->
+                currentGeneration = generation
+                true
+            },
+        )
+
+        assertEquals(AlarmGenerationClaimResult.CLAIMED, firstDelivery)
+
+        val retryQueue = mutableListOf<() -> Unit>()
+        var scheduleAttempts = 0
+        val scheduleReplacement = {
+            scheduleAttempts++
+            // Receiver rearming reuses the generation already claimed by this
+            // delivery, updating a still-pending backup without advancing it.
+            if (backupPending) backupGeneration = currentGeneration
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = false,
+                scheduleExact = { false },
+                scheduleRevocationFallback = { false },
+                cancelRevocationFallback = { backupPending = false },
+                scheduleInexactPrimary = { false },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = scheduleReplacement,
+            retrySchedule = scheduleReplacement,
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(1, scheduleAttempts)
+        assertEquals(1, retryQueue.size)
+
+        retryQueue.single().invoke()
+
+        assertEquals(2, scheduleAttempts)
+        assertTrue(backupPending)
+        assertEquals(currentGeneration, backupGeneration)
+
+        val backupDelivery = claimAlarmDeliveryGeneration(
+            scheduledGeneration = backupGeneration,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            persistGeneration = { generation ->
+                currentGeneration = generation
+                true
+            },
+        )
+
+        assertEquals(AlarmGenerationClaimResult.CLAIMED, backupDelivery)
+    }
+
+    @Test
+    fun pendingBackupRecoversAfterProcessRestartBeforeItsGenerationIsUpdated() {
+        var currentGeneration = 17L
+        var backupGeneration = currentGeneration
+        fun claim(
+            processClaims: AlarmDeliveryGenerationClaims,
+            scheduledGeneration: Long,
+            isRevocationBackup: Boolean,
+        ) = processClaims.claim(
+            scheduledGeneration = scheduledGeneration,
+            currentGeneration = currentGeneration,
+            keepAliveActive = true,
+            isRevocationBackup = isRevocationBackup,
+            persistGeneration = { currentGeneration = it; true },
+        )
+
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(AlarmDeliveryGenerationClaims(), currentGeneration, isRevocationBackup = false),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(17L, backupGeneration)
+
+        // Simulate process death after claim persistence and before the backup
+        // PendingIntent's token is updated; the replacement process has no
+        // in-memory record of the first delivery.
+        val restartedProcessClaims = AlarmDeliveryGenerationClaims()
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+        assertEquals(18L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+
+        // Rearming updates the pending backup to the current generation, so
+        // its next delivery remains valid and the paired alarm is still claimed once.
+        backupGeneration = currentGeneration
+        assertEquals(
+            AlarmGenerationClaimResult.CLAIMED,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = true),
+        )
+        assertEquals(19L, currentGeneration)
+        assertEquals(
+            AlarmGenerationClaimResult.STALE,
+            claim(restartedProcessClaims, backupGeneration, isRevocationBackup = false),
+        )
     }
 }
