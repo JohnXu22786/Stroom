@@ -62,8 +62,21 @@ Normalization and metric definitions:
 - Text is Unicode NFC; CRLF and CR become LF; consecutive whitespace is
   collapsed to one space and leading/trailing whitespace is removed.
 - CER is code-point Levenshtein edit distance divided by the total normalized
-  golden-text code points across pages. Missing text is evaluated as an empty
-  transcription and therefore contributes deletions.
+  golden-text code points across pages. For `markdown` and `table` output, the
+  evaluator removes headings, list/blockquote markers, annotated table pipes
+  and separator rows, links, and inline emphasis/code markup before scoring.
+  Intraword underscores are preserved as text rather than stripped as emphasis.
+  It applies table-pipe normalization to both the golden and returned text. For
+  `markdown`, `table`, and `latex`, it removes paired inline/display math
+  delimiters while preserving unmatched dollar signs used as currency, and normalizes
+  notation commands such as `\int`, `\frac`, and `\sqrt`. Unicode punctuation
+  immediately after inline math does not retain delimiters. For all formats,
+  annotated formula spans are compacted for CER and superscript digit runs are
+  normalized as one exponent. Compound fraction operands and exponent/subscript
+  groups retain parentheses. This
+  compares recognized content separately from the requested output syntax.
+  Missing text is
+  evaluated as an empty transcription and therefore contributes deletions.
 - Page omission counts missing prediction rows, null text, or empty text for a
   non-empty golden page, divided by all fixtures.
 - Reading-order score is the proportion of expected anchor pairs appearing in
@@ -73,12 +86,17 @@ Normalization and metric definitions:
 - Table fidelity compares the annotated rows and cells in sequence. It ignores
   optional leading/trailing Markdown pipes and Markdown separator rows, so a
   valid Markdown table is not penalized for its formatting row. It remains a
-  text check, not semantic table parsing. Formula fidelity is an exact
-  substring check after Unicode superscript normalization; for `markdown` and
-  `latex` output it also removes math delimiters and common LaTeX spacing and
-  notation commands such as `\int`, `\pi`, and `\frac`. It does not perform
-  symbolic equivalence. If any eligible page has no returned text, the metric
-  value is null and its pending count is reported.
+  text check, not semantic table parsing. Formula fidelity compares the
+  annotated formula as a complete span after whitespace compaction and Unicode
+  superscript normalization; surrounding prose is allowed, but adjacent math
+  operators are not. For `markdown`, `table`, and `latex`, it
+  also removes paired math delimiters and preserves unmatched currency dollar signs,
+  and normalizes common notation such as `\int`, `\pi`, `\frac`, and `\sqrt`.
+  Compound fraction operands and compound exponent/subscript groups retain
+  grouping. It does not perform symbolic
+  equivalence. If any
+  eligible page has no returned text, the metric value is null and its pending
+  count is reported.
 - Elapsed time is supplied in milliseconds per fixture. Returned tokens means
   provider-reported completion/output tokens per fixture. If any fixture lacks
   either measurement, that metric's total and mean are null and the missing
@@ -110,5 +128,5 @@ fixture checks after regeneration:
 model configuration, so no live model requests or model scores were produced.
 Provide a sanitized prediction file with the exact model identifier and
 non-secret recognition settings to run the evaluator. The tool rejects
-credential-like setting names and never writes prediction transcripts into its
-report.
+credential-like model IDs, setting names, and setting values, and never writes
+prediction transcripts into its report.

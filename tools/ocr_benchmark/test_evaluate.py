@@ -61,15 +61,26 @@ class EvaluateTests(unittest.TestCase):
     def test_credential_like_setting_names_are_rejected(self):
         for key in (
             "api_token",
+            "key",
+            "KEY",
+            "session_key",
+            "signing_key",
             "authorization_header",
             "auth_header",
             "access_key",
             "private_key",
             "password",
+            "passwd",
+            "passphrase",
+            "passcode",
+            "bearer",
             "cookie",
             "session_cookie",
             "SESSION.Cookie",
             "cookieHeader",
+            "stripe_key",
+            "service_key",
+            "stripeKey",
         ):
             with self.subTest(key=key):
                 input_data = predictions([])
@@ -82,11 +93,40 @@ class EvaluateTests(unittest.TestCase):
         input_data["run"]["settings"] = {
             "temperature": 0.2,
             "region": "test-region",
+            "endpoint": "https://host.example/?region=west",
+            "monkey": "ordinary-word",
         }
 
         report = evaluate_predictions(small_manifest(), input_data)
 
         self.assertEqual(report["run"]["settings"], input_data["run"]["settings"])
+
+    def test_credential_like_setting_values_are_rejected(self):
+        for value in (
+            "https://host.example/?token=redacted-test-value",
+            "Authorization: Bearer redacted-test-value",
+            "https://user:password@example.test/path",
+            "sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "sk" + "_live_" + "a" * 32,
+            "sk_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ):
+            with self.subTest(value=value):
+                input_data = predictions([])
+                input_data["run"]["settings"] = {"endpoint": value}
+                with self.assertRaises(EvaluationError):
+                    evaluate_predictions(small_manifest(), input_data)
+
+    def test_model_id_rejects_credential_like_values(self):
+        for model_id in (
+            "provider/model?token=redacted-test-value",
+            "sk" + "_live_" + "a" * 32,
+        ):
+            with self.subTest(model_id=model_id):
+                input_data = predictions([])
+                input_data["run"]["model_id"] = model_id
+
+                with self.assertRaises(EvaluationError):
+                    evaluate_predictions(small_manifest(), input_data)
 
     def test_empty_fidelity_annotations_are_rejected(self):
         for field in ("table_text", "formula_text"):
@@ -148,6 +188,199 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_markdown_formatting_does_not_inflate_character_error_rate(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "markdown-table",
+                    "gold_text": "Inventory\nCode Count\nP-12 3",
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "markdown-table",
+                    "text": (
+                        "# Inventory\n"
+                        "| Code | Count |\n"
+                        "| --- | ---: |\n"
+                        "| P-12 | 3 |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_markdown_table_from_manifest_does_not_inflate_character_error_rate(self):
+        manifest = json.loads((ROOT / "manifest.json").read_text())
+        fixture = next(
+            fixture
+            for fixture in manifest["fixtures"]
+            if fixture["id"] == "table-en-01"
+        )
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-en-01",
+                    "text": (
+                        "Synthetic Order\n"
+                        "| Code | Count | Total |\n"
+                        "| --- | ---: | ---: |\n"
+                        "| P-12 | 3 | 15.00 |\n"
+                        "| Q-07 | 2 | 8.00 |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions({"fixtures": [fixture]}, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_markdown_cer_keeps_literal_math_bars_outside_tables(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "absolute-value",
+                    "gold_text": "The absolute value is |x|.",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "absolute-value", "text": "The absolute value is x."}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_markdown_cer_keeps_intraword_underscores(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "identifier",
+                    "gold_text": "x_y_z",
+                    "categories": ["english"],
+                }
+            ]
+        }
+        input_data = predictions([{"fixture_id": "identifier", "text": "xyz"}])
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_currency_symbol_is_not_removed_as_a_math_delimiter(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "currency",
+                    "gold_text": "Prices: $12 and $15",
+                    "categories": ["english"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "currency", "text": "Prices: 12 and 15"}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_cer_ignores_optional_formula_spacing(self):
+        formula = "∫_0^1 x^2 dx = 1/3"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "spacing-formula",
+                    "gold_text": f"Integral\n{formula}",
+                    "formula_text": formula,
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "spacing-formula",
+                    "text": r"Integral $\int_0^1x^2dx=\frac{1}{3}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_delimiters_before_unicode_punctuation_are_removed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unicode-punctuation-formula",
+                    "gold_text": "A = πr^2，",
+                    "formula_text": "A = πr^2",
+                    "categories": ["chinese", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unicode-punctuation-formula",
+                    "text": r"A = $\pi r^2$，",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_plain_text_and_table_cer_ignore_formula_spacing(self):
+        formula = "x^2 + y^2 = 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "plain-formula-spacing",
+                    "gold_text": f"Equation\n{formula}",
+                    "formula_text": formula,
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        for output_format in ("plain_text", "table"):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "plain-formula-spacing",
+                            "text": "Equation\nx^2+y^2=1",
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+                self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_extra_table_row_reduces_table_fidelity(self):
         expected = "Code | Count | Total\nP-12 | 3 | 15.00\nQ-07 | 2 | 8.00"
         manifest = {
@@ -206,6 +439,452 @@ class EvaluateTests(unittest.TestCase):
 
                 self.assertEqual(report["run"]["output_format"], output_format)
                 self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+
+    def test_latex_square_root_is_scored_against_its_display_transcription(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "square-root",
+                    "gold_text": "Square root of x\n√x",
+                    "formula_text": "√x",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "square-root", "text": r"Square root of x $\sqrt{x}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_compound_square_root_preserves_operand_grouping(self):
+        formula = "√(x+1)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "compound-square-root",
+                    "gold_text": formula,
+                    "formula_text": formula,
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "compound-square-root", "text": r"$\sqrt{x+1}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_nested_square_root_fraction_is_scored_against_its_display_text(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "nested-radical-fraction",
+                    "gold_text": "√x/2",
+                    "formula_text": "√x/2",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "nested-radical-fraction",
+                    "text": r"$\frac{\sqrt{x}}{2}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_preserves_compound_operand_grouping(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "compound-fraction",
+                    "gold_text": "(x+1)/2",
+                    "formula_text": "(x+1)/2",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "compound-fraction", "text": r"$\frac{x+1}{2}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_groups_multiplication_in_denominator(self):
+        for latex_operator, display_operator in (
+            (r"\cdot ", "·"),
+            (r"\times ", "×"),
+        ):
+            with self.subTest(latex_operator=latex_operator):
+                gold_text = f"x/(a{display_operator}b)"
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "fraction-product-denominator",
+                            "gold_text": gold_text,
+                            "formula_text": gold_text,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "fraction-product-denominator",
+                            "text": rf"$\frac{{x}}{{a{latex_operator}b}}$",
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+                self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_keeps_unary_negative_without_extra_grouping(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "negative-fraction",
+                    "gold_text": "-1/2",
+                    "formula_text": "-1/2",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "negative-fraction", "text": r"$\frac{-1}{2}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_multi_digit_superscripts_match_latex_exponents(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "multi-digit-exponent",
+                    "gold_text": "Power: x¹⁰",
+                    "formula_text": "x¹⁰",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "multi-digit-exponent",
+                    "text": r"Power: $x^{10}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_compound_latex_exponent_preserves_grouping(self):
+        def evaluate(gold_text):
+            manifest = {
+                "fixtures": [
+                    {
+                        "id": "compound-exponent",
+                        "gold_text": gold_text,
+                        "formula_text": gold_text,
+                        "categories": ["formula"],
+                    }
+                ]
+            }
+            input_data = predictions(
+                [
+                    {
+                        "fixture_id": "compound-exponent",
+                        "text": r"$x^{n+1}$",
+                    }
+                ]
+            )
+            input_data["run"]["output_format"] = "latex"
+            return evaluate_predictions(manifest, input_data)
+
+        equivalent = evaluate("x^(n+1)")
+        different = evaluate("x^n+1")
+
+        self.assertEqual(equivalent["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(equivalent["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(different["metrics"]["formula_fidelity"]["value"], 0)
+        self.assertGreater(different["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_plain_text_cer_normalizes_multi_digit_superscript_sequences(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "plain-text-exponent",
+                    "gold_text": "Power: x¹⁰",
+                    "formula_text": "x¹⁰",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "plain-text-exponent", "text": "Power: x^10"}]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_table_formula_metrics_normalize_latex_superscripts(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-formula-exponent",
+                    "gold_text": "Power: x¹⁰",
+                    "formula_text": "x¹⁰",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-formula-exponent",
+                    "text": r"Power: $x^{10}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "table"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_formula_fidelity_rejects_extra_operator_but_allows_prose_boundary(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+
+        incorrect = predictions(
+            [{"fixture_id": "area-equation", "text": "A = πr² + 1"}]
+        )
+        incorrect_report = evaluate_predictions(manifest, incorrect)
+
+        prose = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": "Equation: A = πr². The radius is measured in centimeters.",
+                }
+            ]
+        )
+        prose_report = evaluate_predictions(manifest, prose)
+
+        self.assertEqual(
+            incorrect_report["metrics"]["formula_fidelity"]["value"], 0
+        )
+        self.assertEqual(prose_report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_rejects_equation_operator_before_formula_span(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "equation-fragment",
+                    "gold_text": "x = 1",
+                    "formula_text": "x = 1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+
+        for operator in ("=", "<", ">", "≤", "≥"):
+            with self.subTest(operator=operator):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [
+                            {
+                                "fixture_id": "equation-fragment",
+                                "text": f"-x {operator} x = 1",
+                            }
+                        ]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
+    def test_formula_fidelity_rejects_decimal_separator_continuation(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "decimal-exponent",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+
+        for separator in (".", ","):
+            with self.subTest(separator=separator):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [
+                            {
+                                "fixture_id": "decimal-exponent",
+                                "text": f"A = πr^2{separator}5",
+                            }
+                        ]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
+    def test_formula_fidelity_rejects_math_terms_across_whitespace(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+
+        for text in (
+            "2 A = πr²",
+            "x A = πr²",
+            "A = πr² 2",
+            "A = πr² x",
+            "A = πr² cos θ",
+        ):
+            with self.subTest(text=text):
+                report = evaluate_predictions(
+                    manifest,
+                    predictions([{"fixture_id": "area-equation", "text": text}]),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
+    def test_formula_fidelity_rejects_latex_function_terms_across_whitespace(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"$A = \pi r^2 \cos \theta$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_latex_greek_terms_across_whitespace(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"$A = \pi r^2 \theta$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_latex_integral_operator_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"A = $\pi r^2 \int$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
 
     def test_perfect_predictions_score_each_metric(self):
         report = evaluate_predictions(

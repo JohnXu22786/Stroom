@@ -13,6 +13,7 @@ import sys
 import unicodedata
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 
 REQUIRED_CATEGORIES = {
@@ -29,6 +30,13 @@ REQUIRED_CATEGORIES = {
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
 SECRET_SETTING_KEYS = {
     "apikey",
+    "key",
+    "sessionkey",
+    "signingkey",
+    "passwd",
+    "passphrase",
+    "passcode",
+    "bearer",
     "accesstoken",
     "refreshtoken",
     "token",
@@ -38,6 +46,32 @@ SECRET_SETTING_KEYS = {
     "credential",
     "credentials",
 }
+SUPERSCRIPT_DIGITS = str.maketrans(
+    {
+        "⁰": "0",
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+    }
+)
+SUPERSCRIPT_DIGIT_SEQUENCE = re.compile(r"[⁰¹²³⁴⁵⁶⁷⁸⁹]+")
+OPAQUE_CREDENTIAL_PATTERNS = (
+    re.compile(r"\bsk-(?:proj-|ant-|live-|test-)?[A-Za-z0-9_-]{20,}\b", re.I),
+    re.compile(r"\bsk_(?:proj|ant|live|test)_[A-Za-z0-9_-]{20,}\b", re.I),
+    re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{15,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(
+        r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"
+    ),
+)
 PREDICTION_FIELDS = {
     "fixture_id",
     "text",
@@ -138,32 +172,55 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return fixtures
 
 
+def _is_credential_like_setting_name(key: str) -> bool:
+    normalized_key = re.sub(r"[^a-z]", "", key.lower())
+    word_boundaries = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", key)
+    key_parts = re.findall(r"[A-Za-z0-9]+", word_boundaries)
+    return (
+        normalized_key in SECRET_SETTING_KEYS
+        or (len(key_parts) > 1 and key_parts[-1].lower() == "key")
+        or normalized_key.startswith("auth")
+        or normalized_key.startswith("token")
+        or normalized_key.endswith("token")
+        or any(
+            marker in normalized_key
+            for marker in (
+                "apikey",
+                "accesskey",
+                "authorization",
+                "cookie",
+                "credential",
+                "password",
+                "privatekey",
+                "secret",
+            )
+        )
+    )
+
+
+def _contains_credential_like_value(value: str) -> bool:
+    decoded_value = unquote(value)
+    if any(pattern.search(decoded_value) for pattern in OPAQUE_CREDENTIAL_PATTERNS):
+        return True
+    if re.search(r"(?i)\b(?:bearer|basic)\s+\S+", decoded_value):
+        return True
+    if re.search(r"(?i)://[^/:@\s]+:[^/@\s]+@", decoded_value):
+        return True
+    assignment_pattern = re.compile(
+        r"(?i)(?:^|[?&#\s,;])([^?&#=:\s][^?&#=]*?)\s*(?:=|:(?!//))\s*([^\s&#,;]+)"
+    )
+    return any(
+        _is_credential_like_setting_name(match.group(1).strip())
+        for match in assignment_pattern.finditer(decoded_value)
+    )
+
+
 def _validate_safe_settings(value: Any, path: str = "settings") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
                 raise EvaluationError(f"{path} keys must be strings")
-            normalized_key = re.sub(r"[^a-z]", "", key.lower())
-            credential_like = (
-                normalized_key in SECRET_SETTING_KEYS
-                or normalized_key.startswith("auth")
-                or normalized_key.startswith("token")
-                or normalized_key.endswith("token")
-                or any(
-                    marker in normalized_key
-                    for marker in (
-                        "apikey",
-                        "accesskey",
-                        "authorization",
-                        "cookie",
-                        "credential",
-                        "password",
-                        "privatekey",
-                        "secret",
-                    )
-                )
-            )
-            if credential_like:
+            if _is_credential_like_setting_name(key):
                 raise EvaluationError(
                     f"{path} contains a credential-like field name: {key}"
                 )
@@ -171,6 +228,8 @@ def _validate_safe_settings(value: Any, path: str = "settings") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _validate_safe_settings(child, f"{path}[{index}]")
+    elif isinstance(value, str) and _contains_credential_like_value(value):
+        raise EvaluationError(f"{path} contains a credential-like value")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
         raise EvaluationError(f"{path} contains a non-JSON value")
     elif isinstance(value, float) and not math.isfinite(value):
@@ -191,6 +250,8 @@ def _validated_run_and_predictions(
     settings = run.get("settings")
     if not isinstance(model_id, str) or not model_id.strip():
         raise EvaluationError("run.model_id must identify the evaluated model")
+    if _contains_credential_like_value(model_id):
+        raise EvaluationError("run.model_id contains a credential-like value")
     if not isinstance(settings, dict):
         raise EvaluationError("run.settings must contain the non-secret settings")
     _validate_safe_settings(settings)
@@ -277,43 +338,309 @@ def _table_matches(expected: str, actual: str) -> bool:
     return actual_rows == expected_rows
 
 
-def _canonical_formula(value: str, output_format: str) -> str:
-    text = normalize_text(value)
-    if output_format in {"markdown", "latex"}:
-        text = re.sub(r"\\(?:\(|\)|\[|\])|\${1,2}", "", text)
-        text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", "", text)
-        commands = {
-            r"\int": "∫",
-            r"\pi": "π",
-            r"\cdot": "·",
-            r"\times": "×",
-        }
-        text = re.sub(
-            r"\\(?:int|pi|cdot|times)(?![A-Za-z])",
-            lambda match: commands[match.group()],
-            text,
-        )
-        fraction_pattern = re.compile(
-            r"\\(?:dfrac|tfrac|frac)\s*\{([^{}]+)\}\s*\{([^{}]+)\}"
-        )
-        while fraction_pattern.search(text):
-            text = fraction_pattern.sub(r"\1/\2", text)
-        text = re.sub(r"([_^])\{([^{}]+)\}", r"\1\2", text)
+def _strip_latex_markup(value: str) -> str:
+    def compact_math(match: re.Match[str]) -> str:
+        return re.sub(r"\s+", "", match.group(1))
 
-    for superscript, plain in {
-        "⁰": "^0",
-        "¹": "^1",
-        "²": "^2",
-        "³": "^3",
-        "⁴": "^4",
-        "⁵": "^5",
-        "⁶": "^6",
-        "⁷": "^7",
-        "⁸": "^8",
-        "⁹": "^9",
-    }.items():
-        text = text.replace(superscript, plain)
+    commands = {
+        "int": "∫",
+        "pi": "π",
+        "cdot": "·",
+        "times": "×",
+    }
+    text = re.sub(
+        r"\\(int|pi|cdot|times)(?![A-Za-z])\s*",
+        lambda match: commands[match.group(1)],
+        value,
+    )
+    text = re.sub(r"\\\((.+?)\\\)", compact_math, text, flags=re.DOTALL)
+    text = re.sub(r"\\\[(.+?)\\\]", compact_math, text, flags=re.DOTALL)
+    text = re.sub(r"\\(?:\(|\)|\[|\])", "", text)
+    text = re.sub(
+        r"(?<!\$)\$\$(.+?)\$\$(?!\$)", compact_math, text, flags=re.DOTALL
+    )
+    text = re.sub(
+        r"(?<!\\)(?<!\$)\$(?!\$)([^$]+)\$(?!\$)(?=$|[^\w$])",
+        compact_math,
+        text,
+    )
+    text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
+    fraction_pattern = re.compile(
+        r"\\(?:dfrac|tfrac|frac)\s*\{([^{}]+)\}\s*\{([^{}]+)\}"
+    )
+    square_root_pattern = re.compile(r"\\sqrt\s*\{([^{}]+)\}")
+
+    def has_binary_operator(operand: str) -> bool:
+        return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
+
+    def fraction_text(match: re.Match[str]) -> str:
+        def group_if_compound(operand: str) -> str:
+            operand = operand.strip()
+            if has_binary_operator(operand) and not (
+                operand.startswith("(") and operand.endswith(")")
+            ):
+                return f"({operand})"
+            return operand
+
+        numerator = group_if_compound(match.group(1))
+        denominator = group_if_compound(match.group(2))
+        return f"{numerator}/{denominator}"
+
+    def square_root_text(match: re.Match[str]) -> str:
+        operand = match.group(1).strip()
+        if has_binary_operator(operand) and not (
+            operand.startswith("(") and operand.endswith(")")
+        ):
+            operand = f"({operand})"
+        return f"√{operand}"
+
+    while True:
+        previous = text
+        text = fraction_pattern.sub(fraction_text, text)
+        text = square_root_pattern.sub(square_root_text, text)
+        if text == previous:
+            break
+
+    def normalize_index(match: re.Match[str]) -> str:
+        operator, operand = match.groups()
+        if has_binary_operator(operand) and not (
+            operand.startswith("(") and operand.endswith(")")
+        ):
+            operand = f"({operand})"
+        return f"{operator}{operand}"
+
+    return re.sub(r"([_^])\{([^{}]+)\}", normalize_index, text)
+
+
+def _normalize_superscript_digits(value: str) -> str:
+    return SUPERSCRIPT_DIGIT_SEQUENCE.sub(
+        lambda match: "^" + match.group().translate(SUPERSCRIPT_DIGITS), value
+    )
+
+
+def _compact_annotated_formula(
+    value: str, formula_text: str, output_format: str
+) -> str:
+    normalized_formula = _plain_text_for_cer(formula_text, output_format)
+    compact_formula = "".join(normalized_formula.split())
+    if not compact_formula:
+        return value
+
+    positions = [
+        index for index, character in enumerate(value) if not character.isspace()
+    ]
+    compact_value = "".join(value[index] for index in positions)
+    if compact_value.count(compact_formula) != 1:
+        return value
+
+    start = compact_value.index(compact_formula)
+    first_character = positions[start]
+    last_character = positions[start + len(compact_formula) - 1]
+    return value[:first_character] + compact_formula + value[last_character + 1 :]
+
+
+def _plain_text_for_cer(
+    value: str,
+    output_format: str,
+    table_text: str | None = None,
+    formula_text: str | None = None,
+) -> str:
+    text = value
+    if output_format in {"markdown", "table"}:
+        source_lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        annotated_table_rows = set(_table_rows(table_text or ""))
+        annotated_table_row_indices = set()
+        for index, line in enumerate(source_lines):
+            parsed_rows = _table_rows(line)
+            if parsed_rows and parsed_rows[0] in annotated_table_rows:
+                annotated_table_row_indices.add(index)
+        separator_rows = {
+            index
+            for index, line in enumerate(source_lines)
+            if "|" in line and not _table_rows(line)
+        }
+        table_rows = set()
+        for separator in separator_rows:
+            if separator > 0 and "|" in source_lines[separator - 1]:
+                table_rows.add(separator - 1)
+            row = separator + 1
+            while (
+                row < len(source_lines)
+                and source_lines[row].strip()
+                and "|" in source_lines[row]
+            ):
+                table_rows.add(row)
+                row += 1
+        lines = []
+        for index, line in enumerate(source_lines):
+            if index in separator_rows:
+                continue
+            line = re.sub(r"^\s{0,3}#{1,6}\s+", "", line)
+            line = re.sub(r"^\s*(?:[-+*]|\d+[.)])\s+", "", line)
+            line = re.sub(r"^\s*>+\s?", "", line)
+            line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+            line = re.sub(r"(\*\*|~~|`|\*)(.+?)\1", r"\2", line)
+            line = re.sub(
+                r"(?<!\w)(__|_)(?!\s)(.+?)(?<!\s)\1(?!\w)", r"\2", line
+            )
+            if index in table_rows or index in annotated_table_row_indices:
+                line = line.replace("|", " ")
+            lines.append(line)
+        text = "\n".join(lines)
+    if output_format in {"markdown", "table", "latex"}:
+        text = _strip_latex_markup(text)
+    text = _normalize_superscript_digits(text)
+    text = normalize_text(text)
+    if formula_text:
+        text = _compact_annotated_formula(text, formula_text, output_format)
+    return text
+
+
+def _normalized_formula_text(value: str, output_format: str) -> str:
+    text = normalize_text(value)
+    if output_format in {"markdown", "table", "latex"}:
+        text = _strip_latex_markup(text)
+
+    return _normalize_superscript_digits(text)
+
+
+def _canonical_formula(value: str, output_format: str) -> str:
+    text = _normalized_formula_text(value, output_format)
     return re.sub(r"\s+", "", text)
+
+
+def _formula_span_matches(expected: str, actual: str) -> bool:
+    if not expected:
+        return False
+    pattern = re.compile(r"\s*".join(re.escape(character) for character in expected))
+    left_operators = set("+-−*/·×^_=<>≤≥∫∮∑∏∂∇√∞")
+    right_operators = left_operators
+    math_functions = {
+        "arccos",
+        "arcsin",
+        "arctan",
+        "cos",
+        "cosh",
+        "coprod",
+        "cot",
+        "csc",
+        "exp",
+        "inf",
+        "infty",
+        "int",
+        "iint",
+        "iiint",
+        "lim",
+        "ln",
+        "log",
+        "max",
+        "min",
+        "nabla",
+        "oint",
+        "oiint",
+        "partial",
+        "prod",
+        "sec",
+        "sin",
+        "sinh",
+        "sqrt",
+        "sum",
+        "sup",
+        "tan",
+        "tanh",
+    }
+    greek_symbols = {
+        "Gamma",
+        "Delta",
+        "Theta",
+        "Lambda",
+        "Xi",
+        "Pi",
+        "Sigma",
+        "Upsilon",
+        "Phi",
+        "Psi",
+        "Omega",
+        "alpha",
+        "beta",
+        "chi",
+        "delta",
+        "epsilon",
+        "eta",
+        "gamma",
+        "iota",
+        "kappa",
+        "lambda",
+        "mu",
+        "nu",
+        "omega",
+        "omicron",
+        "phi",
+        "pi",
+        "psi",
+        "rho",
+        "sigma",
+        "tau",
+        "theta",
+        "upsilon",
+        "varepsilon",
+        "varkappa",
+        "varphi",
+        "varpi",
+        "varrho",
+        "varsigma",
+        "vartheta",
+        "xi",
+        "zeta",
+    }
+
+    def is_formula_term(token: str) -> bool:
+        latex_command = re.match(r"\\([A-Za-z]+)", token)
+        function_name = latex_command.group(1) if latex_command else token
+        return (
+            any(character.isdigit() for character in token)
+            or any(character in left_operators for character in token)
+            or (len(token) == 1 and token.isalpha())
+            or function_name in math_functions
+            or function_name in greek_symbols
+        )
+
+    def has_adjacent_formula_term(value: str, *, from_right: bool) -> bool:
+        tokens = value.split()
+        if not tokens:
+            return False
+        token = tokens[0] if from_right else tokens[-1]
+        if not is_formula_term(token):
+            return False
+        if not from_right and len(token) == 1 and token.isalpha() and len(tokens) > 1:
+            return is_formula_term(tokens[-2])
+        return True
+
+    for match in pattern.finditer(actual):
+        before = actual[: match.start()]
+        after = actual[match.end() :]
+        if before:
+            previous = before[-1]
+            if not previous.isspace() and (previous.isalnum() or previous in "^_"):
+                continue
+            previous_non_space = before.rstrip()[-1:]
+            if previous_non_space in left_operators:
+                continue
+            if has_adjacent_formula_term(before.rstrip(), from_right=False):
+                continue
+        if after:
+            if re.match(r"[.,]\d", after):
+                continue
+            following = after[0]
+            if not following.isspace() and (following.isalnum() or following in "^_"):
+                continue
+            next_non_space = after.lstrip()[:1]
+            if next_non_space in right_operators:
+                continue
+            if has_adjacent_formula_term(after.lstrip(), from_right=True):
+                continue
+        return True
+    return False
 
 
 def _exact_snippet_metric(
@@ -336,8 +663,8 @@ def _exact_snippet_metric(
             matches = _table_matches(fixture[field], text)
         else:
             expected = _canonical_formula(fixture[field], output_format)
-            actual = _canonical_formula(text, output_format)
-            matches = expected in actual
+            actual = _normalized_formula_text(text, output_format)
+            matches = _formula_span_matches(expected, actual)
         if matches:
             correct += 1
 
@@ -450,10 +777,25 @@ def evaluate_predictions(
     reference_characters = 0
     omitted_pages = 0
     for fixture in fixtures:
-        expected = normalize_text(fixture["gold_text"])
+        expected_value = fixture["gold_text"]
         prediction = predictions_by_id.get(fixture["id"])
         actual_value = None if prediction is None else prediction["text"]
-        actual = normalize_text(actual_value) if actual_value is not None else ""
+        actual = (
+            _plain_text_for_cer(
+                actual_value,
+                run["output_format"],
+                fixture.get("table_text"),
+                fixture.get("formula_text"),
+            )
+            if actual_value is not None
+            else ""
+        )
+        expected = _plain_text_for_cer(
+            expected_value,
+            run["output_format"],
+            fixture.get("table_text"),
+            fixture.get("formula_text"),
+        )
         edit_distance += levenshtein_distance(expected, actual)
         reference_characters += len(expected)
         if prediction is None or actual_value is None or (not actual and expected):
