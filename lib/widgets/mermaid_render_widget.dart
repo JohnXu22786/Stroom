@@ -714,6 +714,13 @@ MERMAID_CODE_PLACEHOLDER
       }
     };
 
+    window.addEventListener('resize', function() {
+      if (!fitComplete) return;
+      var viewport = document.getElementById('viewport');
+      if (!viewport || viewport.clientWidth <= 0 || viewport.clientHeight <= 0) return;
+      window.fitToViewport();
+    });
+
 GESTURE_SCRIPT_PLACEHOLDER
 
 MERMAID_LOADER_PLACEHOLDER
