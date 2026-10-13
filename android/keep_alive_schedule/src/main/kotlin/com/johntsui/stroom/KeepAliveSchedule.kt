@@ -28,14 +28,15 @@ internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
     scheduleRevocationFallback: () -> Boolean,
-    cancelRevocationFallback: () -> Unit,
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
     val exactScheduled = canScheduleExact && scheduleExact()
     if (exactScheduled && scheduleRevocationFallback()) return true
 
     if (scheduleInexactPrimary()) {
-        cancelRevocationFallback()
+        // Keep a same-generation recovery delivery in case this one-shot is
+        // consumed and the process stops before the receiver can rearm it.
+        scheduleRevocationFallback()
         return true
     }
 
@@ -85,7 +86,7 @@ internal fun claimAlarmDeliveryGeneration(
 }
 
 /**
- * Tracks claims for this process so a paired backup left one generation behind
+ * Tracks claims for this process so a paired alarm left one generation behind
  * by process death can recover without admitting a same-process duplicate.
  */
 internal class AlarmDeliveryGenerationClaims {
@@ -95,7 +96,6 @@ internal class AlarmDeliveryGenerationClaims {
         scheduledGeneration: Long,
         currentGeneration: Long,
         keepAliveActive: Boolean,
-        isRevocationBackup: Boolean,
         persistGeneration: (Long) -> Boolean,
     ): AlarmGenerationClaimResult {
         if (!keepAliveActive) return AlarmGenerationClaimResult.STALE
@@ -113,13 +113,12 @@ internal class AlarmDeliveryGenerationClaims {
             return result
         }
 
-        val isInterruptedClaimRecovery = isRevocationBackup &&
-            scheduledGeneration == currentGeneration - 1L &&
+        val isInterruptedClaimRecovery = scheduledGeneration == currentGeneration - 1L &&
             scheduledGeneration != lastClaimedGeneration
         if (!isInterruptedClaimRecovery) return AlarmGenerationClaimResult.STALE
 
-        // Reuse currentGeneration: the receiver will update the backup token
-        // while rearming, and another process interruption remains recoverable.
+        // Reuse currentGeneration: the receiver updates the pending alarm token
+        // while rearming, and a paired delivery can recover after process death.
         lastClaimedGeneration = scheduledGeneration
         return AlarmGenerationClaimResult.CLAIMED
     }
