@@ -758,8 +758,7 @@ void main() {
           reason: 'the identical trailing open chart should keep loading');
     });
 
-    test(
-        'quoted closed mermaid block does not shift the open tail position',
+    test('quoted closed mermaid block does not shift the open tail position',
         () {
       final config = buildMessageMarkdownConfig(
         isDark: false,
@@ -793,8 +792,7 @@ void main() {
           reason: 'an open quoted fence should keep showing the loading state');
     });
 
-    test('open quoted mermaid fence removes available content indentation',
-        () {
+    test('open quoted mermaid fence removes available content indentation', () {
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,
@@ -855,8 +853,7 @@ void main() {
           reason: 'the actual trailing Mermaid fence should keep loading');
     });
 
-    test(
-        'list-item mermaid fence does not shift the open tail position', () {
+    test('list-item mermaid fence does not shift the open tail position', () {
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,
@@ -923,8 +920,7 @@ void main() {
         conversationIsStreaming: true,
         streamingMsgId: 'current-message-id',
         messageId: 'current-message-id',
-        streamingText:
-            '<!--\n```mermaid\nA\n```\n-->\n\n```mermaid\nA',
+        streamingText: '<!--\n```mermaid\nA\n```\n-->\n\n```mermaid\nA',
       );
       final widget = config.pre.builder!('A', 'mermaid');
 
@@ -1069,6 +1065,56 @@ void main() {
           reason: 'the actual trailing fence should keep loading');
     });
 
+    test(
+        'vertical tab and form feed after heading marker keep HTML fences out of callback order',
+        () {
+      for (final separator in const ['\u000b', '\u000c']) {
+        final streamingText =
+            '#${separator} title\n<span>\n```mermaid\nfake\n```\n\n```mermaid\nA';
+        final parsed = _parseLikeMarkdownGenerator(streamingText);
+        expect(_findElement(parsed, 'h1'), isNotNull);
+        final parsedCode = _findElement(parsed, 'code');
+        expect(parsedCode?.attributes['class'], 'language-mermaid');
+
+        final config = buildMessageMarkdownConfig(
+          isDark: false,
+          conversationIsStreaming: true,
+          streamingMsgId: 'current-message-id',
+          messageId: 'current-message-id',
+          streamingText: streamingText,
+        );
+        final widget = config.pre.builder!(parsedCode!.textContent, 'mermaid');
+
+        expect(widget, isNot(isA<MermaidRenderWidget>()),
+            reason:
+                'the parsed open fence should keep its loading state for $separator');
+      }
+    });
+
+    test('vertical tab and form feed do not end raw HTML blocks', () {
+      for (final separator in const ['\u000b', '\u000c']) {
+        final streamingText =
+            '<span>\n${separator}\n```mermaid\nfake\n```\n\n```mermaid\nA';
+        final parsed = _parseLikeMarkdownGenerator(streamingText);
+        final parsedCode = _findElement(parsed, 'code');
+        expect(parsedCode?.attributes['class'], 'language-mermaid');
+        expect(parsedCode?.textContent.trim(), 'A');
+
+        final config = buildMessageMarkdownConfig(
+          isDark: false,
+          conversationIsStreaming: true,
+          streamingMsgId: 'current-message-id',
+          messageId: 'current-message-id',
+          streamingText: streamingText,
+        );
+        final widget = config.pre.builder!(parsedCode!.textContent, 'mermaid');
+
+        expect(widget, isNot(isA<MermaidRenderWidget>()),
+            reason:
+                'the raw HTML block should keep its fake fence from shifting the open callback for $separator');
+      }
+    });
+
     test('tab after list continuation indent keeps open Mermaid fence loading',
         () {
       final config = buildMessageMarkdownConfig(
@@ -1118,6 +1164,63 @@ void main() {
           reason: 'an ordered list starting at one may interrupt a paragraph');
     });
 
+    test('nested ordered list after paragraph keeps open mermaid loading', () {
+      const streamingText = '- item\n  paragraph\n  2. ```mermaid\n     A';
+      final parsed = _parseLikeMarkdownGenerator(streamingText);
+      final parsedCode = _findElement(parsed, 'code');
+      expect(parsedCode?.attributes['class'], 'language-mermaid');
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final widget = config.pre.builder!(parsedCode!.textContent, 'mermaid');
+
+      expect(widget, isNot(isA<MermaidRenderWidget>()),
+          reason: 'the nested open fence should keep its loading state');
+    });
+
+    test('empty nested list items keep the trailing mermaid block loading', () {
+      const streamingText =
+          '```mermaid\nA\n```\n\n-\n  -\n    ```mermaid\n    A';
+      final parsed = _parseLikeMarkdownGenerator(streamingText);
+      final parsedCodes = <m.Element>[];
+
+      void collectCodeBlocks(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'code') {
+            parsedCodes.add(node);
+          }
+          if (node is m.Element) collectCodeBlocks(node.children ?? []);
+        }
+      }
+
+      collectCodeBlocks(parsed);
+      expect(parsedCodes, hasLength(2));
+      expect(
+        parsedCodes.map((code) => code.attributes['class']),
+        everyElement('language-mermaid'),
+      );
+
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final builder = config.pre.builder!;
+      final closedBlock = builder(parsedCodes[0].textContent, 'mermaid');
+      final openBlock = builder(parsedCodes[1].textContent, 'mermaid');
+
+      expect(closedBlock, isA<MermaidRenderWidget>(),
+          reason: 'the earlier closed chart should render immediately');
+      expect(openBlock, isNot(isA<MermaidRenderWidget>()),
+          reason: 'the nested open chart should keep its loading state');
+    });
+
     test('same-line-closed HTML comment preserves the paragraph boundary', () {
       final config = buildMessageMarkdownConfig(
         isDark: false,
@@ -1133,7 +1236,8 @@ void main() {
       final openBlock = builder('A', 'mermaid');
 
       expect(closedBlock, isA<MermaidRenderWidget>(),
-          reason: 'HTML-contained fence text must not shift the callback index');
+          reason:
+              'HTML-contained fence text must not shift the callback index');
       expect(openBlock, isNot(isA<MermaidRenderWidget>()),
           reason: 'the actual trailing Mermaid block should keep loading');
     });
@@ -1158,8 +1262,7 @@ void main() {
         conversationIsStreaming: true,
         streamingMsgId: 'current-message-id',
         messageId: 'current-message-id',
-        streamingText:
-            'Paragraph\n<span>\n```mermaid\nA\n```\n\n```mermaid\nA',
+        streamingText: 'Paragraph\n<span>\n```mermaid\nA\n```\n\n```mermaid\nA',
       );
       final builder = config.pre.builder!;
 
@@ -1172,10 +1275,81 @@ void main() {
           reason: 'the actual open chart remains the final Mermaid block');
     });
 
-    test('slash not followed by greater-than does not start an HTML block',
-        () {
+    test('GFM table and footnote code preserve raw HTML fence order', () {
+      final streamingText = [
+        '| Name | Value |',
+        '| --- | --- |',
+        '| item | 1 |',
+        '[^note]: Definition',
+        '    indented code',
+        '<span>',
+        '```mermaid',
+        'fake',
+        '```',
+        '',
+        '```mermaid',
+        'A',
+      ].join('\n');
+      final parsed = _parseLikeMarkdownGenerator(streamingText);
+      expect(_findElement(parsed, 'table'), isNotNull);
+      final codeNodes = <m.Element>[];
+
+      void collectCodeNodes(List<m.Node> nodes) {
+        for (final node in nodes) {
+          if (node is m.Element && node.tag == 'code') codeNodes.add(node);
+          if (node is m.Element) collectCodeNodes(node.children ?? []);
+        }
+      }
+
+      collectCodeNodes(parsed);
+      final mermaidCodes = codeNodes
+          .where((code) => code.attributes['class'] == 'language-mermaid')
+          .toList();
+      expect(mermaidCodes, hasLength(1));
+      expect(mermaidCodes.single.textContent.trim(), 'A');
+
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final widget = config.pre.builder!(
+        mermaidCodes.single.textContent,
+        'mermaid',
+      );
+
+      expect(
+        widget,
+        isNot(isA<MermaidRenderWidget>()),
+        reason: 'the raw HTML fake fence must not shift the open callback',
+      );
+    });
+
+    test('link reference definition ends paragraph state before raw HTML', () {
       const streamingText =
-          '<div/foo>\n```mermaid\nA\n```\n\n```mermaid\nA';
+          '[ref]: /url\n<span>\n```mermaid\nfake\n```\n\n```mermaid\nA';
+      final parsed = _parseLikeMarkdownGenerator(streamingText);
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final codeWidgets = _widgetsFromInlineSpans(
+        markdownGenerator.buildWidgets(streamingText, config: config),
+      );
+
+      expect(_findElement(parsed, 'code'), isNotNull);
+      expect(codeWidgets, hasLength(1));
+      expect(codeWidgets.single, isNot(isA<MermaidRenderWidget>()),
+          reason: 'the raw HTML fence must not shift the open callback index');
+    });
+
+    test('slash not followed by greater-than does not start an HTML block', () {
+      const streamingText = '<div/foo>\n```mermaid\nA\n```\n\n```mermaid\nA';
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,
@@ -1277,7 +1451,8 @@ void main() {
         conversationIsStreaming: true,
         streamingMsgId: 'current-message-id',
         messageId: 'current-message-id',
-        streamingText: '- item\n    ```mermaid\n    A\n    ```\n\n```mermaid\nA',
+        streamingText:
+            '- item\n    ```mermaid\n    A\n    ```\n\n```mermaid\nA',
       );
       final builder = config.pre.builder!;
 
@@ -1395,8 +1570,7 @@ void main() {
     });
 
     test('tab in mermaid info string does not shift parsed fence ordinals', () {
-      const streamingText =
-          '```mermaid\tmetadata\nA\n```\n\n```mermaid\nA';
+      const streamingText = '```mermaid\tmetadata\nA\n```\n\n```mermaid\nA';
       final parsed = _parseLikeMarkdownGenerator(streamingText);
       expect(_findElement(parsed, 'pre'), isNotNull);
       final config = buildMessageMarkdownConfig(
@@ -1418,8 +1592,7 @@ void main() {
     });
 
     test('hyphenated Mermaid language keeps parsed fence ordinals aligned', () {
-      const streamingText =
-          '```python-mermaid\nA\n```\n\n```mermaid\nA';
+      const streamingText = '```python-mermaid\nA\n```\n\n```mermaid\nA';
       final config = buildMessageMarkdownConfig(
         isDark: false,
         conversationIsStreaming: true,
@@ -1439,8 +1612,7 @@ void main() {
 
     test('HTML entities in Mermaid fence language keep parsed ordinals aligned',
         () {
-      const streamingText =
-          '```merm&#97;id\nA\n```\n\n```mermaid\nA';
+      const streamingText = '```merm&#97;id\nA\n```\n\n```mermaid\nA';
       final parsed = _parseLikeMarkdownGenerator(streamingText);
       final parsedCode = _findElement(parsed, 'code');
       expect(parsedCode?.attributes['class'], 'language-mermaid');
@@ -1462,9 +1634,30 @@ void main() {
           reason: 'the parsed trailing Mermaid block should keep loading');
     });
 
-    test('tilde Mermaid fence metadata may contain backticks', () {
+    test('lowercase HTML CDATA does not shift parsed Mermaid tail index', () {
       const streamingText =
-          '~~~merm&#97;id meta`data\nA\n~~~\n\n```mermaid\nA';
+          '<![cdata[\n```mermaid\nA\n```\n]]>\n\n```mermaid\nA';
+      final parsed = _parseLikeMarkdownGenerator(streamingText);
+      expect(_findElement(parsed, 'pre'), isNotNull);
+
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final codeWidgets = _widgetsFromInlineSpans(
+        markdownGenerator.buildWidgets(streamingText, config: config),
+      );
+
+      expect(codeWidgets, hasLength(1));
+      expect(codeWidgets.single, isNot(isA<MermaidRenderWidget>()),
+          reason: 'the trailing Mermaid block should remain in loading state');
+    });
+
+    test('tilde Mermaid fence metadata may contain backticks', () {
+      const streamingText = '~~~merm&#97;id meta`data\nA\n~~~\n\n```mermaid\nA';
       final parsed = _parseLikeMarkdownGenerator(streamingText);
       final parsedCode = _findElement(parsed, 'code');
       expect(parsedCode?.attributes['class'], 'language-mermaid');
@@ -1487,8 +1680,7 @@ void main() {
     });
 
     test('decoded language whitespace follows the parser callback value', () {
-      const streamingText =
-          '```foo-mermaid&#32;bar\nA\n```\n\n```mermaid\nA';
+      const streamingText = '```foo-mermaid&#32;bar\nA\n```\n\n```mermaid\nA';
       final parsed = _parseLikeMarkdownGenerator(streamingText);
       final parsedCode = _findElement(parsed, 'code');
       expect(parsedCode?.attributes['class'], 'language-foo-mermaid bar');

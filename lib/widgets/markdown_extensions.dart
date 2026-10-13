@@ -484,7 +484,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
   }
 
   for (final line in lines) {
-    final trimmed = line.trimRight();
+    final trimmed = _trimMarkdownTrailingWhitespace(line);
     if (htmlBlockTerminator != null || htmlBlockUntilBlank) {
       final htmlContainer = _stripActiveContainerPrefixes(
         trimmed,
@@ -497,7 +497,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
           if (htmlBlockTerminator!.hasMatch(htmlContainer.line)) {
             clearHtmlBlock();
           }
-        } else if (htmlContainer.line.trim().isEmpty) {
+        } else if (_isMarkdownBlankLine(htmlContainer.line)) {
           clearHtmlBlock();
         }
         paragraphOpen = false;
@@ -542,7 +542,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     var listContainerIndent =
         listContentIndents.isEmpty ? 0 : listContentIndents.last;
     var listContent = quotedLine.line;
-    if (listContent.trim().isNotEmpty) {
+    if (!_isMarkdownBlankLine(listContent)) {
       final lineIndent = _leadingIndentColumns(listContent);
       while (listContentIndents.isNotEmpty &&
           lineIndent < listContentIndents.last &&
@@ -560,6 +560,7 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
     final listLine = _stripListItemPrefix(
       listContent,
       paragraphOpen: paragraphOpen,
+      isInsideList: listContentIndents.isNotEmpty,
       sourceColumnOffset: listContainerIndent,
     );
     final listItemIndent = listContainerIndent + listLine.indent;
@@ -624,12 +625,11 @@ _MermaidFenceInfo _unclosedFenceInfo(String text) {
       // Content starts after the fence line and its newline.
       tailStart = offset + line.length + 1;
     } else {
-      paragraphOpen =
-          !_isParagraphBoundaryLine(
-                innerQuotedLine.line,
-                paragraphOpen: paragraphOpen,
-              ) &&
-              innerQuotedLine.line.trim().isNotEmpty;
+      paragraphOpen = !_isParagraphBoundaryLine(
+            innerQuotedLine.line,
+            paragraphOpen: paragraphOpen,
+          ) &&
+          !_isMarkdownBlankLine(innerQuotedLine.line);
     }
     offset += line.length + 1;
   }
@@ -721,7 +721,9 @@ bool _isMermaidFenceLanguage(
     for (final node in parsed) {
       if (node is! m.Element || node.tag != 'pre') continue;
       final children = node.children;
-      if (children == null || children.isEmpty || children.first is! m.Element) {
+      if (children == null ||
+          children.isEmpty ||
+          children.first is! m.Element) {
         continue;
       }
       final codeClass = (children.first as m.Element).attributes['class'];
@@ -750,7 +752,10 @@ final _htmlRawTagStart = RegExp(
 final _htmlCommentStart = RegExp(r'^ {0,3}<!--');
 final _htmlProcessingInstructionStart = RegExp(r'^ {0,3}<\?');
 final _htmlDeclarationStart = RegExp(r'^ {0,3}<![a-z]', caseSensitive: false);
-final _htmlCdataStart = RegExp(r'^ {0,3}<!\[CDATA\[');
+final _htmlCdataStart = RegExp(
+  r'^ {0,3}<!\[CDATA\[',
+  caseSensitive: false,
+);
 final _htmlBlockTagStart = RegExp(
   r'^ {0,3}</?(?:address|article|aside|base|basefont|blockquote|body|'
   r'caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|'
@@ -819,17 +824,47 @@ bool _isParagraphBoundaryLine(
   required bool paragraphOpen,
 }) {
   if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
-  if (RegExp(r'^ {0,3}#{1,6}(?:[ \t]|$)').hasMatch(line) ||
+  if (RegExp(r'^ {0,3}#{1,6}(?:[ \t\x0b\x0c]|$)').hasMatch(line) ||
+      _isLinkReferenceDefinitionStart(line) ||
+      _footnoteDefinitionStart.hasMatch(line) ||
       _thematicBreakLine.hasMatch(line)) {
     return true;
   }
-  return paragraphOpen &&
-      RegExp(r'^ {0,3}(?:=+|-+)[ \t]*$').hasMatch(line);
+  return paragraphOpen && RegExp(r'^ {0,3}(?:=+|-+)[ \t]*$').hasMatch(line);
+}
+
+bool _isMarkdownBlankLine(String line) {
+  for (final codeUnit in line.codeUnits) {
+    if (codeUnit != 0x20 && codeUnit != 0x09) return false;
+  }
+  return true;
+}
+
+String _trimMarkdownTrailingWhitespace(String line) {
+  var end = line.length;
+  while (end > 0) {
+    final codeUnit = line.codeUnitAt(end - 1);
+    if (codeUnit != 0x20 && codeUnit != 0x09) break;
+    end--;
+  }
+  return line.substring(0, end);
 }
 
 final _thematicBreakLine = RegExp(
   r'^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$',
 );
+final _footnoteDefinitionStart = RegExp(
+  r'^ {0,3}\[\^[^\] \r\n\x00\t]+\]:[ \t]*',
+);
+final _linkReferenceDefinitionCandidate = RegExp(
+  r'^ {0,3}\[(?:\\.|[^\[\]])+\]:',
+);
+
+bool _isLinkReferenceDefinitionStart(String line) {
+  if (!_linkReferenceDefinitionCandidate.hasMatch(line)) return false;
+  final document = m.Document(encodeHtml: false)..parseLines([line]);
+  return document.linkReferences.isNotEmpty;
+}
 
 String _stripFenceContainerPrefix(
   String text,
@@ -844,17 +879,13 @@ String _stripFenceContainerPrefix(
       fenceIndent == 0) {
     return text;
   }
-  return text
-      .split('\n')
-      .map((line) {
-        final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
-        final listStripped =
-            _stripListItemIndent(outerQuoteStripped, listIndent);
-        final innerQuoteStripped =
-            _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
-        return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
-      })
-      .join('\n');
+  return text.split('\n').map((line) {
+    final outerQuoteStripped = _stripBlockQuoteDepth(line, quoteDepth);
+    final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
+    final innerQuoteStripped =
+        _stripBlockQuoteDepth(listStripped, innerQuoteDepth);
+    return _stripFenceContentIndent(innerQuoteStripped, fenceIndent);
+  }).join('\n');
 }
 
 String _stripFenceContentIndent(String line, int indent) {
@@ -924,7 +955,7 @@ String _stripBlockQuoteDepth(String line, int depth) {
   }
   final listStripped = _stripListItemIndent(outerQuoteStripped, listIndent);
   final blankLineInList =
-      listIndent > 0 && outerQuoteStripped.trim().isEmpty;
+      listIndent > 0 && _isMarkdownBlankLine(outerQuoteStripped);
   if (listIndent > 0 &&
       listStripped == outerQuoteStripped &&
       !blankLineInList) {
@@ -965,8 +996,7 @@ String _stripBlockQuoteDepth(String line, int depth) {
 String _expandLeadingTabs(String line, int column) {
   var index = 0;
   final expanded = StringBuffer();
-  while (index < line.length &&
-      (line[index] == ' ' || line[index] == '\t')) {
+  while (index < line.length && (line[index] == ' ' || line[index] == '\t')) {
     if (line[index] == '\t') {
       final nextColumn = (column ~/ 4 + 1) * 4;
       expanded.write(List.filled(nextColumn - column, ' ').join());
@@ -984,6 +1014,7 @@ String _expandLeadingTabs(String line, int column) {
 ({String line, int indent}) _stripListItemPrefix(
   String line, {
   bool paragraphOpen = false,
+  bool isInsideList = false,
   int sourceColumnOffset = 0,
 }) {
   if (_thematicBreakLine.hasMatch(line)) return (line: line, indent: 0);
@@ -1015,7 +1046,9 @@ String _expandLeadingTabs(String line, int column) {
         RegExp(r'[0-9]').hasMatch(line[markerEnd])) {
       markerEnd++;
     }
-    if (paragraphOpen && line.substring(numberStart, markerEnd) != '1') {
+    if (paragraphOpen &&
+        !isInsideList &&
+        line.substring(numberStart, markerEnd) != '1') {
       return (line: line, indent: 0);
     }
     if (markerEnd >= line.length ||
@@ -1027,8 +1060,9 @@ String _expandLeadingTabs(String line, int column) {
     return (line: line, indent: 0);
   }
 
+  final markerIndent = markerStartIndent + markerEnd - markerStart;
   var separatorEnd = markerEnd;
-  var separatorIndent = markerStartIndent + markerEnd - markerStart;
+  var separatorIndent = markerIndent;
   while (separatorEnd < line.length &&
       (line[separatorEnd] == ' ' || line[separatorEnd] == '\t')) {
     separatorIndent = _indentColumnsAfter(
@@ -1039,27 +1073,27 @@ String _expandLeadingTabs(String line, int column) {
         sourceColumnOffset;
     separatorEnd++;
   }
-  if (separatorEnd == markerEnd) return (line: line, indent: 0);
+  if (separatorEnd == markerEnd) {
+    if (paragraphOpen || markerEnd < line.length) {
+      return (line: line, indent: 0);
+    }
+    return (line: '', indent: markerIndent + 1);
+  }
 
-  final markerIndent = markerStartIndent + markerEnd - markerStart;
   final separatorColumns = separatorIndent - markerIndent;
   final consumesWholeSeparator = separatorColumns <= 4;
-  final consumedSeparator = consumesWholeSeparator
-      ? separatorEnd - markerEnd
-      : 1;
+  final consumedSeparator =
+      consumesWholeSeparator ? separatorEnd - markerEnd : 1;
   final consumed = markerEnd + consumedSeparator;
-  final consumedIndent = consumesWholeSeparator
-      ? separatorIndent
-      : markerIndent + 1;
+  final consumedIndent =
+      consumesWholeSeparator ? separatorIndent : markerIndent + 1;
   var contentLine = line.substring(consumed);
   if (!consumesWholeSeparator) {
     if (line[markerEnd] == '\t') {
       final markerEndColumn = sourceColumnOffset + markerIndent;
-      final tabWidth =
-          _indentColumnsAfter(line, markerEnd, markerEndColumn) -
-              markerEndColumn;
-      contentLine =
-          '${List.filled(tabWidth - 1, ' ').join()}$contentLine';
+      final tabWidth = _indentColumnsAfter(line, markerEnd, markerEndColumn) -
+          markerEndColumn;
+      contentLine = '${List.filled(tabWidth - 1, ' ').join()}$contentLine';
     }
     contentLine = _expandLeadingTabs(
       contentLine,
@@ -1092,6 +1126,7 @@ bool _isLazyListParagraphContinuation(String line, int listIndent) {
   final listLine = _stripListItemPrefix(
     listContent,
     paragraphOpen: true,
+    isInsideList: true,
     sourceColumnOffset: listIndent,
   );
   if (listLine.indent > 0 ||
@@ -1107,8 +1142,7 @@ bool _isLazyListParagraphContinuation(String line, int listIndent) {
 int _leadingIndentColumns(String line) {
   var index = 0;
   var columns = 0;
-  while (index < line.length &&
-      (line[index] == ' ' || line[index] == '\t')) {
+  while (index < line.length && (line[index] == ' ' || line[index] == '\t')) {
     columns = _indentColumnsAfter(line, index, columns);
     index++;
   }
