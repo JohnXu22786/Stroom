@@ -1740,6 +1740,14 @@ void main() {
           reason: 'zoom waits for the active source document to load',
         );
 
+        webView.params.onLoadStop?.call(controller, null);
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          hasLength(scriptCountBeforeQueuedZoom),
+          reason: 'a completion without a URL must not flush queued zoom',
+        );
+
         webView.params.onLoadStop?.call(controller, previousUrl);
         await tester.pump();
         expect(

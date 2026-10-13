@@ -1930,9 +1930,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
                 if (kIsWeb &&
                     ((_webRetryUrl != null && url == null) ||
-                        (url != null &&
-                            _webLoadUrl != null &&
-                            _resolveWebUrl(url.toString()) != _webLoadUrl))) {
+                        (_webLoadUrl != null &&
+                            (url == null ||
+                                _resolveWebUrl(url.toString()) !=
+                                    _webLoadUrl))) {
                   return;
                 }
                 _hasLoadedPage = true;
