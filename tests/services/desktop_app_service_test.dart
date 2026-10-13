@@ -349,6 +349,47 @@ void main() {
       expect(trayManager.hasListeners, isFalse);
     });
 
+    test('pending close is replayed when tray setup fails', () async {
+      final mocks = registerChannelMocks();
+      await withDesktopPlatform(TargetPlatform.windows, () async {
+        // Initialization intercepts close requests before the first-frame
+        // tray setup. The first click must still be honored if setup fails.
+        await DesktopAppService.instance.initialize();
+        await _emitWindowClose();
+
+        mocks['tray_manager']!.throwError = 'tray unavailable';
+        await DesktopAppService.instance.setupTrayAndCloseBehavior();
+      });
+
+      final windowCalls = mocks['window_manager']!.calls;
+      final guardDisabledIndex = windowCalls.indexWhere(
+        (call) =>
+            call.method == 'setPreventClose' &&
+            (call.arguments as Map)['isPreventClose'] == false,
+      );
+      final closeIndex = windowCalls.indexWhere(
+        (call) => call.method == 'close',
+      );
+
+      expect(guardDisabledIndex, greaterThanOrEqualTo(0));
+      expect(
+        closeIndex,
+        greaterThan(guardDisabledIndex),
+        reason: 'the saved close must be replayed after native interception is '
+            'disabled',
+      );
+      expect(
+        windowCalls.where((call) => call.method == 'hide'),
+        isEmpty,
+        reason: 'tray failure must use native close instead of hiding without '
+            'a tray',
+      );
+      expect(
+        windowManager.listeners.contains(DesktopAppService.instance),
+        isFalse,
+      );
+    });
+
     test('setupTrayAndCloseBehavior is a no-op on non-desktop platforms',
         () async {
       final mocks = registerChannelMocks();

@@ -176,7 +176,13 @@ class DesktopAppService extends WindowListener with TrayListener {
         } catch (_) {}
         windowManager.removeListener(this);
         _windowCloseListenerRegistered = false;
+        final replayPendingClose = _pendingCloseBeforeTrayReady;
         _pendingCloseBeforeTrayReady = false;
+        if (replayPendingClose) {
+          // The original native close was intercepted and consumed. Replay it
+          // now that interception is disabled so the first click is honored.
+          await windowManager.close().timeout(_trayTimeout);
+        }
         return;
       }
 
