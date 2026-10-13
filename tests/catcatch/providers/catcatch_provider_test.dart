@@ -1306,8 +1306,7 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isTrue);
     });
 
-    test(
-        'removal cleanup rechecks owners selected during its async gap',
+    test('removal cleanup rechecks owners selected during its async gap',
         () async {
       const media = MediaResource(
         url: 'https://example.com/video.mp4',
