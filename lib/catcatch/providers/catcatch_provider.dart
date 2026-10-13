@@ -56,6 +56,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   bool _taskRestoreNeedsRetry = false;
   bool _snapshotWriteDeferred = false;
   final Set<String> _removedTaskIdsDuringRestore = {};
+  static const int _initialTaskRestoreRetryDelaySeconds = 1;
+  static const int _maximumTaskRestoreRetryDelaySeconds = 60;
+  Timer? _taskRestoreRetryTimer;
+  int _taskRestoreRetryDelaySeconds = _initialTaskRestoreRetryDelaySeconds;
 
   bool get _restoringTasks => _activeTaskRestorations > 0;
 
@@ -63,8 +67,39 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   @override
   void dispose() {
+    _cancelTaskRestoreRetry();
     _disposedSnapshot = List.of(state);
     super.dispose();
+  }
+
+  void _scheduleTaskRestoreRetry() {
+    if (!mounted || _taskRestoreRetryTimer != null) return;
+    _taskRestoreRetryTimer = Timer(
+      Duration(seconds: _taskRestoreRetryDelaySeconds),
+      () {
+        _taskRestoreRetryTimer = null;
+        if (!mounted) return;
+        if (_activeTaskRestorations > 0) {
+          _scheduleTaskRestoreRetry();
+          return;
+        }
+        unawaited(restoreUnfinishedTasks());
+      },
+    );
+
+    final nextDelaySeconds = _taskRestoreRetryDelaySeconds * 2;
+    _taskRestoreRetryDelaySeconds =
+        nextDelaySeconds < _maximumTaskRestoreRetryDelaySeconds
+            ? nextDelaySeconds
+            : _maximumTaskRestoreRetryDelaySeconds;
+  }
+
+  void _cancelTaskRestoreRetry({bool resetDelay = false}) {
+    _taskRestoreRetryTimer?.cancel();
+    _taskRestoreRetryTimer = null;
+    if (resetDelay) {
+      _taskRestoreRetryDelaySeconds = _initialTaskRestoreRetryDelaySeconds;
+    }
   }
 
   // ===========================================================================
@@ -237,9 +272,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 删除任务
   void removeTask(String id) {
-    if (_restoringTasks || _taskRestoreNeedsRetry) {
-      _removedTaskIdsDuringRestore.add(id);
-    }
+    _removedTaskIdsDuringRestore.add(id);
 
     // 如果任务正在运行，取消
     final cancelToken = _cancelTokens.remove(id);
@@ -564,6 +597,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 恢复所有持久化的任务（应用启动时调用）
   Future<void> restoreUnfinishedTasks() async {
+    _cancelTaskRestoreRetry();
     _activeTaskRestorations++;
     try {
       // A previous restore may have queued its reconciled snapshot without
@@ -578,6 +612,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
           '[CatCatchNotifier] Skipping restore after a task snapshot write failed',
         );
         _taskRestoreNeedsRetry = true;
+        _scheduleTaskRestoreRetry();
         return;
       }
 
@@ -631,6 +666,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         ...currentTasks.values,
       ];
       _taskRestoreNeedsRetry = false;
+      _cancelTaskRestoreRetry(resetDelay: true);
       if (hadConcurrentChanges) unawaited(_persistTasks());
 
       debugPrint(
@@ -638,6 +674,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       );
     } catch (e) {
       _taskRestoreNeedsRetry = true;
+      _scheduleTaskRestoreRetry();
       debugPrint('[CatCatchNotifier] Failed to restore tasks: $e');
     } finally {
       _activeTaskRestorations--;
@@ -1001,7 +1038,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         // 原子写入：防止中途崩溃留下半截 JSON 导致任务列表丢失。
         await AtomicFile.writeString(file, jsonEncode(data));
         if (_activeTaskRestorations == 0 && !_taskRestoreNeedsRetry) {
-          _removedTaskIdsDuringRestore.clear();
+          final persistedTaskIds = snapshot.map((task) => task.id).toSet();
+          _removedTaskIdsDuringRestore
+              .removeWhere((id) => !persistedTaskIds.contains(id));
           _snapshotWriteDeferred = false;
         }
         return true;
