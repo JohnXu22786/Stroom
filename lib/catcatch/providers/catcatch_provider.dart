@@ -46,7 +46,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 当前运行中的取消令牌映射（taskId → CancelToken）
   final Map<String, CancelToken> _cancelTokens = {};
 
-  Future<void>? _pendingWrite;
+  Future<bool>? _pendingWrite;
   int _serviceCleanupGeneration = 0;
   int _persistedServiceCleanupGeneration = 0;
   Completer<void>? _removalBarrier;
@@ -561,6 +561,17 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (_activeTaskRestorations == 0) _removedTaskIdsDuringRestore.clear();
     _activeTaskRestorations++;
     try {
+      // A previous restore may have queued its reconciled snapshot without
+      // awaiting it. Wait before loading so a later restore cannot read stale
+      // data while that write is still pending.
+      final pendingWrite = _pendingWrite;
+      if (pendingWrite != null && !await pendingWrite) {
+        debugPrint(
+          '[CatCatchNotifier] Skipping restore after a task snapshot write failed',
+        );
+        return;
+      }
+
       final tasks = await _loadPersistedTasks();
       if (tasks.isEmpty) return;
 
@@ -604,7 +615,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         );
       }
 
-      final hadConcurrentChanges = state.isNotEmpty || removedTaskIds.isNotEmpty;
+      final hadConcurrentChanges =
+          state.isNotEmpty || removedTaskIds.isNotEmpty;
       state = [
         for (final task in restoredTasks.values)
           currentTasks.remove(task.id) ?? task,
@@ -955,7 +967,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }
 
   Future<bool> _writeSnapshot(List<CatCatchTask> snapshot) {
-    final previous = _pendingWrite ?? Future<void>.value();
+    final previous = _pendingWrite?.then<void>((_) {}) ?? Future<void>.value();
     final write = previous.then((_) async {
       try {
         final file = await _tasksFile();
@@ -968,7 +980,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         return false;
       }
     });
-    _pendingWrite = write.then<void>((_) {});
+    _pendingWrite = write;
     return write;
   }
 

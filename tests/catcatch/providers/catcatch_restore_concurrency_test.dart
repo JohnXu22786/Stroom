@@ -46,7 +46,8 @@ class _RestoreRaceNotifier extends CatCatchNotifier {
     required CatCatchTask task,
     required void Function(CatCatchTask updated) onUpdate,
     required CancelToken cancelToken,
-  }) async => null;
+  }) async =>
+      null;
 }
 
 CatCatchTask _task({
@@ -54,14 +55,15 @@ CatCatchTask _task({
   required String url,
   TaskStatus status = TaskStatus.paused,
   List<StepStatus> steps = const [],
-}) => CatCatchTask(
-  id: id,
-  url: url,
-  expectedDurationSec: 30,
-  status: status,
-  steps: steps,
-  createdAt: DateTime(2025, 1, 1),
-);
+}) =>
+    CatCatchTask(
+      id: id,
+      url: url,
+      expectedDurationSec: 30,
+      status: status,
+      steps: steps,
+      createdAt: DateTime(2025, 1, 1),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -176,19 +178,17 @@ void main() {
         await notifier.removeTasksPersisted(['persistence-barrier']);
       }
 
-      final persistedTasks =
-          (jsonDecode(
-                    await File(
-                      '${persistedDirectory.path}/tasks.json',
-                    ).readAsString(),
-                  )
-                  as List)
-              .map(
-                (task) => CatCatchTask.fromMap(
-                  Map<String, dynamic>.from(task as Map),
-                ),
-              )
-              .toList();
+      final persistedTasks = (jsonDecode(
+        await File(
+          '${persistedDirectory.path}/tasks.json',
+        ).readAsString(),
+      ) as List)
+          .map(
+            (task) => CatCatchTask.fromMap(
+              Map<String, dynamic>.from(task as Map),
+            ),
+          )
+          .toList();
       expect(persistedTasks.map((task) => task.id).toSet(), expectedIds);
     },
   );
@@ -230,13 +230,61 @@ void main() {
         await notifier.removeTasksPersisted(['persistence-barrier']);
       }
 
-      final persistedTasks =
-          jsonDecode(
-                await File(
-                  '${persistedDirectory.path}/tasks.json',
-                ).readAsString(),
-              )
-              as List;
+      final persistedTasks = jsonDecode(
+        await File(
+          '${persistedDirectory.path}/tasks.json',
+        ).readAsString(),
+      ) as List;
+      expect(persistedTasks, isEmpty);
+    },
+  );
+
+  test(
+    'restore waits for a pending reconciliation write before loading',
+    () async {
+      final persistedDirectory = Directory('${directory.path}/catcatch')
+        ..createSync();
+      final removedTask = _task(
+        id: 'removed-before-pending-write',
+        url: 'https://example.com/removed.mp4',
+      );
+      await File(
+        '${persistedDirectory.path}/tasks.json',
+      ).writeAsString(jsonEncode([removedTask.toMap()]));
+
+      final firstRestore = notifier.restoreUnfinishedTasks();
+      Future<void>? secondRestore;
+      try {
+        await documents.restorePathStarted.future;
+        notifier.removeTask(removedTask.id);
+        await documents.secondPathStarted.future;
+
+        documents.releaseRestorePath.complete();
+        await firstRestore;
+
+        expect(documents.releaseSecondPath.isCompleted, isFalse);
+        secondRestore = notifier.restoreUnfinishedTasks();
+
+        documents.releaseSecondPath.complete();
+        await secondRestore;
+        expect(container.read(catcatchTasksProvider), isEmpty);
+      } finally {
+        if (!documents.releaseRestorePath.isCompleted) {
+          documents.releaseRestorePath.complete();
+        }
+        if (!documents.releaseSecondPath.isCompleted) {
+          documents.releaseSecondPath.complete();
+        }
+        await firstRestore;
+        if (secondRestore != null) await secondRestore;
+        await notifier.removeTasksPersisted([removedTask.id]);
+      }
+
+      final persistedTasks = jsonDecode(
+        await File(
+          '${persistedDirectory.path}/tasks.json',
+        ).readAsString(),
+      ) as List;
       expect(persistedTasks, isEmpty);
     },
   );
