@@ -135,12 +135,17 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
           toolCallRoundStarts: state.toolCallRoundStarts.isNotEmpty
               ? List<int>.from(state.toolCallRoundStarts)
               : null,
-          blocks: legacyToBlocks(
-            reasoningSections: state.reasoningSections,
-            textChunks: state.textChunks,
-            toolCalls: state.accumulatedToolCalls,
-            toolCallRoundStarts: state.toolCallRoundStarts,
-          ),
+          blocks: [
+            if (hadStreamError)
+              TextBlock(text: formatChatErrorMessage(streamError)),
+            ...assistantBlocks(
+              content: hadStreamError ? '' : state.fullReply,
+              reasoningSections: state.reasoningSections,
+              textSections: state.textChunks,
+              toolCalls: state.accumulatedToolCalls,
+              toolCallRoundStarts: state.toolCallRoundStarts,
+            )
+          ],
         );
         state.history.add(msg);
         assistantMessage = msg;
@@ -195,12 +200,7 @@ extension _ChatStreamManagerFinalizeExt on ChatStreamManager {
         textSections: List.from(state.textChunks),
         toolCalls: List.from(state.accumulatedToolCalls),
         toolCallRoundStarts: List.from(state.toolCallRoundStarts),
-        blocks: legacyToBlocks(
-          reasoningSections: state.reasoningSections,
-          textChunks: state.textChunks,
-          toolCalls: state.accumulatedToolCalls,
-          toolCallRoundStarts: state.toolCallRoundStarts,
-        ),
+        blocks: assistantMessage?.blocks ?? [],
         cancelled: wasCancelled,
       );
     } catch (e, s) {

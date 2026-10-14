@@ -7,6 +7,17 @@ part of 'chat_page.dart';
 
 extension _ChatPageSearchExt on _ChatPageState {
   void _performSearch(String query) {
+    if (_useWebMessages) {
+      setState(() {
+        _searchQuery = query;
+        _searchMatches.clear();
+        _currentMatchIndex = 0;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchWebMessages();
+      });
+      return;
+    }
     setState(() {
       _searchQuery = query;
       _searchMatches.clear();
@@ -106,6 +117,11 @@ extension _ChatPageSearchExt on _ChatPageState {
         return;
       }
 
+      if (_useWebMessages) {
+        _searchWebMessages(locate: true);
+        return;
+      }
+
       // Already-built messages: ensureVisible scrolls the exact render box
       // and bypasses the keyboard session's scroll swallow, matching the
       // original behavior for visible items.
@@ -185,6 +201,8 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   void _closeSearch() {
+    if (_useWebMessages)
+      _webMessageKey.currentState?.send({'type': 'search', 'query': ''});
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;

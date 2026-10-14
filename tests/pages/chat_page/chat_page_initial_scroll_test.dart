@@ -381,7 +381,8 @@ void main() {
             providerEntriesProvider
                 .overrideWith((ref) => ProviderEntriesNotifier()),
           ],
-          child: const MaterialApp(home: ChatPage()),
+          child: const MaterialApp(
+              home: ChatPage.withNativeMessageRendererForTesting()),
         ),
       );
       for (var i = 0; i < 30; i++) {

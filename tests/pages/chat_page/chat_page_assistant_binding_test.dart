@@ -140,7 +140,8 @@ Future<ProviderContainer> _pumpChat(
           return ProviderEntriesNotifier();
         }),
       ],
-      child: const MaterialApp(home: ChatPage()),
+      child: const MaterialApp(
+          home: ChatPage.withNativeMessageRendererForTesting()),
     ),
   );
   // Let _initialize + _loadConversationMessages complete.

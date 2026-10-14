@@ -1,4 +1,4 @@
-﻿// Tests for the edit data-loss warning on ChatPage:
+// Tests for the edit data-loss warning on ChatPage:
 // editing a user message deletes every message below it once sent, so
 // entering edit mode shows a warning ("重新编辑发送后下面所有的消息将丢失")
 // immediately — no keyboard/fallback wait — in the composer, centered in
@@ -60,7 +60,8 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child:
+        const MaterialApp(home: ChatPage.withNativeMessageRendererForTesting()),
   );
 }
 

@@ -637,7 +637,14 @@ void main() {
         (WidgetTester t) async {
       // Set up old format preferences with chat and settings keys
       SharedPreferences.setMockInitialValues({
-        'conversations': '[{"id":"conv1"}]',
+        'conversations': jsonEncode([
+          {
+            'id': 'conv1',
+            'messages': [
+              {'id': 'reply', 'role': 'assistant', 'content': 'Restored reply'}
+            ],
+          }
+        ]),
         'active_conversation_id': 'conv1',
         'provider_entries': '[{"id":"p1","type":"llm"}]',
         'data_format_version': 1,
@@ -687,6 +694,15 @@ void main() {
           reason: 'Chat key should be restored from v1 backup');
       expect(restoredPrefs.getString('provider_entries'), isNotNull,
           reason: 'Settings key should be restored from v1 backup');
+      final restored =
+          (jsonDecode(restoredPrefs.getString('conversations')!) as List)
+              .single;
+      expect(restored['messages'].single['blocks'], [
+        {'type': 'text', 'text': 'Restored reply'}
+      ]);
+      expect(
+          (await DataMigrationService.getStoredPartVersions())[DataParts.chat],
+          DataParts.currentVersions[DataParts.chat]);
     });
 
     testWidgets(

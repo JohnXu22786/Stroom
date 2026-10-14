@@ -77,8 +77,12 @@ Future<Map<String, Object?>> validateJsonBatchAndDataFormatsWeb(
 
 /// Runs the legacy conversation block conversion in the Web worker and returns
 /// the resulting JSON text without parsing that large payload on the UI thread.
-Future<Map<String, Object?>> migrateLegacyConversationsWeb(String raw) async {
-  final message = ['migrateLegacyConversations', raw];
+Future<Map<String, Object?>> migrateLegacyConversationsWeb(String raw,
+    {bool canonical = false}) async {
+  final message = [
+    canonical ? 'canonicalizeConversations' : 'migrateLegacyConversations',
+    raw
+  ];
   Object? primaryError;
   try {
     return _decodeLegacyMigrationResponse(

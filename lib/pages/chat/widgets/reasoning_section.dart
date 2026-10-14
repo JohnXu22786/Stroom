@@ -230,6 +230,21 @@ class _ReasoningButtonState extends ConsumerState<_ReasoningButton> {
 /// Also watches [streamingHasFirstTokenProvider] and [isStreamingProvider]
 /// to reactively update the header from "思考中" to "思考完成" when
 /// reasoning completes (text content starts arriving or stream ends).
+void showReasoningPanel(
+    {required BuildContext context,
+    required String messageId,
+    required int sectionIndex,
+    required String reasoningText,
+    required bool isStreaming}) {
+  showDialog(
+      context: context,
+      builder: (_) => _ReasoningPanelDialog(
+          messageId: messageId,
+          sectionIndex: sectionIndex,
+          initialReasoningText: reasoningText,
+          isStreaming: isStreaming));
+}
+
 class _ReasoningPanelDialog extends ConsumerStatefulWidget {
   final String messageId;
   final int sectionIndex;

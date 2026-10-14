@@ -43,7 +43,8 @@ Widget createChatTestAppWithMessages(List<ChatMessage> messages) {
         return ProviderEntriesNotifier();
       }),
     ],
-    child: const MaterialApp(home: ChatPage()),
+    child:
+        const MaterialApp(home: ChatPage.withNativeMessageRendererForTesting()),
   );
 }
 

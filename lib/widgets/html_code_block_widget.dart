@@ -41,15 +41,26 @@ class HtmlCodeBlockWidget extends StatefulWidget {
 
   /// Builds a complete HTML document wrapping the given [rawHtml] content.
   ///
-  /// The raw HTML is placed inside the `<body>` tag of a standalone HTML5
-  /// document. It is **not** escaped — the user's HTML code should be
-  /// rendered as-is by the WebView browser engine.
+  /// Fragments are placed inside a standalone HTML5 document. Complete HTML
+  /// documents pass through unchanged so their existing head and body remain
+  /// at the document root. The user's HTML is not escaped.
   static String buildHtmlDocument(String rawHtml) {
+    if (_completeDocumentStart.hasMatch(rawHtml)) return rawHtml;
     return _htmlTemplate.replaceFirst(
       'HTML_CONTENT_PLACEHOLDER',
       rawHtml,
     );
   }
+
+  static final RegExp _completeDocumentStart = RegExp(
+    r'^\uFEFF?\s*'
+    r'(?:(?:<!--[\s\S]*?-->\s*)|'
+    r'(?:<\?xml[\s\S]*?\?>\s*))*'
+    r'(?:<!doctype\s+html\b[^>]*>|'
+    r'<html(?:\s|>)|'
+    r'<(?:head|body)(?:\s|>))',
+    caseSensitive: false,
+  );
 
   /// Extracts the text of the document's `<title>` tag, trimmed, or ''
   /// when the HTML has no (non-empty) title. Case-insensitive.

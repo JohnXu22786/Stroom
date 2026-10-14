@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:html/dom.dart' as html;
+import 'package:html/parser.dart' as html_parser;
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
 /// Full-screen dialog that renders HTML code in a completely open sandbox
@@ -55,13 +57,11 @@ class _HtmlPreviewDialogContentState extends State<_HtmlPreviewDialogContent> {
     // extra body padding via a style override injected into the <head>.
     final base = HtmlCodeBlockWidget.buildHtmlDocument(code);
     // Add dialog-specific body padding override
-    return base.replaceFirst(
-      '</head>',
-      '''  <style>
-    body { padding: 16px; }
-  </style>
-</head>''',
+    final document = html_parser.parse(base);
+    document.head?.append(
+      html.Element.tag('style')..text = 'body { padding: 16px; }',
     );
+    return document.outerHtml;
   }
 
   static const _emptyPlaceholderHtml = '''
