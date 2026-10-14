@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/pages/chat/dialogs/html_preview_dialog.dart';
 import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/html_code_block_widget.dart';
 
@@ -406,6 +408,64 @@ void main() {
     });
   });
 
+  group('HtmlCodeBlockWidget.buildHtmlDocument', () {
+    test(
+      'keeps a complete HTML document from being nested in another body',
+      () {
+        const document = '<!doctype html><html lang="en">'
+          '<head><title>Full page</title></head>'
+          '<body><main>Existing body</main></body></html>';
+        const documentWithoutHtmlRoot = '<!doctype html>'
+            '<head><title>Optional html tags</title></head>'
+            '<body><main>Existing body</main></body>';
+
+        expect(HtmlCodeBlockWidget.buildHtmlDocument(document), document);
+        expect(
+          HtmlCodeBlockWidget.buildHtmlDocument(documentWithoutHtmlRoot),
+          documentWithoutHtmlRoot,
+        );
+      },
+    );
+
+    testWidgets(
+      'fullscreen dialog injects its body padding into uppercase HTML tags',
+      (tester) async {
+        final originalPlatform = InAppWebViewPlatform.instance;
+        final platform = _HtmlPreviewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            originalPlatform ?? _HtmlPreviewPlatform());
+        const document = '<HTML><HEAD><title>Full page</title>'
+            '<script>window.headMarker = "</head>";</script></HEAD>'
+            '<BODY><main>Existing body</main></BODY></HTML>';
+
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showHtmlPreviewDialog(
+                  context: context,
+                  htmlCode: document,
+                ),
+                child: const Text('Preview'),
+              ),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('Preview'));
+        await tester.pump();
+
+        final html = platform.webView!.params.initialData!.data;
+        expect(html, contains('window.headMarker = "</head>";'));
+        expect(html, contains('body { padding: 16px; }'));
+        expect(
+          html.indexOf('body { padding: 16px; }'),
+          greaterThan(html.indexOf('</script>')),
+        );
+      },
+    );
+  });
+
   group('HtmlCodeBlockWidget - height behavior', () {
     testWidgets('caps the code view height at 15 visible lines',
         (tester) async {
@@ -477,4 +537,28 @@ void main() {
           reason: 'Custom height should override adaptive sizing');
     });
   });
+}
+
+class _HtmlPreviewPlatform extends InAppWebViewPlatform {
+  _HtmlPreviewWebView? webView;
+
+  @override
+  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
+    PlatformInAppWebViewWidgetCreationParams params,
+  ) =>
+      webView = _HtmlPreviewWebView(params);
+}
+
+class _HtmlPreviewWebView extends PlatformInAppWebViewWidget {
+  _HtmlPreviewWebView(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+
+  @override
+  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) =>
+      params.controllerFromPlatform!(controller) as T;
+
+  @override
+  void dispose() {}
 }

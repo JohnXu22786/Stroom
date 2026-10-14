@@ -255,7 +255,8 @@ test("DSH Markdown preserves safe extensions, tools and incomplete streaming fen
   );
   await wait();
   assert.ok(doc.querySelector(".katex"));
-  assert.equal(doc.querySelector('[data-action="html"]')?.disabled, false);
+  assert.ok(doc.querySelector("iframe.stroom-html-preview"));
+  assert.equal(doc.querySelector('[data-action="html"]'), null);
   v.dom.window.close();
 });
 
@@ -775,84 +776,114 @@ test("search matches Greek final sigma case-insensitively", async () => {
   }
 });
 
-test("preview readiness follows each fence, accepting case variants and settled tails", async () => {
+test("inline HTML waits for a closed fence and compares height with the transcript viewport", async () => {
   const v = await view();
   try {
+    const doc = v.dom.window.document;
+    const transcript = doc.getElementById("transcript");
+    let viewportHeight = 300;
+    Object.defineProperty(transcript, "clientHeight", {
+      configurable: true,
+      get: () => viewportHeight,
+    });
     const update = (text, streaming) =>
       v.receive(
         snapshot("a", [
           message("m", [{ type: "text", text, streaming }], { streaming }),
         ]),
       );
-    update("```HTML\n<h1>closed</h1>\n```\t\n\nmore prose", true);
-    await wait();
-    let button = v.dom.window.document.querySelector('[data-action="html"]');
-    assert.ok(button, "uppercase fence offers HTML preview");
-    assert.equal(
-      button.disabled,
-      false,
-      "closed fence ready while prose streams",
+    const sendPreviewMessage = (iframe, kind, height, reportedViewport = viewportHeight) =>
+      v.dom.window.dispatchEvent(
+        new v.dom.window.MessageEvent("message", {
+          source: iframe.contentWindow,
+          data: {
+            type: "stroom-html-preview",
+            token: iframe.dataset.previewToken,
+            kind,
+            height,
+            viewportHeight: reportedViewport,
+          },
+        }),
+      );
+    update(
+      "```HTML\n<script>document.body.dataset.previewRan = 'yes'</script>\n<h1>short</h1>\n```\t\n\nmore prose",
+      true,
     );
+    await wait();
+    let iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe, "closed uppercase fence renders inline while later prose streams");
+    let previewWindow = doc.querySelector(".stroom-html-preview-window");
+    assert.ok(previewWindow, "the visible content is clipped by a separate wrapper");
+    assert.equal(iframe.getAttribute("sandbox"), "allow-scripts");
+    assert.match(iframe.getAttribute("srcdoc"), /document\.body\.dataset\.previewRan/);
+    assert.equal(iframe.style.height, "300px", "viewport-relative pages start at the conversation viewport height");
+    assert.equal(
+      iframe.closest(".stroom-code-card").querySelector("button"),
+      null,
+      "small inline HTML has no Stroom action buttons",
+    );
+    sendPreviewMessage(iframe, "height", 40);
+    await wait();
+    assert.equal(iframe.style.height, "300px", "measuring content does not shrink the page viewport");
+    assert.equal(previewWindow.style.height, "40px", "short HTML shrinks its visible wrapper to content height");
+    sendPreviewMessage(iframe, "height", 150);
+    await wait();
+    viewportHeight = 100;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a pending resize measurement does not use stale content height");
+    assert.equal(iframe.style.height, "100px");
+    assert.equal(previewWindow.style.height, "100px", "the wrapper stays clipped to the new viewport during remeasurement");
+    sendPreviewMessage(iframe, "height", 150, 300);
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a height report for the previous viewport is ignored");
+    sendPreviewMessage(iframe, "height", 50);
+    await wait();
+    assert.equal(previewWindow.style.height, "50px", "viewport-relative content can shrink after the viewport shrinks");
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"));
+    viewportHeight = 250;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.equal(iframe.style.height, "250px", "the page viewport follows the conversation viewport when it changes");
+    sendPreviewMessage(iframe, "height", 250);
+    await wait();
+    assert.equal(previewWindow.style.height, "250px");
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "content at the viewport limit stays inline");
+    sendPreviewMessage(iframe, "height", 251);
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    let button = doc.querySelector('.html-fullscreen-fallback [data-action="html"]');
+    assert.ok(button, "content taller than the transcript offers the Flutter preview");
     button.click();
     assert.equal(v.events.at(-1).action, "html");
-    let sourceToggle = v.dom.window.document.querySelector(
-      'button[aria-label="查看源码"]',
-    );
-    assert.ok(sourceToggle, "HTML preview can switch to source");
-    sourceToggle.click();
+
+    viewportHeight = 400;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
     await wait();
-    assert.ok(v.dom.window.document.querySelector(".md-code-block"));
-    const previewToggle = v.dom.window.document.querySelector(
-      'button[aria-label="查看页面"]',
-    );
-    assert.ok(previewToggle, "HTML source can switch back to preview");
-    previewToggle.click();
-    await wait();
-    assert.ok(v.dom.window.document.querySelector(".html-preview-card"));
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "fullscreen fallback stays after the viewport grows so HTML scripts do not rerun");
     update("```HTML\r\n<h1>closed</h1>\r\n```\r\nmore prose", true);
     await wait();
-    button = v.dom.window.document.querySelector('[data-action="html"]');
-    assert.ok(button, "CRLF fence offers HTML preview");
-    assert.equal(
-      button.disabled,
-      false,
-      "closed CRLF fence stays ready while later prose streams",
-    );
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "CRLF fence renders inline");
+    iframe = doc.querySelector("iframe.stroom-html-preview");
+    sendPreviewMessage(iframe, "height", 300);
+    await wait();
+    viewportHeight = 200;
+    v.dom.window.dispatchEvent(new v.dom.window.Event("resize"));
+    await wait();
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "a new viewport waits for the matching iframe measurement");
+    sendPreviewMessage(iframe, "height", 300, 200);
+    await wait();
+    assert.ok(doc.querySelector('.html-fullscreen-fallback [data-action="html"]'), "shrinking the transcript below the measured height selects fullscreen");
     update("> ```HTML\n> <h1>quoted</h1>\n> ```\n\nmore", true);
     await wait();
-    assert.equal(
-      v.dom.window.document.querySelector('[data-action="html"]').disabled,
-      false,
-      "quoted closed fence ready",
-    );
-    update("123. > ```HTML\n     > <h1>listed</h1>\n     > ```\n\nmore", true);
-    await wait();
-    assert.equal(
-      v.dom.window.document.querySelector('[data-action="html"]').disabled,
-      false,
-      "quoted list fence ready",
-    );
-    update("- ```html\n\t<p>x</p>\n\t```\n\nmore", true);
-    await wait();
-    assert.equal(
-      v.dom.window.document.querySelector('[data-action="html"]').disabled,
-      false,
-      "tab-indented list fence ready",
-    );
+    assert.ok(doc.querySelector("iframe.stroom-html-preview"), "quoted fence renders inline");
     update("```html\n<h1>tail</h1>", true);
     await wait();
-    assert.equal(
-      v.dom.window.document.querySelector('[data-action="html"]').disabled,
-      true,
-      "open streaming fence waits",
-    );
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "open streaming fence stays as code");
+    assert.ok(doc.querySelector(".md-code-block"));
     update("```html\n<h1>tail</h1>", false);
     await wait();
-    assert.equal(
-      v.dom.window.document.querySelector('[data-action="html"]').disabled,
-      false,
-      "settled open fence ready",
-    );
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null, "an unclosed fence never executes, even after streaming ends");
 
     const prefix =
       "first paragraph\n\nsecond paragraph\n\nthird paragraph\n\n";
@@ -861,21 +892,112 @@ test("preview readiness follows each fence, accepting case variants and settled 
     const openTail = `${prefix}\`\`\`html\n<h1>tail</h1>`;
     update(openTail, true);
     await wait();
-    button = v.dom.window.document.querySelector('[data-action="html"]');
-    assert.equal(
-      button.disabled,
-      true,
-      "an open fence in the re-parsed streaming tail waits for its closing fence",
-    );
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    assert.ok(doc.querySelector(".md-code-block"));
 
     const closedTail = `${openTail}\n\`\`\``;
     update(closedTail, true);
     await wait();
-    button = v.dom.window.document.querySelector('[data-action="html"]');
-    assert.equal(button.disabled, false, "closed tail fence is ready");
+    iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe, "closed fence in a re-parsed streaming tail becomes inline HTML");
+    sendPreviewMessage(iframe, "height", 500);
+    await wait();
+    button = doc.querySelector('.html-fullscreen-fallback [data-action="html"]');
+    assert.ok(button, "oversized tail offers fullscreen");
     button.click();
     assert.equal(v.events.at(-1).sourceStart, closedTail.indexOf("```"));
     assert.equal(v.events.at(-1).sourceEnd, closedTail.length);
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("generated renderer CSP allows network resources used by sandboxed HTML", () => {
+  const html = readFileSync(
+    "../../assets/vendor/dsh_message_view/index.html",
+    "utf8",
+  );
+  const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.ok(policy);
+  assert.match(policy, /default-src 'none'/);
+  for (const directive of [
+    "script-src",
+    "style-src",
+    "img-src",
+    "font-src",
+    "connect-src",
+    "media-src",
+    "frame-src",
+  ]) {
+    const rule = policy
+      .split(";")
+      .map((part) => part.trim().split(/\s+/))
+      .find(([name]) => name === directive);
+    assert.ok(
+      rule?.some((source) => source === "https:" || source === "http:"),
+      `${directive} must allow network sources`,
+    );
+  }
+});
+
+test("inline HTML execution errors fall back to the DSH code block", async () => {
+  const v = await view();
+  try {
+    v.receive(
+      snapshot("a", [
+        message("m", [
+          { type: "text", text: "```html\n<script>throw new Error('preview failed')</script>\n```" },
+        ]),
+      ]),
+    );
+    await wait();
+    const doc = v.dom.window.document;
+    const iframe = doc.querySelector("iframe.stroom-html-preview");
+    assert.ok(iframe);
+    v.dom.window.dispatchEvent(
+      new v.dom.window.MessageEvent("message", {
+        source: iframe.contentWindow,
+        data: {
+          type: "stroom-html-preview",
+          token: iframe.dataset.previewToken,
+          kind: "error",
+        },
+      }),
+    );
+    await wait();
+    assert.equal(doc.querySelector("iframe.stroom-html-preview"), null);
+    assert.ok(doc.querySelector(".md-code-block"));
+  } finally {
+    v.dom.window.close();
+  }
+});
+
+test("a previous Mermaid source toggle does not suppress an updated HTML preview", async () => {
+  const v = await view();
+  try {
+    const doc = v.dom.window.document;
+    const update = (text) =>
+      v.receive(
+        snapshot("source-mode", [
+          message("m", [{ type: "text", text }]),
+        ]),
+      );
+    update("```mermaid\ngraph TD; A-->B\n```");
+    await wait();
+    const sourceToggle = doc.querySelector('[aria-label="查看源码"]');
+    assert.ok(sourceToggle, "Mermaid exposes its source toggle");
+    sourceToggle.click();
+    await wait();
+    assert.ok(doc.querySelector(".md-code-block"), "the source toggle shows Mermaid source");
+
+    update("```html\n<h1>Inline preview</h1>\n```");
+    await wait();
+    assert.ok(
+      doc.querySelector("iframe.stroom-html-preview"),
+      "the same block position can render HTML after Mermaid source mode was used",
+    );
   } finally {
     v.dom.window.close();
   }

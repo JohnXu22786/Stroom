@@ -314,16 +314,29 @@ button:disabled {
 .stroom-code-card > .md-code-block {
   margin: 0;
 }
-.html-preview-card {
-  padding: 16px;
+.stroom-inline-html-card {
+  margin: 0;
 }
-.html-preview-card p {
-  margin: 8px 0;
-  color: var(--secondary);
-  font-size: 13px;
+.stroom-html-preview-window {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
 }
-.html-preview-card button {
-  padding: 4px 12px;
+.stroom-html-preview {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  background: transparent;
+}
+.html-fullscreen-fallback {
+  padding: 8px 0;
+}
+.html-fullscreen-fallback button {
+  padding: 6px 12px;
   border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-markdown-code-block);
 }

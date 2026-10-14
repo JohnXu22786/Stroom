@@ -111,9 +111,11 @@ const js = result.outputFiles
   .text.replace(/<\/script/gi, "<\\/script");
 const css = result.outputFiles.find((f) => f.path.endsWith(".css")).text;
 await mkdir(output, { recursive: true });
+// srcdoc previews inherit this policy; their iframe sandbox keeps scripts
+// away from Stroom's DOM while these directives allow remote page resources.
 await writeFile(
   path.join(output, "index.html"),
-  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: https: http:; font-src data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><style>${css}</style></head><body><div id="root"></div><script>${js}</script></body></html>\n`,
+  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https: http:; style-src 'unsafe-inline' https: http:; img-src data: https: http:; font-src data: https: http:; connect-src https: http:; media-src data: blob: https: http:; frame-src 'self' about: blob: data: https: http:; base-uri 'none'; form-action 'none'"><style>${css}</style></head><body><div id="root"></div><script>${js}</script></body></html>\n`,
 );
 const license = await readFile(
   path.join(root, "node_modules/@deepseek-ai/dsh-client-ui-primitives/LICENSE"),
