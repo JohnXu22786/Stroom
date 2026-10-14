@@ -413,8 +413,8 @@ void main() {
       'keeps a complete HTML document from being nested in another body',
       () {
         const document = '<!doctype html><html lang="en">'
-          '<head><title>Full page</title></head>'
-          '<body><main>Existing body</main></body></html>';
+            '<head><title>Full page</title></head>'
+            '<body><main>Existing body</main></body></html>';
         const documentWithoutHtmlRoot = '<!doctype html>'
             '<head><title>Optional html tags</title></head>'
             '<body><main>Existing body</main></body>';

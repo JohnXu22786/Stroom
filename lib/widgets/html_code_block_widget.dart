@@ -54,11 +54,11 @@ class HtmlCodeBlockWidget extends StatefulWidget {
 
   static final RegExp _completeDocumentStart = RegExp(
     r'^\uFEFF?\s*'
-        r'(?:(?:<!--[\s\S]*?-->\s*)|'
-        r'(?:<\?xml[\s\S]*?\?>\s*))*'
-        r'(?:<!doctype\s+html\b[^>]*>|'
-        r'<html(?:\s|>)|'
-        r'<(?:head|body)(?:\s|>))',
+    r'(?:(?:<!--[\s\S]*?-->\s*)|'
+    r'(?:<\?xml[\s\S]*?\?>\s*))*'
+    r'(?:<!doctype\s+html\b[^>]*>|'
+    r'<html(?:\s|>)|'
+    r'<(?:head|body)(?:\s|>))',
     caseSensitive: false,
   );
 
