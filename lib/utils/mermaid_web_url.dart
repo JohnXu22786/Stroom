@@ -1,6 +1,5 @@
 import 'mermaid_web_url_stub.dart'
-    if (dart.library.html) 'mermaid_web_url_web.dart'
-    as platform;
+    if (dart.library.html) 'mermaid_web_url_web.dart' as platform;
 
 /// Resolves a Mermaid web URL against Flutter's configured web base URI.
 ///

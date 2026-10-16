@@ -18,6 +18,9 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/mermaid_web_url.dart';
+import 'package:stroom/utils/mermaid_web_url_stub.dart'
+    if (dart.library.html) 'package:stroom/utils/mermaid_web_url_web.dart'
+    as platform;
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
@@ -297,8 +300,7 @@ void main() {
       expect(html, contains(r'\u003C!--'));
     });
 
-    test(
-        'web asset URL uses the Flutter base href and keeps one query string',
+    test('web asset URL uses the Flutter base href and keeps one query string',
         () {
       // Regression: the URL previously became "...?v=4?code=..." (two '?'),
       // so URLSearchParams could not find the code and the template showed
@@ -335,6 +337,16 @@ void main() {
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
       expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=9');
+    });
+
+    test('uses the platform base URI when resolving without an override', () {
+      const url = 'assets/assets/vendor/mermaid_render.html?v=9';
+      final platformBaseUri = platform.mermaidWebBaseUri;
+
+      expect(
+        resolveMermaidWebUrl(url),
+        platformBaseUri.resolve(url).toString(),
+      );
     });
 
     // ---- Inline loader caching (perf: the ~3.5MB bundled library must be
