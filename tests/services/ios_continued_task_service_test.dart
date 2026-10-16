@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,6 +37,12 @@ void main() {
       // 测试机为 Windows/macOS 主机，Platform.isIOS 为 false。
       expect(IosContinuedTaskService.instance.isSupported, isFalse);
     });
+
+    if (kIsWeb) {
+      test('isSupported is false on Web without reading dart:io Platform', () {
+        expect(IosContinuedTaskService.instance.isSupported, isFalse);
+      });
+    }
 
     test('debugForceSupported enables the bridge for tests', () {
       IosContinuedTaskService.debugForceSupported = true;

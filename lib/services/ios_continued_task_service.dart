@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 /// iOS 26+ 常驻后台任务桥接（BGContinuedProcessingTask）。
@@ -31,7 +32,7 @@ class IosContinuedTaskService {
   /// 当前平台是否支持常驻后台任务（iOS 26+）。
   bool get isSupported {
     if (debugForceSupported) return true;
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || !Platform.isIOS) return false;
     try {
       final parts = Platform.operatingSystemVersion.split('.');
       final major = parts.isEmpty ? 0 : int.tryParse(parts.first) ?? 0;
