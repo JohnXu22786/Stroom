@@ -141,6 +141,7 @@ class OcrPage extends ConsumerStatefulWidget {
     this.testCameraPicker,
     this.testGalleryPicker,
     this.testImagePayloadPreparer,
+    this.testOcrServiceFactory,
     this.testRetryImageRestorer,
     this.testRetrySnapshotCacher,
     this.retryPageOutcomes = const [],
@@ -161,6 +162,8 @@ class OcrPage extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
       testImagePayloadPreparer;
+  @visibleForTesting
+  final OcrService Function(OcrConfig config)? testOcrServiceFactory;
   @visibleForTesting
   final Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer;
@@ -2711,6 +2714,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       title: title,
       folder: folder,
       onSaved: () => unawaited(textNotifier.loadRecords()),
+      serviceFactory: widget.testOcrServiceFactory,
     );
 
     unawaited(runner.run());

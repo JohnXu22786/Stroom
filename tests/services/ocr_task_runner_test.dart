@@ -1061,6 +1061,27 @@ void main() {
     expect(adapter.closed, isTrue);
   });
 
+  for (final (stage, sent, total) in [
+    ('upload', 1, 10),
+    ('server wait', 10, 10),
+  ]) {
+    test('delete during $stage prevents a late response from saving', () async {
+      final running = runner.run();
+      final request = await adapter.requested.future;
+      request.onSendProgress!(sent, total);
+      notifier.removeTask(id);
+
+      expect(request.cancelToken!.isCancelled, isTrue);
+      expect(notifier.state, isEmpty);
+      adapter.succeed();
+      await running;
+
+      expect(saves, 0);
+      expect(await TextManifest.loadRecords(), isEmpty);
+      expect(adapter.closed, isTrue);
+    });
+  }
+
   test('persisted deletion cancels before awaiting storage', () async {
     final running = runner.run();
     final request = await adapter.requested.future;
@@ -1123,6 +1144,25 @@ void main() {
     expect(await TextManifest.loadRecords(), isEmpty);
     expect(notifier.state.single.status, TaskStatus.failed);
     expect(notifier.state.single.error, '已取消');
+    expect(adapter.closed, isTrue);
+  });
+
+  test('removing a task during file write prevents record commit', () async {
+    writeGate = Completer<void>();
+    final running = runner.run();
+    await adapter.requested.future;
+    adapter.succeed();
+    while (saves == 0) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    notifier.removeTask(id);
+    writeGate!.complete();
+    await running;
+
+    final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
+    expect(notifier.state, isEmpty);
+    expect(await TextManifest.loadRecords(), isEmpty);
+    expect(await TextManifest.readText('$hash.txt'), isNull);
     expect(adapter.closed, isTrue);
   });
 

@@ -1165,6 +1165,44 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
     });
+
+    test(
+        'validates sample and frame counts within JavaScript safe integer range',
+        () {
+      AudioChunkConfig config({
+        double minSilenceDuration = 1,
+        double analysisWindowSeconds = 1,
+      }) =>
+          AudioChunkConfig(
+            fixedDurationSeconds: 1,
+            minChunkDuration: 1,
+            targetChunkDuration: 1,
+            maxChunkDuration: 1,
+            frameSize: 1,
+            minSilenceDuration: minSilenceDuration,
+            analysisWindowSeconds: analysisWindowSeconds,
+          );
+
+      // 2^53 - 1 is the largest integer that JavaScript numbers represent
+      // exactly. Counts just beyond it must be rejected on every platform.
+      config().validateForSampleRate(9007199254740991);
+      expect(
+        () => config().validateForSampleRate(9007199254740992),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => config(analysisWindowSeconds: 2).validateForSampleRate(
+          4503599627370496,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => config(minSilenceDuration: 2).validateForSampleRate(
+          4503599627370496,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 
   group('AudioChunker - fixed duration', () {
