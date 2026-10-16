@@ -19,6 +19,9 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
   bool _throwOnCheck = false;
   bool _deferStopCompletion = false;
   bool _stopRequested = false;
+  bool _holdStoppedCheck = false;
+  Completer<void>? _stoppedCheckStarted;
+  Completer<void>? _releaseStoppedCheck;
   final Set<int> _throwOnCheckCalls = {};
   int _serviceRunningCheckCount = 0;
 
@@ -48,6 +51,18 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
 
   void deferStopCompletion() {
     _deferStopCompletion = true;
+  }
+
+  void holdStoppedCheck() {
+    _holdStoppedCheck = true;
+    _stoppedCheckStarted = Completer<void>();
+    _releaseStoppedCheck = Completer<void>();
+  }
+
+  Future<void> get stoppedCheckStarted => _stoppedCheckStarted!.future;
+
+  void releaseStoppedCheck() {
+    _releaseStoppedCheck!.complete();
   }
 
   void completeDelayedStop() {
@@ -86,7 +101,13 @@ class MockBackgroundServicePlatform extends FlutterBackgroundServicePlatform {
         _throwOnCheckCalls.contains(_serviceRunningCheckCount)) {
       throw 'Simulated check error';
     }
-    return _isRunning;
+    final isRunning = _isRunning;
+    if (!isRunning && _holdStoppedCheck) {
+      _holdStoppedCheck = false;
+      _stoppedCheckStarted!.complete();
+      await _releaseStoppedCheck!.future;
+    }
+    return isRunning;
   }
 
   @override
@@ -339,6 +360,36 @@ void main() {
       expect(prefs.getBool('background_service_enabled'), isFalse);
     });
 
+    test(
+        'cold start during completed stop request does not restore explicit stop',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..holdStoppedCheck();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        final stopping = stopBackgroundService();
+        await mock.stoppedCheckStarted;
+
+        // The stop request has taken effect. Simulate a new process before
+        // the old stop path would persist enabled=false.
+        resetBackgroundServiceLifecycleStateForTesting();
+        await restoreBackgroundServiceOnColdStart();
+        final restoredDuringStop = mock._isRunning;
+
+        mock.releaseStoppedCheck();
+        expect(await stopping, isTrue);
+        expect(
+          restoredDuringStop,
+          isFalse,
+          reason: 'cold-start restore must see the stop intent even after the '
+              'service has stopped but before the stop operation returns',
+        );
+      });
+    });
+
     test('stopBackgroundService persists stop intent before disabling watchdog',
         () async {
       final mock = registerMockPlatform()..setServiceRunning(true);
@@ -414,6 +465,32 @@ void main() {
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
         isFalse,
       );
+    });
+
+    test('failed stop request restores enabled intent and watchdog recovery',
+        () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheckCalls({2});
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('background_service_enabled', true);
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isTrue);
+      });
+
+      expect(
+        keepAliveCalls.any((call) => call.method == 'stopKeepAlive'),
+        isFalse,
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'a failed stop must retain enabled intent and recovery',
+      );
+      expect(mock._isRunning, isFalse);
     });
 
     test(
