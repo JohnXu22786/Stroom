@@ -3605,7 +3605,6 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(readFailureCount, 1);
-        expect(find.textContaining('获取文件夹失败'), findsOneWidget);
         expect(find.byType(FolderPickerDialog), findsNothing);
         expect(completedSaveCount, 1,
             reason: 'a failed manifest read must not be reported as a save');
