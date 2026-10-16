@@ -4966,6 +4966,89 @@ void main() {
       },
     );
     test(
+      'queued batch removal preserves a same-ID add made after invocation',
+      () async {
+        const blockerTaskId = 'first-batch-removal-blocker';
+        const queuedTaskId = 'queued-batch-removal-re-added-task';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Task removed by the first batch',
+          startImmediately: false,
+          taskId: blockerTaskId,
+        );
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Task targeted by the queued batch',
+          startImmediately: false,
+          taskId: queuedTaskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final writeStarted = Completer<void>();
+        final resumeWrite = Completer<void>();
+        var writeCount = 0;
+
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? firstRemoval;
+        Future<bool>? queuedRemoval;
+        try {
+          await notifier.restoreFromPersistence();
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            if (writeCount++ != 0) return;
+            writeStarted.complete();
+            await resumeWrite.future;
+          };
+
+          firstRemoval = notifier.removeTasksPersisted([blockerTaskId]);
+          await writeStarted.future;
+          queuedRemoval = notifier.removeTasksPersisted([queuedTaskId]);
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Replacement added while queued removal waits',
+            startImmediately: false,
+            taskId: queuedTaskId,
+          );
+
+          resumeWrite.complete();
+          expect(await firstRemoval, isTrue);
+          expect(await queuedRemoval, isTrue);
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById(blockerTaskId), isNull);
+          expect(
+            notifier.taskById(queuedTaskId)?.title,
+            'Replacement added while queued removal waits',
+          );
+          expect(
+            notifier.state.where((task) => task.id == queuedTaskId),
+            hasLength(1),
+          );
+          final persisted =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persisted.whereType<Map>().map((row) => row['id']),
+            [queuedTaskId],
+          );
+          expect(
+            persisted.whereType<Map>().single['title'],
+            'Replacement added while queued removal waits',
+          );
+        } finally {
+          if (!resumeWrite.isCompleted) resumeWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (firstRemoval != null) await firstRemoval;
+          if (queuedRemoval != null) await queuedRemoval;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+    test(
       'later pre-restore write retains removals after a failed removal write',
       () async {
         const removedTaskId = 'removed-before-failed-write';
@@ -5285,6 +5368,98 @@ void main() {
           if (!resumeRestore.isCompleted) resumeRestore.complete();
           BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
           BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          if (restore != null) await restore;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          reloaded.dispose();
+          await reloaded.pendingPersistence;
+        }
+      },
+    );
+    test(
+      'batch removal during incomplete restore removes a disk-only task from live state',
+      () async {
+        const taskId = 'batch-removed-during-incomplete-restore';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Persisted task to remove during restore',
+          status: TaskStatus.waiting,
+          createdAt: DateTime(2025, 1, 1),
+        );
+        final skippedRow = <String, dynamic>{
+          'type': 'asr',
+          'title': 'Safely skipped ASR row during batch restore removal',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 2).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {'inputPath': '/recordings/persisted.wav'},
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap(), skippedRow]));
+
+        final snapshotCaptured = Completer<void>();
+        final resumeRestore = Completer<void>();
+        BackgroundTaskNotifier.debugAfterTaskSnapshotRead = () async {
+          if (snapshotCaptured.isCompleted) return;
+          snapshotCaptured.complete();
+          await resumeRestore.future;
+        };
+        final writeStarted = Completer<void>();
+        final resumeWrite = Completer<void>();
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          if (writeStarted.isCompleted) return;
+          writeStarted.complete();
+          await resumeWrite.future;
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        final reloaded = BackgroundTaskNotifier();
+        Future<void>? restore;
+        Future<bool>? removal;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotCaptured.future;
+          expect(notifier.taskById(taskId), isNull);
+
+          // The task exists only on disk when the removal starts. Let restore
+          // merge its partial snapshot, then hold the successful delete write
+          // so the generation filter has to reconcile live state afterward.
+          removal = notifier.removeTasksPersisted([taskId]);
+          resumeRestore.complete();
+          await restore;
+          await writeStarted.future;
+          expect(notifier.taskById(taskId), isNotNull);
+
+          resumeWrite.complete();
+          expect(await removal, isTrue);
+          await notifier.pendingPersistence;
+          expect(notifier.taskById(taskId), isNull);
+
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persisted.whereType<Map>().any((row) => row['id'] == taskId),
+            isFalse,
+          );
+          expect(
+            persisted.singleWhere(
+              (row) => row is Map && row['title'] == skippedRow['title'],
+            ),
+            skippedRow,
+          );
+
+          BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          await reloaded.restoreFromPersistence();
+          await reloaded.pendingPersistence;
+          expect(reloaded.taskById(taskId), isNull);
+        } finally {
+          if (!resumeRestore.isCompleted) resumeRestore.complete();
+          if (!resumeWrite.isCompleted) resumeWrite.complete();
+          BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (removal != null) await removal;
           if (restore != null) await restore;
           notifier.dispose();
           await notifier.pendingPersistence;
