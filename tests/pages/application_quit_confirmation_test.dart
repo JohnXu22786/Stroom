@@ -40,6 +40,8 @@ Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
   WidgetTester tester, {
   required bool closeMinimizes,
   BackgroundTaskNotifier? taskNotifier,
+  bool failTraySetup = false,
+  bool failRollbackClear = false,
 }) async {
   SharedPreferences.setMockInitialValues({
     'data_format_version': 2, // skip migration
@@ -52,6 +54,11 @@ Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
     const MethodChannel('window_manager'),
     (MethodCall call) async {
       windowCalls.add(call);
+      if (failRollbackClear &&
+          call.method == 'setPreventClose' &&
+          (call.arguments as Map)['isPreventClose'] == false) {
+        throw PlatformException(code: 'rollback-failed');
+      }
       return true;
     },
   );
@@ -60,7 +67,12 @@ Future<({List<MethodCall> windowCalls, List<int> exitCodes})> _pumpApplication(
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
     const MethodChannel('tray_manager'),
-    (MethodCall call) async => true,
+    (MethodCall call) async {
+      if (failTraySetup && call.method == 'setIcon') {
+        throw PlatformException(code: 'tray-unavailable');
+      }
+      return true;
+    },
   );
 
   // Record the process exit instead of actually exiting.
@@ -223,6 +235,48 @@ void main() {
         await tester.pumpAndSettle();
         expect(
             ctx.windowCalls.where((c) => c.method == 'destroy'), hasLength(1));
+        expect(ctx.exitCodes, [0]);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        DesktopAppService.instance.resetForTesting();
+      }
+    });
+
+    testWidgets(
+        'tray rollback close cancellation keeps a running task and app alive',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final notifier = BackgroundTaskNotifier();
+        notifier.addTask(type: BackgroundTaskType.ocr, title: '运行中任务');
+        final ctx = await _pumpApplication(
+          tester,
+          closeMinimizes: false,
+          taskNotifier: notifier,
+          failTraySetup: true,
+          failRollbackClear: true,
+        );
+
+        await _emitWindowClose(tester);
+
+        expect(find.text('退出应用？'), findsOneWidget);
+        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(ctx.windowCalls.where((c) => c.method == 'destroy'), isEmpty);
+        expect(ctx.exitCodes, isEmpty);
+
+        // A later close can still confirm that cancellation left the active
+        // task running, then explicitly approve the fallback exit.
+        await _emitWindowClose(tester);
+        expect(find.text('退出应用？'), findsOneWidget);
+        expect(find.textContaining('1 个任务正在运行'), findsOneWidget);
+        await tester.tap(find.text('退出'));
+        await tester.pumpAndSettle();
+        expect(
+          ctx.windowCalls.where((c) => c.method == 'destroy'),
+          hasLength(1),
+        );
         expect(ctx.exitCodes, [0]);
       } finally {
         debugDefaultTargetPlatformOverride = null;
