@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
+import 'package:stroom/models/ocr_output_template.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -1282,9 +1283,7 @@ void main() {
           expect(find.text('已选 2 张图片'), findsOneWidget);
           expect(
             tester
-                .widget<FilledButton>(
-                  find.widgetWithText(FilledButton, '开始识别'),
-                )
+                .widget<FilledButton>(find.widgetWithText(FilledButton, '开始识别'))
                 .onPressed,
             isNotNull,
           );
@@ -1322,7 +1321,9 @@ void main() {
             .toList();
         expect(selectors, hasLength(2));
         expect(
-            selectors.every((selector) => selector.onChanged == null), isTrue);
+          selectors.every((selector) => selector.onChanged == null),
+          isTrue,
+        );
       },
     );
 
@@ -1856,6 +1857,126 @@ void main() {
       expect(find.text('发票提取'), findsWidgets);
       expect(find.text('表格提取'), findsWidgets);
     });
+
+    testWidgets('built-in templates stay separate from custom instructions', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          ocrInstructions: const [
+            OcrInstruction(name: '我的指令', content: '保留自定义内容'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.pumpAndSettle();
+      for (final template in ocrOutputTemplates) {
+        expect(find.text(template.label), findsOneWidget);
+      }
+      expect(find.text('我的指令'), findsOneWidget);
+
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('我的指令'), findsOneWidget);
+      for (final template in ocrOutputTemplates) {
+        expect(find.text(template.label), findsNothing);
+      }
+    });
+
+    testWidgets('selected template is captured verbatim in retry data', (
+      tester,
+    ) async {
+      final notifier = _InspectableBackgroundTaskNotifier();
+      OcrRetrySnapshot? capturedSnapshot;
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry(withModels: true)],
+          testImages: [_createValidOcrTestImage()],
+          backgroundTasksNotifier: notifier,
+          testRetrySnapshotCacher: (
+              {required taskId, required snapshot}) async {
+            capturedSnapshot = snapshot;
+            return OcrRetryStorage.unavailableSnapshot(
+              taskId: taskId,
+              snapshot: snapshot,
+            );
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('默认（仅发送图片）'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Markdown 模板').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await tester.pumpAndSettle();
+
+      final markdown = ocrOutputTemplates.singleWhere(
+        (template) => template.id == 'markdown',
+      );
+      expect(capturedSnapshot?.instructionContent, markdown.content);
+      expect(
+        OcrRetrySnapshot.fromMap(
+          notifier.tasksForTest.single.retryData!,
+        ).instructionContent,
+        markdown.content,
+      );
+    });
+
+    testWidgets(
+      'custom instruction whitespace is kept in retry data and trimmed for requests',
+      (tester) async {
+        const instructionContent = '  Keep the exact spacing.\n  ';
+        const instructions = [
+          OcrInstruction(
+            name: 'Whitespace prompt',
+            content: instructionContent,
+          ),
+        ];
+        final notifier = _InspectableBackgroundTaskNotifier();
+        OcrRetrySnapshot? capturedSnapshot;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [_createValidOcrTestImage()],
+            ocrInstructions: instructions,
+            backgroundTasksNotifier: notifier,
+            testRetrySnapshotCacher: (
+                {required taskId, required snapshot}) async {
+              capturedSnapshot = snapshot;
+              return OcrRetryStorage.unavailableSnapshot(
+                taskId: taskId,
+                snapshot: snapshot,
+              );
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Whitespace prompt').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('开始识别'));
+        await tester.pumpAndSettle();
+
+        expect(capturedSnapshot?.instructionContent, instructionContent);
+        expect(
+          OcrRetrySnapshot.fromMap(
+            notifier.tasksForTest.single.retryData!,
+          ).instructionContent,
+          instructionContent,
+        );
+      },
+    );
 
     testWidgets('shows content snippet when instruction has no name', (
       tester,
@@ -2393,6 +2514,26 @@ void main() {
         1,
       );
       expect(tc['userInstruction'], '提取表格内容');
+
+      const spacedInstruction = '  Keep the exact spacing.\n  ';
+      // ignore: invalid_use_of_visible_for_testing_member
+      final spacedRequestConfig = applySelectedOcrInstruction(
+        {'maxTokens': 4096},
+        const [OcrInstruction(content: spacedInstruction)],
+        0,
+      );
+      expect(spacedRequestConfig['userInstruction'], spacedInstruction.trim());
+    });
+
+    test('each built-in template injects its exact opt-in content', () {
+      for (final template in ocrOutputTemplates) {
+        final tc = applySelectedOcrInstruction(
+          {'maxTokens': 4096},
+          instructions,
+          template.selectionValue,
+        );
+        expect(tc['userInstruction'], template.content);
+      }
     });
 
     test('default selection (-1) leaves typeConfig untouched', () {
@@ -2667,94 +2808,93 @@ void main() {
   });
 
   group('OcrPage - request size budget', () {
-    testWidgets(
-      'reused per-image results skip request size preflight',
-      (tester) async {
-        final largeImage = Uint8List.fromList(
-          img.encodePng(img.Image(width: 3000, height: 2200, numChannels: 3)),
-        );
-        final entry = _createOcrEntry();
-        final retryData = {
-          'type': 'ocr',
-          'version': 3,
-          'modelRef': {
-            'configId': entry.configs.single.id,
-            'modelId': entry.configs.single.models.first.id,
+    testWidgets('reused per-image results skip request size preflight', (
+      tester,
+    ) async {
+      final largeImage = Uint8List.fromList(
+        img.encodePng(img.Image(width: 3000, height: 2200, numChannels: 3)),
+      );
+      final entry = _createOcrEntry();
+      final retryData = {
+        'type': 'ocr',
+        'version': 3,
+        'modelRef': {
+          'configId': entry.configs.single.id,
+          'modelId': entry.configs.single.models.first.id,
+        },
+        'images': [
+          {
+            'bytes': base64Encode(largeImage),
+            'format': 'png',
+            'name': 'completed.png',
           },
-          'images': [
-            {
-              'bytes': base64Encode(largeImage),
-              'format': 'png',
-              'name': 'completed.png',
-            },
-          ],
-          'batchMode': 'perImage',
-          'perImageConcurrency': 1,
-          'requestSizeBudgetBytes': defaultOcrRequestSizeBudgetBytes,
-        };
-        final taskNotifier = _InspectableBackgroundTaskNotifier();
+        ],
+        'batchMode': 'perImage',
+        'perImageConcurrency': 1,
+        'requestSizeBudgetBytes': defaultOcrRequestSizeBudgetBytes,
+      };
+      final taskNotifier = _InspectableBackgroundTaskNotifier();
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            entries: [entry],
-            retryData: retryData,
-            testImagePayloadPreparer: (bytes) async => OcrImagePayload(
-              bytes: bytes,
-              format: 'png',
-              width: 3000,
-              height: 2200,
-            ),
-            retryPageOutcomes: const [
-              OcrPageOutcome(
-                imageIndex: 0,
-                status: OcrPageOutcomeStatus.succeeded,
-                text: 'reused text',
-              ),
-            ],
-            backgroundTasksNotifier: taskNotifier,
-            testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
-              images: [
-                for (final image in snapshot.images)
-                  OcrRetryImage(
-                    bytes: image.bytes!,
-                    format: image.format,
-                    name: image.name,
-                  ),
-              ],
-              missingImageCount: 0,
-            ),
-            testRetrySnapshotCacher:
-                ({required taskId, required snapshot}) async => retryData,
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [entry],
+          retryData: retryData,
+          testImagePayloadPreparer: (bytes) async => OcrImagePayload(
+            bytes: bytes,
+            format: 'png',
+            width: 3000,
+            height: 2200,
           ),
-        );
-        await tester.pumpAndSettle();
+          retryPageOutcomes: const [
+            OcrPageOutcome(
+              imageIndex: 0,
+              status: OcrPageOutcomeStatus.succeeded,
+              text: 'reused text',
+            ),
+          ],
+          backgroundTasksNotifier: taskNotifier,
+          testRetryImageRestorer: (snapshot) async => OcrRetryRestoreResult(
+            images: [
+              for (final image in snapshot.images)
+                OcrRetryImage(
+                  bytes: image.bytes!,
+                  format: image.format,
+                  name: image.name,
+                ),
+            ],
+            missingImageCount: 0,
+          ),
+          testRetrySnapshotCacher:
+              ({required taskId, required snapshot}) async => retryData,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        await tester.enterText(
-          find.byKey(const Key('ocr_request_budget_editor_mib')),
-          '0.001',
-        );
-        await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(
+        find.byKey(const Key('ocr_request_budget_editor_mib')),
+        '0.001',
+      );
+      await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-        final startButton = find.widgetWithText(FilledButton, '开始识别');
-        expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
-        await tester.ensureVisible(startButton);
-        await tester.pumpAndSettle();
-        await tester.tap(startButton);
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+      await tester.ensureVisible(startButton);
+      await tester.pumpAndSettle();
+      await tester.tap(startButton);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-        expect(
-          find.byKey(const Key('ocr_request_budget_dialog_mib')),
-          findsNothing,
-        );
-        expect(taskNotifier.tasksForTest, hasLength(1));
-      },
-    );
+      expect(
+        find.byKey(const Key('ocr_request_budget_dialog_mib')),
+        findsNothing,
+      );
+      expect(taskNotifier.tasksForTest, hasLength(1));
+    });
 
     testWidgets(
       'oversized joint requests offer budget changes and per-image mode',
@@ -2835,10 +2975,7 @@ void main() {
 
         await tester.tap(find.text('取消').last);
         await pumpDialogTransition();
-        expect(
-          find.byTooltip('请求 JSON 上限：0.0002 MiB'),
-          findsOneWidget,
-        );
+        expect(find.byTooltip('请求 JSON 上限：0.0002 MiB'), findsOneWidget);
         expect(taskNotifier.tasksForTest, isEmpty);
       },
     );

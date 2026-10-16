@@ -9,6 +9,7 @@ import 'package:extended_image/extended_image.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/ocr_batch_execution.dart';
+import '../models/ocr_output_template.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart';
 import '../providers/background_task_provider.dart';
@@ -83,25 +84,42 @@ String? _getFirstOcrEntryId(WidgetRef ref) {
   return null;
 }
 
-/// Writes the content of the generic instruction at [instructionIndex] into
-/// [typeConfig]['userInstruction'] — the key the OCR service sends as the
-/// user-message text part. Returns the (possibly changed) typeConfig.
+/// Resolves the selected built-in template or generic instruction without
+/// changing its content. Retry snapshots use this value verbatim; request
+/// configuration trims only user-managed instructions.
 ///
-/// Out-of-range or default (-1) selections remove any 'userInstruction'
-/// from the request copy: the request must stay images-only even when the
-/// copied typeConfig still carries a legacy per-model instruction (kept in
-/// storage for the one-shot generic-store migration).
+/// Default (-1), saved retry snapshot (-2), and out-of-range selections
+/// remove any 'userInstruction' from the request copy. The default request
+/// therefore stays images-only even when the copied typeConfig still carries
+/// a legacy per-model instruction.
+@visibleForTesting
+String? selectedOcrInstructionContent(
+  List<OcrInstruction> instructions,
+  int selectionValue,
+) {
+  final template = ocrOutputTemplateForSelection(selectionValue);
+  if (template != null) return template.content;
+  if (selectionValue >= 0 && selectionValue < instructions.length) {
+    return instructions[selectionValue].content;
+  }
+  return null;
+}
+
 @visibleForTesting
 Map<String, dynamic> applySelectedOcrInstruction(
   Map<String, dynamic> typeConfig,
   List<OcrInstruction> instructions,
-  int instructionIndex,
+  int selectionValue,
 ) {
-  if (instructionIndex >= 0 && instructionIndex < instructions.length) {
-    final content = instructions[instructionIndex].content.trim();
-    if (content.isNotEmpty) {
-      typeConfig['userInstruction'] = content;
-    }
+  final selectedContent = selectedOcrInstructionContent(
+    instructions,
+    selectionValue,
+  );
+  final content = ocrOutputTemplateForSelection(selectionValue) == null
+      ? selectedContent?.trim()
+      : selectedContent;
+  if (content != null && content.isNotEmpty) {
+    typeConfig['userInstruction'] = content;
   } else {
     typeConfig.remove('userInstruction');
   }
@@ -211,8 +229,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _modelSelectionNeedsReselection = false;
   bool _legacyModelConfirmationPending = false;
 
-  /// Index into the generic user instructions, or -1 for the default
-  /// behavior (images only, no instruction).
+  /// Non-negative values index custom instructions; built-in formats use
+  /// stable negative values, while -1 keeps the default images-only request.
   int _selectedInstructionIndex = -1;
 
   /// Instruction index restored from retry data, pending until the generic
@@ -773,9 +791,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final rawIndex = _retryInstructionSnapshot != null
         ? -2
         : (pending ?? _selectedInstructionIndex);
-    final clamped = rawIndex == -2
-        ? -2
-        : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
+    final clamped =
+        rawIndex == -2 || ocrOutputTemplateForSelection(rawIndex) != null
+            ? rawIndex
+            : (rawIndex >= 0 && rawIndex < instructions.length ? rawIndex : -1);
     if (pending == null &&
         _retryInstructionSnapshot == null &&
         clamped != _selectedInstructionIndex) {
@@ -868,6 +887,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                      ...ocrOutputTemplates.map((template) {
+                        return DropdownMenuItem<int>(
+                          value: template.selectionValue,
+                          child: Text(
+                            template.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
                       ...List.generate(instructions.length, (i) {
                         return DropdownMenuItem<int>(
                           value: i,
@@ -2363,10 +2391,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     setDialogState(() => invalidInput = true);
                     return;
                   }
-                  Navigator.pop(
-                    dialogContext,
-                    (true, _requestSizeBudgetMiBController.text.trim()),
-                  );
+                  Navigator.pop(dialogContext, (
+                    true,
+                    _requestSizeBudgetMiBController.text.trim(),
+                  ));
                 },
                 child: const Text('改用逐张识别'),
               ),
@@ -2619,10 +2647,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
     final instructionContent = _retryInstructionSnapshot ??
-        ((_selectedInstructionIndex >= 0 &&
-                _selectedInstructionIndex < instructions.length)
-            ? instructions[_selectedInstructionIndex].content
-            : null);
+        selectedOcrInstructionContent(instructions, _selectedInstructionIndex);
     // Store the retry images before publishing the task or starting its
     // request. A failed request can then never expose a retry action while its
     // snapshot is still being written.
