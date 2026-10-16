@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, debugDefaultTargetPlatformOverride, kIsWeb,
+    show
+        defaultTargetPlatform,
+        debugDefaultTargetPlatformOverride,
+        kIsWeb,
         TargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -664,7 +667,10 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       expect(fakeController.zoomLevel, 1.0);
@@ -790,7 +796,10 @@ void main() {
         webView.controller,
       );
       webView.params.onWebViewCreated!(controller);
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       // The web template's fitToViewport changes zoom in JavaScript. The
@@ -879,7 +888,10 @@ void main() {
 
       // Load completion removes Flutter's loading overlay, while Mermaid's
       // asynchronous render and first fit are still pending.
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       // The toolbar and wheel inputs reach the page before its first fit.
