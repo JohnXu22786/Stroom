@@ -98,6 +98,74 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_cli_reports_overflowing_elapsed_time_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            predictions_path = Path(directory) / "predictions.json"
+            manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+            input_data = predictions(
+                [
+                    {
+                        "fixture_id": "ordered-lines",
+                        "text": "AB",
+                        "elapsed_ms": 10**400,
+                    }
+                ]
+            )
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            stderr = StringIO()
+            stdout = StringIO()
+            with redirect_stderr(stderr), redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("evaluation error:", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_cli_reports_overflowing_elapsed_time_total_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = small_manifest()
+            manifest_path = root / "manifest.json"
+            predictions_path = root / "predictions.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            input_data = predictions(
+                [
+                    {
+                        "fixture_id": fixture["id"],
+                        "text": fixture["gold_text"],
+                        "elapsed_ms": 1e308,
+                    }
+                    for fixture in manifest["fixtures"]
+                ]
+            )
+            predictions_path.write_text(json.dumps(input_data), encoding="utf-8")
+
+            stderr = StringIO()
+            stdout = StringIO()
+            with redirect_stderr(stderr), redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--manifest",
+                        str(manifest_path),
+                        "--predictions",
+                        str(predictions_path),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("elapsed_ms aggregate must remain finite", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertEqual(stdout.getvalue(), "")
+
     def test_credential_like_setting_names_are_rejected(self):
         for key in (
             "api_token",
@@ -222,13 +290,35 @@ class EvaluateTests(unittest.TestCase):
                 with self.assertRaises(EvaluationError):
                     evaluate_predictions(manifest, predictions([]))
 
-    def test_empty_prediction_text_keeps_content_metrics_pending(self):
+    def test_empty_prediction_text_scores_content_metrics_as_failures(self):
         report = evaluate_predictions(
             small_manifest(),
             predictions(
                 [
                     {"fixture_id": "ordered-lines", "text": ""},
+                    {"fixture_id": "formula", "text": " "},
                     {"fixture_id": "table", "text": ""},
+                    {"fixture_id": "blank", "text": ""},
+                ]
+            ),
+        )
+
+        metrics = report["metrics"]
+        self.assertEqual(metrics["page_omission_rate"]["value"], 3 / 4)
+        self.assertEqual(metrics["reading_order_score"]["value"], 0)
+        self.assertEqual(metrics["reading_order_score"]["pending_pages"], 0)
+        self.assertEqual(metrics["table_fidelity"]["value"], 0)
+        self.assertEqual(metrics["table_fidelity"]["pending"], 0)
+        self.assertEqual(metrics["formula_fidelity"]["value"], 0)
+        self.assertEqual(metrics["formula_fidelity"]["pending"], 0)
+
+    def test_missing_or_null_prediction_text_keeps_content_metrics_pending(self):
+        report = evaluate_predictions(
+            small_manifest(),
+            predictions(
+                [
+                    {"fixture_id": "ordered-lines", "text": None},
+                    {"fixture_id": "formula", "text": None},
                 ]
             ),
         )
@@ -238,6 +328,8 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(metrics["reading_order_score"]["pending_pages"], 1)
         self.assertIsNone(metrics["table_fidelity"]["value"])
         self.assertEqual(metrics["table_fidelity"]["pending"], 1)
+        self.assertIsNone(metrics["formula_fidelity"]["value"])
+        self.assertEqual(metrics["formula_fidelity"]["pending"], 1)
 
     def test_markdown_table_separator_does_not_reduce_table_fidelity(self):
         manifest = {
@@ -269,6 +361,32 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_markdown_header_only_table_separator_is_ignored(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "header-only-table",
+                    "gold_text": "A | B",
+                    "table_text": "A | B",
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "header-only-table",
+                    "text": "| A | B |\n| --- | --- |",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_table_fidelity_preserves_trailing_empty_cells(self):
         expected = "A | B\nx |"
         manifest = {
@@ -282,30 +400,535 @@ class EvaluateTests(unittest.TestCase):
             ]
         }
 
-        def report_for(actual):
-            return evaluate_predictions(
-                manifest,
-                predictions(
+        for output_format in ("plain_text", "markdown", "table"):
+            with self.subTest(output_format=output_format):
+                missing_cell_input = predictions(
                     [
                         {
                             "fixture_id": "table",
-                            "text": actual,
+                            "text": "| A | B |\n| --- | --- |\n| x |",
                         }
                     ]
-                ),
+                )
+                missing_cell_input["run"]["output_format"] = output_format
+                preserved_empty_cell_input = predictions(
+                    [
+                        {
+                            "fixture_id": "table",
+                            "text": "| A | B |\n| --- | --- |\n| x | |",
+                        }
+                    ]
+                )
+                preserved_empty_cell_input["run"]["output_format"] = output_format
+                missing_cell = evaluate_predictions(manifest, missing_cell_input)
+                preserved_empty_cell = evaluate_predictions(
+                    manifest, preserved_empty_cell_input
+                )
+
+                self.assertEqual(
+                    missing_cell["metrics"]["table_fidelity"]["value"], 0
+                )
+                self.assertEqual(
+                    preserved_empty_cell["metrics"]["table_fidelity"]["value"],
+                    1,
+                )
+
+    def test_markdown_table_preserves_annotated_hyphen_row_after_divider(self):
+        table = "A | B\n--- | ---\nx | y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-hyphen-row",
+                    "gold_text": table,
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "table-with-hyphen-row",
+                    "text": (
+                        "| A | B |\n"
+                        "| --- | --- |\n"
+                        "| --- | --- |\n"
+                        "| x | y |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_table_fidelity_rejects_extra_compact_row_in_table_context(self):
+        expected = "A|B\nx|y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "compact-table",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "compact-table",
+                        "text": f"{expected}\nz|q",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_compact_row_after_escaped_terminal_pipe(self):
+        expected = "Name | Note\nA | ends-with-pipe\\|"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "escaped-terminal-pipe-table",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "escaped-terminal-pipe-table",
+                        "text": f"{expected}\nz|q",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+        markdown_input = predictions(
+            [
+                {
+                    "fixture_id": "escaped-terminal-pipe-table",
+                    "text": (
+                        "| Name | Note |\n| --- | --- |\n"
+                        "| A | ends-with-pipe\\| |"
+                    ),
+                }
+            ]
+        )
+        markdown_input["run"]["output_format"] = "markdown"
+        markdown_report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "escaped-terminal-pipe-table",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            markdown_input,
+        )
+
+        self.assertEqual(
+            markdown_report["metrics"]["table_fidelity"]["value"], 1
+        )
+
+    def test_table_fidelity_rejects_extra_url_row_in_table_context(self):
+        expected = "A | B\nx | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-url-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-url-row",
+                        "text": f"{expected}\nhttps://example.test | q",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_labeled_row_between_table_rows(self):
+        expected = "Name | Value\nFirst | 1\nSecond | 2"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-labeled-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-labeled-row",
+                        "text": (
+                            "Name | Value\nFirst | 1\n"
+                            "Status: Ready | 99\nSecond | 2"
+                        ),
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_extra_compact_row_with_wrong_width(self):
+        expected = "A|B\nx|y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "compact-table",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "compact-table",
+                        "text": f"{expected}\nz|q|r",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_rejects_compact_row_after_framed_markdown_table(self):
+        expected = "A | B\nx | y"
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "framed-compact-extra-row",
+                    "text": (
+                        "| A | B |\n"
+                        "| --- | --- |\n"
+                        "| x | y |\n"
+                        "z|q"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "framed-compact-extra-row",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_preserves_hyphen_only_data_rows(self):
+        expected = "A | B\n--- | ---\nx | y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hyphen-data-row",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        reports = []
+        for actual in (
+            "A | B\nx | y",
+            expected,
+            f"A | B\nx | y\n--- | ---",
+        ):
+            reports.append(
+                evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "hyphen-data-row", "text": actual}]
+                    ),
+                )
             )
 
-        missing_cell = report_for(
-            "| A | B |\n| --- | --- |\n| x |"
-        )
-        preserved_empty_cell = report_for(
-            "| A | B |\n| --- | --- |\n| x | |"
+        self.assertEqual(reports[0]["metrics"]["table_fidelity"]["value"], 0)
+        self.assertEqual(reports[1]["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(reports[2]["metrics"]["table_fidelity"]["value"], 0)
+
+    def test_table_fidelity_ignores_one_sided_pipe_formula_after_table(self):
+        expected = "A | B\nx | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-formula",
+                        "gold_text": expected,
+                        "table_text": expected,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-formula",
+                        "text": f"{expected}\n|x| = 2",
+                    }
+                ]
+            ),
         )
 
-        self.assertEqual(missing_cell["metrics"]["table_fidelity"]["value"], 0)
-        self.assertEqual(
-            preserved_empty_cell["metrics"]["table_fidelity"]["value"], 1
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_one_sided_formula_before_pipe_prose(self):
+        expected = "A | B\nx | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-formula-and-prose",
+                        "gold_text": f"{expected}\n|x| = 2\nNote: a | b",
+                        "table_text": expected,
+                        "categories": ["english", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-formula-and-prose",
+                        "text": f"{expected}\n|x| = 2\nNote: a | b",
+                    }
+                ]
+            ),
         )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_annotated_framed_single_cell_formula(self):
+        table = "Value |\n1 |"
+        formula = "|x|"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "one-column-table-with-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "one-column-table-with-formula",
+                        "text": (
+                            "| Value |\n"
+                            "| --- |\n"
+                            "| 1 |\n"
+                            f"{formula}"
+                        ),
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_framed_formula_with_markdown_cell_spacing(self):
+        table = "Value |\n1 |"
+        formula = "x = 1"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "one-column-table-with-equation",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "one-column-table-with-equation",
+                        "text": (
+                            "| Value |\n"
+                            "| --- |\n"
+                            "| 1 |\n"
+                            "| x = 1 |"
+                        ),
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_bold_framed_markdown_formula_row(self):
+        table = "Value |\n1 |"
+        formula = "x=1"
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "one-column-table-with-bold-formula",
+                    "text": (
+                        "| Value |\n"
+                        "| --- |\n"
+                        "| 1 |\n"
+                        "| **x=1** |"
+                    ),
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "markdown"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "one-column-table-with-bold-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            input_data,
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_table_fidelity_ignores_unframed_annotated_formula_row(self):
+        table = "A | B\nx | y"
+        formula = "z | q"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-unframed-formula",
+                        "gold_text": f"{table}\n{formula}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "table-with-unframed-formula",
+                        "text": f"{table}\n{formula}",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_before_one_column_table_does_not_consume_table_row(self):
+        table = "Value |\nx |"
+        formula = "|x|"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "one-column-table-with-duplicate-formula",
+                        "gold_text": f"{formula}\n{table}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "one-column-table-with-duplicate-formula",
+                        "text": (
+                            "|x|\n"
+                            "| Value |\n"
+                            "| --- |\n"
+                            "| x |"
+                        ),
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_markdown_table_context_keeps_parenthesized_label_and_formula_pipes(self):
+        table = "A | B\nx | y"
+        formula = "|x| = 2"
+        label = "Figure 2(a)： detail | note"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "markdown-table-with-labeled-prose",
+                        "gold_text": f"{table}\n{formula}\n{label}",
+                        "table_text": table,
+                        "formula_text": formula,
+                        "categories": ["english", "table", "formula"],
+                    }
+                ]
+            },
+            predictions(
+                [
+                    {
+                        "fixture_id": "markdown-table-with-labeled-prose",
+                        "text": (
+                            "| A | B |\n"
+                            "| --- | --- |\n"
+                            "| x | y |\n"
+                            f"{formula}\n{label}"
+                        ),
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
     def test_table_fidelity_ignores_unmatched_trailing_frame_pipes(self):
         expected = "A | B |\nx | y |"
@@ -411,6 +1034,151 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions({"fixtures": [fixture]}, input_data)
 
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_markdown_table_preserves_escaped_pipes_inside_cells(self):
+        table = "Key | Value\nA\\|B | x\\|y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "escaped-pipes",
+                    "gold_text": table,
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        for actual, expected_fidelity, expected_cer in (
+            ("| Key | Value |\n| --- | --- |\n| A\\|B | x\\|y |", 1, 0),
+            ("| Key | Value |\n| --- | --- |\n| A\\|B | z |", 0, None),
+        ):
+            with self.subTest(actual=actual):
+                input_data = predictions(
+                    [{"fixture_id": "escaped-pipes", "text": actual}]
+                )
+                input_data["run"]["output_format"] = "markdown"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                metrics = report["metrics"]
+                self.assertEqual(metrics["table_fidelity"]["value"], expected_fidelity)
+                if expected_cer is not None:
+                    self.assertEqual(
+                        metrics["character_error_rate"]["value"], expected_cer
+                    )
+                else:
+                    self.assertGreater(metrics["character_error_rate"]["value"], 0)
+
+    def test_markdown_cer_does_not_count_pipes_for_compact_wrong_cell(self):
+        table = "Code | Count\nP-12 | 3"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "compact-table-cell-typo",
+                    "gold_text": table,
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        compact_markdown = "| Code | Count |\n| --- | --- |\nP-12|4"
+
+        for output_format in ("markdown", "table"):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "compact-table-cell-typo",
+                            "text": compact_markdown,
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["edit_distance"],
+                    1,
+                )
+
+    def test_markdown_table_cer_preserves_pipes_in_following_prose_and_formula(self):
+        table = "Code | Count\nP-12 | 3"
+        following_text = "Set relation: x | y\n|x| = 2"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-following-pipes",
+                    "gold_text": f"{table}\n{following_text}",
+                    "table_text": table,
+                    "categories": ["english", "table", "formula"],
+                }
+            ]
+        }
+        markdown_table = (
+            "| Code | Count |\n"
+            "| --- | --- |\n"
+            "| P-12 | 3 |"
+        )
+
+        for output_format in ("markdown", "table"):
+            with self.subTest(output_format=output_format):
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "table-with-following-pipes",
+                            "text": f"{markdown_table}\n{following_text}",
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = output_format
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+
+    def test_markdown_table_preserves_pipes_after_punctuated_prose_label(self):
+        table = "Code | Count\nP-12 | 3"
+        label = "Eq. 1: x | y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "table-with-punctuated-label",
+                    "gold_text": f"{table}\n{label}",
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        for output_format in ("plain_text", "markdown", "table"):
+            for actual_label, expected_cer in (
+                (label, 0),
+                (label.replace("|", ""), "positive"),
+            ):
+                with self.subTest(
+                    output_format=output_format, actual_label=actual_label
+                ):
+                    input_data = predictions(
+                        [
+                            {
+                                "fixture_id": "table-with-punctuated-label",
+                                "text": f"{table}\n{actual_label}",
+                            }
+                        ]
+                    )
+                    input_data["run"]["output_format"] = output_format
+
+                    report = evaluate_predictions(manifest, input_data)
+
+                    self.assertEqual(
+                        report["metrics"]["table_fidelity"]["value"], 1
+                    )
+                    cer = report["metrics"]["character_error_rate"]["value"]
+                    if expected_cer == "positive":
+                        self.assertGreater(cer, 0)
+                    else:
+                        self.assertEqual(cer, expected_cer)
 
     def test_plain_text_table_from_manifest_ignores_annotation_separators(self):
         manifest = json.loads((ROOT / "manifest.json").read_text())
@@ -519,6 +1287,25 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_paired_currency_markers_do_not_compact_prose_as_inline_math(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "paired-currency",
+                    "gold_text": "Prices: $12 and $15",
+                    "categories": ["english"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "paired-currency", "text": "Prices: 12and15"}]
+        )
+        input_data["run"]["output_format"] = "markdown"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_latex_cer_strips_inline_math_next_to_cjk_text(self):
         manifest = {
             "fixtures": [
@@ -598,6 +1385,99 @@ class EvaluateTests(unittest.TestCase):
                 self.assertEqual(
                     report["metrics"]["formula_fidelity"]["value"], 1
                 )
+
+    def test_latex_unmatched_math_delimiter_is_not_removed(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unmatched-math-delimiter",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "unmatched-math-delimiter", "text": r"\(x=1"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_latex_unmatched_dollar_before_formula_fails_formula_fidelity(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unmatched-dollar-delimiter",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "unmatched-dollar-delimiter", "text": "$x=1"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertGreater(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_latex_escaped_currency_dollar_before_formula_is_literal(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "escaped-currency-before-formula",
+                    "gold_text": "Price: $x=1",
+                    "formula_text": "x=1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "escaped-currency-before-formula",
+                    "text": r"Price: \$x=1",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_latex_unmatched_delimiter_in_prose_does_not_hide_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unmatched-delimiter-in-prose",
+                    "gold_text": "Note: equation x=1",
+                    "formula_text": "x=1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "unmatched-delimiter-in-prose",
+                    "text": r"Note: unmatched \( marker; equation x=1",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
 
     def test_latex_cer_ignores_optional_formula_spacing(self):
         formula = "∫_0^1 x^2 dx = 1/3"
@@ -753,6 +1633,34 @@ class EvaluateTests(unittest.TestCase):
             len("Code Count P-12 3"),
         )
 
+    def test_plain_text_cer_normalizes_compact_rows_with_a_cell_error(self):
+        expected = "A | B\nx | y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "compact-table-cell-typo",
+                    "gold_text": expected,
+                    "table_text": expected,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "compact-table-cell-typo", "text": "A|B\nx|z"}]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["edit_distance"], 1
+        )
+        self.assertEqual(
+            report["metrics"]["character_error_rate"]["reference_characters"],
+            len("A B x y"),
+        )
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
+
     def test_extra_table_row_reduces_table_fidelity(self):
         expected = "Code | Count | Total\nP-12 | 3 | 15.00\nQ-07 | 2 | 8.00"
         manifest = {
@@ -893,6 +1801,27 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
 
+    def test_chinese_labeled_pipe_prose_after_table_does_not_reduce_fidelity(self):
+        table = "Code | Count\nP-12 | 3"
+        label = "说明：x | y"
+        report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {
+                        "id": "table-with-chinese-pipe-label",
+                        "gold_text": f"{table}\n{label}",
+                        "table_text": table,
+                        "categories": ["chinese", "table"],
+                    }
+                ]
+            },
+            predictions(
+                [{"fixture_id": "table-with-chinese-pipe-label", "text": f"{table}\n{label}"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
     def test_table_fidelity_accepts_compact_rows_without_outer_pipes(self):
         table = "Code|Count\nP-12|3"
         manifest = {
@@ -913,6 +1842,32 @@ class EvaluateTests(unittest.TestCase):
         report = evaluate_predictions(manifest, input_data)
 
         self.assertEqual(report["metrics"]["table_fidelity"]["value"], 1)
+
+    def test_table_fidelity_rejects_extra_one_sided_pipe_row_in_context(self):
+        table = "A | B\nx | y"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "one-sided-extra-row",
+                    "gold_text": table,
+                    "table_text": table,
+                    "categories": ["english", "table"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "one-sided-extra-row",
+                    "text": f"{table}\n|z|q",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["table_fidelity"]["value"], 0)
 
     def test_latex_formula_is_scored_against_its_display_transcription(self):
         manifest = {
@@ -941,6 +1896,93 @@ class EvaluateTests(unittest.TestCase):
                 self.assertEqual(report["run"]["output_format"], output_format)
                 self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
                 self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+
+    def test_latex_greek_commands_match_unicode_formula_symbols(self):
+        for symbol, command in (("θ", "theta"), ("α", "alpha")):
+            with self.subTest(symbol=symbol):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "greek-formula",
+                            "gold_text": symbol,
+                            "formula_text": symbol,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [
+                        {
+                            "fixture_id": "greek-formula",
+                            "text": f"$\\{command}$",
+                        }
+                    ]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(
+                    report["metrics"]["character_error_rate"]["value"], 0
+                )
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 1
+                )
+
+    def test_latex_mathrm_differential_matches_display_formula(self):
+        formula = "∫_0^1 x^2 dx = 1/3"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "calculus-formula",
+                    "gold_text": f"Area under curve\n{formula}",
+                    "formula_text": formula,
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "calculus-formula",
+                    "text": r"Area under curve \(\int_0^1 x^2\,\mathrm{d}x = \frac{1}{3}\)",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_semantic_font_commands_are_not_unwrapped(self):
+        for formula, prediction in (
+            ("R", r"$\mathbb{R}$"),
+            ("x", r"$\mathbf{x}$"),
+        ):
+            with self.subTest(formula=formula):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "semantic-font-formula",
+                            "gold_text": formula,
+                            "formula_text": formula,
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [{"fixture_id": "semantic-font-formula", "text": prediction}]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+                self.assertGreater(
                     report["metrics"]["character_error_rate"]["value"], 0
                 )
 
@@ -1026,6 +2068,32 @@ class EvaluateTests(unittest.TestCase):
         }
         input_data = predictions(
             [{"fixture_id": "compound-fraction", "text": r"$\frac{x+1}{2}$"}]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_fraction_normalizes_nested_exponent_braces(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "fraction-with-exponent",
+                    "gold_text": "x^2/2",
+                    "formula_text": "x^2/2",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "fraction-with-exponent",
+                    "text": r"$\frac{x^{2}}{2}$",
+                }
+            ]
         )
         input_data["run"]["output_format"] = "latex"
 
@@ -1417,6 +2485,81 @@ class EvaluateTests(unittest.TestCase):
         )
         self.assertEqual(prose_report["metrics"]["formula_fidelity"]["value"], 1)
 
+    def test_formula_fidelity_rejects_written_subtraction_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "subtraction-formula",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "subtraction-formula",
+                        "text": "x=1 subtract temperature",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_written_addition_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "addition-formula",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "addition-formula",
+                        "text": "x=1 add temperature",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_division_operator_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "division-formula",
+                    "gold_text": "x=1",
+                    "formula_text": "x=1",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "division-formula",
+                        "text": "x=1 ÷ 2",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
     def test_formula_fidelity_rejects_equation_operator_before_formula_span(self):
         manifest = {
             "fixtures": [
@@ -1483,6 +2626,69 @@ class EvaluateTests(unittest.TestCase):
                 self.assertEqual(
                     report["metrics"]["formula_fidelity"]["value"], 1
                 )
+
+    def test_formula_fidelity_allows_hyphenated_section_label(self):
+        text = "Chapter-2 x = 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hyphenated-section-label",
+                    "gold_text": text,
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "hyphenated-section-label", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_allows_hyphenated_sample_identifier_label(self):
+        text = "Sample A-17: x = 1"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "hyphenated-sample-label",
+                    "gold_text": text,
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "hyphenated-sample-label", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_rejects_formula_nested_in_function_argument(self):
+        text = "f(x = 1)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "function-containing-formula",
+                    "gold_text": text,
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "function-containing-formula", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
 
     def test_formula_fidelity_allows_date_prose_before_formula(self):
         for date, punctuation in (
@@ -1576,6 +2782,28 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(
             date_with_operator["metrics"]["formula_fidelity"]["value"], 0
         )
+
+    def test_formula_fidelity_allows_parenthesized_date_after_formula(self):
+        text = "x = 1 (2025-01-01)"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "parenthesized-date-after-formula",
+                    "gold_text": text,
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [{"fixture_id": "parenthesized-date-after-formula", "text": text}]
+        )
+        input_data["run"]["output_format"] = "plain_text"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
 
     def test_formula_fidelity_allows_numbered_prose_after_formula(self):
         text = "x = 1 2 items remain"
@@ -1722,6 +2950,160 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["formula_fidelity"]["value"], 0
                 )
 
+    def test_formula_fidelity_rejects_written_operator_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "written-operator-after-formula",
+                    "gold_text": "x = 1 plus y",
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "written-operator-after-formula",
+                        "text": "x = 1 plus y",
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_written_operator_before_unknown_operand(self):
+        text = "x=1 plus temperature"
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "unknown-written-operand",
+                    "gold_text": text,
+                    "formula_text": "x=1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "unknown-written-operand", "text": text}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_number_word_around_written_operator(self):
+        for text in ("one plus x=1", "x=1 plus one"):
+            with self.subTest(text=text):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "number-word-formula",
+                            "gold_text": text,
+                            "formula_text": "x=1",
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "number-word-formula", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
+    def test_formula_fidelity_rejects_logical_expression_after_formula(self):
+        for connective in ("and", "or"):
+            with self.subTest(connective=connective):
+                text = f"x = 1 {connective} y = 2"
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "logical-expression-after-formula",
+                            "gold_text": text,
+                            "formula_text": "x = 1",
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [
+                            {
+                                "fixture_id": "logical-expression-after-formula",
+                                "text": text,
+                            }
+                        ]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"], 0
+                )
+
+    def test_formula_fidelity_allows_logical_word_in_prose_boundary(self):
+        text = "The result is x = 1 and it is positive."
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "logical-word-in-prose-boundary",
+                    "gold_text": text,
+                    "formula_text": "x = 1",
+                    "categories": ["english", "formula"],
+                }
+            ]
+        }
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [
+                    {
+                        "fixture_id": "logical-word-in-prose-boundary",
+                        "text": text,
+                    }
+                ]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+
+    def test_formula_fidelity_distinguishes_article_after_logical_word(self):
+        for text, expected_fidelity in (
+            ("The result is x=1 and a solution exists", 1),
+            ("x=1 and a=2", 0),
+        ):
+            with self.subTest(text=text):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "article-or-variable",
+                            "gold_text": text,
+                            "formula_text": "x=1",
+                            "categories": ["english", "formula"],
+                        }
+                    ]
+                }
+                report = evaluate_predictions(
+                    manifest,
+                    predictions(
+                        [{"fixture_id": "article-or-variable", "text": text}]
+                    ),
+                )
+
+                self.assertEqual(
+                    report["metrics"]["formula_fidelity"]["value"],
+                    expected_fidelity,
+                )
+
     def test_formula_fidelity_rejects_latex_function_terms_across_whitespace(self):
         manifest = {
             "fixtures": [
@@ -1738,6 +3120,81 @@ class EvaluateTests(unittest.TestCase):
                 {
                     "fixture_id": "area-equation",
                     "text": r"$A = \pi r^2 \cos \theta$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_latex_math_font_command_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"$A = \pi r^2 \mathrm{y}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_latex_mathit_command_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"$A = \pi r^2 \mathit{y}$",
+                }
+            ]
+        )
+        input_data["run"]["output_format"] = "latex"
+
+        report = evaluate_predictions(manifest, input_data)
+
+        self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 0)
+
+    def test_formula_fidelity_rejects_latex_text_command_after_formula(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "area-equation",
+                    "gold_text": "A = πr²",
+                    "formula_text": "A = πr²",
+                    "categories": ["formula"],
+                }
+            ]
+        }
+        input_data = predictions(
+            [
+                {
+                    "fixture_id": "area-equation",
+                    "text": r"$A = \pi r^2 \text{y}$",
                 }
             ]
         )

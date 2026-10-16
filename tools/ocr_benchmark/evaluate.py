@@ -28,6 +28,50 @@ REQUIRED_CATEGORIES = {
     "low_contrast",
 }
 OUTPUT_FORMATS = {"plain_text", "markdown", "table", "latex"}
+LITERAL_LATEX_DOLLAR = "\ue000"
+LATEX_GREEK_COMMANDS = {
+    "Gamma": "Γ",
+    "Delta": "Δ",
+    "Theta": "Θ",
+    "Lambda": "Λ",
+    "Xi": "Ξ",
+    "Pi": "Π",
+    "Sigma": "Σ",
+    "Upsilon": "Υ",
+    "Phi": "Φ",
+    "Psi": "Ψ",
+    "Omega": "Ω",
+    "alpha": "α",
+    "beta": "β",
+    "chi": "χ",
+    "delta": "δ",
+    "epsilon": "ε",
+    "eta": "η",
+    "gamma": "γ",
+    "iota": "ι",
+    "kappa": "κ",
+    "lambda": "λ",
+    "mu": "μ",
+    "nu": "ν",
+    "omega": "ω",
+    "omicron": "ο",
+    "phi": "φ",
+    "psi": "ψ",
+    "rho": "ρ",
+    "sigma": "σ",
+    "tau": "τ",
+    "theta": "θ",
+    "upsilon": "υ",
+    "varepsilon": "ϵ",
+    "varkappa": "ϰ",
+    "varphi": "ϕ",
+    "varpi": "ϖ",
+    "varrho": "ϱ",
+    "varsigma": "ς",
+    "vartheta": "ϑ",
+    "xi": "ξ",
+    "zeta": "ζ",
+}
 SECRET_SETTING_KEYS = {
     "apikey",
     "key",
@@ -318,13 +362,21 @@ def _validated_run_and_predictions(
         if text is not None and not isinstance(text, str):
             raise EvaluationError(f"{fixture_id}: text must be a string or null")
         elapsed_ms = prediction.get("elapsed_ms")
-        if elapsed_ms is not None and (
-            isinstance(elapsed_ms, bool)
-            or not isinstance(elapsed_ms, (int, float))
-            or not math.isfinite(elapsed_ms)
-            or elapsed_ms < 0
-        ):
-            raise EvaluationError(f"{fixture_id}: elapsed_ms must be non-negative")
+        if elapsed_ms is not None:
+            if isinstance(elapsed_ms, bool) or not isinstance(
+                elapsed_ms, (int, float)
+            ):
+                raise EvaluationError(
+                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                )
+            try:
+                is_finite_elapsed = math.isfinite(elapsed_ms)
+            except OverflowError:
+                is_finite_elapsed = False
+            if not is_finite_elapsed or elapsed_ms < 0:
+                raise EvaluationError(
+                    f"{fixture_id}: elapsed_ms must be a finite non-negative number"
+                )
         returned_tokens = prediction.get("returned_tokens")
         if returned_tokens is not None and (
             isinstance(returned_tokens, bool)
@@ -346,6 +398,50 @@ def _validated_run_and_predictions(
     }, by_id
 
 
+def _split_pipe_cells(value: str) -> list[str]:
+    """Split table delimiters while keeping escaped pipes in their cells."""
+    cells = []
+    current = []
+    index = 0
+    while index < len(value):
+        if value[index] == "\\":
+            run_end = index
+            while run_end < len(value) and value[run_end] == "\\":
+                run_end += 1
+            slash_count = run_end - index
+            if run_end < len(value) and value[run_end] == "|":
+                current.extend("\\" * (slash_count // 2))
+                if slash_count % 2:
+                    current.append("|")
+                else:
+                    cells.append("".join(current))
+                    current = []
+                index = run_end + 1
+            else:
+                current.extend("\\" * slash_count)
+                index = run_end
+            continue
+        if value[index] == "|":
+            cells.append("".join(current))
+            current = []
+        else:
+            current.append(value[index])
+        index += 1
+    cells.append("".join(current))
+    return cells
+
+
+def _has_unescaped_trailing_pipe(value: str) -> bool:
+    if not value.endswith("|"):
+        return False
+    preceding_backslashes = 0
+    index = len(value) - 2
+    while index >= 0 and value[index] == "\\":
+        preceding_backslashes += 1
+        index -= 1
+    return preceding_backslashes % 2 == 0
+
+
 def _table_rows(
     value: str,
     expected_column_count: int | None = None,
@@ -353,6 +449,9 @@ def _table_rows(
     allow_tsv: bool = False,
     matching_rows: set[tuple[str, ...]] | None = None,
     allow_unframed_shape_without_context: bool = False,
+    allow_compact_pipe_row_without_context: bool = False,
+    allow_markdown_separator_rows: bool = False,
+    prefer_markdown_separator_rows: bool = False,
 ) -> list[tuple[str, ...]]:
     def parse_rows(
         column_count: int | None,
@@ -362,17 +461,100 @@ def _table_rows(
     ) -> list[tuple[str, ...]]:
         lines = value.splitlines()
 
+        def has_prose_label(line: str) -> bool:
+            stripped = line.strip()
+            if stripped.startswith("|") or _has_unescaped_trailing_pipe(stripped):
+                return False
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            if cells in (matching_rows or set()):
+                return False
+            first_cell = _split_pipe_cells(stripped)[0].strip()
+            if re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", first_cell):
+                return False
+            label_match = re.match(
+                r"(?P<label>[\w()./-]+(?:\s+[\w()./-]+)*)[:：]\s*(?:\S|$)",
+                first_cell,
+            )
+            return label_match is not None and any(
+                character.isalpha() for character in label_match.group("label")
+            )
+
         def is_unframed_pipe_row(line: str) -> bool:
             stripped = line.strip()
             if (
                 "|" not in stripped
                 or stripped.startswith("|")
-                or stripped.endswith("|")
-                or not re.search(r"\s\|\s", stripped)
+                or _has_unescaped_trailing_pipe(stripped)
+                or has_prose_label(stripped)
             ):
                 return False
-            cells = tuple(normalize_text(cell) for cell in stripped.split("|"))
-            return column_count is None or len(cells) == column_count
+            cells = tuple(
+                normalize_text(cell) for cell in _split_pipe_cells(stripped)
+            )
+            if column_count is not None and len(cells) != column_count:
+                return False
+            return bool(re.search(r"\s\|\s", stripped)) or cells in (
+                matching_rows or set()
+            )
+
+        def is_table_context_row(line: str) -> bool:
+            stripped = line.strip()
+            if "|" not in stripped or has_prose_label(stripped):
+                return False
+            has_leading_pipe = stripped.startswith("|")
+            has_trailing_pipe = _has_unescaped_trailing_pipe(stripped)
+            raw_cells = _split_pipe_cells(stripped)
+            if has_leading_pipe:
+                raw_cells = raw_cells[1:]
+            if has_trailing_pipe:
+                raw_cells = raw_cells[:-1]
+            cells = tuple(normalize_text(cell) for cell in raw_cells)
+            if column_count is not None and len(cells) != column_count:
+                return False
+            is_separator = bool(cells) and all(
+                re.fullmatch(r":?-{3,}:?", cell) for cell in cells
+            )
+            return is_separator or (
+                len(cells) == column_count
+                and (
+                    (has_leading_pipe and has_trailing_pipe)
+                    or bool(re.search(r"\s\|\s", stripped))
+                    or cells in (matching_rows or set())
+                )
+            )
+
+        def has_pipe_table_context(line_index: int) -> bool:
+            return any(
+                0 <= neighbor_index < len(lines)
+                and (
+                    is_unframed_pipe_row(lines[neighbor_index])
+                    or is_table_context_row(lines[neighbor_index])
+                )
+                for neighbor_index in (line_index - 1, line_index + 1)
+            )
+
+        def has_table_context_on_both_sides(line_index: int) -> bool:
+            return (
+                line_index > 0
+                and line_index + 1 < len(lines)
+                and is_table_context_row(lines[line_index - 1])
+                and is_table_context_row(lines[line_index + 1])
+            )
+
+        def is_one_sided_pipe_formula(line: str) -> bool:
+            stripped = line.strip()
+            return (
+                stripped.startswith("|")
+                and not _has_unescaped_trailing_pipe(stripped)
+                and re.match(
+                    r"^\|\s*[^|]+\|\s*(?:<=|>=|!=|=|<|>|≤|≥|≠|≈|"
+                    r"[+\-−*/×÷^])",
+                    stripped,
+                )
+                is not None
+            )
 
         rows = []
         for line_index, line in enumerate(lines):
@@ -384,16 +566,16 @@ def _table_rows(
             stripped = line.strip()
             has_table_row_shape = (
                 stripped.startswith("|")
-                or stripped.endswith("|")
+                or _has_unescaped_trailing_pipe(stripped)
                 or re.search(r"\s\|\s", stripped)
             )
-            first_cell = stripped.split("|", maxsplit=1)[0].strip()
-            has_prose_label = re.match(
-                r"\w+(?:\s+\w+)*:\s+\S", first_cell
-            ) is not None
-            raw_cells = stripped.split("|")
+            has_context_on_both_sides = has_table_context_on_both_sides(line_index)
+            is_prose_label = (
+                has_prose_label(stripped) and not has_context_on_both_sides
+            )
+            raw_cells = _split_pipe_cells(stripped)
             has_leading_pipe = stripped.startswith("|")
-            has_trailing_pipe = stripped.endswith("|")
+            has_trailing_pipe = _has_unescaped_trailing_pipe(stripped)
             if has_leading_pipe:
                 raw_cells = raw_cells[1:]
             if has_trailing_pipe and (
@@ -407,22 +589,49 @@ def _table_rows(
                 raw_cells = raw_cells[:-1]
             cells = [normalize_text(cell) for cell in raw_cells]
             if cells and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
-                continue
+                if (
+                    allow_markdown_separator_rows
+                    and _is_markdown_separator_row_at(
+                        lines,
+                        line_index,
+                        column_count,
+                        matching_rows=matching_rows,
+                        prefer_markdown_separator=prefer_markdown_separator_rows,
+                    )
+                ):
+                    continue
             normalized_cells = tuple(cells)
-            has_unframed_table_context = any(
+            is_compact_pipe_row = (
+                allow_compact_pipe_row_without_context
+                and not has_leading_pipe
+                and not has_trailing_pipe
+                and "|" in stripped
+                and not re.search(r"\s\|\s", stripped)
+                and len(normalized_cells) == column_count
+            )
+            has_table_context = has_pipe_table_context(line_index) or (
+                has_context_on_both_sides
+            )
+            has_one_sided_pipe_table_context = (
+                has_context_on_both_sides
+            ) or any(
                 0 <= neighbor_index < len(lines)
-                and is_unframed_pipe_row(lines[neighbor_index])
+                and _is_table_separator_row(
+                    lines[neighbor_index], len(normalized_cells)
+                )
                 for neighbor_index in (line_index - 1, line_index + 1)
             )
             if (
                 require_table_row_shape
                 and not has_table_row_shape
                 and normalized_cells not in (matching_rows or set())
+                and not has_table_context
+                and not is_compact_pipe_row
             ):
                 continue
             if (
                 require_table_row_shape
-                and has_prose_label
+                and is_prose_label
                 and not (has_leading_pipe or has_trailing_pipe)
                 and normalized_cells not in (matching_rows or set())
             ):
@@ -431,10 +640,23 @@ def _table_rows(
                 require_table_row_shape
                 and not (has_leading_pipe or has_trailing_pipe)
                 and normalized_cells not in (matching_rows or set())
-                and not has_unframed_table_context
+                and not has_table_context
                 and not (
                     allow_unframed_shape_without_context
                     and has_table_row_shape
+                )
+                and not is_compact_pipe_row
+            ):
+                continue
+            if (
+                require_table_row_shape
+                and has_leading_pipe != has_trailing_pipe
+                and normalized_cells not in (matching_rows or set())
+                and (
+                    is_one_sided_pipe_formula(stripped)
+                    or not (
+                        has_one_sided_pipe_table_context or has_table_context
+                    )
                 )
             ):
                 continue
@@ -453,34 +675,155 @@ def _table_rows(
     return parse_rows(column_count)
 
 
-def _is_table_separator_row(value: str, expected_column_count: int) -> bool:
+def _is_markdown_separator_row_at(
+    lines: list[str],
+    line_index: int,
+    column_count: int | None,
+    *,
+    matching_rows: set[tuple[str, ...]] | None = None,
+    prefer_markdown_separator: bool = False,
+) -> bool:
+    if (
+        column_count is None
+        or line_index == 0
+        or not _is_table_separator_row(lines[line_index], column_count)
+    ):
+        return False
+    separator = lines[line_index].strip()
+    separator_cells = _split_pipe_cells(separator)
+    if separator.startswith("|"):
+        separator_cells = separator_cells[1:]
+    if _has_unescaped_trailing_pipe(separator):
+        separator_cells = separator_cells[:-1]
+    if (
+        not prefer_markdown_separator
+        and tuple(normalize_text(cell) for cell in separator_cells)
+        in (matching_rows or set())
+    ):
+        return False
+    if not _table_rows(
+        lines[line_index - 1], column_count, matching_rows=matching_rows
+    ):
+        return False
+    if _is_table_separator_row(lines[line_index - 1], column_count):
+        return False
+
+    for previous_index in range(line_index - 1, -1, -1):
+        if not lines[previous_index].strip():
+            break
+        if _is_table_separator_row(lines[previous_index], column_count):
+            return False
+        if not _table_rows(
+            lines[previous_index], column_count, matching_rows=matching_rows
+        ):
+            break
+    return True
+
+
+def _table_separator_column_count(value: str) -> int | None:
     stripped = value.strip()
     if "|" not in stripped:
-        return False
-    raw_cells = stripped.split("|")
+        return None
+    raw_cells = _split_pipe_cells(stripped)
     if stripped.startswith("|"):
         raw_cells = raw_cells[1:]
-    if stripped.endswith("|"):
+    if _has_unescaped_trailing_pipe(stripped):
         raw_cells = raw_cells[:-1]
     cells = [normalize_text(cell) for cell in raw_cells]
-    return len(cells) == expected_column_count and all(
-        re.fullmatch(r":?-{3,}:?", cell) for cell in cells
-    )
+    if not cells or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
+        return None
+    return len(cells)
 
 
-def _table_matches(expected: str, actual: str, output_format: str) -> bool:
+def _is_table_separator_row(value: str, expected_column_count: int) -> bool:
+    return _table_separator_column_count(value) == expected_column_count
+
+
+def _table_matches(
+    expected: str,
+    actual: str,
+    output_format: str,
+    formula_text: str | None = None,
+) -> bool:
     allow_tsv = output_format == "plain_text"
     expected_rows = _table_rows(expected, allow_tsv=allow_tsv)
     if not expected_rows:
         return normalize_text(expected) in normalize_text(actual)
     expected_column_count = max(len(row) for row in expected_rows)
+    if formula_text:
+        canonical_formula = _canonical_formula(formula_text, output_format)
+        strip_markdown_markup = output_format in {"markdown", "table"}
+
+        def matches_formula_row(value: str) -> bool:
+            return canonical_formula == _canonical_formula(
+                value,
+                output_format,
+                strip_markdown_markup=strip_markdown_markup,
+                formula_text=formula_text,
+            )
+
+        table_lines = actual.splitlines()
+        for line_index, line in enumerate(table_lines):
+            stripped = line.strip()
+            formula_row = matches_formula_row(stripped)
+            if (
+                not formula_row
+                and stripped.startswith("|")
+                and _has_unescaped_trailing_pipe(stripped)
+            ):
+                parsed_row = _table_rows(stripped, 1)
+                if len(parsed_row) == 1:
+                    formula_row = matches_formula_row(parsed_row[0][0])
+            if formula_row:
+                candidate_lines = table_lines[:line_index] + table_lines[
+                    line_index + 1 :
+                ]
+                candidate_rows = _table_rows(
+                    "\n".join(candidate_lines),
+                    expected_column_count,
+                    allow_tsv=allow_tsv,
+                    matching_rows=set(expected_rows),
+                    allow_markdown_separator_rows=True,
+                    prefer_markdown_separator_rows=(
+                        output_format in {"markdown", "table"}
+                    ),
+                )
+                if candidate_rows == expected_rows:
+                    table_lines = candidate_lines
+                    break
+        actual = "\n".join(table_lines)
     actual_rows = _table_rows(
         actual,
         expected_column_count,
         allow_tsv=allow_tsv,
         matching_rows=set(expected_rows),
+        allow_markdown_separator_rows=True,
+        prefer_markdown_separator_rows=(
+            output_format in {"markdown", "table"}
+        ),
     )
     return actual_rows == expected_rows
+
+
+def _unmatched_latex_math_delimiters(value: str) -> list[tuple[int, int]]:
+    closing_for = {"(": ")", "[": "]"}
+    stack = []
+    unmatched = []
+    for match in re.finditer(r"\\(\(|\)|\[|\])", value):
+        preceding_backslashes = len(value[: match.start()]) - len(
+            value[: match.start()].rstrip("\\")
+        )
+        if preceding_backslashes % 2:
+            continue
+        delimiter = match.group(1)
+        if delimiter in closing_for:
+            stack.append((closing_for[delimiter], match.start(), match.end()))
+        elif stack and stack[-1][0] == delimiter:
+            stack.pop()
+        else:
+            unmatched.append((match.start(), match.end()))
+    unmatched.extend((start, end) for _, start, end in stack)
+    return unmatched
 
 
 def _strip_latex_markup(value: str) -> str:
@@ -498,9 +841,14 @@ def _strip_latex_markup(value: str) -> str:
         lambda match: commands[match.group(1)],
         value,
     )
+    text = re.sub(
+        r"\\([A-Za-z]+)",
+        lambda match: LATEX_GREEK_COMMANDS.get(match.group(1), match.group(0)),
+        text,
+    )
+    text = text.replace(r"\$", LITERAL_LATEX_DOLLAR)
     text = re.sub(r"\\\((.+?)\\\)", compact_math, text, flags=re.DOTALL)
     text = re.sub(r"\\\[(.+?)\\\]", compact_math, text, flags=re.DOTALL)
-    text = re.sub(r"\\(?:\(|\)|\[|\])", "", text)
     text = re.sub(
         r"(?<!\$)\$\$(.+?)\$\$(?!\$)", compact_math, text, flags=re.DOTALL
     )
@@ -511,15 +859,18 @@ def _strip_latex_markup(value: str) -> str:
     )
     text = re.sub(r"\\([#$%&_{}])", r"\1", text)
     text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
-    fraction_pattern = re.compile(
-        r"\\(?:dfrac|tfrac|frac)\s*\{([^{}]+)\}\s*\{([^{}]+)\}"
+    text = re.sub(
+        r"\\(?:mathit|mathrm|operatorname|text)\s*\{([^{}]*)\}",
+        r"\1",
+        text,
     )
+    fraction_command = re.compile(r"\\(?:dfrac|tfrac|frac)(?![A-Za-z])\s*")
     square_root_pattern = re.compile(r"\\sqrt\s*\{([^{}]+)\}")
 
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
 
-    def fraction_text(match: re.Match[str]) -> str:
+    def fraction_text(numerator: str, denominator: str) -> str:
         def group_if_compound(operand: str) -> str:
             operand = operand.strip()
             if has_binary_operator(operand) and not (
@@ -528,9 +879,59 @@ def _strip_latex_markup(value: str) -> str:
                 return f"({operand})"
             return operand
 
-        numerator = group_if_compound(match.group(1))
-        denominator = group_if_compound(match.group(2))
+        numerator = group_if_compound(numerator)
+        denominator = group_if_compound(denominator)
         return f"{numerator}/{denominator}"
+
+    def braced_group(value: str, opening_index: int) -> tuple[str, int] | None:
+        if opening_index >= len(value) or value[opening_index] != "{":
+            return None
+        depth = 1
+        index = opening_index + 1
+        while index < len(value):
+            if value[index] == "\\":
+                index += 2
+                continue
+            if value[index] == "{":
+                depth += 1
+            elif value[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return value[opening_index + 1 : index], index + 1
+            index += 1
+        return None
+
+    def replace_fractions(value: str) -> str:
+        output = []
+        index = 0
+        while index < len(value):
+            match = fraction_command.match(value, index)
+            if match is None:
+                output.append(value[index])
+                index += 1
+                continue
+            numerator_group = braced_group(value, match.end())
+            if numerator_group is None:
+                output.append(value[index])
+                index += 1
+                continue
+            numerator, next_index = numerator_group
+            while next_index < len(value) and value[next_index].isspace():
+                next_index += 1
+            denominator_group = braced_group(value, next_index)
+            if denominator_group is None:
+                output.append(value[index])
+                index += 1
+                continue
+            denominator, end_index = denominator_group
+            output.append(
+                fraction_text(
+                    replace_fractions(numerator),
+                    replace_fractions(denominator),
+                )
+            )
+            index = end_index
+        return "".join(output)
 
     def square_root_text(match: re.Match[str]) -> str:
         operand = match.group(1).strip()
@@ -542,7 +943,7 @@ def _strip_latex_markup(value: str) -> str:
 
     while True:
         previous = text
-        text = fraction_pattern.sub(fraction_text, text)
+        text = replace_fractions(text)
         text = square_root_pattern.sub(square_root_text, text)
         if text == previous:
             break
@@ -675,19 +1076,34 @@ def _plain_text_for_cer(
         if annotated_table_rows:
             expected_column_count = max(map(len, annotated_table_rows))
             lines = []
-            for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-                if _is_table_separator_row(line, expected_column_count):
+            source_lines = (
+                text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            )
+            for index, line in enumerate(source_lines):
+                if _is_markdown_separator_row_at(
+                    source_lines,
+                    index,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                ):
                     continue
                 parsed_rows = _table_rows(
                     line,
                     expected_column_count,
                     matching_rows=annotated_table_rows,
                     allow_unframed_shape_without_context=True,
+                    allow_compact_pipe_row_without_context=True,
                 )
-                if any(
-                    len(row) == expected_column_count for row in parsed_rows
-                ):
-                    line = line.replace("|", " ")
+                normalized_row = next(
+                    (
+                        row
+                        for row in parsed_rows
+                        if len(row) == expected_column_count
+                    ),
+                    None,
+                )
+                if normalized_row is not None:
+                    line = " ".join(normalized_row)
                 lines.append(line)
             text = "\n".join(lines)
     if output_format in {"markdown", "table"}:
@@ -698,21 +1114,45 @@ def _plain_text_for_cer(
             parsed_rows = _table_rows(line)
             if parsed_rows and parsed_rows[0] in annotated_table_rows:
                 annotated_table_row_indices.add(index)
-        separator_rows = {
-            index
-            for index, line in enumerate(source_lines)
-            if "|" in line and not _table_rows(line)
-        }
+        separator_rows = {}
+        for index, line in enumerate(source_lines):
+            column_count = _table_separator_column_count(line)
+            if column_count is not None and _is_markdown_separator_row_at(
+                source_lines,
+                index,
+                column_count,
+                matching_rows=annotated_table_rows,
+                prefer_markdown_separator=strip_markdown_markup,
+            ):
+                separator_rows[index] = column_count
         table_rows = set()
-        for separator in separator_rows:
-            if separator > 0 and "|" in source_lines[separator - 1]:
+        for separator, column_count in separator_rows.items():
+            if separator > 0:
+                preceding_rows = _table_rows(
+                    source_lines[separator - 1],
+                    column_count,
+                    matching_rows=annotated_table_rows,
+                )
+            else:
+                preceding_rows = []
+            if any(len(row) == column_count for row in preceding_rows):
                 table_rows.add(separator - 1)
             row = separator + 1
             while (
                 row < len(source_lines)
                 and source_lines[row].strip()
-                and "|" in source_lines[row]
             ):
+                parsed_rows = _table_rows(
+                    source_lines[row],
+                    column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if not any(
+                    len(parsed_row) == column_count
+                    for parsed_row in parsed_rows
+                ):
+                    break
                 table_rows.add(row)
                 row += 1
         lines = []
@@ -726,11 +1166,23 @@ def _plain_text_for_cer(
                 line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
                 line = _strip_markdown_inline_formatting(line, formula_text)
             if index in table_rows or index in annotated_table_row_indices:
-                line = line.replace("|", " ")
+                expected_column_count = (
+                    max(map(len, annotated_table_rows))
+                    if annotated_table_rows
+                    else None
+                )
+                parsed_rows = _table_rows(
+                    line,
+                    expected_column_count,
+                    matching_rows=annotated_table_rows,
+                    allow_compact_pipe_row_without_context=True,
+                )
+                if parsed_rows:
+                    line = " ".join(parsed_rows[0])
             lines.append(line)
         text = "\n".join(lines)
     if output_format in {"markdown", "table", "latex"}:
-        text = _strip_latex_markup(text)
+        text = _strip_latex_markup(text).replace(LITERAL_LATEX_DOLLAR, "$")
     text = _normalize_superscript_digits(text)
     text = normalize_text(text)
     if formula_text:
@@ -762,17 +1214,88 @@ def _normalized_formula_text(
     return _normalize_superscript_digits(text)
 
 
-def _canonical_formula(value: str, output_format: str) -> str:
-    text = _normalized_formula_text(value, output_format)
+def _canonical_formula(
+    value: str,
+    output_format: str,
+    *,
+    strip_markdown_markup: bool = False,
+    formula_text: str | None = None,
+) -> str:
+    text = _normalized_formula_text(
+        value,
+        output_format,
+        strip_markdown_markup=strip_markdown_markup,
+        formula_text=formula_text,
+    )
     return re.sub(r"\s+", "", text)
 
 
-def _formula_span_matches(expected: str, actual: str) -> bool:
+def _formula_span_matches(
+    expected: str,
+    actual: str,
+    output_format: str,
+    unmatched_math_delimiters: list[tuple[int, int]],
+) -> bool:
     if not expected:
         return False
-    pattern = re.compile(r"\s*".join(re.escape(character) for character in expected))
-    left_operators = set("+-−*/·×^_=<>≤≥∫∮∑∏∂∇√∞")
+    pattern_parts = []
+    for character in expected:
+        if character in {"$", LITERAL_LATEX_DOLLAR}:
+            pattern_parts.append(r"(?:\$|\ue000)")
+        else:
+            pattern_parts.append(re.escape(character))
+    pattern = re.compile(r"\s*".join(pattern_parts))
+    left_operators = set("+-−*/·×÷^_=<>≤≥∫∮∑∏∂∇√∞")
     right_operators = left_operators
+    math_word_operators = {
+        "add",
+        "and",
+        "divided",
+        "minus",
+        "mod",
+        "modulo",
+        "multiplied",
+        "or",
+        "over",
+        "plus",
+        "subtract",
+        "times",
+    }
+    written_number_words = {
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+        "twenty",
+        "thirty",
+        "forty",
+        "fifty",
+        "sixty",
+        "seventy",
+        "eighty",
+        "ninety",
+        "hundred",
+        "thousand",
+        "million",
+        "billion",
+        "trillion",
+    }
     math_functions = {
         "arccos",
         "arcsin",
@@ -807,49 +1330,19 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         "tan",
         "tanh",
     }
-    greek_symbols = {
-        "Gamma",
-        "Delta",
-        "Theta",
-        "Lambda",
-        "Xi",
-        "Pi",
-        "Sigma",
-        "Upsilon",
-        "Phi",
-        "Psi",
-        "Omega",
-        "alpha",
-        "beta",
-        "chi",
-        "delta",
-        "epsilon",
-        "eta",
-        "gamma",
-        "iota",
-        "kappa",
-        "lambda",
-        "mu",
-        "nu",
-        "omega",
-        "omicron",
-        "phi",
-        "pi",
-        "psi",
-        "rho",
-        "sigma",
-        "tau",
-        "theta",
-        "upsilon",
-        "varepsilon",
-        "varkappa",
-        "varphi",
-        "varpi",
-        "varrho",
-        "varsigma",
-        "vartheta",
-        "xi",
-        "zeta",
+    greek_symbols = set(LATEX_GREEK_COMMANDS) | {"pi"}
+    latex_math_formatting_commands = {
+        "boldsymbol",
+        "mathbb",
+        "mathbf",
+        "mathcal",
+        "mathfrak",
+        "mathit",
+        "mathrm",
+        "mathsf",
+        "mathtt",
+        "operatorname",
+        "text",
     }
 
     def is_cjk_text_character(character: str) -> bool:
@@ -868,12 +1361,19 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
             )
             or function_name in math_functions
             or function_name in greek_symbols
+            or function_name in latex_math_formatting_commands
         )
 
     def has_adjacent_formula_term(value: str, *, from_right: bool) -> bool:
         tokens = value.split()
         if not tokens:
             return False
+        if not from_right:
+            function_call = re.search(
+                r"(\\?[A-Za-z][A-Za-z0-9]*)\s*\($", value
+            )
+            if function_call and is_formula_term(function_call.group(1)):
+                return True
         token = tokens[0] if from_right else tokens[-1]
         if not from_right and (
             re.fullmatch(r"\d+[.)]", token)
@@ -884,11 +1384,47 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
         token_without_punctuation = (
             token[:-1] if has_trailing_punctuation else token
         )
+        if token_without_punctuation.casefold() in math_word_operators:
+            if len(tokens) == 1:
+                return True
+            adjacent_token = tokens[1] if from_right else tokens[-2]
+            if token_without_punctuation.casefold() not in {"and", "or"}:
+                return True
+            if (
+                from_right
+                and adjacent_token.casefold() == "a"
+                and len(tokens) > 2
+                and not is_formula_term(tokens[2].rstrip(".,;:!?"))
+            ):
+                return False
+            return (
+                is_formula_term(adjacent_token)
+                or adjacent_token.rstrip(".,;:!?").casefold()
+                in written_number_words
+            )
+        if (
+            not from_right
+            and len(tokens) > 1
+            and token.endswith((":", "："))
+            and not is_formula_term(tokens[-2])
+            and re.fullmatch(
+                r"[A-Za-z][A-Za-z0-9]*-\d+[A-Za-z0-9]*",
+                token_without_punctuation,
+            )
+        ):
+            return False
+        if not from_right and re.fullmatch(
+            r"(?i)(?:appendix|chapter|equation|figure|page|part|problem|question|"
+            r"section|table)-\d+[a-z]?",
+            token_without_punctuation,
+        ):
+            return False
+        date_token = token_without_punctuation.strip("()[]{}")
         is_numeric_date = (
             re.fullmatch(
                 r"(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|"
                 r"\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})",
-                token_without_punctuation,
+                date_token,
             )
             is not None
         )
@@ -933,6 +1469,17 @@ def _formula_span_matches(expected: str, actual: str) -> bool:
     for match in pattern.finditer(actual):
         before = actual[: match.start()]
         after = actual[match.end() :]
+        if output_format in {"markdown", "table", "latex"}:
+            trimmed_before = before.rstrip()
+            trimmed_after = after.lstrip()
+            if trimmed_before.endswith("$") or trimmed_after.startswith("$"):
+                continue
+            after_start = len(actual) - len(trimmed_after)
+            if any(
+                end == len(trimmed_before) or start == after_start
+                for start, end in unmatched_math_delimiters
+            ):
+                continue
         if before:
             previous = before[-1]
             if (
@@ -977,12 +1524,16 @@ def _exact_snippet_metric(
     for fixture in eligible:
         prediction = predictions_by_id.get(fixture["id"])
         text = None if prediction is None else prediction["text"]
-        normalized_text = None if text is None else normalize_text(text)
-        if not normalized_text:
+        if text is None:
             pending += 1
             continue
         if field == "table_text":
-            matches = _table_matches(fixture[field], text, output_format)
+            matches = _table_matches(
+                fixture[field],
+                text,
+                output_format,
+                formula_text=fixture.get("formula_text"),
+            )
         else:
             expected = _canonical_formula(fixture[field], output_format)
             actual = _normalized_formula_text(
@@ -991,7 +1542,17 @@ def _exact_snippet_metric(
                 strip_markdown_markup=True,
                 formula_text=fixture[field],
             )
-            matches = _formula_span_matches(expected, actual)
+            unmatched_math_delimiters = (
+                _unmatched_latex_math_delimiters(actual)
+                if output_format in {"markdown", "table", "latex"}
+                else []
+            )
+            matches = _formula_span_matches(
+                expected,
+                actual,
+                output_format,
+                unmatched_math_delimiters,
+            )
         if matches:
             correct += 1
 
@@ -1034,9 +1595,6 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        if not normalized_prediction:
-            pending_pages += 1
-            continue
         positions = [normalized_prediction.find(anchor) for anchor in anchors]
         for left_index, left_position in enumerate(positions):
             for right_position in positions[left_index + 1 :]:
@@ -1082,8 +1640,14 @@ def _usage_metric(
         mean = None
         status = "pending"
     else:
-        total = sum(values)
-        mean = total / len(values)
+        try:
+            total = sum(values)
+            mean = total / len(values)
+            aggregate_is_finite = math.isfinite(total) and math.isfinite(mean)
+        except OverflowError:
+            aggregate_is_finite = False
+        if not aggregate_is_finite:
+            raise EvaluationError(f"{field} aggregate must remain finite")
         status = "complete"
     return {
         total_name: total,

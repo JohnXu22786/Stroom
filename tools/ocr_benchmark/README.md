@@ -71,8 +71,9 @@ Normalization and metric definitions:
   Intraword underscores are preserved as text rather than stripped as emphasis.
   It applies table-pipe normalization to both the golden and returned text. For
   `markdown`, `table`, and `latex`, it removes paired inline/display math
-  delimiters while preserving unmatched dollar signs used as currency, and normalizes
-  notation commands such as `\int`, `\frac`, and `\sqrt`. Unicode punctuation
+  delimiters while preserving unmatched and escaped dollar signs used as
+  currency, and normalizes notation commands such as `\int`, `\theta`,
+  `\alpha`, `\frac`, and `\sqrt`. Unicode punctuation
   immediately after inline math does not retain delimiters. For all formats,
   annotated formula spans are compacted for CER and superscript digit runs are
   normalized as one exponent. Compound fraction operands and exponent/subscript
@@ -85,32 +86,45 @@ Normalization and metric definitions:
 - Reading-order score is the proportion of expected anchor pairs appearing in
   golden order within the normalized prediction. Anchors are unique fragments
   recorded for multi-column fixtures. A missing anchor is an incorrect pair;
-  a page with no returned text leaves this metric pending.
+  an empty or whitespace-only returned string scores zero. A missing prediction
+  row or null text leaves this metric pending.
 - Table fidelity compares the annotated rows and cells in sequence. It ignores
-  optional outer Markdown pipes and Markdown separator rows, while preserving
-  empty cells according to the annotated column count. For `plain_text`, it
-  also accepts tab-separated table rows. An unframed pipe row must match an
-  annotated row or have neighboring same-width table rows; labeled prose such
-  as `Set relation: x | y` is not counted as a row. A valid Markdown table is
-  not penalized for its formatting row. It remains a text check, not semantic
-  table parsing. Formula fidelity compares the
+  optional outer Markdown pipes and a valid Markdown formatting row, while
+  preserving annotated hyphen-only data rows and empty cells. For `plain_text`,
+  it also accepts tab-separated table rows. An unframed pipe row must match an
+  annotated row or have neighboring table context; a compact row with the wrong
+  number of cells remains visible as an extra row. One-sided-pipe rows need an
+  annotated match or neighboring table context; one-sided absolute-value
+  equations such as `|x| = 2` remain formula text unless annotated as table
+  rows. Labeled prose such as `Set relation: x | y` is not counted as a row. It
+  remains a text check, not semantic table parsing. Escaped `\|` characters
+  remain literal cell content.
+  An exact annotated formula line is excluded from
+  table comparison when removing it leaves the annotated rows intact. Formula
+  fidelity compares the
   annotated formula as a complete span after whitespace compaction and Unicode
   superscript normalization; surrounding prose is allowed, but adjacent math
-  operators are not. For `markdown`, `table`, and `latex`, it
-  also removes paired math delimiters and preserves unmatched currency dollar signs,
+  operators, including spelled forms such as `plus` and `minus`, are not. For
+  `markdown`, `table`, and `latex`, it
+  also removes paired math delimiters, preserves unmatched currency dollar signs,
   and normalizes common notation such as `\int`, `\pi`, `\frac`, and `\sqrt`.
+  It unwraps `\mathrm`, `\mathit`, `\operatorname`, and `\text` arguments while
+  preserving font selectors such as `\mathbb` and `\mathbf`.
+  Unmatched `\(`, `\)`, `\[`, `\]`, or `$` delimiters remain literal and fail
+  formula fidelity when adjacent to the annotated formula.
   Escaped LaTeX text symbols such as `\%`, `\_`, and `\$` are scored as
   their literal characters.
   Paired math delimiters may touch CJK text; whitespace directly between CJK
   text and an annotated formula is ignored. Compound fraction operands and
   compound exponent/subscript groups retain grouping. It does not perform
-  symbolic equivalence. If any
-  eligible page has no returned text, the metric value is null and its pending
-  count is reported.
+  symbolic equivalence. Empty or whitespace-only returned text is a failed
+  match. If any eligible page has a missing prediction row or null text, the
+  metric value is null and its pending count is reported.
 - Elapsed time is supplied in milliseconds per fixture. Returned tokens means
   provider-reported completion/output tokens per fixture. If any fixture lacks
   either measurement, that metric's total and mean are null and the missing
-  page count is reported.
+  page count is reported. A finite aggregate is required; overflow is reported
+  as an evaluation error.
 
 The deterministic self-tests and fixture checks validate the evaluator and
 input set; they do not measure OCR model quality.
