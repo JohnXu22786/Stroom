@@ -534,7 +534,10 @@ void main() {
       // must notify Flutter so the Flutter-side pan state does not go
       // stale and snap back on the next gesture/button interaction.
       // Mouse drag pan and touch pan must both report.
-      expect(html, contains('panX = panStartX + (e.clientX - dragStartX)'));
+      expect(html, contains('var deltaX = e.clientX - dragStartX;'));
+      expect(html, contains('var deltaY = e.clientY - dragStartY;'));
+      expect(html, contains('panX = panStartX + deltaX;'));
+      expect(html, contains('panY = panStartY + deltaY;'));
       expect(html, contains('panX = touchPanStartX'));
       // Exactly one notify per mutation path: setZoom, fitToViewport,
       // native pan/pinch, mouse-drag pan, touch pan. This pins the notify
