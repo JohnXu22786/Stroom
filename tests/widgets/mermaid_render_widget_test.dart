@@ -2865,6 +2865,74 @@ void main() {
     );
 
     testWidgets(
+      'keeps source and save actions available after inline render error',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        const mermaidCode = 'graph TD\nA-->B';
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: mermaidCode,
+                testOnlyGetAllFolders: () async => {'Charts'},
+              ),
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        });
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+
+        final webView = platform.webView!;
+        final controller =
+            webView.controllerFromPlatform<InAppWebViewController>(
+          webView.controller,
+        );
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: webView.params.initialData!.baseUrl!,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Could not connect to host',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text('重试'), findsOneWidget);
+        expect(find.byIcon(Icons.code), findsOneWidget);
+        expect(find.byIcon(Icons.save), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        expect(find.text('保存 Mermaid 图表'), findsOneWidget);
+        Navigator.of(tester.element(find.text('保存 Mermaid 图表'))).pop();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pumpAndSettle();
+        expect(find.text(mermaidCode), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
       'late native WebView creation clears the timeout after loading',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
