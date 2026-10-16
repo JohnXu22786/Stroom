@@ -140,6 +140,10 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     unawaited(_persistTasks());
 
     // 异步开始执行
+    final previousCancelToken = _cancelTokens[id];
+    if (previousCancelToken != null && !previousCancelToken.isCancelled) {
+      previousCancelToken.cancel();
+    }
     _executeTask(task);
 
     return id;
