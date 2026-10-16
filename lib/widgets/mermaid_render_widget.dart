@@ -2152,11 +2152,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
           // Button row (top right) — keep the toolbar available after a
           // render error so users can still inspect or save the source.
+          // The error overlay already intercepts WebView taps, so avoid a
+          // second PointerInterceptor around the toolbar in that state.
           if (widget.showToolbar && !showLoading)
             Positioned(
               top: 4,
               right: 4,
-              child: _buildWebOverlay(_buildButtonRow(cs)),
+              child: showErrorOverlay
+                  ? _buildButtonRow(cs)
+                  : _buildWebOverlay(_buildButtonRow(cs)),
             ),
 
           // Zoom controls overlay — shown independently of showToolbar.
