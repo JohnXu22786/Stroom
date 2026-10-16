@@ -539,14 +539,14 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                 (label == '添加关联' || label == '添加验证')) {
                               final currentSnippet =
                                   MermaidTemplates.getSnippets(
-                                    'requirement',
-                                    code: _codeController.text,
-                                  )
-                                  .firstWhere(
-                                    (item) => item.$1 == label,
-                                    orElse: () => (label, ''),
-                                  )
-                                  .$2;
+                                'requirement',
+                                code: _codeController.text,
+                              )
+                                      .firstWhere(
+                                        (item) => item.$1 == label,
+                                        orElse: () => (label, ''),
+                                      )
+                                      .$2;
                               if (currentSnippet.isNotEmpty) {
                                 _insertSnippet(currentSnippet);
                               }
