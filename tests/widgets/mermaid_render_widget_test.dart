@@ -3552,6 +3552,95 @@ void main() {
     );
 
     testWidgets(
+      'aborts after a transient manifest read failure and retries with a unique name',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          TextManifest.invalidateCache();
+        });
+
+        var completedSaveCount = 0;
+        await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          MermaidRenderWidget(
+            mermaidCode: 'graph TD\n  A-->B',
+            testOnlyOnMmdSaveComplete: () => completedSaveCount++,
+          ),
+        );
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        final firstSave = (await TextManifest.loadRecordsUncached())
+            .singleWhere((record) => record.format == 'mmd');
+        expect(firstSave.name, 'graph TD');
+        expect(firstSave.folder, isEmpty);
+        expect(completedSaveCount, 1);
+
+        TextManifest.invalidateCache();
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        var readFailureCount = 0;
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          readFailureCount++;
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          throw StateError('injected transient manifest read failure');
+        };
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+        expect(readFailureCount, 1);
+        expect(find.textContaining('获取文件夹失败'), findsOneWidget);
+        expect(find.byType(FolderPickerDialog), findsNothing);
+        expect(completedSaveCount, 1,
+            reason: 'a failed manifest read must not be reported as a save');
+        expect(
+          (await TextManifest.loadRecordsUncached())
+              .where((record) => record.format == 'mmd')
+              .map((record) => record.name),
+          ['graph TD'],
+          reason: 'the failed folder lookup must not create a duplicate row',
+        );
+
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        final savedMmdRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(completedSaveCount, 2);
+        expect(savedMmdRecords, hasLength(2));
+        expect(
+          savedMmdRecords.map((record) => record.name),
+          unorderedEquals(['graph TD', 'graph TD (2)']),
+        );
+        expect(savedMmdRecords.map((record) => record.folder),
+            everyElement(isEmpty));
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'concurrent saves with the same name get unique names in one folder',
       (tester) async {
         SharedPreferences.setMockInitialValues({});

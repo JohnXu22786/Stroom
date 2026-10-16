@@ -967,9 +967,9 @@ class ManifestOperations<T extends FileRecord> {
     }
   }
 
-  Future<Set<String>> getAllFolders() async {
+  Future<Set<String>> getAllFolders({bool throwOnError = false}) async {
     try {
-      await loadRecords();
+      await loadRecords(throwOnError: throwOnError);
       final folders = <String>{};
       folders.addAll(_folderCache);
       for (final r in _cache ?? []) {

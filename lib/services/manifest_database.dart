@@ -62,6 +62,14 @@ class ManifestDatabase {
     WebFileStore.enableTestMode();
   }
 
+  /// Drops the loaded JSON snapshot without clearing its backing store.
+  ///
+  /// This models a cold manifest read after the app has already persisted data.
+  @visibleForTesting
+  static void invalidateWebDataCacheForTesting() {
+    _webData = null;
+  }
+
   /// Whether to use JSON-based storage (web or test mode)
   static bool get _useJsonStore => kIsWeb || _useInMemoryStorage;
 
