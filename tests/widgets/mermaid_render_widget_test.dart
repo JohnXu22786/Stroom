@@ -3147,6 +3147,108 @@ void main() {
       },
       skip: kIsWeb,
     );
+
+    testWidgets(
+      'concurrent saves with the same name get unique names in one folder',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+        });
+
+        final firstFolderLookupStarted = Completer<void>();
+        final firstFolderLookup = Completer<Set<String>>();
+        Future<Set<String>> getFirstFolders() {
+          firstFolderLookupStarted.complete();
+          return firstFolderLookup.future;
+        }
+
+        await _mountReadyMermaidWidgets(
+          tester,
+          platform,
+          [
+            SizedBox(
+              height: 240,
+              child: MermaidRenderWidget(
+                mermaidCode: 'graph TD\n  A-->B',
+                testOnlyGetAllFolders: getFirstFolders,
+              ),
+            ),
+            const SizedBox(
+              height: 240,
+              child: MermaidRenderWidget(mermaidCode: 'graph TD\n  A-->C'),
+            ),
+          ],
+        );
+
+        final firstMetadataWriteStarted = Completer<void>();
+        final releaseFirstMetadataWrite = Completer<void>();
+        var metadataWriteCount = 0;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          metadataWriteCount++;
+          if (metadataWriteCount == 1) {
+            firstMetadataWriteStarted.complete();
+            await releaseFirstMetadataWrite.future;
+          }
+        };
+
+        await tester.tap(find.byIcon(Icons.save).first);
+        await tester.runAsync(
+          () async => firstFolderLookupStarted.future,
+        );
+        // Keep the first dialog from covering the second widget until both
+        // saves have started their folder selection.
+        await tester.tap(find.byIcon(Icons.save).last);
+        await tester.pumpAndSettle();
+        expect(find.byType(FolderPickerDialog), findsOneWidget);
+
+        firstFolderLookup.complete({});
+        await tester.pumpAndSettle();
+        expect(find.byType(FolderPickerDialog), findsNWidgets(2));
+
+        // Both diagrams default to "graph TD". Pause the first record write
+        // after its name was chosen so the second save resolves its name
+        // against the same persisted record snapshot.
+        await tester.tap(find.text('确定').last);
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () async => firstMetadataWriteStarted.future,
+        );
+
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+        releaseFirstMetadataWrite.complete();
+        await tester.pumpAndSettle();
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+
+        final savedRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(savedRecords, hasLength(2));
+        expect(
+          savedRecords.map((record) => record.name),
+          unorderedEquals(['graph TD', 'graph TD (2)']),
+        );
+        expect(
+          await Future.wait(
+            savedRecords
+                .map((record) => TextManifest.readText(record.storagePath)),
+          ),
+          unorderedEquals(['graph TD\n  A-->B', 'graph TD\n  A-->C']),
+        );
+      },
+      skip: kIsWeb,
+    );
   });
 }
 
@@ -3156,8 +3258,29 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   Widget body, {
   bool supportsJavaScriptHandlers = false,
 }) async {
+  await _mountReadyMermaidWidgets(
+    tester,
+    platform,
+    [body],
+    supportsJavaScriptHandlers: supportsJavaScriptHandlers,
+  );
+  return platform.webView!;
+}
+
+Future<List<_MermaidWebView>> _mountReadyMermaidWidgets(
+  WidgetTester tester,
+  _MermaidWebViewPlatform platform,
+  List<Widget> bodies, {
+  bool supportsJavaScriptHandlers = false,
+}) async {
   await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
-  await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: bodies.length == 1 ? bodies.single : Column(children: bodies),
+      ),
+    ),
+  );
   await tester.runAsync(() async {
     await Future<void>.delayed(const Duration(milliseconds: 1));
   });
@@ -3165,25 +3288,31 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   await tester.pump(const Duration(milliseconds: 600));
   await tester.pump();
 
-  final webView = platform.webView!;
-  webView.controller.supportsJavaScriptHandlers = supportsJavaScriptHandlers;
-  final controller = webView.controllerFromPlatform<InAppWebViewController>(
-    webView.controller,
-  );
-  webView.params.onWebViewCreated!(controller);
-  final initialUrl = webView.params.initialData?.baseUrl;
-  webView.params.onLoadStop?.call(controller, initialUrl);
+  for (final webView in platform.webViews) {
+    webView.controller.supportsJavaScriptHandlers = supportsJavaScriptHandlers;
+    final controller = webView.controllerFromPlatform<InAppWebViewController>(
+      webView.controller,
+    );
+    webView.params.onWebViewCreated!(controller);
+    final initialUrl = webView.params.initialData?.baseUrl;
+    webView.params.onLoadStop?.call(controller, initialUrl);
+  }
   await tester.pump();
-  return webView;
+  return platform.webViews;
 }
 
 class _MermaidWebViewPlatform extends InAppWebViewPlatform {
   _MermaidWebView? webView;
+  final webViews = <_MermaidWebView>[];
 
   @override
   PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
-          PlatformInAppWebViewWidgetCreationParams params) =>
-      webView = _MermaidWebView(params);
+      PlatformInAppWebViewWidgetCreationParams params) {
+    final created = _MermaidWebView(params);
+    webView = created;
+    webViews.add(created);
+    return created;
+  }
 }
 
 class _MermaidWebView extends PlatformInAppWebViewWidget {
