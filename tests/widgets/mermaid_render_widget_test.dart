@@ -1343,16 +1343,14 @@ void main() {
           const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
           supportsJavaScriptHandlers: true,
         );
-        final initialDocumentUrl =
-            tester.widget<InAppWebView>(find.byType(InAppWebView))
-                .initialData!
-                .baseUrl;
+        final initialDocumentUrl = webView.params.initialData!.baseUrl;
         expect(
           initialDocumentUrl,
           isNotNull,
           reason: 'native initialData needs a document identity for callbacks',
         );
-        final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        final controller =
+            webView.controllerFromPlatform<InAppWebViewController>(
           webView.controller,
         );
 
@@ -1390,7 +1388,10 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text('页面加载失败: Stale subresource failed'), findsNothing);
+        expect(
+          find.text('页面加载失败: Stale subresource failed'),
+          findsNothing,
+        );
         expect(find.text('重试'), findsNothing);
 
         webView.params.onReceivedError!(
@@ -1573,17 +1574,12 @@ void main() {
           supportsJavaScriptHandlers: true,
         );
         final controller = webView.controller;
+        final initialData = webView.params.initialData!;
+        final initialHtml = initialData.data;
         expect(
-          tester
-              .widget<InAppWebView>(find.byType(InAppWebView))
-              .initialData!
-              .data,
+          initialHtml,
           contains("callHandler('onMermaidError', msg, 0);"),
         );
-        final initialHtml = tester
-            .widget<InAppWebView>(find.byType(InAppWebView))
-            .initialData!
-            .data;
         expect(
           initialHtml,
           contains("window.addEventListener('error', function(event) {"),
@@ -2639,8 +2635,8 @@ void main() {
         await tester.pump(const Duration(seconds: 12));
         expect(find.text(creationError), findsOneWidget);
         final failedWebViewElement = tester.element(find.byType(InAppWebView));
-        final failedInitialData =
-            tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData!;
+        final failedWebView = platform.webView!;
+        final failedInitialData = failedWebView.params.initialData!;
 
         await tester.tap(find.text('重试'));
         await tester.pump();
@@ -2652,7 +2648,7 @@ void main() {
               'was never created',
         );
         final retriedInitialData =
-            tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData!;
+            platform.webView!.params.initialData!;
         expect(
           retriedInitialData.data,
           contains("callHandler('onMermaidError', msg, 1);"),
@@ -3171,8 +3167,7 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
     webView.controller,
   );
   webView.params.onWebViewCreated!(controller);
-  final initialUrl =
-      tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData?.baseUrl;
+  final initialUrl = webView.params.initialData?.baseUrl;
   webView.params.onLoadStop?.call(controller, initialUrl);
   await tester.pump();
   return webView;
