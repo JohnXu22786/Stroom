@@ -130,6 +130,121 @@ void main() {
     expect(prefs.getString('provider_entries'), contains(secret));
   });
 
+  testWidgets('redacts keys when a provider entry has no type',
+      (WidgetTester t) async {
+    const secret = 'sk_missing_provider_type_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'unknown-provider-entry',
+          'name': 'Preserved provider name',
+          'key': secret,
+          'configs': [
+            {
+              'id': 'unknown-provider-config',
+              'host': 'https://api.example.test',
+              'key': secret,
+              'options': {
+                'label': 'Preserved option',
+                'credentials': {'key': secret},
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText, isNot(contains(secret)));
+    expect(exportedText, contains('Preserved provider name'));
+    expect(exportedText, contains('Preserved option'));
+    expect(exportedText, contains('https://api.example.test'));
+  });
+
+  testWidgets('redacts keys when a provider entry has an unsupported type',
+      (WidgetTester t) async {
+    const secret = 'sk_unsupported_provider_type_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'unsupported-provider-entry',
+          'type': 'unsupported-provider',
+          'name': 'Preserved unsupported provider',
+          'key': secret,
+          'configs': [
+            {
+              'id': 'unsupported-provider-config',
+              'host': 'https://unsupported.example.test',
+              'key': secret,
+              'options': {
+                'label': 'Preserved unsupported option',
+                'credentials': {'key': secret},
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText, isNot(contains(secret)));
+    expect(exportedText, contains('Preserved unsupported provider'));
+    expect(exportedText, contains('Preserved unsupported option'));
+    expect(exportedText, contains('https://unsupported.example.test'));
+  });
+
+  testWidgets('preserves data for a recognized builtin provider type',
+      (WidgetTester t) async {
+    const builtinValue = 'supported-builtin-key-value';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'builtin-provider-entry',
+          'type': 'builtin',
+          'name': 'Preserved builtin provider',
+          'key': builtinValue,
+          'configs': [
+            {
+              'id': 'builtin-provider-config',
+              'options': {'key': builtinValue},
+            },
+          ],
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText, contains(builtinValue));
+    expect(exportedText, contains('Preserved builtin provider'));
+  });
+
   // ==================================================================
   // Backup creation: onProgress callback
   // ==================================================================

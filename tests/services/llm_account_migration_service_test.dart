@@ -425,6 +425,56 @@ void main() {
     );
 
     test(
+      'preserves an existing shared credential when a keyless config reuses it',
+      () async {
+        const existingSecret = 'sk_existing_shared_reference';
+        final source = jsonEncode([
+          {
+            'id': 'shared-llm-entry',
+            'type': 'llm',
+            'name': 'Shared LLM entry',
+            'configs': [
+              {
+                'id': 'shared-provider-config-1',
+                'providerName': 'Existing provider',
+                'credentialRef': 'shared-credential-ref',
+                'models': [],
+              },
+              {
+                'id': 'shared-provider-config-2',
+                'providerName': 'Conflicting provider',
+                'key': 'sk_conflicting_shared_reference',
+                'credentialRef': 'shared-credential-ref',
+                'models': [],
+              },
+            ],
+          },
+        ]);
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
+        final credentials = _MemoryCredentialStore()
+          ..values['shared-credential-ref'] = existingSecret;
+
+        await expectLater(
+          _service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+
+        expect(preferences.values['provider_entries'], source);
+        expect(
+          credentials.values['shared-credential-ref'],
+          existingSecret,
+        );
+        expect(credentials.writeReferences, isEmpty);
+        expect(
+          preferences.values[LlmAccountMigrationService.migrationStateKey],
+          isNull,
+        );
+      },
+    );
+
+    test(
       'creates different model groups for delimiter-containing identities',
       () async {
         final preferences = _MemoryLlmPreferences({

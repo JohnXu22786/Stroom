@@ -94,7 +94,7 @@ class LlmAccountMigrationService {
     var accountsMigrated = 0;
     var groupsCreated = 0;
     final seenAccountIds = <String>{};
-    final credentialValuesByReference = <String, String>{};
+    final credentialValuesByReference = <String, String?>{};
 
     for (final entryValue in entries) {
       if (entryValue is! Map<String, dynamic> || entryValue['type'] != 'llm') {
@@ -162,15 +162,26 @@ class LlmAccountMigrationService {
             : existingRef as String?;
 
         if (key.isNotEmpty) {
-          final previousValue = credentialValuesByReference[credentialRef!];
+          final reference = credentialRef!;
+          final referenceWasRecorded =
+              credentialValuesByReference.containsKey(reference);
+          final previousValue = credentialValuesByReference[reference];
           if (previousValue != null && previousValue != key) {
             // A shared secure reference cannot safely represent two legacy
             // credentials. Abort while the original provider entries remain.
             throw const LlmAccountMigrationException();
           }
-          credentialValuesByReference[credentialRef] = key;
-          await _storeAndVerify(credentialRef!, key);
-          config['credentialRef'] = credentialRef;
+          if (referenceWasRecorded && previousValue == null) {
+            final existingCredential = await credentialStore.read(reference);
+            if (existingCredential != null && existingCredential != key) {
+              throw const LlmAccountMigrationException();
+            }
+          }
+          credentialValuesByReference[reference] = key;
+          await _storeAndVerify(reference, key);
+          config['credentialRef'] = reference;
+        } else if (credentialRef != null) {
+          credentialValuesByReference.putIfAbsent(credentialRef, () => null);
         }
 
         final modelMappings = _mapModels(accountId, config);

@@ -5541,6 +5541,15 @@ Map<String, String> _encodeBackupPreferenceGroups(
 /// unavailable, but backup archives must never copy its plaintext LLM keys.
 /// Malformed provider settings are omitted rather than copied without a safe
 /// way to identify credential fields.
+const _backupKnownProviderTypes = {
+  'llm',
+  'tts',
+  'ocr',
+  'asr',
+  'mcp',
+  'builtin',
+};
+
 Object? _safeBackupPreferenceValue(String key, Object? value) {
   if (key != 'provider_entries') return value;
   if (value is! String) return null;
@@ -5549,7 +5558,12 @@ Object? _safeBackupPreferenceValue(String key, Object? value) {
     if (decoded is! List) return null;
     for (final entry in decoded) {
       if (entry is! Map) return null;
-      if (entry['type'] != 'llm') continue;
+      if (entry['type'] != 'llm') {
+        if (!_backupKnownProviderTypes.contains(entry['type'])) {
+          _removeBackupCredentialKeys(entry);
+        }
+        continue;
+      }
       // Mixed legacy entries can retain the old credential at the entry level
       // even after configs[] was introduced.
       entry.remove('key');
@@ -5567,6 +5581,19 @@ Object? _safeBackupPreferenceValue(String key, Object? value) {
     return jsonEncode(decoded);
   } catch (_) {
     return null;
+  }
+}
+
+void _removeBackupCredentialKeys(Object? value) {
+  if (value is Map) {
+    value.remove('key');
+    for (final child in value.values) {
+      _removeBackupCredentialKeys(child);
+    }
+  } else if (value is List) {
+    for (final child in value) {
+      _removeBackupCredentialKeys(child);
+    }
   }
 }
 
