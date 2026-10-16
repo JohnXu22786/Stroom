@@ -286,7 +286,8 @@ class TextManifest {
   }
 
   // Folder management
-  static Future<Set<String>> getAllFolders() => _ops.getAllFolders();
+  static Future<Set<String>> getAllFolders({bool throwOnError = false}) =>
+      _ops.getAllFolders(throwOnError: throwOnError);
   static Future<void> addFolder(String name) => _ops.addFolder(name);
   static Future<void> removeFolder(String name) => _ops.removeFolder(name);
   static Future<void> removeFolderFromCache(String folderPath) =>

@@ -1716,7 +1716,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     late final Set<String> folders;
     try {
       folders = await (widget.testOnlyGetAllFolders?.call() ??
-          TextManifest.getAllFolders());
+          TextManifest.getAllFolders(throwOnError: true));
     } catch (e) {
       _isSaving = false;
       if (mounted) {
