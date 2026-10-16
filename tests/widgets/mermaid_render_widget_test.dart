@@ -1327,14 +1327,11 @@ void main() {
       'native source updates ignore stale subresource errors but show active document errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
-        final previousTargetPlatform = debugDefaultTargetPlatformOverride;
         final platform = _MermaidWebViewPlatform();
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
         InAppWebViewPlatform.instance = platform;
         addTearDown(() {
           InAppWebViewPlatform.instance =
               previousPlatform ?? _MermaidWebViewPlatform();
-          debugDefaultTargetPlatformOverride = previousTargetPlatform;
         });
 
         final webView = await _mountReadyMermaidWidget(
@@ -1351,8 +1348,7 @@ void main() {
         );
         final controller =
             webView.controllerFromPlatform<InAppWebViewController>(
-          webView.controller,
-        );
+                webView.controller);
 
         await tester.pumpWidget(
           const MaterialApp(
@@ -1557,14 +1553,11 @@ void main() {
       'native source updates ignore stale Mermaid bridge errors but show active document errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
-        final previousTargetPlatform = debugDefaultTargetPlatformOverride;
         final platform = _MermaidWebViewPlatform();
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
         InAppWebViewPlatform.instance = platform;
         addTearDown(() {
           InAppWebViewPlatform.instance =
               previousPlatform ?? _MermaidWebViewPlatform();
-          debugDefaultTargetPlatformOverride = previousTargetPlatform;
         });
 
         final webView = await _mountReadyMermaidWidget(
@@ -1924,6 +1917,7 @@ void main() {
         await tester.pump();
 
         final webView = platform.webView!;
+        final initialDocumentUrl = webView.params.initialData!.baseUrl!;
         final controller = webView
             .controllerFromPlatform<InAppWebViewController>(webView.controller);
         webView.params.onWebViewCreated!(controller);
@@ -1939,7 +1933,7 @@ void main() {
         webView.params.onReceivedError!(
           controller,
           WebResourceRequest(
-            url: WebUri('data:text/html,mermaid'),
+            url: initialDocumentUrl,
             isForMainFrame: true,
           ),
           WebResourceError(
