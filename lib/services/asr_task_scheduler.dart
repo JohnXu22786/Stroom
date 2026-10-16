@@ -46,8 +46,7 @@ class AsrTaskScheduler {
   final String saveFolder;
   final int modelIndex;
   final AsrService Function(AsrConfig) _serviceFactory;
-  final Future<Map<String, dynamic>> Function(AsrTaskAudio)
-      _retryDataComputer;
+  final Future<Map<String, dynamic>> Function(AsrTaskAudio) _retryDataComputer;
   final AsrTextWriter _writeText;
   final void Function() _onSaved;
 
