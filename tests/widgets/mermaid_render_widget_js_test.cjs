@@ -1081,6 +1081,22 @@ test('web mouse click after slight pointer jitter reaches Mermaid', () => {
   assert.equal(harness.mermaidTargetClicks, 1);
 });
 
+test('fullscreen inline mouse click after slight pointer jitter reaches Mermaid', () => {
+  const harness = createMouseGestureHarness(
+    extractMouseGestureScript('fullscreen inline', dartSource),
+  );
+
+  harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+  harness.dispatch('mousemove', {clientX: 11, clientY: 20});
+  harness.dispatch('mouseup');
+
+  assert.deepEqual(harness.dispatch('click'), {
+    defaultPrevented: false,
+    propagationStopped: false,
+  }, 'a click after slight pointer jitter must reach Mermaid');
+  assert.equal(harness.mermaidTargetClicks, 1);
+});
+
 test('web pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
   const harness = createTouchGestureHarness(extractTouchGestureScript());
   const twoTouches = [
