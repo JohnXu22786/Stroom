@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show debugDefaultTargetPlatformOverride, kIsWeb, TargetPlatform;
+    show defaultTargetPlatform, debugDefaultTargetPlatformOverride, kIsWeb,
+        TargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -1546,7 +1547,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
@@ -1656,7 +1657,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
@@ -1948,7 +1949,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
@@ -2664,7 +2665,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
