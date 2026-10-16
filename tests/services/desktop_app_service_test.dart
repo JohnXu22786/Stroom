@@ -398,7 +398,12 @@ void main() {
         () async {
       final mocks = registerChannelMocks();
       final exitCodes = <int>[];
+      var confirmationCalls = 0;
       DesktopAppService.exitApp = exitCodes.add;
+      DesktopAppService.instance.onQuitConfirmation = () async {
+        confirmationCalls++;
+        return true;
+      };
 
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.initialize();
@@ -427,6 +432,8 @@ void main() {
             (call.arguments as Map)['isPreventClose'] == false),
         isTrue,
       );
+      expect(confirmationCalls, 1,
+          reason: 'a later close must use the configured confirmation');
       expect(exitCodes, [0]);
       expect(_calledWith(windowCalls, 'hide'), isFalse,
           reason: 'a missing tray cannot be used as a minimize destination');
@@ -441,7 +448,12 @@ void main() {
         () async {
       final mocks = registerChannelMocks();
       final exitCodes = <int>[];
+      var confirmationCalls = 0;
       DesktopAppService.exitApp = exitCodes.add;
+      DesktopAppService.instance.onQuitConfirmation = () async {
+        confirmationCalls++;
+        return false;
+      };
 
       await withDesktopPlatform(TargetPlatform.windows, () async {
         await DesktopAppService.instance.initialize();
@@ -455,9 +467,10 @@ void main() {
       });
 
       final windowCalls = mocks['window_manager']!.calls;
-      expect(exitCodes, [0],
-          reason: 'the close request captured before tray setup must be '
-              'honored through the close-to-quit fallback');
+      expect(confirmationCalls, 1,
+          reason: 'the captured close must use the configured confirmation');
+      expect(exitCodes, isEmpty,
+          reason: 'cancelling the captured close must keep the app alive');
       expect(_calledWith(windowCalls, 'close'), isFalse,
           reason: 'native close must not be replayed while interception may '
               'still be active');

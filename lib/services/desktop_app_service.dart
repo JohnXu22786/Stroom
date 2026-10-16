@@ -196,8 +196,8 @@ class DesktopAppService extends WindowListener with TrayListener {
             await windowManager.close().timeout(_trayTimeout);
           } else {
             // Native close may still be intercepted, so honor the pending
-            // request directly through the no-tray exit fallback.
-            await quitApplication();
+            // request through the close-to-quit confirmation path.
+            await quitWithConfirmation();
           }
         }
         return;
@@ -245,7 +245,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   void onWindowClose() {
     debugPrint('[DesktopAppService] Window close intercepted');
     if (_trayRollbackCloseInterceptionFailed) {
-      unawaited(quitApplication());
+      unawaited(quitWithConfirmation());
       return;
     }
     // 在托盘注册完成前只阻止原生默认关闭，保持启动窗口可见；隐藏
