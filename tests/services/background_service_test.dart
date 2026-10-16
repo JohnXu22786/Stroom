@@ -138,11 +138,19 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
 }
 
 class _FailingPreferenceReadStore extends InMemorySharedPreferencesStore {
-  _FailingPreferenceReadStore(Map<String, Object> data) : super.withData(data);
+  _FailingPreferenceReadStore(
+    Map<String, Object> data, {
+    this.failReads = true,
+  }) : super.withData(data);
+
+  bool failReads;
 
   @override
   Future<Map<String, Object>> getAll() async {
-    throw StateError('Simulated preference read error');
+    if (failReads) {
+      throw StateError('Simulated preference read error');
+    }
+    return super.getAll();
   }
 }
 
@@ -544,7 +552,7 @@ void main() {
     });
 
     test(
-        'restoreBackgroundServiceOnColdStart recovers when enabled preference read fails',
+        'restoreBackgroundServiceOnColdStart does not assume enabled when preference read fails',
         () async {
       final mock = registerMockPlatform();
       mock.setServiceRunning(false);
@@ -560,10 +568,14 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
       });
 
-      expect(mock._isRunning, isTrue);
       expect(
-        keepAliveCalls.map((call) => call.method),
-        contains('rearmKeepAlive'),
+        mock._isRunning,
+        isFalse,
+        reason: 'a failed read does not confirm that the service was enabled',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
       );
     });
 
@@ -1244,6 +1256,63 @@ void main() {
       );
       expect(keepAliveCalls.any((c) => c.method == 'startKeepAlive'), isFalse,
           reason: '冷启动恢复是补武装场景，不得清零失败计数');
+    });
+
+    test(
+        'cold-start restore does not undo a persisted stop when preference read fails',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _FailingPreferenceReadStore(
+        {'flutter.background_service_enabled': true},
+        failReads: false,
+      );
+      SharedPreferencesStorePlatform.instance = store;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+        SharedPreferences.resetStatic();
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+      });
+      expect(
+        prefs.getBool('background_service_enabled'),
+        isFalse,
+        reason: 'the explicit stop must persist disabled intent',
+      );
+
+      // A new preferences instance must read the disabled choice from the
+      // backing store before its subsequent read failure is introduced.
+      SharedPreferences.resetStatic();
+      final coldStartPrefs = await SharedPreferences.getInstance();
+      expect(
+        coldStartPrefs.getBool('background_service_enabled'),
+        isFalse,
+        reason: 'the disabled choice must survive a process restart',
+      );
+
+      SharedPreferences.resetStatic();
+      store.failReads = true;
+      resetBackgroundServiceLifecycleStateForTesting();
+      keepAliveCalls.clear();
+
+      await withAndroidPlatform(() async {
+        await restoreBackgroundServiceOnColdStart();
+      });
+
+      expect(
+        mock._isRunning,
+        isFalse,
+        reason: 'a preference read failure must not restart a service the '
+            'user explicitly stopped',
+      );
+      expect(
+        keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isFalse,
+        reason: 'a failed read must not re-arm watchdog state after the stop',
+      );
     });
 
     test('cold-start restore re-arms the watchdog when service startup throws',

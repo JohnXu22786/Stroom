@@ -460,7 +460,7 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
 
   try {
     final wasEnabled = await _isBackgroundServiceEnabled(
-      assumeEnabledOnReadError: true,
+      assumeEnabledOnReadError: false,
     );
     if (!wasEnabled) return;
     if (!await isColdStartRestoreEnabled()) {
