@@ -1359,9 +1359,8 @@ void main() {
           isNotNull,
           reason: 'native initialData needs a document identity for callbacks',
         );
-        final controller =
-            webView.controllerFromPlatform<InAppWebViewController>(
-                webView.controller);
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
 
         await tester.pumpWidget(
           const MaterialApp(
@@ -1371,8 +1370,7 @@ void main() {
           ),
         );
         await tester.pump();
-        final staleDocumentUrl =
-            webView.controller.loadedDataBaseUrls.last!;
+        final staleDocumentUrl = webView.controller.loadedDataBaseUrls.last!;
 
         await tester.pumpWidget(
           const MaterialApp(
@@ -2654,8 +2652,7 @@ void main() {
           reason: 'Retry must create a new platform view when the controller '
               'was never created',
         );
-        final retriedInitialData =
-            platform.webView!.params.initialData!;
+        final retriedInitialData = platform.webView!.params.initialData!;
         expect(
           retriedInitialData.data,
           contains("callHandler('onMermaidError', msg, 1);"),
