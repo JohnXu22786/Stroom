@@ -2150,21 +2150,24 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               ),
             ),
 
-          // Button row (top right) — only show when widget.showToolbar is true
-          // and the WebView is ready with no error.
-          if (widget.showToolbar && !showLoading && !showErrorOverlay)
+          // Button row (top right) — keep the toolbar available after a
+          // render error so users can still inspect or save the source.
+          // The error overlay already intercepts WebView taps, so avoid a
+          // second PointerInterceptor around the toolbar in that state.
+          if (widget.showToolbar && !showLoading)
             Positioned(
               top: 4,
               right: 4,
-              child: _buildWebOverlay(_buildButtonRow(cs)),
+              child: showErrorOverlay
+                  ? _buildButtonRow(cs)
+                  : _buildWebOverlay(_buildButtonRow(cs)),
             ),
 
           // Zoom controls overlay — shown independently of showToolbar.
           // When showToolbar is also true and the widget is ready, the
           // toolbar already includes zoom controls (in render mode), so
           // we skip to avoid duplication.
-          if (widget.showZoomControls &&
-              (!widget.showToolbar || showLoading || showErrorOverlay))
+          if (widget.showZoomControls && (!widget.showToolbar || showLoading))
             Positioned(
               top: 4,
               right: 4,
