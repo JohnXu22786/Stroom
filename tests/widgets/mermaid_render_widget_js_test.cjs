@@ -144,6 +144,14 @@ function extractTouchGestureScript() {
   return webTemplateSource.slice(start, end);
 }
 
+function extractInlineTouchGestureScript() {
+  const start = dartSource.indexOf('    // Touch events for mobile pan');
+  assert.notEqual(start, -1, 'Could not find fullscreen inline touch gesture handlers');
+  const end = dartSource.indexOf("\n''';", start);
+  assert.notEqual(end, -1, 'Could not find the end of fullscreen inline touch gesture handlers');
+  return dartSource.slice(start, end);
+}
+
 function createTouchGestureHarness(touchGestureScript) {
   const listeners = new Map();
   const zoomCalls = [];
@@ -1099,6 +1107,28 @@ test('fullscreen inline mouse click after slight pointer jitter reaches Mermaid'
 
 test('web pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
   const harness = createTouchGestureHarness(extractTouchGestureScript());
+  const twoTouches = [
+    {clientX: 10, clientY: 10},
+    {clientX: 30, clientY: 10},
+  ];
+
+  harness.dispatch('touchstart', twoTouches);
+  harness.dispatch('touchstart', [
+    ...twoTouches,
+    {clientX: 50, clientY: 10},
+  ]);
+  harness.dispatch('touchend', twoTouches);
+  const move = harness.dispatch('touchmove', [
+    {clientX: 10, clientY: 10},
+    {clientX: 32, clientY: 10},
+  ]);
+
+  assert.equal(move.defaultPrevented, true);
+  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10]]);
+});
+
+test('fullscreen inline pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
+  const harness = createTouchGestureHarness(extractInlineTouchGestureScript());
   const twoTouches = [
     {clientX: 10, clientY: 10},
     {clientX: 30, clientY: 10},
