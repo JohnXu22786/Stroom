@@ -495,11 +495,12 @@ Future<bool> _setServiceEnabledPreference(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setBool(_backgroundServiceEnabledKey, enabled);
     if (!saved) {
-      if (!enabled) {
-        // setBool updates the legacy cache before writing. Reload to confirm
-        // that a rejected write did not leave a persisted enabled intent.
-        await prefs.reload();
-        if (prefs.getBool(_backgroundServiceEnabledKey) != true) return true;
+      // setBool updates the legacy cache before writing. Reload to verify the
+      // durable value; a missing value counts as disabled, but not as intent.
+      await prefs.reload();
+      final savedValue = prefs.getBool(_backgroundServiceEnabledKey);
+      if (savedValue == enabled || (!enabled && savedValue != true)) {
+        return true;
       }
       throw StateError('SharedPreferences rejected service state.');
     }
