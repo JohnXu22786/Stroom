@@ -183,16 +183,48 @@ class MermaidRenderWidget extends StatefulWidget {
   /// exactly once per library instance ([_buildMermaidLoader] caches it),
   /// and the multi-megabyte skeleton (template + gestures + loader) is
   /// built once and reused ([_buildMermaidSkeleton] caches it). Each
-  /// render only pays a single pass over the skeleton to splice in the
-  /// (small) diagram code.
+  /// render only pays a small number of passes over the skeleton to splice
+  /// in the diagram code and optional error-document generation.
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
   static String buildMermaidHtml(String mermaidCode,
-      {bool withJsGestures = true, String? inlineMermaidJs}) {
+      {bool withJsGestures = true,
+      String? inlineMermaidJs,
+      int? errorDocumentGeneration}) {
     final escaped = _escapeMermaidCode(mermaidCode);
     final loader = _buildMermaidLoader(inlineMermaidJs);
-    final skeleton = _buildMermaidSkeleton(withJsGestures, loader);
+    var skeleton = _buildMermaidSkeleton(withJsGestures, loader);
+    if (errorDocumentGeneration != null) {
+      skeleton = skeleton.replaceFirst(
+        "callHandler('onMermaidError', msg);",
+        "callHandler('onMermaidError', msg, $errorDocumentGeneration);",
+      );
+      skeleton = skeleton.replaceFirst(
+        '/*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/',
+        '''window.addEventListener('error', function(event) {
+      var target = event.target;
+      var container = document.getElementById('diagram-container');
+      if (!target || !container || !container.contains(target)) return;
+      var href = target.href;
+      var hrefValue = href && href.baseVal !== undefined ? href.baseVal : href;
+      var resourceUrl = target.currentSrc || target.src ||
+        hrefValue ||
+        (target.getAttribute &&
+          (target.getAttribute('src') || target.getAttribute('href')));
+      if (!resourceUrl) return;
+      var sameOrigin = false;
+      try {
+        sameOrigin = new URL(resourceUrl, document.baseURI).origin ===
+          window.location.origin;
+      } catch(_) {
+        // An unresolvable resource in the diagram still belongs to this page.
+      }
+      if (sameOrigin) return;
+      reportError('Mermaid resource failed to load');
+    }, true);''',
+      );
+    }
     return skeleton.replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
   }
 
@@ -511,6 +543,8 @@ MERMAID_CODE_PLACEHOLDER
         }
       } catch(_) {}
     }
+
+    /*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/
 
     // Reports the current zoom + pan to Flutter so the Flutter side always
     // mirrors the JS state (used for button anchors and gesture bases).
@@ -881,9 +915,23 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   int _webRetryGeneration = 0;
   int _webSourceUpdateGeneration = 0;
   int _nativeLoadGeneration = 0;
+  // Embedded in each page so delayed Mermaid bridge errors keep their source.
+  int _mermaidDocumentGeneration = 0;
   WebUri? _nativeLoadBaseUrl;
 
   String _resolveWebUrl(String url) => Uri.base.resolve(url).toString();
+
+  WebUri _newNativeLoadBaseUrl() {
+    final generation = ++_nativeLoadGeneration;
+    return WebUri('https://mermaid-$generation.invalid/load/');
+  }
+
+  WebUri? _initialNativeLoadBaseUrl() {
+    // Windows replaces its view on source changes because WebView2 ignores
+    // loadData base URLs; that view's controller identity scopes callbacks.
+    if (defaultTargetPlatform == TargetPlatform.windows) return null;
+    return _nativeLoadBaseUrl ??= _newNativeLoadBaseUrl();
+  }
 
   /// Whether the source code view is shown instead of the rendered diagram.
   bool _showSourceCode = false;
@@ -994,6 +1042,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // stays alive the code change goes through loadData below. (The
       // source-code toggle keeps the WebView mounted — see [build].)
       _initialHtml = null;
+      _nativeLoadBaseUrl = null;
       // Ordinary web source updates use the iframe's own loading hint. A
       // retained-view retry instead keeps Flutter's overlay until its
       // navigation completes or the retry fallback resolves it. On native
@@ -1079,6 +1128,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _loadMermaidCode() {
+    _mermaidDocumentGeneration++;
     _hasLoadedPage = false;
     _canApplyZoomCommands = false;
     final code = widget.mermaidCode.trim();
@@ -1124,9 +1174,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // Native loadData completions carry their document's base URL. Give each
     // HTML document a distinct URL so a late completion from an older load can
     // be ignored.
-    final nativeLoadBaseUrl = WebUri(
-      'https://mermaid.invalid/load/${++_nativeLoadGeneration}/',
-    );
+    final nativeLoadBaseUrl = _newNativeLoadBaseUrl();
     _nativeLoadBaseUrl = nativeLoadBaseUrl;
 
     if (code.isEmpty) {
@@ -1145,8 +1193,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // the JS mouse handlers act as a fallback (e.g. mobile platforms where
     // the platform view receives events directly). Sharing one template
     // keeps zoom anchoring and auto-fit behavior identical everywhere.
-    final html = MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    final html = MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      errorDocumentGeneration: _mermaidDocumentGeneration,
+    );
     _armReadyFallback();
     ctrl.loadData(
       data: html,
@@ -1159,6 +1210,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void _retry() {
     final webViewWasNeverCreated = _webViewController == null;
     setState(() {
+      // A retry advances the document generation, so any remounted page
+      // must rebuild its HTML and native base URL for that generation.
+      _initialHtml = null;
+      _nativeLoadBaseUrl = null;
       _errorMessage = null;
       _hasWebRetryTimeoutError = false;
       _isReady = false;
@@ -1738,8 +1793,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     }
     // Same shared template as the fullscreen dialog, with the bundled
     // mermaid.js inlined (offline rendering, no CDN request).
-    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(code,
-        inlineMermaidJs: _inlineMermaidJs);
+    return _initialHtml ??= MermaidRenderWidget.buildMermaidHtml(
+      code,
+      inlineMermaidJs: _inlineMermaidJs,
+      errorDocumentGeneration: _mermaidDocumentGeneration,
+    );
   }
 
   @override
@@ -1854,11 +1912,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       data: _getInitialHtml(),
                       mimeType: 'text/html',
                       encoding: 'utf8',
+                      baseUrl: _initialNativeLoadBaseUrl(),
                     ),
               onWebViewCreated: (ctrl) {
                 if (currentWebViewKey != _webViewKey) return;
                 _webViewController = ctrl;
-                if (!kIsWeb) _nativeLoadBaseUrl = null;
                 // On web the iframe manages its own loading state (the
                 // asset template shows a hint until the diagram renders),
                 // so the widget is immediately ready and no fallback timer
@@ -1884,14 +1942,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   ctrl.addJavaScriptHandler(
                     handlerName: 'onMermaidError',
                     callback: (args) {
-                      if (mounted) {
-                        final msg =
-                            args.isNotEmpty ? args[0].toString() : '未知错误';
-                        setState(() {
-                          _errorMessage = msg;
-                          _hasWebRetryTimeoutError = false;
-                        });
-                      }
+                      if (!mounted || args.length < 2) return;
+                      final generation = int.tryParse(args[1].toString());
+                      if (generation != _mermaidDocumentGeneration) return;
+                      final msg = args[0].toString();
+                      setState(() {
+                        _errorMessage = msg;
+                        _hasWebRetryTimeoutError = false;
+                      });
                     },
                   );
                   ctrl.addJavaScriptHandler(
@@ -1956,6 +2014,21 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                     !kIsWeb &&
                     _nativeLoadBaseUrl != null &&
                     request.url.toString() != _nativeLoadBaseUrl.toString()) {
+                  return;
+                }
+                final requestUrl = request.url.toString();
+                final documentGenerationMatch = RegExp(
+                  r'^https://mermaid-(\d+)\.invalid/',
+                ).firstMatch(requestUrl);
+                if (!kIsWeb &&
+                    request.isForMainFrame != true &&
+                    _nativeLoadBaseUrl != null &&
+                    (documentGenerationMatch == null ||
+                        documentGenerationMatch.group(1) !=
+                            '$_nativeLoadGeneration')) {
+                  // Only same-origin resources carry the synthetic document
+                  // identity in their URL. Cross-origin failures are reported
+                  // from the page through the generation-tagged JS bridge.
                   return;
                 }
                 if (kIsWeb && request.isForMainFrame == true) {

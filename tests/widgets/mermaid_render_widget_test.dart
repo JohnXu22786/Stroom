@@ -3,7 +3,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart'
-    show debugDefaultTargetPlatformOverride, kIsWeb, TargetPlatform;
+    show
+        defaultTargetPlatform,
+        debugDefaultTargetPlatformOverride,
+        kIsWeb,
+        TargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -663,7 +667,10 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       expect(fakeController.zoomLevel, 1.0);
@@ -789,7 +796,10 @@ void main() {
         webView.controller,
       );
       webView.params.onWebViewCreated!(controller);
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       // The web template's fitToViewport changes zoom in JavaScript. The
@@ -878,7 +888,10 @@ void main() {
 
       // Load completion removes Flutter's loading overlay, while Mermaid's
       // asynchronous render and first fit are still pending.
-      webView.params.onLoadStop?.call(controller, null);
+      webView.params.onLoadStop?.call(
+        controller,
+        webView.params.initialData?.baseUrl,
+      );
       await tester.pump();
 
       // The toolbar and wheel inputs reach the page before its first fit.
@@ -1324,6 +1337,340 @@ void main() {
     );
 
     testWidgets(
+      'native source updates ignore stale subresource errors but show active document errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+        });
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          supportsJavaScriptHandlers: true,
+        );
+        final initialDocumentUrl = webView.params.initialData!.baseUrl;
+        expect(
+          initialDocumentUrl,
+          isNotNull,
+          reason: 'native initialData needs a document identity for callbacks',
+        );
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+        final staleDocumentUrl = webView.controller.loadedDataBaseUrls.last!;
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+        final activeDocumentUrl = webView.controller.loadedDataBaseUrls.last!;
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('${staleDocumentUrl}old-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale subresource failed'),
+          findsNothing,
+        );
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              Uri.parse(staleDocumentUrl.toString())
+                  .resolve('../old-parent-relative-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale parent-relative subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale parent-relative subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              Uri.parse(staleDocumentUrl.toString())
+                  .resolve('/old-absolute-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale absolute subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale absolute subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('${initialDocumentUrl!}old-initial-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale initial subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale initial subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/old-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale external subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale external subresource failed'),
+          findsNothing,
+        );
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/current-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current absolute subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current absolute subresource failed'),
+          findsNothing,
+        );
+        expect(find.text('重试'), findsNothing);
+
+        webView.controller.simulateMermaidError(
+          'Current absolute subresource failed',
+          2,
+        );
+        await tester.pump();
+        expect(
+          find.text('Current absolute subresource failed'),
+          findsOneWidget,
+          reason: 'the current document reports external failures by bridge',
+        );
+        expect(find.text('重试'), findsOneWidget);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('${activeDocumentUrl}current-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current subresource failed'),
+          findsOneWidget,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              Uri.parse(activeDocumentUrl.toString())
+                  .resolve('../current-parent-relative-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current parent-relative subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current parent-relative subresource failed'),
+          findsOneWidget,
+        );
+
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
+      'native source updates ignore stale Mermaid bridge errors but show active document errors',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+        });
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          supportsJavaScriptHandlers: true,
+        );
+        final controller = webView.controller;
+        final initialData = webView.params.initialData!;
+        final initialHtml = initialData.data;
+        expect(
+          initialHtml,
+          contains("callHandler('onMermaidError', msg, 0);"),
+        );
+        expect(
+          initialHtml,
+          contains("window.addEventListener('error', function(event) {"),
+        );
+        expect(
+          initialHtml,
+          contains("reportError('Mermaid resource failed to load');"),
+        );
+        expect(
+          initialHtml,
+          isNot(
+            contains('MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER'),
+          ),
+        );
+
+        controller.simulateMermaidError(
+          'Current initial Mermaid render failed',
+          0,
+        );
+        await tester.pump();
+        expect(
+          find.text('Current initial Mermaid render failed'),
+          findsOneWidget,
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+        const staleGeneration = 1;
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+        const activeGeneration = 2;
+        expect(activeGeneration, isNot(staleGeneration));
+
+        controller.simulateMermaidError(
+          'Stale initial Mermaid render failed',
+          0,
+        );
+        await tester.pump();
+
+        expect(find.text('Stale initial Mermaid render failed'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        controller.simulateMermaidError(
+          'Stale Mermaid render failed',
+          staleGeneration,
+        );
+        await tester.pump();
+
+        expect(find.text('Stale Mermaid render failed'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        controller.simulateMermaidError(
+          'Current Mermaid render failed',
+          activeGeneration,
+        );
+        await tester.pump();
+
+        expect(find.text('Current Mermaid render failed'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(
+          controller.loadedDataDocuments[0],
+          contains("callHandler('onMermaidError', msg, 1);"),
+        );
+        expect(
+          controller.loadedDataDocuments[1],
+          contains("callHandler('onMermaidError', msg, 2);"),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
       'native source updates ignore stale errors and completion before current load errors',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -1581,6 +1928,7 @@ void main() {
         await tester.pump();
 
         final webView = platform.webView!;
+        final initialDocumentUrl = webView.params.initialData!.baseUrl!;
         final controller = webView
             .controllerFromPlatform<InAppWebViewController>(webView.controller);
         webView.params.onWebViewCreated!(controller);
@@ -1596,7 +1944,7 @@ void main() {
         webView.params.onReceivedError!(
           controller,
           WebResourceRequest(
-            url: WebUri('data:text/html,mermaid'),
+            url: initialDocumentUrl,
             isForMainFrame: true,
           ),
           WebResourceError(
@@ -1611,7 +1959,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
@@ -2292,6 +2640,8 @@ void main() {
         await tester.pump(const Duration(seconds: 12));
         expect(find.text(creationError), findsOneWidget);
         final failedWebViewElement = tester.element(find.byType(InAppWebView));
+        final failedWebView = platform.webView!;
+        final failedInitialData = failedWebView.params.initialData!;
 
         await tester.tap(find.text('重试'));
         await tester.pump();
@@ -2301,6 +2651,17 @@ void main() {
           isNot(same(failedWebViewElement)),
           reason: 'Retry must create a new platform view when the controller '
               'was never created',
+        );
+        final retriedInitialData = platform.webView!.params.initialData!;
+        expect(
+          retriedInitialData.data,
+          contains("callHandler('onMermaidError', msg, 1);"),
+          reason: 'the remounted page must use the retry document generation',
+        );
+        expect(
+          retriedInitialData.baseUrl,
+          isNot(failedInitialData.baseUrl),
+          reason: 'the remounted page must use a new native document identity',
         );
         expect(find.text(creationError), findsNothing);
 
@@ -2313,7 +2674,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
-      skip: kIsWeb,
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets(
@@ -2810,7 +3171,8 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
     webView.controller,
   );
   webView.params.onWebViewCreated!(controller);
-  webView.params.onLoadStop?.call(controller, null);
+  final initialUrl = webView.params.initialData?.baseUrl;
+  webView.params.onLoadStop?.call(controller, initialUrl);
   await tester.pump();
   return webView;
 }
@@ -2860,6 +3222,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   final wheelZoomAnchors = <Offset>[];
   final loadedUrls = <WebUri>[];
   final loadedDataBaseUrls = <WebUri?>[];
+  final loadedDataDocuments = <String>[];
   final _javascriptHandlers = <String, JavaScriptHandlerCallback>{};
   Size viewportSize = const Size(200, 100);
   double zoomLevel = 1.0;
@@ -2869,6 +3232,10 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
   double _nativeGestureZoomLevel = 1.0;
   bool supportsJavaScriptHandlers = false;
   bool _fitComplete = false;
+
+  void simulateMermaidError(String message, int documentGeneration) {
+    _javascriptHandlers['onMermaidError']?.call([message, documentGeneration]);
+  }
 
   void simulateJsFitToViewport(double fittedZoom) {
     zoomLevel = fittedZoom;
@@ -2980,6 +3347,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     WebUri? allowingReadAccessTo,
   }) async {
     loadedDataBaseUrls.add(baseUrl);
+    loadedDataDocuments.add(data);
   }
 
   @override
