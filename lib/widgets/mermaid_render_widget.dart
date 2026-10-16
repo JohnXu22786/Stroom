@@ -154,6 +154,15 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Test-only: overrides the initial folder lookup used by Save as MMD.
   final Future<Set<String>> Function()? testOnlyGetAllFolders;
 
+  /// Test-only: runs immediately before a Save as MMD name lock is acquired.
+  final VoidCallback? testOnlyBeforeMmdFolderNameLock;
+
+  /// Test-only: runs after a Save as MMD name is selected, before it is saved.
+  final Future<void> Function(String name)? testOnlyAfterMmdNameAllocation;
+
+  /// Test-only: runs after a Save as MMD record has been persisted.
+  final VoidCallback? testOnlyOnMmdSaveComplete;
+
   const MermaidRenderWidget({
     super.key,
     required this.mermaidCode,
@@ -163,6 +172,9 @@ class MermaidRenderWidget extends StatefulWidget {
     this.showZoomControls = false,
     this.testOnlyShowSourceCode,
     this.testOnlyGetAllFolders,
+    this.testOnlyBeforeMmdFolderNameLock,
+    this.testOnlyAfterMmdNameAllocation,
+    this.testOnlyOnMmdSaveComplete,
   });
 
   /// Builds a complete HTML document with mermaid.js that renders the
@@ -901,6 +913,27 @@ MERMAID_LOADER_PLACEHOLDER
 }
 
 class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
+  static final Map<String, Future<void>> _pendingMmdSavesByFolder = {};
+
+  static Future<T> _withMmdFolderNameLock<T>(
+    String folder,
+    Future<T> Function() action,
+  ) async {
+    final previous = _pendingMmdSavesByFolder[folder] ?? Future<void>.value();
+    final release = Completer<void>();
+    final pending = previous.then((_) => release.future);
+    _pendingMmdSavesByFolder[folder] = pending;
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release.complete();
+      if (identical(_pendingMmdSavesByFolder[folder], pending)) {
+        _pendingMmdSavesByFolder.remove(folder);
+      }
+    }
+  }
+
   InAppWebViewController? _webViewController;
   bool _isReady = false;
   bool _hasLoadedPage = false;
@@ -1727,27 +1760,34 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 
-      // Ensure unique filename in the selected folder
-      final records = await TextManifest.loadRecords();
-      String finalName = userFileName;
-      int counter = 2;
-      while (records
-          .any((r) => r.name == finalName && r.folder == selectedFolder)) {
-        finalName = '$userFileName ($counter)';
-        counter++;
-      }
+      widget.testOnlyBeforeMmdFolderNameLock?.call();
+      final finalName = await _withMmdFolderNameLock(selectedFolder, () async {
+        // Name selection and record insertion must be one serialized
+        // operation so concurrent saves cannot choose the same visible name.
+        final records = await TextManifest.loadRecords();
+        var finalName = userFileName;
+        var counter = 2;
+        while (records
+            .any((r) => r.name == finalName && r.folder == selectedFolder)) {
+          finalName = '$userFileName ($counter)';
+          counter++;
+        }
 
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: finalName,
-        hash: hash,
-        format: 'mmd',
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: selectedFolder,
-        textLength: content.length,
-      ));
+        await widget.testOnlyAfterMmdNameAllocation?.call(finalName);
+        await TextManifest.writeText(storageFileName, content);
+        await TextManifest.addRecord(TextRecord(
+          name: finalName,
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: selectedFolder,
+          textLength: content.length,
+        ));
+        return finalName;
+      });
 
+      widget.testOnlyOnMmdSaveComplete?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
