@@ -78,6 +78,83 @@ void main() {
       expect(mergeSnippet, startsWith('  merge '));
       expect(template.split('\n'), contains('  branch $mergeTarget'));
     });
+
+    test('merge snippet targets an existing branch for each GitGraph setup',
+        () {
+      final scenarios = [
+        (
+          code: '''gitGraph
+  commit id: "初始提交"
+  branch feature
+  checkout main''',
+          expectedTarget: 'feature',
+          existingBranches: <String>{'main', 'feature'},
+        ),
+        (
+          code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'trunk' } } }%%
+gitGraph
+  commit id: "初始提交"''',
+          expectedTarget: 'trunk',
+          existingBranches: <String>{'trunk'},
+        ),
+        (
+          code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'develop' } } }%%
+gitGraph
+  commit id: "初始提交"
+  branch feature''',
+          expectedTarget: 'develop',
+          existingBranches: <String>{'develop', 'feature'},
+        ),
+        (
+          code: '''%% mainBranchName: develop
+gitGraph
+  commit id: "mainBranchName: develop"
+  branch feature
+  checkout main''',
+          expectedTarget: 'feature',
+          existingBranches: <String>{'main', 'feature'},
+        ),
+        (
+          code: '''---
+config:
+  gitGraph:
+    mainBranchName: trunk
+---
+gitGraph
+  commit id: "初始提交"''',
+          expectedTarget: 'trunk',
+          existingBranches: <String>{'trunk'},
+        ),
+        (
+          code: '''---
+config: { gitGraph: { mainBranchName: trunk } }
+---
+gitGraph
+  commit id: "初始提交"''',
+          expectedTarget: 'trunk',
+          existingBranches: <String>{'trunk'},
+        ),
+      ];
+
+      for (final scenario in scenarios) {
+        final mergeSnippet = MermaidTemplates.getSnippets(
+          'gitGraph',
+          code: scenario.code,
+        ).singleWhere((snippet) => snippet.$1 == '合并分支').$2;
+        final insertedCode = MermaidTemplates.insertSnippet(
+          scenario.code,
+          mergeSnippet,
+        );
+        final mergeCommand = insertedCode
+            .split('\n')
+            .singleWhere((line) => line.trim().startsWith('merge '));
+        final mergeTarget = mergeCommand.trim().split(RegExp(r'\s+')).last;
+
+        expect(scenario.code, isNot(contains('branch develop')));
+        expect(scenario.existingBranches, contains(mergeTarget));
+        expect(mergeTarget, scenario.expectedTarget);
+      }
+    });
   });
 
   group('MermaidTemplates - mindmap snippets', () {
