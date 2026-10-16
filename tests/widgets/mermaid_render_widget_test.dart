@@ -14,6 +14,7 @@ import 'package:flutter/services.dart'
     show HardwareKeyboard, LogicalKeyboardKey, rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -22,6 +23,151 @@ import 'package:stroom/widgets/mermaid_render_widget.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('MermaidRenderWidget - web overlay pointer routing', () {
+    testWidgets(
+      'inline toolbar intercepts the iframe without blocking diagram gestures',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->B',
+                showToolbar: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final webView = platform.webView!;
+        final controller =
+            webView.controllerFromPlatform<InAppWebViewController>(
+          webView.controller,
+        );
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onLoadStop?.call(
+          controller,
+          webView.controller.loadedUrls.last,
+        );
+        await tester.pump();
+
+        final zoomCenter = tester.getCenter(find.byIcon(Icons.zoom_in));
+        final interceptor = find.byType(PointerInterceptor);
+        expect(interceptor, findsOneWidget);
+        final interceptorRect = tester.getRect(interceptor);
+        expect(interceptorRect.contains(zoomCenter), isTrue);
+
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          contains('window.applyZoomDeltasAfterFit([0.1])'),
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->B',
+                showToolbar: false,
+                showZoomControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final standaloneZoom = find.byType(PointerInterceptor);
+        expect(standaloneZoom, findsOneWidget);
+        final standaloneZoomRect = tester.getRect(standaloneZoom);
+        final standaloneZoomCenter =
+            tester.getCenter(find.byIcon(Icons.zoom_in));
+        expect(standaloneZoomRect.contains(standaloneZoomCenter), isTrue);
+
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts.where(
+            (script) => script == 'window.applyZoomDeltasAfterFit([0.1])',
+          ),
+          hasLength(2),
+        );
+
+        final diagramCenter =
+            tester.getCenter(find.byType(MermaidRenderWidget));
+        expect(standaloneZoomRect.contains(diagramCenter), isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets('error retry overlay intercepts the iframe and retries',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      webView.params.onReceivedError!(
+        controller,
+        WebResourceRequest(
+          url: WebUri(
+            MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B'),
+          ),
+          isForMainFrame: true,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+          description: 'Could not connect to host',
+        ),
+      );
+      await tester.pump();
+
+      final retry = find.text('重试');
+      expect(retry, findsOneWidget);
+      final retryCenter = tester.getCenter(retry);
+      final interceptor = find.byType(PointerInterceptor);
+      expect(interceptor, findsOneWidget);
+      final interceptorRect = tester.getRect(interceptor);
+      expect(interceptorRect.contains(retryCenter), isTrue);
+      expect(
+        interceptorRect.contains(
+          tester.getCenter(find.byType(MermaidRenderWidget)),
+        ),
+        isTrue,
+      );
+
+      final loadCount = webView.controller.loadedUrls.length;
+      await tester.tap(retry);
+      await tester.pump();
+      expect(webView.controller.loadedUrls.length, greaterThan(loadCount));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+  });
 
   group('MermaidRenderWidget - bundled JavaScript loading', () {
     test(

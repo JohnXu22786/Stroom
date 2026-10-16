@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -1891,6 +1892,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     );
   }
 
+  Widget _buildWebOverlay(Widget child) =>
+      kIsWeb ? PointerInterceptor(child: child) : child;
+
   /// Builds the render layer: the deferred-creation loading placeholder
   /// (before the WebView exists), or the WebView with its overlays and
   /// button row. Kept mounted underneath the source code view when
@@ -1908,7 +1912,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+              child: _buildWebOverlay(
+                _buildLoadingIndicator(cs, '正在准备渲染引擎...'),
+              ),
             ),
             // Zoom controls overlay — visible even during loading when
             // showZoomControls is true.
@@ -1916,7 +1922,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               Positioned(
                 top: 4,
                 right: 4,
-                child: _buildZoomControls(cs),
+                child: _buildWebOverlay(_buildZoomControls(cs)),
               ),
           ],
         ),
@@ -2101,18 +2107,22 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           // Loading overlay
           if (showLoading)
             Positioned.fill(
-              child: Container(
-                color: cs.surface,
-                child: _buildLoadingIndicator(cs, '加载渲染引擎...'),
+              child: _buildWebOverlay(
+                Container(
+                  color: cs.surface,
+                  child: _buildLoadingIndicator(cs, '加载渲染引擎...'),
+                ),
               ),
             ),
 
           // Error overlay
           if (showErrorOverlay)
             Positioned.fill(
-              child: Container(
-                color: cs.surface,
-                child: _buildErrorWidget(cs, _errorMessage!),
+              child: _buildWebOverlay(
+                Container(
+                  color: cs.surface,
+                  child: _buildErrorWidget(cs, _errorMessage!),
+                ),
               ),
             ),
 
@@ -2122,7 +2132,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Positioned(
               top: 4,
               right: 4,
-              child: _buildButtonRow(cs),
+              child: _buildWebOverlay(_buildButtonRow(cs)),
             ),
 
           // Zoom controls overlay — shown independently of showToolbar.
@@ -2134,7 +2144,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
             Positioned(
               top: 4,
               right: 4,
-              child: _buildZoomControls(cs),
+              child: _buildWebOverlay(_buildZoomControls(cs)),
             ),
         ],
       ),
