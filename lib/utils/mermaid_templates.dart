@@ -776,9 +776,85 @@ class MermaidTemplates {
   // Context-specific snippets for each diagram type
   // ---------------------------------------------------------------------------
 
+  static String? _gitGraphConfiguredMainBranch(String code) {
+    final mainBranchNamePattern = RegExp(
+      r'''["']?mainBranchName["']?\s*:\s*["']?([^\s"',}#]+)''',
+    );
+    final initDirectives = RegExp(
+      r'%%\{\s*init\s*:\s*(.*?)\}%%',
+      dotAll: true,
+    );
+    final gitGraphConfigPattern = RegExp(
+      r'''["']?gitGraph["']?\s*:\s*\{([^}]*)\}''',
+      dotAll: true,
+    );
+
+    for (final directive in initDirectives.allMatches(code)) {
+      final gitGraphConfig = gitGraphConfigPattern.firstMatch(directive[1]!);
+      final mainBranchName = mainBranchNamePattern.firstMatch(
+        gitGraphConfig?.group(1) ?? '',
+      );
+      if (mainBranchName != null) return mainBranchName[1];
+    }
+
+    final frontmatter = RegExp(
+      r'^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)',
+    ).firstMatch(code);
+    if (frontmatter == null) return null;
+
+    var gitGraphIndent = -1;
+    for (final line in frontmatter[1]!.split(RegExp(r'\r?\n'))) {
+      final trimmedLine = line.trimLeft();
+      if (trimmedLine.isEmpty || trimmedLine.startsWith('#')) continue;
+      final indentation = line.length - trimmedLine.length;
+      if (gitGraphIndent >= 0 && indentation <= gitGraphIndent) {
+        gitGraphIndent = -1;
+      }
+      if (gitGraphIndent < 0 &&
+          RegExp(r'''^["']?gitGraph["']?\s*:\s*(?:#.*)?$''').hasMatch(
+            trimmedLine,
+          )) {
+        gitGraphIndent = indentation;
+        continue;
+      }
+      final inlineGitGraphConfig = gitGraphConfigPattern.firstMatch(
+        trimmedLine,
+      );
+      if (inlineGitGraphConfig != null) {
+        final mainBranchName = mainBranchNamePattern.firstMatch(
+          inlineGitGraphConfig[1]!,
+        );
+        if (mainBranchName != null) return mainBranchName[1];
+      }
+      if (gitGraphIndent >= 0 && indentation > gitGraphIndent) {
+        final mainBranchName = mainBranchNamePattern.firstMatch(trimmedLine);
+        if (mainBranchName != null) return mainBranchName[1];
+      }
+    }
+
+    return null;
+  }
+
+  static String _gitGraphMergeTarget(String code) {
+    final branches = RegExp(
+      r'^\s*branch\s+(\S+)',
+      multiLine: true,
+    ).allMatches(code).map((match) => match[1]!).toSet();
+    final configuredMainBranch = _gitGraphConfiguredMainBranch(code);
+
+    if (branches.contains('develop') || configuredMainBranch == 'develop') {
+      return 'develop';
+    }
+    if (branches.isNotEmpty) return branches.first;
+    return configuredMainBranch ?? 'main';
+  }
+
   /// Returns a list of "snippet buttons" for a given diagram [typeId].
   /// Each entry is (label, snippetText).
-  static List<(String label, String snippet)> getSnippets(String typeId) {
+  static List<(String label, String snippet)> getSnippets(
+    String typeId, {
+    String? code,
+  }) {
     switch (typeId) {
       case 'flowchart':
         return [
@@ -836,7 +912,10 @@ class MermaidTemplates {
           ('添加提交', '  commit id: "新提交"'),
           ('创建分支', '  branch 新分支'),
           ('切换分支', '  checkout 新分支'),
-          ('合并分支', '  merge develop'),
+          (
+            '合并分支',
+            '  merge ${_gitGraphMergeTarget(code ?? _gitGraphTemplate())}',
+          ),
         ];
       case 'mindmap':
         return [
