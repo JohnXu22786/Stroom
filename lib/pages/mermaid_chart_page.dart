@@ -437,7 +437,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final types = MermaidTemplates.getAllTypes();
-    final snippets = MermaidTemplates.getSnippets(_selectedTypeId);
+    final snippets = MermaidTemplates.getSnippets(
+      _selectedTypeId,
+      code: _selectedTypeId == 'requirement' ? _codeController.text : null,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -532,15 +535,32 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           if (_selectedTypeId == 'gantt' && label == '添加依赖任务') {
                             _insertGanttDependencyTask();
                           } else {
-                            final snippetToInsert = _selectedTypeId ==
-                                        'gitGraph' &&
-                                    label == '合并分支'
-                                ? MermaidTemplates.getSnippets(
-                                    'gitGraph',
-                                    code: _codeController.text,
-                                  ).singleWhere((item) => item.$1 == label).$2
-                                : snippet;
-                            _insertSnippet(snippetToInsert);
+                            if (_selectedTypeId == 'requirement' &&
+                                (label == '添加关联' || label == '添加验证')) {
+                              final currentSnippet =
+                                  MermaidTemplates.getSnippets(
+                                'requirement',
+                                code: _codeController.text,
+                              )
+                                      .firstWhere(
+                                        (item) => item.$1 == label,
+                                        orElse: () => (label, ''),
+                                      )
+                                      .$2;
+                              if (currentSnippet.isNotEmpty) {
+                                _insertSnippet(currentSnippet);
+                              }
+                            } else {
+                              final snippetToInsert = _selectedTypeId ==
+                                          'gitGraph' &&
+                                      label == '合并分支'
+                                  ? MermaidTemplates.getSnippets(
+                                      'gitGraph',
+                                      code: _codeController.text,
+                                    ).singleWhere((item) => item.$1 == label).$2
+                                  : snippet;
+                              _insertSnippet(snippetToInsert);
+                            }
                           }
                         },
                         visualDensity: VisualDensity.compact,

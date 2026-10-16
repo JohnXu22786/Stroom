@@ -141,6 +141,65 @@ void main() {
       expect(textField.controller?.text, contains('Test'));
     });
 
+    testWidgets('custom Requirement relationship chips insert declared nodes', (
+      tester,
+    ) async {
+      const initialCode = '''requirementDiagram
+  requirement account_access {
+    id: 1
+    text: Account access
+    risk: low
+    verifyMethod: test
+  }
+  element portal_ui {
+    type: UI
+  }
+  element auth_api {
+    type: Service
+  }''';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      await tester.tap(find.text('添加关联'));
+      await tester.pump();
+
+      var editorCode = tester
+          .widget<TextField>(find.byType(TextField).first)
+          .controller!
+          .text;
+      expect(editorCode, contains('portal_ui - satisfies -> account_access'));
+      expect(editorCode, isNot(contains('登录页面')));
+
+      await tester.pump(const Duration(milliseconds: 801));
+      await tester.tap(find.text('添加验证'));
+      await tester.pump();
+
+      editorCode = tester
+          .widget<TextField>(find.byType(TextField).first)
+          .controller!
+          .text;
+      expect(editorCode, contains('auth_api - verifies -> account_access'));
+      expect(editorCode, isNot(contains('认证服务')));
+    });
+
+    testWidgets(
+      'hides Requirement relationship chips without endpoint classes',
+      (tester) async {
+        const initialCode = '''requirementDiagram
+  requirement account_access {
+    id: 1
+    text: Account access
+    risk: low
+    verifyMethod: test
+  }''';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        expect(find.text('添加关联'), findsNothing);
+        expect(find.text('添加验证'), findsNothing);
+      },
+    );
+
     testWidgets('Gantt dependency snippet uses an existing task ID', (
       tester,
     ) async {
