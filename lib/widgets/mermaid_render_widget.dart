@@ -200,6 +200,30 @@ class MermaidRenderWidget extends StatefulWidget {
         "callHandler('onMermaidError', msg);",
         "callHandler('onMermaidError', msg, $errorDocumentGeneration);",
       );
+      skeleton = skeleton.replaceFirst(
+        '/*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/',
+        '''window.addEventListener('error', function(event) {
+      var target = event.target;
+      var container = document.getElementById('diagram-container');
+      if (!target || !container || !container.contains(target)) return;
+      var href = target.href;
+      var hrefValue = href && href.baseVal !== undefined ? href.baseVal : href;
+      var resourceUrl = target.currentSrc || target.src ||
+        hrefValue ||
+        (target.getAttribute &&
+          (target.getAttribute('src') || target.getAttribute('href')));
+      if (!resourceUrl) return;
+      var sameOrigin = false;
+      try {
+        sameOrigin = new URL(resourceUrl, document.baseURI).origin ===
+          window.location.origin;
+      } catch(_) {
+        // An unresolvable resource in the diagram still belongs to this page.
+      }
+      if (sameOrigin) return;
+      reportError('Mermaid resource failed to load');
+    }, true);''',
+      );
     }
     return skeleton.replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
   }
@@ -519,6 +543,8 @@ MERMAID_CODE_PLACEHOLDER
         }
       } catch(_) {}
     }
+
+    /*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER*/
 
     // Reports the current zoom + pan to Flutter so the Flutter side always
     // mirrors the JS state (used for button anchors and gesture bases).
@@ -1996,14 +2022,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 ).firstMatch(requestUrl);
                 if (!kIsWeb &&
                     request.isForMainFrame != true &&
-                    _nativeLoadGeneration > 0 &&
                     _nativeLoadBaseUrl != null &&
-                    documentGenerationMatch != null &&
-                    documentGenerationMatch.group(1) !=
-                        '$_nativeLoadGeneration') {
-                  // A generation-specific host lets native subresource
-                  // errors remain attributable even after relative paths
-                  // resolve outside the document's base path.
+                    (documentGenerationMatch == null ||
+                        documentGenerationMatch.group(1) !=
+                            '$_nativeLoadGeneration')) {
+                  // Only same-origin resources carry the synthetic document
+                  // identity in their URL. Cross-origin failures are reported
+                  // from the page through the generation-tagged JS bridge.
                   return;
                 }
                 if (kIsWeb && request.isForMainFrame == true) {

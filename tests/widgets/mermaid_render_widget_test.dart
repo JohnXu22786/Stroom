@@ -1341,6 +1341,7 @@ void main() {
           tester,
           platform,
           const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          supportsJavaScriptHandlers: true,
         );
         final initialDocumentUrl =
             tester.widget<InAppWebView>(find.byType(InAppWebView))
@@ -1457,6 +1458,56 @@ void main() {
         webView.params.onReceivedError!(
           controller,
           WebResourceRequest(
+            url: WebUri('https://cdn.example/old-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale external subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale external subresource failed'),
+          findsNothing,
+        );
+        expect(find.text('重试'), findsNothing);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/current-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current absolute subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current absolute subresource failed'),
+          findsNothing,
+        );
+        expect(find.text('重试'), findsNothing);
+
+        webView.controller.simulateMermaidError(
+          'Current absolute subresource failed',
+          2,
+        );
+        await tester.pump();
+        expect(
+          find.text('Current absolute subresource failed'),
+          findsOneWidget,
+          reason: 'the current document reports external failures by bridge',
+        );
+        expect(find.text('重试'), findsOneWidget);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
             url: WebUri('${activeDocumentUrl}current-image.svg'),
             isForMainFrame: false,
           ),
@@ -1494,23 +1545,6 @@ void main() {
           findsOneWidget,
         );
 
-        webView.params.onReceivedError!(
-          controller,
-          WebResourceRequest(
-            url: WebUri('https://cdn.example/current-image.svg'),
-            isForMainFrame: false,
-          ),
-          WebResourceError(
-            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
-            description: 'Current absolute subresource failed',
-          ),
-        );
-        await tester.pump();
-
-        expect(
-          find.text('页面加载失败: Current absolute subresource failed'),
-          findsOneWidget,
-        );
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -1545,6 +1579,24 @@ void main() {
               .initialData!
               .data,
           contains("callHandler('onMermaidError', msg, 0);"),
+        );
+        final initialHtml = tester
+            .widget<InAppWebView>(find.byType(InAppWebView))
+            .initialData!
+            .data;
+        expect(
+          initialHtml,
+          contains("window.addEventListener('error', function(event) {"),
+        );
+        expect(
+          initialHtml,
+          contains("reportError('Mermaid resource failed to load');"),
+        );
+        expect(
+          initialHtml,
+          isNot(
+            contains('MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER'),
+          ),
         );
 
         controller.simulateMermaidError(
