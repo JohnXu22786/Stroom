@@ -953,6 +953,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   bool _shouldCreateWebView = false;
   Key _webViewKey = const Key('mermaid_render_webview');
   String? _errorMessage;
+  bool _hasWebViewCreationTimeoutError = false;
   bool _hasWebRetryTimeoutError = false;
   // Tracks ordinary navigations too, so their late main-frame errors are stale.
   String? _webLoadUrl;
@@ -1097,6 +1098,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       }
       _hasLoadedPage = false;
       _errorMessage = null;
+      _hasWebViewCreationTimeoutError = false;
       _hasWebRetryTimeoutError = false;
       _showSourceCode = false;
       _zoomLevel = 1.0;
@@ -1106,9 +1108,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (oldWidget.mermaidCode.trim().isEmpty &&
           widget.mermaidCode.trim().isNotEmpty) {
         // The empty-code placeholder unmounts the WebView. Drop its stale
-        // controller and give the remounted platform view a fresh creation
-        // deadline, so a failed remount still reaches the error state.
+        // controller and give the remounted platform view a fresh key and
+        // creation deadline, so stale callbacks and failed mounts are handled.
         _webViewController = null;
+        _webViewKey = UniqueKey();
         _webRetryUrl = null;
         _armWebViewCreationFallback();
       }
@@ -1141,7 +1144,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       if (mounted && _webViewController == null && _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] WebView was not created within '
             '12s, showing an error');
-        setState(() => _errorMessage = '图表渲染引擎初始化失败，请重试');
+        setState(() {
+          _errorMessage = '图表渲染引擎初始化失败，请重试';
+          _hasWebViewCreationTimeoutError = true;
+        });
       }
     });
   }
@@ -1260,6 +1266,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _initialHtml = null;
       _nativeLoadBaseUrl = null;
       _errorMessage = null;
+      _hasWebViewCreationTimeoutError = false;
       _hasWebRetryTimeoutError = false;
       _isReady = false;
       if (webViewWasNeverCreated) {
@@ -1974,6 +1981,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
               onWebViewCreated: (ctrl) {
                 if (currentWebViewKey != _webViewKey) return;
                 _webViewController = ctrl;
+                if (mounted && _hasWebViewCreationTimeoutError) {
+                  setState(() {
+                    _errorMessage = null;
+                    _hasWebViewCreationTimeoutError = false;
+                  });
+                }
                 // On web the iframe manages its own loading state (the
                 // asset template shows a hint until the diagram renders),
                 // so the widget is immediately ready and no fallback timer

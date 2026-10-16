@@ -2865,6 +2865,87 @@ void main() {
     );
 
     testWidgets(
+      'late native WebView creation clears the timeout after loading',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountMermaidWidgetBeforeNativeCreation(
+          tester,
+          platform,
+        );
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        final initialDocumentUrl = webView.params.initialData!.baseUrl!;
+        const creationError = '图表渲染引擎初始化失败，请重试';
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onLoadStop?.call(controller, initialDocumentUrl);
+        await tester.pump();
+
+        expect(find.text(creationError), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
+      'late native WebView creation still reports a main-frame failure',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountMermaidWidgetBeforeNativeCreation(
+          tester,
+          platform,
+        );
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+        final initialDocumentUrl = webView.params.initialData!.baseUrl!;
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        const loadError = '页面加载失败: Late main-frame failure';
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: initialDocumentUrl,
+            isForMainFrame: true,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Late main-frame failure',
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(creationError), findsNothing);
+        expect(find.text(loadError), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
       'empty-code remount reports a failed WebView creation',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -2910,6 +2991,71 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
       },
       skip: kIsWeb,
+    );
+
+    testWidgets(
+      'superseded native creation cannot clear the remount timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final supersededWebView = await _mountMermaidWidgetBeforeNativeCreation(
+          tester,
+          platform,
+        );
+        final supersededController = supersededWebView
+            .controllerFromPlatform<InAppWebViewController>(
+                supersededWebView.controller);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+
+        final remountedWebView = platform.webView!;
+        final remountedController = remountedWebView
+            .controllerFromPlatform<InAppWebViewController>(
+                remountedWebView.controller);
+        final remountedDocumentUrl = remountedWebView.params.initialData!.baseUrl!;
+        const creationError = '图表渲染引擎初始化失败，请重试';
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+
+        supersededWebView.params.onWebViewCreated!(supersededController);
+        await tester.pump();
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'an unmounted WebView must not clear its replacement view error',
+        );
+
+        remountedWebView.params.onWebViewCreated!(remountedController);
+        await tester.pump();
+        remountedWebView.params.onLoadStop?.call(
+          remountedController,
+          remountedDocumentUrl,
+        );
+        await tester.pump();
+        expect(find.text(creationError), findsNothing);
+        expect(find.text('重试'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
     );
 
     testWidgets('shows loading state initially before WebView creation',
@@ -3500,6 +3646,27 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   webView.params.onLoadStop?.call(controller, initialUrl);
   await tester.pump();
   return webView;
+}
+
+Future<_MermaidWebView> _mountMermaidWidgetBeforeNativeCreation(
+  WidgetTester tester,
+  _MermaidWebViewPlatform platform,
+) async {
+  await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+  await tester.pumpWidget(
+    const MaterialApp(
+      home: Scaffold(
+        body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+      ),
+    ),
+  );
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  });
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+  await tester.pump();
+  return platform.webView!;
 }
 
 Future<List<_MermaidWebView>> _mountReadyMermaidWidgets(
