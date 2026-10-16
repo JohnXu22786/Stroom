@@ -903,7 +903,14 @@ MERMAID_LOADER_PLACEHOLDER
     }, { passive: false });
 
     document.addEventListener('touchend', function(e) {
-      lastTouchDist = 0;
+      if (e.touches.length === 2) {
+        lastTouchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+      } else {
+        lastTouchDist = 0;
+      }
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
