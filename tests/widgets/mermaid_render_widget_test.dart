@@ -3161,11 +3161,39 @@ void main() {
         addTearDown(() {
           InAppWebViewPlatform.instance =
               previousPlatform ?? _MermaidWebViewPlatform();
-          ManifestDatabase.beforeWebDataSaveForTesting = null;
         });
 
         final firstFolderLookupStarted = Completer<void>();
         final firstFolderLookup = Completer<Set<String>>();
+        final firstNameSelected = Completer<String>();
+        final secondNameLockAttempted = Completer<void>();
+        final bothNamesSelected = Completer<void>();
+        final releaseFirstNameSelection = Completer<void>();
+        final bothSavesCompleted = Completer<void>();
+        final selectedNames = <String>[];
+        var completedSaveCount = 0;
+        addTearDown(() {
+          if (!releaseFirstNameSelection.isCompleted) {
+            releaseFirstNameSelection.complete();
+          }
+        });
+
+        Future<void> holdFirstNameSelection(String name) async {
+          selectedNames.add(name);
+          firstNameSelected.complete(name);
+          await releaseFirstNameSelection.future;
+        }
+
+        Future<void> recordSecondNameSelection(String name) async {
+          selectedNames.add(name);
+          if (selectedNames.length == 2) bothNamesSelected.complete();
+        }
+
+        void onMmdSaveComplete() {
+          completedSaveCount++;
+          if (completedSaveCount == 2) bothSavesCompleted.complete();
+        }
+
         Future<Set<String>> getFirstFolders() {
           firstFolderLookupStarted.complete();
           return firstFolderLookup.future;
@@ -3180,25 +3208,23 @@ void main() {
               child: MermaidRenderWidget(
                 mermaidCode: 'graph TD\n  A-->B',
                 testOnlyGetAllFolders: getFirstFolders,
+                testOnlyAfterMmdNameAllocation: holdFirstNameSelection,
+                testOnlyOnMmdSaveComplete: onMmdSaveComplete,
               ),
             ),
-            const SizedBox(
+            SizedBox(
               height: 240,
-              child: MermaidRenderWidget(mermaidCode: 'graph TD\n  A-->C'),
+              child: MermaidRenderWidget(
+                mermaidCode: 'graph TD\n  A-->C',
+                testOnlyBeforeMmdFolderNameLock: () {
+                  secondNameLockAttempted.complete();
+                },
+                testOnlyAfterMmdNameAllocation: recordSecondNameSelection,
+                testOnlyOnMmdSaveComplete: onMmdSaveComplete,
+              ),
             ),
           ],
         );
-
-        final firstMetadataWriteStarted = Completer<void>();
-        final releaseFirstMetadataWrite = Completer<void>();
-        var metadataWriteCount = 0;
-        ManifestDatabase.beforeWebDataSaveForTesting = () async {
-          metadataWriteCount++;
-          if (metadataWriteCount == 1) {
-            firstMetadataWriteStarted.complete();
-            await releaseFirstMetadataWrite.future;
-          }
-        };
 
         await tester.tap(find.byIcon(Icons.save).first);
         await tester.runAsync(
@@ -3214,23 +3240,33 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(FolderPickerDialog), findsNWidgets(2));
 
-        // Both diagrams default to "graph TD". Pause the first record write
-        // after its name was chosen so the second save resolves its name
-        // against the same persisted record snapshot.
+        // Both diagrams default to "graph TD". Pause the first save after it
+        // chooses that name, before it inserts the record.
         await tester.tap(find.text('确定').last);
         await tester.pumpAndSettle();
         await tester.runAsync(
-          () async => firstMetadataWriteStarted.future,
+          () async => firstNameSelected.future,
         );
 
+        expect(selectedNames, ['graph TD']);
+
+        // Let the second save reach the lock while the first name is still
+        // unregistered. It must not choose a name from the stale snapshot.
         await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
-        releaseFirstMetadataWrite.complete();
-        await tester.pumpAndSettle();
         await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 20));
+          await secondNameLockAttempted.future;
+          await Future<void>.delayed(Duration.zero);
+        });
+        final secondNameSelectedBeforeFirstWasSaved = selectedNames.length > 1;
+
+        releaseFirstNameSelection.complete();
+        await tester.runAsync(() async {
+          await bothNamesSelected.future.timeout(const Duration(seconds: 5));
+          await bothSavesCompleted.future.timeout(const Duration(seconds: 5));
         });
 
+        expect(secondNameSelectedBeforeFirstWasSaved, isFalse);
         final savedRecords = (await TextManifest.loadRecordsUncached())
             .where((record) => record.format == 'mmd')
             .toList();
@@ -3258,13 +3294,25 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
   Widget body, {
   bool supportsJavaScriptHandlers = false,
 }) async {
-  await _mountReadyMermaidWidgets(
-    tester,
-    platform,
-    [body],
-    supportsJavaScriptHandlers: supportsJavaScriptHandlers,
+  await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+  await tester.pumpWidget(MaterialApp(home: Scaffold(body: body)));
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  });
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 600));
+  await tester.pump();
+
+  final webView = platform.webView!;
+  webView.controller.supportsJavaScriptHandlers = supportsJavaScriptHandlers;
+  final controller = webView.controllerFromPlatform<InAppWebViewController>(
+    webView.controller,
   );
-  return platform.webView!;
+  webView.params.onWebViewCreated!(controller);
+  final initialUrl = webView.params.initialData?.baseUrl;
+  webView.params.onLoadStop?.call(controller, initialUrl);
+  await tester.pump();
+  return webView;
 }
 
 Future<List<_MermaidWebView>> _mountReadyMermaidWidgets(

@@ -154,6 +154,15 @@ class MermaidRenderWidget extends StatefulWidget {
   /// Test-only: overrides the initial folder lookup used by Save as MMD.
   final Future<Set<String>> Function()? testOnlyGetAllFolders;
 
+  /// Test-only: runs immediately before a Save as MMD name lock is acquired.
+  final VoidCallback? testOnlyBeforeMmdFolderNameLock;
+
+  /// Test-only: runs after a Save as MMD name is selected, before it is saved.
+  final Future<void> Function(String name)? testOnlyAfterMmdNameAllocation;
+
+  /// Test-only: runs after a Save as MMD record has been persisted.
+  final VoidCallback? testOnlyOnMmdSaveComplete;
+
   const MermaidRenderWidget({
     super.key,
     required this.mermaidCode,
@@ -163,6 +172,9 @@ class MermaidRenderWidget extends StatefulWidget {
     this.showZoomControls = false,
     this.testOnlyShowSourceCode,
     this.testOnlyGetAllFolders,
+    this.testOnlyBeforeMmdFolderNameLock,
+    this.testOnlyAfterMmdNameAllocation,
+    this.testOnlyOnMmdSaveComplete,
   });
 
   /// Builds a complete HTML document with mermaid.js that renders the
@@ -1748,6 +1760,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       final hash = computeTextHash(bytes);
       final storageFileName = '$hash.txt';
 
+      widget.testOnlyBeforeMmdFolderNameLock?.call();
       final finalName = await _withMmdFolderNameLock(selectedFolder, () async {
         // Name selection and record insertion must be one serialized
         // operation so concurrent saves cannot choose the same visible name.
@@ -1760,6 +1773,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           counter++;
         }
 
+        await widget.testOnlyAfterMmdNameAllocation?.call(finalName);
         await TextManifest.writeText(storageFileName, content);
         await TextManifest.addRecord(TextRecord(
           name: finalName,
@@ -1773,6 +1787,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         return finalName;
       });
 
+      widget.testOnlyOnMmdSaveComplete?.call();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
