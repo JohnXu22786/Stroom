@@ -310,12 +310,29 @@ Future<bool> _stopBackgroundService() async {
   await AppLogService.info('BackgroundService', '停止后台服务');
   try {
     final service = FlutterBackgroundService();
-    await _requestServiceStopAndWait(service);
-    await AppLogService.info('BackgroundService', '后台服务已停止');
-    // 先持久化 enabled=false，再取消 AlarmManager 看门狗：
-    // 如果进程在这两步之间被杀，冷启动恢复也会读到已关闭意图。
+    final wasEnabled = await _isBackgroundServiceEnabled(
+      assumeEnabledOnReadError: true,
+    );
+    // Persist the explicit stop intent before requesting the stop. If the
+    // process dies once the service has stopped, cold-start recovery must not
+    // restore it from a stale enabled preference.
+    final stopIntentPersisted = await _setServiceEnabledPreference(false);
+    try {
+      await _requestServiceStopAndWait(service);
+    } catch (_) {
+      if (stopIntentPersisted && wasEnabled) {
+        // Keep the old recovery behavior if the stop was not confirmed.
+        _explicitUserEnabledInProcess = true;
+        await _setServiceEnabledPreference(true);
+        await _rearmKeepAlive();
+      }
+      rethrow;
+    }
     _explicitUserEnabledInProcess = false;
-    if (!await _setServiceEnabledPreference(false)) return false;
+    await AppLogService.info('BackgroundService', '后台服务已停止');
+    // A rejected preference write must leave recovery armed while persisted
+    // enabled intent is still true, even though the stop request was sent.
+    if (!stopIntentPersisted) return false;
     await _disableKeepAlive();
     return true;
   } catch (e) {
