@@ -119,6 +119,9 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   final executorStarted = Completer<void>();
   final secondExecutorStarted = Completer<void>();
   int executorStarts = 0;
+  bool holdRetryExecutions = false;
+  final retryCancelTokens = <CancelToken>[];
+  final retryReleases = <Completer<void>>[];
 
   void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
 
@@ -151,6 +154,12 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
       secondExecutorStarted.complete();
+    }
+    if (holdRetryExecutions) {
+      retryCancelTokens.add(cancelToken);
+      final release = Completer<void>();
+      retryReleases.add(release);
+      await release.future;
     }
     return null;
   }
@@ -1203,6 +1212,73 @@ void main() {
       expect(servicePlatform.stopCalls, 0);
       expect(servicePlatform.running, isTrue);
       expect(preferences.getBool('background_service_enabled'), isFalse);
+    });
+
+    test('repeated confirm cancels superseded execution before pause',
+        () async {
+      const taskId = 'repeat-confirm-pause';
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.confirmAndContinue(taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        notifier.confirmAndContinue(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final firstRun = notifier.retryCancelTokens[0];
+        final currentRun = notifier.retryCancelTokens[1];
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isFalse);
+
+        notifier.pauseTask(taskId);
+
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('removing a repeated task cancels all overlapping executions',
+        () async {
+      const taskId = 'repeat-confirm-remove';
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.confirmAndContinue(taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        notifier.confirmAndContinue(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final firstRun = notifier.retryCancelTokens[0];
+        final currentRun = notifier.retryCancelTokens[1];
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isFalse);
+
+        notifier.removeTask(taskId);
+
+        expect(firstRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
     });
 
     test('rejected user start preference write does not start service',

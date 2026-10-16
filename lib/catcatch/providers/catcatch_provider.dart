@@ -906,8 +906,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤执行
   Future<void> _executeTaskFrom(CatCatchTask task, StepType fromStep) async {
+    final previousCancelToken = _cancelTokens[task.id];
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
+    if (previousCancelToken != null && !previousCancelToken.isCancelled) {
+      previousCancelToken.cancel();
+    }
 
     try {
       // Task status does not indicate whether the background service is alive.
