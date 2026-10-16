@@ -80,6 +80,25 @@ void main() {
       await tester.pump();
       expect(controller.zoomLevel, closeTo(1.0, 0.0001));
 
+      preview.webView.params.onReceivedError!(
+        preview.controller,
+        WebResourceRequest(
+          url: WebUri('https://example.com/diagram.html'),
+          isForMainFrame: true,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'document request failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('加载失败'), findsOneWidget);
+      expect(
+        previewDom.controlReceivesPointer('close'),
+        isTrue,
+        reason: previewDom.pointerHitTargetDescription('close'),
+      );
       previewDom.clickControl('close');
       await tester.pumpAndSettle();
       expect(find.byKey(overlayKey), findsNothing);
