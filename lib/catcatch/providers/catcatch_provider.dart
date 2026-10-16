@@ -349,11 +349,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (task == null) return;
     try {
       final appDirPath = await AppStorage.directory;
-      // Selection can acquire shared paths while directory resolution waits.
-      final currentRemainingTasks =
+      Iterable<CatCatchTask> currentRemainingTasks() =>
           mounted ? state : (_disposedSnapshot ?? remainingTasks);
       await cleanupTaskFiles(task,
-          appDirPath: appDirPath, remainingTasks: currentRemainingTasks);
+          appDirPath: appDirPath,
+          remainingTasks: currentRemainingTasks(),
+          remainingTasksProvider: currentRemainingTasks);
     } catch (e) {
       debugPrint('[CatCatchNotifier] Failed to clean up task files: $e');
     }
@@ -367,20 +368,28 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   @visibleForTesting
   static Future<void> cleanupTaskFiles(CatCatchTask task,
       {String? appDirPath,
-      Iterable<CatCatchTask> remainingTasks = const []}) async {
+      Iterable<CatCatchTask> remainingTasks = const [],
+      Iterable<CatCatchTask> Function()? remainingTasksProvider}) async {
     final appDir = appDirPath ?? await AppStorage.directory;
-    final pathsInUse = <String>{};
-    for (final remainingTask in remainingTasks) {
-      final downloadedFilePath = remainingTask.downloadedFilePath;
-      if (downloadedFilePath != null) {
-        pathsInUse.add(_normalizedFilePath(downloadedFilePath));
+    Iterable<CatCatchTask> currentRemainingTasks() =>
+        remainingTasksProvider?.call() ?? remainingTasks;
+
+    bool isInUse(String path) {
+      final normalizedPath = _normalizedFilePath(path);
+      for (final remainingTask in currentRemainingTasks()) {
+        final downloadedFilePath = remainingTask.downloadedFilePath;
+        if (downloadedFilePath != null &&
+            _normalizedFilePath(downloadedFilePath) == normalizedPath) {
+          return true;
+        }
+        if (remainingTask.status != TaskStatus.completed &&
+            _mediaDerivedArtifacts(remainingTask, appDir).any((artifact) =>
+                _normalizedFilePath(artifact.path) == normalizedPath)) {
+          return true;
+        }
       }
-      if (remainingTask.status != TaskStatus.completed) {
-        pathsInUse.addAll(_mediaDerivedArtifacts(remainingTask, appDir)
-            .map((artifact) => _normalizedFilePath(artifact.path)));
-      }
+      return false;
     }
-    bool isInUse(String path) => pathsInUse.contains(_normalizedFilePath(path));
 
     // 1. 删除分段下载进度跟踪
     final progressPath =
@@ -390,20 +399,21 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
     if (task.downloadedFilePath != null &&
-        task.status != TaskStatus.completed &&
-        !isInUse(task.downloadedFilePath!)) {
-      await _deleteFileBestEffort(File(task.downloadedFilePath!));
+        task.status != TaskStatus.completed) {
+      final downloadedFilePath = task.downloadedFilePath!;
+      await _deleteFileBestEffort(File(downloadedFilePath),
+          shouldDelete: () => !isInUse(downloadedFilePath));
     }
 
     // 3. 如果没有已选媒体资源，说明还没开始下载，无需进一步清理
     if (task.selectedMedia == null) return;
 
     for (final artifact in _mediaDerivedArtifacts(task, appDir)) {
-      if (isInUse(artifact.path)) continue;
+      bool shouldDelete() => !isInUse(artifact.path);
       if (artifact is Directory) {
-        await _deleteDirBestEffort(artifact);
+        await _deleteDirBestEffort(artifact, shouldDelete: shouldDelete);
       } else if (artifact is File) {
-        await _deleteFileBestEffort(artifact);
+        await _deleteFileBestEffort(artifact, shouldDelete: shouldDelete);
       }
     }
   }
@@ -442,10 +452,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 取消下载后写入句柄可能尚未释放（Windows 上打开的文件无法删除），
   /// 因此重试几次直到句柄释放，避免残留半下载文件。
   /// 重试间隔为 150ms × 尝试次数（锁定句柄的单元测试依赖该节奏）。
-  static Future<void> _deleteFileBestEffort(File file) async {
+  static Future<void> _deleteFileBestEffort(File file,
+      {bool Function()? shouldDelete}) async {
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         if (await file.exists()) {
+          if (shouldDelete != null && !shouldDelete()) return;
           await file.delete();
         }
         return;
@@ -457,10 +469,12 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   }
 
   /// 删除目录（递归），失败时短暂重试（与 [_deleteFileBestEffort] 同理）。
-  static Future<void> _deleteDirBestEffort(Directory dir) async {
+  static Future<void> _deleteDirBestEffort(Directory dir,
+      {bool Function()? shouldDelete}) async {
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         if (await dir.exists()) {
+          if (shouldDelete != null && !shouldDelete()) return;
           await dir.delete(recursive: true);
         }
         return;

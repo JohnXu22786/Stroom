@@ -1367,6 +1367,50 @@ void main() {
       }
     });
 
+    test('removal cleanup rechecks owners selected after its snapshot',
+        () async {
+      const media = MediaResource(
+        url: 'https://example.com/video.mp4',
+        name: 'video',
+        ext: 'mp4',
+      );
+      final downloadDir = Directory('${directory.path}/catcatch/downloads')
+        ..createSync(recursive: true);
+      final tempDownload = File(
+        '${downloadDir.path}/video.mp4.catcatch_tmp',
+      )..writeAsStringSync('partial download');
+      final unsharedDownload = File('${directory.path}/unshared-download.tmp')
+        ..writeAsStringSync('removed task artifact');
+      final progressFile = File(
+        '${directory.path}/catcatch/.progress/removed_dl_progress.json',
+      )..createSync(recursive: true);
+      final remaining = task('remaining').copyWith(
+        steps: [StepStatus.running(StepType.userSelecting)],
+      );
+      notifier.setTasksForTest([remaining]);
+
+      final cleanup = CatCatchNotifier.cleanupTaskFiles(
+        task('removed').copyWith(
+          selectedMedia: media,
+          downloadedFilePath: unsharedDownload.path,
+        ),
+        appDirPath: directory.path,
+        remainingTasks: notifier.tasksForTest,
+        remainingTasksProvider: () => notifier.tasksForTest,
+      );
+      // The owner list starts with an unselected task. Select its media after
+      // cleanup starts but before its first async deletion resumes.
+      notifier.selectMedia('remaining', media);
+      await notifier.executorStarted.future.timeout(
+        const Duration(seconds: 2),
+      );
+      await cleanup;
+
+      expect(await tempDownload.exists(), isTrue);
+      expect(await unsharedDownload.exists(), isFalse);
+      expect(await progressFile.exists(), isFalse);
+    });
+
     test('a user start reconciles a timed-out stop before reporting active',
         () async {
       expect(await startBackgroundService(), isTrue);
