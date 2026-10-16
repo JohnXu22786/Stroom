@@ -28,12 +28,13 @@ class AsrTaskAudio {
 
 class _AsrTaskJob {
   final String taskId;
+  final BackgroundTask taskGeneration;
   final AsrTaskAudio audio;
   final String title;
   final CancelToken cancelToken = CancelToken();
   AsrService? service;
 
-  _AsrTaskJob(this.taskId, this.audio, this.title);
+  _AsrTaskJob(this.taskId, this.taskGeneration, this.audio, this.title);
 }
 
 /// Owns one standalone ASR batch and runs its tasks serially after the page
@@ -45,6 +46,7 @@ class AsrTaskScheduler {
   final String saveFolder;
   final int modelIndex;
   final AsrService Function(AsrConfig) _serviceFactory;
+  final Future<Map<String, dynamic>> Function(AsrTaskAudio) _retryDataComputer;
   final AsrTextWriter _writeText;
   final void Function() _onSaved;
 
@@ -60,6 +62,7 @@ class AsrTaskScheduler {
     AsrService Function(AsrConfig)? serviceFactory,
     AsrTextWriter? writeText,
     void Function()? onSaved,
+    Future<Map<String, dynamic>> Function(AsrTaskAudio)? retryDataComputer,
   })  : config = _snapshotConfig(config),
         audios = List.unmodifiable(
           audios.map(
@@ -72,6 +75,10 @@ class AsrTaskScheduler {
         ),
         _serviceFactory =
             serviceFactory ?? ((config) => AsrService(config: config)),
+        _retryDataComputer = retryDataComputer ??
+            ((audio) => Isolate.run(
+                  () => _buildRetryData(audio, modelIndex, saveFolder),
+                )),
         _writeText = writeText ?? TextManifest.writeText,
         _onSaved = onSaved ?? _ignoreSaved;
 
@@ -112,7 +119,12 @@ class AsrTaskScheduler {
               title: title,
               startImmediately: false,
             );
-            return _AsrTaskJob(taskId, audio, title);
+            return _AsrTaskJob(
+              taskId,
+              notifier.taskById(taskId)!,
+              audio,
+              title,
+            );
           }(),
       ];
 
@@ -154,9 +166,7 @@ class AsrTaskScheduler {
 
   Future<void> _computeRetryData(_AsrTaskJob job) async {
     try {
-      final retryData = await Isolate.run(
-        () => _buildRetryData(job.audio, modelIndex, saveFolder),
-      );
+      final retryData = await _retryDataComputer(job.audio);
       _setRetryData(job, retryData);
     } catch (_) {
       // Isolate.run is unavailable on some targets, including Flutter Web.
@@ -169,8 +179,13 @@ class AsrTaskScheduler {
   }
 
   void _setRetryData(_AsrTaskJob job, Map<String, dynamic> retryData) {
-    if (notifier.taskById(job.taskId) == null) return;
+    if (!_isCurrentGeneration(job)) return;
     notifier.setRetryData(job.taskId, retryData);
+  }
+
+  bool _isCurrentGeneration(_AsrTaskJob job) {
+    final task = notifier.taskById(job.taskId);
+    return task != null && task.hasSameGenerationAs(job.taskGeneration);
   }
 
   void _cancel(_AsrTaskJob job) {
@@ -180,12 +195,17 @@ class AsrTaskScheduler {
 
   void _checkActive(_AsrTaskJob job) {
     final task = notifier.taskById(job.taskId);
-    if (task == null || task.status != TaskStatus.running) _cancel(job);
+    if (task == null ||
+        !task.hasSameGenerationAs(job.taskGeneration) ||
+        task.status != TaskStatus.running) {
+      _cancel(job);
+    }
     if (job.cancelToken.isCancelled) throw job.cancelToken.cancelError!;
   }
 
   Future<void> _runQueue(List<_AsrTaskJob> jobs) async {
     for (final job in jobs) {
+      if (!_isCurrentGeneration(job)) continue;
       if (!notifier.startTaskIfWaiting(job.taskId)) {
         notifier.unregisterCancellation(job.taskId);
         continue;
@@ -231,7 +251,7 @@ class AsrTaskScheduler {
         writeText: _writeText,
       ).saveResult(result.subtitle ?? result.text, format: result.outputFormat);
     } catch (error) {
-      if (job.cancelToken.isCancelled) return;
+      if (job.cancelToken.isCancelled || !_isCurrentGeneration(job)) return;
       final task = notifier.taskById(job.taskId);
       if (task == null) return;
 
@@ -277,7 +297,9 @@ class AsrTaskScheduler {
         rawResponse: rawResponse,
       );
     } finally {
-      notifier.unregisterCancellation(job.taskId);
+      if (_isCurrentGeneration(job)) {
+        notifier.unregisterCancellation(job.taskId);
+      }
       service?.close();
       job.service = null;
     }

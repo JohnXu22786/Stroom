@@ -120,6 +120,7 @@ void main() {
     required List<AsrTaskAudio> audios,
     AsrConfig config = _config,
     AsrTextWriter? writeText,
+    Future<Map<String, dynamic>> Function(AsrTaskAudio)? retryDataComputer,
   }) {
     final dio = Dio()..httpClientAdapter = adapter;
     addTearDown(() => dio.close(force: true));
@@ -131,6 +132,7 @@ void main() {
       modelIndex: 2,
       serviceFactory: (config) => AsrService(config: config, dio: dio),
       writeText: writeText,
+      retryDataComputer: retryDataComputer,
     );
   }
 
@@ -177,6 +179,104 @@ void main() {
     expect(adapter.calls, hasLength(1));
     expect(notifier.state.map((task) => task.id), [taskIds.first]);
     expect(notifier.state.single.status, TaskStatus.completed);
+  });
+
+  test(
+    'a removed queued job cannot claim a same-ID replacement task',
+    () async {
+      final adapter = _ControlledAdapter(holdFirstResponse: true);
+      final run = scheduler(
+        adapter,
+        audios: [audio('one.wav'), audio('removed.wav')],
+      );
+      final execution = run.start();
+      final taskIds = run.taskIds;
+      await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
+
+      final removal = notifier.removeTasksPersisted([taskIds[1]]);
+      final replacementId = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'replacement.wav',
+        retryData: {'source': 'replacement'},
+        startImmediately: false,
+        taskId: taskIds[1],
+      );
+      expect(replacementId, taskIds[1]);
+      expect(await removal, isTrue);
+
+      adapter.releaseResponse.complete();
+      await execution;
+
+      final replacement = notifier.taskById(replacementId)!;
+      expect(replacement.status, TaskStatus.waiting);
+      expect(adapter.calls, hasLength(1));
+    },
+  );
+
+  test(
+    'old retry-data completion cannot overwrite a same-ID replacement task',
+    () async {
+      final adapter = _ControlledAdapter(holdFirstResponse: true);
+      final retryDataStarted = Completer<void>();
+      final retryDataResult = Completer<Map<String, dynamic>>();
+      final run = scheduler(
+        adapter,
+        audios: [audio('old.wav')],
+        retryDataComputer: (audio) {
+          retryDataStarted.complete();
+          return retryDataResult.future;
+        },
+      );
+      final execution = run.start();
+      final taskId = run.taskIds.single;
+      await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
+      await retryDataStarted.future.timeout(const Duration(seconds: 5));
+
+      final removal = notifier.removeTasksPersisted([taskId]);
+      final replacementRetryData = {'source': 'replacement'};
+      notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'replacement.wav',
+        retryData: replacementRetryData,
+        startImmediately: false,
+        taskId: taskId,
+      );
+      expect(await removal, isTrue);
+
+      retryDataResult.complete({'source': 'old'});
+      await retryDataResult.future;
+      await notifier.pendingPersistence;
+      await execution;
+
+      expect(notifier.taskById(taskId)!.retryData, replacementRetryData);
+    },
+  );
+
+  test('retry data is retained for its original task generation', () async {
+    final adapter = _ControlledAdapter(holdFirstResponse: true);
+    final retryDataStarted = Completer<void>();
+    final retryDataResult = Completer<Map<String, dynamic>>();
+    final computedRetryData = {'source': 'original'};
+    final run = scheduler(
+      adapter,
+      audios: [audio('original.wav')],
+      retryDataComputer: (audio) {
+        retryDataStarted.complete();
+        return retryDataResult.future;
+      },
+    );
+    final execution = run.start();
+    final taskId = run.taskIds.single;
+    await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
+    await retryDataStarted.future.timeout(const Duration(seconds: 5));
+
+    retryDataResult.complete(computedRetryData);
+    await retryDataResult.future;
+    await notifier.pendingPersistence;
+
+    expect(notifier.taskById(taskId)!.retryData, computedRetryData);
+    adapter.releaseResponse.complete();
+    await execution;
   });
 
   test('canceling an in-flight request does not save its transcript', () async {

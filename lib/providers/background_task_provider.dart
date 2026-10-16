@@ -428,6 +428,10 @@ class BackgroundTask {
   static Object _generationTokenFor(BackgroundTask task) =>
       _generationTokens[task] ??= Object();
 
+  /// Returns whether [other] is another snapshot of this task generation.
+  bool hasSameGenerationAs(BackgroundTask other) =>
+      identical(_generationTokenFor(this), _generationTokenFor(other));
+
   final String id;
   final BackgroundTaskType type;
   final String title;
