@@ -3006,8 +3006,8 @@ void main() {
           tester,
           platform,
         );
-        final supersededController = supersededWebView
-            .controllerFromPlatform<InAppWebViewController>(
+        final supersededController =
+            supersededWebView.controllerFromPlatform<InAppWebViewController>(
                 supersededWebView.controller);
 
         await tester.pumpWidget(
@@ -3026,10 +3026,11 @@ void main() {
         );
 
         final remountedWebView = platform.webView!;
-        final remountedController = remountedWebView
-            .controllerFromPlatform<InAppWebViewController>(
+        final remountedController =
+            remountedWebView.controllerFromPlatform<InAppWebViewController>(
                 remountedWebView.controller);
-        final remountedDocumentUrl = remountedWebView.params.initialData!.baseUrl!;
+        final remountedDocumentUrl =
+            remountedWebView.params.initialData!.baseUrl!;
         const creationError = '图表渲染引擎初始化失败，请重试';
 
         await tester.pump(const Duration(seconds: 12));
@@ -3040,7 +3041,8 @@ void main() {
         expect(
           find.text(creationError),
           findsOneWidget,
-          reason: 'an unmounted WebView must not clear its replacement view error',
+          reason:
+              'an unmounted WebView must not clear its replacement view error',
         );
 
         remountedWebView.params.onWebViewCreated!(remountedController);
