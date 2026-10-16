@@ -787,6 +787,7 @@ MERMAID_LOADER_PLACEHOLDER
     var panStartX = 0;
     var panStartY = 0;
     var hasDragged = false;
+    var dragSlop = 4;
     var suppressClickAfterPan = false;
     var suppressClickTimer = null;
 
@@ -810,11 +811,13 @@ MERMAID_LOADER_PLACEHOLDER
 
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
-        if (e.clientX !== dragStartX || e.clientY !== dragStartY) {
+        var deltaX = e.clientX - dragStartX;
+        var deltaY = e.clientY - dragStartY;
+        if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
           hasDragged = true;
         }
-        panX = panStartX + (e.clientX - dragStartX);
-        panY = panStartY + (e.clientY - dragStartY);
+        panX = panStartX + deltaX;
+        panY = panStartY + deltaY;
         updateTransform();
         notifyTransform();
         e.preventDefault();
