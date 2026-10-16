@@ -769,6 +769,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       steps: steps,
       retryData: retryData,
     );
+    final generation = BackgroundTask._generationTokenFor(task);
+    for (final activeRemoval in _activeBatchRemovalAddedGenerations) {
+      activeRemoval[id]?.add(generation);
+    }
     state = [task, ...state];
     _persistTasks(preserveSkippedEntries: true);
     _syncIosContinuedTask();
@@ -994,69 +998,83 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Save removals before publishing them; absent IDs also retry disk cleanup.
   Future<bool> removeTasksPersisted(Iterable<String> ids) async {
     final removedIds = ids.toSet();
-    for (final id in removedIds) {
-      cancelTask(id);
-    }
-    while (_removalBarrier != null) {
-      await _removalBarrier!.future;
-    }
-    if (!mounted) return false;
-    if (removedIds.isEmpty) return true;
-
-    final gate = Completer<void>();
-    _removalBarrier = gate;
+    final addedTaskGenerations = <String, Set<Object>>{
+      for (final id in removedIds) id: <Object>{},
+    };
+    _activeBatchRemovalAddedGenerations.add(addedTaskGenerations);
     try {
-      final removedTasks =
-          state.where((task) => removedIds.contains(task.id)).toList();
-      // Keep only the generation that existed when removal began. Updates
-      // preserve this token, while addTask creates a new one for reused IDs.
-      final removedTaskGenerations = {
-        for (final task in removedTasks)
-          (task.id, BackgroundTask._generationTokenFor(task)),
-      };
-      bool isNotRemovedTaskGeneration(BackgroundTask task) =>
-          !removedTaskGenerations
-              .contains((task.id, BackgroundTask._generationTokenFor(task)));
-      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
-      if (!await _writeSnapshot(
-        proposed,
-        preserveSkippedEntries: _taskSnapshotIncomplete,
-        excludedPersistedTaskIds: removedIds,
-      )) {
-        return false;
+      for (final id in removedIds) {
+        cancelTask(id);
       }
-      if (_restoreBarrier != null) {
-        for (final id in removedIds) {
-          _recordPendingRestoreTaskRemoval(id);
+      while (_removalBarrier != null) {
+        await _removalBarrier!.future;
+      }
+      if (!mounted) return false;
+      if (removedIds.isEmpty) return true;
+
+      final gate = Completer<void>();
+      _removalBarrier = gate;
+      try {
+        final removedTasks =
+            state.where((task) => removedIds.contains(task.id)).toList();
+        // A same-ID task added after this request began is a new generation
+        // and must survive even when this request waited behind another batch.
+        bool isNotRemovedTaskGeneration(BackgroundTask task) {
+          if (!removedIds.contains(task.id)) return true;
+          final generation = BackgroundTask._generationTokenFor(task);
+          return addedTaskGenerations[task.id]?.contains(generation) ?? false;
         }
+
+        final proposed = state.where(isNotRemovedTaskGeneration).toList();
+        final retainedAddedTaskIds = {
+          for (final task in proposed)
+            if (removedIds.contains(task.id)) task.id,
+        };
+        final excludedPersistedTaskIds =
+            removedIds.difference(retainedAddedTaskIds);
+        if (!await _writeSnapshot(
+          proposed,
+          preserveSkippedEntries: _taskSnapshotIncomplete,
+          excludedPersistedTaskIds: excludedPersistedTaskIds,
+        )) {
+          return false;
+        }
+        if (_restoreBarrier != null) {
+          for (final id in removedIds) {
+            if (retainedAddedTaskIds.contains(id)) continue;
+            _recordPendingRestoreTaskRemoval(id);
+          }
+        }
+        final cacheCandidates = <String>{
+          for (final task in removedTasks)
+            if (task.type == BackgroundTaskType.ocr)
+              ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        };
+        final currentTasks = mounted ? state : (_disposedSnapshot ?? const []);
+        cacheCandidates.addAll({
+          for (final task in currentTasks)
+            if (removedIds.contains(task.id) &&
+                task.type == BackgroundTaskType.ocr)
+              ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
+        });
+        if (mounted) {
+          state = state.where(isNotRemovedTaskGeneration).toList();
+          _syncIosContinuedTask();
+        }
+        if (!mounted) {
+          // Deferred ordinary writes own this snapshot after disposal. Only a
+          // successful removal may remove these IDs from its final flush.
+          _disposedSnapshot =
+              _disposedSnapshot?.where(isNotRemovedTaskGeneration).toList();
+        }
+        await _deleteUnreferencedOcrCache(cacheCandidates);
+        return true;
+      } finally {
+        _removalBarrier = null;
+        gate.complete();
       }
-      final cacheCandidates = <String>{
-        for (final task in removedTasks)
-          if (task.type == BackgroundTaskType.ocr)
-            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      };
-      final currentTasks = mounted ? state : (_disposedSnapshot ?? const []);
-      cacheCandidates.addAll({
-        for (final task in currentTasks)
-          if (removedIds.contains(task.id) &&
-              task.type == BackgroundTaskType.ocr)
-            ...OcrRetryStorage.referencesFromSnapshot(task.retryData),
-      });
-      if (mounted) {
-        state = state.where(isNotRemovedTaskGeneration).toList();
-        _syncIosContinuedTask();
-      }
-      if (!mounted) {
-        // Deferred ordinary writes own this snapshot after disposal. Only a
-        // successful removal may remove these IDs from its final flush.
-        _disposedSnapshot =
-            _disposedSnapshot?.where(isNotRemovedTaskGeneration).toList();
-      }
-      await _deleteUnreferencedOcrCache(cacheCandidates);
-      return true;
     } finally {
-      _removalBarrier = null;
-      gate.complete();
+      _activeBatchRemovalAddedGenerations.remove(addedTaskGenerations);
     }
   }
 
@@ -1274,6 +1292,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final Map<String, Object> _pendingRestoreTaskRemovals = <String, Object>{};
   final Map<String, Object> _pendingTaskRemovalReconciliations =
       <String, Object>{};
+  final List<Map<String, Set<Object>>> _activeBatchRemovalAddedGenerations = [];
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
   Future<void>? _disposedPersistence;
