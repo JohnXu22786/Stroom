@@ -41,6 +41,61 @@ void main() {
       expect(template, contains('element 认证服务 {'));
       expect(verificationSnippet, '  认证服务 - verifies -> 用户登录');
     });
+
+    test('relationship snippets use declared nodes in a custom diagram', () {
+      const code = '''requirementDiagram
+  functionalRequirement account_access {
+    id: 1
+    text: A user can access the account
+    risk: low
+    verifyMethod: test
+  }
+  element web_portal {
+    type: UI
+  }
+  element auth_api {
+    type: Service
+  }''';
+      final snippets = MermaidTemplates.getSnippets('requirement', code: code);
+      final relationshipSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加关联')
+          .$2;
+      final verificationSnippet = snippets
+          .singleWhere((snippet) => snippet.$1 == '添加验证')
+          .$2;
+
+      expect(relationshipSnippet, '  web_portal - satisfies -> account_access');
+      expect(verificationSnippet, '  auth_api - verifies -> account_access');
+      expect(relationshipSnippet, isNot(contains('用户登录')));
+      expect(verificationSnippet, isNot(contains('认证服务')));
+    });
+
+    test('omits relationship snippets when an endpoint class is missing', () {
+      const diagrams = [
+        '''requirementDiagram
+  requirement account_access {
+    id: 1
+    text: Account access
+    risk: low
+    verifyMethod: test
+  }''',
+        '''requirementDiagram
+  element web_portal {
+    type: UI
+  }''',
+      ];
+
+      for (final code in diagrams) {
+        final snippets = MermaidTemplates.getSnippets(
+          'requirement',
+          code: code,
+        );
+        final labels = snippets.map((snippet) => snippet.$1);
+
+        expect(labels, isNot(contains('添加关联')));
+        expect(labels, isNot(contains('添加验证')));
+      }
+    });
   });
 
   group('MermaidTemplates - requirement diagram verification method', () {

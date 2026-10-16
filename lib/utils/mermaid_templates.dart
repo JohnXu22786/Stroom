@@ -772,6 +772,46 @@ class MermaidTemplates {
   认证服务 - verifies -> 用户登录''';
   }
 
+  static List<(String label, String snippet)> _requirementRelationshipSnippets(
+    String code,
+  ) {
+    final requirementId = RegExp(
+      r'^[ \t]*(?:requirement|functionalRequirement|interfaceRequirement|'
+      r'performanceRequirement|physicalRequirement|designConstraint)[ \t]+'
+      r'([^\s{]+)[ \t]*\{',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(code)?[1];
+    final elementDeclarations = RegExp(
+      r'^[ \t]*element[ \t]+([^\s{]+)[ \t]*\{',
+      multiLine: true,
+      caseSensitive: false,
+    ).allMatches(code).toList();
+    if (requirementId == null || elementDeclarations.isEmpty) return const [];
+
+    final satisfiesElement = elementDeclarations.first[1]!;
+    var verificationElement = satisfiesElement;
+    for (final element in elementDeclarations) {
+      final closingBrace = code.indexOf('}', element.end);
+      if (closingBrace < 0) continue;
+
+      final elementBody = code.substring(element.end, closingBrace);
+      if (RegExp(
+        r'^[ \t]*type[ \t]*:[ \t]*Service[ \t]*$',
+        multiLine: true,
+        caseSensitive: false,
+      ).hasMatch(elementBody)) {
+        verificationElement = element[1]!;
+        break;
+      }
+    }
+
+    return [
+      ('添加关联', '  $satisfiesElement - satisfies -> $requirementId'),
+      ('添加验证', '  $verificationElement - verifies -> $requirementId'),
+    ];
+  }
+
   // ---------------------------------------------------------------------------
   // Context-specific snippets for each diagram type
   // ---------------------------------------------------------------------------
@@ -933,11 +973,13 @@ class MermaidTemplates {
           ('添加子块', '  block\n    A["块A"]\n  end'),
         ];
       case 'requirement':
+        final relationshipSnippets = _requirementRelationshipSnippets(
+          code ?? _requirementTemplate(),
+        );
         return [
           ('添加需求', '  requirement 新需求 {\n    id: 1\n    text: 需求描述\n  }'),
           ('添加元素', '  element 新元素 {\n    type: UI\n  }'),
-          ('添加关联', '  登录页面 - satisfies -> 用户登录'),
-          ('添加验证', '  认证服务 - verifies -> 用户登录'),
+          ...relationshipSnippets,
         ];
       default:
         return [];
