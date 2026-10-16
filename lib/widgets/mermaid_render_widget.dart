@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:stroom/pages/chat/dialogs/mermaid_preview_dialog.dart';
+import 'package:stroom/utils/mermaid_web_url.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'code_block_source_widget.dart';
@@ -396,12 +397,12 @@ class MermaidRenderWidget extends StatefulWidget {
   /// failures, which do not happen in normal builds).
   static const bundledMermaidJsAsset = 'assets/vendor/mermaid.min.js';
 
-  /// Web-only: absolute URL of the bundled asset template loaded via
-  /// [InAppWebViewController.loadUrl]. Flutter web serves assets under
-  /// `/assets/<pubspec path>`, and the template loads mermaid.min.js from
+  /// Web-only: URL of the bundled asset template loaded via
+  /// [InAppWebViewController.loadUrl]. Keeping it relative lets the browser
+  /// resolve it against Flutter web's configured `<base href>`, including
+  /// deployments under a path prefix. The template loads mermaid.min.js from
   /// the same directory (same origin, no CDN request).
-  static const webAssetTemplateUrl =
-      '/assets/assets/vendor/mermaid_render.html';
+  static const webAssetTemplateUrl = 'assets/assets/vendor/mermaid_render.html';
 
   /// Web-only: builds the full template URL for [code]. The ?v= query
   /// forces a fresh template fetch (a stale browser/iframe cache of the
@@ -953,7 +954,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   int _mermaidDocumentGeneration = 0;
   WebUri? _nativeLoadBaseUrl;
 
-  String _resolveWebUrl(String url) => Uri.base.resolve(url).toString();
+  String _resolveWebUrl(String url) => resolveMermaidWebUrl(url);
 
   WebUri _newNativeLoadBaseUrl() {
     final generation = ++_nativeLoadGeneration;
