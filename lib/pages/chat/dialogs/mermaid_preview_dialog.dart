@@ -505,6 +505,26 @@ class _MermaidPreviewDialogContentState
                 ),
               ),
 
+            // Keep a visible exit above loading and error overlays. The
+            // fullscreen route disables iOS edge-swipe dismissal.
+            if (!showControls)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 4,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.close, size: 24),
+                    tooltip: '关闭预览',
+                    color: cs.onSurface,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ),
+
             // Top bar with title, zoom controls, and close button
             // Only show controls when WebView is ready and no error
             if (showControls && kIsWeb)
