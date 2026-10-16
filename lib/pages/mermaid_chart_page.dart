@@ -532,7 +532,15 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           if (_selectedTypeId == 'gantt' && label == '添加依赖任务') {
                             _insertGanttDependencyTask();
                           } else {
-                            _insertSnippet(snippet);
+                            final snippetToInsert = _selectedTypeId ==
+                                        'gitGraph' &&
+                                    label == '合并分支'
+                                ? MermaidTemplates.getSnippets(
+                                    'gitGraph',
+                                    code: _codeController.text,
+                                  ).singleWhere((item) => item.$1 == label).$2
+                                : snippet;
+                            _insertSnippet(snippetToInsert);
                           }
                         },
                         visualDensity: VisualDensity.compact,
