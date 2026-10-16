@@ -131,6 +131,89 @@ void main() {
   );
 
   testWidgets(
+    'can close the fullscreen preview while its Mermaid asset is loading',
+    (tester) async {
+      if (kIsWeb) return;
+
+      final delayedAsset = Completer<ByteData>();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMessageHandler('flutter/assets', (message) async {
+        final assetKey = utf8.decode(
+          message!.buffer.asUint8List(
+            message.offsetInBytes,
+            message.lengthInBytes,
+          ),
+        );
+        if (assetKey != MermaidRenderWidget.bundledMermaidJsAsset) {
+          return null;
+        }
+        return delayedAsset.future;
+      });
+      addTearDown(() {
+        messenger.setMockMessageHandler('flutter/assets', null);
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showMermaidPreviewDialog(
+                context: context,
+                mermaidCode: 'graph TD\nA-->B',
+              ),
+              child: const Text('Open preview'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open preview'));
+      await tester.pump();
+
+      expect(find.text('加载图表预览...'), findsOneWidget);
+      expect(find.byTooltip('关闭预览'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('关闭预览'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(Dialog), findsNothing);
+      delayedAsset.completeError(StateError('Simulated asset load failure'));
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'can close the fullscreen preview after a main-frame load failure',
+    (tester) async {
+      final preview = await _openPreviewWithEarlyControls(tester);
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+
+      preview.webView.params.onReceivedError!(
+        preview.controller,
+        WebResourceRequest(
+          url: WebUri('https://example.com/diagram.html'),
+          isForMainFrame: true,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'document request failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('加载失败'), findsOneWidget);
+      expect(find.byTooltip('关闭预览'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('关闭预览'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+    },
+  );
+
+  testWidgets(
     'queues zoom tapped before WebView creation until the page is ready',
     (tester) async {
       final preview = await _openPreviewWithEarlyControls(tester);
