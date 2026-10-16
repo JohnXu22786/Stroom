@@ -467,6 +467,33 @@ void main() {
       );
     });
 
+    test(
+        'stopBackgroundService accepts rejected disable with missing preference',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(true);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      SharedPreferencesStorePlatform.instance =
+          _FailingEnabledPreferenceStore({});
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+      await prefs.reload();
+      expect(prefs.getBool('background_service_enabled'), isNull);
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isFalse);
+      expect(prefs.getBool('background_service_enabled'), isNull);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('stopKeepAlive'),
+      );
+    });
+
     test('failed stop request restores enabled intent and watchdog recovery',
         () async {
       final mock = registerMockPlatform()
@@ -847,6 +874,35 @@ void main() {
         keepAliveCalls.any((c) => c.method == 'startKeepAlive'),
         isTrue,
         reason: 'starting the service must arm the native keep-alive alarm',
+      );
+    });
+
+    test('persistent start recovers when a redundant enabled write is rejected',
+        () async {
+      final mock = registerMockPlatform()..setServiceRunning(false);
+      final prefs = await SharedPreferences.getInstance();
+      final originalStore = await _rejectEnabledPreferenceWrites(
+        prefs,
+        initiallyEnabled: true,
+      );
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+      await prefs.reload();
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+
+      await withAndroidPlatform(() async {
+        expect(await startBackgroundService(), isTrue);
+        await prefs.reload();
+      });
+
+      expect(mock._isRunning, isTrue);
+      expect(prefs.getBool('background_service_enabled'), isTrue);
+      expect(
+        keepAliveCalls.map((call) => call.method),
+        contains('startKeepAlive'),
+        reason: 'saved enabled intent must still arm service recovery after a '
+            'redundant preference write is rejected',
       );
     });
 
