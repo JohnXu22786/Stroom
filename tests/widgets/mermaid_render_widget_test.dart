@@ -1342,6 +1342,15 @@ void main() {
           platform,
           const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
         );
+        final initialDocumentUrl =
+            tester.widget<InAppWebView>(find.byType(InAppWebView))
+                .initialData!
+                .baseUrl;
+        expect(
+          initialDocumentUrl,
+          isNotNull,
+          reason: 'native initialData needs a document identity for callbacks',
+        );
         final controller = webView.controllerFromPlatform<InAppWebViewController>(
           webView.controller,
         );
@@ -1386,6 +1395,68 @@ void main() {
         webView.params.onReceivedError!(
           controller,
           WebResourceRequest(
+            url: WebUri(
+              Uri.parse(staleDocumentUrl.toString())
+                  .resolve('../old-parent-relative-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale parent-relative subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale parent-relative subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              Uri.parse(staleDocumentUrl.toString())
+                  .resolve('/old-absolute-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale absolute subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale absolute subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('${initialDocumentUrl!}old-initial-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Stale initial subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Stale initial subresource failed'),
+          findsNothing,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
             url: WebUri('${activeDocumentUrl}current-image.svg'),
             isForMainFrame: false,
           ),
@@ -1398,6 +1469,46 @@ void main() {
 
         expect(
           find.text('页面加载失败: Current subresource failed'),
+          findsOneWidget,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri(
+              Uri.parse(activeDocumentUrl.toString())
+                  .resolve('../current-parent-relative-image.svg')
+                  .toString(),
+            ),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current parent-relative subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current parent-relative subresource failed'),
+          findsOneWidget,
+        );
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(
+            url: WebUri('https://cdn.example/current-image.svg'),
+            isForMainFrame: false,
+          ),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Current absolute subresource failed',
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.text('页面加载失败: Current absolute subresource failed'),
           findsOneWidget,
         );
         expect(find.text('重试'), findsOneWidget);
@@ -1428,6 +1539,23 @@ void main() {
           supportsJavaScriptHandlers: true,
         );
         final controller = webView.controller;
+        expect(
+          tester
+              .widget<InAppWebView>(find.byType(InAppWebView))
+              .initialData!
+              .data,
+          contains("callHandler('onMermaidError', msg, 0);"),
+        );
+
+        controller.simulateMermaidError(
+          'Current initial Mermaid render failed',
+          0,
+        );
+        await tester.pump();
+        expect(
+          find.text('Current initial Mermaid render failed'),
+          findsOneWidget,
+        );
 
         await tester.pumpWidget(
           const MaterialApp(
@@ -1451,6 +1579,15 @@ void main() {
         expect(activeGeneration, isNot(staleGeneration));
 
         controller.simulateMermaidError(
+          'Stale initial Mermaid render failed',
+          0,
+        );
+        await tester.pump();
+
+        expect(find.text('Stale initial Mermaid render failed'), findsNothing);
+        expect(find.text('重试'), findsNothing);
+
+        controller.simulateMermaidError(
           'Stale Mermaid render failed',
           staleGeneration,
         );
@@ -1469,11 +1606,11 @@ void main() {
         expect(find.text('重试'), findsOneWidget);
         expect(
           controller.loadedDataDocuments[0],
-          contains('var mermaidErrorDocumentGeneration = 1;'),
+          contains("callHandler('onMermaidError', msg, 1);"),
         );
         expect(
           controller.loadedDataDocuments[1],
-          contains('var mermaidErrorDocumentGeneration = 2;'),
+          contains("callHandler('onMermaidError', msg, 2);"),
         );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -2450,6 +2587,8 @@ void main() {
         await tester.pump(const Duration(seconds: 12));
         expect(find.text(creationError), findsOneWidget);
         final failedWebViewElement = tester.element(find.byType(InAppWebView));
+        final failedInitialData =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData!;
 
         await tester.tap(find.text('重试'));
         await tester.pump();
@@ -2459,6 +2598,18 @@ void main() {
           isNot(same(failedWebViewElement)),
           reason: 'Retry must create a new platform view when the controller '
               'was never created',
+        );
+        final retriedInitialData =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData!;
+        expect(
+          retriedInitialData.data,
+          contains("callHandler('onMermaidError', msg, 1);"),
+          reason: 'the remounted page must use the retry document generation',
+        );
+        expect(
+          retriedInitialData.baseUrl,
+          isNot(failedInitialData.baseUrl),
+          reason: 'the remounted page must use a new native document identity',
         );
         expect(find.text(creationError), findsNothing);
 
@@ -2968,7 +3119,9 @@ Future<_MermaidWebView> _mountReadyMermaidWidget(
     webView.controller,
   );
   webView.params.onWebViewCreated!(controller);
-  webView.params.onLoadStop?.call(controller, null);
+  final initialUrl =
+      tester.widget<InAppWebView>(find.byType(InAppWebView)).initialData?.baseUrl;
+  webView.params.onLoadStop?.call(controller, initialUrl);
   await tester.pump();
   return webView;
 }
