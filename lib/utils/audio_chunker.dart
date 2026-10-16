@@ -1,6 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+// Keep derived counts exact when the chunker runs with JavaScript numbers.
+const _maxSafeInteger = 9007199254740991;
+
 // ============================================================================
 // Pure-Dart audio chunker for WAV files
 //
@@ -171,18 +174,18 @@ class AudioChunkConfig {
       ('maxChunkDuration', maxChunkDuration),
     ]) {
       final samples = duration * sampleRate;
-      if (!samples.isFinite || samples < 1 || samples > 0x7fffffffffffffff) {
+      if (!samples.isFinite || samples < 1 || samples > _maxSafeInteger) {
         throw ArgumentError.value(duration, name);
       }
     }
 
     final analysisFrames = analysisWindowSeconds * sampleRate / frameSize;
     final silenceFrames = minSilenceDuration * sampleRate / frameSize;
-    if (!analysisFrames.isFinite || analysisFrames > 0x7fffffffffffffff) {
+    if (!analysisFrames.isFinite || analysisFrames > _maxSafeInteger) {
       throw ArgumentError.value(analysisWindowSeconds, 'analysisWindowSeconds');
     }
     if (!silenceFrames.isFinite ||
-        silenceFrames > 0x7fffffffffffffff ||
+        silenceFrames > _maxSafeInteger ||
         !(minSilenceDuration * 1000).isFinite) {
       throw ArgumentError.value(minSilenceDuration, 'minSilenceDuration');
     }
