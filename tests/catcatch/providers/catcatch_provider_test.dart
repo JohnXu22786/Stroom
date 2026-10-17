@@ -1453,6 +1453,79 @@ void main() {
     );
 
     test(
+      'resuming duplicate IDs preserves the newest runtime snapshot',
+      () async {
+        const taskId = 'resume-newest-runtime-snapshot';
+        const staleMedia = MediaResource(
+          url: 'https://example.com/older.m3u8',
+          name: 'older',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        const newestMedia = MediaResource(
+          url: 'https://example.com/newest.m3u8',
+          name: 'newest',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final older = task(taskId).copyWith(
+          steps: StepType.values.map(StepStatus.pending).toList(),
+          detectedMedia: const [staleMedia],
+          selectedMedia: staleMedia,
+          progress: 8,
+          downloadedFilePath: '/tmp/older.partial.mp4',
+          downloadedBytes: 80,
+        );
+        final newest = task(taskId).copyWith(
+          steps: [
+            StepStatus.done(StepType.fetching, detail: 'newest fetched page'),
+            ...StepType.values.skip(1).map(StepStatus.pending),
+          ],
+          detectedMedia: const [newestMedia],
+          selectedMedia: newestMedia,
+          progress: 47,
+          downloadedFilePath: '/tmp/newest.partial.mp4',
+          downloadedBytes: 4700,
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newest]);
+        final executionNotifier = notifier;
+
+        try {
+          executionNotifier.resumeTask(taskId);
+          await executionNotifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          final persisted = await _waitForPersistedLatestTaskForTest(
+            directory,
+            taskId,
+            expectedProgress: newest.progress,
+          );
+          expect(persisted, isNotNull);
+          expect(persisted!.progress, newest.progress);
+          expect(persisted.steps.first.completed, isTrue);
+          expect(persisted.steps.first.detail, 'newest fetched page');
+          expect(
+            persisted.detectedMedia.map((media) => media.url).toList(),
+            [newestMedia.url],
+          );
+          expect(persisted.selectedMedia?.url, newestMedia.url);
+          expect(persisted.downloadedFilePath, newest.downloadedFilePath);
+          expect(persisted.downloadedBytes, newest.downloadedBytes);
+        } finally {
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      },
+    );
+
+    test(
       'resume runtime updates persist to the newest duplicate task row',
       () async {
         const taskId = 'resumed-duplicate-task';
