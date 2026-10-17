@@ -45,6 +45,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 当前运行中的取消令牌映射（taskId → CancelToken）
   final Map<String, CancelToken> _cancelTokens = {};
+  final Expando<Object> _cancelTokenOwners = Expando<Object>();
 
   Future<bool>? _pendingWrite;
   int _serviceCleanupGeneration = 0;
@@ -319,7 +320,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     final gate = Completer<void>();
     _removalBarrier = gate;
     try {
-      final proposed = state.where((t) => !removedIds.contains(t.id)).toList();
+      final removalTargets = Set<Object>.identity()
+        ..addAll(state
+            .where((task) => removedIds.contains(task.id))
+            .map((task) => task.runtimeIdentity));
+      final proposed = state
+          .where((task) => !removalTargets.contains(task.runtimeIdentity))
+          .toList();
       if (_restoringTasks || _taskRestoreNeedsRetry) {
         _removedTaskIdsDuringRestore.addAll(removedIds);
       }
@@ -328,13 +335,20 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         _persistedServiceCleanupGeneration = cleanupGeneration;
       }
       if (mounted) {
-        final removed = state.where((t) => removedIds.contains(t.id)).toList();
-        final remaining =
-            state.where((t) => !removedIds.contains(t.id)).toList();
+        final removed = state
+            .where((task) => removalTargets.contains(task.runtimeIdentity))
+            .toList();
+        final remaining = state
+            .where((task) => !removalTargets.contains(task.runtimeIdentity))
+            .toList();
         state = remaining;
         for (final id in removedIds) {
-          final token = _cancelTokens.remove(id);
-          if (token != null && !token.isCancelled) token.cancel();
+          final token = _cancelTokens[id];
+          if (token != null &&
+              removalTargets.contains(_cancelTokenOwners[token])) {
+            _cancelTokens.remove(id);
+            if (!token.isCancelled) token.cancel();
+          }
         }
         for (final task in removed) {
           unawaited(_cleanupTaskFiles(task, remainingTasks: remaining));
@@ -342,9 +356,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       }
       if (!mounted) {
         // Deferred ordinary writes own this snapshot after disposal. Only a
-        // successful removal may remove these IDs from its final flush.
+        // successful removal may remove its selected rows from the final flush.
         _disposedSnapshot = _disposedSnapshot
-            ?.where((task) => !removedIds.contains(task.id))
+            ?.where((task) => !removalTargets.contains(task.runtimeIdentity))
             .toList();
       }
       final remainingTasks = mounted ? state : _disposedSnapshot;
@@ -835,6 +849,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 执行任务
   Future<void> _executeTask(CatCatchTask task) async {
     final cancelToken = CancelToken();
+    _cancelTokenOwners[cancelToken] = task.runtimeIdentity;
     _cancelTokens[task.id] = cancelToken;
 
     try {
@@ -924,6 +939,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   Future<void> _executeTaskFrom(CatCatchTask task, StepType fromStep) async {
     final previousCancelToken = _cancelTokens[task.id];
     final cancelToken = CancelToken();
+    _cancelTokenOwners[cancelToken] = task.runtimeIdentity;
     _cancelTokens[task.id] = cancelToken;
     if (previousCancelToken != null && !previousCancelToken.isCancelled) {
       previousCancelToken.cancel();

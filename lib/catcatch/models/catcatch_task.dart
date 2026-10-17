@@ -154,6 +154,10 @@ class CatCatchTask {
   /// Legacy task records require the task-flow registration fallback.
   static const nativeRegisteredPathKey = 'nativeRegisteredPath';
 
+  // Keep ownership across immutable updates without persisting runtime state.
+  final Object? _runtimeIdentity;
+  Object get runtimeIdentity => _runtimeIdentity ?? this;
+
   final String id;
   final String url;
   final int expectedDurationSec;
@@ -193,7 +197,8 @@ class CatCatchTask {
     this.downloadedFilePath,
     this.metadata = const {},
     this.downloadedBytes = 0,
-  });
+    Object? runtimeIdentity,
+  }) : _runtimeIdentity = runtimeIdentity;
 
   // ---------------------------------------------------------------------------
   // copyWith
@@ -228,6 +233,7 @@ class CatCatchTask {
             : this.statusChangedAt);
 
     return CatCatchTask(
+      runtimeIdentity: runtimeIdentity,
       id: id ?? this.id,
       url: url ?? this.url,
       expectedDurationSec: expectedDurationSec ?? this.expectedDurationSec,
