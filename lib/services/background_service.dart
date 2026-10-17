@@ -604,11 +604,12 @@ Future<bool?> _readFailedStopIntentRestorePending() async {
       final pending = await StartupPreferences.getBool(
         _failedStopIntentRestorePendingKey,
       );
-      if (pending == true) {
+      final resolvedPending = pending ?? false;
+      if (resolvedPending) {
         _failedStopIntentRestorePending = true;
         _failedStopIntentRestoreMarkerDurable = true;
       }
-      return pending;
+      return resolvedPending;
     } catch (_) {
       return null;
     }
@@ -645,6 +646,8 @@ Future<bool?> _readBackgroundServiceEnabled() async {
 /// The decision and service start share a lock to preserve concurrent user intent.
 Future<bool> stopBackgroundServiceIfNotUserEnabled() =>
     _withServiceLifecycleLock(() async {
+      // A read error leaves intent unknown, so implicit cleanup must defer.
+      if (await _readFailedStopIntentRestorePending() != false) return false;
       if (await _isBackgroundServiceEnabled()) return false;
       return _stopBackgroundService();
     });
