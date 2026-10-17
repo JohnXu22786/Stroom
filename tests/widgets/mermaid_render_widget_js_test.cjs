@@ -621,6 +621,42 @@ test('manual zoom-out keeps sub-0.1 fitted diagrams at their fitted scale', () =
   }
 });
 
+test('native pinch-in preserves a sub-floor fit and ordinary zoom bounds', () => {
+  const applyGestureTransform = dartSource.match(
+    /^    window\.applyGestureTransformAfterFit = function\(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY\) \{[\s\S]*?^    \};/m,
+  );
+  assert.ok(applyGestureTransform, 'Could not find native applyGestureTransformAfterFit');
+
+  const context = {
+    window: {},
+    fitComplete: true,
+    activeNativeGestureId: null,
+    nativeGestureZoomLevel: 1,
+    zoomLevel: 1 / 15,
+    panX: 0,
+    panY: 0,
+    pendingZoomOperations: [],
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+  vm.runInNewContext(applyGestureTransform[0], context);
+
+  context.window.applyGestureTransformAfterFit(1, 1.05, 0, 0, null, null);
+  assert.ok(
+    Math.abs(context.zoomLevel - (1 / 15) * 1.05) < 1e-12,
+    'a small native zoom-in should use its relative scale below 0.1',
+  );
+  assert.ok(context.zoomLevel < 0.1);
+
+  context.zoomLevel = 0.2;
+  context.window.applyGestureTransformAfterFit(2, 0.25, 0, 0, null, null);
+  assert.equal(context.zoomLevel, 0.1, 'a normal fit should retain the 0.1 lower bound');
+
+  context.zoomLevel = 1;
+  context.window.applyGestureTransformAfterFit(3, 11, 0, 0, null, null);
+  assert.equal(context.zoomLevel, 10, 'native pinch-in should retain the 10.0 upper bound');
+});
+
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
   const viewport = {clientWidth: 0, clientHeight: 0};
   const attributes = {};

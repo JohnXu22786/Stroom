@@ -1470,6 +1470,72 @@ void main() {
     );
 
     testWidgets(
+      'native pinch-in applies a relative scale below the manual zoom floor',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showToolbar: false,
+          ),
+          supportsJavaScriptHandlers: true,
+        );
+        final fakeController = webView.controller;
+        final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+        fakeController.viewportSize = widgetRect.size;
+        fakeController.simulateJsFitToViewport(1 / 15);
+
+        final center = tester.getCenter(find.byType(InAppWebView));
+        final firstFinger = await tester.startGesture(
+          center - const Offset(300, 0),
+          pointer: 13,
+        );
+        final secondFinger = await tester.startGesture(
+          center + const Offset(300, 0),
+          pointer: 14,
+        );
+        await tester.pump();
+
+        final firstGestureCall = fakeController.gestureTransformCalls.length;
+        await firstFinger.moveTo(center - const Offset(330, 0));
+        await secondFinger.moveTo(center + const Offset(330, 0));
+        await tester.pump();
+
+        final relativeScale = fakeController.gestureTransformCalls
+            .skip(firstGestureCall)
+            .fold<double>(1, (scale, operation) => scale * operation.scale);
+        expect(relativeScale, greaterThan(1));
+        expect(relativeScale, lessThan(1.5));
+        expect(
+          fakeController.zoomLevel,
+          closeTo((1 / 15) * relativeScale, 0.0001),
+          reason:
+              'a small native zoom-in must scale from the fitted zoom instead of jumping to 0.1',
+        );
+        expect(
+          fakeController.zoomLevel,
+          lessThan(0.1),
+          reason:
+              'the relative pinch should remain below the manual zoom floor',
+        );
+
+        await firstFinger.up();
+        await secondFinger.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'a stationary native diagram tap forwards one WebView click',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -4202,10 +4268,8 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     panY += operation.panDeltaY;
     final oldZoom = zoomLevel;
     final requestedZoom = _nativeGestureZoomLevel * operation.scale;
-    final minZoom = _nativeGestureZoomLevel < 0.1 &&
-            requestedZoom <= _nativeGestureZoomLevel
-        ? _nativeGestureZoomLevel
-        : 0.1;
+    final minZoom =
+        _nativeGestureZoomLevel < 0.1 ? _nativeGestureZoomLevel : 0.1;
     _nativeGestureZoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
     zoomLevel = _nativeGestureZoomLevel;
     final appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1.0;

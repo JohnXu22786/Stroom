@@ -626,10 +626,8 @@ MERMAID_CODE_PLACEHOLDER
       panY += panDeltaY;
       var oldZoom = zoomLevel;
       var requestedZoom = nativeGestureZoomLevel * scale;
-      var minZoom =
-        nativeGestureZoomLevel < 0.1 && requestedZoom <= nativeGestureZoomLevel
-          ? nativeGestureZoomLevel
-          : 0.1;
+      // Keep a sub-floor fit as the lower bound until native zoom crosses it.
+      var minZoom = nativeGestureZoomLevel < 0.1 ? nativeGestureZoomLevel : 0.1;
       nativeGestureZoomLevel = Math.max(minZoom, Math.min(10, requestedZoom));
       zoomLevel = nativeGestureZoomLevel;
       var appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1;
@@ -1472,8 +1470,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   double _clampManualZoom(double requestedZoom, {required double currentZoom}) {
-    final minZoom =
-        currentZoom < 0.1 && requestedZoom <= currentZoom ? currentZoom : 0.1;
+    // Let native pinch-in scale from a sub-floor fit without a jump to 0.1.
+    final minZoom = currentZoom < 0.1 ? currentZoom : 0.1;
     return requestedZoom.clamp(minZoom, 10.0).toDouble();
   }
 
