@@ -575,7 +575,9 @@ void main() {
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
-        isFalse,
+        isTrue,
+        reason: 'unknown intent must leave recovery to the native persisted-'
+            'state check without starting the service immediately',
       );
     });
 
@@ -628,6 +630,12 @@ void main() {
         await restoreBackgroundServiceOnColdStart();
         // Service should remain not running
         expect(mock._isRunning, isFalse);
+        expect(
+          keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+          isFalse,
+          reason: 'a readable disabled preference does not need watchdog '
+              'recovery',
+        );
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -1259,7 +1267,7 @@ void main() {
     });
 
     test(
-        'cold-start restore does not undo a persisted stop when preference read fails',
+        'cold-start read failure safely rearms without undoing a persisted stop',
         () async {
       final mock = registerMockPlatform()..setServiceRunning(true);
       final originalStore = SharedPreferencesStorePlatform.instance;
@@ -1310,8 +1318,18 @@ void main() {
       );
       expect(
         keepAliveCalls.any((call) => call.method == 'rearmKeepAlive'),
+        isTrue,
+        reason: 'unknown intent may re-arm because the native watchdog checks '
+            'the durable enabled state before recovery',
+      );
+
+      store.failReads = false;
+      SharedPreferences.resetStatic();
+      final persistedStopPrefs = await SharedPreferences.getInstance();
+      expect(
+        persistedStopPrefs.getBool('background_service_enabled'),
         isFalse,
-        reason: 'a failed read must not re-arm watchdog state after the stop',
+        reason: 're-arming recovery must not change the durable stop choice',
       );
     });
 
