@@ -120,6 +120,24 @@ void main() {
     );
   });
 
+  group('MermaidTemplates - Gantt snippet date format', () {
+    test('task and milestone snippets use the chart date format', () {
+      const code = '''gantt
+  dateFormat  YYYY/MM/DD''';
+      final snippets = MermaidTemplates.getSnippets('gantt', code: code);
+      final taskSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
+      final milestoneSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
+
+      expect(taskSnippet, matches(RegExp(r'^  新任务 :\d{4}/\d{2}/\d{2}, 7d$')));
+      expect(
+        milestoneSnippet,
+        matches(RegExp(r'^  里程碑 :milestone, \d{4}/\d{2}/\d{2}, 0d$')),
+      );
+    });
+  });
+
   group('MermaidTemplates - GitGraph snippets', () {
     test('merge snippet targets a branch defined in the default template', () {
       final template = MermaidTemplates.getTemplate('gitGraph');
