@@ -45,6 +45,8 @@ class OcrTaskRunner {
   final Map<int, int> _perImageRequestStages = {};
   final Map<int, int> _perImageUploadPercent = {};
   Future<void>? _running;
+  late final BackgroundTask? _taskGeneration;
+  Object? _cancellationOwner;
   int _stage = -1;
   int _uploadPercent = -1;
 
@@ -84,6 +86,7 @@ class OcrTaskRunner {
         _serviceFactory =
             serviceFactory ?? ((config) => OcrService(config: config)),
         _writeText = writeText ?? TextManifest.writeText {
+    _taskGeneration = notifier.taskById(taskId);
     if (perImageConcurrency < 1 || perImageConcurrency > 2) {
       throw ArgumentError.value(
         perImageConcurrency,
@@ -96,6 +99,12 @@ class OcrTaskRunner {
   /// Memoization fences duplicate starts, including starts after completion.
   Future<void> run() => _running ??= _run();
 
+  bool get _ownsTaskGeneration {
+    final taskGeneration = _taskGeneration;
+    return taskGeneration != null &&
+        notifier.taskById(taskId)?.hasSameGenerationAs(taskGeneration) == true;
+  }
+
   void cancel() {
     _cancelToken.cancel('已取消');
     for (final service in _activeServices.toList()) {
@@ -104,7 +113,7 @@ class OcrTaskRunner {
   }
 
   void _checkActive() {
-    if (!notifier.mounted || !notifier.state.any((task) => task.id == taskId)) {
+    if (!notifier.mounted || !_ownsTaskGeneration) {
       cancel();
     }
     if (_cancelToken.isCancelled) throw _cancelToken.cancelError!;
@@ -114,10 +123,13 @@ class OcrTaskRunner {
     _checkActive();
     if (next <= _stage) return;
     for (var i = 0; i < next; i++) {
+      _checkActive();
       notifier.updateStep(taskId, i, completed: true);
     }
+    _checkActive();
     _stage = next;
     notifier.updateStep(taskId, next, running: true);
+    _checkActive();
   }
 
   void _requestStage(OcrRequestStage stage) {
@@ -141,15 +153,17 @@ class OcrTaskRunner {
     _perImageRequestStages[imageIndex] = stageIndex;
     _perImageUploadPercent.putIfAbsent(imageIndex, () => 0);
     _syncPerImageSteps();
+    _checkActive();
   }
 
   void _syncPerImageSteps() {
     if (_perImageRequestStages.isEmpty ||
         _cancelToken.isCancelled ||
-        !notifier.mounted) {
+        !notifier.mounted ||
+        !_ownsTaskGeneration) {
       return;
     }
-    final task = notifier.state.where((task) => task.id == taskId).firstOrNull;
+    final task = notifier.taskById(taskId);
     if (task == null || task.steps.length < 4) return;
 
     final activeStages = _perImageRequestStages.values.toList();
@@ -207,7 +221,16 @@ class OcrTaskRunner {
   }
 
   Future<void> _run() async {
-    notifier.registerCancellation(taskId, cancel);
+    final taskGeneration = _taskGeneration;
+    if (taskGeneration == null) {
+      cancel();
+    } else {
+      _cancellationOwner = notifier.registerCancellationForGeneration(
+        taskId,
+        taskGeneration,
+        cancel,
+      );
+    }
     String? taskSpecificFailure;
     try {
       _checkActive();
@@ -244,6 +267,7 @@ class OcrTaskRunner {
         isComplete: result.isComplete,
         folder: folder,
       );
+      _checkActive();
       if (!result.isComplete) {
         final hasFailedPage = executionMode == OcrBatchMode.perImage &&
             notifier.state.any(
@@ -278,9 +302,8 @@ class OcrTaskRunner {
       await _resultSaver.saveResult(result.text, isComplete: result.isComplete);
     } catch (error) {
       // A removed/disposed task must never be recreated by late callbacks.
-      if (!_cancelToken.isCancelled && notifier.mounted) {
-        final task =
-            notifier.state.where((task) => task.id == taskId).firstOrNull;
+      if (!_cancelToken.isCancelled && _ownsTaskGeneration) {
+        final task = notifier.taskById(taskId);
         if (task != null) {
           final safeError = taskSpecificFailure == null
               ? error is OcrRequestTooLargeException
@@ -295,6 +318,7 @@ class OcrTaskRunner {
                   ) ??
                   'OCR 部分页面未完成';
           for (var i = 0; i < task.steps.length; i++) {
+            if (!_ownsTaskGeneration) break;
             if (task.steps[i].running) {
               notifier.updateStep(taskId, i, failed: true, error: safeError);
             } else if (task.steps[i].status == BgStepStatus.pending) {
@@ -317,6 +341,7 @@ class OcrTaskRunner {
                     excludedValues: [config.apiKey],
                   ) ??
                   '';
+          if (!_ownsTaskGeneration) return;
           notifier.failTask(
             taskId,
             error: safeErrorMessage,
@@ -326,7 +351,13 @@ class OcrTaskRunner {
         }
       }
     } finally {
-      notifier.unregisterCancellation(taskId);
+      final cancellationOwner = _cancellationOwner;
+      if (cancellationOwner != null) {
+        notifier.unregisterCancellationForGeneration(
+          taskId,
+          cancellationOwner,
+        );
+      }
       for (final service in _activeServices.toList()) {
         service.close();
       }
@@ -375,7 +406,7 @@ class OcrTaskRunner {
           );
         }
       }
-      if (notifier.mounted && notifier.state.any((task) => task.id == taskId)) {
+      if (notifier.mounted && _ownsTaskGeneration) {
         _publishPageOutcomes(outcomes);
       }
     }
@@ -480,7 +511,9 @@ class OcrTaskRunner {
   }
 
   void _publishPageOutcomes(List<OcrPageOutcome> outcomes) {
-    notifier.setOcrPageOutcomes(taskId, List.unmodifiable(outcomes));
+    if (_ownsTaskGeneration) {
+      notifier.setOcrPageOutcomes(taskId, List.unmodifiable(outcomes));
+    }
   }
 
   String _combinedPageText(List<OcrPageOutcome> outcomes) => outcomes

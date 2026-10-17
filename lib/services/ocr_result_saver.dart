@@ -149,6 +149,7 @@ class OcrResultSaver {
         _checkActive();
 
         notifier.updateStep(taskId, 4, completed: true);
+        _checkActive();
         notifier.completeTask(
           taskId,
           downloadedFilePath: publishedPath,
