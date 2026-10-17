@@ -1332,19 +1332,17 @@ void main() {
             expectedProgress: runtimeUpdate.progress,
           );
           expect(persisted, isNotNull);
-          final persistedRecords =
-              (jsonDecode(
-                        await File(
-                          '${directory.path}/catcatch/tasks.json',
-                        ).readAsString(),
-                      )
-                      as List)
-                  .map(
-                    (record) => CatCatchTask.fromMap(
-                      Map<String, dynamic>.from(record as Map),
-                    ),
-                  )
-                  .toList();
+          final persistedRecords = (jsonDecode(
+            await File(
+              '${directory.path}/catcatch/tasks.json',
+            ).readAsString(),
+          ) as List)
+              .map(
+                (record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ),
+              )
+              .toList();
           expect(persistedRecords.map((current) => current.id).toList(), [
             'progress-before',
             taskId,
