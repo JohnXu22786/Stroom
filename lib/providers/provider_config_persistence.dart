@@ -11,127 +11,7 @@ const int _maxCorruptProviderBackups = 3;
 extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// 迁移旧版 chat_configs（被重构删除的 ChatProviderConfigItem 格式）到 provider_entries
   Future<void> _migrateOldChatConfigs(SharedPreferences prefs) async {
-    final oldJson = prefs.getString('chat_configs');
-    if (oldJson == null || oldJson.isEmpty) return;
-
-    try {
-      // 顶层也需防御：chat_configs 整体不是数组时，`as List?` 强转
-      // 抛 TypeError 会静默中断迁移。
-      final decoded = jsonDecode(oldJson);
-      if (decoded is! List) {
-        debugPrint('chat_configs 不是合法数组，跳过旧配置迁移');
-        await prefs.remove('chat_configs');
-        await prefs.remove('chat_selected_config_id');
-        return;
-      }
-      // 兜底：使用 whereType 安全过滤，避免非 Map 条目导致的闪退
-      final oldList = decoded.whereType<Map<String, dynamic>>().toList();
-      if (oldList.isEmpty) {
-        await prefs.remove('chat_configs');
-        await prefs.remove('chat_selected_config_id');
-        return;
-      }
-
-      final migratedConfigs = <ProviderConfigItem>[];
-      for (final oldItem in oldList) {
-        // 兜底：安全过滤 oldItem['models']。
-        // 注意：oldItem['models'] 本身可能是非 List（损坏数据），
-        // 用 `is! List` 判断而不是 `as List?` 强转（强转抛 TypeError
-        // 会静默中断迁移，chat_configs 永不清理、每次启动重复迁移）。
-        final rawModels = oldItem['models'];
-        final oldModels = rawModels is List
-            ? rawModels.whereType<Map<String, dynamic>>().toList()
-            : <Map<String, dynamic>>[];
-
-        final models = oldModels.map((m) {
-          final typeConfig = <String, dynamic>{};
-          // 与 startup 迁移副本保持一致：迁移 per-model 的
-          // context/maxTokens（旧数据把压缩阈值挂在 model 上，
-          // 不迁移则老用户的自动压缩静默失效）。
-          final context = m['maxTokens'] ?? m['context'];
-          if (context != null) typeConfig['context'] = context;
-          final temperature = m['temperature'];
-          if (temperature != null) typeConfig['temperature'] = temperature;
-
-          // `is! String`/`is! bool` 而非强转：损坏数据中字段值可能
-          // 是任意类型。
-          final modelId = m['modelId'];
-          return ModelConfig(
-            name: modelId is String ? modelId : '',
-            modelId: modelId is String ? modelId : '',
-            supportStream:
-                m['supportStream'] is bool ? m['supportStream'] as bool : true,
-            typeConfig: typeConfig,
-          );
-        }).toList();
-
-        migratedConfigs.add(
-          ProviderConfigItem(
-            providerName: oldItem['providerName'] is String
-                ? oldItem['providerName']
-                : '',
-            host: oldItem['host'] is String ? oldItem['host'] : '',
-            key: oldItem['key'] is String ? oldItem['key'] : '',
-            models: models,
-          ),
-        );
-      }
-
-      if (migratedConfigs.isEmpty) return;
-
-      // 读取或初始化当前 provider_entries
-      String? existingJson;
-      try {
-        existingJson = prefs.getString('provider_entries');
-      } catch (_) {}
-
-      List<Map<String, dynamic>> existingEntries = [];
-      if (existingJson != null && existingJson.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(existingJson);
-          if (decoded is! List) {
-            // 现有 provider_entries 整体损坏（非数组）：先备份原始
-            // 数据再覆盖 —— 否则这里的写入会永久销毁损坏现场。
-            await _backupCorruptProviderEntries(prefs, existingJson);
-            existingEntries = [];
-          } else {
-            // 兜底：使用 whereType 安全过滤非 Map 条目
-            existingEntries =
-                decoded.whereType<Map<String, dynamic>>().toList();
-          }
-        } catch (_) {
-          // 现有数据损坏，忽略并用空列表重新开始
-          try {
-            await _backupCorruptProviderEntries(prefs, existingJson);
-          } catch (_) {}
-          existingEntries = [];
-        }
-      }
-
-      // 如果已有 llm 类型条目则不覆盖
-      final hasLlmEntry = existingEntries.any(
-        (e) => e['type'] == 'llm' && e['id'] != 'builtin_llm',
-      );
-      if (!hasLlmEntry) {
-        existingEntries.add({
-          'id': 'migrated_llm',
-          'type': 'llm',
-          'name': 'LLM供应商',
-          'configs': migratedConfigs.map((c) => c.toMap()).toList(),
-        });
-
-        await prefs.setString('provider_entries', jsonEncode(existingEntries));
-      }
-
-      // 删除旧数据，防止重复迁移
-      await prefs.remove('chat_configs');
-      await prefs.remove('chat_selected_config_id');
-      debugPrint(
-        'Migrated ${oldList.length} old chat config(s) to provider_entries',
-      );
-    } catch (e) {
-      debugPrint('Failed to migrate old chat configs: $e');
-    }
+    await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
   }
 
   Future<void> _migrateOldCustomParams(SharedPreferences prefs) async {
@@ -175,8 +55,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (changed) {
         await prefs.setString('provider_entries', jsonEncode(list));
       }
-    } catch (e) {
-      debugPrint('Failed to migrate custom param types: $e');
+    } catch (_) {
+      debugPrint('Failed to migrate custom parameter types.');
     }
   }
 
@@ -245,8 +125,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (changed) {
         await prefs.setString('provider_entries', jsonEncode(list));
       }
-    } catch (e) {
-      debugPrint('Failed to migrate legacy effort params: $e');
+    } catch (_) {
+      debugPrint('Failed to migrate legacy effort parameters.');
     }
   }
 
@@ -405,22 +285,15 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       host: url ?? '',
       key: '',
       models: [
-        ModelConfig(
-          name: name,
-          modelId: transport,
-          typeConfig: typeConfig,
-        ),
+        ModelConfig(name: name, modelId: transport, typeConfig: typeConfig),
       ],
     );
   }
 
   /// 迁移：为已有 MCP 条目添加或更新内置 MCP 配置
-  Future<void> _migrateBuiltinMcpConfigs(
-    SharedPreferences prefs,
-    List<ProviderEntry> entries,
-  ) async {
+  Future<bool> _migrateBuiltinMcpConfigs(List<ProviderEntry> entries) async {
     final mcpEntryIdx = entries.indexWhere((e) => e.type == 'mcp');
-    if (mcpEntryIdx < 0) return;
+    if (mcpEntryIdx < 0) return false;
 
     final mcpEntry = entries[mcpEntryIdx];
     final builtin = _createBuiltinMcpConfigs();
@@ -464,7 +337,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
               updatedConfig.models[0].typeConfig['apiKey'] = oldApiKey;
               // Also update headers/env with the old key
               _applyApiKeyToTypeConfig(
-                  updatedConfig.models[0].typeConfig, oldApiKey);
+                updatedConfig.models[0].typeConfig,
+                oldApiKey,
+              );
             }
             final connectivityTest = oldTypeConfig['connectivityTest'];
             if (connectivityTest is Map) {
@@ -498,11 +373,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
     if (changed) {
       entries[mcpEntryIdx] = mcpEntry;
-      await prefs.setString(
-        'provider_entries',
-        jsonEncode(entries.map((e) => e.toMap()).toList()),
-      );
     }
+    return changed;
   }
 
   /// Extract API key from an existing config
@@ -517,7 +389,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
 
   /// Apply an API key to a typeConfig (update headers/env placeholders)
   void _applyApiKeyToTypeConfig(
-      Map<String, dynamic> typeConfig, String apiKey) {
+    Map<String, dynamic> typeConfig,
+    String apiKey,
+  ) {
     if (apiKey.isEmpty) return;
     typeConfig['apiKey'] = apiKey;
     // Update headers
@@ -549,7 +423,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
   /// 时把原始 JSON 存到独立 key，最多保留 [_maxCorruptProviderBackups] 份，
   /// 避免回退默认后后续 _persist 把含 API key 的原始配置永久覆盖。
   Future<void> _backupCorruptProviderEntries(
-      SharedPreferences prefs, String corruptJson) async {
+    SharedPreferences prefs,
+    String corruptJson,
+  ) async {
     try {
       final backupKey =
           'provider_entries_corrupt_${DateTime.now().millisecondsSinceEpoch}';
@@ -562,27 +438,237 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         await prefs.remove(keys.removeAt(0));
       }
       debugPrint(
-          '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey');
-    } catch (e) {
-      debugPrint('Failed to back up corrupt provider entries: $e');
+        '[ProviderEntriesNotifier] 已备份损坏的 provider_entries 到 $backupKey',
+      );
+    } catch (_) {
+      debugPrint('Failed to back up corrupt provider entries.');
     }
   }
 
   Future<void> _persist({bool rethrowOnFailure = false}) async {
+    SharedPreferences? prefsForRollback;
+    String? providerEntriesBeforeMigration;
+    String? mcpGroupsBeforeMigration;
+    String? attemptedProviderEntries;
+    String? attemptedMcpGroups;
+    var pairedWriteStarted = false;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final json = jsonEncode(state.entries.map((e) => e.toMap()).toList());
-      final entriesSaved = await prefs.setString('provider_entries', json);
-      final groupsSaved = await prefs.setString(
-        'mcp_provider_groups',
-        jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList()),
-      );
-      if (rethrowOnFailure && (!entriesSaved || !groupsSaved)) {
+      prefsForRollback = prefs;
+      providerEntriesBeforeMigration = prefs.getString('provider_entries');
+      mcpGroupsBeforeMigration = prefs.getString('mcp_provider_groups');
+      if (_providerEntriesSourceUnreadable) {
+        _reloadBeforeNextMutation = true;
+        debugPrint(
+          'Provider settings were not persisted because stored entries could not be read safely.',
+        );
+        if (rethrowOnFailure) {
+          throw StateError('Stored provider entries require recovery.');
+        }
+        return;
+      }
+      final groupsJson =
+          jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList());
+      if (!_jsonPreferenceEquals(
+        prefs.getString('mcp_provider_groups'),
+        mcpGroupsBeforeMigration,
+      )) {
+        throw StateError('Provider settings changed during persistence.');
+      }
+      attemptedMcpGroups = groupsJson;
+      pairedWriteStarted = true;
+      final groupsSaved =
+          await prefs.setString('mcp_provider_groups', groupsJson);
+      if (!groupsSaved ||
+          prefs.getString('mcp_provider_groups') != groupsJson) {
         throw StateError('Failed to persist provider configuration.');
       }
-    } catch (e) {
-      debugPrint('Failed to persist provider entries: $e');
+
+      _applyCredentialReferencesFromSavedEntries(
+        state.entries,
+        prefs.getString('provider_entries'),
+      );
+      final migrationInput = jsonEncode(
+        state.entries.map((entry) => entry.toCredentialMigrationMap()).toList(),
+      );
+      try {
+        await LlmAccountMigrationService(
+          preferences: _SharedPreferencesLlmAccountPreferences(prefs),
+          credentialStore: _credentialStore,
+        ).migrate(sourceProviderEntriesJson: migrationInput);
+      } on LlmAccountMigrationException {
+        _reloadBeforeNextMutation = true;
+        debugPrint(
+          'Secure credential storage is unavailable; provider settings were not persisted.',
+        );
+        throw StateError('Secure credential migration is unavailable.');
+      }
+
+      _applyCredentialReferencesFromSavedEntries(
+        state.entries,
+        prefs.getString('provider_entries'),
+      );
+      final persistedEntries = state.entries.map((entry) {
+        final serialized = entry.toMap();
+        if (entry.type == 'llm') {
+          serialized.remove('key');
+          final configs = serialized['configs'];
+          if (configs is List) {
+            for (final config in configs.whereType<Map>()) {
+              config.remove('key');
+            }
+          }
+        }
+        return serialized;
+      }).toList();
+      final json = jsonEncode(persistedEntries);
+      final entriesAfterMigration = prefs.getString('provider_entries');
+      final providerEntriesMatch = _jsonPreferenceEquals(
+        entriesAfterMigration,
+        json,
+      );
+      final mcpGroupsMatch = _jsonPreferenceEquals(
+        prefs.getString('mcp_provider_groups'),
+        groupsJson,
+      );
+      if (!providerEntriesMatch || !mcpGroupsMatch) {
+        throw StateError('Provider settings changed during persistence.');
+      }
+      attemptedProviderEntries = json;
+      final entriesAlreadySaved = _jsonPreferenceEquals(
+        prefs.getString('provider_entries'),
+        json,
+      );
+      final entriesSaved = entriesAlreadySaved ||
+          await prefs.setString('provider_entries', json);
+      final entriesVerified =
+          _jsonPreferenceEquals(prefs.getString('provider_entries'), json);
+      final groupsVerified =
+          prefs.getString('mcp_provider_groups') == groupsJson;
+      if (!entriesSaved || !entriesVerified || !groupsVerified) {
+        throw StateError('Failed to persist provider configuration.');
+      } else {
+        _reloadBeforeNextMutation = false;
+      }
+    } catch (_) {
+      if (pairedWriteStarted && prefsForRollback != null) {
+        await _rollbackPairedPreferenceWrite(
+          prefsForRollback,
+          'provider_entries',
+          providerEntriesBeforeMigration,
+          attemptedProviderEntries,
+        );
+        await _rollbackPairedPreferenceWrite(
+          prefsForRollback,
+          'mcp_provider_groups',
+          mcpGroupsBeforeMigration,
+          attemptedMcpGroups,
+        );
+      }
+      _reloadBeforeNextMutation = true;
+      debugPrint('Failed to persist provider entries.');
       if (rethrowOnFailure) rethrow;
     }
   }
+
+  Future<void> _rollbackPairedPreferenceWrite(
+    SharedPreferences prefs,
+    String key,
+    String? previous,
+    String? attempted,
+  ) async {
+    if (attempted == null || attempted == previous) return;
+    try {
+      if (prefs.getString(key) != attempted) return;
+      if (previous == null) {
+        final removed = await prefs.remove(key);
+        if (!removed || prefs.getString(key) != null) return;
+      } else {
+        final saved = await prefs.setString(key, previous);
+        if (!saved || prefs.getString(key) != previous) return;
+      }
+    } catch (_) {
+      // The notifier is marked for reload by _persist's caller on failure.
+    }
+  }
+
+  bool _jsonPreferenceEquals(String? left, String? right) {
+    if (left == right) return true;
+    if (left == null || right == null) return false;
+    try {
+      return _jsonValueEquals(jsonDecode(left), jsonDecode(right));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _jsonValueEquals(Object? left, Object? right) {
+    if (left is Map && right is Map) {
+      if (left.length != right.length) return false;
+      for (final key in left.keys) {
+        if (!right.containsKey(key) ||
+            !_jsonValueEquals(left[key], right[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (left is List && right is List) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (!_jsonValueEquals(left[index], right[index])) return false;
+      }
+      return true;
+    }
+    return left == right;
+  }
+
+  void _applyCredentialReferencesFromSavedEntries(
+    List<ProviderEntry> entries,
+    String? savedJson,
+  ) {
+    if (savedJson == null) return;
+    try {
+      final decoded = jsonDecode(savedJson);
+      if (decoded is! List) return;
+      final referencesByConfigId = <String, String>{};
+      for (final entry in decoded.whereType<Map>()) {
+        if (entry['type'] != 'llm' || entry['configs'] is! List) continue;
+        for (final config in (entry['configs'] as List).whereType<Map>()) {
+          final id = config['id'];
+          final reference = config['credentialRef'];
+          if (id is String && reference is String) {
+            referencesByConfigId[id] = reference;
+          }
+        }
+      }
+      for (final entry in entries.where((entry) => entry.type == 'llm')) {
+        for (final config in entry.configs) {
+          final reference = referencesByConfigId[config.id];
+          if (reference != null && config.credentialRef == null) {
+            config.credentialRef = reference;
+          }
+        }
+      }
+    } catch (_) {
+      // The migration has already validated its own persisted JSON. A parse
+      // error here only means the legacy state should not be rewritten.
+    }
+  }
+}
+
+class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
+  final SharedPreferences _preferences;
+
+  _SharedPreferencesLlmAccountPreferences(this._preferences);
+
+  @override
+  Future<String?> getString(String key) async => _preferences.getString(key);
+
+  @override
+  Future<bool> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<bool> remove(String key) => _preferences.remove(key);
 }

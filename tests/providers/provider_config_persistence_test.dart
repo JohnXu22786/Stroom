@@ -75,5 +75,27 @@ void main() {
       // 回退默认预置，应用仍可正常使用。
       expect(notifier.state.entries, isNotEmpty);
     });
+
+    test('persists a fresh non-LLM provider edit without an LLM key change',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final notifier = ProviderEntriesNotifier();
+      await notifier.load();
+
+      final added = ProviderEntry(
+        id: 'fresh-ocr-entry',
+        type: 'ocr',
+        name: 'Fresh OCR provider',
+      );
+      await notifier.addFirst(added);
+
+      final prefs = await SharedPreferences.getInstance();
+      final stored =
+          jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+      expect(
+        stored.whereType<Map>().any((entry) => entry['id'] == added.id),
+        isTrue,
+      );
+    });
   });
 }

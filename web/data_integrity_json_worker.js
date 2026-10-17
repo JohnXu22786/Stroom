@@ -315,7 +315,7 @@ function prepareLegacyChatConfigs(json) {
         typeConfig,
       };
     });
-    return {
+    const migratedConfig = {
       providerName: typeof oldItem.providerName === 'string'
         ? oldItem.providerName
         : '',
@@ -323,7 +323,20 @@ function prepareLegacyChatConfigs(json) {
       key: typeof oldItem.key === 'string' ? oldItem.key : '',
       models,
     };
+    for (const field of ['credentialRef', 'publicKey']) {
+      const value = oldItem[field];
+      if (value != null) {
+        if (typeof value !== 'string' || value.trim().length === 0) {
+          return null;
+        }
+        migratedConfig[field] = value;
+      }
+    }
+    return migratedConfig;
   });
+  if (migratedConfigs.some((config) => config == null)) {
+    return { metadata: { status: 'invalid' } };
+  }
 
   return {
     metadata: { status: 'ready', legacyConfigCount: oldList.length },
@@ -348,23 +361,142 @@ function mergeLegacyChatConfigs(migratedConfigsJson, existingJson) {
     }
   }
 
-  const hasLlmEntry = existingEntries.some((entry) =>
+  const llmEntries = existingEntries.filter((entry) =>
     entry.type === 'llm' && entry.id !== 'builtin_llm',
   );
-  if (hasLlmEntry) {
-    return { metadata: { status: 'alreadyMigrated', corruptExisting } };
+  if (llmEntries.length === 0) {
+    const priorLegacyConfigs = [];
+    for (const legacy of migratedConfigs) {
+      if (!isRecord(legacy)) {
+        return { metadata: { status: 'conflict', corruptExisting } };
+      }
+      for (const prior of priorLegacyConfigs) {
+        if (sameLegacyProviderConfig(prior, legacy) &&
+            mergeLegacySafeMetadata({ ...prior }, legacy) == null) {
+          return { metadata: { status: 'conflict', corruptExisting } };
+        }
+      }
+      priorLegacyConfigs.push(legacy);
+    }
+    existingEntries.push({
+      id: 'migrated_llm',
+      type: 'llm',
+      name: 'LLM供应商',
+      configs: migratedConfigs,
+    });
+    return {
+      metadata: { status: 'write', corruptExisting },
+      payload: JSON.stringify(existingEntries),
+    };
   }
 
-  existingEntries.push({
-    id: 'migrated_llm',
-    type: 'llm',
-    name: 'LLM供应商',
-    configs: migratedConfigs,
-  });
+  const destination = llmEntries[0];
+  const hasTopLevelConfig = Object.keys(destination).some((key) =>
+    key !== 'configs' && !['id', 'type', 'name', 'enabled'].includes(key),
+  );
+  if (!Array.isArray(destination.configs) &&
+      (destination.configs != null || hasTopLevelConfig)) {
+    return { metadata: { status: 'conflict', corruptExisting } };
+  }
+  if (!Array.isArray(destination.configs)) destination.configs = [];
+  let changed = false;
+  for (const legacy of migratedConfigs) {
+    if (!isRecord(legacy)) {
+      return { metadata: { status: 'conflict', corruptExisting } };
+    }
+    const matches = [];
+    llmEntries.forEach(function (entry) {
+      if (!Array.isArray(entry.configs)) return;
+      entry.configs.forEach(function (existing, index) {
+        if (isRecord(existing) && sameLegacyProviderConfig(existing, legacy)) {
+          matches.push({ configs: entry.configs, index, existing });
+        }
+      });
+    });
+    if (matches.length > 1) {
+      return { metadata: { status: 'conflict', corruptExisting } };
+    }
+    if (matches.length === 0) {
+      destination.configs.push(legacy);
+      changed = true;
+      continue;
+    }
+    const match = matches[0];
+    const merged = mergeLegacySafeMetadata(match.existing, legacy);
+    if (merged == null) {
+      return { metadata: { status: 'conflict', corruptExisting } };
+    }
+    if (merged.changed) {
+      match.configs[match.index] = match.existing;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return { metadata: { status: 'alreadyMigrated', corruptExisting } };
+  }
   return {
     metadata: { status: 'write', corruptExisting },
     payload: JSON.stringify(existingEntries),
   };
+}
+
+function sameLegacyProviderConfig(existing, legacy) {
+  const providerName = (value) =>
+    typeof value.providerName === 'string' ? value.providerName : '';
+  const host = (value) => typeof value.host === 'string' ? value.host : '';
+  if (providerName(existing) !== providerName(legacy) ||
+      host(existing) !== host(legacy)) return false;
+  const modelIds = (value) => {
+    if (!Array.isArray(value.models)) return null;
+    const result = [];
+    for (const model of value.models) {
+      if (!isRecord(model)) return null;
+      result.push(typeof model.modelId === 'string'
+        ? model.modelId
+        : (typeof model.name === 'string' ? model.name : ''));
+    }
+    return result;
+  };
+  const existingIds = modelIds(existing);
+  const legacyIds = modelIds(legacy);
+  return existingIds != null && legacyIds != null &&
+    JSON.stringify(existingIds) === JSON.stringify(legacyIds);
+}
+
+function mergeLegacySafeMetadata(existing, legacy) {
+  const existingKey = existing.key;
+  const legacyKey = legacy.key;
+  if ((existingKey != null && typeof existingKey !== 'string') ||
+      (legacyKey != null && typeof legacyKey !== 'string') ||
+      (typeof existingKey === 'string' && existingKey.length > 0 &&
+       typeof legacyKey === 'string' && legacyKey.length > 0 &&
+       existingKey !== legacyKey)) return null;
+  if ((existingKey == null || existingKey === '') &&
+      typeof existing.credentialRef === 'string' &&
+      existing.credentialRef.length > 0 &&
+      typeof legacyKey === 'string' && legacyKey.length > 0) return null;
+  let changed = false;
+  if ((existingKey == null || existingKey === '') &&
+      typeof legacyKey === 'string' && legacyKey.length > 0) {
+    existing.key = legacyKey;
+    changed = true;
+  }
+  for (const field of ['credentialRef', 'publicKey']) {
+    const current = existing[field];
+    const incoming = legacy[field];
+    if ((current != null &&
+         (typeof current !== 'string' || current.trim().length === 0)) ||
+        (incoming != null &&
+         (typeof incoming !== 'string' || incoming.trim().length === 0)) ||
+        (current != null && incoming != null && current !== incoming)) {
+      return null;
+    }
+    if (current == null && incoming != null) {
+      existing[field] = incoming;
+      changed = true;
+    }
+  }
+  return { changed };
 }
 
 function fixProviderEntries(json) {
