@@ -1406,19 +1406,17 @@ void main() {
             expect(notifier.tasksForTest.first, same(older));
             expect(notifier.tasksForTest.last.error, contains('后台服务启动失败'));
             expect(notifier.executorStarts, 0);
-            final persisted =
-                (jsonDecode(
-                          await File(
-                            '${directory.path}/catcatch/tasks.json',
-                          ).readAsString(),
-                        )
-                        as List)
-                    .map(
-                      (record) => CatCatchTask.fromMap(
-                        Map<String, dynamic>.from(record as Map),
-                      ),
-                    )
-                    .toList();
+            final persisted = (jsonDecode(
+              await File(
+                '${directory.path}/catcatch/tasks.json',
+              ).readAsString(),
+            ) as List)
+                .map(
+                  (record) => CatCatchTask.fromMap(
+                    Map<String, dynamic>.from(record as Map),
+                  ),
+                )
+                .toList();
             expect(persisted, hasLength(2));
             expect(persisted.first.status, TaskStatus.paused);
             expect(persisted.last.status, TaskStatus.failed);
