@@ -2396,6 +2396,73 @@ void main() {
     );
 
     testWidgets(
+      'web source preview remount rejects stale callbacks and shows retry',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        const mermaidCode = 'graph TD\nA-->B';
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: mermaidCode),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final firstWebView = platform.webView!;
+        final firstController = firstWebView
+            .controllerFromPlatform<InAppWebViewController>(
+          firstWebView.controller,
+        );
+        firstWebView.params.onWebViewCreated!(firstController);
+        await tester.pump();
+        final firstUrl = firstWebView.controller.loadedUrls.last;
+        firstWebView.params.onLoadStop?.call(firstController, firstUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pump();
+        expect(find.text(mermaidCode), findsOneWidget);
+        expect(find.byType(InAppWebView), findsNothing);
+
+        await tester.tap(find.byIcon(Icons.image));
+        await tester.pump();
+        expect(platform.webViews, hasLength(2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        // The new iframe never delivers onWebViewCreated. Late callbacks from
+        // the disposed iframe must not mark this mount attempt as ready.
+        firstWebView.params.onWebViewCreated!(firstController);
+        firstWebView.params.onLoadStop?.call(firstController, firstUrl);
+        await tester.pump();
+        expect(
+          find.text('加载渲染引擎...'),
+          findsOneWidget,
+          reason: 'the previous iframe cannot satisfy the remount attempt',
+        );
+
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        expect(platform.webViews, hasLength(3));
+        expect(find.text(creationError), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
       'web source updates keep queued zoom until current load completes',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
@@ -2472,6 +2539,53 @@ void main() {
           contains(predicate<String>((script) =>
               script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
         );
+        expect(tester.takeException(), isNull);
+
+        webView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: currentUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Retry navigation failed',
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pump();
+        expect(find.byType(InAppWebView), findsNothing);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->D',
+                showZoomControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(platform.webViews, hasLength(2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        // The prior view's callbacks cannot satisfy a source-mode remount.
+        webView.params.onWebViewCreated!(controller);
+        webView.params.onLoadStop?.call(controller, currentUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 9));
+        expect(find.text(creationError), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },
