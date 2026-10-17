@@ -1092,18 +1092,32 @@ class MermaidTemplates {
     return null;
   }
 
-  static String _gitGraphMergeTarget(String code) {
+  static String? _gitGraphMergeTarget(String code) {
     final branches = RegExp(
       r'^\s*branch\s+(\S+)',
       multiLine: true,
     ).allMatches(code).map((match) => match[1]!).toSet();
     final configuredMainBranch = _gitGraphConfiguredMainBranch(code);
+    final mainBranch = configuredMainBranch ?? 'main';
+    var activeBranch = mainBranch;
 
-    if (branches.contains('develop') || configuredMainBranch == 'develop') {
-      return 'develop';
+    for (final checkout in RegExp(
+      r'^[ \t]*checkout[ \t]+(\S+)',
+      multiLine: true,
+    ).allMatches(code)) {
+      activeBranch = checkout[1]!;
     }
-    if (branches.isNotEmpty) return branches.first;
-    return configuredMainBranch ?? 'main';
+
+    final candidates = <String>{
+      if (branches.contains('develop') || configuredMainBranch == 'develop')
+        'develop',
+      ...branches,
+      mainBranch,
+    };
+    for (final branch in candidates) {
+      if (branch != activeBranch) return branch;
+    }
+    return null;
   }
 
   /// Returns a list of "snippet buttons" for a given diagram [typeId].
@@ -1166,14 +1180,12 @@ class MermaidTemplates {
           ('添加多人任务', '    协作任务: 4: 用户, 系统'),
         ];
       case 'gitGraph':
+        final mergeTarget = _gitGraphMergeTarget(code ?? _gitGraphTemplate());
         return [
           ('添加提交', '  commit id: "新提交"'),
           ('创建分支', '  branch 新分支'),
           ('切换分支', '  checkout 新分支'),
-          (
-            '合并分支',
-            '  merge ${_gitGraphMergeTarget(code ?? _gitGraphTemplate())}',
-          ),
+          if (mergeTarget != null) ('合并分支', '  merge $mergeTarget'),
         ];
       case 'mindmap':
         return [
