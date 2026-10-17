@@ -697,12 +697,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final restoredTasks = <String, CatCatchTask>{};
       for (final task in migrated) {
         if (removedTaskIds.contains(task.id)) continue;
-        restoredTasks.putIfAbsent(
-          task.id,
-          () => task.status == TaskStatus.running
-              ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
-              : task,
-        );
+        restoredTasks[task.id] = task.status == TaskStatus.running
+            ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+            : task;
       }
 
       final hadConcurrentChanges =
