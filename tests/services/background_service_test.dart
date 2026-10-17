@@ -833,6 +833,70 @@ void main() {
       expect(intentRestoreCalls, hasLength(2));
     });
 
+    test('repeated failed stop preserves prior durable recovery intent', () async {
+      final mock = registerMockPlatform()
+        ..setServiceRunning(true)
+        ..setThrowOnCheck(true);
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      final store = _RejectFailedStopRollbackStore({
+        'flutter.background_service_enabled': false,
+        'flutter.background_service_failed_stop_restore_pending': true,
+        'flutter.background_service_watchdog': true,
+      });
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('com.johntsui.stroom/keepalive'),
+        (MethodCall methodCall) async {
+          keepAliveCalls.add(methodCall);
+          if (methodCall.method == 'rearmKeepAlive') return false;
+          return true;
+        },
+      );
+
+      await withAndroidPlatform(() async {
+        expect(await stopBackgroundService(), isFalse);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.reload();
+        expect(prefs.getBool('background_service_enabled'), isFalse);
+        expect(
+          prefs.getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'an unconfirmed stop must retain the earlier recovery intent',
+        );
+
+        // A late stop and process death must still leave cold-start recovery.
+        mock
+          ..setThrowOnCheck(false)
+          ..setServiceRunning(false);
+        store.allowEnabledRestorationWrites();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'rearmKeepAlive' &&
+                methodCall.arguments is Map &&
+                methodCall.arguments['restoreEnabledIntent'] == true) {
+              await store.persistEnabledFromNativeRecovery();
+              await (await SharedPreferences.getInstance()).reload();
+            }
+            return true;
+          },
+        );
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        await restoreBackgroundServiceOnColdStart();
+        expect(mock._isRunning, isTrue);
+        final restoredPrefs = await SharedPreferences.getInstance();
+        await restoredPrefs.reload();
+        expect(restoredPrefs.getBool('background_service_enabled'), isTrue);
+      });
+    });
+
     test('explicit stop clears pending failed-stop recovery before cold start',
         () async {
       final mock = registerMockPlatform()
