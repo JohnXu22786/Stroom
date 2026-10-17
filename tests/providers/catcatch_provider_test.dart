@@ -40,6 +40,31 @@ class _GatedCatCatchNotifier extends CatCatchNotifier {
   }
 }
 
+// Fail one delete to model a handle held by the cancelled download.
+class _RetryProgressFile implements File {
+  _RetryProgressFile(this.file, this.onFirstDelete);
+
+  final File file;
+  final void Function() onFirstDelete;
+  int deleteAttempts = 0;
+
+  @override
+  Future<bool> exists() => file.exists();
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) async {
+    deleteAttempts++;
+    if (deleteAttempts == 1) {
+      onFirstDelete();
+      throw FileSystemException('download handle still open', file.path);
+    }
+    return file.delete(recursive: recursive);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -191,6 +216,70 @@ void main() {
     // ====================================================================
     // Tests
     // ====================================================================
+
+    test('preserves a replacement checkpoint created during cleanup', () async {
+      final removed = createTask(id: 'reused', status: TaskStatus.running);
+      final progress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        'reused_dl_progress.json',
+      ))..createSync(recursive: true);
+      final owners = <CatCatchTask>[];
+      final cleanup = CatCatchNotifier.cleanupTaskFiles(
+        removed,
+        appDirPath: appDir,
+        remainingTasksProvider: () => owners,
+      );
+      // Cleanup has started, but its async exists check has not resumed.
+      owners.add(createTask(id: 'reused', status: TaskStatus.paused));
+      progress.writeAsStringSync('replacement checkpoint');
+      await cleanup;
+      expect(progress.readAsStringSync(), 'replacement checkpoint');
+
+      owners.clear();
+      await CatCatchNotifier.cleanupTaskFiles(removed, appDirPath: appDir);
+      expect(progress.existsSync(), isFalse);
+    });
+
+    test('rechecks checkpoint ownership before retrying a failed delete',
+        () async {
+      final removed = createTask(id: 'reused', status: TaskStatus.running);
+      final progress = File(p.join(
+        appDir,
+        'catcatch',
+        '.progress',
+        'reused_dl_progress.json',
+      ))..createSync(recursive: true);
+      final owners = <CatCatchTask>[];
+      final retryFile = _RetryProgressFile(progress, () {
+        owners.add(createTask(id: 'reused', status: TaskStatus.running));
+        progress.writeAsStringSync('replacement checkpoint');
+      });
+      await IOOverrides.runZoned(
+        () => CatCatchNotifier.cleanupTaskFiles(
+          removed,
+          appDirPath: appDir,
+          remainingTasksProvider: () => owners,
+        ),
+        createFile: (path) {
+          expect(path, progress.path);
+          return retryFile;
+        },
+      );
+      expect(retryFile.deleteAttempts, 1);
+      expect(progress.readAsStringSync(), 'replacement checkpoint');
+
+      // With no replacement, the existing retry must still finish cleanup.
+      owners.clear();
+      final unownedRetry = _RetryProgressFile(progress, () {});
+      await IOOverrides.runZoned(
+        () => CatCatchNotifier.cleanupTaskFiles(removed, appDirPath: appDir),
+        createFile: (_) => unownedRetry,
+      );
+      expect(unownedRetry.deleteAttempts, 2);
+      expect(progress.existsSync(), isFalse);
+    });
 
     test('deletes temp download file and progress for running task', () async {
       final media = createMedia();

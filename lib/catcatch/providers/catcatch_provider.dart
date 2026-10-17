@@ -411,7 +411,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     // 1. 删除分段下载进度跟踪
     final progressPath =
         p.join(appDir, 'catcatch', '.progress', '${task.id}_dl_progress.json');
-    await _deleteFileBestEffort(File(progressPath));
+    await _deleteFileBestEffort(File(progressPath),
+        shouldDelete: () =>
+            !currentRemainingTasks().any((current) => current.id == task.id));
 
     // 2. 对于未完成的任务，删除它已记录的 downloadedFilePath
     // （放在前面处理，与 selectedMedia 无关）
