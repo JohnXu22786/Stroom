@@ -994,7 +994,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
       _persistOcrTaskRemoval(taskId, references);
     } else {
-      _persistTasks(excludedPersistedTaskIds: {taskId});
+      _persistTasks(
+        excludedPersistedTaskIds: {taskId},
+        retryOnceOnRemovalWriteFailure: true,
+      );
     }
     _syncIosContinuedTask();
   }
@@ -1123,6 +1126,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final write = _writeSnapshot(
         state,
         excludedPersistedTaskIds: {taskId},
+        retryOnceOnRemovalWriteFailure: true,
       );
       return _pendingWrite = write.then<void>((saved) async {
         if (saved) {
@@ -1142,6 +1146,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         snapshot,
         dirOverride,
         excludedPersistedTaskIds: {taskId},
+        retryOnceOnRemovalWriteFailure: true,
       );
       if (saved) {
         await _deleteUnreferencedOcrCache(references);
@@ -1326,6 +1331,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<bool> _persistTasks({
     bool preserveSkippedEntries = false,
     Set<String> excludedPersistedTaskIds = const <String>{},
+    bool retryOnceOnRemovalWriteFailure = false,
   }) {
     final preserveCurrentSkippedEntries =
         preserveSkippedEntries || _taskSnapshotIncomplete;
@@ -1349,6 +1355,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               ? _taskSnapshotIncomplete
               : preserveCurrentSkippedEntries,
           excludedPersistedTaskIds: excludedPersistedTaskIds,
+          retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
         );
       });
       _pendingWrite = deferred.then<void>((_) {});
@@ -1362,6 +1369,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         snapshot,
         preserveSkippedEntries: preserveCurrentSkippedEntries,
         excludedPersistedTaskIds: excludedPersistedTaskIds,
+        retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
       );
       _disposedPersistence ??= write.then<void>((_) {});
       return write;
@@ -1370,6 +1378,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       state,
       preserveSkippedEntries: preserveCurrentSkippedEntries,
       excludedPersistedTaskIds: excludedPersistedTaskIds,
+      retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
     );
   }
 
@@ -1377,6 +1386,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     List<BackgroundTask> snapshot, {
     bool preserveSkippedEntries = false,
     Set<String> excludedPersistedTaskIds = const <String>{},
+    bool retryOnceOnRemovalWriteFailure = false,
   }) {
     if (_taskSnapshotIncomplete &&
         (!preserveSkippedEntries ||
@@ -1394,6 +1404,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         dirOverride,
         preserveSkippedEntries: preserveSkippedEntries,
         excludedPersistedTaskIds: excludedPersistedTaskIds,
+        retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
       );
     });
     _pendingWrite = write.then<void>((_) {});
@@ -1405,6 +1416,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? dirOverride, {
     bool preserveSkippedEntries = false,
     Set<String> excludedPersistedTaskIds = const <String>{},
+    bool retryOnceOnRemovalWriteFailure = false,
   }) async {
     final excludedTaskIds = <String>{
       ...excludedPersistedTaskIds,
@@ -1477,6 +1489,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
             dirOverride,
             preservedEntries: skippedEntries,
           );
+    // Retry a failed removal once from current state to retain a same-ID task
+    // added while the first snapshot write was pending.
+    if (!saved && retryOnceOnRemovalWriteFailure) {
+      final latestSnapshot = mounted ? state : _disposedSnapshot;
+      if (latestSnapshot == null) return false;
+      final retryExcludedTaskIds = <String>{
+        for (final id in excludedPersistedTaskIds)
+          if (_pendingRestoreTaskRemovals.containsKey(id) ||
+              _pendingTaskRemovalReconciliations.containsKey(id))
+            id,
+      };
+      return _writeSnapshotNow(
+        latestSnapshot,
+        dirOverride,
+        preserveSkippedEntries: preserveCurrentSkippedEntries,
+        excludedPersistedTaskIds: retryExcludedTaskIds,
+      );
+    }
     if (saved) {
       final reconciledTaskIds = <String>{};
       for (final entry in taskRemovalTokens.entries) {
