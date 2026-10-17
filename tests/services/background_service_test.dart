@@ -1175,7 +1175,8 @@ void main() {
           if (pendingMarker != null)
             'flutter.background_service_failed_stop_restore_pending':
                 pendingMarker,
-        })..failNextReads(2);
+        })
+          ..failNextReads(2);
         SharedPreferencesStorePlatform.instance = store;
         SharedPreferences.resetStatic();
         final originalLegacyPreferenceMode =
