@@ -331,6 +331,8 @@ class _MermaidPreviewDialogContentState
     final showControls =
         (!_isLoading || widget.showControlsBeforeWebViewReadyForTesting) &&
             !_hasError;
+    final showWebControls = kIsWeb && (showControls || _hasError);
+    final showFlutterClose = !showControls && !showWebControls;
 
     return PopScope(
       canPop: false,
@@ -505,9 +507,9 @@ class _MermaidPreviewDialogContentState
                 ),
               ),
 
-            // Keep a visible exit above loading and error overlays. The
-            // fullscreen route disables iOS edge-swipe dismissal.
-            if (!showControls)
+            // Keep a visible exit during loading. After a web navigation
+            // error, HTML controls provide the exit above the mounted iframe.
+            if (showFlutterClose)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 4,
                 right: 8,
@@ -526,8 +528,9 @@ class _MermaidPreviewDialogContentState
               ),
 
             // Top bar with title, zoom controls, and close button
-            // Only show controls when WebView is ready and no error
-            if (showControls && kIsWeb)
+            // Web controls render in the document above the iframe, including
+            // after a main-frame navigation error.
+            if (showWebControls)
               Positioned(
                 top: MediaQuery.of(context).padding.top + 4,
                 left: 0,
