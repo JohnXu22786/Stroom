@@ -932,11 +932,12 @@ class MermaidTemplates {
           ('添加一对一', '  实体A ||--|| 实体B : 对应'),
         ];
       case 'gantt':
+        final startDate = _ganttStartDate(code ?? '');
         return [
           ('添加阶段', '  section 新阶段'),
-          ('添加任务', '  新任务 :2024-01-01, 7d'),
+          ('添加任务', '  新任务 :$startDate, 7d'),
           ('添加依赖任务', '  后续任务 :after a1, 5d'),
-          ('添加里程碑', '  里程碑 :milestone, 2024-01-15, 0d'),
+          ('添加里程碑', '  里程碑 :milestone, $startDate, 0d'),
         ];
       case 'pie':
         return [('添加类别', '  "新类别" : 30'), ('添加标题', 'title 饼图标题')];
