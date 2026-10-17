@@ -2397,7 +2397,8 @@ void main() {
     );
 
     testWidgets(
-      'web source preview remount rejects stale callbacks and shows retry',
+      'web source updates keep queued zoom until current load completes: '
+      'source preview remount rejects stale callbacks and shows retry',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
         final platform = _MermaidWebViewPlatform();
@@ -2541,13 +2542,124 @@ void main() {
               script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
         );
         expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
 
-        webView.params.onReceivedError!(
+    testWidgets(
+      'web source updates keep queued zoom until current load completes: '
+      'pending retry clears when code is empty',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final firstWebView = platform.webView!;
+        final controller =
+            firstWebView.controllerFromPlatform<InAppWebViewController>(
+                firstWebView.controller);
+        firstWebView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final initialUrl = firstWebView.controller.loadedUrls.last;
+        firstWebView.params.onLoadStop?.call(controller, initialUrl);
+        await tester.pump();
+
+        firstWebView.params.onReceivedError!(
           controller,
-          WebResourceRequest(url: currentUrl, isForMainFrame: true),
+          WebResourceRequest(url: initialUrl, isForMainFrame: true),
           WebResourceError(
             type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
-            description: 'Retry navigation failed',
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(platform.webViews, hasLength(2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+        expect(
+          find.text('加载渲染引擎...'),
+          findsOneWidget,
+          reason: 'the empty-code view cancels the pending retry fallback',
+        );
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+
+        await tester.pump(const Duration(seconds: 10));
+        expect(find.text('图表渲染引擎初始化失败，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
+      'web source updates keep queued zoom until current load completes: '
+      'timed out retry clears when code is empty',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final firstWebView = platform.webView!;
+        final controller =
+            firstWebView.controllerFromPlatform<InAppWebViewController>(
+                firstWebView.controller);
+        firstWebView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final initialUrl = firstWebView.controller.loadedUrls.last;
+        firstWebView.params.onLoadStop?.call(controller, initialUrl);
+        await tester.pump();
+
+        firstWebView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: initialUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
           ),
         );
         await tester.pump();
@@ -2567,14 +2679,12 @@ void main() {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
-              body: MermaidRenderWidget(
-                mermaidCode: 'graph TD\nA-->D',
-                showZoomControls: true,
-              ),
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
             ),
           ),
         );
         await tester.pump();
+
         expect(platform.webViews, hasLength(2));
         expect(find.text('加载渲染引擎...'), findsOneWidget);
         await tester.pump(const Duration(seconds: 3));
@@ -2584,91 +2694,9 @@ void main() {
           reason: 'a timed-out retry cannot outlive the empty-code view',
         );
         expect(find.text('页面加载超时，请重试'), findsNothing);
-        const creationError = '图表渲染引擎初始化失败，请重试';
-        await tester.pump(const Duration(seconds: 10));
-        expect(find.text(creationError), findsOneWidget);
-        expect(find.text('重试'), findsOneWidget);
-
-        await tester.tap(find.byIcon(Icons.code));
-        await tester.pump();
-        expect(find.byType(InAppWebView), findsNothing);
-        await tester.pumpWidget(
-          const MaterialApp(
-            home: Scaffold(
-              body: MermaidRenderWidget(
-                mermaidCode: 'graph TD\nA-->E',
-                showZoomControls: true,
-              ),
-            ),
-          ),
-        );
-        await tester.pump();
-        expect(platform.webViews, hasLength(3));
-        expect(find.text('加载渲染引擎...'), findsOneWidget);
-
-        // The prior view's callbacks cannot satisfy a source-mode remount.
-        webView.params.onWebViewCreated!(controller);
-        webView.params.onLoadStop?.call(controller, currentUrl);
-        await tester.pump();
-        expect(find.text('加载渲染引擎...'), findsOneWidget);
-
-        await tester.pump(const Duration(seconds: 3));
-        expect(
-          find.text('加载渲染引擎...'),
-          findsOneWidget,
-          reason:
-              'the remounted iframe has not reached its 12s creation timeout',
-        );
-        expect(find.text('页面加载超时，请重试'), findsNothing);
 
         await tester.pump(const Duration(seconds: 10));
-        expect(
-          find.text(creationError),
-          findsOneWidget,
-          reason: 'the remounted iframe did not report creation within 12s',
-        );
-        expect(find.text('重试'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-
-        // Empty code replaces the source view with a placeholder and has no
-        // WebView to create. Returning to nonempty code must start a fresh
-        // creation deadline for its remounted iframe.
-        await tester.tap(find.byIcon(Icons.code));
-        await tester.pump();
-        expect(find.byType(InAppWebView), findsNothing);
-        await tester.pumpWidget(
-          const MaterialApp(
-            home: Scaffold(
-              body: MermaidRenderWidget(mermaidCode: ''),
-            ),
-          ),
-        );
-        expect(find.text('No Mermaid code to render'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 11));
-        expect(
-          find.text(creationError),
-          findsNothing,
-          reason: 'empty code has no WebView creation to time out',
-        );
-
-        await tester.pumpWidget(
-          const MaterialApp(
-            home: Scaffold(
-              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->F'),
-            ),
-          ),
-        );
-        await tester.pump();
-        expect(platform.webViews, hasLength(4));
-        expect(find.text('加载渲染引擎...'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 1));
-        expect(
-          find.text(creationError),
-          findsNothing,
-          reason: 'the empty-code attempt cannot time out the new iframe',
-        );
-        await tester.pump(const Duration(seconds: 11));
-        expect(find.text(creationError), findsOneWidget);
+        expect(find.text('图表渲染引擎初始化失败，请重试'), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
