@@ -1916,6 +1916,7 @@ void main() {
 
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
+
         await tester.pumpWidget(const SizedBox.shrink());
       },
       skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
@@ -2579,11 +2580,56 @@ void main() {
         expect(find.text('加载渲染引擎...'), findsOneWidget);
 
         await tester.pump(const Duration(seconds: 3));
-        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(
+          find.text('加载渲染引擎...'),
+          findsOneWidget,
+          reason:
+              'the remounted iframe has not reached its 12s creation timeout',
+        );
         expect(find.text('页面加载超时，请重试'), findsNothing);
 
         const creationError = '图表渲染引擎初始化失败，请重试';
-        await tester.pump(const Duration(seconds: 9));
+        await tester.pump(const Duration(seconds: 10));
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'the remounted iframe did not report creation within 12s',
+        );
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // Empty code replaces the source view with a placeholder and has no
+        // WebView to create. Returning to nonempty code must start a fresh
+        // creation deadline for its remounted iframe.
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pump();
+        expect(find.byType(InAppWebView), findsNothing);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        expect(find.text('No Mermaid code to render'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 12));
+        expect(
+          find.text(creationError),
+          findsNothing,
+          reason: 'empty code has no WebView creation to time out',
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->E'),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(platform.webViews, hasLength(3));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 12));
         expect(find.text(creationError), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
