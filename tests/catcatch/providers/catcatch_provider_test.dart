@@ -1534,7 +1534,8 @@ void main() {
             await notifier.restoreUnfinishedTasks();
             await notifier.waitForTaskSnapshotWritesForTesting();
             expect(notifier.tasksForTest.single.progress, 73);
-            final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+            final persisted =
+                jsonDecode(await tasksFile.readAsString()) as List;
             expect(persisted, hasLength(1));
             expect((persisted.single as Map)['id'], taskId);
             expect((persisted.single as Map)['progress'], 73);
