@@ -144,9 +144,25 @@ class _RejectFailedStopRollbackStore extends InMemorySharedPreferencesStore {
 
   bool _stopIntentWasDisabled = false;
   bool _rejectEnabledRestorationWrites = true;
+  int _readFailuresRemaining = 0;
+  int readAttempts = 0;
 
   void allowEnabledRestorationWrites() {
     _rejectEnabledRestorationWrites = false;
+  }
+
+  void failNextReads(int count) {
+    _readFailuresRemaining = count;
+  }
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    readAttempts++;
+    if (_readFailuresRemaining > 0) {
+      _readFailuresRemaining--;
+      throw StateError('Simulated preference read error');
+    }
+    return super.getAll();
   }
 
   @override
@@ -593,7 +609,7 @@ void main() {
     });
 
     test(
-        'failed stop cold-start retries native recovery after initial recovery fails',
+        'implicit cleanup preserves pending failed-stop recovery after cold start',
         () async {
       final mock = registerMockPlatform()
         ..setServiceRunning(true)
@@ -647,7 +663,6 @@ void main() {
       SharedPreferences.resetStatic();
       resetBackgroundServiceLifecycleStateForTesting();
       mock.setServiceRunning(false);
-      nativeRecoveryAvailable = true;
       await withAndroidPlatform(() async {
         final restartedPrefs = await SharedPreferences.getInstance();
         activePreferences = restartedPrefs;
@@ -659,8 +674,60 @@ void main() {
         );
         await restoreBackgroundServiceOnColdStart();
         await restartedPrefs.reload();
+        expect(restartedPrefs.getBool('background_service_enabled'), isFalse,
+            reason:
+                'unavailable native recovery must leave stale intent alone');
+        expect(
+          restartedPrefs
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'failed cold-start recovery must retain the durable marker',
+        );
+
+        // The stop was not confirmed, so model the shared service still
+        // running when task cleanup reaches the stale disabled preference.
+        mock.setServiceRunning(true);
+        final readsBeforeCleanup = store.readAttempts;
+        store.failNextReads(2);
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        expect(
+          await stopBackgroundServiceIfNotUserEnabled(),
+          isFalse,
+          reason: 'implicit cleanup must defer when recovery-marker reads fail',
+        );
+        expect(
+          store.readAttempts,
+          readsBeforeCleanup + 2,
+          reason: 'cleanup must not fall through to read stale disabled intent',
+        );
+        final preferencesAfterCleanup = await SharedPreferences.getInstance();
+        activePreferences = preferencesAfterCleanup;
+        await preferencesAfterCleanup.reload();
+        expect(preferencesAfterCleanup.getBool('background_service_enabled'),
+            isFalse);
+        expect(
+          preferencesAfterCleanup
+              .getBool('background_service_failed_stop_restore_pending'),
+          isTrue,
+          reason: 'implicit cleanup must preserve the only recovery marker',
+        );
+        expect(mock._isRunning, isTrue,
+            reason: 'implicit cleanup must not stop the shared service');
+        expect(
+          keepAliveCalls.where((call) => call.method == 'stopKeepAlive'),
+          isEmpty,
+          reason:
+              'implicit cleanup must not cancel pending keep-alive recovery',
+        );
+
+        // Once native recovery returns, the still-pending marker can restore
+        // the user's enabled intent on a later cold-start attempt.
+        nativeRecoveryAvailable = true;
+        await restoreBackgroundServiceOnColdStart();
+        await restartedPrefs.reload();
         expect(restartedPrefs.getBool('background_service_enabled'), isTrue,
-            reason: 'cold-start retry must durably restore enabled intent');
+            reason: 'a later cold-start retry must restore enabled intent');
         expect(
           restartedPrefs
               .getBool('background_service_failed_stop_restore_pending'),
@@ -673,11 +740,11 @@ void main() {
       final recoveryCalls = keepAliveCalls
           .where((call) => call.method == 'rearmKeepAlive')
           .toList();
-      expect(recoveryCalls, hasLength(3));
+      expect(recoveryCalls, hasLength(4));
       expect(
-        recoveryCalls.take(2).map((call) => call.arguments),
+        recoveryCalls.take(3).map((call) => call.arguments),
         everyElement({'restoreEnabledIntent': true}),
-        reason: 'the failed attempt and cold-start retry must restore intent',
+        reason: 'each pending attempt must request native intent restoration',
       );
       expect(recoveryCalls.last.arguments, isNull,
           reason: 'ordinary cold-start rearming must retain normal behavior');
