@@ -1468,6 +1468,438 @@ sequenceDiagram
       expect(code, isNot(contains('NewNode1[新节点]')));
     });
 
+    testWidgets('repeated class snippet insertions use distinct class IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  新类 <|-- ExistingClass',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1', '新类2']);
+      expect(code, contains('  新类 <|-- ExistingClass'));
+      expect(code, contains('class 新类1 {\n  +String 属性\n  +方法() void\n}'));
+      expect(code, contains('class 新类2 {\n  +String 属性\n  +方法() void\n}'));
+    });
+
+    testWidgets('class snippets skip IDs in compact relationships', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  新类--ExistingClass',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  新类--ExistingClass'));
+      expect(code, contains('class 新类1 {\n  +String 属性\n  +方法() void\n}'));
+    });
+
+    testWidgets('class snippets skip IDs on CRLF lines with trailing space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\r\n  新类--ExistingClass \r\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  新类--ExistingClass'));
+    });
+
+    testWidgets('class snippets skip compact right endpoints after letter o', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  Foo--新类',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  Foo--新类'));
+    });
+
+    testWidgets('class snippets skip IDs after embedded o in left endpoint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'classDiagram\n  Customer--新类',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加类'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final classIds = RegExp(
+        r'^class (\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(classIds, ['新类1']);
+      expect(code, contains('  Customer--新类'));
+    });
+
+    testWidgets('repeated ER snippet insertions use distinct entity IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  新实体 ||--o{ 已有实体 : owns',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1', '新实体2']);
+      expect(code, contains('  新实体 ||--o{ 已有实体 : owns'));
+      expect(
+        code,
+        contains('  新实体1 {\n    int id PK\n    string name\n  }'),
+      );
+      expect(
+        code,
+        contains('  新实体2 {\n    int id PK\n    string name\n  }'),
+      );
+    });
+
+    testWidgets('ER snippets skip IDs in compact relationships', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  新实体||--o{已有实体:owns\n  其他实体||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  新实体||--o{已有实体:owns'));
+      expect(code, contains('  其他实体||--o{新实体'));
+      expect(
+        code,
+        contains('  新实体1 {\n    int id PK\n    string name\n  }'),
+      );
+    });
+
+    testWidgets('ER snippets skip compact right endpoints after letter o', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  Foo||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  Foo||--o{新实体'));
+    });
+
+    testWidgets('ER snippets skip IDs after embedded o in left endpoint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\n  Customer||--o{新实体',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  Customer||--o{新实体'));
+    });
+
+    testWidgets('ER snippets skip IDs on CRLF lines with trailing space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'erDiagram\r\n  新实体||--o{已有实体:owns \r\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加实体'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final entityIds = RegExp(
+        r'^\s*(\S+) \{$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(entityIds, ['新实体1']);
+      expect(code, contains('  新实体||--o{已有实体:owns'));
+    });
+
+    testWidgets('repeated block snippet insertions use distinct block IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  A["existing"] NewBlock["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final blockIds = RegExp(
+        r'^\s*(NewBlock\d*)\["新块"\]$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]);
+
+      expect(blockIds, ['NewBlock1', 'NewBlock2']);
+      expect(code, contains('A["existing"] NewBlock["existing"]'));
+      expect(code, contains('  NewBlock1["新块"]'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip bare IDs before later blocks', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock A["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock A["existing"]'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip alternate block shapes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock("existing")',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock("existing")'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip width-qualified IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock["existing"]\n  NewBlock1:2',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock["existing"]'));
+      expect(code, contains('  NewBlock1:2'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('block snippets skip IDs in nested block headers', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode:
+              'block-beta\n  NewBlock["existing"]\n  block:NewBlock1:2\n  end',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock["existing"]'));
+      expect(code, contains('  block:NewBlock1:2'));
+      expect(code, contains('  NewBlock2["新块"]'));
+    });
+
+    testWidgets('repeated block snippets skip IDs in unspaced links', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  NewBlock-->A\n  B-->NewBlock',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('  NewBlock-->A'));
+      expect(code, contains('  B-->NewBlock'));
+      expect(code, contains('  NewBlock1["新块"]'));
+    });
+
+    testWidgets(
+      'block snippets skip IDs after unspaced connector markers',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: 'block-beta\n  A--oNewBlock\n  B--xNewBlock1',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加块'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+
+        expect(code, contains('  A--oNewBlock'));
+        expect(code, contains('  B--xNewBlock1'));
+        expect(code, contains('  NewBlock2["新块"]'));
+      },
+    );
+
     testWidgets(
       'adding a requirement to the default diagram assigns a unique ID',
       (tester) async {
