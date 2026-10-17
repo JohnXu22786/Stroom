@@ -407,7 +407,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v11';
+    var TEMPLATE_VERSION = 'v12';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;
@@ -477,7 +477,9 @@
       try {
         mermaid.initialize({
           theme: 'default',
-          securityLevel: 'loose',
+          // Keep sanitized HTML labels; antiscript also sanitizes URLs and
+          // disables the click directives enabled by loose mode.
+          securityLevel: 'antiscript',
           fontFamily: 'sans-serif',
         });
         mermaid.run({

@@ -264,7 +264,9 @@ class MermaidRenderWidget extends StatefulWidget {
   /// mermaid.js is loaded dynamically from the CDN — dynamic injection
   /// (not a static `<script>` in `<head>`) keeps the document load event
   /// from being blocked by a slow/unreachable CDN, and a failure or
-  /// timeout shows a visible error instead of an endless spinner.
+  /// timeout shows a visible error instead of an endless spinner. Both
+  /// loaders use Mermaid's antiscript mode to keep sanitized HTML labels
+  /// while enabling URL sanitization and disabling click directives.
   static String _buildMermaidLoader(String? inlineMermaidJs) {
     if (inlineMermaidJs != null && inlineMermaidJs.isNotEmpty) {
       if (identical(inlineMermaidJs, _cachedLoaderLibraryJs) &&
@@ -285,7 +287,7 @@ class MermaidRenderWidget extends StatefulWidget {
       try {
         mermaid.initialize({
           theme: 'default',
-          securityLevel: 'loose',
+          securityLevel: 'antiscript',
           fontFamily: 'sans-serif',
         });
         mermaid.run({
@@ -357,7 +359,7 @@ class MermaidRenderWidget extends StatefulWidget {
         try {
           mermaid.initialize({
             theme: 'default',
-            securityLevel: 'loose',
+            securityLevel: 'antiscript',
             fontFamily: 'sans-serif',
           });
           mermaid.run({
@@ -416,7 +418,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=11';
+    final base = '$webAssetTemplateUrl?v=12';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
