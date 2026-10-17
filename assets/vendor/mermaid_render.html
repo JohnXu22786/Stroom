@@ -108,7 +108,8 @@
     // point (in viewport coordinates) instead of the top-left corner.
     window.setZoom = function(level, centerX, centerY) {
       var oldZoom = zoomLevel;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
@@ -121,9 +122,11 @@
     // inline widget, which tracks pan/zoom on the Flutter side and computes
     // the zoom anchor (finger position / preview center) itself.
     window.setPanZoom = function(x, y, level) {
+      var oldZoom = zoomLevel;
       panX = x;
       panY = y;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       updateTransform();
     };
 
@@ -404,7 +407,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v10';
+    var TEMPLATE_VERSION = 'v11';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;

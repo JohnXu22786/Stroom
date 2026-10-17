@@ -416,7 +416,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=10';
+    final base = '$webAssetTemplateUrl?v=11';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -575,7 +575,8 @@ MERMAID_CODE_PLACEHOLDER
     // point (in viewport coordinates) instead of the top-left corner.
     window.setZoom = function(level, centerX, centerY) {
       var oldZoom = zoomLevel;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
         panY = centerY - (centerY - panY) * (zoomLevel / oldZoom);
@@ -589,9 +590,11 @@ MERMAID_CODE_PLACEHOLDER
     // Sets absolute pan offset and zoom level in a single call for callers
     // that track the complete transform outside this page.
     window.setPanZoom = function(x, y, level) {
+      var oldZoom = zoomLevel;
       panX = x;
       panY = y;
-      zoomLevel = Math.max(0.1, Math.min(10, level));
+      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      zoomLevel = Math.max(minZoom, Math.min(10, level));
       activeNativeGestureId = null;
       nativeGestureZoomLevel = zoomLevel;
       updateTransform();
@@ -620,7 +623,12 @@ MERMAID_CODE_PLACEHOLDER
       panX += panDeltaX;
       panY += panDeltaY;
       var oldZoom = zoomLevel;
-      nativeGestureZoomLevel = Math.max(0.1, Math.min(10, nativeGestureZoomLevel * scale));
+      var requestedZoom = nativeGestureZoomLevel * scale;
+      var minZoom =
+        nativeGestureZoomLevel < 0.1 && requestedZoom <= nativeGestureZoomLevel
+          ? nativeGestureZoomLevel
+          : 0.1;
+      nativeGestureZoomLevel = Math.max(minZoom, Math.min(10, requestedZoom));
       zoomLevel = nativeGestureZoomLevel;
       var appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1;
       if (centerX !== null && centerY !== null) {
@@ -1326,7 +1334,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     double? centerX;
     double? centerY;
     if (hasZoom) {
-      final newZoom = (_zoomLevel * gestureScale).clamp(0.1, 10.0);
+      final newZoom = _clampManualZoom(
+        _zoomLevel * gestureScale,
+        currentZoom: _zoomLevel,
+      );
       final renderBox = context.findRenderObject() as RenderBox?;
       if (renderBox != null && renderBox.hasSize) {
         final localPos = renderBox.globalToLocal(details.focalPoint);
@@ -1424,7 +1435,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final ctrl = _webViewController;
     // Keep every wheel step: before fit completes, Flutter cannot know the
     // final fitted zoom at which JavaScript will apply this delta.
-    _zoomLevel = (_zoomLevel + delta).clamp(0.1, 10.0).toDouble();
+    _zoomLevel = _clampManualZoom(
+      _zoomLevel + delta,
+      currentZoom: _zoomLevel,
+    );
     if (ctrl == null || !_canApplyZoomCommands) {
       _pendingZoomOperations.add((
         delta: delta,
@@ -1453,6 +1467,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (oldZoom <= 0) return;
     _panX = centerX - (centerX - _panX) * (newZoom / oldZoom);
     _panY = centerY - (centerY - _panY) * (newZoom / oldZoom);
+  }
+
+  double _clampManualZoom(double requestedZoom, {required double currentZoom}) {
+    final minZoom =
+        currentZoom < 0.1 && requestedZoom <= currentZoom ? currentZoom : 0.1;
+    return requestedZoom.clamp(minZoom, 10.0).toDouble();
   }
 
   /// Sends a relative native pan/pinch update to the WebView in one call.
@@ -1640,7 +1660,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // has no JS handler bridge, so Flutter's cached level may not reflect
     // auto-fit or JS gesture changes.
     if (!kIsWeb) {
-      final target = (_zoomLevel + delta).clamp(0.1, 10.0);
+      final target = _clampManualZoom(
+        _zoomLevel + delta,
+        currentZoom: _zoomLevel,
+      );
       if (target == _zoomLevel) return;
       _zoomLevel = target;
     }
