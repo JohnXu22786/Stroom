@@ -306,13 +306,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=11&code='));
+      expect(url, contains('mermaid_render.html?v=12&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=11?')));
+      expect(url, isNot(contains('v=12?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '11',
+        'v': '12',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +336,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=11');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=12');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -440,9 +440,21 @@ void main() {
       expect(html, contains('Bob--&gt;&gt;Alice'));
     });
 
-    test('HTML uses loose securityLevel for mermaid', () {
+    test('CDN fallback uses sanitized antiscript security mode', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains("securityLevel: 'loose'"));
+      // Antiscript keeps safely sanitized HTML labels and sanitizes URL
+      // values; Mermaid only registers click callbacks in loose mode.
+      expect(html, contains("securityLevel: 'antiscript'"));
+      expect(html, isNot(contains("securityLevel: 'loose'")));
+    });
+
+    test('inlined Mermaid loader uses antiscript security mode', () {
+      final html = MermaidRenderWidget.buildMermaidHtml(
+        'graph TD\nA-->B',
+        inlineMermaidJs: 'var bundled = 1;',
+      );
+      expect(html, contains("securityLevel: 'antiscript'"));
+      expect(html, isNot(contains("securityLevel: 'loose'")));
     });
 
     test('HTML includes error container for rendering failures', () {
@@ -743,6 +755,14 @@ void main() {
     Future<String> loadAssetTemplate() =>
         rootBundle.loadString('assets/vendor/mermaid_render.html');
 
+    test('uses antiscript security mode for untrusted web diagrams', () async {
+      final html = await loadAssetTemplate();
+      // This keeps sanitized HTML labels while disabling loose-only
+      // click callbacks and enabling Mermaid's URL sanitizer.
+      expect(html, contains("securityLevel: 'antiscript'"));
+      expect(html, isNot(contains("securityLevel: 'loose'")));
+    });
+
     test('loads mermaid.min.js from the same asset directory (no CDN)',
         () async {
       final html = await loadAssetTemplate();
@@ -774,7 +794,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v11');
+      expect(templateVersion, 'v12');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');

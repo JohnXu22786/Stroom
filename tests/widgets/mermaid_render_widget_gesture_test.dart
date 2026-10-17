@@ -75,8 +75,8 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('mermaid.initialize'));
       expect(html, contains('mermaid.run'));
-      expect(html, contains('securityLevel'));
-      expect(html, contains("'loose'"));
+      expect(html, contains("securityLevel: 'antiscript'"));
+      expect(html, isNot(contains("securityLevel: 'loose'")));
     });
 
     testWidgets('HTML contains viewport meta tag for mobile', (tester) async {
