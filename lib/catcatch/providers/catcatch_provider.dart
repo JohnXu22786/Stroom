@@ -584,7 +584,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     selectMedia(parentTaskId, mediaList.first, mergeAudioUrl: mergeAudioUrl);
 
     // 其余资源：创建子任务，跳过分析直接下载
-    final parentIndex = state.indexWhere((t) => t.id == parentTaskId);
+    final parentIndex = state.lastIndexWhere((t) => t.id == parentTaskId);
     if (parentIndex < 0) return;
     final parent = state[parentIndex];
 
