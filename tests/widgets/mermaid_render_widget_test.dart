@@ -2556,9 +2556,14 @@ void main() {
         await tester.pump(const Duration(seconds: 3));
         expect(find.text('页面加载超时，请重试'), findsOneWidget);
 
-        await tester.tap(find.byIcon(Icons.code));
-        await tester.pump();
-        expect(find.byType(InAppWebView), findsNothing);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: ''),
+            ),
+          ),
+        );
+        expect(find.text('No Mermaid code to render'), findsOneWidget);
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
@@ -2571,6 +2576,34 @@ void main() {
         );
         await tester.pump();
         expect(platform.webViews, hasLength(2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+        expect(
+          find.text('加载渲染引擎...'),
+          findsOneWidget,
+          reason: 'a timed-out retry cannot outlive the empty-code view',
+        );
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 10));
+        expect(find.text(creationError), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pump();
+        expect(find.byType(InAppWebView), findsNothing);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(
+                mermaidCode: 'graph TD\nA-->E',
+                showZoomControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(platform.webViews, hasLength(3));
         expect(find.text('加载渲染引擎...'), findsOneWidget);
 
         // The prior view's callbacks cannot satisfy a source-mode remount.
@@ -2588,7 +2621,6 @@ void main() {
         );
         expect(find.text('页面加载超时，请重试'), findsNothing);
 
-        const creationError = '图表渲染引擎初始化失败，请重试';
         await tester.pump(const Duration(seconds: 10));
         expect(
           find.text(creationError),
@@ -2612,7 +2644,7 @@ void main() {
           ),
         );
         expect(find.text('No Mermaid code to render'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 12));
+        await tester.pump(const Duration(seconds: 11));
         expect(
           find.text(creationError),
           findsNothing,
@@ -2622,14 +2654,20 @@ void main() {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
-              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->E'),
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->F'),
             ),
           ),
         );
         await tester.pump();
-        expect(platform.webViews, hasLength(3));
+        expect(platform.webViews, hasLength(4));
         expect(find.text('加载渲染引擎...'), findsOneWidget);
-        await tester.pump(const Duration(seconds: 12));
+        await tester.pump(const Duration(seconds: 1));
+        expect(
+          find.text(creationError),
+          findsNothing,
+          reason: 'the empty-code attempt cannot time out the new iframe',
+        );
+        await tester.pump(const Duration(seconds: 11));
         expect(find.text(creationError), findsOneWidget);
         expect(find.text('重试'), findsOneWidget);
         expect(tester.takeException(), isNull);
