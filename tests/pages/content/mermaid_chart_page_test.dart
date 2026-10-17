@@ -1302,6 +1302,116 @@ sequenceDiagram
       expect(controller?.text, contains('NewNode'));
     });
 
+    testWidgets('repeated flowchart node insertions use distinct IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n  A[Start] --> B[End]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final nodeIds = RegExp(
+        r'^\s*(NewNode\d*)\[新节点\]$',
+        multiLine: true,
+      ).allMatches(textField.controller!.text).map((match) => match[1]);
+
+      expect(nodeIds, ['NewNode', 'NewNode1']);
+    });
+
+    testWidgets('flowchart node insertion preserves existing NewNode label', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n  NewNode[Existing] --> A[End]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('NewNode[Existing]'));
+      expect(code, contains('NewNode1[新节点]'));
+      expect(code, isNot(contains('NewNode[新节点]')));
+    });
+
+    testWidgets('flowchart node insertion skips IDs in link endpoints', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD; NewNode~~~A; B <--> NewNode1; '
+              'NewNode2 o-- C; D x-- NewNode3; E --> NewNode4; '
+              'NewNode5 o-- NewNode6 --> H',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('NewNode~~~A'));
+      expect(code, contains('B <--> NewNode1'));
+      expect(code, contains('NewNode2 o-- C'));
+      expect(code, contains('D x-- NewNode3'));
+      expect(code, contains('E --> NewNode4'));
+      expect(code, contains('NewNode5 o-- NewNode6 --> H'));
+      expect(code, contains('NewNode7[新节点]'));
+      expect(code, isNot(contains('NewNode[新节点]')));
+    });
+
+    testWidgets('flowchart node insertion ignores label and comment text', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'graph TD\n%% NewNode\n'
+              '  A["NewNode --> quoted label"]\n'
+              '  B[NewNode --> unquoted label]\n'
+              '  C>label --> NewNode --> asymmetric label]\n'
+              r'  K>escaped \] --> NewNode --> asymmetric label]'
+              '\n'
+              '  D -- NewNode --> E\n'
+              '  I -- "label --> NewNode --> quoted edge label" --> J\n'
+              '  L -. NewNode .-> M\n'
+              '  F -->|NewNode| G\n'
+              '  H["NewNode %% label text"]\n',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加节点'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+
+      expect(code, contains('%% NewNode'));
+      expect(code, contains('C>label --> NewNode --> asymmetric label]'));
+      expect(code, contains('D -- NewNode --> E'));
+      expect(code, contains('NewNode[新节点]'));
+      expect(code, isNot(contains('NewNode1[新节点]')));
+    });
+
     testWidgets(
       'adding a requirement to the default diagram assigns a unique ID',
       (tester) async {

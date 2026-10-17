@@ -51,6 +51,223 @@ class MermaidTemplates {
     return buf.toString();
   }
 
+  /// Assigns an unused ID to the flowchart "add node" snippet.
+  static String assignUniqueFlowchartNodeId(String code, String snippet) {
+    final snippetId = RegExp(r'^([ \t]*)NewNode(?=[ \t]*\[)').firstMatch(
+      snippet,
+    );
+    if (snippetId == null) return snippet;
+
+    final existingIds = _flowchartNodeIds(code);
+    var nodeId = 'NewNode';
+    var suffix = 1;
+    while (existingIds.contains(nodeId)) {
+      nodeId = 'NewNode${suffix++}';
+    }
+
+    return snippet.replaceRange(
+      snippetId.start + snippetId[1]!.length,
+      snippetId.end,
+      nodeId,
+    );
+  }
+
+  /// Finds existing IDs from flowchart statements and their link endpoints.
+  static Set<String> _flowchartNodeIds(String code) {
+    final nodeIdPattern = RegExp(r'\b(NewNode\d*)\b');
+    final usedIds = <String>{};
+
+    for (final line in code.split('\n')) {
+      final flowchartSyntax = _stripFlowchartLabelsAndComments(line);
+      for (final statement in flowchartSyntax.split(';')) {
+        for (final match in nodeIdPattern.allMatches(statement)) {
+          final before = statement.substring(0, match.start).trimRight();
+          final after = statement.substring(match.end).trimLeft();
+          final startsNode = before.isEmpty ||
+              before.endsWith('&') ||
+              RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?$').hasMatch(before);
+          final endsNode = after.isEmpty ||
+              after.startsWith(RegExp(r'(?:[ox])?[-=.~<>]{2,}[ox]?')) ||
+              after.startsWith(RegExp(r'^[\[({>@:]')) ||
+              after.startsWith('&');
+
+          if (startsNode && endsNode) usedIds.add(match[1]!);
+        }
+      }
+    }
+
+    return usedIds;
+  }
+
+  /// Removes label and comment text before checking node-ID syntax.
+  static String _stripFlowchartLabelsAndComments(String line) {
+    final buffer = StringBuffer();
+    final edgeLabelStartPattern = RegExp(r'(---|--|===|==|-\.)([ \t]+)');
+    var index = 0;
+
+    while (index < line.length) {
+      if (line.startsWith('%%', index)) break;
+
+      final char = line[index];
+      if (char == '"') {
+        index = _skipDelimitedText(line, index, '"', '"');
+        buffer.write(' ');
+        continue;
+      }
+
+      if (char == '[' || char == '(' || char == '{') {
+        index = _skipDelimitedText(
+          line,
+          index,
+          char,
+          switch (char) {
+            '[' => ']',
+            '(' => ')',
+            _ => '}',
+          },
+        );
+        buffer.write(' ');
+        continue;
+      }
+
+      final previous = index > 0 ? line[index - 1] : '';
+      if (char == '>' &&
+          previous.isNotEmpty &&
+          previous.trim().isNotEmpty &&
+          !'<>=-.~'.contains(previous)) {
+        final labelEnd = _asymmetricFlowchartLabelEnd(line, index + 1);
+        if (labelEnd != null) {
+          index = labelEnd;
+          buffer.write(' ');
+          continue;
+        }
+      }
+
+      if (char == '|') {
+        index = _skipDelimitedText(line, index, '|', '|');
+        buffer.write(' ');
+        continue;
+      }
+
+      final connectorMarkerChar = index > 0 ? line[index - 1] : '';
+      final isMarkedConnector =
+          (connectorMarkerChar == 'o' || connectorMarkerChar == 'x') &&
+              (index < 2 || !RegExp(r'[A-Za-z0-9_]').hasMatch(line[index - 2]));
+      final edgeLabelStart = !isMarkedConnector && (char == '-' || char == '=')
+          ? edgeLabelStartPattern.matchAsPrefix(line, index)
+          : null;
+      if (edgeLabelStart != null) {
+        final edgeLabelEnd = _flowchartEdgeLabelEnd(
+          line,
+          index + edgeLabelStart.end,
+        );
+        if (edgeLabelEnd != null) {
+          buffer
+            ..write(edgeLabelStart[1])
+            ..write(' ')
+            ..write(edgeLabelEnd.$2)
+            ..write(' ');
+          index = edgeLabelEnd.$1;
+          continue;
+        }
+      }
+
+      buffer.write(char);
+      index++;
+    }
+
+    return buffer.toString();
+  }
+
+  static int? _asymmetricFlowchartLabelEnd(String line, int start) {
+    var index = start;
+    var insideQuotes = false;
+    while (index < line.length) {
+      if (line[index] == r'\' && index + 1 < line.length) {
+        index += 2;
+        continue;
+      }
+      if (line[index] == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (!insideQuotes && line[index] == ']') {
+        return index + 1;
+      }
+      index++;
+    }
+    return null;
+  }
+
+  static (int, String)? _flowchartEdgeLabelEnd(String line, int start) {
+    final edgeConnectorPattern = RegExp(r'(-->|---|==>|===|-\.->|\.->)');
+    var index = start;
+
+    while (index < line.length) {
+      if (line.startsWith('%%', index) || line[index] == ';') {
+        return null;
+      }
+      if (line[index] == '"') {
+        index = _skipDelimitedText(line, index, '"', '"');
+        continue;
+      }
+
+      final connector = edgeConnectorPattern.matchAsPrefix(line, index);
+      if (index > start &&
+          (line[index - 1] == ' ' || line[index - 1] == '\t') &&
+          connector != null) {
+        return (index + connector.end, connector[1]!);
+      }
+      index++;
+    }
+
+    return null;
+  }
+
+  static int _skipDelimitedText(
+    String text,
+    int start,
+    String opening,
+    String closing,
+  ) {
+    var index = start + opening.length;
+    if (opening == closing) {
+      var insideQuotes = false;
+      while (index < text.length) {
+        if (text[index] == r'\' && index + 1 < text.length) {
+          index += 2;
+          continue;
+        }
+        if (opening != '"' && text[index] == '"') {
+          insideQuotes = !insideQuotes;
+          index++;
+          continue;
+        }
+        if (!insideQuotes && text[index] == closing) return index + 1;
+        index++;
+      }
+      return index;
+    }
+
+    var depth = 1;
+    var insideQuotes = false;
+
+    while (index < text.length) {
+      final char = text[index];
+      if (char == r'\' && index + 1 < text.length) {
+        index += 2;
+        continue;
+      }
+      if (char == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (!insideQuotes) {
+        if (char == opening) depth++;
+        if (char == closing && --depth == 0) return index + 1;
+      }
+      index++;
+    }
+
+    return index;
+  }
+
   /// Assigns an unused ID to a requirement snippet for the current diagram.
   static String assignUniqueRequirementId(String code, String snippet) {
     final isRequirementDiagram = RegExp(
