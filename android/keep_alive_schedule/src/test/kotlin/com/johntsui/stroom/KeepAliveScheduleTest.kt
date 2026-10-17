@@ -8,9 +8,11 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
-    fun exactWatchdogAndRevocationBackupUseDistinctPendingIntentIdentity() {
+    fun exactAndInexactWatchdogsAndRevocationBackupUseDistinctPendingIntentIdentity() {
         assertNotEquals(KEEP_ALIVE_ALARM_ACTION, KEEP_ALIVE_REVOCATION_BACKUP_ACTION)
         assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
+        assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE)
+        assertNotEquals(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
     }
 
     @Test
@@ -213,6 +215,53 @@ class KeepAliveScheduleTest {
     }
 
     @Test
+    fun failedBackupSetupDoesNotReplacePendingExactPrimary() {
+        val operations = mutableListOf<String>()
+        val retryQueue = mutableListOf<() -> Unit>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "exact")
+        var backupAttempts = 0
+        val schedule = {
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = true,
+                scheduleExact = {
+                    operations += "exact"
+                    pendingPrimaryAlarms[KEEP_ALIVE_ALARM_REQUEST_CODE] = "exact"
+                    true
+                },
+                scheduleRevocationFallback = {
+                    operations += "backup"
+                    ++backupAttempts > 2
+                },
+                // Exact and inexact primaries use different PendingIntent
+                // identities, so arming fallback cannot replace the exact one.
+                scheduleInexactPrimary = {
+                    operations += "inexact-primary"
+                    pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "inexact"
+                    true
+                },
+                cancelPreviousPrimaryAfterInexactFallback = {
+                    operations += "cancel-old-primary"
+                    pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+                },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = schedule,
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
+        assertEquals(2, backupAttempts)
+        assertEquals("exact", pendingPrimaryAlarms[KEEP_ALIVE_ALARM_REQUEST_CODE])
+        assertEquals("inexact", pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE])
+        assertEquals(1, retryQueue.size)
+    }
+
+    @Test
     fun failedInexactPrimaryMakesOneLastAttemptToArmRecoveryBackup() {
         val operations = mutableListOf<String>()
 
@@ -225,6 +274,53 @@ class KeepAliveScheduleTest {
 
         assertTrue(scheduled)
         assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
+    }
+
+    @Test
+    fun successfulInexactFallbackReplacesPreviousPrimaryIdentity() {
+        val operations = mutableListOf<String>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "old-inexact")
+
+        val scheduled = scheduleWithExactRevocationFallback(
+            canScheduleExact = false,
+            scheduleExact = { operations += "exact"; true },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            scheduleInexactPrimary = {
+                operations += "inexact-primary"
+                pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "inexact"
+                true
+            },
+            cancelPreviousPrimaryAfterInexactFallback = {
+                operations += "cancel-old-primary"
+                pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+            },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("backup", "inexact-primary", "cancel-old-primary"), operations)
+        assertEquals(mapOf(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE to "inexact"), pendingPrimaryAlarms)
+    }
+
+    @Test
+    fun legacyInexactFallbackCancelsPreviousPrimaryAfterReplacementIsScheduled() {
+        val operations = mutableListOf<String>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "legacy-repeating")
+
+        val scheduled = scheduleLegacyInexactPrimary(
+            scheduleRepeating = {
+                operations += "schedule-replacement"
+                pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "repeating"
+                true
+            },
+            cancelPreviousPrimary = {
+                operations += "cancel-legacy"
+                pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+            },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("schedule-replacement", "cancel-legacy"), operations)
+        assertEquals(mapOf(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE to "repeating"), pendingPrimaryAlarms)
     }
 
     @Test
