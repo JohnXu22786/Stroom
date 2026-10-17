@@ -416,7 +416,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=9';
+    final base = '$webAssetTemplateUrl?v=10';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -725,7 +725,7 @@ MERMAID_CODE_PLACEHOLDER
       // double-scale the diagram (shrunk and misplaced).
       svg.setAttribute('width', sw);
       svg.setAttribute('height', sh);
-      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      zoomLevel = Math.min(10, Math.min(vw / sw, vh / sh));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
       activeNativeGestureId = null;

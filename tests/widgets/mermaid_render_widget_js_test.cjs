@@ -460,6 +460,51 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
   assert.deepEqual(failures, []);
 });
 
+test('native and web auto-fit contain diagrams that need less than 0.1 zoom', () => {
+  for (const [templateName, fit] of [
+    ['native', fitFunction],
+    ['web', webFitFunction],
+  ]) {
+    const viewport = {clientWidth: 200, clientHeight: 100};
+    const diagramSize = {width: 3000, height: 1000};
+    const svg = {
+      getBBox: () => diagramSize,
+      setAttribute: () => {},
+    };
+    const container = {querySelector: () => svg};
+    const context = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      fitComplete: false,
+      pendingZoomOperations: [],
+      activeNativeGestureId: null,
+      nativeGestureZoomLevel: 1,
+      updateTransform: () => {},
+      notifyTransform: () => {},
+    };
+
+    vm.runInNewContext(fit[0], context);
+    context.window.fitToViewport();
+
+    assert.ok(context.zoomLevel < 0.1, `${templateName} fit should use a zoom below 0.1`);
+    assert.ok(
+      diagramSize.width * context.zoomLevel <= viewport.clientWidth,
+      `${templateName} fit should keep the diagram within the viewport width`,
+    );
+    assert.ok(
+      diagramSize.height * context.zoomLevel <= viewport.clientHeight,
+      `${templateName} fit should keep the diagram within the viewport height`,
+    );
+    assert.ok(Math.abs(context.zoomLevel - 1 / 15) < 1e-12);
+  }
+});
+
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
   const viewport = {clientWidth: 0, clientHeight: 0};
   const attributes = {};

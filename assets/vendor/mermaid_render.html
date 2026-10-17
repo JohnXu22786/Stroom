@@ -221,7 +221,7 @@
       // double-scale the diagram (shrunk and misplaced).
       svg.setAttribute('width', sw);
       svg.setAttribute('height', sh);
-      zoomLevel = Math.max(0.1, Math.min(10, Math.min(vw / sw, vh / sh)));
+      zoomLevel = Math.min(10, Math.min(vw / sw, vh / sh));
       panX = (vw - sw * zoomLevel) / 2;
       panY = (vh - sh * zoomLevel) / 2;
       updateTransform();
@@ -404,7 +404,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v9';
+    var TEMPLATE_VERSION = 'v10';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;
