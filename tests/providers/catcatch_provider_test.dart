@@ -224,7 +224,8 @@ void main() {
         'catcatch',
         '.progress',
         'reused_dl_progress.json',
-      ))..createSync(recursive: true);
+      ))
+        ..createSync(recursive: true);
       final owners = <CatCatchTask>[];
       final cleanup = CatCatchNotifier.cleanupTaskFiles(
         removed,
@@ -250,7 +251,8 @@ void main() {
         'catcatch',
         '.progress',
         'reused_dl_progress.json',
-      ))..createSync(recursive: true);
+      ))
+        ..createSync(recursive: true);
       final owners = <CatCatchTask>[];
       final retryFile = _RetryProgressFile(progress, () {
         owners.add(createTask(id: 'reused', status: TaskStatus.running));
