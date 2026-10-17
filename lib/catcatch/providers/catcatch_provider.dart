@@ -947,25 +947,41 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
-            final currentStatus = state[index].status;
-            // 如果外部已将任务暂停，保留暂停状态，不覆盖
-            if (currentStatus == TaskStatus.paused &&
-                updated.status == TaskStatus.running) {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index)
-                    updated.copyWith(status: TaskStatus.paused)
-                  else
-                    state[i],
-              ];
-            } else {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index) updated else state[i],
-              ];
+            final current = state[index];
+            final mergedMetadata = Map<String, String>.from(current.metadata);
+            for (final key in task.metadata.keys) {
+              if (!updated.metadata.containsKey(key)) {
+                mergedMetadata.remove(key);
+              }
             }
+            for (final entry in updated.metadata.entries) {
+              if (task.metadata[entry.key] != entry.value) {
+                mergedMetadata[entry.key] = entry.value;
+              }
+            }
+
+            final runtimeUpdate = updated.copyWith(
+              url: current.url,
+              expectedDurationSec: current.expectedDurationSec,
+              title:
+                  current.title != task.title ? current.title : updated.title,
+              createdAt: current.createdAt,
+              statusChangedAt: updated.status == task.status
+                  ? current.statusChangedAt
+                  : updated.statusChangedAt,
+              metadata: mergedMetadata,
+            );
+            final next = current.status == TaskStatus.paused &&
+                    updated.status == TaskStatus.running
+                // 如果外部已将任务暂停，保留暂停状态，不覆盖
+                ? runtimeUpdate.copyWith(status: TaskStatus.paused)
+                : runtimeUpdate;
+            state = [
+              for (int i = 0; i < state.length; i++)
+                if (i == index) next else state[i],
+            ];
           }
           _persistTasks();
         },
