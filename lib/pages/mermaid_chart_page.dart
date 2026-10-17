@@ -213,8 +213,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   void _insertSnippet(String snippet) {
     final currentCode = _codeController.text;
+    final snippetWithUniqueDiagramEntityId =
+        MermaidTemplates.assignUniqueDiagramEntityId(
+      currentCode,
+      snippet,
+      _selectedTypeId,
+    );
     final snippetWithUniqueFlowchartNodeId =
-        MermaidTemplates.assignUniqueFlowchartNodeId(currentCode, snippet);
+        MermaidTemplates.assignUniqueFlowchartNodeId(
+      currentCode,
+      snippetWithUniqueDiagramEntityId,
+    );
     final snippetWithUniqueRequirementId =
         MermaidTemplates.assignUniqueRequirementId(
       currentCode,

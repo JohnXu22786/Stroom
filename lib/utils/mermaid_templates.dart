@@ -51,6 +51,59 @@ class MermaidTemplates {
     return buf.toString();
   }
 
+  /// Assigns an unused ID to class, ER, or block entity snippets.
+  static String assignUniqueDiagramEntityId(
+    String code,
+    String snippet,
+    String diagramTypeId,
+  ) {
+    final patterns = switch (diagramTypeId) {
+      'classDiagram' => (
+          r'^([ \t]*class[ \t]+)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*class[ \t]+(?:"[^"]+"[ \t]+as[ \t]+)?(\S+)(?=[ \t]*(?:\{|$))|^[ \t]*(\S+)(?:[ \t]+"[^"]+")?[ \t]+[<|>*o().-]+[ \t]+(?:"[^"]+"[ \t]+)?(\S+)(?:[ \t]*:.*)?$|^[ \t]*(\S+?)(?:[ \t]+"[^"]+")?[ \t]*(?=[<|>*o().-]*[-.])[<|>*o().-]+[ \t]*(?:"[^"]+"[ \t]+)?(\S+?)(?:[ \t]*:.*)?$',
+        ),
+      'erDiagram' => (
+          r'^([ \t]*)(\S+)(?=[ \t]*\{)',
+          r'^[ \t]*(?:(\S+?)[ \t]*(?=[|{}oO.-]*[-.])[|{}oO.-]+[ \t]*(\S+?)[ \t]*(?::.*)?$|(\S+)[ \t]*\{|(\S+)[ \t]+[|{}oO.-]+[ \t]+(\S+)[ \t]*:.*$)',
+        ),
+      'block' => (
+          r'^([ \t]*)(\S+)(?=\[)',
+          r'(?:^|[ \t;<>.=~|\-]|--[ox])(\S+)(?=\[)|(?:^|[ \t;<>.=~|\-]|--[ox]|block:)(NewBlock\d*)(?=[ \t;]|$|\(|\{|:\d+|[-=<>.~|])',
+        ),
+      _ => null,
+    };
+    if (patterns == null) return snippet;
+
+    final snippetId = RegExp(patterns.$1).firstMatch(snippet);
+    if (snippetId == null) return snippet;
+
+    final existingIds = <String>{};
+    final existingIdPattern = RegExp(patterns.$2);
+    for (final sourceLine in code.split('\n')) {
+      final line = sourceLine.trimRight();
+      if (line.trimLeft().startsWith('%%')) continue;
+      for (final existingId in existingIdPattern.allMatches(line)) {
+        for (var group = 1; group <= existingId.groupCount; group++) {
+          final entityId = existingId[group];
+          if (entityId != null) existingIds.add(entityId);
+        }
+      }
+    }
+
+    final baseId = snippetId[2]!;
+    var entityId = baseId;
+    var suffix = 1;
+    while (existingIds.contains(entityId)) {
+      entityId = '$baseId${suffix++}';
+    }
+
+    return snippet.replaceRange(
+      snippetId.start + snippetId[1]!.length,
+      snippetId.end,
+      entityId,
+    );
+  }
+
   /// Assigns an unused ID to the flowchart "add node" snippet.
   static String assignUniqueFlowchartNodeId(String code, String snippet) {
     final snippetId = RegExp(r'^([ \t]*)NewNode(?=[ \t]*\[)').firstMatch(
