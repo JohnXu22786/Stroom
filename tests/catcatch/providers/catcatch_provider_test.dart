@@ -121,6 +121,8 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   int executorStarts = 0;
   bool holdRetryExecutions = false;
   bool holdTaskExecutions = false;
+  Object? taskExecutionError;
+  Object? retryExecutionError;
   final retryCancelTokens = <CancelToken>[];
   final retryReleases = <Completer<void>>[];
   final retryCompletions = <Completer<void>>[];
@@ -166,6 +168,7 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
         if (!completion.isCompleted) completion.complete();
       }
     }
+    if (taskExecutionError != null) throw taskExecutionError!;
     return null;
   }
 
@@ -196,6 +199,7 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
         if (!completion.isCompleted) completion.complete();
       }
     }
+    if (retryExecutionError != null) throw retryExecutionError!;
     return null;
   }
 }
@@ -1307,6 +1311,164 @@ void main() {
         for (final release in notifier.retryReleases) {
           if (!release.isCompleted) release.complete();
         }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('pausing a duplicate updates the active row and stops the service',
+        () async {
+      const taskId = 'pause-active-duplicate';
+      await preferences.setBool('background_service_enabled', false);
+      servicePlatform.running = true;
+      servicePlatform.stopRequested = Completer<void>();
+      notifier.holdTaskExecutions = true;
+      notifier.setTasksForTest([task(taskId)]);
+
+      try {
+        notifier.addTask('invalid://pause-duplicate', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+        final activeToken = notifier.taskCancelTokens.single;
+        notifier.pauseTask(taskId);
+
+        expect(activeToken.isCancelled, isTrue);
+        expect(notifier.tasksForTest.last.status, TaskStatus.paused);
+        await servicePlatform.stopRequested!.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted, hasLength(2));
+        expect(persisted.last.status, TaskStatus.paused);
+        expect(servicePlatform.stopCalls, 1);
+      } finally {
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future));
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('normal execution failure marks the active duplicate row failed',
+        () async {
+      const taskId = 'normal-failed-active-duplicate';
+      const failureMessage = 'Bad state: normal execution failed';
+      notifier.holdTaskExecutions = true;
+      notifier.taskExecutionError = StateError('normal execution failed');
+      notifier.setTasksForTest([task(taskId)]);
+      final activeRowFailed = Completer<void>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          if (tasks.length > 1 &&
+              tasks.last.id == taskId &&
+              tasks.last.status == TaskStatus.failed &&
+              tasks.last.error == failureMessage &&
+              !activeRowFailed.isCompleted) {
+            activeRowFailed.complete();
+          }
+        },
+      );
+
+      try {
+        notifier.addTask('invalid://normal-failure', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+
+        notifier.taskReleases.single.complete();
+        await activeRowFailed.future.timeout(const Duration(seconds: 2));
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted.last.status, TaskStatus.failed);
+        expect(persisted.last.error, failureMessage);
+      } finally {
+        subscription.close();
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future));
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('retry execution failure marks the active duplicate row failed',
+        () async {
+      const taskId = 'retry-failed-active-duplicate';
+      const failureMessage = 'Bad state: retry execution failed';
+      notifier.holdRetryExecutions = true;
+      notifier.retryExecutionError = StateError('retry execution failed');
+      notifier.setTasksForTest([
+        task(taskId).copyWith(
+          status: TaskStatus.failed,
+          error: 'older failure',
+        ),
+        task(taskId).copyWith(
+          status: TaskStatus.failed,
+          error: 'latest failure',
+        ),
+      ]);
+      final activeRowFailed = Completer<void>();
+      final subscription = container.listen<List<CatCatchTask>>(
+        catcatchTasksProvider,
+        (_, tasks) {
+          if (tasks.last.id == taskId &&
+              tasks.last.status == TaskStatus.failed &&
+              tasks.last.error == failureMessage &&
+              !activeRowFailed.isCompleted) {
+            activeRowFailed.complete();
+          }
+        },
+      );
+
+      try {
+        notifier.retryStep(taskId, StepType.fetching);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(notifier.tasksForTest.last.status, TaskStatus.running);
+
+        notifier.retryReleases.single.complete();
+        await activeRowFailed.future.timeout(const Duration(seconds: 2));
+        await notifier.waitForTaskSnapshotWritesForTesting();
+
+        final persisted = (jsonDecode(
+          await File('${directory.path}/catcatch/tasks.json').readAsString(),
+        ) as List)
+            .map((record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ))
+            .where((current) => current.id == taskId)
+            .toList();
+        expect(persisted.last.status, TaskStatus.failed);
+        expect(persisted.last.error, failureMessage);
+      } finally {
+        subscription.close();
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.retryCompletions.map((item) => item.future));
         await notifier.removeTasksPersisted([taskId]);
       }
     });

@@ -151,7 +151,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 暂停任务
   void pauseTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
 
     // 取消当前操作
@@ -895,7 +895,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       }
       debugPrint('[CatCatchNotifier] Task execution error: $e');
       // 更新为失败状态
-      final index = state.indexWhere((t) => t.id == task.id);
+      final index = state.lastIndexWhere((t) => t.id == task.id);
       if (index >= 0) {
         state = [
           for (int i = 0; i < state.length; i++)
@@ -1010,7 +1010,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
         return;
       }
       debugPrint('[CatCatchNotifier] Task retry error: $e');
-      final index = state.indexWhere((t) => t.id == task.id);
+      final index = state.lastIndexWhere((t) => t.id == task.id);
       if (index >= 0) {
         state = [
           for (int i = 0; i < state.length; i++)
