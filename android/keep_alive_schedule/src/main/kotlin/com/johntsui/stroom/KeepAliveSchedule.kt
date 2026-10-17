@@ -30,30 +30,30 @@ internal fun scheduleWithExactRevocationFallback(
     scheduleRevocationFallback: () -> Boolean,
     scheduleInexactPrimary: () -> Boolean,
 ): Boolean {
+    // Arm recovery first so process death cannot strand a new exact alarm
+    // before its revocation fallback is pending. If that fails, leave an
+    // inexact primary before retrying the backup.
+    var inexactPrimaryScheduled = false
+    var revocationBackupScheduled = scheduleRevocationFallback()
+    if (!revocationBackupScheduled) {
+        inexactPrimaryScheduled = scheduleInexactPrimary()
+        revocationBackupScheduled = scheduleRevocationFallback()
+        if (!revocationBackupScheduled) {
+            if (!inexactPrimaryScheduled) scheduleInexactPrimary()
+            return false
+        }
+    }
+
     val exactScheduled = canScheduleExact && scheduleExact()
     if (exactScheduled) {
-        if (scheduleRevocationFallback()) return true
-
-        // The exact primary is already queued with its PendingIntent. Retrying
-        // it as inexact would replace the foreground-service-eligible alarm.
-        // Retry only the missing backup; a failed retry remains eligible for
-        // the caller's bounded scheduling retry.
-        return scheduleRevocationFallback()
+        return true
     }
 
-    if (scheduleInexactPrimary()) {
-        // Keep a same-generation recovery delivery in case this one-shot is
-        // consumed and the process stops before the receiver can rearm it. The
-        // caller also needs the backup result to retry if only the primary was
-        // successfully scheduled.
-        return scheduleRevocationFallback()
-    }
+    if (inexactPrimaryScheduled || scheduleInexactPrimary()) return true
 
     // Keep any already queued backup alive if the replacement primary failed.
-    // When there was no backup, make one last bounded attempt to leave a future
-    // receiver delivery that can recover the watchdog.
-    val fallbackScheduled = scheduleRevocationFallback()
-    return fallbackScheduled
+    // The caller schedules its bounded retry if this last attempt also fails.
+    return scheduleRevocationFallback()
 }
 
 internal fun claimAlarmDeliveryGeneration(
