@@ -164,16 +164,18 @@ void main() {
         (
           code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'trunk' } } }%%
 gitGraph
-  commit id: "初始提交"''',
+  commit id: "初始提交"
+  branch feature
+  checkout feature''',
           expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk'},
+          existingBranches: <String>{'trunk', 'feature'},
         ),
         (
           code: '''%%{init: { 'gitGraph': { 'mainBranchName': 'develop' } } }%%
 gitGraph
   commit id: "初始提交"
   branch feature''',
-          expectedTarget: 'develop',
+          expectedTarget: 'feature',
           existingBranches: <String>{'develop', 'feature'},
         ),
         (
@@ -192,18 +194,22 @@ config:
     mainBranchName: trunk
 ---
 gitGraph
-  commit id: "初始提交"''',
+  commit id: "初始提交"
+  branch feature
+  checkout feature''',
           expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk'},
+          existingBranches: <String>{'trunk', 'feature'},
         ),
         (
           code: '''---
 config: { gitGraph: { mainBranchName: trunk } }
 ---
 gitGraph
-  commit id: "初始提交"''',
+  commit id: "初始提交"
+  branch feature
+  checkout feature''',
           expectedTarget: 'trunk',
-          existingBranches: <String>{'trunk'},
+          existingBranches: <String>{'trunk', 'feature'},
         ),
       ];
 
@@ -225,6 +231,29 @@ gitGraph
         expect(scenario.existingBranches, contains(mergeTarget));
         expect(mergeTarget, scenario.expectedTarget);
       }
+    });
+
+    test('merge snippet avoids the first declared branch when checked out', () {
+      const code = '''gitGraph
+  branch develop
+  checkout develop
+  branch feature''';
+      final mergeSnippet = MermaidTemplates.getSnippets(
+        'gitGraph',
+        code: code,
+      ).singleWhere((snippet) => snippet.$1 == '合并分支').$2;
+      final mergeTarget = mergeSnippet.trim().split(RegExp(r'\s+')).last;
+
+      expect({'main', 'develop', 'feature'}, contains(mergeTarget));
+      expect(mergeTarget, isNot('develop'));
+    });
+
+    test('omits merge snippet when there is no alternate branch', () {
+      const code = '''gitGraph
+  checkout main''';
+      final snippets = MermaidTemplates.getSnippets('gitGraph', code: code);
+
+      expect(snippets.map((snippet) => snippet.$1), isNot(contains('合并分支')));
     });
   });
 
