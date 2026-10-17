@@ -2,7 +2,13 @@ import 'dart:async';
 import 'dart:io' show exit;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugPrint, defaultTargetPlatform, visibleForTesting;
+    show
+        TargetPlatform,
+        ValueListenable,
+        ValueNotifier,
+        debugPrint,
+        defaultTargetPlatform,
+        visibleForTesting;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -58,7 +64,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   bool _windowCloseListenerRegistered = false;
   bool _pendingCloseBeforeTrayReady = false;
   bool _trayRollbackCloseInterceptionFailed = false;
-  bool _trayReady = false;
+  final _trayReady = ValueNotifier<bool>(false);
   bool _quitRequested = false;
   Menu? _menu;
 
@@ -73,7 +79,10 @@ class DesktopAppService extends WindowListener with TrayListener {
   Menu? get trayMenuForTesting => _menu;
 
   /// 托盘是否已成功注册（用于 UI 展示真实状态）。
-  bool get isTrayReady => _trayReady;
+  bool get isTrayReady => _trayReady.value;
+
+  /// Notifies UI when asynchronous tray registration becomes ready.
+  ValueListenable<bool> get trayReady => _trayReady;
 
   /// 「关闭即退出」模式下的退出确认回调。
   ///
@@ -91,7 +100,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     _windowCloseListenerRegistered = false;
     _pendingCloseBeforeTrayReady = false;
     _trayRollbackCloseInterceptionFailed = false;
-    _trayReady = false;
+    _trayReady.value = false;
     _quitRequested = false;
     _confirmInProgress = false;
     _menu = null;
@@ -126,7 +135,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 3. 窗口监听在托盘就绪前暂缓处理关闭事件。若托盘失败则撤销拦截并移除
   ///    监听，避免出现「窗口已隐藏但无托盘可恢复」的幽灵进程。
   Future<void> setupTrayAndCloseBehavior() async {
-    if (!isDesktopPlatform || _quitRequested || _trayReady) return;
+    if (!isDesktopPlatform || _quitRequested || _trayReady.value) return;
     // 托盘注册超时：插件挂起（如 Linux 缺少 appindicator 服务）时
     // 走回滚路径，而不是让窗口永远无法关闭。
 
@@ -158,7 +167,7 @@ class DesktopAppService extends WindowListener with TrayListener {
         }
         _menu = _buildMenu();
         await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
-        _trayReady = true;
+        _trayReady.value = true;
         _trayRollbackCloseInterceptionFailed = false;
         debugPrint('[DesktopAppService] Tray icon registered');
       } catch (e) {
@@ -250,7 +259,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     }
     // 在托盘注册完成前只阻止原生默认关闭，保持启动窗口可见；隐藏
     // 前必须确保用户已有可用的托盘入口，避免产生无法恢复的幽灵进程。
-    if (!_trayReady) {
+    if (!_trayReady.value) {
       _pendingCloseBeforeTrayReady = true;
       return;
     }
