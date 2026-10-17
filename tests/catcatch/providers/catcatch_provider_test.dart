@@ -1267,6 +1267,83 @@ void main() {
       }
     });
 
+    test('restore keeps the newest persisted record for duplicate task IDs',
+        () async {
+      const taskId = 'restored-duplicate-task';
+      final older = task(taskId).copyWith(
+        url: 'https://example.com/older.mp4',
+        metadata: const {'replacement': 'older'},
+      );
+      const replacementMedia = MediaResource(
+        url: 'https://example.com/replacement.m3u8',
+        name: 'replacement',
+        ext: 'm3u8',
+        isPlaylist: true,
+      );
+      final replacement = task(taskId).copyWith(
+        url: 'https://example.com/replacement-page',
+        title: 'Replacement task',
+        expectedDurationSec: 90,
+        status: TaskStatus.running,
+        steps: [
+          StepStatus.done(StepType.fetching),
+          StepStatus.progressing(StepType.downloading, 47),
+        ],
+        detectedMedia: const [replacementMedia],
+        selectedMedia: replacementMedia,
+        progress: 47,
+        downloadedFilePath: '/tmp/replacement.partial.mp4',
+        metadata: const {'replacement': 'newest'},
+        downloadedBytes: 1234,
+      );
+      final distinctBefore = task('distinct-before');
+      final distinctAfter = task('distinct-after');
+      final tasksDirectory = Directory('${directory.path}/catcatch');
+      await tasksDirectory.create(recursive: true);
+      await File('${tasksDirectory.path}/tasks.json').writeAsString(
+        jsonEncode([
+          older.toMap(),
+          distinctBefore.toMap(),
+          replacement.toMap(),
+          distinctAfter.toMap(),
+        ]),
+      );
+
+      // A fresh container has no in-memory tasks, like a process restart.
+      container.dispose();
+      containerDisposed = true;
+      container = ProviderContainer(overrides: [
+        catcatchTasksProvider.overrideWith((ref) {
+          notifier = _CleanupCatCatchNotifier(ref);
+          return notifier;
+        }),
+      ]);
+      containerDisposed = false;
+      container.read(catcatchTasksProvider);
+
+      await notifier.restoreUnfinishedTasks();
+
+      expect(
+        notifier.tasksForTest.map((current) => current.id).toList(),
+        [taskId, 'distinct-before', 'distinct-after'],
+      );
+      final restored = notifier.tasksForTest.singleWhere(
+        (current) => current.id == taskId,
+      );
+      expect(restored.url, replacement.url);
+      expect(restored.title, replacement.title);
+      expect(restored.expectedDurationSec, replacement.expectedDurationSec);
+      expect(restored.status, TaskStatus.paused);
+      expect(restored.error, '应用重启，已暂停');
+      expect(restored.steps.map((step) => step.progress).toList(), [100, 47]);
+      expect(restored.detectedMedia.single.url, replacementMedia.url);
+      expect(restored.selectedMedia?.url, replacementMedia.url);
+      expect(restored.progress, replacement.progress);
+      expect(restored.downloadedFilePath, replacement.downloadedFilePath);
+      expect(restored.metadata, replacement.metadata);
+      expect(restored.downloadedBytes, replacement.downloadedBytes);
+    });
+
     test('reused addTask ID cancels superseded execution before removal',
         () async {
       const taskId = 'duplicate-add-task-remove';
