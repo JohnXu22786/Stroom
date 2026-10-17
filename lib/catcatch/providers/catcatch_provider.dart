@@ -172,7 +172,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 继续任务（从暂停状态恢复）
   void resumeTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
     if (state[index].status != TaskStatus.paused) return;
 
@@ -929,7 +929,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     try {
       // Task status does not indicate whether the background service is alive.
-      final index = state.indexWhere((current) => current.id == task.id);
+      final index = state.lastIndexWhere((current) => current.id == task.id);
       if (index >= 0 && state[index].status != TaskStatus.running) {
         state = [
           for (int i = 0; i < state.length; i++)

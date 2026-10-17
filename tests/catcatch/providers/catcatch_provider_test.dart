@@ -1614,6 +1614,54 @@ void main() {
       },
     );
 
+    for (final olderStatus in [TaskStatus.paused, TaskStatus.running]) {
+      test('resume follows the active duplicate after $olderStatus', () async {
+        const taskId = 'resume-active-duplicate';
+        final older = task(taskId).copyWith(status: olderStatus);
+        final active = task(taskId).copyWith(
+          url: 'https://example.com/active.mp4',
+          title: 'Active duplicate',
+          expectedDurationSec: 60,
+          steps: StepType.values.map(StepStatus.pending).toList(),
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, active]);
+
+        try {
+          notifier.resumeTask(taskId);
+          expect(notifier.tasksForTest.last.status, TaskStatus.running);
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          expect(notifier.lastRetriedTask!.url, active.url);
+          expect(notifier.lastRetriedTask!.title, active.title);
+          expect(notifier.lastRetriedTask!.expectedDurationSec, 60);
+          expect(notifier.tasksForTest.first, same(older));
+
+          final firstToken = notifier.retryCancelTokens.single;
+          notifier.pauseTask(taskId);
+          expect(firstToken.isCancelled, isTrue);
+          expect(notifier.tasksForTest.last.status, TaskStatus.paused);
+
+          notifier.resumeTask(taskId);
+          expect(notifier.tasksForTest.last.status, TaskStatus.running);
+          await notifier.secondExecutorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          expect(notifier.executorStarts, 2);
+          expect(notifier.retryCancelTokens.last.isCancelled, isFalse);
+          expect(notifier.tasksForTest.first, same(older));
+        } finally {
+          for (final release in notifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+              notifier.retryCompletions.map((item) => item.future));
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      });
+    }
+
     test(
       'resuming duplicate IDs preserves the newest runtime snapshot',
       () async {
@@ -1725,9 +1773,8 @@ void main() {
           progress: 12,
           downloadedFilePath: '/tmp/stale.partial.mp4',
           metadata: const {
-            'stale-setting': 'newer',
-            'runtime-key': 'current',
-            'newest-only': 'preserved',
+            'stale-setting': 'older',
+            'runtime-key': 'before',
           },
           downloadedBytes: 345,
         );
@@ -1740,6 +1787,16 @@ void main() {
           await executionNotifier.executorStarted.future.timeout(
             const Duration(seconds: 2),
           );
+
+          // A concurrent edit must survive updates from the resumed snapshot.
+          executionNotifier.setTasksForTest([
+            executionNotifier.tasksForTest.first,
+            executionNotifier.tasksForTest.last.copyWith(metadata: const {
+              'stale-setting': 'newer',
+              'runtime-key': 'current',
+              'newest-only': 'preserved',
+            }),
+          ]);
 
           final runtimeUpdate = executionNotifier.lastRetriedTask!.copyWith(
             status: TaskStatus.running,
