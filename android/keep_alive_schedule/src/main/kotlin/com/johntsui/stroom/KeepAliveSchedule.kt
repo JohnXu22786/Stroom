@@ -8,6 +8,7 @@ internal object KeepAliveScheduleIntervals {
 internal const val KEEP_ALIVE_ALARM_ACTION = "com.johntsui.stroom.KEEP_ALIVE"
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_ACTION = "com.johntsui.stroom.KEEP_ALIVE_REVOCATION_BACKUP"
 internal const val KEEP_ALIVE_ALARM_REQUEST_CODE = 2001
+internal const val KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE = 2003
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE = 2002
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS = 60_000L
 
@@ -24,11 +25,21 @@ internal fun scheduleCompatibleRevocationBackup(
     scheduleLegacy()
 }
 
+internal fun scheduleLegacyInexactPrimary(
+    scheduleRepeating: () -> Boolean,
+    cancelPreviousPrimary: () -> Unit,
+): Boolean {
+    if (!scheduleRepeating()) return false
+    cancelPreviousPrimary()
+    return true
+}
+
 internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
     scheduleRevocationFallback: () -> Boolean,
     scheduleInexactPrimary: () -> Boolean,
+    cancelPreviousPrimaryAfterInexactFallback: () -> Unit = {},
 ): Boolean {
     // Arm recovery first so process death cannot strand a new exact alarm
     // before its revocation fallback is pending. If that fails, leave an
@@ -49,7 +60,11 @@ internal fun scheduleWithExactRevocationFallback(
         return true
     }
 
-    if (inexactPrimaryScheduled || scheduleInexactPrimary()) return true
+    if (inexactPrimaryScheduled || scheduleInexactPrimary()) {
+        // Replacing the old primary is safe only after its recovery backup is pending.
+        cancelPreviousPrimaryAfterInexactFallback()
+        return true
+    }
 
     // Keep any already queued backup alive if the replacement primary failed.
     // The caller schedules its bounded retry if this last attempt also fails.
