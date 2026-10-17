@@ -327,9 +327,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final proposed = state
           .where((task) => !removalTargets.contains(task.runtimeIdentity))
           .toList();
-      if (_restoringTasks || _taskRestoreNeedsRetry) {
-        _removedTaskIdsDuringRestore.addAll(removedIds);
-      }
+      // A deferred or failed write retains the selected rows, so it must not
+      // leave restore tombstones that would discard them during reconciliation.
       if (!await _writeSnapshot(proposed)) return false;
       if (cleanupGeneration > _persistedServiceCleanupGeneration) {
         _persistedServiceCleanupGeneration = cleanupGeneration;

@@ -1473,6 +1473,91 @@ void main() {
       }
     });
 
+    for (final restoreFailed in [false, true]) {
+      test(
+        'failed persisted removal retains execution through ${restoreFailed ? 'restore retry' : 'active restore'}',
+        () async {
+          const taskId = 'retained-after-failed-removal';
+          const removedId = 'explicitly-removed-before-failure';
+          notifier.holdTaskExecutions = true;
+          notifier.addTask('invalid://retained', 30, taskId: taskId);
+          await notifier.executorStarted.future;
+          await notifier.waitForTaskSnapshotWritesForTesting();
+          final running = notifier.tasksForTest.single;
+          final token = notifier.taskCancelTokens.single;
+          final tasksFile = File('${directory.path}/catcatch/tasks.json');
+          final stored = jsonEncode([running.toMap(), task(removedId).toMap()]);
+          await tasksFile.writeAsString(restoreFailed ? '[invalid]' : stored);
+
+          Future<void>? restore;
+          if (restoreFailed) {
+            await notifier.restoreUnfinishedTasks();
+          } else {
+            AppStorage.resetCache();
+            documents.pathRequests = 0;
+            documents.firstRequestStarted = Completer<void>();
+            documents.releaseFirstRequest = Completer<void>();
+            restore = notifier.restoreUnfinishedTasks();
+            await documents.firstRequestStarted!.future.timeout(
+              const Duration(seconds: 2),
+            );
+          }
+
+          try {
+            // A prior explicit removal must remain effective even when the
+            // failed persisted removal also requests its already absent ID.
+            notifier.removeTask(removedId);
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(
+              await notifier.removeTasksPersisted([taskId, removedId]),
+              isFalse,
+            );
+            expect(notifier.tasksForTest.single.runtimeIdentity,
+                same(running.runtimeIdentity));
+            expect(token.isCancelled, isFalse);
+
+            if (restoreFailed) {
+              await tasksFile.writeAsString(stored);
+              await notifier.restoreUnfinishedTasks();
+            } else {
+              documents.releaseFirstRequest!.complete();
+              await restore;
+            }
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(notifier.tasksForTest.single.runtimeIdentity,
+                same(running.runtimeIdentity));
+            expect(notifier.tasksForTest.single.status, TaskStatus.running);
+            expect(token.isCancelled, isFalse);
+
+            notifier.lastTaskUpdate!(running.copyWith(progress: 73));
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            await notifier.restoreUnfinishedTasks();
+            await notifier.waitForTaskSnapshotWritesForTesting();
+            expect(notifier.tasksForTest.single.progress, 73);
+            final persisted = jsonDecode(await tasksFile.readAsString()) as List;
+            expect(persisted, hasLength(1));
+            expect((persisted.single as Map)['id'], taskId);
+            expect((persisted.single as Map)['progress'], 73);
+            expect(token.isCancelled, isFalse);
+
+            expect(await notifier.removeTasksPersisted([taskId]), isTrue);
+            expect(token.isCancelled, isTrue);
+            expect(notifier.tasksForTest, isEmpty);
+            expect(jsonDecode(await tasksFile.readAsString()), isEmpty);
+          } finally {
+            final release = documents.releaseFirstRequest;
+            if (release != null && !release.isCompleted) release.complete();
+            if (restore != null) await restore;
+            for (final release in notifier.taskReleases) {
+              if (!release.isCompleted) release.complete();
+            }
+            await Future.wait(
+                notifier.taskCompletions.map((item) => item.future));
+          }
+        },
+      );
+    }
+
     test('pausing a duplicate updates the active row and stops the service',
         () async {
       const taskId = 'pause-active-duplicate';
