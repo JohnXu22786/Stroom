@@ -2415,8 +2415,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
 
         final firstWebView = platform.webView!;
-        final firstController = firstWebView
-            .controllerFromPlatform<InAppWebViewController>(
+        final firstController =
+            firstWebView.controllerFromPlatform<InAppWebViewController>(
           firstWebView.controller,
         );
         firstWebView.params.onWebViewCreated!(firstController);
