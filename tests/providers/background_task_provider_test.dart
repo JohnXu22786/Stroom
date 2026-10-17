@@ -298,6 +298,48 @@ void main() {
       expect(notifier.state[0].completedAt, isNotNull);
     });
 
+    test(
+      'cancelTask does not fail a same-ID replacement created during step notification',
+      () async {
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '旧任务');
+        notifier.updateStep(id, 0, running: true);
+        notifier.registerCancellationForGeneration(
+          id,
+          notifier.taskById(id)!,
+          () {},
+        );
+
+        var replaced = false;
+        notifier.addListener((_) {
+          final task = notifier.taskById(id);
+          if (replaced ||
+              task?.title != '旧任务' ||
+              task!.steps.first.status != BgStepStatus.failed) {
+            return;
+          }
+
+          replaced = true;
+          notifier.removeTask(id);
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: '替换任务',
+            taskId: id,
+          );
+        });
+
+        notifier.cancelTask(id);
+
+        expect(replaced, isTrue);
+        expect(notifier.state.single.title, '替换任务');
+        expect(notifier.state.single.status, TaskStatus.running);
+        expect(notifier.state.single.error, isNull);
+
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      },
+    );
+
     test('removeTask removes task from list (manual removal)', () {
       final notifier = BackgroundTaskNotifier();
 

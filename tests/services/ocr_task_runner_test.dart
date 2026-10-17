@@ -658,6 +658,175 @@ void main() {
     },
   );
 
+  test(
+    'a late cancelled runner cannot publish into a same-ID replacement',
+    () async {
+      final staleRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [(input, 'png')],
+        executionMode: OcrBatchMode.perImage,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) =>
+            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final staleRun = staleRunner.run();
+      final request = await adapter.requested.future;
+      notifier.removeTask(id);
+      notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'replacement',
+        taskId: id,
+      );
+      const replacementOutcome = OcrPageOutcome(
+        imageIndex: 0,
+        status: OcrPageOutcomeStatus.succeeded,
+        text: 'replacement page',
+      );
+      notifier.setOcrPageOutcomes(id, [replacementOutcome]);
+
+      adapter.succeed();
+      await staleRun;
+
+      expect(request.cancelToken!.isCancelled, isTrue);
+      expect(notifier.state.single.title, 'replacement');
+      expect(
+        notifier.state.single.ocrPageOutcomes.single.status,
+        replacementOutcome.status,
+      );
+      expect(
+        notifier.state.single.ocrPageOutcomes.single.text,
+        replacementOutcome.text,
+      );
+    },
+  );
+
+  test(
+    'a late cancelled runner cannot unregister same-ID replacement cancellation',
+    () async {
+      final staleRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [(input, 'png')],
+        executionMode: OcrBatchMode.perImage,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) =>
+            OcrService(config: config, dio: Dio()..httpClientAdapter = adapter),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final staleRun = staleRunner.run();
+      await adapter.requested.future;
+      notifier.removeTask(id);
+      notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'replacement',
+        taskId: id,
+      );
+
+      final replacementAdapter = _ControlledAdapter();
+      final replacementRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [(input, 'png')],
+        executionMode: OcrBatchMode.perImage,
+        title: 'replacement',
+        folder: 'captured folder',
+        serviceFactory: (config) => OcrService(
+          config: config,
+          dio: Dio()..httpClientAdapter = replacementAdapter,
+        ),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+      final replacementRun = replacementRunner.run();
+      final replacementRequest = await replacementAdapter.requested.future;
+
+      adapter.succeed();
+      await staleRun;
+      notifier.cancelTask(id);
+
+      expect(replacementRequest.cancelToken!.isCancelled, isTrue);
+      replacementAdapter.succeed();
+      await replacementRun;
+    },
+  );
+
+  test(
+    'a same-ID replacement during result notification rejects late state',
+    () async {
+      var replaced = false;
+      notifier.addListener((tasks) {
+        if (!replaced && tasks.single.result == 'owned text') {
+          replaced = true;
+          notifier.removeTask(id);
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'replacement',
+            taskId: id,
+          );
+        }
+      }, fireImmediately: false);
+
+      final running = runner.run();
+      await adapter.requested.future;
+      adapter.succeed();
+      await running;
+
+      expect(replaced, isTrue);
+      expect(notifier.state.single.title, 'replacement');
+      expect(notifier.state.single.result, isNull);
+      expect(notifier.state.single.rawRequest, isNull);
+      expect(notifier.state.single.rawResponse, isNull);
+      expect(
+        notifier.state.single.steps.every(
+          (step) => step.status == BgStepStatus.pending,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'a same-ID replacement during save completion stays running',
+    () async {
+      var replaced = false;
+      notifier.addListener((tasks) {
+        if (!replaced &&
+            tasks.single.steps[4].status == BgStepStatus.completed) {
+          replaced = true;
+          notifier.removeTask(id);
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'replacement',
+            taskId: id,
+          );
+        }
+      }, fireImmediately: false);
+
+      final running = runner.run();
+      await adapter.requested.future;
+      adapter.succeed();
+      await running;
+
+      expect(replaced, isTrue);
+      expect(notifier.state.single.title, 'replacement');
+      expect(notifier.state.single.status, TaskStatus.running);
+      expect(notifier.state.single.result, isNull);
+      expect(notifier.state.single.downloadedFilePath, isNull);
+      expect(await TextManifest.loadRecords(), isEmpty);
+    },
+  );
+
   test('persisted diagnostics exclude a key matching HTTP status', () async {
     const apiKey = '200';
     final credentialRunner = OcrTaskRunner(
@@ -992,6 +1161,71 @@ void main() {
     expect((await TextManifest.loadRecords()).map((record) => record.name),
         ['existing']);
   });
+
+  test(
+    'a cancelled save-only retry cannot unregister same-ID replacement cancellation',
+    () async {
+      notifier.setResult(id, 'owned text');
+      notifier.failTask(id, error: 'previous save failed');
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      final saver = OcrResultSaver(
+        taskId: id,
+        notifier: notifier,
+        title: 'owned',
+        folder: '',
+        onSaved: () {},
+        writeText: (name, text, {beforeCommit}) async {
+          writeStarted.complete();
+          await releaseWrite.future;
+          beforeCommit?.call();
+          return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+        },
+      );
+      final retry = saver.retryTaskResult();
+      await writeStarted.future;
+
+      notifier.removeTask(id);
+      notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'replacement',
+        taskId: id,
+      );
+
+      final replacementAdapter = _ControlledAdapter();
+      final replacementRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [(input, 'png')],
+        title: 'replacement',
+        folder: 'captured folder',
+        serviceFactory: (config) => OcrService(
+          config: config,
+          dio: Dio()..httpClientAdapter = replacementAdapter,
+        ),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+      final replacementRun = replacementRunner.run();
+      final replacementRequest = await replacementAdapter.requested.future;
+
+      releaseWrite.complete();
+      await expectLater(retry, throwsA(anything));
+      notifier.cancelTask(id);
+      final replacementWasCancelled =
+          replacementRequest.cancelToken!.isCancelled;
+      replacementAdapter.succeed();
+      await replacementRun;
+
+      expect(replacementWasCancelled, isTrue);
+      expect(notifier.state.single.title, 'replacement');
+      expect(notifier.state.single.status, TaskStatus.failed);
+      expect(notifier.state.single.error, '已取消');
+      expect(notifier.state.single.result, isNull);
+    },
+  );
 
   test('cancelling after manifest insertion rolls back its new record and file',
       () async {

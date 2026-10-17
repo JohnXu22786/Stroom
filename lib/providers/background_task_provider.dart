@@ -665,9 +665,16 @@ final backgroundTasksProvider =
   (ref) => BackgroundTaskNotifier(),
 );
 
+class _TaskCancellationRegistration {
+  final Object owner = Object();
+  final void Function() cancel;
+
+  _TaskCancellationRegistration(this.cancel);
+}
+
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
-  final Map<String, void Function()> _cancellations = {};
+  final Map<String, _TaskCancellationRegistration> _cancellations = {};
 
   /// Returns a live task by ID, or null after removal or notifier disposal.
   BackgroundTask? taskById(String taskId) {
@@ -681,18 +688,44 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       cancel();
       return;
     }
-    _cancellations[taskId] = cancel;
+    _cancellations[taskId] = _TaskCancellationRegistration(cancel);
   }
 
   void unregisterCancellation(String taskId) => _cancellations.remove(taskId);
 
+  /// Register cancellation only while [taskGeneration] still owns [taskId].
+  /// The returned token prevents an older run from unregistering its successor.
+  Object? registerCancellationForGeneration(
+    String taskId,
+    BackgroundTask taskGeneration,
+    void Function() cancel,
+  ) {
+    if (!mounted ||
+        taskById(taskId)?.hasSameGenerationAs(taskGeneration) != true) {
+      cancel();
+      return null;
+    }
+    final registration = _TaskCancellationRegistration(cancel);
+    _cancellations[taskId] = registration;
+    return registration.owner;
+  }
+
+  void unregisterCancellationForGeneration(String taskId, Object owner) {
+    if (identical(_cancellations[taskId]?.owner, owner)) {
+      _cancellations.remove(taskId);
+    }
+  }
+
   void cancelTask(String taskId) {
-    final cancel = _cancellations.remove(taskId);
-    if (cancel == null) return;
-    cancel();
-    if (!mounted) return;
-    final task = state.where((task) => task.id == taskId).firstOrNull;
-    if (task == null) return;
+    final registration = _cancellations.remove(taskId);
+    if (registration == null) return;
+    final task = taskById(taskId);
+    registration.cancel();
+    if (!mounted ||
+        task == null ||
+        taskById(taskId)?.hasSameGenerationAs(task) != true) {
+      return;
+    }
     setSteps(
       taskId,
       task.steps
@@ -707,6 +740,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           )
           .toList(),
     );
+    if (!mounted || taskById(taskId)?.hasSameGenerationAs(task) != true) {
+      return;
+    }
     failTask(taskId, error: '已取消');
   }
 
@@ -736,8 +772,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   @override
   void dispose() {
-    for (final cancel in _cancellations.values.toList()) {
-      cancel();
+    for (final registration in _cancellations.values.toList()) {
+      registration.cancel();
     }
     _cancellations.clear();
     _disposedSnapshot = List.of(state);
@@ -985,7 +1021,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
     final removalToken = _recordPendingRestoreTaskRemoval(taskId);
     _pendingTaskRemovalReconciliations[taskId] = removalToken;
-    _cancellations.remove(taskId)?.call();
+    _cancellations.remove(taskId)?.cancel();
     final removed = state.where((task) => task.id == taskId).firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
     if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
