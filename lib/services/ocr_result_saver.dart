@@ -30,6 +30,7 @@ class OcrResultSaver {
   final OcrTextWriter _writeText;
   final OcrTextRecordWriter _addRecord;
   final OcrTextRecordsLoader _loadRecordsUncached;
+  final BackgroundTask? _taskGeneration;
 
   OcrResultSaver({
     required this.taskId,
@@ -41,7 +42,8 @@ class OcrResultSaver {
     OcrTextWriter? writeText,
     OcrTextRecordWriter? addRecord,
     OcrTextRecordsLoader? loadRecordsUncached,
-  })  : _cancelToken = cancelToken ?? CancelToken(),
+  })  : _taskGeneration = notifier.taskById(taskId),
+        _cancelToken = cancelToken ?? CancelToken(),
         _writeText = writeText ?? TextManifest.writeText,
         _addRecord = addRecord ?? TextManifest.addRecord,
         _loadRecordsUncached =
@@ -49,8 +51,14 @@ class OcrResultSaver {
 
   void cancel() => _cancelToken.cancel('已取消');
 
+  bool get _ownsTaskGeneration {
+    final taskGeneration = _taskGeneration;
+    return taskGeneration != null &&
+        notifier.taskById(taskId)?.hasSameGenerationAs(taskGeneration) == true;
+  }
+
   void _checkActive() {
-    if (!notifier.mounted || !notifier.state.any((task) => task.id == taskId)) {
+    if (!notifier.mounted || !_ownsTaskGeneration) {
       cancel();
     }
     if (_cancelToken.isCancelled) throw _cancelToken.cancelError!;
@@ -71,35 +79,53 @@ class OcrResultSaver {
       throw StateError('不完整的 OCR 结果需要明确选择保存为部分结果');
     }
 
+    _checkActive();
+    final taskGeneration = _taskGeneration!;
     if (!task.resultIsComplete && allowPartial) {
       notifier.markPartialResultSaveRequested(taskId);
+      _checkActive();
     }
-    notifier.registerCancellation(taskId, cancel);
-    notifier.startSaveRetry(taskId);
+    final cancellationOwner = notifier.registerCancellationForGeneration(
+      taskId,
+      taskGeneration,
+      cancel,
+    );
     try {
+      _checkActive();
+      notifier.startSaveRetry(taskId);
+      _checkActive();
       return await saveResult(
         task.result!,
         isComplete: task.resultIsComplete,
         allowPartial: allowPartial || task.partialSaveRequested,
       );
     } catch (error) {
-      if (!_cancelToken.isCancelled && notifier.mounted) {
-        final current =
-            notifier.state.where((task) => task.id == taskId).firstOrNull;
-        if (current != null) {
+      if (!_cancelToken.isCancelled &&
+          notifier.mounted &&
+          _ownsTaskGeneration) {
+        final current = notifier.taskById(taskId);
+        if (current != null && current.hasSameGenerationAs(taskGeneration)) {
           for (var i = 0; i < current.steps.length; i++) {
+            if (_cancelToken.isCancelled || !_ownsTaskGeneration) break;
             if (current.steps[i].running) {
               notifier.updateStep(taskId, i, failed: true, error: '$error');
             } else if (current.steps[i].status == BgStepStatus.pending) {
               notifier.updateStep(taskId, i, skipped: true);
             }
           }
-          notifier.failTask(taskId, error: 'OCR结果保存失败: $error');
+          if (!_cancelToken.isCancelled && _ownsTaskGeneration) {
+            notifier.failTask(taskId, error: 'OCR结果保存失败: $error');
+          }
         }
       }
       rethrow;
     } finally {
-      notifier.unregisterCancellation(taskId);
+      if (cancellationOwner != null) {
+        notifier.unregisterCancellationForGeneration(
+          taskId,
+          cancellationOwner,
+        );
+      }
     }
   }
 

@@ -1162,6 +1162,71 @@ void main() {
         ['existing']);
   });
 
+  test(
+    'a cancelled save-only retry cannot unregister same-ID replacement cancellation',
+    () async {
+      notifier.setResult(id, 'owned text');
+      notifier.failTask(id, error: 'previous save failed');
+
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      final saver = OcrResultSaver(
+        taskId: id,
+        notifier: notifier,
+        title: 'owned',
+        folder: '',
+        onSaved: () {},
+        writeText: (name, text, {beforeCommit}) async {
+          writeStarted.complete();
+          await releaseWrite.future;
+          beforeCommit?.call();
+          return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+        },
+      );
+      final retry = saver.retryTaskResult();
+      await writeStarted.future;
+
+      notifier.removeTask(id);
+      notifier.addTask(
+        type: BackgroundTaskType.ocr,
+        title: 'replacement',
+        taskId: id,
+      );
+
+      final replacementAdapter = _ControlledAdapter();
+      final replacementRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [(input, 'png')],
+        title: 'replacement',
+        folder: 'captured folder',
+        serviceFactory: (config) => OcrService(
+          config: config,
+          dio: Dio()..httpClientAdapter = replacementAdapter,
+        ),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+      final replacementRun = replacementRunner.run();
+      final replacementRequest = await replacementAdapter.requested.future;
+
+      releaseWrite.complete();
+      await expectLater(retry, throwsA(anything));
+      notifier.cancelTask(id);
+      final replacementWasCancelled =
+          replacementRequest.cancelToken!.isCancelled;
+      replacementAdapter.succeed();
+      await replacementRun;
+
+      expect(replacementWasCancelled, isTrue);
+      expect(notifier.state.single.title, 'replacement');
+      expect(notifier.state.single.status, TaskStatus.failed);
+      expect(notifier.state.single.error, '已取消');
+      expect(notifier.state.single.result, isNull);
+    },
+  );
+
   test('cancelling after manifest insertion rolls back its new record and file',
       () async {
     notifier.setResult(id, 'owned text');
