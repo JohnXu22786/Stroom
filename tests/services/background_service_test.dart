@@ -137,6 +137,27 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
   }
 }
 
+class _RejectFailedStopRollbackStore extends InMemorySharedPreferencesStore {
+  _RejectFailedStopRollbackStore(Map<String, Object> data)
+      : super.withData(data);
+
+  bool _stopIntentWasDisabled = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (valueType == 'Bool' && key == 'flutter.background_service_enabled') {
+      if (value == false) _stopIntentWasDisabled = true;
+      if (value == true && _stopIntentWasDisabled) {
+        return Future<bool>.value(false);
+      }
+    }
+    return super.setValue(valueType, key, value);
+  }
+
+  Future<bool> persistEnabledFromNativeRecovery() =>
+      super.setValue('Bool', 'flutter.background_service_enabled', true);
+}
+
 class _FailingPreferenceReadStore extends InMemorySharedPreferencesStore {
   _FailingPreferenceReadStore(
     Map<String, Object> data, {
@@ -527,6 +548,76 @@ void main() {
       );
       expect(mock._isRunning, isFalse);
     });
+
+    for (final watchdogEnabled in [true, false]) {
+      test(
+          'failed stop recovers durable enabled intent when Dart rollback write is rejected (watchdog=$watchdogEnabled)',
+          () async {
+        final mock = registerMockPlatform()
+          ..setServiceRunning(true)
+          ..setThrowOnCheckCalls({2});
+        final prefs = await SharedPreferences.getInstance();
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore(
+          {
+            'flutter.background_service_enabled': true,
+            'flutter.background_service_watchdog': watchdogEnabled,
+          },
+        );
+        SharedPreferencesStorePlatform.instance = store;
+        await prefs.reload();
+        expect(await isWatchdogEnabled(), watchdogEnabled);
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+        });
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall methodCall) async {
+            keepAliveCalls.add(methodCall);
+            final arguments = methodCall.arguments;
+            if (methodCall.method == 'rearmKeepAlive' &&
+                arguments is Map &&
+                arguments['restoreEnabledIntent'] == true) {
+              await store.persistEnabledFromNativeRecovery();
+            }
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          expect(await stopBackgroundService(), isFalse);
+          await prefs.reload();
+        });
+
+        expect(prefs.getBool('background_service_enabled'), isTrue,
+            reason: 'native recovery must durably restore enabled intent after '
+                'the Dart rollback write is rejected');
+        final recoveryCall = keepAliveCalls.firstWhere(
+          (call) => call.method == 'rearmKeepAlive',
+        );
+        expect(
+          recoveryCall.arguments,
+          {'restoreEnabledIntent': true},
+          reason: 'native recovery must receive the failed-stop intent even '
+              'when watchdog scheduling is disabled',
+        );
+
+        // A new process must recover from the backing preference alone.
+        SharedPreferences.resetStatic();
+        resetBackgroundServiceLifecycleStateForTesting();
+        mock.setServiceRunning(false);
+        await withAndroidPlatform(() async {
+          final restartedPrefs = await SharedPreferences.getInstance();
+          expect(restartedPrefs.getBool('background_service_enabled'), isTrue);
+          await restoreBackgroundServiceOnColdStart();
+        });
+
+        expect(mock._isRunning, isTrue,
+            reason: 'cold-start recovery must not depend on the old process '
+                'choice after a failed stop');
+      });
+    }
 
     test(
         'restoreBackgroundServiceOnColdStart starts service when previously enabled',
