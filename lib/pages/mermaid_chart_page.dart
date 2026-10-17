@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
@@ -378,20 +379,40 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         counter++;
       }
 
-      await TextManifest.writeText(storageFileName, content);
       if (existingRecord == null) {
-        await TextManifest.addRecord(
-          TextRecord(
-            name: finalName,
-            hash: hash,
-            format: 'mmd',
-            createdAt: DateTime.now(),
-            size: bytes.length,
-            folder: selectedFolder,
-            textLength: content.length,
-          ),
-        );
+        await TextManifest.withSaveLock(hash, () async {
+          await TextManifest.writeText(storageFileName, content);
+          try {
+            await TextManifest.addRecord(
+              TextRecord(
+                name: finalName,
+                hash: hash,
+                format: 'mmd',
+                createdAt: DateTime.now(),
+                size: bytes.length,
+                folder: selectedFolder,
+                textLength: content.length,
+              ),
+            );
+          } catch (error, stackTrace) {
+            try {
+              final currentRecords = await TextManifest.loadRecordsUncached();
+              if (!currentRecords.any(
+                (record) => record.storagePath == storageFileName,
+              )) {
+                await TextManifest.deleteFile(storageFileName);
+              }
+            } catch (cleanupError) {
+              debugPrint(
+                'Failed to clean up Mermaid chart file $storageFileName '
+                'after record registration failed: $cleanupError',
+              );
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+        });
       } else {
+        await TextManifest.writeText(storageFileName, content);
         await TextManifest.updateRecord(
           TextRecord(
             id: existingRecord.id,
