@@ -714,7 +714,8 @@ void main() {
 
       await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
       await tester.pump();
-      await tester.enterText(find.byType(TextField).first, 'graph TD\n  A-->B');
+      const content = 'graph TD\n  A-->B';
+      await tester.enterText(find.byType(TextField).first, content);
       await tester.pump();
 
       await tester.tap(find.byIcon(Icons.save));
@@ -740,8 +741,63 @@ void main() {
       );
       expect(tester.widget<IconButton>(saveButton).onPressed, isNotNull);
       expect(await TextManifest.loadRecords(), isEmpty);
+      final hash = computeTextHash(Uint8List.fromList(utf8.encode(content)));
+      expect(await TextManifest.readText('$hash.txt'), isNull);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets(
+      'record registration failure preserves a hash file referenced by an '
+      'existing record',
+      (tester) async {
+        addTearDown(() {
+          ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+        });
+        const content = 'graph TD\n  A-->B';
+        final hash = computeTextHash(Uint8List.fromList(utf8.encode(content)));
+        final existingRecord = TextRecord(
+          name: 'existing chart',
+          hash: hash,
+          format: 'mmd',
+          createdAt: DateTime(2026),
+          size: utf8.encode(content).length,
+          textLength: content.length,
+        );
+        await TextManifest.writeText(existingRecord.storagePath, content);
+        await TextManifest.addRecord(existingRecord);
+        ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+          throw StateError('simulated save failure');
+        };
+
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).first, content);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        expect(find.text('保存图表'), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          (await TextManifest.loadRecords()).map((record) => record.id),
+          [existingRecord.id],
+        );
+        expect(
+          await TextManifest.readText(existingRecord.storagePath),
+          content,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('save with empty content shows error, no folder picker', (
       tester,
