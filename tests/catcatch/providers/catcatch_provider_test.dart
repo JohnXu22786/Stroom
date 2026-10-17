@@ -325,6 +325,70 @@ void main() {
           createdAt: DateTime(2025, 1, 1),
         );
 
+    test('batch media children inherit the latest selected parent snapshot',
+        () async {
+      const firstMedia = MediaResource(
+        url: 'https://example.com/first.mp4',
+        name: 'first',
+        ext: 'mp4',
+      );
+      const secondMedia = MediaResource(
+        url: 'https://example.com/second.mp4',
+        name: 'second',
+        ext: 'mp4',
+      );
+      final stale = task('batch-parent').copyWith(
+        url: 'https://example.com/stale',
+        title: 'stale',
+        expectedDurationSec: 10,
+        metadata: {'source': 'stale', 'mergeAudioUrl': 'stale-audio'},
+      );
+      final latest = task('batch-parent').copyWith(
+        url: 'https://example.com/latest',
+        title: 'latest',
+        expectedDurationSec: 120,
+        steps: [StepStatus.running(StepType.userSelecting)],
+        metadata: {'source': 'latest', 'referer': 'https://example.com/page'},
+      );
+      notifier.setTasksForTest([stale, latest]);
+      notifier.holdRetryExecutions = true;
+
+      try {
+        notifier.batchSelectMedia(
+          'batch-parent',
+          [firstMedia, secondMedia],
+          mergeAudioUrl: 'https://example.com/requested-audio.m4a',
+        );
+        final child = notifier.tasksForTest.singleWhere(
+          (current) => current.id != 'batch-parent',
+        );
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        expect(child.url, latest.url);
+        expect(child.expectedDurationSec, latest.expectedDurationSec);
+        expect(child.title, 'latest - second.mp4');
+        expect(child.selectedMedia, secondMedia);
+        expect(child.metadata, {
+          ...latest.metadata,
+          'mergeAudioUrl': 'https://example.com/requested-audio.m4a',
+          'mergeMode': 'audio_video',
+        });
+        expect(notifier.tasksForTest.first, same(stale));
+        expect(notifier.tasksForTest[1].selectedMedia, firstMedia);
+        expect(notifier.lastRetriedTask!.id, child.id);
+        expect(notifier.lastRetriedTask!.metadata, child.metadata);
+      } finally {
+        for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.retryCompletions.map((c) => c.future));
+        await notifier.removeTasksPersisted(
+          notifier.tasksForTest.map((current) => current.id).toList(),
+        );
+      }
+    });
+
     for (final action in ['confirm', 'select', 'skip', 'retry', 'retryStep']) {
       test('duplicate continuation uses newest snapshot: $action', () async {
         const id = 'interactive-duplicate';
