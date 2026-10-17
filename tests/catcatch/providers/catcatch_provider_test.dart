@@ -120,8 +120,13 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   final secondExecutorStarted = Completer<void>();
   int executorStarts = 0;
   bool holdRetryExecutions = false;
+  bool holdTaskExecutions = false;
   final retryCancelTokens = <CancelToken>[];
   final retryReleases = <Completer<void>>[];
+  final taskCancelTokens = <CancelToken>[];
+  final taskReleases = <Completer<void>>[];
+  final taskCompletions = <Completer<void>>[];
+  final uncancelledTaskCompletions = <String>[];
 
   void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
 
@@ -138,6 +143,21 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
       secondExecutorStarted.complete();
+    }
+    if (holdTaskExecutions) {
+      taskCancelTokens.add(cancelToken);
+      final release = Completer<void>();
+      final completion = Completer<void>();
+      taskReleases.add(release);
+      taskCompletions.add(completion);
+      try {
+        await release.future;
+        if (!cancelToken.isCancelled) {
+          uncancelledTaskCompletions.add(task.id);
+        }
+      } finally {
+        if (!completion.isCompleted) completion.complete();
+      }
     }
     return null;
   }
@@ -1241,6 +1261,46 @@ void main() {
         expect(currentRun.isCancelled, isTrue);
       } finally {
         for (final release in notifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('reused addTask ID cancels superseded execution before removal',
+        () async {
+      const taskId = 'duplicate-add-task-remove';
+      notifier.holdTaskExecutions = true;
+
+      try {
+        notifier.addTask('invalid://first-task', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        notifier.addTask('invalid://second-task', 30, taskId: taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final supersededRun = notifier.taskCancelTokens[0];
+        final currentRun = notifier.taskCancelTokens[1];
+        final supersededRunCancelledBeforeRemoval = supersededRun.isCancelled;
+
+        expect(await notifier.removeTasksPersisted([taskId]), isTrue);
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(notifier.taskCompletions.map((item) => item.future))
+            .timeout(const Duration(seconds: 2));
+
+        expect(supersededRunCancelledBeforeRemoval, isTrue);
+        expect(supersededRun.isCancelled, isTrue);
+        expect(currentRun.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+        expect(notifier.uncancelledTaskCompletions, isEmpty);
+      } finally {
+        for (final release in notifier.taskReleases) {
           if (!release.isCompleted) release.complete();
         }
         await notifier.removeTasksPersisted([taskId]);
