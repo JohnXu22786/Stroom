@@ -298,6 +298,48 @@ void main() {
       expect(notifier.state[0].completedAt, isNotNull);
     });
 
+    test(
+      'cancelTask does not fail a same-ID replacement created during step notification',
+      () async {
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(type: BackgroundTaskType.ocr, title: '旧任务');
+        notifier.updateStep(id, 0, running: true);
+        notifier.registerCancellationForGeneration(
+          id,
+          notifier.taskById(id)!,
+          () {},
+        );
+
+        var replaced = false;
+        notifier.addListener((_) {
+          final task = notifier.taskById(id);
+          if (replaced ||
+              task?.title != '旧任务' ||
+              task!.steps.first.status != BgStepStatus.failed) {
+            return;
+          }
+
+          replaced = true;
+          notifier.removeTask(id);
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: '替换任务',
+            taskId: id,
+          );
+        });
+
+        notifier.cancelTask(id);
+
+        expect(replaced, isTrue);
+        expect(notifier.state.single.title, '替换任务');
+        expect(notifier.state.single.status, TaskStatus.running);
+        expect(notifier.state.single.error, isNull);
+
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      },
+    );
+
     test('removeTask removes task from list (manual removal)', () {
       final notifier = BackgroundTaskNotifier();
 
@@ -4339,7 +4381,7 @@ void main() {
     );
 
     test(
-      'back-to-back OCR removals preserve cache referenced by a failed snapshot',
+      'back-to-back OCR removals preserve cache while deletion retry fails',
       () async {
         WebFileStore.enableTestMode();
         final imageBytes = Uint8List.fromList([31, 32, 33, 34]);
@@ -4374,7 +4416,7 @@ void main() {
             if (writeCount == 1) {
               firstWriteEntered.complete();
               await resumeFirstWrite.future;
-            } else if (writeCount == 2) {
+            } else if (writeCount == 2 || writeCount == 3) {
               throw StateError('simulated second removal write failure');
             }
           };
@@ -5049,7 +5091,7 @@ void main() {
       },
     );
     test(
-      'later pre-restore write retains removals after a failed removal write',
+      'later pre-restore write retains removals after both removal writes fail',
       () async {
         const removedTaskId = 'removed-before-failed-write';
         const addedTaskId = 'added-after-failed-removal';
@@ -5066,8 +5108,8 @@ void main() {
 
         var writeAttempts = 0;
         BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
-          if (writeAttempts++ == 0) {
-            throw StateError('simulated first task snapshot write failure');
+          if (writeAttempts++ < 2) {
+            throw StateError('simulated task snapshot write failure');
           }
         };
 
@@ -5076,6 +5118,7 @@ void main() {
         try {
           notifier.removeTask(removedTaskId);
           await notifier.pendingPersistence;
+          expect(writeAttempts, 2);
           expect(
             (jsonDecode(
               await _tasksFileIn(testDir.path).readAsString(),
@@ -5092,7 +5135,7 @@ void main() {
             taskId: addedTaskId,
           );
           await notifier.pendingPersistence;
-          expect(writeAttempts, 2);
+          expect(writeAttempts, 3);
           final persistedIds = (jsonDecode(
             await _tasksFileIn(testDir.path).readAsString(),
           ) as List)
@@ -5105,6 +5148,130 @@ void main() {
           expect(reloaded.taskById(removedTaskId), isNull);
           expect(reloaded.taskById(addedTaskId), isNotNull);
         } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          reloaded.dispose();
+          await reloaded.pendingPersistence;
+        }
+      },
+    );
+    test(
+      'removeTask retries a failed snapshot write before another mutation',
+      () async {
+        const taskId = 'removed-after-transient-snapshot-failure';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Persisted task to remove',
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          if (writeAttempts++ == 0) {
+            throw StateError('simulated transient task snapshot write failure');
+          }
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        final reloaded = BackgroundTaskNotifier();
+        try {
+          notifier.removeTask(taskId);
+          await notifier.pendingPersistence;
+
+          final persisted =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          await reloaded.restoreFromPersistence();
+          await reloaded.pendingPersistence;
+          expect(
+            reloaded.taskById(taskId),
+            isNull,
+            reason: 'a fresh provider must not restore the removed task',
+          );
+          expect(persisted, isEmpty);
+          expect(writeAttempts, 2);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          reloaded.dispose();
+          await reloaded.pendingPersistence;
+        }
+      },
+    );
+    test(
+      'failed removal retry keeps a same-ID replacement task',
+      () async {
+        const taskId = 'replacement-after-failed-removal-write';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'Persisted task to remove',
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final firstWriteStarted = Completer<void>();
+        final resumeFirstWrite = Completer<void>();
+        var writeAttempts = 0;
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          final attempt = writeAttempts++;
+          if (attempt == 0) {
+            firstWriteStarted.complete();
+            await resumeFirstWrite.future;
+            throw StateError('simulated transient task snapshot write failure');
+          }
+          if (attempt == 2) {
+            throw StateError('simulated queued replacement write failure');
+          }
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        final reloaded = BackgroundTaskNotifier();
+        try {
+          notifier.removeTask(taskId);
+          await firstWriteStarted.future;
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Replacement task with the same ID',
+            startImmediately: false,
+            taskId: taskId,
+          );
+
+          resumeFirstWrite.complete();
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 3);
+          final persisted =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(persisted.whereType<Map>(), hasLength(1));
+          expect(persisted.whereType<Map>().single['id'], taskId);
+          expect(
+            persisted.whereType<Map>().single['title'],
+            'Replacement task with the same ID',
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          await reloaded.restoreFromPersistence();
+          await reloaded.pendingPersistence;
+          expect(
+            reloaded.taskById(taskId)?.title,
+            'Replacement task with the same ID',
+          );
+        } finally {
+          if (!resumeFirstWrite.isCompleted) resumeFirstWrite.complete();
           BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
           notifier.dispose();
           await notifier.pendingPersistence;

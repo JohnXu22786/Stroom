@@ -8,6 +8,7 @@ internal object KeepAliveScheduleIntervals {
 internal const val KEEP_ALIVE_ALARM_ACTION = "com.johntsui.stroom.KEEP_ALIVE"
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_ACTION = "com.johntsui.stroom.KEEP_ALIVE_REVOCATION_BACKUP"
 internal const val KEEP_ALIVE_ALARM_REQUEST_CODE = 2001
+internal const val KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE = 2003
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE = 2002
 internal const val KEEP_ALIVE_REVOCATION_BACKUP_GRACE_MS = 60_000L
 
@@ -24,36 +25,50 @@ internal fun scheduleCompatibleRevocationBackup(
     scheduleLegacy()
 }
 
+internal fun scheduleLegacyInexactPrimary(
+    scheduleRepeating: () -> Boolean,
+    cancelPreviousPrimary: () -> Unit,
+): Boolean {
+    if (!scheduleRepeating()) return false
+    cancelPreviousPrimary()
+    return true
+}
+
 internal fun scheduleWithExactRevocationFallback(
     canScheduleExact: Boolean,
     scheduleExact: () -> Boolean,
     scheduleRevocationFallback: () -> Boolean,
     scheduleInexactPrimary: () -> Boolean,
+    cancelPreviousPrimaryAfterInexactFallback: () -> Unit = {},
 ): Boolean {
-    val exactScheduled = canScheduleExact && scheduleExact()
-    if (exactScheduled) {
-        if (scheduleRevocationFallback()) return true
-
-        // The exact primary is already queued with its PendingIntent. Retrying
-        // it as inexact would replace the foreground-service-eligible alarm.
-        // Retry only the missing backup; a failed retry remains eligible for
-        // the caller's bounded scheduling retry.
-        return scheduleRevocationFallback()
+    // Arm recovery first so process death cannot strand a new exact alarm
+    // before its revocation fallback is pending. If that fails, leave an
+    // inexact primary before retrying the backup.
+    var inexactPrimaryScheduled = false
+    var revocationBackupScheduled = scheduleRevocationFallback()
+    if (!revocationBackupScheduled) {
+        inexactPrimaryScheduled = scheduleInexactPrimary()
+        revocationBackupScheduled = scheduleRevocationFallback()
+        if (!revocationBackupScheduled) {
+            if (!inexactPrimaryScheduled) scheduleInexactPrimary()
+            return false
+        }
     }
 
-    if (scheduleInexactPrimary()) {
-        // Keep a same-generation recovery delivery in case this one-shot is
-        // consumed and the process stops before the receiver can rearm it. The
-        // caller also needs the backup result to retry if only the primary was
-        // successfully scheduled.
-        return scheduleRevocationFallback()
+    val exactScheduled = canScheduleExact && scheduleExact()
+    if (exactScheduled) {
+        return true
+    }
+
+    if (inexactPrimaryScheduled || scheduleInexactPrimary()) {
+        // Replacing the old primary is safe only after its recovery backup is pending.
+        cancelPreviousPrimaryAfterInexactFallback()
+        return true
     }
 
     // Keep any already queued backup alive if the replacement primary failed.
-    // When there was no backup, make one last bounded attempt to leave a future
-    // receiver delivery that can recover the watchdog.
-    val fallbackScheduled = scheduleRevocationFallback()
-    return fallbackScheduled
+    // The caller schedules its bounded retry if this last attempt also fails.
+    return scheduleRevocationFallback()
 }
 
 internal fun claimAlarmDeliveryGeneration(

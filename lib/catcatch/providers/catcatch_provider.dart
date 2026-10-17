@@ -177,28 +177,39 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (state[index].status != TaskStatus.paused) return;
 
     final task = state[index];
+    final latestRuntimeTask = state.lastWhere((t) => t.id == id);
+    final resumeSnapshot = task.copyWith(
+      steps: latestRuntimeTask.steps,
+      detectedMedia: latestRuntimeTask.detectedMedia,
+      selectedMedia: latestRuntimeTask.selectedMedia,
+      progress: latestRuntimeTask.progress,
+      downloadedFilePath: latestRuntimeTask.downloadedFilePath,
+      downloadedBytes: latestRuntimeTask.downloadedBytes,
+      clearSelectedMedia: latestRuntimeTask.selectedMedia == null,
+      clearDownloadedFilePath: latestRuntimeTask.downloadedFilePath == null,
+    );
     // 如果卡在 userSelecting 步骤，让 _executeSteps 自然处理
 
     // 找到第一个未完成的步骤
     StepType? firstIncomplete;
     int firstIncompleteIndex = -1;
-    for (int i = 0; i < task.steps.length; i++) {
-      if (!task.steps[i].completed) {
-        firstIncomplete = task.steps[i].type;
+    for (int i = 0; i < resumeSnapshot.steps.length; i++) {
+      if (!resumeSnapshot.steps[i].completed) {
+        firstIncomplete = resumeSnapshot.steps[i].type;
         firstIncompleteIndex = i;
         break;
       }
     }
 
     // 重置该步骤及之后为 pending
-    final newSteps = List<StepStatus>.from(task.steps);
+    final newSteps = List<StepStatus>.from(resumeSnapshot.steps);
     if (firstIncompleteIndex >= 0) {
       for (int i = firstIncompleteIndex; i < newSteps.length; i++) {
         newSteps[i] = StepStatus.pending(newSteps[i].type);
       }
     }
 
-    final updated = task.copyWith(
+    final updated = resumeSnapshot.copyWith(
       status: TaskStatus.running,
       steps: newSteps,
       clearError: true,
@@ -697,12 +708,9 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       final restoredTasks = <String, CatCatchTask>{};
       for (final task in migrated) {
         if (removedTaskIds.contains(task.id)) continue;
-        restoredTasks.putIfAbsent(
-          task.id,
-          () => task.status == TaskStatus.running
-              ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
-              : task,
-        );
+        restoredTasks[task.id] = task.status == TaskStatus.running
+            ? task.copyWith(status: TaskStatus.paused, error: '应用重启，已暂停')
+            : task;
       }
 
       final hadConcurrentChanges =
@@ -847,7 +855,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
             // 如果外部已将任务暂停，保留暂停状态，不覆盖
@@ -950,25 +958,41 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
-            final currentStatus = state[index].status;
-            // 如果外部已将任务暂停，保留暂停状态，不覆盖
-            if (currentStatus == TaskStatus.paused &&
-                updated.status == TaskStatus.running) {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index)
-                    updated.copyWith(status: TaskStatus.paused)
-                  else
-                    state[i],
-              ];
-            } else {
-              state = [
-                for (int i = 0; i < state.length; i++)
-                  if (i == index) updated else state[i],
-              ];
+            final current = state[index];
+            final mergedMetadata = Map<String, String>.from(current.metadata);
+            for (final key in task.metadata.keys) {
+              if (!updated.metadata.containsKey(key)) {
+                mergedMetadata.remove(key);
+              }
             }
+            for (final entry in updated.metadata.entries) {
+              if (task.metadata[entry.key] != entry.value) {
+                mergedMetadata[entry.key] = entry.value;
+              }
+            }
+
+            final runtimeUpdate = updated.copyWith(
+              url: current.url,
+              expectedDurationSec: current.expectedDurationSec,
+              title:
+                  current.title != task.title ? current.title : updated.title,
+              createdAt: current.createdAt,
+              statusChangedAt: updated.status == task.status
+                  ? current.statusChangedAt
+                  : updated.statusChangedAt,
+              metadata: mergedMetadata,
+            );
+            final next = current.status == TaskStatus.paused &&
+                    updated.status == TaskStatus.running
+                // 如果外部已将任务暂停，保留暂停状态，不覆盖
+                ? runtimeUpdate.copyWith(status: TaskStatus.paused)
+                : runtimeUpdate;
+            state = [
+              for (int i = 0; i < state.length; i++)
+                if (i == index) next else state[i],
+            ];
           }
           _persistTasks();
         },

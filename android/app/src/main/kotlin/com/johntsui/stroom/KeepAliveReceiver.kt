@@ -71,6 +71,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "KeepAliveReceiver"
         private const val ALARM_REQUEST_CODE = KEEP_ALIVE_ALARM_REQUEST_CODE
+        private const val INEXACT_ALARM_REQUEST_CODE = KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE
         private const val REVOCATION_BACKUP_REQUEST_CODE = KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE
         private const val SCHEDULE_RETRY_DELAY_MS = 1_000L
         private const val KEY_KEEP_ALIVE_ALARM_GENERATION = "keep_alive_alarm_generation"
@@ -203,11 +204,24 @@ class KeepAliveReceiver : BroadcastReceiver() {
                 Log.e(TAG, "Failed to persist keep-alive alarm generation")
                 return false
             }
-            val pendingIntent = createPendingIntent(
+            val exactPendingIntent = createPendingIntent(
                 context,
                 PendingIntent.FLAG_UPDATE_CURRENT,
                 ACTION_KEEP_ALIVE,
                 ALARM_REQUEST_CODE,
+                generation,
+            )
+            val inexactPendingIntent = createPendingIntent(
+                context,
+                PendingIntent.FLAG_UPDATE_CURRENT,
+                ACTION_KEEP_ALIVE,
+                INEXACT_ALARM_REQUEST_CODE,
+                generation,
+            )
+            updateExistingPendingIntentGeneration(
+                context,
+                ACTION_KEEP_ALIVE,
+                INEXACT_ALARM_REQUEST_CODE,
                 generation,
             )
             updateExistingPendingIntentGeneration(
@@ -227,8 +241,11 @@ class KeepAliveReceiver : BroadcastReceiver() {
                         alarmManager.setExactAndAllowWhileIdle(
                             AlarmManager.ELAPSED_REALTIME_WAKEUP,
                             triggerAt,
-                            pendingIntent,
+                            exactPendingIntent,
                         )
+                        // Remove an inexact recovery primary from the previous
+                        // setup now that recovery and the exact replacement are armed.
+                        alarmManager.cancel(inexactPendingIntent)
                         Log.i(TAG, "Keep-alive exact alarm scheduled (interval=${intervalMs / 60000}min)")
                         true
                     } catch (e: SecurityException) {
@@ -283,27 +300,38 @@ class KeepAliveReceiver : BroadcastReceiver() {
                             alarmManager.setAndAllowWhileIdle(
                                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
                                 triggerAt,
-                                pendingIntent,
+                                inexactPendingIntent,
                             )
                             Log.i(TAG, "Keep-alive inexact alarm scheduled (interval=${intervalMs / 60000}min)")
                         } else {
-                            alarmManager.setInexactRepeating(
-                                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                                triggerAt,
-                                // 退避间隔同样作用于重复周期：API < 23 上
-                                // 只有首触发间隔会被尊重，重复周期必须显式
-                                // 传 intervalMs，否则退避设备仍每 5 分钟
-                                // 被唤醒一次。
-                                intervalMs,
-                                pendingIntent,
+                            scheduleLegacyInexactPrimary(
+                                scheduleRepeating = {
+                                    alarmManager.setInexactRepeating(
+                                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                                        triggerAt,
+                                        // 退避间隔同样作用于重复周期：API < 23 上
+                                        // 只有首触发间隔会被尊重，重复周期必须显式
+                                        // 传 intervalMs，否则退避设备仍每 5 分钟
+                                        // 被唤醒一次。
+                                        intervalMs,
+                                        inexactPendingIntent,
+                                    )
+                                    Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
+                                    true
+                                },
+                                cancelPreviousPrimary = {
+                                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
+                                },
                             )
-                            Log.i(TAG, "Keep-alive repeating alarm scheduled (interval=${intervalMs / 60000}min)")
                         }
                         true
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to schedule keep-alive alarm", e)
                         false
                     }
+                },
+                cancelPreviousPrimaryAfterInexactFallback = {
+                    cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
                 },
             )
         }
@@ -320,6 +348,7 @@ class KeepAliveReceiver : BroadcastReceiver() {
 
         private fun cancelScheduledAlarms(context: Context) {
             cancelAlarmIntent(context, ACTION_KEEP_ALIVE, ALARM_REQUEST_CODE)
+            cancelAlarmIntent(context, ACTION_KEEP_ALIVE, INEXACT_ALARM_REQUEST_CODE)
             cancelAlarmIntent(
                 context,
                 ACTION_KEEP_ALIVE_REVOCATION_BACKUP,

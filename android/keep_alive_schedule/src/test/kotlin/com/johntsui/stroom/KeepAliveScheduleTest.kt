@@ -8,9 +8,11 @@ import org.junit.Test
 
 class KeepAliveScheduleTest {
     @Test
-    fun exactWatchdogAndRevocationBackupUseDistinctPendingIntentIdentity() {
+    fun exactAndInexactWatchdogsAndRevocationBackupUseDistinctPendingIntentIdentity() {
         assertNotEquals(KEEP_ALIVE_ALARM_ACTION, KEEP_ALIVE_REVOCATION_BACKUP_ACTION)
         assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
+        assertNotEquals(KEEP_ALIVE_ALARM_REQUEST_CODE, KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE)
+        assertNotEquals(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE, KEEP_ALIVE_REVOCATION_BACKUP_REQUEST_CODE)
     }
 
     @Test
@@ -18,16 +20,25 @@ class KeepAliveScheduleTest {
         val exactTriggerAt = 300_000L
         assertEquals(60_000L, revocationBackupTriggerAt(exactTriggerAt) - exactTriggerAt)
         val operations = mutableListOf<String>()
+        var backupPending = false
 
         val scheduled = scheduleWithExactRevocationFallback(
             canScheduleExact = true,
-            scheduleExact = { operations += "exact"; true },
-            scheduleRevocationFallback = { operations += "backup"; true },
+            scheduleExact = {
+                operations += "exact"
+                assertTrue("Schedule the recovery backup before the exact alarm", backupPending)
+                true
+            },
+            scheduleRevocationFallback = {
+                operations += "backup"
+                backupPending = true
+                true
+            },
             scheduleInexactPrimary = { operations += "inexact-primary"; true },
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("exact", "backup"), operations)
+        assertEquals(listOf("backup", "exact"), operations)
     }
 
     @Test
@@ -42,7 +53,7 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary"), operations)
 
         operations.clear()
         val exactAttemptFailed = scheduleWithExactRevocationFallback(
@@ -53,7 +64,7 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(exactAttemptFailed)
-        assertEquals(listOf("exact", "inexact-primary", "backup"), operations)
+        assertEquals(listOf("backup", "exact", "inexact-primary"), operations)
     }
 
     @Test
@@ -68,7 +79,7 @@ class KeepAliveScheduleTest {
                 scheduleExact = { operations += "exact"; true },
                 scheduleRevocationFallback = {
                     operations += "backup"
-                    ++backupAttempts > 1
+                    ++backupAttempts > 2
                 },
                 scheduleInexactPrimary = { operations += "inexact-primary"; true },
             )
@@ -85,13 +96,16 @@ class KeepAliveScheduleTest {
         )
 
         assertFalse(scheduled)
-        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
         assertEquals(1, retryQueue.size)
 
         retryQueue.single().invoke()
 
         assertTrue(retryScheduleSucceeded)
-        assertEquals(listOf("inexact-primary", "backup", "inexact-primary", "backup"), operations)
+        assertEquals(
+            listOf("backup", "inexact-primary", "backup", "backup", "inexact-primary"),
+            operations,
+        )
     }
 
     @Test
@@ -117,7 +131,7 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary"), operations)
         val scheduledPrimaryGeneration = checkNotNull(primaryGeneration)
         val scheduledBackupGeneration = checkNotNull(backupGeneration)
         assertEquals(scheduledPrimaryGeneration, scheduledBackupGeneration)
@@ -196,8 +210,55 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("exact", "backup", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary", "backup", "exact"), operations)
         assertEquals("exact", primarySchedule)
+    }
+
+    @Test
+    fun failedBackupSetupDoesNotReplacePendingExactPrimary() {
+        val operations = mutableListOf<String>()
+        val retryQueue = mutableListOf<() -> Unit>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "exact")
+        var backupAttempts = 0
+        val schedule = {
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = true,
+                scheduleExact = {
+                    operations += "exact"
+                    pendingPrimaryAlarms[KEEP_ALIVE_ALARM_REQUEST_CODE] = "exact"
+                    true
+                },
+                scheduleRevocationFallback = {
+                    operations += "backup"
+                    ++backupAttempts > 2
+                },
+                // Exact and inexact primaries use different PendingIntent
+                // identities, so arming fallback cannot replace the exact one.
+                scheduleInexactPrimary = {
+                    operations += "inexact-primary"
+                    pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "inexact"
+                    true
+                },
+                cancelPreviousPrimaryAfterInexactFallback = {
+                    operations += "cancel-old-primary"
+                    pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+                },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = schedule,
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
+        )
+
+        assertFalse(scheduled)
+        assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
+        assertEquals(2, backupAttempts)
+        assertEquals("exact", pendingPrimaryAlarms[KEEP_ALIVE_ALARM_REQUEST_CODE])
+        assertEquals("inexact", pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE])
+        assertEquals(1, retryQueue.size)
     }
 
     @Test
@@ -212,22 +273,81 @@ class KeepAliveScheduleTest {
         )
 
         assertTrue(scheduled)
-        assertEquals(listOf("inexact-primary", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
     }
 
     @Test
-    fun missingRevocationBackupKeepsBoundedRetryEligibleDespiteExactPrimary() {
+    fun successfulInexactFallbackReplacesPreviousPrimaryIdentity() {
         val operations = mutableListOf<String>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "old-inexact")
 
         val scheduled = scheduleWithExactRevocationFallback(
-            canScheduleExact = true,
+            canScheduleExact = false,
             scheduleExact = { operations += "exact"; true },
-            scheduleRevocationFallback = { operations += "backup"; false },
-            scheduleInexactPrimary = { operations += "inexact-primary"; false },
+            scheduleRevocationFallback = { operations += "backup"; true },
+            scheduleInexactPrimary = {
+                operations += "inexact-primary"
+                pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "inexact"
+                true
+            },
+            cancelPreviousPrimaryAfterInexactFallback = {
+                operations += "cancel-old-primary"
+                pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+            },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("backup", "inexact-primary", "cancel-old-primary"), operations)
+        assertEquals(mapOf(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE to "inexact"), pendingPrimaryAlarms)
+    }
+
+    @Test
+    fun legacyInexactFallbackCancelsPreviousPrimaryAfterReplacementIsScheduled() {
+        val operations = mutableListOf<String>()
+        val pendingPrimaryAlarms = mutableMapOf(KEEP_ALIVE_ALARM_REQUEST_CODE to "legacy-repeating")
+
+        val scheduled = scheduleLegacyInexactPrimary(
+            scheduleRepeating = {
+                operations += "schedule-replacement"
+                pendingPrimaryAlarms[KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE] = "repeating"
+                true
+            },
+            cancelPreviousPrimary = {
+                operations += "cancel-legacy"
+                pendingPrimaryAlarms.remove(KEEP_ALIVE_ALARM_REQUEST_CODE)
+            },
+        )
+
+        assertTrue(scheduled)
+        assertEquals(listOf("schedule-replacement", "cancel-legacy"), operations)
+        assertEquals(mapOf(KEEP_ALIVE_INEXACT_ALARM_REQUEST_CODE to "repeating"), pendingPrimaryAlarms)
+    }
+
+    @Test
+    fun missingRevocationBackupAvoidsExactPrimaryAndKeepsBoundedRetryEligible() {
+        val operations = mutableListOf<String>()
+        val retryQueue = mutableListOf<() -> Unit>()
+        var exactAttempts = 0
+        val schedule = {
+            scheduleWithExactRevocationFallback(
+                canScheduleExact = true,
+                scheduleExact = { exactAttempts++; operations += "exact"; true },
+                scheduleRevocationFallback = { operations += "backup"; false },
+                scheduleInexactPrimary = { operations += "inexact-primary"; true },
+            )
+        }
+
+        val scheduled = scheduleAlarmWithRetry(
+            schedule = schedule,
+            retrySchedule = schedule,
+            isStillActive = { true },
+            retryLater = { retryQueue += it },
         )
 
         assertFalse(scheduled)
-        assertEquals(listOf("exact", "backup", "backup"), operations)
+        assertEquals(listOf("backup", "inexact-primary", "backup"), operations)
+        assertEquals(0, exactAttempts)
+        assertEquals(1, retryQueue.size)
     }
 
     @Test

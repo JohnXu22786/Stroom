@@ -18,6 +18,8 @@ const _serviceContent = '后台任务运行中…';
 /// Android system killing the process for memory), the app can restore
 /// the background service on the next cold start.
 const _backgroundServiceEnabledKey = 'background_service_enabled';
+const _failedStopIntentRestorePendingKey =
+    'background_service_failed_stop_restore_pending';
 
 /// SharedPreferences keys for individual keep-alive strategy toggles.
 /// All default to true (maximum protection). Users can disable
@@ -49,12 +51,18 @@ final Map<String, Completer<void>> _recoveryOptionWriteQueues = {};
 // the user's latest choice over a stale preference value.
 bool? _explicitUserEnabledInProcess;
 bool _serviceStopMayBePending = false;
+// Retain failed-stop recovery in memory while its durable marker is being
+// written or native intent restoration is still failing.
+bool _failedStopIntentRestorePending = false;
+bool _failedStopIntentRestoreMarkerDurable = false;
 
 @visibleForTesting
 void resetBackgroundServiceLifecycleStateForTesting() {
   _serviceLifecycleQueue = Future<void>.value();
   _explicitUserEnabledInProcess = null;
   _serviceStopMayBePending = false;
+  _failedStopIntentRestorePending = false;
+  _failedStopIntentRestoreMarkerDurable = false;
 }
 
 Future<T> _withServiceLifecycleLock<T>(Future<T> Function() operation) async {
@@ -216,13 +224,18 @@ Future<bool> startBackgroundService({bool persistEnabled = true}) =>
         if (persistEnabled) {
           if (!await _setServiceEnabledPreference(true)) return false;
           _explicitUserEnabledInProcess = true;
+          _failedStopIntentRestorePending = false;
+          _failedStopIntentRestoreMarkerDurable = false;
+          await _setFailedStopIntentRestorePendingPreference(false);
         }
         final persistentIntentEnabled = persistEnabled ||
             await _isBackgroundServiceEnabled(
               assumeEnabledOnReadError: false,
-            );
-        Future<bool> scheduleKeepAlive() =>
-            persistEnabled ? _enableKeepAlive() : _rearmKeepAlive();
+            ) ||
+            await _hasFailedStopIntentRestorePending();
+        Future<bool> scheduleKeepAlive() => persistEnabled
+            ? _enableKeepAlive()
+            : _rearmKeepAliveForCurrentIntent();
 
         // Android 13+ 上通知权限决定前台服务通知是否可见。
         // 权限被拒绝时服务仍能启动（仅通知不可见），因此请求失败不阻塞。
@@ -309,6 +322,17 @@ Future<bool> stopBackgroundService() =>
 Future<bool> _stopBackgroundService() async {
   await AppLogService.info('BackgroundService', '停止后台服务');
   try {
+    // Clear any failed-stop recovery marker before persisting an explicit
+    // stop, so a later cold start cannot revive a service the user stopped.
+    final failedStopRestorePending =
+        await _readFailedStopIntentRestorePending();
+    if (failedStopRestorePending != false) {
+      if (!await _setFailedStopIntentRestorePendingPreference(false)) {
+        return false;
+      }
+      _failedStopIntentRestorePending = false;
+      _failedStopIntentRestoreMarkerDurable = false;
+    }
     final service = FlutterBackgroundService();
     final wasEnabled = await _isBackgroundServiceEnabled(
       assumeEnabledOnReadError: true,
@@ -324,13 +348,32 @@ Future<bool> _stopBackgroundService() async {
         // Keep the old recovery behavior if the stop was not confirmed.
         _explicitUserEnabledInProcess = true;
         final rollbackPersisted = await _setServiceEnabledPreference(true);
-        await _rearmKeepAlive(
+        _failedStopIntentRestorePending =
+            !rollbackPersisted && isBackgroundServiceSupported();
+        if (_failedStopIntentRestorePending) {
+          _failedStopIntentRestoreMarkerDurable =
+              await _setFailedStopIntentRestorePendingPreference(true);
+          if (!_failedStopIntentRestoreMarkerDurable) {
+            // A transient preference write rejection must not leave recovery
+            // dependent on this process's in-memory state.
+            _failedStopIntentRestoreMarkerDurable =
+                await _setFailedStopIntentRestorePendingPreference(true);
+          }
+        }
+        final recoverySucceeded = await _rearmKeepAlive(
           restoreEnabledIntent: !rollbackPersisted,
         );
+        if (recoverySucceeded && _failedStopIntentRestorePending) {
+          _failedStopIntentRestorePending = false;
+          _failedStopIntentRestoreMarkerDurable = false;
+          await _setFailedStopIntentRestorePendingPreference(false);
+        }
       }
       rethrow;
     }
     _explicitUserEnabledInProcess = false;
+    _failedStopIntentRestorePending = false;
+    _failedStopIntentRestoreMarkerDurable = false;
     await AppLogService.info('BackgroundService', '后台服务已停止');
     // A rejected preference write must leave recovery armed while persisted
     // enabled intent is still true, even though the stop request was sent.
@@ -398,6 +441,9 @@ Future<bool> restartBackgroundService() => _withServiceLifecycleLock(() async {
         // process-only start.
         if (!await _setServiceEnabledPreference(true)) return false;
         _explicitUserEnabledInProcess = true;
+        _failedStopIntentRestorePending = false;
+        _failedStopIntentRestoreMarkerDurable = false;
+        await _setFailedStopIntentRestorePendingPreference(false);
 
         final service = FlutterBackgroundService();
         try {
@@ -461,18 +507,23 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!isBackgroundServiceSupported()) return;
 
   try {
+    // The failed-stop marker survives process death, unlike the in-process
+    // choice. Restore it before treating a stale disabled preference as final.
+    if (await _hasFailedStopIntentRestorePending()) {
+      await _rearmKeepAliveForCurrentIntent();
+    }
     final wasEnabled = await _readBackgroundServiceEnabled();
     if (wasEnabled == null) {
       // Intent is unknown, so do not start immediately. Rearm the watchdog;
       // the native receiver checks the durable enabled state before recovery.
-      await _rearmKeepAlive();
+      await _rearmKeepAliveForCurrentIntent();
       return;
     }
     if (!wasEnabled) return;
     if (!await isColdStartRestoreEnabled()) {
       // This toggle suppresses an immediate start, but the persisted enabled
       // intent still needs the watchdog armed for a later recovery attempt.
-      await _rearmKeepAlive();
+      await _rearmKeepAliveForCurrentIntent();
       return;
     }
 
@@ -487,7 +538,7 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
       // 重新武装 AlarmManager 看门狗：进程被强杀/应用更新后闹钟可能丢失，
       // 即使冷启动恢复服务失败，也必须同步重新调度，否则看门狗会永久失效。
       // 注意：恢复场景不清零失败计数（见 _rearmKeepAlive 注释）。
-      await _rearmKeepAlive();
+      await _rearmKeepAliveForCurrentIntent();
     }
   } catch (e) {
     debugPrint('[BackgroundService] Failed to restore background service: $e');
@@ -518,6 +569,58 @@ Future<bool> _setServiceEnabledPreference(bool enabled) async {
   }
 }
 
+Future<bool> _setFailedStopIntentRestorePendingPreference(bool pending) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final saved =
+        await prefs.setBool(_failedStopIntentRestorePendingKey, pending);
+    if (!saved) {
+      await prefs.reload();
+      final savedValue = prefs.getBool(_failedStopIntentRestorePendingKey);
+      if (savedValue == pending || (!pending && savedValue != true)) {
+        return true;
+      }
+      throw StateError(
+          'SharedPreferences rejected failed-stop recovery state.');
+    }
+    return true;
+  } catch (e) {
+    debugPrint(
+        '[BackgroundService] Failed to save failed-stop recovery state: $e');
+    await AppLogService.error('BackgroundService', '保存停止恢复状态失败', e);
+    return false;
+  }
+}
+
+Future<bool> _hasFailedStopIntentRestorePending() async {
+  return await _readFailedStopIntentRestorePending() ?? false;
+}
+
+Future<bool?> _readFailedStopIntentRestorePending() async {
+  if (_failedStopIntentRestorePending) return true;
+
+  Future<bool?> readOnce() async {
+    try {
+      final pending = await StartupPreferences.getBool(
+        _failedStopIntentRestorePendingKey,
+      );
+      final resolvedPending = pending ?? false;
+      if (resolvedPending) {
+        _failedStopIntentRestorePending = true;
+        _failedStopIntentRestoreMarkerDurable = true;
+      }
+      return resolvedPending;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // A one-off preference-store read error must not let cold start honor a
+  // stale disabled intent while this durable recovery marker is still set.
+  final pending = await readOnce();
+  return pending ?? await readOnce();
+}
+
 Future<bool> _isBackgroundServiceEnabled({
   bool assumeEnabledOnReadError = true,
 }) async {
@@ -543,6 +646,8 @@ Future<bool?> _readBackgroundServiceEnabled() async {
 /// The decision and service start share a lock to preserve concurrent user intent.
 Future<bool> stopBackgroundServiceIfNotUserEnabled() =>
     _withServiceLifecycleLock(() async {
+      // A read error leaves intent unknown, so implicit cleanup must defer.
+      if (await _readFailedStopIntentRestorePending() != false) return false;
       if (await _isBackgroundServiceEnabled()) return false;
       return _stopBackgroundService();
     });
@@ -665,8 +770,15 @@ Future<bool> _enableKeepAlive() async {
 /// 与 [_enableKeepAlive] 的区别：只重新调度闹钟，不清零连续失败计数。
 /// 持久失败环境（Android 15 dataSync 上限、无电池豁免等）下，每次
 /// 打开应用都清零计数会让看门狗永远无法进入退避保护。
+/// On iOS, a restore request persists enabled intent because no watchdog
+/// channel is available.
 Future<bool> _rearmKeepAlive({bool restoreEnabledIntent = false}) async {
-  if (defaultTargetPlatform != TargetPlatform.android) return true;
+  if (defaultTargetPlatform != TargetPlatform.android) {
+    if (restoreEnabledIntent && defaultTargetPlatform == TargetPlatform.iOS) {
+      return _setServiceEnabledPreference(true);
+    }
+    return true;
+  }
   if (!restoreEnabledIntent && !await isWatchdogEnabled()) return true;
   try {
     final scheduled = await _keepAliveChannel
@@ -687,6 +799,24 @@ Future<bool> _rearmKeepAlive({bool restoreEnabledIntent = false}) async {
   }
 }
 
+Future<bool> _rearmKeepAliveForCurrentIntent() async {
+  final restoreEnabledIntent = await _hasFailedStopIntentRestorePending();
+  if (!restoreEnabledIntent) return _rearmKeepAlive();
+  if (!_failedStopIntentRestoreMarkerDurable) {
+    _failedStopIntentRestoreMarkerDurable =
+        await _setFailedStopIntentRestorePendingPreference(true);
+  }
+  final scheduled = await _rearmKeepAlive(
+    restoreEnabledIntent: restoreEnabledIntent,
+  );
+  if (restoreEnabledIntent && scheduled) {
+    _failedStopIntentRestorePending = false;
+    _failedStopIntentRestoreMarkerDurable = false;
+    await _setFailedStopIntentRestorePendingPreference(false);
+  }
+  return scheduled;
+}
+
 /// Re-arms the native watchdog without querying or starting the service.
 ///
 /// Recovery is scheduled only while the user's persistent service intent is
@@ -695,11 +825,12 @@ Future<bool> _rearmKeepAlive({bool restoreEnabledIntent = false}) async {
 Future<bool> rearmBackgroundServiceWatchdog() =>
     _withServiceLifecycleLock(() async {
       if (!await _isBackgroundServiceEnabled(
-        assumeEnabledOnReadError: true,
-      )) {
+            assumeEnabledOnReadError: true,
+          ) &&
+          !await _hasFailedStopIntentRestorePending()) {
         return true;
       }
-      return _rearmKeepAlive();
+      return _rearmKeepAliveForCurrentIntent();
     });
 
 Future<void> _disableKeepAlive() async {
@@ -799,7 +930,7 @@ Future<void> rearmKeepAliveOnResume() async {
   try {
     await _withServiceLifecycleLock(() async {
       if (!await _isBackgroundServiceEnabled(assumeEnabledOnReadError: true)) {
-        return;
+        if (!await _hasFailedStopIntentRestorePending()) return;
       }
       // 补武装：不清零失败计数（持久失败环境下看门狗应保持退避）。
       // 注意：这里不再检查「冷启动自动恢复」开关 —— 该开关只控制冷启动
@@ -808,7 +939,7 @@ Future<void> rearmKeepAliveOnResume() async {
       // 精确闹钟被系统撤销后会永久失去看门狗（resume 是唯一的补武装
       // 时机），而且已武装的闹钟触发时只检查 background_service_enabled，
       // 并不会因为冷启动开关而停止复活服务。
-      await _rearmKeepAlive();
+      await _rearmKeepAliveForCurrentIntent();
     });
   } catch (e) {
     debugPrint('[BackgroundService] Failed to re-arm keep-alive on resume: $e');

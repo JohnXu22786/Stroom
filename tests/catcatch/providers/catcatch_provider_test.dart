@@ -123,9 +123,14 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
   bool holdTaskExecutions = false;
   final retryCancelTokens = <CancelToken>[];
   final retryReleases = <Completer<void>>[];
+  final retryCompletions = <Completer<void>>[];
   final taskCancelTokens = <CancelToken>[];
   final taskReleases = <Completer<void>>[];
   final taskCompletions = <Completer<void>>[];
+  CatCatchTask? lastExecutedTask;
+  CatCatchTask? lastRetriedTask;
+  void Function(CatCatchTask)? lastTaskUpdate;
+  void Function(CatCatchTask)? lastRetryTaskUpdate;
   final uncancelledTaskCompletions = <String>[];
 
   void setTasksForTest(List<CatCatchTask> tasks) => state = tasks;
@@ -139,6 +144,8 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     required CancelToken cancelToken,
   }) async {
     executorStarts++;
+    lastExecutedTask = task;
+    lastTaskUpdate = onUpdate;
     onUpdate(task.copyWith(status: TaskStatus.running));
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
@@ -170,6 +177,8 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     required CancelToken cancelToken,
   }) async {
     executorStarts++;
+    lastRetriedTask = task;
+    lastRetryTaskUpdate = onUpdate;
     onUpdate(task.copyWith(status: TaskStatus.running));
     if (!executorStarted.isCompleted) executorStarted.complete();
     if (executorStarts == 2 && !secondExecutorStarted.isCompleted) {
@@ -178,8 +187,14 @@ class _CleanupCatCatchNotifier extends CatCatchNotifier {
     if (holdRetryExecutions) {
       retryCancelTokens.add(cancelToken);
       final release = Completer<void>();
+      final completion = Completer<void>();
       retryReleases.add(release);
-      await release.future;
+      retryCompletions.add(completion);
+      try {
+        await release.future;
+      } finally {
+        if (!completion.isCompleted) completion.complete();
+      }
     }
     return null;
   }
@@ -203,6 +218,7 @@ Future<CatCatchTask?> _waitForPersistedTaskForTest(
   Directory directory,
   String taskId, {
   TaskStatus expectedStatus = TaskStatus.failed,
+  int? expectedProgress,
 }) async {
   final file = File('${directory.path}/catcatch/tasks.json');
   final timeout = Stopwatch()..start();
@@ -214,9 +230,37 @@ Future<CatCatchTask?> _waitForPersistedTaskForTest(
         ),
       );
       for (final task in tasks) {
-        if (task.id == taskId && task.status == expectedStatus) {
+        if (task.id == taskId &&
+            task.status == expectedStatus &&
+            (expectedProgress == null || task.progress == expectedProgress)) {
           return task;
         }
+      }
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  return null;
+}
+
+Future<CatCatchTask?> _waitForPersistedLatestTaskForTest(
+  Directory directory,
+  String taskId, {
+  required int expectedProgress,
+}) async {
+  final file = File('${directory.path}/catcatch/tasks.json');
+  final timeout = Stopwatch()..start();
+  while (timeout.elapsed < const Duration(seconds: 5)) {
+    if (await file.exists()) {
+      final tasks = (jsonDecode(await file.readAsString()) as List)
+          .map(
+            (task) => CatCatchTask.fromMap(
+              Map<String, dynamic>.from(task as Map),
+            ),
+          )
+          .where((task) => task.id == taskId)
+          .toList();
+      if (tasks.length > 1 && tasks.last.progress == expectedProgress) {
+        return tasks.last;
       }
     }
     await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -1265,6 +1309,504 @@ void main() {
         }
         await notifier.removeTasksPersisted([taskId]);
       }
+    });
+
+    test(
+      'runtime updates from reused addTask ID survive fresh-provider restore',
+      () async {
+        const taskId = 'reused-add-task-progress';
+        const replacementMedia = MediaResource(
+          url: 'https://example.com/replacement.m3u8',
+          name: 'replacement',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final distinctBefore = task('progress-before');
+        final older = task(taskId).copyWith(
+          url: 'https://example.com/older.mp4',
+          metadata: const {'replacement': 'older'},
+        );
+        final distinctAfter = task('progress-after');
+        notifier.holdTaskExecutions = true;
+        notifier.setTasksForTest([distinctBefore, older, distinctAfter]);
+
+        try {
+          notifier.addTask(
+            'https://example.com/replacement-page',
+            90,
+            taskId: taskId,
+          );
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          expect(notifier.tasksForTest.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+            taskId,
+          ]);
+          final replacementExecution = notifier.lastExecutedTask!;
+          final runtimeUpdate = replacementExecution.copyWith(
+            status: TaskStatus.running,
+            steps: [
+              StepStatus.done(StepType.fetching),
+              StepStatus.progressing(StepType.downloading, 73),
+            ],
+            detectedMedia: const [replacementMedia],
+            selectedMedia: replacementMedia,
+            progress: 73,
+            downloadedFilePath: '/tmp/replacement.partial.mp4',
+            metadata: const {'replacement': 'newest'},
+            downloadedBytes: 1234,
+          );
+          notifier.lastTaskUpdate!(runtimeUpdate);
+
+          final persisted = await _waitForPersistedTaskForTest(
+            directory,
+            taskId,
+            expectedStatus: TaskStatus.running,
+            expectedProgress: runtimeUpdate.progress,
+          );
+          expect(persisted, isNotNull);
+          final persistedRecords = (jsonDecode(
+            await File(
+              '${directory.path}/catcatch/tasks.json',
+            ).readAsString(),
+          ) as List)
+              .map(
+                (record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ),
+              )
+              .toList();
+          expect(persistedRecords.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+            taskId,
+          ]);
+
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            notifier.taskCompletions.map((item) => item.future),
+          ).timeout(const Duration(seconds: 2));
+
+          // A fresh container models process restart and forces restore to pick
+          // the last persisted record for the duplicate task ID.
+          container.dispose();
+          containerDisposed = true;
+          container = ProviderContainer(
+            overrides: [
+              catcatchTasksProvider.overrideWith((ref) {
+                notifier = _CleanupCatCatchNotifier(ref);
+                return notifier;
+              }),
+            ],
+          );
+          containerDisposed = false;
+          container.read(catcatchTasksProvider);
+          await notifier.restoreUnfinishedTasks();
+
+          expect(notifier.tasksForTest.map((current) => current.id).toList(), [
+            'progress-before',
+            taskId,
+            'progress-after',
+          ]);
+          final restored = notifier.tasksForTest.singleWhere(
+            (current) => current.id == taskId,
+          );
+          expect(restored.url, runtimeUpdate.url);
+          expect(
+            restored.expectedDurationSec,
+            runtimeUpdate.expectedDurationSec,
+          );
+          expect(restored.progress, runtimeUpdate.progress);
+          expect(restored.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(restored.detectedMedia.single.url, replacementMedia.url);
+          expect(restored.selectedMedia?.url, replacementMedia.url);
+          expect(restored.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(restored.metadata, runtimeUpdate.metadata);
+          expect(restored.title, runtimeUpdate.title);
+          expect(restored.status, TaskStatus.paused);
+          expect(restored.error, '应用重启，已暂停');
+          expect(restored.steps.map((step) => step.progress).toList(), [
+            100,
+            73,
+          ]);
+        } finally {
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            notifier.taskCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([
+            taskId,
+            'progress-before',
+            'progress-after',
+          ]);
+        }
+      },
+    );
+
+    test(
+      'resuming duplicate IDs preserves the newest runtime snapshot',
+      () async {
+        const taskId = 'resume-newest-runtime-snapshot';
+        const staleMedia = MediaResource(
+          url: 'https://example.com/older.m3u8',
+          name: 'older',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        const newestMedia = MediaResource(
+          url: 'https://example.com/newest.m3u8',
+          name: 'newest',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final older = task(taskId).copyWith(
+          steps: StepType.values.map(StepStatus.pending).toList(),
+          detectedMedia: const [staleMedia],
+          selectedMedia: staleMedia,
+          progress: 8,
+          downloadedFilePath: '/tmp/older.partial.mp4',
+          downloadedBytes: 80,
+        );
+        final newest = task(taskId).copyWith(
+          steps: [
+            StepStatus.done(StepType.fetching, detail: 'newest fetched page'),
+            ...StepType.values.skip(1).map(StepStatus.pending),
+          ],
+          detectedMedia: const [newestMedia],
+          selectedMedia: newestMedia,
+          progress: 47,
+          downloadedFilePath: '/tmp/newest.partial.mp4',
+          downloadedBytes: 4700,
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newest]);
+        final executionNotifier = notifier;
+
+        try {
+          executionNotifier.resumeTask(taskId);
+          await executionNotifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          final persisted = await _waitForPersistedLatestTaskForTest(
+            directory,
+            taskId,
+            expectedProgress: newest.progress,
+          );
+          expect(persisted, isNotNull);
+          expect(persisted!.progress, newest.progress);
+          expect(persisted.steps.first.completed, isTrue);
+          expect(persisted.steps.first.detail, 'newest fetched page');
+          expect(
+            persisted.detectedMedia.map((media) => media.url).toList(),
+            [newestMedia.url],
+          );
+          expect(persisted.selectedMedia?.url, newestMedia.url);
+          expect(persisted.downloadedFilePath, newest.downloadedFilePath);
+          expect(persisted.downloadedBytes, newest.downloadedBytes);
+        } finally {
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      },
+    );
+
+    test(
+      'resume runtime updates persist to the newest duplicate task row',
+      () async {
+        const taskId = 'resumed-duplicate-task';
+        const staleMedia = MediaResource(
+          url: 'https://example.com/stale.m3u8',
+          name: 'stale',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        const resumedMedia = MediaResource(
+          url: 'https://example.com/resumed.m3u8',
+          name: 'resumed',
+          ext: 'm3u8',
+          isPlaylist: true,
+        );
+        final pendingSteps = StepType.values.map(StepStatus.pending).toList();
+        final older = task(taskId).copyWith(
+          url: 'https://example.com/older.mp4',
+          expectedDurationSec: 30,
+          steps: pendingSteps,
+          progress: 8,
+          metadata: const {
+            'stale-setting': 'older',
+            'runtime-key': 'before',
+          },
+        );
+        final newer = task(taskId).copyWith(
+          url: 'https://example.com/newer.mp4',
+          expectedDurationSec: 90,
+          title: 'Newest stale task',
+          createdAt: DateTime(2025, 1, 2),
+          steps: pendingSteps,
+          detectedMedia: const [staleMedia],
+          selectedMedia: staleMedia,
+          progress: 12,
+          downloadedFilePath: '/tmp/stale.partial.mp4',
+          metadata: const {
+            'stale-setting': 'newer',
+            'runtime-key': 'current',
+            'newest-only': 'preserved',
+          },
+          downloadedBytes: 345,
+        );
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newer]);
+        final executionNotifier = notifier;
+
+        try {
+          executionNotifier.resumeTask(taskId);
+          await executionNotifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+
+          final runtimeUpdate = executionNotifier.lastRetriedTask!.copyWith(
+            status: TaskStatus.running,
+            steps: [
+              StepStatus.done(StepType.fetching),
+              StepStatus.progressing(StepType.downloading, 73),
+            ],
+            detectedMedia: const [resumedMedia],
+            selectedMedia: resumedMedia,
+            progress: 73,
+            downloadedFilePath: '/tmp/resumed.partial.mp4',
+            metadata: const {
+              'stale-setting': 'older',
+              'runtime-key': 'after',
+            },
+            downloadedBytes: 1234,
+          );
+          executionNotifier.lastRetryTaskUpdate!(runtimeUpdate);
+
+          final persisted = await _waitForPersistedLatestTaskForTest(
+            directory,
+            taskId,
+            expectedProgress: runtimeUpdate.progress,
+          );
+          expect(persisted, isNotNull);
+          expect(persisted!.detectedMedia.single.url, resumedMedia.url);
+          expect(persisted.selectedMedia?.url, resumedMedia.url);
+          expect(
+              persisted.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(persisted.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(persisted.url, newer.url);
+          expect(persisted.expectedDurationSec, newer.expectedDurationSec);
+          expect(persisted.title, newer.title);
+          expect(persisted.createdAt, newer.createdAt);
+          expect(persisted.metadata, {
+            'stale-setting': 'newer',
+            'runtime-key': 'after',
+            'newest-only': 'preserved',
+          });
+
+          final persistedRecords = (jsonDecode(
+            await File('${directory.path}/catcatch/tasks.json').readAsString(),
+          ) as List)
+              .map(
+                (record) => CatCatchTask.fromMap(
+                  Map<String, dynamic>.from(record as Map),
+                ),
+              )
+              .toList();
+          expect(persistedRecords.map((current) => current.id).toList(), [
+            taskId,
+            taskId,
+          ]);
+          expect(persistedRecords.last.progress, runtimeUpdate.progress);
+
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          ).timeout(const Duration(seconds: 2));
+
+          // A fresh provider models process restart and restores only the last
+          // persisted record for this duplicate task ID.
+          container.dispose();
+          containerDisposed = true;
+          container = ProviderContainer(
+            overrides: [
+              catcatchTasksProvider.overrideWith((ref) {
+                notifier = _CleanupCatCatchNotifier(ref);
+                return notifier;
+              }),
+            ],
+          );
+          containerDisposed = false;
+          container.read(catcatchTasksProvider);
+          await notifier.restoreUnfinishedTasks();
+
+          expect(notifier.tasksForTest, hasLength(1));
+          final restored = notifier.tasksForTest.single;
+          expect(restored.progress, runtimeUpdate.progress);
+          expect(restored.downloadedFilePath, runtimeUpdate.downloadedFilePath);
+          expect(restored.detectedMedia.single.url, resumedMedia.url);
+          expect(restored.selectedMedia?.url, resumedMedia.url);
+          expect(restored.downloadedBytes, runtimeUpdate.downloadedBytes);
+          expect(restored.url, newer.url);
+          expect(restored.expectedDurationSec, newer.expectedDurationSec);
+          expect(restored.title, newer.title);
+          expect(restored.createdAt, newer.createdAt);
+          expect(restored.metadata, persisted.metadata);
+          expect(restored.status, TaskStatus.paused);
+        } finally {
+          for (final release in executionNotifier.retryReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait(
+            executionNotifier.retryCompletions.map((item) => item.future),
+          );
+          await notifier.removeTasksPersisted([taskId]);
+        }
+      },
+    );
+
+    test('resumed runtime title updates replace the unchanged newest title',
+        () async {
+      const taskId = 'resumed-duplicate-title-task';
+      final pendingSteps = StepType.values.map(StepStatus.pending).toList();
+      final older = task(taskId).copyWith(
+        title: 'Shared task title',
+        steps: pendingSteps,
+      );
+      final newer = task(taskId).copyWith(
+        title: 'Shared task title',
+        steps: pendingSteps,
+      );
+      notifier.holdRetryExecutions = true;
+      notifier.setTasksForTest([older, newer]);
+      final executionNotifier = notifier;
+
+      try {
+        executionNotifier.resumeTask(taskId);
+        await executionNotifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+
+        final runtimeUpdate = executionNotifier.lastRetriedTask!.copyWith(
+          title: 'Fetched page title',
+          status: TaskStatus.running,
+          steps: [
+            StepStatus.done(StepType.fetching),
+            StepStatus.progressing(StepType.downloading, 73),
+          ],
+          progress: 73,
+        );
+        executionNotifier.lastRetryTaskUpdate!(runtimeUpdate);
+
+        final persisted = await _waitForPersistedLatestTaskForTest(
+          directory,
+          taskId,
+          expectedProgress: runtimeUpdate.progress,
+        );
+        expect(persisted, isNotNull);
+        expect(persisted!.title, 'Fetched page title');
+      } finally {
+        for (final release in executionNotifier.retryReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        await Future.wait(
+          executionNotifier.retryCompletions.map((item) => item.future),
+        );
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    test('restore keeps the newest persisted record for duplicate task IDs',
+        () async {
+      const taskId = 'restored-duplicate-task';
+      final older = task(taskId).copyWith(
+        url: 'https://example.com/older.mp4',
+        metadata: const {'replacement': 'older'},
+      );
+      const replacementMedia = MediaResource(
+        url: 'https://example.com/replacement.m3u8',
+        name: 'replacement',
+        ext: 'm3u8',
+        isPlaylist: true,
+      );
+      final replacement = task(taskId).copyWith(
+        url: 'https://example.com/replacement-page',
+        title: 'Replacement task',
+        expectedDurationSec: 90,
+        status: TaskStatus.running,
+        steps: [
+          StepStatus.done(StepType.fetching),
+          StepStatus.progressing(StepType.downloading, 47),
+        ],
+        detectedMedia: const [replacementMedia],
+        selectedMedia: replacementMedia,
+        progress: 47,
+        downloadedFilePath: '/tmp/replacement.partial.mp4',
+        metadata: const {'replacement': 'newest'},
+        downloadedBytes: 1234,
+      );
+      final distinctBefore = task('distinct-before');
+      final distinctAfter = task('distinct-after');
+      final tasksDirectory = Directory('${directory.path}/catcatch');
+      await tasksDirectory.create(recursive: true);
+      await File('${tasksDirectory.path}/tasks.json').writeAsString(
+        jsonEncode([
+          older.toMap(),
+          distinctBefore.toMap(),
+          replacement.toMap(),
+          distinctAfter.toMap(),
+        ]),
+      );
+
+      // A fresh container has no in-memory tasks, like a process restart.
+      container.dispose();
+      containerDisposed = true;
+      container = ProviderContainer(overrides: [
+        catcatchTasksProvider.overrideWith((ref) {
+          notifier = _CleanupCatCatchNotifier(ref);
+          return notifier;
+        }),
+      ]);
+      containerDisposed = false;
+      container.read(catcatchTasksProvider);
+
+      await notifier.restoreUnfinishedTasks();
+
+      expect(
+        notifier.tasksForTest.map((current) => current.id).toList(),
+        [taskId, 'distinct-before', 'distinct-after'],
+      );
+      final restored = notifier.tasksForTest.singleWhere(
+        (current) => current.id == taskId,
+      );
+      expect(restored.url, replacement.url);
+      expect(restored.title, replacement.title);
+      expect(restored.expectedDurationSec, replacement.expectedDurationSec);
+      expect(restored.status, TaskStatus.paused);
+      expect(restored.error, '应用重启，已暂停');
+      expect(restored.steps.map((step) => step.progress).toList(), [100, 47]);
+      expect(restored.detectedMedia.single.url, replacementMedia.url);
+      expect(restored.selectedMedia?.url, replacementMedia.url);
+      expect(restored.progress, replacement.progress);
+      expect(restored.downloadedFilePath, replacement.downloadedFilePath);
+      expect(restored.metadata, replacement.metadata);
+      expect(restored.downloadedBytes, replacement.downloadedBytes);
     });
 
     test('reused addTask ID cancels superseded execution before removal',
