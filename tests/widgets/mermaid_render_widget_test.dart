@@ -306,13 +306,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=9&code='));
+      expect(url, contains('mermaid_render.html?v=11&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=9?')));
+      expect(url, isNot(contains('v=11?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '9',
+        'v': '11',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +336,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=9');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=11');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -612,9 +612,16 @@ void main() {
               'metaKey (Cmd on macOS) must be supported for cross-platform zoom');
     });
 
-    test('HTML constrains zoom between 0.1 and 10', () {
+    test(
+        'HTML preserves sub-floor auto-fit while retaining the manual zoom floor',
+        () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom,'));
       expect(html, contains('Math.min(10'));
     });
 
@@ -767,7 +774,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v9');
+      expect(templateVersion, 'v11');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -1351,6 +1358,87 @@ void main() {
           closeTo(5.5, 0.001),
           reason:
               'the raw 11x pinch must be replayed against the fitted 0.5x zoom',
+        );
+
+        await firstFinger.up();
+        await secondFinger.up();
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
+      'toolbar and native pinch zoom-out preserve an under-minimum auto-fit',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            height: 200,
+            showZoomControls: true,
+          ),
+          supportsJavaScriptHandlers: true,
+        );
+        final fakeController = webView.controller;
+        final widgetRect = tester.getRect(find.byType(MermaidRenderWidget));
+        fakeController.viewportSize = widgetRect.size;
+        fakeController.simulateJsFitToViewport(1 / 15);
+
+        await tester.tap(find.byIcon(Icons.zoom_out));
+        await tester.pump();
+        expect(
+          fakeController.zoomLevel,
+          closeTo(1 / 15, 0.0001),
+          reason:
+              'toolbar zoom-out must not enlarge a diagram below the manual floor',
+        );
+
+        await tester.drag(
+          find.byType(MermaidRenderWidget),
+          const Offset(25, -10),
+        );
+        await tester.pump();
+        expect(
+          fakeController.zoomLevel,
+          closeTo(1 / 15, 0.0001),
+          reason:
+              'native pan-only input must preserve a diagram below the manual floor',
+        );
+
+        final center = tester.getCenter(find.byType(InAppWebView));
+        final firstFinger = await tester.startGesture(
+          center - const Offset(50, 0),
+          pointer: 11,
+        );
+        final secondFinger = await tester.startGesture(
+          center + const Offset(50, 0),
+          pointer: 12,
+        );
+        await tester.pump();
+        await firstFinger.moveTo(center - const Offset(5, 0));
+        await secondFinger.moveTo(center + const Offset(5, 0));
+        await tester.pump();
+
+        expect(
+          fakeController.gestureTransformCalls.any(
+            (operation) => operation.scale < 1,
+          ),
+          isTrue,
+          reason: 'the gesture must exercise native pinch-out',
+        );
+        expect(
+          fakeController.zoomLevel,
+          closeTo(1 / 15, 0.0001),
+          reason:
+              'native pinch-out must not enlarge a diagram below the manual floor',
         );
 
         await firstFinger.up();
@@ -4001,8 +4089,13 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     panX += operation.panDeltaX;
     panY += operation.panDeltaY;
     final oldZoom = zoomLevel;
-    _nativeGestureZoomLevel *= operation.scale;
-    zoomLevel = _nativeGestureZoomLevel.clamp(0.1, 10.0).toDouble();
+    final requestedZoom = _nativeGestureZoomLevel * operation.scale;
+    final minZoom = _nativeGestureZoomLevel < 0.1 &&
+            requestedZoom <= _nativeGestureZoomLevel
+        ? _nativeGestureZoomLevel
+        : 0.1;
+    _nativeGestureZoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
+    zoomLevel = _nativeGestureZoomLevel;
     final appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1.0;
     if (operation.centerX != null && operation.centerY != null) {
       panX = operation.centerX! - (operation.centerX! - panX) * appliedScale;
@@ -4015,7 +4108,10 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     for (final operation in _pendingZoomOperations) {
       final centerX = operation.centerX ?? viewportSize.width / 2;
       final centerY = operation.centerY ?? viewportSize.height / 2;
-      final newZoom = (zoomLevel + operation.delta).clamp(0.1, 10.0).toDouble();
+      final requestedZoom = zoomLevel + operation.delta;
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
+      final newZoom = requestedZoom.clamp(minZoom, 10.0).toDouble();
       if (newZoom == zoomLevel) {
         _activeNativeGestureId = null;
         _nativeGestureZoomLevel = zoomLevel;
@@ -4166,17 +4262,20 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
     ).firstMatch(source);
     if (relativeZoom != null) {
-      zoomLevel = (zoomLevel + double.parse(relativeZoom.group(1)!))
-          .clamp(0.1, 10.0)
-          .toDouble();
+      final requestedZoom = zoomLevel + double.parse(relativeZoom.group(1)!);
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
+      zoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
       return;
     }
 
     final absoluteZoom =
         RegExp(r'window\.setZoom\((-?\d+(?:\.\d+)?),').firstMatch(source);
     if (absoluteZoom != null) {
-      zoomLevel =
-          double.parse(absoluteZoom.group(1)!).clamp(0.1, 10.0).toDouble();
+      final requestedZoom = double.parse(absoluteZoom.group(1)!);
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
+      zoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
     }
   }
 

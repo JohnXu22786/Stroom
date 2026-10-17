@@ -460,6 +460,167 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
   assert.deepEqual(failures, []);
 });
 
+test('native and web auto-fit contain diagrams that need less than 0.1 zoom', () => {
+  for (const [templateName, fit] of [
+    ['native', fitFunction],
+    ['web', webFitFunction],
+  ]) {
+    const viewport = {clientWidth: 200, clientHeight: 100};
+    const diagramSize = {width: 3000, height: 1000};
+    const svg = {
+      getBBox: () => diagramSize,
+      setAttribute: () => {},
+    };
+    const container = {querySelector: () => svg};
+    const context = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      fitComplete: false,
+      pendingZoomOperations: [],
+      activeNativeGestureId: null,
+      nativeGestureZoomLevel: 1,
+      updateTransform: () => {},
+      notifyTransform: () => {},
+    };
+
+    vm.runInNewContext(fit[0], context);
+    context.window.fitToViewport();
+
+    assert.ok(context.zoomLevel < 0.1, `${templateName} fit should use a zoom below 0.1`);
+    assert.ok(
+      diagramSize.width * context.zoomLevel <= viewport.clientWidth,
+      `${templateName} fit should keep the diagram within the viewport width`,
+    );
+    assert.ok(
+      diagramSize.height * context.zoomLevel <= viewport.clientHeight,
+      `${templateName} fit should keep the diagram within the viewport height`,
+    );
+    assert.ok(Math.abs(context.zoomLevel - 1 / 15) < 1e-12);
+  }
+});
+
+test('manual zoom-out keeps sub-0.1 fitted diagrams at their fitted scale', () => {
+  for (const [templateName, templateSource, fit, nativeGesture] of [
+    ['native', dartSource, fitFunction, true],
+    ['web', webTemplateSource, webFitFunction, false],
+  ]) {
+    const setZoom = templateSource.match(
+      /^    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+    );
+    const setPanZoom = templateSource.match(
+      /^    window\.setPanZoom = function\(x, y, level\) \{[\s\S]*?^    \};/m,
+    );
+    const applyZoomDeltas = templateSource.match(
+      /^    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+    );
+    const applyWheelZoom = templateSource.match(
+      /^    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY\) \{[\s\S]*?^    \};/m,
+    );
+    assert.ok(setZoom, `Could not find ${templateName} setZoom`);
+    assert.ok(setPanZoom, `Could not find ${templateName} setPanZoom`);
+    assert.ok(applyZoomDeltas, `Could not find ${templateName} applyZoomDeltasAfterFit`);
+    assert.ok(applyWheelZoom, `Could not find ${templateName} applyWheelZoomAfterFit`);
+
+    const viewport = {clientWidth: 200, clientHeight: 100};
+    const svg = {
+      getBBox: () => ({width: 3000, height: 1000}),
+      setAttribute: () => {},
+    };
+    const container = {querySelector: () => svg};
+    const context = {
+      window: {},
+      document: {
+        getElementById: (id) =>
+          id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+      },
+      zoomLevel: 1,
+      panX: 0,
+      panY: 0,
+      fitComplete: false,
+      pendingZoomOperations: [],
+      activeNativeGestureId: null,
+      nativeGestureZoomLevel: 1,
+      updateTransform: () => {},
+      notifyTransform: () => {},
+    };
+    const functions = [
+      setZoom[0],
+      setPanZoom[0],
+      applyZoomDeltas[0],
+      applyWheelZoom[0],
+      fit[0],
+    ];
+    if (nativeGesture) {
+      const applyGestureTransform = templateSource.match(
+        /^    window\.applyGestureTransformAfterFit = function\(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      );
+      assert.ok(applyGestureTransform, 'Could not find native applyGestureTransformAfterFit');
+      functions.splice(2, 0, applyGestureTransform[0]);
+    }
+    vm.runInNewContext(functions.join('\n'), context);
+    context.window.fitToViewport();
+
+    const fittedZoom = context.zoomLevel;
+    const fittedPanX = context.panX;
+    const fittedPanY = context.panY;
+    assert.ok(fittedZoom < 0.1, `${templateName} must start below the manual zoom floor`);
+    context.window.setZoom(fittedZoom, 100, 50);
+    assert.equal(
+      context.zoomLevel,
+      fittedZoom,
+      `${templateName} unchanged zoom must preserve a sub-0.1 fit`,
+    );
+    if (nativeGesture) {
+      context.window.applyGestureTransformAfterFit(1, 1, 5, -3, null, null);
+      assert.equal(
+        context.zoomLevel,
+        fittedZoom,
+        'native pan-only input must preserve a sub-0.1 fit',
+      );
+      assert.equal(context.panX, fittedPanX + 5);
+      assert.equal(context.panY, fittedPanY - 3);
+    }
+    context.window.setPanZoom(17, 23, fittedZoom);
+    assert.equal(
+      context.zoomLevel,
+      fittedZoom,
+      `${templateName} pan-only setPanZoom must preserve a sub-0.1 fit`,
+    );
+    assert.equal(context.panX, 17);
+    assert.equal(context.panY, 23);
+    context.window.applyZoomDeltasAfterFit([-0.1]);
+    assert.equal(
+      context.zoomLevel,
+      fittedZoom,
+      `${templateName} toolbar zoom-out must not increase a sub-0.1 fit`,
+    );
+    context.window.applyWheelZoomAfterFit(-0.1, 100, 50);
+    assert.equal(
+      context.zoomLevel,
+      fittedZoom,
+      `${templateName} wheel zoom-out must not increase a sub-0.1 fit`,
+    );
+    if (nativeGesture) {
+      context.window.applyGestureTransformAfterFit(1, 0.9, 0, 0, 100, 50);
+      assert.equal(
+        context.zoomLevel,
+        fittedZoom,
+        'native pinch-out must not increase a sub-0.1 fit',
+      );
+    }
+    context.window.setZoom(0.08, 100, 50);
+    assert.equal(context.zoomLevel, 0.1, `${templateName} zoom-in should retain its 0.1 floor`);
+    context.window.setZoom(0.05, 100, 50);
+    assert.equal(context.zoomLevel, 0.1, `${templateName} zoom-out should stop at its 0.1 floor`);
+  }
+});
+
 test('fitToViewport retries once the zero-sized viewport is laid out', () => {
   const viewport = {clientWidth: 0, clientHeight: 0};
   const attributes = {};

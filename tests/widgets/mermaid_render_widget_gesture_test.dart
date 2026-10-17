@@ -62,8 +62,13 @@ void main() {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('window.setZoom'));
       expect(html, contains('window.setPanZoom'));
-      // Should clamp zoom between 0.1 and 10
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      // Preserve the auto-fit scale below the manual zoom floor.
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     testWidgets('HTML contains mermaid initialization code', (tester) async {
@@ -94,9 +99,15 @@ void main() {
       expect(html, contains('onTransformChanged'));
     });
 
-    testWidgets('zoom is clamped between 0.1 and 10', (tester) async {
+    testWidgets('zoom preserves a sub-floor fit and retains the manual floor',
+        (tester) async {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     testWidgets('full gesture JS handles pinch-to-zoom and pan',

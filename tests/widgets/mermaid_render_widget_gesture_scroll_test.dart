@@ -410,9 +410,14 @@ void main() {
       expect(html, contains('window.setPanZoom'));
     });
 
-    test('setZoom still clamps between 0.1 and 10', () {
+    test('setZoom preserves a sub-floor fit and retains the manual floor', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1, Math.min(10, level))'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom, Math.min(10, level))'));
     });
 
     test('setZoom still reports via onTransformChanged handler', () {
