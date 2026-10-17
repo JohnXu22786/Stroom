@@ -1113,6 +1113,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         _webViewController = null;
         _webViewKey = UniqueKey();
         _webRetryUrl = null;
+      }
+      if (!kIsWeb &&
+          defaultTargetPlatform != TargetPlatform.windows &&
+          widget.mermaidCode.trim().isNotEmpty &&
+          _webViewController == null) {
         _armWebViewCreationFallback();
       }
       if (shouldRearmWebRetry) {
