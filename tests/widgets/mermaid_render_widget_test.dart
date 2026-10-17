@@ -612,9 +612,16 @@ void main() {
               'metaKey (Cmd on macOS) must be supported for cross-platform zoom');
     });
 
-    test('HTML constrains zoom between 0.1 and 10', () {
+    test(
+        'HTML preserves sub-floor auto-fit while retaining the manual zoom floor',
+        () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      expect(html, contains('Math.max(0.1'));
+      expect(
+        html,
+        contains(
+            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
+      );
+      expect(html, contains('Math.max(minZoom,'));
       expect(html, contains('Math.min(10'));
     });
 
@@ -1390,7 +1397,8 @@ void main() {
         expect(
           fakeController.zoomLevel,
           closeTo(1 / 15, 0.0001),
-          reason: 'toolbar zoom-out must not enlarge a diagram below the manual floor',
+          reason:
+              'toolbar zoom-out must not enlarge a diagram below the manual floor',
         );
 
         await tester.drag(
@@ -1401,21 +1409,22 @@ void main() {
         expect(
           fakeController.zoomLevel,
           closeTo(1 / 15, 0.0001),
-          reason: 'native pan-only input must preserve a diagram below the manual floor',
+          reason:
+              'native pan-only input must preserve a diagram below the manual floor',
         );
 
-        final center = widgetRect.center;
+        final center = tester.getCenter(find.byType(InAppWebView));
         final firstFinger = await tester.startGesture(
-          center - const Offset(30, 0),
+          center - const Offset(50, 0),
           pointer: 11,
         );
         final secondFinger = await tester.startGesture(
-          center + const Offset(30, 0),
+          center + const Offset(50, 0),
           pointer: 12,
         );
         await tester.pump();
-        await firstFinger.moveTo(center - const Offset(20, 0));
-        await secondFinger.moveTo(center + const Offset(20, 0));
+        await firstFinger.moveTo(center - const Offset(5, 0));
+        await secondFinger.moveTo(center + const Offset(5, 0));
         await tester.pump();
 
         expect(
@@ -1428,7 +1437,8 @@ void main() {
         expect(
           fakeController.zoomLevel,
           closeTo(1 / 15, 0.0001),
-          reason: 'native pinch-out must not enlarge a diagram below the manual floor',
+          reason:
+              'native pinch-out must not enlarge a diagram below the manual floor',
         );
 
         await firstFinger.up();
@@ -4099,9 +4109,8 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       final centerX = operation.centerX ?? viewportSize.width / 2;
       final centerY = operation.centerY ?? viewportSize.height / 2;
       final requestedZoom = zoomLevel + operation.delta;
-      final minZoom = zoomLevel < 0.1 && requestedZoom <= zoomLevel
-          ? zoomLevel
-          : 0.1;
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
       final newZoom = requestedZoom.clamp(minZoom, 10.0).toDouble();
       if (newZoom == zoomLevel) {
         _activeNativeGestureId = null;
@@ -4253,17 +4262,20 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       r'window\.setZoom\(window\.zoomLevel \+ (-?\d+(?:\.\d+)?),',
     ).firstMatch(source);
     if (relativeZoom != null) {
-      zoomLevel = (zoomLevel + double.parse(relativeZoom.group(1)!))
-          .clamp(0.1, 10.0)
-          .toDouble();
+      final requestedZoom = zoomLevel + double.parse(relativeZoom.group(1)!);
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
+      zoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
       return;
     }
 
     final absoluteZoom =
         RegExp(r'window\.setZoom\((-?\d+(?:\.\d+)?),').firstMatch(source);
     if (absoluteZoom != null) {
-      zoomLevel =
-          double.parse(absoluteZoom.group(1)!).clamp(0.1, 10.0).toDouble();
+      final requestedZoom = double.parse(absoluteZoom.group(1)!);
+      final minZoom =
+          zoomLevel < 0.1 && requestedZoom <= zoomLevel ? zoomLevel : 0.1;
+      zoomLevel = requestedZoom.clamp(minZoom, 10.0).toDouble();
     }
   }
 
