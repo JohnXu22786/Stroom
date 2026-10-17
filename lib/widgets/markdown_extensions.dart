@@ -825,7 +825,7 @@ bool _isParagraphBoundaryLine(
 }) {
   if (!paragraphOpen && _leadingIndentColumns(line) >= 4) return true;
   if (RegExp(r'^ {0,3}#{1,6}(?:[ \t\x0b\x0c]|$)').hasMatch(line) ||
-      _isLinkReferenceDefinitionStart(line) ||
+      (!paragraphOpen && _isLinkReferenceDefinitionStart(line)) ||
       _footnoteDefinitionStart.hasMatch(line) ||
       _thematicBreakLine.hasMatch(line)) {
     return true;

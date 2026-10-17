@@ -1348,6 +1348,37 @@ void main() {
           reason: 'the raw HTML fence must not shift the open callback index');
     });
 
+    test('link reference definition inside paragraph preserves Mermaid indices',
+        () {
+      final streamingText = [
+        'Paragraph text',
+        '[ref]: /url',
+        '<span>',
+        '```mermaid',
+        'A',
+        '```',
+        '',
+        '```mermaid',
+        'A',
+      ].join('\n');
+      final config = buildMessageMarkdownConfig(
+        isDark: false,
+        conversationIsStreaming: true,
+        streamingMsgId: 'current-message-id',
+        messageId: 'current-message-id',
+        streamingText: streamingText,
+      );
+      final codeWidgets = _widgetsFromInlineSpans(
+        markdownGenerator.buildWidgets(streamingText, config: config),
+      );
+
+      expect(codeWidgets, hasLength(2));
+      expect(codeWidgets.first, isA<MermaidRenderWidget>(),
+          reason: 'the closed Mermaid block must not be mistaken for the tail');
+      expect(codeWidgets.last, isNot(isA<MermaidRenderWidget>()),
+          reason: 'the actual trailing Mermaid fence should keep loading');
+    });
+
     test('slash not followed by greater-than does not start an HTML block', () {
       const streamingText = '<div/foo>\n```mermaid\nA\n```\n\n```mermaid\nA';
       final config = buildMessageMarkdownConfig(
