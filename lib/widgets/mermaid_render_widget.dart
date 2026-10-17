@@ -620,8 +620,8 @@ MERMAID_CODE_PLACEHOLDER
       panX += panDeltaX;
       panY += panDeltaY;
       var oldZoom = zoomLevel;
-      nativeGestureZoomLevel *= scale;
-      zoomLevel = Math.max(0.1, Math.min(10, nativeGestureZoomLevel));
+      nativeGestureZoomLevel = Math.max(0.1, Math.min(10, nativeGestureZoomLevel * scale));
+      zoomLevel = nativeGestureZoomLevel;
       var appliedScale = oldZoom > 0 ? zoomLevel / oldZoom : 1;
       if (centerX !== null && centerY !== null) {
         panX = centerX - (centerX - panX) * appliedScale;

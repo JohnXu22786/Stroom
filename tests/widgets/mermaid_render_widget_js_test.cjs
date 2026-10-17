@@ -881,7 +881,41 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
   boundedContext.window.applyGestureTransformAfterFit(4, 2.6, 0, 0, 100, 50);
   boundedContext.window.applyGestureTransformAfterFit(4, 11 / 13, 0, 0, 100, 50);
   boundedContext.window.fitToViewport();
-  assert.equal(boundedContext.zoomLevel, 10);
+  assert.ok(
+    Math.abs(boundedContext.zoomLevel - (10 * 11 / 13)) < 1e-9,
+    'a reverse pinch step should apply from the clamped zoom',
+  );
+});
+
+test('native pinch reverses immediately after hitting zoom cap', () => {
+  const applyGestureTransform = dartSource.match(
+    /    window\.applyGestureTransformAfterFit = function\(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY\) \{[\s\S]*?^    \};/m,
+  );
+  assert.ok(applyGestureTransform, 'Could not find applyGestureTransformAfterFit');
+
+  const context = {
+    window: {},
+    fitComplete: true,
+    activeNativeGestureId: null,
+    nativeGestureZoomLevel: 1,
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    pendingZoomOperations: [],
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+  vm.runInNewContext(applyGestureTransform[0], context);
+
+  context.window.applyGestureTransformAfterFit(1, 11, 0, 0, null, null);
+  assert.equal(context.zoomLevel, 10, 'the first pinch update should clamp at zoom 10');
+
+  context.window.applyGestureTransformAfterFit(1, 0.95, 0, 0, null, null);
+  assert.equal(
+    context.zoomLevel,
+    9.5,
+    'reversing the pinch should reduce zoom from the clamped level immediately',
+  );
 });
 
 const webLibraryLoader = webTemplateSource.match(
