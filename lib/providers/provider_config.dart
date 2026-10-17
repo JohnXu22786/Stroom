@@ -8,6 +8,7 @@ import '../models/tts_models.dart';
 import '../services/llm_account_migration_service.dart';
 import '../services/llm_credential_store.dart';
 import '../services/provider_model_migration.dart';
+import '../services/data_migration_service.dart';
 
 export '../models/tts_models.dart';
 export '../models/mcp_provider_group.dart';
@@ -243,6 +244,8 @@ final providerEntriesProvider =
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final LlmCredentialStore _credentialStore;
   bool _providerEntriesSourceUnreadable = false;
+  bool _reloadBeforeNextMutation = false;
+  bool _lastLoadSucceeded = false;
 
   ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
       : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
@@ -252,6 +255,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> get ready => _loading;
 
   Future<void> load() async {
+    _lastLoadSucceeded = false;
     _providerEntriesSourceUnreadable = false;
     var mcpGroups = builtinMcpProviderGroups;
     try {
@@ -285,9 +289,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             // Keep serving the original config in memory. The migration
             // service leaves provider_entries untouched until secure writes
             // and account/group validation succeed; later saves retry it.
+            _reloadBeforeNextMutation = true;
+            state = ProviderEntriesState(
+              isLoaded: false,
+              mcpGroups: mcpGroups,
+            );
             debugPrint(
               'Secure credential migration is unavailable; legacy LLM settings are preserved.',
             );
+            return;
           }
           rawList = jsonDecode(prefs.getString('provider_entries')!) as List;
         } catch (_) {
@@ -397,20 +407,55 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }
 
         state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
+        _reloadBeforeNextMutation = false;
         if (entriesChanged ||
             groupAssignmentsChanged ||
             prefs.getString('mcp_provider_groups') !=
                 jsonEncode(mcpGroups.map((group) => group.toMap()).toList())) {
           await _persist();
         }
+        _lastLoadSucceeded = !_reloadBeforeNextMutation;
         return;
       }
     } catch (_) {
       debugPrint('Failed to load provider entries.');
+      _providerEntriesSourceUnreadable = true;
+      _reloadBeforeNextMutation = true;
+      state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
+      return;
     }
 
     // 默认预置
     state = _defaultEntries(mcpGroups: mcpGroups);
+    if (!_providerEntriesSourceUnreadable) {
+      _reloadBeforeNextMutation = false;
+    }
+    _lastLoadSucceeded =
+        !_providerEntriesSourceUnreadable && !_reloadBeforeNextMutation;
+  }
+
+  Future<void> _reloadBeforeMutationIfNeeded() async {
+    if (_reloadBeforeNextMutation) {
+      await load();
+      if (!_lastLoadSucceeded) {
+        throw StateError('Provider settings must be reloaded before editing.');
+      }
+      _reloadBeforeNextMutation = false;
+    }
+    if (!state.isLoaded) {
+      throw StateError('Provider settings are unavailable.');
+    }
+  }
+
+  Future<void> _setStateAndPersist(ProviderEntriesState next) async {
+    final previous = state;
+    state = next;
+    try {
+      await _persist(rethrowOnFailure: true);
+    } catch (_) {
+      if (identical(state, next)) state = previous;
+      rethrow;
+    }
   }
 
   Future<void> _hydrateLlmCredentials(List<ProviderEntry> entries) async {
@@ -421,8 +466,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         try {
           config.key = await _credentialStore.read(reference) ?? '';
         } on LlmCredentialStoreException {
-          config.key = '';
           debugPrint('Secure credential storage is unavailable.');
+          rethrow;
         }
       }
     }
@@ -493,11 +538,13 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   /// 在列表第一个位置添加新条目
   Future<void> addFirst(ProviderEntry entry) async {
-    state = ProviderEntriesState(
-      entries: [entry, ...state.entries],
-      mcpGroups: state.mcpGroups,
+    await _reloadBeforeMutationIfNeeded();
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: [entry, ...state.entries],
+        mcpGroups: state.mcpGroups,
+      ),
     );
-    await _persist();
   }
 
   /// 更新条目
@@ -506,57 +553,68 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     ProviderEntry updated, {
     bool requirePersistence = false,
   }) async {
-    state = ProviderEntriesState(
-      entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
-      mcpGroups: state.mcpGroups,
+    await _reloadBeforeMutationIfNeeded();
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
+        mcpGroups: state.mcpGroups,
+      ),
     );
-    await _persist(rethrowOnFailure: requirePersistence);
   }
 
   /// 删除条目
   Future<void> remove(String id) async {
-    state = ProviderEntriesState(
-      entries: state.entries.where((e) => e.id != id).toList(),
-      mcpGroups: state.mcpGroups,
+    await _reloadBeforeMutationIfNeeded();
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: state.entries.where((e) => e.id != id).toList(),
+        mcpGroups: state.mcpGroups,
+      ),
     );
-    await _persist();
   }
 
   Future<void> addMcpGroup(McpProviderGroup group) async {
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: [...state.mcpGroups, group],
+    await _reloadBeforeMutationIfNeeded();
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: state.entries,
+        mcpGroups: [...state.mcpGroups, group],
+      ),
     );
-    await _persist();
   }
 
   Future<void> updateMcpGroup(McpProviderGroup updated) async {
+    await _reloadBeforeMutationIfNeeded();
     final current =
         state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
     if (current == null || current.isBuiltin) return;
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: state.mcpGroups
-          .map((group) => group.id == updated.id ? updated : group)
-          .toList(),
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: state.entries,
+        mcpGroups: state.mcpGroups
+            .map((group) => group.id == updated.id ? updated : group)
+            .toList(),
+      ),
     );
-    await _persist();
   }
 
   Future<void> setMcpGroupEnabled(String id, bool enabled) async {
-    state = ProviderEntriesState(
-      entries: state.entries,
-      mcpGroups: state.mcpGroups
-          .map(
-            (group) =>
-                group.id == id ? group.copyWith(enabled: enabled) : group,
-          )
-          .toList(),
+    await _reloadBeforeMutationIfNeeded();
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: state.entries,
+        mcpGroups: state.mcpGroups
+            .map(
+              (group) =>
+                  group.id == id ? group.copyWith(enabled: enabled) : group,
+            )
+            .toList(),
+      ),
     );
-    await _persist();
   }
 
   Future<void> removeMcpGroup(String id) async {
+    await _reloadBeforeMutationIfNeeded();
     final group = state.mcpGroups.where((item) => item.id == id).firstOrNull;
     if (group == null || group.isBuiltin) return;
     final fallbackId = id == builtinMcpServicesGroupId
@@ -579,14 +637,16 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }).toList(),
       );
     }).toList();
-    state = ProviderEntriesState(
-      entries: entries,
-      mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
+    await _setStateAndPersist(
+      ProviderEntriesState(
+        entries: entries,
+        mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
+      ),
     );
-    await _persist();
   }
 
   Future<void> moveMcpConfigToGroup(String configId, String groupId) async {
+    await _reloadBeforeMutationIfNeeded();
     final entries = state.entries.map((entry) {
       if (entry.type != 'mcp' ||
           !entry.configs.any((config) => config.id == configId)) {
@@ -604,7 +664,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }).toList(),
       );
     }).toList();
-    state = ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups);
-    await _persist();
+    await _setStateAndPersist(
+      ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+    );
   }
 }

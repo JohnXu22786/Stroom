@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -11,6 +12,7 @@ import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
@@ -23,11 +25,14 @@ import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
+import '../utils/credential_field_sanitizer.dart';
 import '../utils/backup_archive_path.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import 'llm_account_migration_service.dart';
+import 'llm_credential_store.dart';
 import '../catcatch/models/catcatch_task.dart' show CatCatchTask;
 import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
@@ -78,6 +83,67 @@ class _RestoreEntryCorruptException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class _StagedRestoreCredentials {
+  final LlmCredentialStore _store;
+  final Map<String, String?> _previousValues;
+  final Map<String, String> _stagedValues;
+  final Set<String> _changedReferences;
+  final LlmCredentialTransactionLease _lease;
+  var _resolved = false;
+  bool? _rollbackResult;
+
+  _StagedRestoreCredentials(
+    this._store,
+    this._previousValues,
+    this._stagedValues,
+    this._changedReferences,
+    this._lease,
+  );
+
+  void commit() {
+    if (_resolved) return;
+    _resolved = true;
+    _rollbackResult = true;
+    _lease.release();
+  }
+
+  Future<bool> rollback() async {
+    if (_resolved) return _rollbackResult ?? false;
+    var complete = true;
+    try {
+      for (final reference in _changedReferences) {
+        try {
+          final current = await _store.read(reference);
+          final previous = _previousValues[reference];
+          if (current == previous) continue;
+          if (current != _stagedValues[reference]) {
+            complete = false;
+            continue;
+          }
+          if (previous == null) {
+            await _store.delete(reference);
+            if (await _store.read(reference) != null) complete = false;
+          } else {
+            await _store.write(reference, previous);
+            if (await _store.read(reference) != previous) complete = false;
+          }
+        } catch (_) {
+          complete = false;
+        }
+      }
+    } finally {
+      _resolved = true;
+      _rollbackResult = complete;
+      _lease.release();
+    }
+    return complete;
+  }
+}
+
+class _PreferenceRestoreRollbackIncomplete implements Exception {
+  const _PreferenceRestoreRollbackIncomplete();
 }
 
 // ====================================================================
@@ -1591,7 +1657,8 @@ class BackupService {
   /// contain plaintext keys. They are recovery artifacts, not portable app
   /// settings, so never export or restore them through ordinary backups.
   static bool _isLegacyProviderQuarantineKey(String key) =>
-      key.startsWith('provider_entries_corrupt_');
+      key.startsWith('provider_entries_corrupt_') ||
+      key.startsWith('chat_configs_corrupt_');
 
   /// 判断一个 SharedPreferences 键是否属于 [selection] 中选中的类别。
   ///
@@ -2131,6 +2198,8 @@ class BackupService {
     BackupSelection selection = BackupSelection.all,
     bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
+    LlmCredentialStore? credentialStoreForTest,
+    Future<void> Function()? afterCredentialStagingForTest,
   }) async {
     onProgress?.call(0.0);
     await _yieldToEventLoop();
@@ -2175,6 +2244,17 @@ class BackupService {
       skipMissingCategories: skipMissingCategories,
     );
     final restoreSelection = metadata.restoreSelection;
+    final selectedPreferences = _restoredPreferencePayload(
+      metadata,
+      restoreSelection,
+    );
+    _normalizeLegacyProviderEntriesForRestore(selectedPreferences);
+    final restoreCredentialStore =
+        credentialStoreForTest ?? PlatformLlmCredentialStore();
+    await _validateRestoredCredentialSettings(
+      selectedPreferences,
+      credentialStore: restoreCredentialStore,
+    );
     _validateArchiveEntryChecksums(archive, fileMap, restoreSelection);
     await _preflightBrowserCookieMerge(
       restoreSelection,
@@ -2204,21 +2284,49 @@ class BackupService {
     );
     onProgress?.call(0.15);
     await _yieldToEventLoop();
-
-    // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
-    // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
-    // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
-    // 与清除功能的行为一致。
-    await _prepareSelectedFilesForRestore(
-      restoreSelection,
-      taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-      taskFilesToReplace: metadata.taskFilesToReplace,
-      completeFileInventories: metadata.completeFileInventories,
+    final restoreCredentialTransaction = await _stageInlineRestoreCredentials(
+      selectedPreferences,
+      credentialStore: restoreCredentialStore,
     );
 
-    // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-    debugPrint('[BackupService] _restoreFromBytes: restoring database');
-    await _restoreRecordsAndPrefs(metadata, restoreSelection);
+    try {
+      await afterCredentialStagingForTest?.call();
+      // 先清除本次确实要恢复的数据类别。手动导入会先将备份中不存在的类别
+      // 从 restoreSelection 排除，避免空备份内容清掉当前数据。
+      // 删除失败（如 Windows 上文件被占用）时中止恢复并提示重启重试，
+      // 与清除功能的行为一致。
+      await _prepareSelectedFilesForRestore(
+        restoreSelection,
+        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+        taskFilesToReplace: metadata.taskFilesToReplace,
+        completeFileInventories: metadata.completeFileInventories,
+      );
+
+      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+      debugPrint('[BackupService] _restoreFromBytes: restoring database');
+      await _restoreRecordsAndPrefs(
+        metadata,
+        restoreSelection,
+        selectedPreferences: selectedPreferences,
+      );
+      restoreCredentialTransaction.commit();
+    } catch (error) {
+      if (error is _PreferenceRestoreRollbackIncomplete) {
+        // Some selected settings may still point at the staged references.
+        // Keep those secure values until preferences can be recovered.
+        restoreCredentialTransaction.commit();
+        throw StateError(
+          'Backup preferences could not be restored after a failed restore. '
+          'Secure credentials were retained.',
+        );
+      }
+      if (!await restoreCredentialTransaction.rollback()) {
+        throw StateError(
+          'Unable to restore secure credentials after a failed backup restore.',
+        );
+      }
+      rethrow;
+    }
     onProgress?.call(0.55);
     await _yieldToEventLoop();
 
@@ -2341,6 +2449,16 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
+      final selectedPreferences = _restoredPreferencePayload(
+        metadata,
+        restoreSelection,
+      );
+      _normalizeLegacyProviderEntriesForRestore(selectedPreferences);
+      final restoreCredentialStore = PlatformLlmCredentialStore();
+      await _validateRestoredCredentialSettings(
+        selectedPreferences,
+        credentialStore: restoreCredentialStore,
+      );
       _validateZipEntryChecksumsBeforeRestore(
         reader,
         restoreSelection,
@@ -2370,22 +2488,44 @@ class BackupService {
       );
       onProgress?.call(0.15);
       await _yieldToEventLoop();
-
-      // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
-      await _prepareSelectedFilesForRestore(
-        restoreSelection,
-        taskFlowAttachmentKeys: taskFlowAttachmentKeys,
-        taskFilesToReplace: metadata.taskFilesToReplace,
-        completeFileInventories: metadata.completeFileInventories,
+      final restoreCredentialTransaction = await _stageInlineRestoreCredentials(
+        selectedPreferences,
+        credentialStore: restoreCredentialStore,
       );
 
-      // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
-      debugPrint('[BackupService] _restoreFromZipFile: restoring database');
-      await _restoreRecordsAndPrefs(
-        metadata,
-        restoreSelection,
-        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-      );
+      try {
+        // 勾选即清空：先清除选中类别的现有文件（语义与内存版一致）。
+        await _prepareSelectedFilesForRestore(
+          restoreSelection,
+          taskFlowAttachmentKeys: taskFlowAttachmentKeys,
+          taskFilesToReplace: metadata.taskFilesToReplace,
+          completeFileInventories: metadata.completeFileInventories,
+        );
+
+        // 恢复数据库记录与 SharedPreferences（使用已解析校验的数据）
+        debugPrint('[BackupService] _restoreFromZipFile: restoring database');
+        await _restoreRecordsAndPrefs(
+          metadata,
+          restoreSelection,
+          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+          selectedPreferences: selectedPreferences,
+        );
+        restoreCredentialTransaction.commit();
+      } catch (error) {
+        if (error is _PreferenceRestoreRollbackIncomplete) {
+          restoreCredentialTransaction.commit();
+          throw StateError(
+            'Backup preferences could not be restored after a failed restore. '
+            'Secure credentials were retained.',
+          );
+        }
+        if (!await restoreCredentialTransaction.rollback()) {
+          throw StateError(
+            'Unable to restore secure credentials after a failed backup restore.',
+          );
+        }
+        rethrow;
+      }
       onProgress?.call(0.55);
       await _yieldToEventLoop();
 
@@ -4063,6 +4203,861 @@ class BackupService {
     return versions.isEmpty ? null : versions;
   }
 
+  static Map<String, dynamic> _restoredPreferencePayload(
+    _RestoreMetadata metadata,
+    BackupSelection selection,
+  ) {
+    final restoreChat =
+        selection.chatRecordsAndAttachments && metadata.restoreChatPreferences;
+    if (metadata.isV1) {
+      final result = <String, dynamic>{};
+      if (metadata.v1Prefs == null) return result;
+      for (final entry in metadata.v1Prefs!.entries) {
+        final isChat = _isChatPrefKey(entry.key);
+        if ((isChat && restoreChat) || (!isChat && selection.settings)) {
+          result[entry.key] = entry.value;
+        }
+      }
+      return result;
+    }
+    return {
+      if (restoreChat && metadata.chatPrefs != null) ...metadata.chatPrefs!,
+      if (selection.settings && metadata.settingsPrefs != null)
+        ...metadata.settingsPrefs!,
+    };
+  }
+
+  static void _normalizeLegacyProviderEntriesForRestore(
+    Map<String, dynamic> selectedPreferences,
+  ) {
+    final encoded = selectedPreferences['provider_entries'];
+    if (encoded is! String || encoded.isEmpty) return;
+    final decoded = jsonDecode(encoded);
+    if (decoded is! List) return;
+
+    final configs = <Map>[];
+    final models = <Map>[];
+    var changed = false;
+    const configFields = [
+      'providerName',
+      'host',
+      'key',
+      'models',
+      'typeConfig',
+      'customParams',
+      'reasoningParams',
+      'endpointType',
+    ];
+
+    for (var entryIndex = 0; entryIndex < decoded.length; entryIndex++) {
+      final rawEntry = decoded[entryIndex];
+      if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
+      final entry = Map<String, dynamic>.from(rawEntry);
+      if (!entry.containsKey('configs')) {
+        if (entry['key'] != null && entry['key'] is! String) continue;
+        final config = <String, dynamic>{
+          for (final field in configFields)
+            if (entry.containsKey(field)) field: entry[field],
+        };
+        final hasSingleConfig = ['providerName', 'host', 'key'].any(
+          (field) =>
+              config[field] is String && (config[field] as String).isNotEmpty,
+        );
+        entry['configs'] = hasSingleConfig ? [config] : <Map>[];
+        for (final field in configFields) {
+          entry.remove(field);
+        }
+        changed = true;
+      }
+
+      final rawConfigs = entry['configs'];
+      if (rawConfigs is List) {
+        for (var configIndex = 0;
+            configIndex < rawConfigs.length;
+            configIndex++) {
+          final rawConfig = rawConfigs[configIndex];
+          if (rawConfig is! Map) continue;
+          final config = Map<String, dynamic>.from(rawConfig);
+          rawConfigs[configIndex] = config;
+          configs.add(config);
+          final rawModels = config['models'];
+          if (rawModels is! List) continue;
+          for (var modelIndex = 0;
+              modelIndex < rawModels.length;
+              modelIndex++) {
+            final rawModel = rawModels[modelIndex];
+            if (rawModel is! Map) continue;
+            final model = Map<String, dynamic>.from(rawModel);
+            rawModels[modelIndex] = model;
+            models.add(model);
+          }
+        }
+      }
+      decoded[entryIndex] = entry;
+    }
+
+    bool assignIds(List<Map> items, String prefix) {
+      final counts = <String, int>{};
+      for (final item in items) {
+        final id = item['id'];
+        if (id is String && id.isNotEmpty) {
+          counts[id] = (counts[id] ?? 0) + 1;
+        }
+      }
+      var idsChanged = false;
+      for (final item in items) {
+        final id = item['id'];
+        if (id is! String || id.isEmpty || counts[id] != 1) {
+          item['id'] = '${prefix}_${const Uuid().v4()}';
+          idsChanged = true;
+        }
+      }
+      return idsChanged;
+    }
+
+    changed = assignIds(configs, 'config') || changed;
+    changed = assignIds(models, 'model') || changed;
+    if (changed) selectedPreferences['provider_entries'] = jsonEncode(decoded);
+  }
+
+  static Future<_StagedRestoreCredentials> _stageInlineRestoreCredentials(
+    Map<String, dynamic> selectedPreferences, {
+    required LlmCredentialStore credentialStore,
+  }) async {
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    var transactionOwnsQueue = false;
+    try {
+      // Credential preflight runs before acquiring this shared lease. Recheck
+      // against the current secure values while holding the lease so a
+      // concurrent migration cannot invalidate that earlier result.
+      await _validateRestoredCredentialSettings(
+        selectedPreferences,
+        credentialStore: credentialStore,
+      );
+      final accountReferenceById = <String, String>{};
+      final accountEnvelope =
+          selectedPreferences[LlmAccountMigrationService.accountsPreferenceKey];
+      if (accountEnvelope is String && accountEnvelope.isNotEmpty) {
+        final decoded = jsonDecode(accountEnvelope) as Map;
+        for (final rawAccount in decoded['items'] as List) {
+          final account = Map<String, dynamic>.from(rawAccount as Map);
+          final id = account['id'];
+          final reference = account['credentialRef'];
+          if (id is String && reference is String) {
+            accountReferenceById[id] = reference;
+          }
+        }
+      }
+
+      String configIdentity(Map<String, dynamic> config) {
+        final rawModels = config['models'];
+        final modelIds = <String>[];
+        if (rawModels is List) {
+          for (final rawModel in rawModels) {
+            final model = rawModel as Map;
+            modelIds.add(
+              model['modelId'] is String
+                  ? model['modelId'] as String
+                  : (model['name'] is String ? model['name'] as String : ''),
+            );
+          }
+        }
+        return jsonEncode([
+          config['providerName'] is String ? config['providerName'] : '',
+          config['host'] is String ? config['host'] : '',
+          modelIds,
+        ]);
+      }
+
+      String legacyCredentialReference(Map<String, dynamic> config) {
+        final identity = configIdentity(config);
+        final digest = sha256.convert(utf8.encode(identity));
+        return 'stroom.llm.credential.legacy_backup.$digest';
+      }
+
+      final referencesByAccountId = <String, String>{
+        ...accountReferenceById,
+      };
+      final referencesByIdentity = <String, Set<String>>{};
+      void rememberReference(
+        String identity,
+        String reference, {
+        String? accountId,
+      }) {
+        if (accountId != null) {
+          final previous = referencesByAccountId[accountId];
+          if (previous != null && previous != reference) {
+            throw const FormatException('Conflicting restore references.');
+          }
+          referencesByAccountId[accountId] = reference;
+        }
+        referencesByIdentity
+            .putIfAbsent(identity, () => <String>{})
+            .add(reference);
+      }
+
+      String? uniqueIdentityReference(String identity) {
+        final references = referencesByIdentity[identity];
+        if (references == null || references.isEmpty) return null;
+        if (references.length != 1) {
+          throw const FormatException('Ambiguous restore references.');
+        }
+        return references.single;
+      }
+
+      final pendingSecrets = <String, String>{};
+      void stageSecret(String reference, String secret) {
+        final previous = pendingSecrets[reference];
+        if (previous != null && previous != secret) {
+          throw const FormatException('Conflicting restore credentials.');
+        }
+        pendingSecrets[reference] = secret;
+      }
+
+      var providerEntriesChanged = false;
+      List<dynamic>? restoredProviderEntries;
+      final rawProviderEntries = selectedPreferences['provider_entries'];
+      if (rawProviderEntries is String) {
+        restoredProviderEntries = jsonDecode(rawProviderEntries) as List;
+        for (var entryIndex = 0;
+            entryIndex < restoredProviderEntries.length;
+            entryIndex++) {
+          final rawEntry = restoredProviderEntries[entryIndex];
+          if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
+          final entry = Map<String, dynamic>.from(rawEntry);
+          final rawEntryKey = entry.remove('key');
+          if (rawEntry.containsKey('key')) providerEntriesChanged = true;
+          final rawConfigs = entry['configs'];
+          if (rawConfigs is! List) {
+            if (rawEntryKey is String && rawEntryKey.isNotEmpty) {
+              throw const FormatException('Invalid LLM restore config.');
+            }
+            restoredProviderEntries[entryIndex] = entry;
+            continue;
+          }
+          final configs = rawConfigs;
+          if (rawEntryKey is String && rawEntryKey.isNotEmpty) {
+            if (configs.length != 1 || configs.single is! Map) {
+              throw const FormatException('Invalid LLM restore config.');
+            }
+            final config = Map<String, dynamic>.from(configs.single as Map);
+            final configKey = config['key'];
+            if (configKey is String &&
+                configKey.isNotEmpty &&
+                configKey != rawEntryKey) {
+              throw const FormatException('Conflicting restore credentials.');
+            }
+            config['key'] = rawEntryKey;
+            configs[0] = config;
+            providerEntriesChanged = true;
+          }
+          for (var configIndex = 0;
+              configIndex < configs.length;
+              configIndex++) {
+            final rawConfig = configs[configIndex];
+            if (rawConfig is! Map) continue;
+            final config = Map<String, dynamic>.from(rawConfig);
+            configs[configIndex] = config;
+            final id = config['id'];
+            final reference = config['credentialRef'] ??
+                (id is String ? accountReferenceById[id] : null);
+            if (reference is String) {
+              rememberReference(
+                configIdentity(config),
+                reference,
+                accountId: id is String ? id : null,
+              );
+            }
+          }
+          entry['configs'] = configs;
+          restoredProviderEntries[entryIndex] = entry;
+        }
+
+        for (var entryIndex = 0;
+            entryIndex < restoredProviderEntries.length;
+            entryIndex++) {
+          final rawEntry = restoredProviderEntries[entryIndex];
+          if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
+          final entry = Map<String, dynamic>.from(rawEntry);
+          final configs = entry['configs'];
+          if (configs is! List) continue;
+          for (var configIndex = 0;
+              configIndex < configs.length;
+              configIndex++) {
+            final rawConfig = configs[configIndex];
+            if (rawConfig is! Map) continue;
+            final config = Map<String, dynamic>.from(rawConfig);
+            final rawKey = config.remove('key');
+            if (rawConfig.containsKey('key')) providerEntriesChanged = true;
+            if (rawKey is String && rawKey.isNotEmpty) {
+              final id = config['id'];
+              if (id is! String || id.isEmpty) {
+                throw const FormatException('Invalid LLM restore config ID.');
+              }
+              final identity = configIdentity(config);
+              final reference = config['credentialRef'] ??
+                  referencesByAccountId[id] ??
+                  'stroom.llm.credential.${Uri.encodeComponent(id)}';
+              if (reference is! String || reference.isEmpty) {
+                throw const FormatException('Invalid restore reference.');
+              }
+              rememberReference(identity, reference, accountId: id);
+              config['credentialRef'] = reference;
+              stageSecret(reference, rawKey);
+              providerEntriesChanged = true;
+            }
+            configs[configIndex] = config;
+          }
+          entry['configs'] = configs;
+          restoredProviderEntries[entryIndex] = entry;
+        }
+      }
+
+      var legacyConfigsChanged = false;
+      List<dynamic>? restoredLegacyConfigs;
+      final rawLegacyConfigs = selectedPreferences['chat_configs'];
+      if (rawLegacyConfigs is String) {
+        restoredLegacyConfigs = jsonDecode(rawLegacyConfigs) as List;
+        for (var index = 0; index < restoredLegacyConfigs.length; index++) {
+          final rawConfig = restoredLegacyConfigs[index];
+          if (rawConfig is! Map) continue;
+          final config = Map<String, dynamic>.from(rawConfig);
+          final identity = configIdentity(config);
+          final reference = config['credentialRef'];
+          final id = config['id'];
+          if (reference is String) {
+            rememberReference(
+              identity,
+              reference,
+              accountId: id is String ? id : null,
+            );
+          }
+        }
+        for (var index = 0; index < restoredLegacyConfigs.length; index++) {
+          final rawConfig = restoredLegacyConfigs[index];
+          if (rawConfig is! Map) continue;
+          final config = Map<String, dynamic>.from(rawConfig);
+          final key = config.remove('key');
+          if (rawConfig.containsKey('key')) legacyConfigsChanged = true;
+          final identity = configIdentity(config);
+          final id = config['id'];
+          final existingReference = id is String
+              ? referencesByAccountId[id]
+              : uniqueIdentityReference(identity);
+          if (key is String && key.isNotEmpty) {
+            final reference = config['credentialRef'] ??
+                existingReference ??
+                (id is String
+                    ? 'stroom.llm.credential.${Uri.encodeComponent(id)}'
+                    : legacyCredentialReference(config));
+            if (reference is! String || reference.isEmpty) {
+              throw const FormatException('Invalid legacy restore reference.');
+            }
+            rememberReference(
+              identity,
+              reference,
+              accountId: id is String ? id : null,
+            );
+            config['credentialRef'] = reference;
+            stageSecret(reference, key);
+            legacyConfigsChanged = true;
+          } else if (config['credentialRef'] == null &&
+              existingReference != null) {
+            config['credentialRef'] = existingReference;
+            legacyConfigsChanged = true;
+          }
+          restoredLegacyConfigs[index] = config;
+        }
+      }
+
+      final previousValues = <String, String?>{};
+      final attemptedReferences = <String>{};
+      try {
+        for (final reference in pendingSecrets.keys) {
+          previousValues[reference] = await credentialStore.read(reference);
+        }
+        for (final entry in pendingSecrets.entries) {
+          if (previousValues[entry.key] == entry.value) continue;
+          attemptedReferences.add(entry.key);
+          await credentialStore.write(entry.key, entry.value);
+          if (await credentialStore.read(entry.key) != entry.value) {
+            throw const LlmCredentialStoreException();
+          }
+        }
+
+        final sanitizedPreferences = Map<String, dynamic>.from(
+          selectedPreferences,
+        );
+        if (providerEntriesChanged) {
+          sanitizedPreferences['provider_entries'] =
+              jsonEncode(restoredProviderEntries);
+        }
+        if (legacyConfigsChanged) {
+          sanitizedPreferences['chat_configs'] =
+              jsonEncode(restoredLegacyConfigs);
+        }
+        await _validateRestoredCredentialSettings(
+          sanitizedPreferences,
+          credentialStore: credentialStore,
+        );
+        if (providerEntriesChanged) {
+          selectedPreferences['provider_entries'] =
+              sanitizedPreferences['provider_entries'];
+        }
+        if (legacyConfigsChanged) {
+          selectedPreferences['chat_configs'] =
+              sanitizedPreferences['chat_configs'];
+        }
+        final transaction = _StagedRestoreCredentials(
+          credentialStore,
+          Map<String, String?>.from(previousValues),
+          Map<String, String>.from(pendingSecrets),
+          Set<String>.from(attemptedReferences),
+          lease,
+        );
+        transactionOwnsQueue = true;
+        return transaction;
+      } catch (_) {
+        var rollbackComplete = true;
+        for (final reference in attemptedReferences) {
+          try {
+            final current = await credentialStore.read(reference);
+            final previous = previousValues[reference];
+            if (current == previous) continue;
+            if (current != pendingSecrets[reference]) {
+              rollbackComplete = false;
+              continue;
+            }
+            if (previous == null) {
+              await credentialStore.delete(reference);
+              if (await credentialStore.read(reference) != null) {
+                rollbackComplete = false;
+              }
+            } else {
+              await credentialStore.write(reference, previous);
+              if (await credentialStore.read(reference) != previous) {
+                rollbackComplete = false;
+              }
+            }
+          } catch (_) {
+            rollbackComplete = false;
+          }
+        }
+        if (!rollbackComplete) {
+          throw const BackupValidationException(
+            '备份中的 LLM 凭据无法回滚。请保留原备份并重试恢复。',
+          );
+        }
+        throw const BackupValidationException(
+          '备份中的 LLM 凭据无法安全存储。未更改本机数据。',
+        );
+      }
+    } on BackupValidationException {
+      rethrow;
+    } catch (_) {
+      throw const BackupValidationException(
+        '备份中的 LLM 设置无效或无法安全存储。未更改本机数据。',
+      );
+    } finally {
+      if (!transactionOwnsQueue) lease.release();
+    }
+  }
+
+  static Future<void> _validateRestoredCredentialSettings(
+    Map<String, dynamic> selectedPreferences, {
+    LlmCredentialStore? credentialStore,
+  }) async {
+    try {
+      if (selectedPreferences.values.any((value) => value == null)) {
+        throw const FormatException('Null selected preference value.');
+      }
+      final credentialUsages = <String, List<String?>>{};
+      final accountReferenceById = <String, String>{};
+      final providerAccountIds = <String>{};
+      final providerConfigUsagesById =
+          <String, ({String key, String? reference, String? publicKey})>{};
+      final providerConfigUsagesByIdentity = <String,
+          List<({String key, String? reference, String? publicKey})>>{};
+
+      String configIdentity(
+          Map<String, dynamic> config, List<String> modelIds) {
+        return jsonEncode([
+          config['providerName'] is String ? config['providerName'] : '',
+          config['host'] is String ? config['host'] : '',
+          modelIds,
+        ]);
+      }
+
+      bool hasConflictingMetadata(
+        ({String key, String? reference, String? publicKey}) left,
+        ({String key, String? reference, String? publicKey}) right,
+      ) =>
+          (left.key.isNotEmpty &&
+              right.key.isNotEmpty &&
+              left.key != right.key) ||
+          (left.reference != null &&
+              right.reference != null &&
+              left.reference != right.reference) ||
+          (left.publicKey != null &&
+              right.publicKey != null &&
+              left.publicKey != right.publicKey);
+
+      ({String key, String? reference, String? publicKey})?
+          matchingProviderConfig(String? accountId, String identity) {
+        if (accountId != null) return providerConfigUsagesById[accountId];
+        final candidates = providerConfigUsagesByIdentity[identity];
+        if (candidates == null || candidates.isEmpty) return null;
+        final first = candidates.first;
+        for (final candidate in candidates.skip(1)) {
+          if (hasConflictingMetadata(first, candidate)) {
+            throw const FormatException('Ambiguous provider identity.');
+          }
+        }
+        return first;
+      }
+
+      final accountEnvelope =
+          selectedPreferences[LlmAccountMigrationService.accountsPreferenceKey];
+      if (accountEnvelope != null) {
+        if (accountEnvelope is! String) {
+          throw const FormatException('Invalid LLM account envelope.');
+        }
+        if (accountEnvelope.isNotEmpty) {
+          final decoded = jsonDecode(accountEnvelope);
+          if (decoded is! Map || decoded['items'] is! List) {
+            throw const FormatException('Invalid LLM account envelope.');
+          }
+          final accountIds = <String>{};
+          for (final rawAccount in decoded['items'] as List) {
+            if (rawAccount is! Map) {
+              throw const FormatException('Invalid LLM account record.');
+            }
+            final account = Map<String, dynamic>.from(rawAccount);
+            final id = account['id'];
+            if (id is! String || id.trim().isEmpty || !accountIds.add(id)) {
+              throw const FormatException('Invalid LLM account ID.');
+            }
+            final reference = account['credentialRef'];
+            if (reference != null &&
+                (reference is! String || reference.trim().isEmpty)) {
+              throw const FormatException('Invalid credential reference.');
+            }
+            final models = account['models'];
+            if (models != null &&
+                (models is! List || models.any((model) => model is! Map))) {
+              throw const FormatException('Invalid LLM account models.');
+            }
+            if (reference is String) accountReferenceById[id] = reference;
+          }
+          if (containsCredentialValue(decoded)) {
+            throw const FormatException('Invalid LLM account envelope.');
+          }
+        }
+      }
+
+      final groupEnvelope = selectedPreferences[
+          LlmAccountMigrationService.modelGroupsPreferenceKey];
+      if (groupEnvelope != null) {
+        if (groupEnvelope is! String) {
+          throw const FormatException('Invalid LLM model-group envelope.');
+        }
+        if (groupEnvelope.isNotEmpty) {
+          final decoded = jsonDecode(groupEnvelope);
+          if (decoded is! Map || decoded['items'] is! List) {
+            throw const FormatException('Invalid LLM model-group envelope.');
+          }
+          final groupIds = <String>{};
+          for (final rawGroup in decoded['items'] as List) {
+            if (rawGroup is! Map) {
+              throw const FormatException('Invalid LLM model-group record.');
+            }
+            final group = Map<String, dynamic>.from(rawGroup);
+            final id = group['id'];
+            if (id is! String || id.trim().isEmpty || !groupIds.add(id)) {
+              throw const FormatException('Invalid LLM model-group ID.');
+            }
+            final members = group['members'];
+            if (members != null &&
+                (members is! List || members.any((member) => member is! Map))) {
+              throw const FormatException('Invalid LLM model-group members.');
+            }
+          }
+          if (containsCredentialValue(decoded)) {
+            throw const FormatException('Invalid LLM model-group envelope.');
+          }
+        }
+      }
+
+      final providerEntries = selectedPreferences['provider_entries'];
+      if (providerEntries != null) {
+        if (providerEntries is! String) {
+          throw const FormatException('Invalid provider entries.');
+        }
+        final decoded = jsonDecode(providerEntries);
+        if (decoded is! List) {
+          throw const FormatException('Invalid provider entries.');
+        }
+        for (final rawEntry in decoded) {
+          if (rawEntry is! Map) {
+            throw const FormatException('Invalid provider entry.');
+          }
+          if (rawEntry['type'] != 'llm') {
+            final type = rawEntry['type'];
+            if ((type == 'mcp' || !_backupKnownProviderTypes.contains(type)) &&
+                containsCredentialValue(rawEntry)) {
+              throw const FormatException('Unsupported provider credential.');
+            }
+            continue;
+          }
+          final entry = Map<String, dynamic>.from(rawEntry);
+          final rawEntryKey = entry['key'];
+          if (rawEntryKey != null && rawEntryKey is! String) {
+            throw const FormatException('Invalid provider credential.');
+          }
+          final entryKey = rawEntryKey is String ? rawEntryKey : '';
+          final safeEntryFields = Map<String, dynamic>.from(entry)
+            ..remove('key')
+            ..remove('configs');
+          if (containsCredentialValue(safeEntryFields)) {
+            throw const FormatException('Unsupported provider credential.');
+          }
+          final rawConfigs = entry['configs'];
+          if (rawConfigs == null) {
+            if (entryKey.isNotEmpty) {
+              throw const FormatException('Invalid provider config.');
+            }
+            continue;
+          }
+          if (rawConfigs is! List ||
+              (entryKey.isNotEmpty &&
+                  (rawConfigs.length != 1 || rawConfigs.single is! Map))) {
+            throw const FormatException('Invalid provider config.');
+          }
+          for (final rawConfig in rawConfigs) {
+            if (rawConfig is! Map) {
+              throw const FormatException('Invalid provider config.');
+            }
+            final config = Map<String, dynamic>.from(rawConfig);
+            final accountId = config['id'];
+            if (accountId is! String ||
+                accountId.trim().isEmpty ||
+                !providerAccountIds.add(accountId)) {
+              throw const FormatException('Invalid provider account ID.');
+            }
+            final rawKey = config['key'];
+            if (rawKey != null && rawKey is! String) {
+              throw const FormatException('Invalid provider credential.');
+            }
+            if (entryKey.isNotEmpty &&
+                rawKey is String &&
+                rawKey.isNotEmpty &&
+                rawKey != entryKey) {
+              throw const FormatException('Conflicting provider credentials.');
+            }
+            final key =
+                rawKey is String && rawKey.isNotEmpty ? rawKey : entryKey;
+            final reference = config['credentialRef'];
+            if (reference != null &&
+                (reference is! String || reference.trim().isEmpty)) {
+              throw const FormatException('Invalid credential reference.');
+            }
+            final accountReference = accountReferenceById[accountId];
+            if (reference is String &&
+                accountReference != null &&
+                reference != accountReference) {
+              throw const FormatException('Conflicting credential references.');
+            }
+            final effectiveReference = reference ?? accountReference;
+            final models = config['models'];
+            if (models != null && models is! List) {
+              throw const FormatException('Invalid provider models.');
+            }
+            if (models is List && models.any((model) => model is! Map)) {
+              throw const FormatException('Invalid provider models.');
+            }
+            final modelIds = <String>[];
+            if (models is List) {
+              for (final rawModel in models) {
+                final model = rawModel as Map;
+                modelIds.add(
+                  model['modelId'] is String
+                      ? model['modelId'] as String
+                      : (model['name'] is String
+                          ? model['name'] as String
+                          : ''),
+                );
+              }
+            }
+            final publicKey = config['publicKey'];
+            if (publicKey != null &&
+                (publicKey is! String || publicKey.trim().isEmpty)) {
+              throw const FormatException('Invalid public key metadata.');
+            }
+            final identity = configIdentity(config, modelIds);
+            final current = (
+              key: key,
+              reference: effectiveReference as String?,
+              publicKey: publicKey as String?,
+            );
+            providerConfigUsagesById[accountId] = current;
+            providerConfigUsagesByIdentity
+                .putIfAbsent(
+                    identity,
+                    () => <({
+                          String key,
+                          String? reference,
+                          String? publicKey
+                        })>[])
+                .add(current);
+            config.remove('key');
+            if (containsCredentialValue(config)) {
+              throw const FormatException('Unsupported nested credential.');
+            }
+            if (effectiveReference is String) {
+              credentialUsages
+                  .putIfAbsent(effectiveReference, () => <String?>[])
+                  .add(key.isEmpty ? null : key);
+            }
+          }
+        }
+      }
+
+      for (final accountReference in accountReferenceById.entries) {
+        if (providerAccountIds.contains(accountReference.key)) continue;
+        credentialUsages
+            .putIfAbsent(accountReference.value, () => <String?>[])
+            .add(null);
+      }
+
+      final legacyConfigs = selectedPreferences['chat_configs'];
+      if (legacyConfigs != null) {
+        if (legacyConfigs is! String) {
+          throw const FormatException('Invalid legacy chat configs.');
+        }
+        final decoded = jsonDecode(legacyConfigs);
+        if (decoded is! List) {
+          throw const FormatException('Invalid legacy chat configs.');
+        }
+        final seen =
+            <String, ({String key, String? reference, String? publicKey})>{};
+        for (final rawConfig in decoded) {
+          if (rawConfig is! Map) {
+            throw const FormatException('Invalid legacy chat config.');
+          }
+          final config = Map<String, dynamic>.from(rawConfig);
+          final rawAccountId = config['id'];
+          if (rawAccountId != null &&
+              (rawAccountId is! String || rawAccountId.trim().isEmpty)) {
+            throw const FormatException('Invalid legacy account ID.');
+          }
+          final accountId = rawAccountId is String ? rawAccountId : null;
+          final key = config['key'];
+          if (key != null && key is! String) {
+            throw const FormatException('Invalid legacy credential.');
+          }
+          final reference = config['credentialRef'];
+          final publicKey = config['publicKey'];
+          if (reference != null &&
+                  (reference is! String || reference.trim().isEmpty) ||
+              publicKey != null &&
+                  (publicKey is! String || publicKey.trim().isEmpty)) {
+            throw const FormatException('Invalid legacy metadata.');
+          }
+          final models = config['models'];
+          if (models != null && models is! List) {
+            throw const FormatException('Invalid legacy models.');
+          }
+          final modelIds = <String>[];
+          if (models is List) {
+            for (final rawModel in models) {
+              if (rawModel is! Map) {
+                throw const FormatException('Invalid legacy models.');
+              }
+              final modelId = rawModel['modelId'] is String
+                  ? rawModel['modelId'] as String
+                  : (rawModel['name'] is String
+                      ? rawModel['name'] as String
+                      : '');
+              modelIds.add(modelId);
+            }
+          }
+          config.remove('key');
+          if (containsCredentialValue(config)) {
+            throw const FormatException('Unsupported nested credential.');
+          }
+          final identity = configIdentity(config, modelIds);
+          final current = (
+            key: key is String ? key : '',
+            reference: reference as String?,
+            publicKey: publicKey as String?,
+          );
+          final providerConfig = matchingProviderConfig(accountId, identity);
+          if (providerConfig != null &&
+              hasConflictingMetadata(providerConfig, current)) {
+            throw const FormatException('Conflicting provider credentials.');
+          }
+          final effectiveReference =
+              current.reference ?? providerConfig?.reference;
+          final correlationKey =
+              accountId == null ? 'identity:$identity' : 'account:$accountId';
+          final previous = seen[correlationKey];
+          if (previous != null &&
+              ((previous.key.isNotEmpty &&
+                      current.key.isNotEmpty &&
+                      previous.key != current.key) ||
+                  (previous.reference != null &&
+                      current.reference != null &&
+                      previous.reference != current.reference) ||
+                  (previous.publicKey != null &&
+                      current.publicKey != null &&
+                      previous.publicKey != current.publicKey))) {
+            throw const FormatException('Ambiguous legacy chat configs.');
+          }
+          seen[correlationKey] = previous == null
+              ? (
+                  key: current.key,
+                  reference: effectiveReference,
+                  publicKey: current.publicKey,
+                )
+              : (
+                  key: previous.key.isNotEmpty ? previous.key : current.key,
+                  reference: previous.reference ?? effectiveReference,
+                  publicKey: previous.publicKey ?? current.publicKey,
+                );
+        }
+        for (final usage in seen.values) {
+          if (usage.reference == null) continue;
+          credentialUsages
+              .putIfAbsent(usage.reference!, () => <String?>[])
+              .add(usage.key.isEmpty ? null : usage.key);
+        }
+      }
+
+      final secureStore = credentialStore ?? PlatformLlmCredentialStore();
+      for (final usage in credentialUsages.entries) {
+        final existing = await secureStore.read(usage.key);
+        final keys = usage.value.whereType<String>().toSet();
+        if (keys.length > 1) {
+          throw const FormatException('Conflicting credential references.');
+        }
+        final hasKeylessUse = usage.value.any((value) => value == null);
+        if (hasKeylessUse && keys.isNotEmpty && existing != keys.single) {
+          throw const FormatException('Conflicting credential references.');
+        }
+        if (hasKeylessUse && keys.isEmpty && existing == null) {
+          throw const FormatException('Missing secure credential.');
+        }
+      }
+    } on BackupValidationException {
+      rethrow;
+    } catch (_) {
+      throw const BackupValidationException(
+        '备份中的 LLM 设置无效或存在歧义。未更改本机数据。',
+      );
+    }
+  }
+
   /// 恢复数据库记录与 SharedPreferences（删除操作已在调用前完成）。
   ///
   /// 注意：偏好设置必须将要恢复的所有数据合并后一次性调用
@@ -4072,6 +5067,7 @@ class BackupService {
     _RestoreMetadata metadata,
     BackupSelection selection, {
     bool useStartupPreferenceAdapter = false,
+    Map<String, dynamic>? selectedPreferences,
   }) async {
     // 恢复数据库记录（使用已解析校验的数据）
     if (metadata.dbData != null) {
@@ -4118,55 +5114,14 @@ class BackupService {
       browserCookies: selection.browserCookies,
       includeMediaFiles: false,
     );
-    if (metadata.isV1) {
-      // v1 格式：preferences.json 包含所有键（聊天+设置合并）
-      // 按 key 分类拆分：只恢复选中类别对应的键，未选中的类别保持原样
-      if (restoreChatPreferences || selection.settings) {
-        debugPrint(
-          '[BackupService] _restoreRecordsAndPrefs: restoring v1 preferences',
-        );
-        final restorePrefs = <String, dynamic>{};
-        if (metadata.v1Prefs != null) {
-          for (final entry in metadata.v1Prefs!.entries) {
-            final isChat = _isChatPrefKey(entry.key);
-            if ((isChat && restoreChatPreferences) ||
-                (!isChat && selection.settings)) {
-              restorePrefs[entry.key] = entry.value;
-            }
-          }
-        }
-        await _restorePreferencesFromJson(
-          restorePrefs,
-          selection: preferenceSelection,
-          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-        );
-      }
-    } else {
-      // v2 格式：chat_data.json + settings.json 分开，合并后一次性恢复
-      final mergedPrefs = <String, dynamic>{};
-      if (restoreChatPreferences) {
-        debugPrint(
-          '[BackupService] _restoreRecordsAndPrefs: merging chat_data.json',
-        );
-        if (metadata.chatPrefs != null) {
-          mergedPrefs.addAll(metadata.chatPrefs!);
-        }
-      }
-      if (selection.settings) {
-        debugPrint(
-          '[BackupService] _restoreRecordsAndPrefs: merging settings.json',
-        );
-        if (metadata.settingsPrefs != null) {
-          mergedPrefs.addAll(metadata.settingsPrefs!);
-        }
-      }
-      if (restoreChatPreferences || selection.settings) {
-        await _restorePreferencesFromJson(
-          mergedPrefs,
-          selection: preferenceSelection,
-          useStartupPreferenceAdapter: useStartupPreferenceAdapter,
-        );
-      }
+    if (restoreChatPreferences || selection.settings) {
+      final restoredPrefs = selectedPreferences ??
+          _restoredPreferencePayload(metadata, selection);
+      await _restorePreferencesFromJson(
+        restoredPrefs,
+        selection: preferenceSelection,
+        useStartupPreferenceAdapter: useStartupPreferenceAdapter,
+      );
     }
   }
 
@@ -4542,62 +5497,164 @@ class BackupService {
       startupPrefs = null;
     }
 
-    final keys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
-    final keysToRemove =
-        keys.where((k) => _isKeyInSelection(k, selection)).toList();
-    for (final key in keysToRemove) {
-      if (prefs != null) {
-        await prefs.remove(key);
-      } else {
-        await startupPrefs!.remove(key);
+    final existingKeys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
+    final affectedKeys = <String>{
+      ...existingKeys.where((key) => _isKeyInSelection(key, selection)),
+      ...backupPrefs.keys.where((key) => _isKeyInSelection(key, selection)),
+    };
+    final previousValues = await _readPreferenceValues(
+      affectedKeys,
+      preferences: prefs,
+    );
+
+    Future<void> restorePreviousPreferences() async {
+      final currentKeys = prefs?.getKeys() ?? await startupPrefs!.getKeys();
+      for (final key in currentKeys.where(affectedKeys.contains)) {
+        final removed = prefs != null
+            ? await prefs.remove(key)
+            : await startupPrefs!.remove(key);
+        if (!removed) {
+          throw StateError(
+              'Failed to remove preference during restore rollback.');
+        }
+      }
+      for (final entry in previousValues.entries) {
+        final previousValue = entry.value;
+        if (previousValue == null) {
+          throw StateError(
+              'Unsupported preference value during restore rollback.');
+        }
+        final saved = await _writePreferenceValue(
+          entry.key,
+          previousValue,
+          preferences: prefs,
+          startupPreferences: startupPrefs,
+        );
+        if (saved != true) {
+          throw StateError(
+              'Failed to restore a preference after backup failure.');
+        }
+      }
+
+      final restoredValues = await _readPreferenceValues(
+        affectedKeys,
+        preferences: prefs,
+      );
+      for (final key in affectedKeys) {
+        final wasPresent = previousValues.containsKey(key);
+        final isPresent = restoredValues.containsKey(key);
+        if (wasPresent != isPresent ||
+            (wasPresent &&
+                !_samePreferenceValue(
+                    previousValues[key], restoredValues[key]))) {
+          throw StateError('Preference rollback verification failed.');
+        }
       }
     }
 
-    for (final entry in backupPrefs.entries) {
-      if (!_isKeyInSelection(entry.key, selection)) continue;
-      final v = entry.value;
-      try {
-        if (v is String) {
-          if (prefs != null) {
-            await prefs.setString(entry.key, v);
-          } else {
-            await startupPrefs!.setString(entry.key, v);
-          }
-        } else if (v is bool) {
-          if (prefs != null) {
-            await prefs.setBool(entry.key, v);
-          } else {
-            await startupPrefs!.setBool(entry.key, v);
-          }
-        } else if (v is int) {
-          if (prefs != null) {
-            await prefs.setInt(entry.key, v);
-          } else {
-            await startupPrefs!.setInt(entry.key, v);
-          }
-        } else if (v is double) {
-          if (prefs != null) {
-            await prefs.setDouble(entry.key, v);
-          } else {
-            await startupPrefs!.setDouble(entry.key, v);
-          }
-        } else if (v is List) {
-          final stringList = v.cast<String>();
-          if (prefs != null) {
-            await prefs.setStringList(entry.key, stringList);
-          } else {
-            await startupPrefs!.setStringList(entry.key, stringList);
-          }
+    try {
+      final keysToRemove = existingKeys
+          .where((key) => _isKeyInSelection(key, selection))
+          .toList();
+      for (final key in keysToRemove) {
+        final removed = prefs != null
+            ? await prefs.remove(key)
+            : await startupPrefs!.remove(key);
+        if (!removed) {
+          throw StateError('Failed to remove restored preference $key.');
         }
-      } catch (e) {
-        debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
-        if (useStartupPreferenceAdapter) rethrow;
       }
+
+      for (final entry in backupPrefs.entries) {
+        if (!_isKeyInSelection(entry.key, selection)) continue;
+        try {
+          final saved = await _writePreferenceValue(
+            entry.key,
+            entry.value,
+            preferences: prefs,
+            startupPreferences: startupPrefs,
+          );
+          if (saved == null) continue;
+          if (!saved) {
+            throw StateError(
+              'Failed to write restored preference ${entry.key}.',
+            );
+          }
+        } catch (e) {
+          debugPrint('恢复偏好设置 ${entry.key} 失败: $e');
+          rethrow;
+        }
+      }
+    } catch (error, stackTrace) {
+      try {
+        await restorePreviousPreferences();
+      } catch (_) {
+        throw const _PreferenceRestoreRollbackIncomplete();
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
+
     await AppLogService.info(
       'BackupService',
-      '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${keysToRemove.length}',
+      '_restorePreferencesFromJson: restored ${backupPrefs.length} keys, removed ${existingKeys.where((key) => _isKeyInSelection(key, selection)).length}',
     );
+  }
+
+  static Future<Map<String, Object?>> _readPreferenceValues(
+    Set<String> keys, {
+    required SharedPreferences? preferences,
+  }) async {
+    if (preferences == null) return StartupPreferences.getValues(keys);
+    return {
+      for (final key in keys)
+        if (preferences.containsKey(key)) key: preferences.get(key),
+    };
+  }
+
+  static Future<bool?> _writePreferenceValue(
+    String key,
+    Object value, {
+    required SharedPreferences? preferences,
+    required StartupMigrationPreferences? startupPreferences,
+  }) async {
+    if (value is String) {
+      return preferences != null
+          ? preferences.setString(key, value)
+          : startupPreferences!.setString(key, value);
+    }
+    if (value is bool) {
+      return preferences != null
+          ? preferences.setBool(key, value)
+          : startupPreferences!.setBool(key, value);
+    }
+    if (value is int) {
+      return preferences != null
+          ? preferences.setInt(key, value)
+          : startupPreferences!.setInt(key, value);
+    }
+    if (value is double) {
+      return preferences != null
+          ? preferences.setDouble(key, value)
+          : startupPreferences!.setDouble(key, value);
+    }
+    if (value is List) {
+      final stringList = value.cast<String>();
+      return preferences != null
+          ? preferences.setStringList(key, stringList)
+          : startupPreferences!.setStringList(key, stringList);
+    }
+    return null;
+  }
+
+  static bool _samePreferenceValue(Object? left, Object? right) {
+    if (left is List && right is List) {
+      if (left.length != right.length) return false;
+      for (var index = 0; index < left.length; index++) {
+        if (left[index] != right[index]) return false;
+      }
+      return true;
+    }
+    return left == right;
   }
 
   // ================================================================
@@ -5484,13 +6541,19 @@ class BackupService {
     Uint8List bytes, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
+    bool skipPostRestoreMigration = false,
     bool skipMissingCategories = false,
+    LlmCredentialStore? credentialStore,
+    Future<void> Function()? afterCredentialStagingForTest,
   }) async {
     await _restoreFromBytes(
       bytes,
       onProgress: onProgress,
       selection: selection,
+      skipPostRestoreMigration: skipPostRestoreMigration,
       skipMissingCategories: skipMissingCategories,
+      credentialStoreForTest: credentialStore,
+      afterCredentialStagingForTest: afterCredentialStagingForTest,
     );
   }
 
@@ -5551,49 +6614,57 @@ const _backupKnownProviderTypes = {
 };
 
 Object? _safeBackupPreferenceValue(String key, Object? value) {
+  if (key == 'chat_configs') {
+    if (value is! String) return null;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! List) return null;
+      return jsonEncode(sanitizeCredentialFields(decoded));
+    } catch (_) {
+      return null;
+    }
+  }
+  if (key == LlmAccountMigrationService.accountsPreferenceKey ||
+      key == LlmAccountMigrationService.modelGroupsPreferenceKey) {
+    if (value is! String) return null;
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is! Map || decoded['items'] is! List) return null;
+      return jsonEncode(sanitizeCredentialFields(decoded));
+    } catch (_) {
+      return null;
+    }
+  }
   if (key != 'provider_entries') return value;
   if (value is! String) return null;
   try {
     final decoded = jsonDecode(value);
     if (decoded is! List) return null;
-    for (final entry in decoded) {
+    for (var index = 0; index < decoded.length; index++) {
+      final entry = decoded[index];
       if (entry is! Map) return null;
       if (entry['type'] != 'llm') {
+        if (entry['type'] == 'mcp') {
+          decoded[index] = sanitizeCredentialFields(entry);
+          continue;
+        }
         if (!_backupKnownProviderTypes.contains(entry['type'])) {
-          _removeBackupCredentialKeys(entry);
+          decoded[index] = sanitizeCredentialFields(entry);
         }
         continue;
       }
-      // Mixed legacy entries can retain the old credential at the entry level
-      // even after configs[] was introduced.
-      entry.remove('key');
       final configs = entry['configs'];
-      if (configs == null) {
-        // Older provider entries stored their single config at the top level.
-        continue;
+      if (configs != null && configs is! List) return null;
+      if (configs is List) {
+        for (final config in configs) {
+          if (config is! Map) return null;
+        }
       }
-      if (configs is! List) return null;
-      for (final config in configs) {
-        if (config is! Map) return null;
-        config.remove('key');
-      }
+      decoded[index] = sanitizeCredentialFields(entry);
     }
     return jsonEncode(decoded);
   } catch (_) {
     return null;
-  }
-}
-
-void _removeBackupCredentialKeys(Object? value) {
-  if (value is Map) {
-    value.remove('key');
-    for (final child in value.values) {
-      _removeBackupCredentialKeys(child);
-    }
-  } else if (value is List) {
-    for (final child in value) {
-      _removeBackupCredentialKeys(child);
-    }
   }
 }
 

@@ -11,6 +11,18 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
+const _settingsAndTextRestoreSelection = BackupSelection(
+  chatRecordsAndAttachments: false,
+  settings: true,
+  pictures: false,
+  audio: false,
+  videos: false,
+  texts: true,
+  tasks: false,
+  ankiData: false,
+  browserCookies: false,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -128,6 +140,1366 @@ void main() {
     expect(exportedText, contains('legacy-provider-config'));
     expect(exportedText, contains('legacy-model-id'));
     expect(prefs.getString('provider_entries'), contains(secret));
+  });
+
+  testWidgets(
+      'redacts nested model credentials while preserving safe model data',
+      (WidgetTester t) async {
+    const secret = 'sk_nested_model_subscription_secret';
+    const secretKeyValue = 'sk_nested_model_secret_key_value';
+    const authKeyValue = 'sk_nested_model_auth_key_value';
+    const functionsKeyValue = 'sk_nested_model_functions_key_value';
+    const proxyAuthorizationValue = 'sk_nested_model_proxy_authorization_value';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'model-provider-entry',
+          'type': 'llm',
+          'name': 'Preserved provider',
+          'configs': [
+            {
+              'id': 'model-provider-config',
+              'providerName': 'Safe provider',
+              'models': [
+                {
+                  'id': 'safe-model',
+                  'modelId': 'safe-model-id',
+                  'name': 'Preserved model name',
+                  'headers': {
+                    'Ocp-Apim-Subscription-Key': secret,
+                    'x-functions-key': functionsKeyValue,
+                    'proxy-authorization': proxyAuthorizationValue,
+                  },
+                  'options': {
+                    'authorizationHeader': secret,
+                    'temperature': 0.25,
+                  },
+                  'secretKey': secretKeyValue,
+                  'authKey': authKeyValue,
+                  'publicKey': 'public-key-metadata',
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(secret), isFalse);
+    expect(exportedText.contains(secretKeyValue), isFalse);
+    expect(exportedText.contains(authKeyValue), isFalse);
+    expect(exportedText.contains(functionsKeyValue), isFalse);
+    expect(exportedText.contains(proxyAuthorizationValue), isFalse);
+    expect(exportedText, contains('safe-model-id'));
+    expect(exportedText, contains('Preserved model name'));
+    expect(exportedText, contains('temperature'));
+    expect(exportedText, contains('public-key-metadata'));
+  });
+
+  testWidgets(
+      'sanitizes missing and unknown provider types and legacy chat configs',
+      (WidgetTester t) async {
+    const missingTypeSecret = 'sk_missing_provider_type_secret';
+    const unknownTypeSecret = 'sk_unknown_provider_type_secret';
+    const legacyConfigSecret = 'sk_legacy_chat_config_secret';
+    const nestedLegacySecret = 'sk_legacy_chat_nested_secret';
+    const quarantinedLegacySecret = 'sk_quarantined_chat_config_secret';
+    const credentialKeySecret = 'sk_credential_key_field_secret';
+    const apiSecretKeySecret = 'sk_api_secret_key_field_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'provider-without-type',
+          'name': 'Keep missing-type data',
+          'apiKey': missingTypeSecret,
+        },
+        {
+          'id': 'provider-with-unknown-type',
+          'type': 'custom-provider',
+          'name': 'Keep custom provider data',
+          'headers': {
+            'authorizationHeader': unknownTypeSecret,
+            'credentialKey': credentialKeySecret,
+            'apiSecretKey': apiSecretKeySecret,
+          },
+        },
+      ]),
+    );
+    await prefs.setString(
+      'chat_configs',
+      jsonEncode([
+        {
+          'providerName': 'Legacy provider',
+          'host': 'https://legacy.example.test',
+          'key': legacyConfigSecret,
+          'credentialRef': 'safe-legacy-credential-reference',
+          'publicKey': 'safe-legacy-public-key',
+          'models': [
+            {
+              'modelId': 'safe-legacy-model-id',
+              'headers': {'Ocp-Apim-Subscription-Key': nestedLegacySecret},
+            },
+          ],
+        },
+      ]),
+    );
+    await prefs.setString(
+      'chat_configs_corrupt_123',
+      jsonEncode([
+        {
+          'providerName': 'Quarantined legacy config',
+          'key': quarantinedLegacySecret
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(missingTypeSecret), isFalse);
+    expect(exportedText.contains(unknownTypeSecret), isFalse);
+    expect(exportedText.contains(legacyConfigSecret), isFalse);
+    expect(exportedText.contains(nestedLegacySecret), isFalse);
+    expect(exportedText.contains(quarantinedLegacySecret), isFalse);
+    expect(exportedText.contains(credentialKeySecret), isFalse);
+    expect(exportedText.contains(apiSecretKeySecret), isFalse);
+    expect(exportedText, contains('provider-without-type'));
+    expect(exportedText, contains('provider-with-unknown-type'));
+    expect(exportedText, contains('safe-legacy-model-id'));
+    expect(exportedText, contains('safe-legacy-credential-reference'));
+    expect(exportedText, contains('safe-legacy-public-key'));
+  });
+
+  testWidgets('redacts authentication cookies from custom provider backups',
+      (WidgetTester t) async {
+    const cookie = 'session=sk_cookie_export_secret';
+    const setCookie = 'auth=sk_set_cookie_export_secret; HttpOnly';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'custom-cookie-provider',
+          'type': 'custom-provider',
+          'headers': {
+            'Cookie': cookie,
+            'Set-Cookie': setCookie,
+          },
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(cookie), isFalse);
+    expect(exportedText.contains(setCookie), isFalse);
+    expect(exportedText, contains('custom-cookie-provider'));
+  });
+
+  testWidgets('redacts credentials from LLM account and group backups',
+      (WidgetTester t) async {
+    const accountSecret = 'sk_account_envelope_export_secret';
+    const groupSecret = 'sk_group_envelope_export_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      LlmAccountMigrationService.accountsPreferenceKey,
+      jsonEncode({
+        'version': 1,
+        'items': [
+          {
+            'id': 'safe-account-id',
+            'credentialRef': 'safe-account-reference',
+            'apiKey': accountSecret,
+          },
+        ],
+        'authorizationHeader': accountSecret,
+      }),
+    );
+    await prefs.setString(
+      LlmAccountMigrationService.modelGroupsPreferenceKey,
+      jsonEncode({
+        'version': 1,
+        'items': [
+          {
+            'id': 'safe-group-id',
+            'members': [
+              {'accountId': 'safe-account-id', 'token': groupSecret},
+            ],
+          },
+        ],
+      }),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(accountSecret), isFalse);
+    expect(exportedText.contains(groupSecret), isFalse);
+    expect(exportedText, contains('safe-account-id'));
+    expect(exportedText, contains('safe-account-reference'));
+    expect(exportedText, contains('safe-group-id'));
+
+    const malformedEnvelopeSecret = 'sk_malformed_llm_envelope_export_secret';
+    await prefs.setString(
+      LlmAccountMigrationService.accountsPreferenceKey,
+      jsonEncode(malformedEnvelopeSecret),
+    );
+    final malformedBackup = await BackupService.buildBackupBytesForTest();
+    final malformedArchive = ZipDecoder().decodeBytes(malformedBackup);
+    final malformedExportedText = malformedArchive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+    expect(malformedExportedText.contains(malformedEnvelopeSecret), isFalse);
+  });
+
+  testWidgets('redacts credentials from MCP provider backups',
+      (WidgetTester t) async {
+    const apiKey = 'sk_mcp_backup_api_key_secret';
+    const headerSecret = 'sk_mcp_backup_authorization_secret';
+    const environmentSecret = 'sk_mcp_backup_environment_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        {
+          'id': 'mcp-provider-entry',
+          'type': 'mcp',
+          'name': 'MCP provider',
+          'typeConfig': {
+            'apiKey': apiKey,
+            'headers': {'Authorization': headerSecret},
+            'environment': {'MCP_API_TOKEN': environmentSecret},
+            'command': 'safe-command',
+          },
+        },
+      ]),
+    );
+
+    final bytes = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(bytes);
+    final exportedText = archive.files
+        .where((file) => file.isFile)
+        .map((file) =>
+            utf8.decode(file.content as List<int>, allowMalformed: true))
+        .join('\n');
+
+    expect(exportedText.contains(apiKey), isFalse);
+    expect(exportedText.contains(headerSecret), isFalse);
+    expect(exportedText.contains(environmentSecret), isFalse);
+    expect(exportedText, contains('mcp-provider-entry'));
+    expect(exportedText, contains('safe-command'));
+  });
+
+  testWidgets(
+      'preflights ambiguous legacy chat configs before files or database change',
+      (WidgetTester t) async {
+    final prefs = await SharedPreferences.getInstance();
+    const importedText = 'this-text-must-not-be-restored';
+    await TextManifest.writeText('imported-text-hash.txt', importedText);
+    await ManifestDatabase.insertTextRecord({
+      'id': 'imported-text-record',
+      'name': 'Imported text',
+      'hash': 'imported-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': importedText.length,
+      'folder': '',
+      'textLength': importedText.length,
+    });
+    await prefs.setString('provider_entries', '[]');
+
+    final validBackup = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(validBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['chat_configs'] = jsonEncode([
+      {
+        'providerName': 'Ambiguous provider',
+        'host': 'https://api.example.test',
+        'key': 'sk_first_ambiguous_legacy_key',
+        'models': [
+          {'modelId': 'same-model'},
+        ],
+      },
+      {
+        'providerName': 'Ambiguous provider',
+        'host': 'https://api.example.test',
+        'key': 'sk_second_ambiguous_legacy_key',
+        'models': [
+          {'modelId': 'same-model'},
+        ],
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final invalidSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+        ArchiveFile('settings.json', invalidSettings.length, invalidSettings));
+    final backup = Uint8List.fromList(ZipEncoder().encode(archive));
+
+    await ManifestDatabase.clearAllData();
+    TextManifest.invalidateCache();
+    await TextManifest.deleteFile('imported-text-hash.txt');
+    const existingText = 'keep-this-existing-text';
+    await TextManifest.writeText('existing-text-hash.txt', existingText);
+    await ManifestDatabase.insertTextRecord({
+      'id': 'existing-text-record',
+      'name': 'Existing text',
+      'hash': 'existing-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': existingText.length,
+      'folder': '',
+      'textLength': existingText.length,
+    });
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        backup,
+        selection: _settingsAndTextRestoreSelection,
+      ),
+      throwsA(
+        isA<BackupValidationException>().having(
+          (error) => error.message,
+          'message',
+          '备份中的 LLM 设置无效或存在歧义。未更改本机数据。',
+        ),
+      ),
+    );
+
+    final textRecords = await ManifestDatabase.getAllTextRecords();
+    expect(textRecords.map((record) => record['id']),
+        contains('existing-text-record'));
+    expect(textRecords.map((record) => record['id']),
+        isNot(contains('imported-text-record')));
+    expect(await TextManifest.readText('existing-text-hash.txt'), existingText);
+    expect(await TextManifest.readText('imported-text-hash.txt'), isNull);
+  });
+
+  testWidgets(
+      'preflights malformed selected LLM settings before files or database change',
+      (WidgetTester t) async {
+    final prefs = await SharedPreferences.getInstance();
+    await TextManifest.writeText('imported-text-hash.txt', 'unrestored');
+    await ManifestDatabase.insertTextRecord({
+      'id': 'imported-text-record',
+      'name': 'Imported text',
+      'hash': 'imported-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': 'unrestored'.length,
+      'folder': '',
+      'textLength': 'unrestored'.length,
+    });
+    await prefs.setString(
+      'provider_entries',
+      '[]',
+    );
+
+    final validBackup = await BackupService.buildBackupBytesForTest();
+    final archive = ZipDecoder().decodeBytes(validBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'malformed-llm-entry',
+        'type': 'llm',
+        'configs': 'not-a-config-list',
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final invalidSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+        ArchiveFile('settings.json', invalidSettings.length, invalidSettings));
+    final backup = Uint8List.fromList(ZipEncoder().encode(archive));
+
+    await ManifestDatabase.clearAllData();
+    TextManifest.invalidateCache();
+    await TextManifest.deleteFile('imported-text-hash.txt');
+    const existingText = 'preserve-on-invalid-import';
+    await TextManifest.writeText('existing-text-hash.txt', existingText);
+    await ManifestDatabase.insertTextRecord({
+      'id': 'existing-text-record',
+      'name': 'Existing text',
+      'hash': 'existing-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': existingText.length,
+      'folder': '',
+      'textLength': existingText.length,
+    });
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(backup),
+      throwsA(isA<BackupValidationException>()),
+    );
+
+    final textRecords = await ManifestDatabase.getAllTextRecords();
+    expect(textRecords.map((record) => record['id']),
+        contains('existing-text-record'));
+    expect(textRecords.map((record) => record['id']),
+        isNot(contains('imported-text-record')));
+    expect(await TextManifest.readText('existing-text-hash.txt'), existingText);
+    expect(await TextManifest.readText('imported-text-hash.txt'), isNull);
+  });
+
+  testWidgets(
+      'preflights LLM account IDs, references, and envelopes before restore mutations',
+      (WidgetTester t) async {
+    final prefs = await SharedPreferences.getInstance();
+    const importedText = 'this-text-must-not-be-restored';
+    await TextManifest.writeText('imported-text-hash.txt', importedText);
+    await ManifestDatabase.insertTextRecord({
+      'id': 'imported-text-record',
+      'name': 'Imported text',
+      'hash': 'imported-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': importedText.length,
+      'folder': '',
+      'textLength': importedText.length,
+    });
+    await prefs.setString('provider_entries', '[]');
+
+    final validBackup = await BackupService.buildBackupBytesForTest();
+    final invalidSettingsCases = <Map<String, dynamic>>[
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'entry-with-extra-credential',
+            'type': 'llm',
+            'authorizationHeader': 'sk_restore_entry_header_secret',
+            'configs': [
+              {'id': 'valid-account-id', 'models': []},
+            ],
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'missing-type-entry-with-credential',
+            'apiKey': 'sk_restore_missing_type_secret',
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'invalid-entry-level-llm-key',
+            'type': 'llm',
+            'key': 42,
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'unknown-type-entry-with-credential',
+            'type': 'custom-provider',
+            'headers': {
+              'authorizationHeader': 'sk_restore_unknown_type_secret'
+            },
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'unknown-type-set-cookie-entry',
+            'type': 'custom-provider',
+            'headers': {'Set-Cookie': 'auth=sk_restore_set_cookie_secret'},
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'credential-bearing-mcp-entry',
+            'type': 'mcp',
+            'typeConfig': {
+              'apiKey': 'sk_restore_mcp_secret',
+              'headers': {'Authorization': 'sk_restore_mcp_header_secret'},
+            },
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'missing-type-cookie-entry',
+            'headers': {'Cookie': 'auth=sk_restore_cookie_secret'},
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'cross-source-llm-entry',
+            'type': 'llm',
+            'configs': [
+              {
+                'id': 'cross-source-account',
+                'providerName': 'Cross-source provider',
+                'host': 'https://cross-source.example.test',
+                'key': 'sk_provider_entries_cross_source_key',
+                'models': [
+                  {'modelId': 'cross-source-model'},
+                ],
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Cross-source provider',
+            'host': 'https://cross-source.example.test',
+            'key': 'sk_legacy_chat_configs_cross_source_key',
+            'models': [
+              {'modelId': 'cross-source-model'},
+            ],
+          },
+        ]),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'account-ref-fallback-entry',
+            'type': 'llm',
+            'configs': [
+              {'id': 'account-ref-fallback-id', 'models': []},
+            ],
+          },
+        ]),
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {
+              'id': 'account-ref-fallback-id',
+              'credentialRef': 'missing-account-level-secure-reference',
+              'models': [],
+            },
+          ],
+        }),
+      },
+      {
+        'provider_entries': jsonEncode([
+          {
+            'id': 'mismatched-reference-entry',
+            'type': 'llm',
+            'configs': [
+              {
+                'id': 'mismatched-reference-id',
+                'credentialRef': 'provider-config-reference',
+                'models': [],
+              },
+            ],
+          },
+        ]),
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {
+              'id': 'mismatched-reference-id',
+              'credentialRef': 'account-envelope-reference',
+              'models': [],
+            },
+          ],
+        }),
+      },
+      {
+        LlmAccountMigrationService.accountsPreferenceKey:
+            '{"version":1,"items":"not-a-record-list"}',
+      },
+      {
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {'id': ''},
+          ],
+        }),
+      },
+      {
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {
+              'id': 'unlinked-account-with-reference',
+              'credentialRef': 'missing-unlinked-account-reference',
+              'models': [],
+            },
+          ],
+        }),
+      },
+      {
+        LlmAccountMigrationService.modelGroupsPreferenceKey:
+            '{"version":1,"items":"not-a-record-list"}',
+      },
+    ];
+
+    Uint8List backupWithSettings(Map<String, dynamic> replacement) {
+      final archive = ZipDecoder().decodeBytes(validBackup);
+      final settingsFile = archive.findFile('settings.json')!;
+      final settings =
+          jsonDecode(utf8.decode(settingsFile.content as List<int>))
+              as Map<String, dynamic>;
+      settings.addAll(replacement);
+      archive.removeFile(settingsFile);
+      final encoded = utf8.encode(jsonEncode(settings));
+      archive.addFile(ArchiveFile('settings.json', encoded.length, encoded));
+      return Uint8List.fromList(ZipEncoder().encode(archive));
+    }
+
+    await ManifestDatabase.clearAllData();
+    TextManifest.invalidateCache();
+    await TextManifest.deleteFile('imported-text-hash.txt');
+    const existingText = 'preserve-on-invalid-import';
+    await TextManifest.writeText('existing-text-hash.txt', existingText);
+    await ManifestDatabase.insertTextRecord({
+      'id': 'existing-text-record',
+      'name': 'Existing text',
+      'hash': 'existing-text-hash',
+      'format': 'txt',
+      'createdAt': DateTime.now().toIso8601String(),
+      'size': existingText.length,
+      'folder': '',
+      'textLength': existingText.length,
+    });
+
+    for (final invalidSettings in invalidSettingsCases) {
+      await expectLater(
+        BackupService.restoreFromBytesForTest(
+          backupWithSettings(invalidSettings),
+          selection: _settingsAndTextRestoreSelection,
+          credentialStore: _BackupCredentialStore(),
+        ),
+        throwsA(
+          isA<BackupValidationException>().having(
+            (error) => error.message,
+            'message',
+            '备份中的 LLM 设置无效或存在歧义。未更改本机数据。',
+          ),
+        ),
+      );
+
+      final textRecords = await ManifestDatabase.getAllTextRecords();
+      expect(textRecords.map((record) => record['id']),
+          contains('existing-text-record'));
+      expect(textRecords.map((record) => record['id']),
+          isNot(contains('imported-text-record')));
+      expect(
+          await TextManifest.readText('existing-text-hash.txt'), existingText);
+      expect(await TextManifest.readText('imported-text-hash.txt'), isNull);
+      expect(prefs.getString('provider_entries'), '[]');
+    }
+  });
+
+  testWidgets(
+      'rejects an unlinked LLM account credential reference without secure data',
+      (WidgetTester t) async {
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings[LlmAccountMigrationService.accountsPreferenceKey] = jsonEncode({
+      'version': 1,
+      'items': [
+        {
+          'id': 'unlinked-account',
+          'credentialRef': 'missing-unlinked-account-reference',
+          'models': [],
+        },
+      ],
+    });
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: _BackupCredentialStore(),
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+    expect(prefs.getString('provider_entries'), '[]');
+    expect(
+      prefs.getString(LlmAccountMigrationService.accountsPreferenceKey),
+      isNull,
+    );
+  });
+
+  testWidgets('rejects credential-bearing MCP settings before restore commits',
+      (WidgetTester t) async {
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const secret = 'sk_credential_bearing_mcp_restore_secret';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'credential-bearing-mcp-entry',
+        'type': 'mcp',
+        'typeConfig': {
+          'apiKey': secret,
+          'headers': {'Authorization': secret},
+        },
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: _BackupCredentialStore(),
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+    expect(prefs.getString('provider_entries'), '[]');
+  });
+
+  testWidgets(
+      'rejects cross-source inline credentials that conflict with a referenced secret',
+      (WidgetTester t) async {
+    const reference = 'stroom.llm.credential.cross-source-preflight';
+    const existingSecret = 'sk_existing_cross_source_secret';
+    const legacySecret = 'sk_conflicting_legacy_restore_secret';
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'keyless-provider-entry',
+        'type': 'llm',
+        'configs': [
+          {
+            'id': 'keyless-provider-config',
+            'providerName': 'Shared provider',
+            'host': 'https://shared.example.test',
+            'credentialRef': reference,
+            'models': [
+              {'modelId': 'shared-model'},
+            ],
+          },
+        ],
+      },
+    ]);
+    settings['chat_configs'] = jsonEncode([
+      {
+        'providerName': 'Shared provider',
+        'host': 'https://shared.example.test',
+        'key': legacySecret,
+        'models': [
+          {'modelId': 'shared-model'},
+        ],
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+    final credentialStore = _BackupCredentialStore()
+      ..values[reference] = existingSecret;
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: credentialStore,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+
+    expect(credentialStore.values[reference] == existingSecret, isTrue);
+    expect(prefs.getString('provider_entries') == '[]', isTrue);
+  });
+
+  testWidgets(
+      'restores distinct accounts that share endpoint and model identity',
+      (WidgetTester t) async {
+    const firstReference = 'stroom.llm.credential.same-endpoint-first';
+    const secondReference = 'stroom.llm.credential.same-endpoint-second';
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'shared-endpoint-llm-entry',
+        'type': 'llm',
+        'configs': [
+          {
+            'id': 'same-endpoint-account-one',
+            'providerName': 'Shared endpoint',
+            'host': 'https://same-endpoint.example.test',
+            'credentialRef': firstReference,
+            'models': [
+              {'modelId': 'shared-model'},
+            ],
+          },
+          {
+            'id': 'same-endpoint-account-two',
+            'providerName': 'Shared endpoint',
+            'host': 'https://same-endpoint.example.test',
+            'credentialRef': secondReference,
+            'models': [
+              {'modelId': 'shared-model'},
+            ],
+          },
+        ],
+      },
+    ]);
+    settings[LlmAccountMigrationService.accountsPreferenceKey] = jsonEncode({
+      'version': 1,
+      'items': [
+        {
+          'id': 'same-endpoint-account-one',
+          'credentialRef': firstReference,
+          'models': [],
+        },
+        {
+          'id': 'same-endpoint-account-two',
+          'credentialRef': secondReference,
+          'models': [],
+        },
+      ],
+    });
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+    final credentialStore = _BackupCredentialStore()
+      ..values[firstReference] = 'stored-value-one'
+      ..values[secondReference] = 'stored-value-two';
+
+    await BackupService.restoreFromBytesForTest(
+      Uint8List.fromList(ZipEncoder().encode(archive)),
+      selection: settingsOnlySelection,
+      skipPostRestoreMigration: true,
+      credentialStore: credentialStore,
+    );
+
+    final restoredEntries =
+        jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+    final configs =
+        ((restoredEntries.single as Map)['configs'] as List).cast<Map>();
+    expect(
+      configs.map((config) => config['credentialRef']).toSet(),
+      {firstReference, secondReference},
+    );
+    expect(credentialStore.values[firstReference], 'stored-value-one');
+    expect(credentialStore.values[secondReference], 'stored-value-two');
+  });
+
+  testWidgets(
+      'rejects null selected provider settings before clearing local settings',
+      (WidgetTester t) async {
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    const previousProviderEntries = '[]';
+    await prefs.setString('provider_entries', previousProviderEntries);
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = null;
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: _BackupCredentialStore(),
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+
+    expect(prefs.getString('provider_entries'), previousProviderEntries);
+  });
+
+  testWidgets(
+      'restores legacy single-config LLM entries without persisting inline keys',
+      (WidgetTester t) async {
+    const legacySecret = 'sk_legacy_single_config_restore_secret';
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'legacy-single-config-entry',
+        'type': 'llm',
+        'name': 'Legacy single config',
+        'providerName': 'Legacy provider',
+        'host': 'https://legacy-single-config.example.test',
+        'key': legacySecret,
+        'models': [
+          {'modelId': 'legacy-model', 'name': 'Legacy model'},
+        ],
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+    final credentialStore = _BackupCredentialStore();
+
+    await BackupService.restoreFromBytesForTest(
+      Uint8List.fromList(ZipEncoder().encode(archive)),
+      selection: settingsOnlySelection,
+      skipPostRestoreMigration: true,
+      credentialStore: credentialStore,
+    );
+
+    final restoredEntries =
+        jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+    final restoredEntry = restoredEntries.single as Map;
+    final restoredConfigs = (restoredEntry['configs'] as List).cast<Map>();
+    final restoredConfig = restoredConfigs.single;
+    expect(restoredEntry['providerName'], isNull);
+    expect(restoredEntry.containsKey('key'), isFalse);
+    expect(restoredConfig['id'], isA<String>());
+    expect(restoredConfig['id'], isNotEmpty);
+    expect(restoredConfig['key'], isNull);
+    expect(restoredConfig['providerName'], 'Legacy provider');
+    expect(restoredConfig['host'], 'https://legacy-single-config.example.test');
+    expect(
+        (restoredConfig['models'] as List).single['modelId'], 'legacy-model');
+    final reference = restoredConfig['credentialRef'] as String;
+    expect(credentialStore.values[reference], legacySecret);
+    expect(
+        prefs.getString('provider_entries')!.contains(legacySecret), isFalse);
+  });
+
+  testWidgets(
+      'restores LLM configs without IDs using staged secure credentials',
+      (WidgetTester t) async {
+    const legacySecret = 'sk_missing_config_id_restore_secret';
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final baseBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(baseBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'llm-configs-without-ids-entry',
+        'type': 'llm',
+        'configs': [
+          {
+            'providerName': 'Config without ID',
+            'host': 'https://missing-config-id.example.test',
+            'key': legacySecret,
+            'models': [],
+          },
+        ],
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+    final credentialStore = _BackupCredentialStore();
+
+    await BackupService.restoreFromBytesForTest(
+      Uint8List.fromList(ZipEncoder().encode(archive)),
+      selection: settingsOnlySelection,
+      skipPostRestoreMigration: true,
+      credentialStore: credentialStore,
+    );
+
+    final restoredEntries =
+        jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+    final restoredEntry = restoredEntries.single as Map;
+    final restoredConfig = restoredEntry['configs'] as List;
+    final config = restoredConfig.single as Map;
+    expect(config['id'], isA<String>());
+    expect(config['id'], isNotEmpty);
+    expect(config['key'], isNull);
+    final reference = config['credentialRef'] as String;
+    expect(credentialStore.values[reference], legacySecret);
+    expect(
+        prefs.getString('provider_entries')!.contains(legacySecret), isFalse);
+  });
+
+  testWidgets(
+      'moves inline restore credentials to secure storage before prefs commit',
+      (WidgetTester t) async {
+    const providerSecret = 'sk_restore_provider_entry_secret';
+    const entrySecret = 'sk_restore_provider_entry_level_secret';
+    const legacySecret = 'sk_restore_legacy_chat_secret';
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', '[]');
+    final validBackup = await BackupService.buildBackupBytesForTest(
+      selection: settingsOnlySelection,
+    );
+    final archive = ZipDecoder().decodeBytes(validBackup);
+    final settingsFile = archive.findFile('settings.json')!;
+    final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+        as Map<String, dynamic>;
+    settings['provider_entries'] = jsonEncode([
+      {
+        'id': 'restore-llm-entry',
+        'type': 'llm',
+        'name': 'Restored LLM',
+        'configs': [
+          {
+            'id': 'restore-provider-config',
+            'providerName': 'Restored provider',
+            'host': 'https://restore-provider.example.test',
+            'key': providerSecret,
+            'models': [],
+          },
+        ],
+      },
+      {
+        'id': 'restore-llm-entry-key',
+        'type': 'llm',
+        'name': 'Restored legacy entry key',
+        'key': entrySecret,
+        'configs': [
+          {
+            'id': 'restore-entry-key-config',
+            'providerName': 'Restored entry-key provider',
+            'host': 'https://restore-entry-key.example.test',
+            'models': [],
+          },
+        ],
+      },
+    ]);
+    settings['chat_configs'] = jsonEncode([
+      {
+        'providerName': 'Restored legacy provider',
+        'host': 'https://restore-legacy.example.test',
+        'key': legacySecret,
+        'models': [
+          {'modelId': 'legacy-model'},
+        ],
+      },
+    ]);
+    archive.removeFile(settingsFile);
+    final encodedSettings = utf8.encode(jsonEncode(settings));
+    archive.addFile(
+      ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+    );
+    final credentialStore = _BackupCredentialStore();
+
+    await BackupService.restoreFromBytesForTest(
+      Uint8List.fromList(ZipEncoder().encode(archive)),
+      selection: settingsOnlySelection,
+      skipPostRestoreMigration: true,
+      credentialStore: credentialStore,
+    );
+
+    final restoredEntries =
+        jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
+    final restoredConfig = ((restoredEntries.singleWhere(
+      (entry) => (entry as Map)['id'] == 'restore-llm-entry',
+    ) as Map)['configs'] as List)
+        .single as Map;
+    expect(restoredConfig.containsKey('key'), isFalse);
+    final providerReference = restoredConfig['credentialRef'] as String;
+    expect(credentialStore.values[providerReference], providerSecret);
+    final restoredEntryKeyConfig = ((restoredEntries.singleWhere(
+      (entry) => (entry as Map)['id'] == 'restore-llm-entry-key',
+    ) as Map)['configs'] as List)
+        .single as Map;
+    expect(restoredEntryKeyConfig.containsKey('key'), isFalse);
+    final entryReference = restoredEntryKeyConfig['credentialRef'] as String;
+    expect(credentialStore.values[entryReference], entrySecret);
+
+    final restoredLegacy =
+        jsonDecode(prefs.getString('chat_configs')!) as List<dynamic>;
+    final restoredLegacyConfig = restoredLegacy.single as Map;
+    expect(restoredLegacyConfig.containsKey('key'), isFalse);
+    final legacyReference = restoredLegacyConfig['credentialRef'] as String;
+    expect(credentialStore.values[legacyReference], legacySecret);
+    expect(
+        prefs.getString('provider_entries'), isNot(contains(providerSecret)));
+    expect(prefs.getString('provider_entries'), isNot(contains(entrySecret)));
+    expect(prefs.getString('chat_configs'), isNot(contains(legacySecret)));
+
+    await prefs.setString('provider_entries', '[]');
+    await prefs.remove('chat_configs');
+    final unavailableStore = _BackupCredentialStore()..failOnWriteNumber = 2;
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: unavailableStore,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+    expect(prefs.getString('provider_entries'), '[]');
+    expect(prefs.getString('chat_configs'), isNull);
+    expect(unavailableStore.values, isEmpty);
+  });
+
+  test('serializes backup restore until migration rollback completes',
+      () async {
+    const settingsOnlySelection = BackupSelection(
+      chatRecordsAndAttachments: false,
+      settings: true,
+      pictures: false,
+      audio: false,
+      videos: false,
+      texts: false,
+      tasks: false,
+      ankiData: false,
+      browserCookies: false,
+    );
+    const reference = 'stroom.llm.credential.concurrent-restore-rollback';
+    const firstSecret = 'sk_initial_migration_credential';
+    const migrationSecret = 'sk_rollback_migration_credential';
+    const restoredSecret = 'sk_committed_backup_restore_credential';
+
+    String sourceWithKey(String secret) => jsonEncode([
+          {
+            'id': 'rollback-race-provider',
+            'type': 'llm',
+            'configs': [
+              {
+                'id': 'rollback-race-account',
+                'providerName': 'Rollback race provider',
+                'host': 'https://rollback-race.example.test',
+                'credentialRef': reference,
+                'key': secret,
+                'models': [],
+              },
+            ],
+          },
+        ]);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('provider_entries', sourceWithKey(firstSecret));
+    final credentials = _BackupCredentialStore();
+    final migrationPreferences = _BackupLlmPreferences(prefs);
+    final migration = LlmAccountMigrationService(
+      preferences: migrationPreferences,
+      credentialStore: credentials,
+    );
+    await migration.migrate();
+    expect(credentials.values[reference] == firstSecret, isTrue);
+    await prefs.remove(LlmAccountMigrationService.migrationStateKey);
+
+    late Future<void> pendingRestore;
+    var restoreCompletedBeforeMigrationFailure = false;
+    migrationPreferences.onSet = (key, value) async {
+      if (key != LlmAccountMigrationService.migrationStateKey) {
+        return prefs.setString(key, value);
+      }
+      expect(credentials.values[reference] == migrationSecret, isTrue);
+      final backupBytes = await BackupService.buildBackupBytesForTest(
+        selection: settingsOnlySelection,
+      );
+      final archive = ZipDecoder().decodeBytes(backupBytes);
+      final settingsFile = archive.findFile('settings.json')!;
+      final settings =
+          jsonDecode(utf8.decode(settingsFile.content as List<int>))
+              as Map<String, dynamic>;
+      final entries =
+          jsonDecode(settings['provider_entries'] as String) as List<dynamic>;
+      final entry = entries.single as Map<String, dynamic>;
+      final config = (entry['configs'] as List).single as Map<String, dynamic>;
+      config['key'] = restoredSecret;
+      settings['provider_entries'] = jsonEncode(entries);
+      archive.removeFile(settingsFile);
+      final encodedSettings = utf8.encode(jsonEncode(settings));
+      archive.addFile(
+        ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
+      );
+      pendingRestore = BackupService.restoreFromBytesForTest(
+        Uint8List.fromList(ZipEncoder().encode(archive)),
+        selection: settingsOnlySelection,
+        skipPostRestoreMigration: true,
+        credentialStore: credentials,
+      ).then((_) {
+        restoreCompletedBeforeMigrationFailure = true;
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(restoreCompletedBeforeMigrationFailure, isFalse);
+      return false;
+    };
+
+    await expectLater(
+      migration.migrate(
+        sourceProviderEntriesJson: sourceWithKey(migrationSecret),
+      ),
+      throwsA(isA<LlmAccountMigrationException>()),
+    );
+    await pendingRestore;
+    expect(credentials.values[reference] == restoredSecret, isTrue);
   });
 
   testWidgets('redacts keys when a provider entry has no type',
@@ -734,6 +2106,7 @@ void main() {
 
 class _BackupLlmPreferences implements LlmAccountPreferences {
   final SharedPreferences _preferences;
+  Future<bool> Function(String key, String value)? onSet;
 
   _BackupLlmPreferences(this._preferences);
 
@@ -741,23 +2114,35 @@ class _BackupLlmPreferences implements LlmAccountPreferences {
   Future<String?> getString(String key) async => _preferences.getString(key);
 
   @override
-  Future<bool> setString(String key, String value) =>
-      _preferences.setString(key, value);
+  Future<bool> setString(String key, String value) async {
+    final hook = onSet;
+    if (hook != null) return hook(key, value);
+    return _preferences.setString(key, value);
+  }
+
+  @override
+  Future<bool> remove(String key) => _preferences.remove(key);
 }
 
 class _BackupCredentialStore implements LlmCredentialStore {
-  final Map<String, String> _values = {};
+  final Map<String, String> values = {};
+  int? failOnWriteNumber;
+  var _writeCount = 0;
 
   @override
-  Future<String?> read(String reference) async => _values[reference];
+  Future<String?> read(String reference) async => values[reference];
 
   @override
   Future<void> write(String reference, String secret) async {
-    _values[reference] = secret;
+    _writeCount++;
+    if (_writeCount == failOnWriteNumber) {
+      throw const LlmCredentialStoreException();
+    }
+    values[reference] = secret;
   }
 
   @override
   Future<void> delete(String reference) async {
-    _values.remove(reference);
+    values.remove(reference);
   }
 }

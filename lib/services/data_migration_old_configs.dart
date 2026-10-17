@@ -335,13 +335,23 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
         'typeConfig': typeConfig,
       };
     }).toList();
-    migratedConfigs.add(<String, dynamic>{
+    final migratedConfig = <String, dynamic>{
       'providerName':
           oldItem['providerName'] is String ? oldItem['providerName'] : '',
       'host': oldItem['host'] is String ? oldItem['host'] : '',
       'key': oldItem['key'] is String ? oldItem['key'] : '',
       'models': models,
-    });
+    };
+    for (final field in const ['credentialRef', 'publicKey']) {
+      final value = oldItem[field];
+      if (value != null) {
+        if (value is! String || value.trim().isEmpty) {
+          throw const FormatException('Invalid safe legacy metadata.');
+        }
+        migratedConfig[field] = value;
+      }
+    }
+    migratedConfigs.add(migratedConfig);
   }
 
   return {
@@ -373,21 +383,183 @@ Map<String, Object?> _mergeLegacyChatConfigsSync(
 
   final hasLlmEntry = existingEntries
       .any((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm');
-  if (hasLlmEntry) {
-    return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+  if (!hasLlmEntry) {
+    final priorLegacyConfigs = <Map<String, dynamic>>[];
+    for (final rawLegacy in migratedConfigs) {
+      if (rawLegacy is! Map<String, dynamic>) {
+        return {'status': 'conflict', 'corruptExisting': corruptExisting};
+      }
+      final legacy = Map<String, dynamic>.from(rawLegacy);
+      for (final prior in priorLegacyConfigs) {
+        if (_sameLegacyProviderConfig(prior, legacy) &&
+            _mergeLegacySafeMetadata(
+                  Map<String, dynamic>.from(prior),
+                  legacy,
+                ) ==
+                null) {
+          return {'status': 'conflict', 'corruptExisting': corruptExisting};
+        }
+      }
+      priorLegacyConfigs.add(legacy);
+    }
+    existingEntries.add({
+      'id': 'migrated_llm',
+      'type': 'llm',
+      'name': 'LLM供应商',
+      'configs': migratedConfigs,
+    });
+    return {
+      'status': 'write',
+      'corruptExisting': corruptExisting,
+      'payload': jsonEncode(existingEntries),
+    };
   }
 
-  existingEntries.add({
-    'id': 'migrated_llm',
-    'type': 'llm',
-    'name': 'LLM供应商',
-    'configs': migratedConfigs,
-  });
+  final llmEntries = existingEntries
+      .where((entry) => entry['type'] == 'llm' && entry['id'] != 'builtin_llm')
+      .toList();
+  final destination = llmEntries.first;
+  final rawDestinationConfigs = destination['configs'];
+  final hasTopLevelConfig = destination.keys.any(
+    (key) =>
+        key != 'configs' &&
+        !const {'id', 'type', 'name', 'enabled'}.contains(key),
+  );
+  if (rawDestinationConfigs is! List &&
+      (rawDestinationConfigs != null || hasTopLevelConfig)) {
+    return {'status': 'conflict', 'corruptExisting': corruptExisting};
+  }
+  final destinationConfigs =
+      rawDestinationConfigs is List ? rawDestinationConfigs : <dynamic>[];
+  destination['configs'] = destinationConfigs;
+  var changed = false;
+  for (final rawLegacy in migratedConfigs) {
+    if (rawLegacy is! Map<String, dynamic>) {
+      throw const FormatException('Invalid migrated legacy config.');
+    }
+    final matches = <(List<dynamic>, int, Map<String, dynamic>)>[];
+    for (final entry in llmEntries) {
+      final configs = entry['configs'];
+      if (configs is! List) continue;
+      for (var index = 0; index < configs.length; index++) {
+        final rawExisting = configs[index];
+        if (rawExisting is! Map) continue;
+        final existing = Map<String, dynamic>.from(rawExisting);
+        if (_sameLegacyProviderConfig(existing, rawLegacy)) {
+          matches.add((configs, index, existing));
+        }
+      }
+    }
+    if (matches.length > 1) {
+      return {'status': 'conflict', 'corruptExisting': corruptExisting};
+    }
+    if (matches.isEmpty) {
+      destinationConfigs.add(rawLegacy);
+      changed = true;
+      continue;
+    }
+    final match = matches.single;
+    final existing = match.$3;
+    final merged = _mergeLegacySafeMetadata(existing, rawLegacy);
+    if (merged == null) {
+      return {'status': 'conflict', 'corruptExisting': corruptExisting};
+    }
+    if (merged) {
+      match.$1[match.$2] = existing;
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return {'status': 'alreadyMigrated', 'corruptExisting': corruptExisting};
+  }
   return {
     'status': 'write',
     'corruptExisting': corruptExisting,
     'payload': jsonEncode(existingEntries),
   };
+}
+
+bool _sameLegacyProviderConfig(
+  Map<String, dynamic> existing,
+  Map<String, dynamic> legacy,
+) {
+  if ((existing['providerName'] is String ? existing['providerName'] : '') !=
+          (legacy['providerName'] is String ? legacy['providerName'] : '') ||
+      (existing['host'] is String ? existing['host'] : '') !=
+          (legacy['host'] is String ? legacy['host'] : '')) {
+    return false;
+  }
+  List<String>? modelIds(Object? value) {
+    if (value is! List) return null;
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! Map) return null;
+      final id = item['modelId'] is String
+          ? item['modelId'] as String
+          : (item['name'] is String ? item['name'] as String : '');
+      result.add(id);
+    }
+    return result;
+  }
+
+  final existingModels = modelIds(existing['models']);
+  final legacyModels = modelIds(legacy['models']);
+  return existingModels != null &&
+      legacyModels != null &&
+      jsonEncode(existingModels) == jsonEncode(legacyModels);
+}
+
+bool? _mergeLegacySafeMetadata(
+  Map<String, dynamic> existing,
+  Map<String, dynamic> legacy,
+) {
+  final existingKey = existing['key'];
+  final legacyKey = legacy['key'];
+  if (existingKey != null && existingKey is! String ||
+      legacyKey != null && legacyKey is! String) {
+    return null;
+  }
+  if (existingKey is String &&
+      existingKey.isNotEmpty &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty &&
+      existingKey != legacyKey) {
+    return null;
+  }
+  final existingReference = existing['credentialRef'];
+  if (existingReference is String &&
+      existingReference.isNotEmpty &&
+      (existingKey == null || existingKey == '') &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty) {
+    // A legacy source cannot safely rotate a reference already used by the
+    // provider entry. Keep both preferences intact for recovery or explicit
+    // account-level rotation after migration.
+    return null;
+  }
+  var changed = false;
+  if ((existingKey == null || existingKey == '') &&
+      legacyKey is String &&
+      legacyKey.isNotEmpty) {
+    existing['key'] = legacyKey;
+    changed = true;
+  }
+  for (final field in const ['credentialRef', 'publicKey']) {
+    final current = existing[field];
+    final incoming = legacy[field];
+    if (current != null && (current is! String || current.trim().isEmpty) ||
+        incoming != null && (incoming is! String || incoming.trim().isEmpty)) {
+      return null;
+    }
+    if (current != null && incoming != null && current != incoming) {
+      return null;
+    }
+    if (current == null && incoming != null) {
+      existing[field] = incoming;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 Map<String, Object?> _fixProviderEntriesSync(String raw) {
