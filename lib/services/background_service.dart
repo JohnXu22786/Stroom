@@ -511,7 +511,9 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   try {
     // The failed-stop marker survives process death, unlike the in-process
     // choice. Restore it before treating a stale disabled preference as final.
-    if (await _hasFailedStopIntentRestorePending()) {
+    // Unknown marker reads also need a recovery retry before accepting disabled
+    // intent. Rearming restores intent only after confirming a pending marker.
+    if (await _readFailedStopIntentRestorePending() != false) {
       await _rearmKeepAliveForCurrentIntent();
     }
     final wasEnabled = await _readBackgroundServiceEnabled();

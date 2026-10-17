@@ -1164,6 +1164,70 @@ void main() {
       );
     });
 
+    for (final pendingMarker in [true, false, null]) {
+      test(
+          'cold start retries unknown marker without enabling disabled intent (marker=$pendingMarker)',
+          () async {
+        final mock = registerMockPlatform()..setServiceRunning(false);
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore({
+          'flutter.background_service_enabled': false,
+          if (pendingMarker != null)
+            'flutter.background_service_failed_stop_restore_pending':
+                pendingMarker,
+        })
+          ..failNextReads(2);
+        SharedPreferencesStorePlatform.instance = store;
+        SharedPreferences.resetStatic();
+        final originalLegacyPreferenceMode =
+            StartupPreferences.debugUseLegacyPreferencesForTesting;
+        StartupPreferences.debugUseLegacyPreferencesForTesting = true;
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+          StartupPreferences.debugUseLegacyPreferencesForTesting =
+              originalLegacyPreferenceMode;
+        });
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall call) async {
+            keepAliveCalls.add(call);
+            final arguments = call.arguments;
+            if (call.method == 'rearmKeepAlive' &&
+                arguments is Map &&
+                arguments['restoreEnabledIntent'] == true) {
+              await store.persistEnabledFromNativeRecovery();
+              final preferences = await SharedPreferences.getInstance();
+              await preferences.reload();
+            }
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          await restoreBackgroundServiceOnColdStart();
+          final preferences = await SharedPreferences.getInstance();
+          await preferences.reload();
+          expect(preferences.getBool('background_service_enabled'),
+              pendingMarker == true,
+              reason: 'only a confirmed pending marker may restore enabled '
+                  'intent after store access resumes');
+          expect(mock._isRunning, pendingMarker == true);
+          expect(
+            keepAliveCalls.where((call) =>
+                call.method == 'rearmKeepAlive' &&
+                call.arguments is Map &&
+                call.arguments['restoreEnabledIntent'] == true),
+            hasLength(pendingMarker == true ? 1 : 0),
+          );
+          expect(store.readAttempts, greaterThan(2),
+              reason: 'the initial marker reads must both fail before the '
+                  'store becomes accessible');
+        });
+      });
+    }
+
     test('failed iOS stop retries durable intent restoration on cold start',
         () async {
       final mock = registerMockPlatform()
