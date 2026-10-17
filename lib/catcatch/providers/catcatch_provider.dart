@@ -296,9 +296,11 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     }
 
     // 查找被删除的任务，用于清理文件
-    final task = state.where((t) => t.id == id).firstOrNull;
+    final removedTasks = state.where((t) => t.id == id).toList();
     final remainingTasks = state.where((t) => t.id != id).toList();
-    unawaited(_cleanupTaskFiles(task, remainingTasks: remainingTasks));
+    for (final task in removedTasks) {
+      unawaited(_cleanupTaskFiles(task, remainingTasks: remainingTasks));
+    }
 
     state = remainingTasks;
     _persistTasks();

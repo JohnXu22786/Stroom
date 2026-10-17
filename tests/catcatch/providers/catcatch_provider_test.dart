@@ -2146,6 +2146,63 @@ void main() {
       expect(preferences.getBool('background_service_enabled'), isTrue);
     });
 
+    test(
+      'removal cleans every duplicate while preserving remaining owners',
+      () async {
+        const firstMedia = MediaResource(
+          url: 'https://example.com/first.mp4',
+          name: 'first',
+          ext: 'mp4',
+        );
+        const secondMedia = MediaResource(
+          url: 'https://example.com/second.mp4',
+          name: 'second',
+          ext: 'mp4',
+        );
+        final downloadDir = Directory('${directory.path}/catcatch/downloads')
+          ..createSync(recursive: true);
+        final firstArtifact = File('${downloadDir.path}/first.mp4.catcatch_tmp')
+          ..writeAsStringSync('first partial');
+        final secondArtifact = File(
+          '${downloadDir.path}/second.mp4.catcatch_tmp',
+        )..writeAsStringSync('second partial');
+        final firstPartial = File('${directory.path}/first.partial')
+          ..writeAsStringSync('first recorded partial');
+        final secondPartial = File('${directory.path}/second.partial')
+          ..writeAsStringSync('second recorded partial');
+        final sharedArtifact = File('${downloadDir.path}/second.mp4')
+          ..writeAsStringSync('remaining owner');
+        notifier.setTasksForTest([
+          task('duplicate').copyWith(
+            selectedMedia: firstMedia,
+            downloadedFilePath: firstPartial.path,
+          ),
+          task('duplicate').copyWith(
+            selectedMedia: secondMedia,
+            downloadedFilePath: secondPartial.path,
+          ),
+          task('remaining').copyWith(downloadedFilePath: sharedArtifact.path),
+        ]);
+
+        notifier.removeTask('duplicate');
+        expect(notifier.tasksForTest.map((task) => task.id), ['remaining']);
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        final removedArtifacts = [
+          firstArtifact,
+          secondArtifact,
+          firstPartial,
+          secondPartial,
+        ];
+        // Wait for the unawaited cleanup through its observable filesystem result.
+        await Future<void>(() async {
+          while (removedArtifacts.any((file) => file.existsSync())) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        }).timeout(const Duration(seconds: 2));
+        expect(sharedArtifact.readAsStringSync(), 'remaining owner');
+      },
+    );
+
     test('removal cleanup rechecks owners selected during its async gap',
         () async {
       const media = MediaResource(
