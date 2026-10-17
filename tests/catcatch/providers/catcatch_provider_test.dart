@@ -2262,6 +2262,166 @@ void main() {
       expect(restored.downloadedBytes, replacement.downloadedBytes);
     });
 
+    test('persisted removal cancels a selected row restarted during its write',
+        () async {
+      const taskId = 'restart-during-persisted-removal';
+      notifier.holdTaskExecutions = true;
+      notifier.holdRetryExecutions = true;
+      Future<bool>? removal;
+      try {
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        documents.releaseAllRequests = Completer<void>();
+        AppStorage.resetCache();
+        removal = notifier.removeTasksPersisted([taskId]);
+        notifier.pauseTask(taskId);
+        notifier.resumeTask(taskId);
+        await notifier.secondExecutorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        final restartedToken = notifier.taskCancelTokens.last;
+        expect(restartedToken.isCancelled, isFalse);
+
+        documents.releaseAllRequests!.complete();
+        expect(await removal, isTrue);
+        expect(restartedToken.isCancelled, isTrue);
+        expect(notifier.tasksForTest, isEmpty);
+      } finally {
+        if (documents.releaseAllRequests?.isCompleted == false) {
+          documents.releaseAllRequests!.complete();
+        }
+        if (removal != null) await removal;
+        for (final release in [
+          ...notifier.taskReleases,
+          ...notifier.retryReleases,
+        ]) {
+          if (!release.isCompleted) release.complete();
+        }
+        await notifier.waitForTaskSnapshotWritesForTesting();
+      }
+    });
+
+    test('failed persisted removal retains its selected row and execution',
+        () async {
+      const taskId = 'failed-persisted-removal-owner';
+      notifier.holdTaskExecutions = true;
+      try {
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        final original = notifier.tasksForTest.single;
+        notifier.setTasksForTest([original, _FailingSerializationTask()]);
+
+        expect(await notifier.removeTasksPersisted([taskId]), isFalse);
+        expect(notifier.tasksForTest.first, same(original));
+        expect(notifier.taskCancelTokens.single.isCancelled, isFalse);
+      } finally {
+        for (final release in notifier.taskReleases) {
+          if (!release.isCompleted) release.complete();
+        }
+        notifier.setTasksForTest([]);
+        await notifier.removeTasksPersisted([taskId]);
+      }
+    });
+
+    for (final disposeDuringWrite in [false, true]) {
+      test(
+          'persisted removal still removes an updated original row '
+          '(dispose: $disposeDuringWrite)', () async {
+        const taskId = 'update-during-persisted-removal';
+        notifier.holdTaskExecutions = true;
+        notifier.addTask('invalid://original', 30, taskId: taskId);
+        await notifier.executorStarted.future.timeout(
+          const Duration(seconds: 2),
+        );
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        documents.releaseAllRequests = Completer<void>();
+        AppStorage.resetCache();
+        final removal = notifier.removeTasksPersisted([taskId]);
+        notifier.lastTaskUpdate!(notifier.lastExecutedTask!.copyWith(
+          progress: 42,
+        ));
+        if (disposeDuringWrite) {
+          container.dispose();
+          containerDisposed = true;
+        }
+        documents.releaseAllRequests!.complete();
+        expect(await removal, isTrue);
+        expect(
+          notifier.taskCancelTokens.single.isCancelled,
+          !disposeDuringWrite,
+        );
+        notifier.taskReleases.single.complete();
+        await notifier.taskCompletions.single.future;
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        if (!disposeDuringWrite) expect(notifier.tasksForTest, isEmpty);
+        final persisted = await File(
+          '${directory.path}/catcatch/tasks.json',
+        ).readAsString();
+        expect(jsonDecode(persisted), isEmpty);
+      });
+    }
+
+    for (final disposeDuringWrite in [false, true]) {
+      test(
+          'persisted removal preserves a replacement during its write '
+          '(dispose: $disposeDuringWrite)', () async {
+        const taskId = 'replace-during-persisted-removal';
+        notifier.holdTaskExecutions = true;
+        notifier.setTasksForTest([task(taskId)]);
+        documents.firstRequestStarted = Completer<void>();
+        documents.releaseFirstRequest = Completer<void>();
+        Future<bool>? removal;
+
+        try {
+          removal = notifier.removeTasksPersisted([taskId]);
+          await documents.firstRequestStarted!.future.timeout(
+            const Duration(seconds: 2),
+          );
+          notifier.addTask('invalid://replacement', 45, taskId: taskId);
+          await notifier.executorStarted.future.timeout(
+            const Duration(seconds: 2),
+          );
+          final replacementToken = notifier.taskCancelTokens.single;
+          if (disposeDuringWrite) {
+            container.dispose();
+            containerDisposed = true;
+          }
+          documents.releaseFirstRequest!.complete();
+          expect(await removal, isTrue);
+          await notifier.waitForTaskSnapshotWritesForTesting();
+
+          if (!disposeDuringWrite) {
+            expect(notifier.tasksForTest.single.url, 'invalid://replacement');
+            expect(replacementToken.isCancelled, isFalse);
+            notifier.taskReleases.single.complete();
+            await notifier.taskCompletions.single.future;
+            expect(notifier.uncancelledTaskCompletions, [taskId]);
+            await notifier.waitForTaskSnapshotWritesForTesting();
+          }
+          final persisted = jsonDecode(await File(
+            '${directory.path}/catcatch/tasks.json',
+          ).readAsString()) as List;
+          expect(persisted, hasLength(1));
+          expect((persisted.single as Map)['url'], 'invalid://replacement');
+        } finally {
+          if (!documents.releaseFirstRequest!.isCompleted) {
+            documents.releaseFirstRequest!.complete();
+          }
+          if (removal != null) await removal;
+          for (final release in notifier.taskReleases) {
+            if (!release.isCompleted) release.complete();
+          }
+          await notifier.waitForTaskSnapshotWritesForTesting();
+        }
+      });
+    }
+
     test('reused addTask ID cancels superseded execution before removal',
         () async {
       const taskId = 'duplicate-add-task-remove';
