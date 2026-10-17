@@ -1361,6 +1361,84 @@ void main() {
       }
     });
 
+    for (final resumed in [false, true]) {
+      test(
+        '${resumed ? 'resumed' : 'normal'} startup failure fails the newest duplicate',
+        () async {
+          const taskId = 'startup-failed-active-duplicate';
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+          await preferences.setBool('background_service_enabled', false);
+          servicePlatform.startResult = false;
+          servicePlatform.runningAfterStart = true;
+          servicePlatform.startEntered = Completer<void>();
+          servicePlatform.releaseStart = Completer<void>();
+          servicePlatform.stopRequested = Completer<void>();
+          final older = task(taskId).copyWith(title: 'Older paused row');
+          notifier.setTasksForTest([
+            older,
+            if (resumed) task(taskId).copyWith(title: 'Newest paused row'),
+          ]);
+          final failed = Completer<void>();
+          final subscription = container.listen<List<CatCatchTask>>(
+            catcatchTasksProvider,
+            (_, tasks) {
+              if (tasks.last.status == TaskStatus.failed &&
+                  !failed.isCompleted) {
+                failed.complete();
+              }
+            },
+          );
+
+          try {
+            if (resumed) {
+              notifier.resumeTask(taskId);
+            } else {
+              notifier.addTask('invalid://startup-failure', 30, taskId: taskId);
+            }
+            await servicePlatform.startEntered!.future.timeout(
+              const Duration(seconds: 2),
+            );
+            expect(notifier.tasksForTest.last.status, TaskStatus.running);
+            servicePlatform.releaseStart!.complete();
+            await failed.future.timeout(const Duration(seconds: 2));
+            await notifier.waitForTaskSnapshotWritesForTesting();
+
+            expect(notifier.tasksForTest.first, same(older));
+            expect(notifier.tasksForTest.last.error, contains('后台服务启动失败'));
+            expect(notifier.executorStarts, 0);
+            final persisted =
+                (jsonDecode(
+                          await File(
+                            '${directory.path}/catcatch/tasks.json',
+                          ).readAsString(),
+                        )
+                        as List)
+                    .map(
+                      (record) => CatCatchTask.fromMap(
+                        Map<String, dynamic>.from(record as Map),
+                      ),
+                    )
+                    .toList();
+            expect(persisted, hasLength(2));
+            expect(persisted.first.status, TaskStatus.paused);
+            expect(persisted.last.status, TaskStatus.failed);
+            expect(persisted.last.error, contains('后台服务启动失败'));
+            await servicePlatform.stopRequested!.future.timeout(
+              const Duration(seconds: 2),
+            );
+            expect(servicePlatform.stopCalls, 1);
+            expect(preferences.getBool('background_service_enabled'), isFalse);
+          } finally {
+            subscription.close();
+            if (!servicePlatform.releaseStart!.isCompleted) {
+              servicePlatform.releaseStart!.complete();
+            }
+            await notifier.removeTasksPersisted([taskId]);
+          }
+        },
+      );
+    }
+
     test('normal execution failure marks the active duplicate row failed',
         () async {
       const taskId = 'normal-failed-active-duplicate';

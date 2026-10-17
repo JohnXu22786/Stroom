@@ -813,7 +813,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       );
 
   void _markTaskFailedAfterBackgroundServiceStartup(String taskId) {
-    final index = state.indexWhere((current) => current.id == taskId);
+    final index = state.lastIndexWhere((current) => current.id == taskId);
     if (index < 0) return;
 
     _serviceCleanupGeneration++;
