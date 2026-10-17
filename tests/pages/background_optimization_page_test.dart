@@ -586,6 +586,70 @@ void main() {
       await DesktopAppService.instance.setupTrayAndCloseBehavior();
     }
 
+    for (final closeMinimize in [true, false]) {
+      for (final disposeBeforeReady in [false, true]) {
+        testWidgets(
+            'async tray readiness refreshes status (minimize: $closeMinimize, disposed: $disposeBeforeReady)',
+            (tester) async {
+          registerMockPlatform();
+          SharedPreferences.setMockInitialValues({
+            'desktop_close_minimize': closeMinimize,
+          });
+          debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+          final service = DesktopAppService.instance;
+          service.resetForTesting();
+          final menuReady = Completer<void>();
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(
+            const MethodChannel('window_manager'),
+            (call) async => true,
+          );
+          messenger.setMockMethodCallHandler(
+            const MethodChannel('tray_manager'),
+            (call) async {
+              if (call.method == 'setContextMenu') await menuReady.future;
+              return true;
+            },
+          );
+          tester.view.physicalSize = const Size(1080, 4000);
+          tester.view.devicePixelRatio = 1.0;
+          try {
+            final setup = service.setupTrayAndCloseBehavior();
+            await tester.pumpWidget(_buildTestApp());
+            await tester.pumpAndSettle();
+            expect(service.isTrayReady, isFalse);
+            expect(find.text('桌面端托盘暂不可用，关闭窗口将直接退出'), findsOneWidget);
+
+            if (disposeBeforeReady) {
+              await tester.pumpWidget(const SizedBox.shrink());
+            }
+            menuReady.complete();
+            await tester.pumpAndSettle();
+            await setup;
+            expect(service.isTrayReady, isTrue);
+            expect(tester.takeException(), isNull);
+            if (!disposeBeforeReady) {
+              expect(find.text('桌面端托盘暂不可用，关闭窗口将直接退出'), findsNothing);
+              expect(
+                find.text(closeMinimize ? '桌面端使用托盘驻留保活' : '桌面端关闭窗口时退出应用'),
+                findsOneWidget,
+              );
+            }
+          } finally {
+            if (!menuReady.isCompleted) menuReady.complete();
+            await tester.pumpWidget(const SizedBox.shrink());
+            service.resetForTesting();
+            messenger.setMockMethodCallHandler(
+                const MethodChannel('tray_manager'), null);
+            debugDefaultTargetPlatformOverride = null;
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          }
+        });
+      }
+    }
+
     testWidgets('desktop platforms explain tray-resident close behavior',
         (tester) async {
       final mock = registerMockPlatform();

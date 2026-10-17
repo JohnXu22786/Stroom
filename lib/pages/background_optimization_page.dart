@@ -54,6 +54,9 @@ class _BackgroundOptimizationPageState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (isDesktopPlatform()) {
+      DesktopAppService.instance.trayReady.addListener(_onTrayReadyChanged);
+    }
     _detectPlatform();
     _checkBackgroundService();
     _checkBatteryOptimization();
@@ -63,6 +66,7 @@ class _BackgroundOptimizationPageState
 
   @override
   void dispose() {
+    DesktopAppService.instance.trayReady.removeListener(_onTrayReadyChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -201,6 +205,13 @@ class _BackgroundOptimizationPageState
         _isCheckingService = false;
       });
     }
+  }
+
+  void _onTrayReadyChanged() {
+    if (!mounted || !isDesktopPlatform()) return;
+    setState(() {
+      _optimizationStatus = _getDesktopOptimizationStatus();
+    });
   }
 
   String _getDesktopOptimizationStatus() {
