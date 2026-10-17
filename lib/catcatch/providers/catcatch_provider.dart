@@ -177,28 +177,39 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
     if (state[index].status != TaskStatus.paused) return;
 
     final task = state[index];
+    final latestRuntimeTask = state.lastWhere((t) => t.id == id);
+    final resumeSnapshot = task.copyWith(
+      steps: latestRuntimeTask.steps,
+      detectedMedia: latestRuntimeTask.detectedMedia,
+      selectedMedia: latestRuntimeTask.selectedMedia,
+      progress: latestRuntimeTask.progress,
+      downloadedFilePath: latestRuntimeTask.downloadedFilePath,
+      downloadedBytes: latestRuntimeTask.downloadedBytes,
+      clearSelectedMedia: latestRuntimeTask.selectedMedia == null,
+      clearDownloadedFilePath: latestRuntimeTask.downloadedFilePath == null,
+    );
     // 如果卡在 userSelecting 步骤，让 _executeSteps 自然处理
 
     // 找到第一个未完成的步骤
     StepType? firstIncomplete;
     int firstIncompleteIndex = -1;
-    for (int i = 0; i < task.steps.length; i++) {
-      if (!task.steps[i].completed) {
-        firstIncomplete = task.steps[i].type;
+    for (int i = 0; i < resumeSnapshot.steps.length; i++) {
+      if (!resumeSnapshot.steps[i].completed) {
+        firstIncomplete = resumeSnapshot.steps[i].type;
         firstIncompleteIndex = i;
         break;
       }
     }
 
     // 重置该步骤及之后为 pending
-    final newSteps = List<StepStatus>.from(task.steps);
+    final newSteps = List<StepStatus>.from(resumeSnapshot.steps);
     if (firstIncompleteIndex >= 0) {
       for (int i = firstIncompleteIndex; i < newSteps.length; i++) {
         newSteps[i] = StepStatus.pending(newSteps[i].type);
       }
     }
 
-    final updated = task.copyWith(
+    final updated = resumeSnapshot.copyWith(
       status: TaskStatus.running,
       steps: newSteps,
       clearError: true,
