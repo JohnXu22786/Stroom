@@ -3076,6 +3076,98 @@ void main() {
     );
 
     testWidgets(
+      'native source changes before controller creation load the latest source',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountMermaidWidgetBeforeNativeCreation(
+          tester,
+          platform,
+        );
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+
+        expect(webView.params.initialData!.data, contains('A--&gt;B'));
+        expect(webView.controller.loadedDataDocuments, isEmpty);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          webView.controller.loadedDataDocuments,
+          isEmpty,
+          reason: 'source changes wait for the native controller to be created',
+        );
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->D'),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(webView.controller.loadedDataDocuments, isEmpty);
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        expect(webView.controller.loadedDataDocuments, hasLength(1));
+        expect(
+          webView.controller.loadedDataDocuments.single,
+          contains('A--&gt;D'),
+        );
+        expect(
+          webView.controller.loadedDataDocuments.single,
+          isNot(contains('A--&gt;C')),
+        );
+        expect(
+          webView.controller.loadedDataDocuments.single,
+          isNot(contains('A--&gt;B')),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
+      'native initial source is not reloaded when the controller is created',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountMermaidWidgetBeforeNativeCreation(
+          tester,
+          platform,
+        );
+        final controller = webView
+            .controllerFromPlatform<InAppWebViewController>(webView.controller);
+
+        webView.params.onWebViewCreated!(controller);
+        await tester.pump();
+
+        expect(webView.params.initialData!.data, contains('A--&gt;B'));
+        expect(webView.controller.loadedDataDocuments, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
       'nonempty source update restarts the native creation timeout',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
