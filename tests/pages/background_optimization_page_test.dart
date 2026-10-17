@@ -489,6 +489,10 @@ void main() {
 
       // Should show error status
       expect(find.text('无法检测后台服务状态'), findsOneWidget);
+      expect(
+        find.text('后台服务状态未知，请重新检测以确认服务是否运行。'),
+        findsOneWidget,
+      );
       // Should still show re-detect button
       expect(find.text('重新检测'), findsOneWidget);
       // Should show start button since service is not running

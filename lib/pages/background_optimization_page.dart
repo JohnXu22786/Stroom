@@ -1142,6 +1142,10 @@ class _BackgroundOptimizationPageState
   String _getStatusDescription() {
     if (_isCheckingService) return '正在检测后台服务状态...';
 
+    if (_isServiceStatusUnknown) {
+      return '后台服务状态未知，请重新检测以确认服务是否运行。';
+    }
+
     if (_isServiceRunning) return '后台服务正在运行，任务将在后台正常执行。';
 
     // Platform-specific messaging when service is not running
