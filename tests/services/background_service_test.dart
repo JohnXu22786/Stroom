@@ -139,9 +139,11 @@ class _FailingEnabledPreferenceStore extends InMemorySharedPreferencesStore {
 }
 
 class _RejectFailedStopRollbackStore extends InMemorySharedPreferencesStore {
-  _RejectFailedStopRollbackStore(Map<String, Object> data)
+  _RejectFailedStopRollbackStore(Map<String, Object> data,
+      {this.throwOnDisable = false})
       : super.withData(data);
 
+  final bool throwOnDisable;
   bool _stopIntentWasDisabled = false;
   bool _rejectEnabledRestorationWrites = true;
   int _readFailuresRemaining = 0;
@@ -168,7 +170,10 @@ class _RejectFailedStopRollbackStore extends InMemorySharedPreferencesStore {
   @override
   Future<bool> setValue(String valueType, String key, Object value) {
     if (valueType == 'Bool' && key == 'flutter.background_service_enabled') {
-      if (value == false) _stopIntentWasDisabled = true;
+      if (value == false) {
+        _stopIntentWasDisabled = true;
+        if (throwOnDisable) throw StateError('Simulated disable write error');
+      }
       if (value == true &&
           _stopIntentWasDisabled &&
           _rejectEnabledRestorationWrites) {
@@ -832,6 +837,75 @@ void main() {
       );
       expect(intentRestoreCalls, hasLength(2));
     });
+
+    for (final throwOnDisable in [false, true]) {
+      test(
+          'repeated failed stop preserves prior durable recovery intent (disable throws=$throwOnDisable)',
+          () async {
+        final mock = registerMockPlatform()
+          ..setServiceRunning(true)
+          ..setThrowOnCheck(true);
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        final store = _RejectFailedStopRollbackStore({
+          'flutter.background_service_enabled': false,
+          'flutter.background_service_failed_stop_restore_pending': true,
+          'flutter.background_service_watchdog': true,
+        }, throwOnDisable: throwOnDisable);
+        SharedPreferencesStorePlatform.instance = store;
+        SharedPreferences.resetStatic();
+        addTearDown(() {
+          SharedPreferencesStorePlatform.instance = originalStore;
+        });
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+          const MethodChannel('com.johntsui.stroom/keepalive'),
+          (MethodCall methodCall) async {
+            keepAliveCalls.add(methodCall);
+            if (methodCall.method == 'rearmKeepAlive') return false;
+            return true;
+          },
+        );
+
+        await withAndroidPlatform(() async {
+          expect(await stopBackgroundService(), isFalse);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.reload();
+          expect(prefs.getBool('background_service_enabled'), isFalse);
+          expect(
+            prefs.getBool('background_service_failed_stop_restore_pending'),
+            isTrue,
+            reason:
+                'an unconfirmed stop must retain the earlier recovery intent',
+          );
+
+          // A late stop and process death must still leave cold-start recovery.
+          mock
+            ..setThrowOnCheck(false)
+            ..setServiceRunning(false);
+          store.allowEnabledRestorationWrites();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(
+            const MethodChannel('com.johntsui.stroom/keepalive'),
+            (MethodCall methodCall) async {
+              if (methodCall.method == 'rearmKeepAlive' &&
+                  methodCall.arguments is Map &&
+                  methodCall.arguments['restoreEnabledIntent'] == true) {
+                await store.persistEnabledFromNativeRecovery();
+                await (await SharedPreferences.getInstance()).reload();
+              }
+              return true;
+            },
+          );
+          SharedPreferences.resetStatic();
+          resetBackgroundServiceLifecycleStateForTesting();
+          await restoreBackgroundServiceOnColdStart();
+          expect(mock._isRunning, isTrue);
+          final restoredPrefs = await SharedPreferences.getInstance();
+          await restoredPrefs.reload();
+          expect(restoredPrefs.getBool('background_service_enabled'), isTrue);
+        });
+      });
+    }
 
     test('explicit stop clears pending failed-stop recovery before cold start',
         () async {
