@@ -155,6 +155,15 @@ internal fun scheduleWithActiveIntent(
     return schedule()
 }
 
+internal fun scheduleFailedStopRecovery(
+    watchdogEnabled: Boolean,
+    persistEnabledIntent: () -> Boolean,
+    scheduleWatchdog: () -> Boolean,
+): Boolean = scheduleWithActiveIntent(
+    persistActiveIntent = persistEnabledIntent,
+    schedule = { if (watchdogEnabled) scheduleWatchdog() else true },
+)
+
 internal fun scheduleAlarmWithRetry(
     schedule: () -> Boolean,
     retrySchedule: () -> Boolean,

@@ -181,6 +181,18 @@ class KeepAliveReceiver : BroadcastReceiver() {
             return scheduled
         }
 
+        /** Restore a failed stop's enabled intent before scheduling recovery. */
+        fun scheduleFailedStopRecoveryAlarm(context: Context, intervalMs: Long): Boolean {
+            val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            return scheduleFailedStopRecovery(
+                watchdogEnabled = prefs.getBoolean(KEY_WATCHDOG_ENABLED, true),
+                persistEnabledIntent = {
+                    prefs.edit().putBoolean(KEY_SERVICE_ENABLED, true).commit()
+                },
+                scheduleWatchdog = { scheduleRearmAlarm(context, intervalMs) },
+            )
+        }
+
         private fun scheduleAlarmNow(
             context: Context,
             intervalMs: Long,

@@ -406,6 +406,66 @@ class KeepAliveScheduleTest {
     }
 
     @Test
+    fun failedStopRecoveryPersistsEnabledIntentWithoutSchedulingWhenWatchdogIsDisabled() {
+        var serviceEnabled = false
+        var scheduleAttempts = 0
+
+        val recovered = scheduleFailedStopRecovery(
+            watchdogEnabled = false,
+            persistEnabledIntent = {
+                serviceEnabled = true
+                true
+            },
+            scheduleWatchdog = {
+                scheduleAttempts++
+                true
+            },
+        )
+
+        assertTrue(recovered)
+        assertTrue(serviceEnabled)
+        assertEquals(0, scheduleAttempts)
+    }
+
+    @Test
+    fun failedStopRecoveryPersistsEnabledIntentBeforeSchedulingWhenWatchdogIsEnabled() {
+        var serviceEnabled = false
+        var scheduleSawEnabledIntent = false
+
+        val recovered = scheduleFailedStopRecovery(
+            watchdogEnabled = true,
+            persistEnabledIntent = {
+                serviceEnabled = true
+                true
+            },
+            scheduleWatchdog = {
+                scheduleSawEnabledIntent = serviceEnabled
+                true
+            },
+        )
+
+        assertTrue(recovered)
+        assertTrue(scheduleSawEnabledIntent)
+    }
+
+    @Test
+    fun failedStopRecoveryDoesNotScheduleWhenEnabledIntentPersistenceFails() {
+        var scheduleAttempted = false
+
+        val recovered = scheduleFailedStopRecovery(
+            watchdogEnabled = true,
+            persistEnabledIntent = { false },
+            scheduleWatchdog = {
+                scheduleAttempted = true
+                true
+            },
+        )
+
+        assertFalse(recovered)
+        assertFalse(scheduleAttempted)
+    }
+
+    @Test
     fun explicitStartSchedulingRetriesOnceAndPreservesInitialFailureResult() {
         val retryQueue = mutableListOf<() -> Unit>()
         var scheduleAttempts = 0

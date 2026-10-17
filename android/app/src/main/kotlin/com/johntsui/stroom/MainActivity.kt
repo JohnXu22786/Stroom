@@ -245,7 +245,14 @@ class MainActivity : FlutterActivity() {
                     } else {
                         KeepAliveReceiver.KEEP_ALIVE_INTERVAL_MS
                     }
-                    result.success(KeepAliveReceiver.scheduleRearmAlarm(this, interval))
+                    val restoreEnabledIntent =
+                        call.argument<Boolean>("restoreEnabledIntent") == true
+                    val scheduled = if (restoreEnabledIntent) {
+                        KeepAliveReceiver.scheduleFailedStopRecoveryAlarm(this, interval)
+                    } else {
+                        KeepAliveReceiver.scheduleRearmAlarm(this, interval)
+                    }
+                    result.success(scheduled)
                 }
                 "stopKeepAlive" -> {
                     Log.i(TAG, "Keep-alive: stop requested from Dart")

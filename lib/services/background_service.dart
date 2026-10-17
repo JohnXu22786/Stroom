@@ -323,8 +323,10 @@ Future<bool> _stopBackgroundService() async {
       if (stopIntentPersisted && wasEnabled) {
         // Keep the old recovery behavior if the stop was not confirmed.
         _explicitUserEnabledInProcess = true;
-        await _setServiceEnabledPreference(true);
-        await _rearmKeepAlive();
+        final rollbackPersisted = await _setServiceEnabledPreference(true);
+        await _rearmKeepAlive(
+          restoreEnabledIntent: !rollbackPersisted,
+        );
       }
       rethrow;
     }
@@ -663,12 +665,15 @@ Future<bool> _enableKeepAlive() async {
 /// 与 [_enableKeepAlive] 的区别：只重新调度闹钟，不清零连续失败计数。
 /// 持久失败环境（Android 15 dataSync 上限、无电池豁免等）下，每次
 /// 打开应用都清零计数会让看门狗永远无法进入退避保护。
-Future<bool> _rearmKeepAlive() async {
+Future<bool> _rearmKeepAlive({bool restoreEnabledIntent = false}) async {
   if (defaultTargetPlatform != TargetPlatform.android) return true;
-  if (!await isWatchdogEnabled()) return true;
+  if (!restoreEnabledIntent && !await isWatchdogEnabled()) return true;
   try {
     final scheduled = await _keepAliveChannel
-        .invokeMethod<bool>('rearmKeepAlive')
+        .invokeMethod<bool>(
+          'rearmKeepAlive',
+          restoreEnabledIntent ? {'restoreEnabledIntent': true} : null,
+        )
         .timeout(_keepAliveChannelTimeout);
     if (scheduled != true) {
       debugPrint(
