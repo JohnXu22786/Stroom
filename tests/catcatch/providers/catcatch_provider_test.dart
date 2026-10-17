@@ -1655,7 +1655,8 @@ void main() {
           for (final release in notifier.retryReleases) {
             if (!release.isCompleted) release.complete();
           }
-          await Future.wait(notifier.retryCompletions.map((item) => item.future));
+          await Future.wait(
+              notifier.retryCompletions.map((item) => item.future));
           await notifier.removeTasksPersisted([taskId]);
         }
       });
