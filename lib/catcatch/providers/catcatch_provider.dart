@@ -844,7 +844,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
               !identical(_cancelTokens[task.id], cancelToken)) {
             return;
           }
-          final index = state.indexWhere((t) => t.id == updated.id);
+          final index = state.lastIndexWhere((t) => t.id == updated.id);
           if (index >= 0) {
             final currentStatus = state[index].status;
             // 如果外部已将任务暂停，保留暂停状态，不覆盖
