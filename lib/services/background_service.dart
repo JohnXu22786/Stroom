@@ -459,9 +459,13 @@ Future<void> restoreBackgroundServiceOnColdStart() async {
   if (!isBackgroundServiceSupported()) return;
 
   try {
-    final wasEnabled = await _isBackgroundServiceEnabled(
-      assumeEnabledOnReadError: false,
-    );
+    final wasEnabled = await _readBackgroundServiceEnabled();
+    if (wasEnabled == null) {
+      // Intent is unknown, so do not start immediately. Rearm the watchdog;
+      // the native receiver checks the durable enabled state before recovery.
+      await _rearmKeepAlive();
+      return;
+    }
     if (!wasEnabled) return;
     if (!await isColdStartRestoreEnabled()) {
       // This toggle suppresses an immediate start, but the persisted enabled
@@ -515,15 +519,21 @@ Future<bool> _setServiceEnabledPreference(bool enabled) async {
 Future<bool> _isBackgroundServiceEnabled({
   bool assumeEnabledOnReadError = true,
 }) async {
+  final wasEnabled = await _readBackgroundServiceEnabled();
+  return wasEnabled ?? assumeEnabledOnReadError;
+}
+
+Future<bool?> _readBackgroundServiceEnabled() async {
   final inProcessChoice = _explicitUserEnabledInProcess;
   if (inProcessChoice != null) return inProcessChoice;
   try {
     return (await StartupPreferences.getBool(_backgroundServiceEnabledKey)) ??
         false;
   } catch (_) {
-    // Automatic task cleanup must not stop a service if the user's preference
-    // could not be read.
-    return assumeEnabledOnReadError;
+    // Keep read failure distinct from a known disabled choice. Cold-start
+    // recovery can rearm safely without starting while native state remains
+    // authoritative about whether the alarm may recover the service.
+    return null;
   }
 }
 
