@@ -229,7 +229,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 重试失败的任务（从头开始）
   void retryTask(String id) {
-    final index = state.indexWhere((t) => t.id == id);
+    final index = state.lastIndexWhere((t) => t.id == id);
     if (index < 0) return;
     if (state[index].status != TaskStatus.failed) return;
 
@@ -252,7 +252,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   /// 从指定步骤重试
   void retryStep(String taskId, StepType stepType) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     final task = state[index];
@@ -508,7 +508,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// 当下载的文件是 ts/flv 等特殊格式或来自播放列表时，
   /// 任务会暂停等待用户确认。调用此方法表示用户同意继续转换。
   void confirmAndContinue(String taskId) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     final task = state[index];
@@ -530,7 +530,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   /// [mergeAudioUrl] 如果非空，表示需要将指定音频 URL 合并到选中的视频中。
   void selectMedia(String taskId, MediaResource media,
       {String? mergeAudioUrl}) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     // 标记 userSelecting 步骤为已完成
@@ -627,7 +627,7 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   ///
   /// 当用户选择"保留原始格式"时调用，跳过 ffmpeg 转换直接进入保存步骤。
   void skipConversion(String taskId) {
-    final index = state.indexWhere((t) => t.id == taskId);
+    final index = state.lastIndexWhere((t) => t.id == taskId);
     if (index < 0) return;
 
     // 标记 converting 步骤为已跳过
