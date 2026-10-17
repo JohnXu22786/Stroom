@@ -33,16 +33,20 @@ void main() {
     );
   }
 
-  Widget buildWrapper({AxisDirection direction = AxisDirection.down}) {
+  Widget buildWrapper({
+    AxisDirection direction = AxisDirection.down,
+    Widget? child,
+  }) {
     return MaterialApp(
       home: Scaffold(
         body: TransformStretchOverscroll(
           axisDirection: direction,
-          child: const SizedBox(
-            width: 200,
-            height: 200,
-            child: ColoredBox(color: Colors.blue),
-          ),
+          child: child ??
+              const SizedBox(
+                width: 200,
+                height: 200,
+                child: ColoredBox(color: Colors.blue),
+              ),
         ),
       ),
     );
@@ -148,6 +152,43 @@ void main() {
         delta: const Offset(0, -10),
       ),
     ).dispatch(ctx);
+    await tester.pump();
+
+    expect(transformUnderTest(tester).transform.getMaxScaleOnAxis(), 1.0);
+  });
+
+  testWidgets('ignores nested same-axis scroll notifications', (tester) async {
+    await tester.pumpWidget(
+      buildWrapper(
+        child: SizedBox(
+          height: 200,
+          child: ListView(
+            children: const [
+              SizedBox(
+                height: 400,
+                child: ColoredBox(color: Colors.blue),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final ctx = contextOf(tester);
+    final notification = OverscrollNotification(
+      metrics: buildMetrics(),
+      context: ctx,
+      overscroll: 100,
+      velocity: 0,
+      dragDetails: DragUpdateDetails(
+        globalPosition: Offset.zero,
+        delta: const Offset(0, -10),
+      ),
+    );
+    notification.dispatch(ctx);
+
+    expect(notification.depth, 1,
+        reason: 'the inner ListView viewport should mark this as nested');
     await tester.pump();
 
     expect(transformUnderTest(tester).transform.getMaxScaleOnAxis(), 1.0);
