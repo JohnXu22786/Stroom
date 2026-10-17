@@ -325,6 +325,100 @@ void main() {
           createdAt: DateTime(2025, 1, 1),
         );
 
+    for (final action in ['confirm', 'select', 'skip', 'retry', 'retryStep']) {
+      test('duplicate continuation uses newest snapshot: $action', () async {
+        const id = 'interactive-duplicate';
+        const media = MediaResource(
+          url: 'https://example.com/new.mp4',
+          name: 'new',
+          ext: 'mp4',
+        );
+        final older = task(id).copyWith(
+          url: 'https://example.com/old',
+          status: TaskStatus.completed,
+          metadata: const {'snapshot': 'old'},
+        );
+        final newest = task(id).copyWith(
+          url: 'https://example.com/new',
+          status: TaskStatus.failed,
+          steps: StepType.values.map(StepStatus.pending).toList(),
+          selectedMedia: media,
+          downloadedFilePath: '/new/download.mp4',
+          metadata: const {'snapshot': 'new', 'pendingConfirm': 'waiting'},
+        );
+        notifier.holdTaskExecutions = true;
+        notifier.holdRetryExecutions = true;
+        notifier.setTasksForTest([older, newest]);
+        try {
+          switch (action) {
+            case 'confirm':
+              notifier.confirmAndContinue(id);
+            case 'select':
+              notifier.selectMedia(id, media);
+            case 'skip':
+              notifier.skipConversion(id);
+            case 'retry':
+              notifier.retryTask(id);
+            case 'retryStep':
+              notifier.retryStep(id, StepType.converting);
+          }
+          await notifier.executorStarted.future
+              .timeout(const Duration(seconds: 2));
+          final executed = action == 'retry'
+              ? notifier.lastExecutedTask!
+              : notifier.lastRetriedTask!;
+          expect(executed.url, newest.url);
+          expect(executed.metadata['snapshot'], 'new');
+          if (action != 'retry') {
+            expect(executed.selectedMedia, media);
+            expect(executed.downloadedFilePath, newest.downloadedFilePath);
+          } else {
+            expect(executed.downloadedFilePath, isNull);
+          }
+          expect(notifier.tasksForTest.first, same(older));
+          final update = executed.copyWith(progress: 63);
+          if (action == 'retry') {
+            notifier.lastTaskUpdate!(update);
+          } else {
+            notifier.lastRetryTaskUpdate!(update);
+          }
+          expect(notifier.tasksForTest.last.progress, 63);
+          expect(notifier.tasksForTest.first, same(older));
+        } finally {
+          for (final release in [
+            ...notifier.taskReleases,
+            ...notifier.retryReleases
+          ]) {
+            if (!release.isCompleted) release.complete();
+          }
+          await Future.wait([
+            ...notifier.taskCompletions,
+            ...notifier.retryCompletions,
+          ].map((item) => item.future));
+          await notifier.removeTasksPersisted([id]);
+        }
+      });
+    }
+
+    for (final retryWholeTask in [true, false]) {
+      test('duplicate retry ignores stale eligibility: $retryWholeTask',
+          () async {
+        const id = 'ineligible-duplicate';
+        final older = task(id).copyWith(status: TaskStatus.failed);
+        final newest = task(id).copyWith(status: TaskStatus.completed);
+        notifier.setTasksForTest([older, newest]);
+        if (retryWholeTask) {
+          notifier.retryTask(id);
+        } else {
+          notifier.retryStep(id, StepType.downloading);
+        }
+        // Eligibility is synchronous: rejected retries leave both rows intact.
+        expect(notifier.tasksForTest, [same(older), same(newest)]);
+        await notifier.waitForTaskSnapshotWritesForTesting();
+        expect(notifier.executorStarts, 0);
+      });
+    }
+
     test('new tasks await temporary service startup before execution',
         () async {
       await preferences.setBool('background_service_enabled', false);
