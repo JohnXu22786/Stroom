@@ -1875,6 +1875,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// waste (it used to run inside [build] on every setState).
   String? _initialHtml;
 
+  Key? _nativeInitialSourceKey;
+  String? _nativeInitialSourceCode;
+
+  String _getNativeInitialSourceCode() {
+    if (_nativeInitialSourceKey != _webViewKey) {
+      _nativeInitialSourceKey = _webViewKey;
+      _nativeInitialSourceCode = widget.mermaidCode.trim();
+    }
+    return _nativeInitialSourceCode!;
+  }
+
   String _getInitialHtml() {
     final code = widget.mermaidCode.trim();
     if (code.isEmpty) {
@@ -1981,6 +1992,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     final showLoading = !_isReady && _errorMessage == null;
     final showErrorOverlay = _errorMessage != null;
     final currentWebViewKey = _webViewKey;
+    final initialNativeSourceCode =
+        !kIsWeb && defaultTargetPlatform != TargetPlatform.windows
+            ? _getNativeInitialSourceCode()
+            : null;
 
     return _buildBorderedContainer(
       height: effectiveHeight,
@@ -2027,9 +2042,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   }
                   _loadMermaidCode();
                 } else {
-                  // The initial page (initialData) loads outside
-                  // [_loadMermaidCode], so arm the ready fallback here too.
-                  _armReadyFallback();
+                  if (initialNativeSourceCode != null &&
+                      initialNativeSourceCode != widget.mermaidCode.trim()) {
+                    // Native initialData is a snapshot. If its source changed
+                    // while the platform view was mounting, apply the latest
+                    // source after the controller becomes available.
+                    _loadMermaidCode();
+                  } else {
+                    // The initial page (initialData) loads outside
+                    // [_loadMermaidCode], so arm the ready fallback here too.
+                    _armReadyFallback();
+                  }
                 }
                 // Register the JS→Flutter message bridge (error reporting
                 // and transform sync). flutter_inappwebview's WEB platform
