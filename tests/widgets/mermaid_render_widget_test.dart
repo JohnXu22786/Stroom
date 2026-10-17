@@ -2968,6 +2968,46 @@ void main() {
     );
 
     testWidgets(
+      'nonempty source update restarts the native creation timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await _mountMermaidWidgetBeforeNativeCreation(tester, platform);
+        const creationError = '图表渲染引擎初始化失败，请重试';
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nB-->C'),
+            ),
+          ),
+        );
+
+        expect(find.text(creationError), findsNothing);
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+
+        await tester.pump(const Duration(seconds: 12));
+
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'a nonempty source update must restart the failed native '
+              'WebView creation deadline',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
       'late native WebView creation still reports a main-frame failure',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
