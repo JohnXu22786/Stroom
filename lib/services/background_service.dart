@@ -345,8 +345,9 @@ Future<bool> _stopBackgroundService() async {
       await _requestServiceStopAndWait(service);
     } catch (_) {
       if ((stopIntentPersisted && wasEnabled) ||
-          failedStopRestorePending == true) {
-        // Keep the old recovery behavior if the stop was not confirmed.
+          failedStopRestorePending != false) {
+        // Preserve possible prior recovery intent when its marker could not
+        // be read and the stop was not confirmed.
         _explicitUserEnabledInProcess = true;
         final rollbackPersisted = await _setServiceEnabledPreference(true);
         _failedStopIntentRestorePending =
