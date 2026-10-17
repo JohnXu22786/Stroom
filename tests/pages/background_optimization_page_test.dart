@@ -632,9 +632,7 @@ void main() {
             if (!disposeBeforeReady) {
               expect(find.text('桌面端托盘暂不可用，关闭窗口将直接退出'), findsNothing);
               expect(
-                find.text(closeMinimize
-                    ? '桌面端使用托盘驻留保活'
-                    : '桌面端关闭窗口时退出应用'),
+                find.text(closeMinimize ? '桌面端使用托盘驻留保活' : '桌面端关闭窗口时退出应用'),
                 findsOneWidget,
               );
             }
