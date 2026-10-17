@@ -49,6 +49,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
     TextManifest.beforeFolderLoadForTesting = null;
     TextManifest.invalidateCache();
   });
@@ -628,6 +629,119 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'rapid save activation during folder lookup does not stack pickers',
+      (tester) async {
+        final folderLoadStarted = Completer<void>();
+        final releaseFolderLoad = Completer<void>();
+        var folderLoadCount = 0;
+        addTearDown(() {
+          TextManifest.beforeFolderLoadForTesting = null;
+          if (!releaseFolderLoad.isCompleted) releaseFolderLoad.complete();
+        });
+        TextManifest.beforeFolderLoadForTesting = () async {
+          folderLoadCount++;
+          if (!folderLoadStarted.isCompleted) folderLoadStarted.complete();
+          await releaseFolderLoad.future;
+        };
+
+        await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+        await tester.pump();
+        await tester.enterText(
+          find.byType(TextField).first,
+          'graph TD\n  A-->B',
+        );
+        await tester.pump();
+
+        // Deliver two activations before yielding a frame. The first starts
+        // the asynchronous lookup while this same callback is still reachable.
+        final saveButton = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        final save = tester.widget<IconButton>(saveButton).onPressed!;
+        save();
+        await folderLoadStarted.future;
+        save();
+        await tester.pump();
+        final saveButtonDuringLookup = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        final saveIsLockedWhileLoading =
+            tester.widget<IconButton>(saveButtonDuringLookup).onPressed == null;
+
+        releaseFolderLoad.complete();
+        await tester.pumpAndSettle();
+
+        expect(
+          folderLoadCount,
+          1,
+          reason: 'Repeated activation should not start another folder lookup.',
+        );
+        expect(
+          saveIsLockedWhileLoading,
+          isTrue,
+          reason: 'The in-flight save should disable further activation.',
+        );
+        expect(find.text('保存图表'), findsOneWidget);
+        expect(find.byType(FolderPickerDialog), findsOneWidget);
+
+        await tester.tap(find.text('取消'));
+        await tester.pumpAndSettle();
+        expect(find.byIcon(Icons.save), findsOneWidget);
+        final saveButtonAfterCancel = find.ancestor(
+          of: find.byIcon(Icons.save),
+          matching: find.byType(IconButton),
+        );
+        expect(
+          tester.widget<IconButton>(saveButtonAfterCancel).onPressed,
+          isNotNull,
+        );
+      },
+    );
+
+    testWidgets('save write failure reports an error and unlocks save', (
+      tester,
+    ) async {
+      addTearDown(() {
+        ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+      });
+      ManifestDatabase.beforeJsonRecordRegistrationForTesting = () {
+        throw StateError('simulated save failure');
+      };
+
+      await tester.pumpWidget(_buildTestApp(initialShowPreview: false));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField).first, 'graph TD\n  A-->B');
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+      expect(find.text('保存图表'), findsOneWidget);
+
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.text('保存失败: Bad state: simulated save failure'),
+        findsOneWidget,
+      );
+      final saveButton = find.ancestor(
+        of: find.byIcon(Icons.save),
+        matching: find.byType(IconButton),
+      );
+      expect(tester.widget<IconButton>(saveButton).onPressed, isNotNull);
+      expect(await TextManifest.loadRecords(), isEmpty);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets('save with empty content shows error, no folder picker', (
       tester,

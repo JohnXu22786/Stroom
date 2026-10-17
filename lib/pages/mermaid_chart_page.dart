@@ -88,6 +88,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   final _codeController = TextEditingController();
   String _selectedTypeId = 'flowchart';
   bool _isSaving = false;
+  bool _isSaveFlowActive = false;
   late EditorMode _editorMode;
 
   /// Whether the left/right panels in wide split mode are swapped.
@@ -290,59 +291,64 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   }
 
   Future<void> _saveChart() async {
+    if (_isSaveFlowActive) return;
+
     if (_codeController.text.trim().isEmpty) {
       _showEmptyChartError();
       return;
     }
 
-    // Show save dialog with filename input and folder picker
-    final folders = await TextManifest.getAllFolders();
-    if (!mounted) return;
+    // Lock the entire asynchronous save flow before the first await so rapid
+    // activations cannot open stacked folder pickers.
+    setState(() => _isSaveFlowActive = true);
+    try {
+      // Show save dialog with filename input and folder picker.
+      final folders = await TextManifest.getAllFolders();
+      if (!mounted) return;
 
-    final content = _codeController.text;
-    if (content.trim().isEmpty) {
-      _showEmptyChartError();
-      return;
-    }
+      // Keep this snapshot after folder lookup so edits made while it loads
+      // remain included in the save.
+      final content = _codeController.text;
+      if (content.trim().isEmpty) {
+        _showEmptyChartError();
+        return;
+      }
 
-    // Local controller - will be garbage collected after _saveChart completes.
-    // Not explicitly disposed because the dialog's dismiss animation still
-    // references it after showDialog returns.
-    final existingRecord = widget.existingRecord;
-    final fileNameController = TextEditingController(
-      text: existingRecord?.name ?? '我的图表',
-    );
-    final selectedFolder = await FolderPickerDialog.show(
-      context,
-      currentFolder: existingRecord?.folder ?? '',
-      availableFolders: folders,
-      title: '保存图表',
-      hintText: '选择或创建文件夹保存 .mmd 图表文件',
-      fileNameController: fileNameController,
-      fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
-      onCreateFolder: (name) async {
-        await TextManifest.addFolder(name);
-        return null;
-      },
-      onRefreshFolders: () async => TextManifest.getAllFolders(),
-    );
+      // Local controller - will be garbage collected after _saveChart completes.
+      // Not explicitly disposed because the dialog's dismiss animation still
+      // references it after showDialog returns.
+      final existingRecord = widget.existingRecord;
+      final fileNameController = TextEditingController(
+        text: existingRecord?.name ?? '我的图表',
+      );
+      final selectedFolder = await FolderPickerDialog.show(
+        context,
+        currentFolder: existingRecord?.folder ?? '',
+        availableFolders: folders,
+        title: '保存图表',
+        hintText: '选择或创建文件夹保存 .mmd 图表文件',
+        fileNameController: fileNameController,
+        fileNameHintText: '输入文件名（自动添加 .mmd 后缀）',
+        onCreateFolder: (name) async {
+          await TextManifest.addFolder(name);
+          return null;
+        },
+        onRefreshFolders: () async => TextManifest.getAllFolders(),
+      );
 
-    final userFileName = fileNameController.text.trim();
+      final userFileName = fileNameController.text.trim();
 
-    if (selectedFolder == null || !mounted) return;
+      if (selectedFolder == null || !mounted) return;
 
-    if (userFileName.isEmpty) {
-      if (mounted) {
+      if (userFileName.isEmpty) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        return;
       }
-      return;
-    }
 
-    setState(() => _isSaving = true);
+      setState(() => _isSaving = true);
 
-    try {
       final typeLabel = MermaidTemplates.getAllTypes()
           .firstWhere((t) => t.id == _selectedTypeId)
           .label;
@@ -408,7 +414,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       }
 
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _isSaveFlowActive = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -421,10 +430,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
         );
+      }
+    } finally {
+      if (mounted && (_isSaving || _isSaveFlowActive)) {
+        setState(() {
+          _isSaving = false;
+          _isSaveFlowActive = false;
+        });
       }
     }
   }
@@ -463,7 +478,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             IconButton(
               icon: const Icon(Icons.save, size: 20),
               tooltip: '保存到文本储存区',
-              onPressed: _saveChart,
+              onPressed: _isSaveFlowActive ? null : _saveChart,
             ),
         ],
       ),
