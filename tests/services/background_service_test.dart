@@ -855,7 +855,8 @@ void main() {
         final store = _RejectFailedStopRollbackStore({
           'flutter.background_service_enabled': false,
           if (priorMarker != null)
-            'flutter.background_service_failed_stop_restore_pending': priorMarker,
+            'flutter.background_service_failed_stop_restore_pending':
+                priorMarker,
           'flutter.background_service_watchdog': true,
         }, throwOnDisable: throwOnDisable);
         store.failNextReads(readFailures);
