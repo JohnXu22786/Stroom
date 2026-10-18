@@ -42,8 +42,7 @@ class AnkiActions {
 
   Future<void> removeDeck(int did) async {
     final col = await _col;
-    col.removeDeck(did);
-    await col.save();
+    await col.removeDeck(did);
     _refresh();
   }
 
@@ -60,15 +59,26 @@ class AnkiActions {
       {int? modelId, String tags = ''}) async {
     final col = await _col;
     final models = col.modelList;
-    final mid = modelId ?? (models.isNotEmpty ? models.first.id : 1);
+    final int mid;
 
     // Ensure model exists; if not, seed both Basic and Cloze
     if (models.isEmpty) {
-      col.addModel(Notetype.createBasic());
+      final basic = Notetype.createBasic();
+      col.addModel(basic);
+      mid = modelId ?? basic.id;
+    } else {
+      mid = modelId ?? models.first.id;
     }
     // Ensure Cloze model exists
     if (!col.modelList.any((m) => m.name == 'Cloze')) {
       col.addModel(Notetype.createCloze());
+    }
+    if (col.getModel(mid) == null) {
+      throw StateError('The note type $mid is unavailable.');
+    }
+    if (models.isEmpty) {
+      // NoteDao derives sort fields from the persisted notetype JSON.
+      await col.save();
     }
 
     final tagList = tags.trim().isEmpty

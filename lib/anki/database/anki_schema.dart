@@ -1,7 +1,7 @@
-/// Exact SQL schema matching AnkiDroid's collection.anki2.
+/// Anki schema 11 collection tables plus Stroom's local settings tables.
 ///
-/// Tables: col, notes, cards, revlog, graves, deck_config, config
-/// Column names and types match Anki's source exactly.
+/// Official tables: col, notes, cards, revlog, graves. Stroom adds local
+/// deck_config and config tables for normalized sync bookkeeping.
 class AnkiSchema {
   /// Current schema version (Anki 2.1 schema version 11).
   static const int schemaVersion = 11;
@@ -13,8 +13,15 @@ class AnkiSchema {
         _createCards,
         _createRevlog,
         _createGraves,
+        ...localSupportStatements,
+      ];
+
+  /// App-local tables that are not present in an official schema 11 download.
+  /// They are created when a collection is opened by Stroom.
+  static List<String> get localSupportStatements => [
         _createDeckConfig,
         _createConfig,
+        syncDestinationStatement,
       ];
 
   // ─── col ─────────────────────────────────────────────────────
@@ -48,7 +55,7 @@ class AnkiSchema {
       usn       INTEGER NOT NULL,
       tags      TEXT NOT NULL,
       flds      TEXT NOT NULL,
-      sfld      TEXT NOT NULL,
+      sfld      INTEGER NOT NULL,
       csum      INTEGER NOT NULL,
       flags     INTEGER NOT NULL,
       data      TEXT NOT NULL
@@ -106,8 +113,8 @@ class AnkiSchema {
     )
   ''';
 
-  // ─── deck_config ────────────────────────────────────────────
-  // Named deck option presets (Anki 2.1.28+).
+  // ─── local deck_config mirror ────────────────────────────────
+  // Normalized local index mirrored to col.dconf for sync.
   static const String _createDeckConfig = '''
     CREATE TABLE IF NOT EXISTS deck_config (
       id         INTEGER PRIMARY KEY,
@@ -118,14 +125,23 @@ class AnkiSchema {
     )
   ''';
 
-  // ─── config ──────────────────────────────────────────────────
-  // Named key-value config (Anki 2.1.28+).
+  // ─── local config mirror ────────────────────────────────────
+  // Normalized local settings index used by incremental sync.
   static const String _createConfig = '''
     CREATE TABLE IF NOT EXISTS config (
       key        TEXT PRIMARY KEY,
       usn        INTEGER NOT NULL,
       mtime_secs INTEGER NOT NULL,
       config     TEXT NOT NULL
+    )
+  ''';
+
+  // ─── local sync destination guard ─────────────────────────────
+  // Prevent incremental USNs from one destination being applied to another.
+  static const String syncDestinationStatement = '''
+    CREATE TABLE IF NOT EXISTS stroom_sync_destination (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      identity   TEXT NOT NULL
     )
   ''';
 }
