@@ -419,7 +419,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=15';
+    final base = '$webAssetTemplateUrl?v=16';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -540,6 +540,7 @@ MERMAID_CODE_PLACEHOLDER
     var pendingZoomOperations = [];
     var activeNativeGestureId = null;
     var nativeGestureZoomLevel = 1;
+    window.zoomInputQueueReady = false;
 
     function zoomInputTimestamp() {
       var performance = window.performance;
@@ -554,7 +555,83 @@ MERMAID_CODE_PLACEHOLDER
       if (typeof operation.inputTimestamp !== 'number') {
         operation.inputTimestamp = zoomInputTimestamp();
       }
+      if (typeof operation.inputSequence !== 'number') {
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            var sequence = Number(
+              parentWindow.__stroomMermaidZoomInputSequence
+            ) || 0;
+            operation.inputSequence = sequence + 1;
+            parentWindow.__stroomMermaidZoomInputSequence =
+              operation.inputSequence;
+          }
+        } catch (error) {
+          // Cross-origin parents cannot share the Dart/iframe sequence.
+        }
+      }
       pendingZoomOperations.push(operation);
+    }
+
+    function replayPendingZoomOperations() {
+      if (!fitComplete || window.zoomInputQueueReady === false ||
+          pendingZoomOperations.length === 0) return;
+      var zoomOperations = pendingZoomOperations;
+      pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        var timestampOrder = a.inputTimestamp - b.inputTimestamp;
+        if (timestampOrder !== 0) return timestampOrder;
+        if (typeof a.inputSequence === 'number' &&
+            typeof b.inputSequence === 'number') {
+          return a.inputSequence - b.inputSequence;
+        }
+        return 0;
+      });
+      var viewport = document.getElementById('viewport');
+      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
+        var zoomOperation = zoomOperations[zoomIndex];
+        if (zoomOperation.kind === 'gesture') {
+          window.applyGestureTransformAfterFit(
+            zoomOperation.gestureId,
+            zoomOperation.scale,
+            zoomOperation.panDeltaX,
+            zoomOperation.panDeltaY,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else if (zoomOperation.kind === 'touch-pan') {
+          panX += zoomOperation.panDeltaX;
+          panY += zoomOperation.panDeltaY;
+          updateTransform();
+          notifyTransform();
+        } else if (zoomOperation.kind === 'touch-pinch') {
+          window.setZoom(
+            zoomLevel * zoomOperation.scale,
+            zoomOperation.centerX,
+            zoomOperation.centerY,
+            true
+          );
+        } else if (zoomOperation.anchored) {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            viewport.clientWidth / 2,
+            viewport.clientHeight / 2
+          );
+        }
+      }
+      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
+          touchLastY !== undefined) {
+        touchStartX = touchLastX;
+        touchStartY = touchLastY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
     }
 
     function updateTransform() {
@@ -624,7 +701,7 @@ MERMAID_CODE_PLACEHOLDER
     // Before the first fit, retain it as a relative transform so the fit can
     // establish its base zoom and center before replaying the gesture.
     window.applyGestureTransformAfterFit = function(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY) {
-      if (!fitComplete) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
         queuePendingZoomOperation({
           kind: 'gesture',
           gestureId: gestureId,
@@ -659,7 +736,7 @@ MERMAID_CODE_PLACEHOLDER
 
     window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
-      if (!fitComplete) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
         for (var i = 0; i < deltas.length; i++) {
           queuePendingZoomOperation({
             delta: deltas[i],
@@ -680,7 +757,7 @@ MERMAID_CODE_PLACEHOLDER
     };
 
     window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
-      if (!fitComplete) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
         queuePendingZoomOperation({
           delta: delta,
           anchored: true,
@@ -699,18 +776,26 @@ MERMAID_CODE_PLACEHOLDER
         var operation = operations[i];
         if (!operation || typeof operation.delta !== 'number') continue;
         if (operation.kind === 'wheel') {
-          window.applyWheelZoomAfterFit(
-            operation.delta,
-            operation.centerX,
-            operation.centerY,
-            operation.inputTimestamp
-          );
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: true,
+            centerX: operation.centerX,
+            centerY: operation.centerY,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
         } else if (operation.kind === 'toolbar') {
-          window.applyZoomDeltasAfterFit(
-            [operation.delta],
-            operation.inputTimestamp
-          );
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: false,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
         }
+      }
+      window.zoomInputQueueReady = true;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -768,54 +853,8 @@ MERMAID_CODE_PLACEHOLDER
       updateTransform();
       notifyTransform();
       fitComplete = true;
-      var zoomOperations = pendingZoomOperations;
-      pendingZoomOperations = [];
-      zoomOperations.sort(function(a, b) {
-        return a.inputTimestamp - b.inputTimestamp;
-      });
-      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
-        var zoomOperation = zoomOperations[zoomIndex];
-        if (zoomOperation.kind === 'gesture') {
-          window.applyGestureTransformAfterFit(
-            zoomOperation.gestureId,
-            zoomOperation.scale,
-            zoomOperation.panDeltaX,
-            zoomOperation.panDeltaY,
-            zoomOperation.centerX,
-            zoomOperation.centerY
-          );
-        } else if (zoomOperation.kind === 'touch-pan') {
-          panX += zoomOperation.panDeltaX;
-          panY += zoomOperation.panDeltaY;
-          updateTransform();
-          notifyTransform();
-        } else if (zoomOperation.kind === 'touch-pinch') {
-          window.setZoom(
-            zoomLevel * zoomOperation.scale,
-            zoomOperation.centerX,
-            zoomOperation.centerY,
-            true
-          );
-        } else if (zoomOperation.anchored) {
-          window.setZoom(
-            zoomLevel + zoomOperation.delta,
-            zoomOperation.centerX,
-            zoomOperation.centerY
-          );
-        } else {
-          window.setZoom(
-            zoomLevel + zoomOperation.delta,
-            vw / 2,
-            vh / 2
-          );
-        }
-      }
-      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
-          touchLastY !== undefined) {
-        touchStartX = touchLastX;
-        touchStartY = touchLastY;
-        touchPanStartX = panX;
-        touchPanStartY = panY;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -1081,6 +1120,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         double? centerX,
         double? centerY,
         double inputTimestamp,
+        int? inputSequence,
       })> _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
@@ -1525,7 +1565,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         delta: delta,
         centerX: centerX,
         centerY: centerY,
-        inputTimestamp: platform.mermaidZoomInputTimestamp,
+        inputTimestamp: mermaidZoomInputTimestamp,
+        inputSequence: mermaidZoomInputSequence,
       ));
       return;
     }
@@ -1733,7 +1774,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         delta: delta,
         centerX: null,
         centerY: null,
-        inputTimestamp: platform.mermaidZoomInputTimestamp,
+        inputTimestamp: mermaidZoomInputTimestamp,
+        inputSequence: mermaidZoomInputSequence,
       ));
       return;
     }
@@ -1758,7 +1800,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   Future<void> _applyPendingZoomOperations() async {
     final ctrl = _webViewController;
-    if (ctrl == null || _pendingZoomOperations.isEmpty) return;
+    if (ctrl == null) return;
 
     final pendingOperations = List.of(_pendingZoomOperations);
     _pendingZoomOperations.clear();
@@ -1771,6 +1813,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           'kind': 'toolbar',
           'delta': operation.delta,
           'inputTimestamp': operation.inputTimestamp,
+          'inputSequence': operation.inputSequence,
         };
       }
       return {
@@ -1779,8 +1822,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         'centerX': centerX,
         'centerY': centerY,
         'inputTimestamp': operation.inputTimestamp,
+        'inputSequence': operation.inputSequence,
       };
     }).toList();
+    // Even an empty flush marks the page as ready to apply queued DOM zooms.
     await ctrl.evaluateJavascript(
       source: 'window.applyZoomOperationsAfterFit(${jsonEncode(operations)})',
     );

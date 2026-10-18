@@ -282,10 +282,14 @@ function createTouchZoomHarness(
   const queueHelper = templateSource.match(
     /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
   );
+  const replayHelper = templateSource.match(
+    /^    function replayPendingZoomOperations\(\) \{[\s\S]*?^    \}/m,
+  );
   assert.ok(setZoom, `Could not find ${templateName} setZoom`);
   assert.ok(zoomState, `Could not find ${templateName} zoom state`);
   assert.ok(timestampHelper, `Could not find ${templateName} timestamp helper`);
   assert.ok(queueHelper, `Could not find ${templateName} queue helper`);
+  assert.ok(replayHelper, `Could not find ${templateName} replay helper`);
 
   const listeners = new Map();
   const viewport = {
@@ -320,6 +324,7 @@ function createTouchZoomHarness(
       zoomState[0],
       timestampHelper[0],
       queueHelper[0],
+      replayHelper[0],
       setZoom[0],
       fit[0],
       touchGestureScript,
@@ -591,6 +596,10 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
       'pending zoom queue helper',
       true,
     );
+    const replayHelper = extract(
+      /^    function replayPendingZoomOperations\(\) \{[\s\S]*?^    \}/m,
+      'pending zoom replay helper',
+    );
     const setZoom = extract(
       /    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
       'setZoom',
@@ -640,8 +649,8 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
     };
 
     vm.runInNewContext(
-      [state, timestampHelper, queueHelper, setZoom, applyWheelZoom,
-        applyZoomOperations, applyZoomDeltas, fit]
+      [state, timestampHelper, queueHelper, replayHelper, setZoom,
+        applyWheelZoom, applyZoomOperations, applyZoomDeltas, fit]
         .filter(Boolean)
         .join('\n'),
       context,
@@ -751,6 +760,10 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
     'pending zoom queue helper',
     true,
   );
+  const replayHelper = extract(
+    /^    function replayPendingZoomOperations\(\) \{[\s\S]*?^    \}/m,
+    'pending zoom replay helper',
+  );
   const setZoom = extract(
     /^    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
     'setZoom',
@@ -779,7 +792,10 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
   const svg = {getBBox: () => ({width: 100, height: 50}), setAttribute: () => {}};
   const container = {querySelector: () => svg};
   const context = {
-    window: {performance: {timeOrigin: 1000, now: () => 20}},
+    window: {
+      performance: {timeOrigin: 1000, now: () => 20},
+      parent: {__stroomMermaidZoomInputSequence: 1},
+    },
     document: {
       getElementById: (id) =>
         id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
@@ -794,7 +810,7 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
   };
 
   vm.runInNewContext(
-    [state, timestampHelper, queueHelper, setZoom, applyWheelZoom,
+    [state, timestampHelper, queueHelper, replayHelper, setZoom, applyWheelZoom,
       applyZoomDeltas, applyZoomOperations, fit].filter(Boolean).join('\n'),
     context,
   );
@@ -803,8 +819,13 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
     context,
   );
 
-  // The first toolbar click is still queued in Dart when the iframe receives
-  // the later wheel event. onLoadStop then transfers that earlier click.
+  // The first toolbar click remains queued in Dart while JavaScript finishes
+  // the initial fit. A later iframe wheel event must wait for onLoadStop to
+  // transfer that earlier click before either operation is applied.
+  context.window.zoomInputQueueReady = false;
+  context.window.fitToViewport();
+  assert.equal(context.zoomLevel, 2, 'fit may finish before the Dart queue flush');
+
   handleWheel({
     ctrlKey: true,
     deltaY: -10,
@@ -812,12 +833,20 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
     clientY: 100,
     preventDefault: () => {},
   });
-  context.window.applyZoomOperationsAfterFit([
-    {kind: 'toolbar', delta: 0.1, inputTimestamp: 1010},
-  ]);
-  assert.equal(context.zoomLevel, 1, 'both inputs must wait for the first fit');
+  assert.equal(context.zoomLevel, 2, 'the later wheel waits for the Dart queue flush');
+  assert.equal(context.pendingZoomOperations.length, 1);
+  assert.equal(context.pendingZoomOperations[0].inputTimestamp, 1020);
 
-  context.window.fitToViewport();
+  // Both events can share a fallback timestamp. The parent-window sequence
+  // keeps the earlier toolbar input ahead of the later iframe wheel input.
+  context.window.applyZoomOperationsAfterFit([
+    {
+      kind: 'toolbar',
+      delta: 0.1,
+      inputTimestamp: 1020,
+      inputSequence: 1,
+    },
+  ]);
 
   assert.equal(context.zoomLevel, 2.2);
   const anchor = (pan, center, oldZoom, newZoom) =>
@@ -1262,6 +1291,10 @@ test('native and web templates apply queued zoom after auto-fit', () => {
       /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
       'pending zoom queue helper',
     );
+    const replayHelper = extract(
+      /^    function replayPendingZoomOperations\(\) \{[\s\S]*?^    \}/m,
+      'pending zoom replay helper',
+    );
     const fit = extract(
       /    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
       'fitToViewport',
@@ -1289,7 +1322,7 @@ test('native and web templates apply queued zoom after auto-fit', () => {
     };
 
     vm.runInNewContext(
-      `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyAfterFit}\n${fit}`,
+      `${state}\n${timestampHelper}\n${queueHelper}\n${replayHelper}\n${setZoom}\n${applyAfterFit}\n${fit}`,
       context,
     );
 
@@ -1362,8 +1395,12 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
     'pending zoom queue helper',
   );
+  const replayHelper = extract(
+    /^    function replayPendingZoomOperations\(\) \{[\s\S]*?^    \}/m,
+    'pending zoom replay helper',
+  );
   vm.runInNewContext(
-    `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    `${state}\n${timestampHelper}\n${queueHelper}\n${replayHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
     context,
   );
 
@@ -1410,7 +1447,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     notifyTransform: () => {},
   };
   vm.runInNewContext(
-    `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    `${state}\n${timestampHelper}\n${queueHelper}\n${replayHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
     clampedContext,
   );
 
@@ -1439,7 +1476,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
       notifyTransform: () => {},
     };
     vm.runInNewContext(
-      `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+      `${state}\n${timestampHelper}\n${queueHelper}\n${replayHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
       targetContext,
     );
     return targetContext;

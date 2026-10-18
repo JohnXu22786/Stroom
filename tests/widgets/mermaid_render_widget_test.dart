@@ -62,6 +62,12 @@ void main() {
           webView.controller.loadedUrls.last,
         );
         await tester.pump();
+        expect(
+          webView.controller.evaluatedScripts,
+          contains('window.applyZoomOperationsAfterFit([])'),
+          reason:
+              'load completion releases the page zoom queue even when empty',
+        );
 
         final zoomCenter = tester.getCenter(find.byIcon(Icons.zoom_in));
         final interceptor = find.byType(PointerInterceptor);
@@ -306,13 +312,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=15&code='));
+      expect(url, contains('mermaid_render.html?v=16&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=15?')));
+      expect(url, isNot(contains('v=16?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '15',
+        'v': '16',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +342,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=15');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=16');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -799,7 +805,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v15');
+      expect(templateVersion, 'v16');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -1156,7 +1162,10 @@ void main() {
 
       expect(
         fakeController.evaluatedScripts,
-        ['window.applyZoomDeltasAfterFit([0.1])'],
+        [
+          'window.applyZoomOperationsAfterFit([])',
+          'window.applyZoomDeltasAfterFit([0.1])',
+        ],
         reason: 'horizontal-only Ctrl+wheel should not issue another zoom',
       );
 
@@ -1167,7 +1176,7 @@ void main() {
 
       expect(
         fakeController.evaluatedScripts,
-        hasLength(3),
+        hasLength(4),
         reason: 'the toolbar and both vertical wheel inputs should be captured',
       );
       expect(
@@ -1177,6 +1186,7 @@ void main() {
       );
 
       final expectedCommands = <String>[
+        'window.applyZoomOperationsAfterFit([])',
         'window.applyZoomDeltasAfterFit([0.1])',
         for (final center in localWheelCenters)
           'window.applyWheelZoomAfterFit(0.1, ${center.dx}, ${center.dy});',
