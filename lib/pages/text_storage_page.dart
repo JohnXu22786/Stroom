@@ -150,8 +150,6 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
           }
           continue;
         }
-        final storageFileName = '$hash.txt';
-
         final displayName = _uniqueTextName(
           p.basenameWithoutExtension(rawName),
           records,
@@ -159,8 +157,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         );
         usedInBatch.add(displayName);
 
-        await TextManifest.writeFile(storageFileName, bytes);
-        await TextManifest.addRecord(
+        await TextManifest.saveTextRecord(
           TextRecord(
             name: displayName,
             hash: hash,
@@ -170,6 +167,7 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             folder: _currentFolder,
             textLength: content.length,
           ),
+          content,
         );
         count++;
       }

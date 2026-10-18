@@ -101,17 +101,18 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         final content = oldStoragePath == newStoragePath
             ? null
             : await TextManifest.readFile(oldStoragePath);
-        if (content != null) {
-          await TextManifest.writeFile(newStoragePath, content);
-        }
-        await TextManifest.updateRecord(updated);
-        if (content != null &&
-            !records.any(
-              (record) =>
-                  record.id != id && record.storageFileName == oldStoragePath,
-            )) {
-          await TextManifest.deleteFile(oldStoragePath);
-        }
+        await TextManifest.withSaveLock(updated.hash, () async {
+          if (content != null) {
+            await TextManifest.writeFile(newStoragePath, content);
+          }
+          await TextManifest.updateRecord(updated);
+          if (content != null) {
+            await TextManifest.deleteFileIfUnreferenced(
+              r.hash,
+              oldStoragePath,
+            );
+          }
+        });
       }
     }
     await loadRecords();

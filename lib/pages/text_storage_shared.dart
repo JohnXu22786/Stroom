@@ -46,18 +46,19 @@ class TextCreatePageState extends State<TextCreatePage> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
 
-      await TextManifest.writeText(storageFileName, content);
-      await TextManifest.addRecord(TextRecord(
-        name: title,
-        hash: hash,
-        format: _selectedFormat,
-        createdAt: DateTime.now(),
-        size: bytes.length,
-        folder: widget.initialFolder,
-        textLength: content.length,
-      ));
+      await TextManifest.saveTextRecord(
+        TextRecord(
+          name: title,
+          hash: hash,
+          format: _selectedFormat,
+          createdAt: DateTime.now(),
+          size: bytes.length,
+          folder: widget.initialFolder,
+          textLength: content.length,
+        ),
+        content,
+      );
 
       if (mounted) {
         setState(() => _isSaving = false);

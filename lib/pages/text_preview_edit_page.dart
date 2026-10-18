@@ -301,25 +301,18 @@ class _TextPreviewEditPageState extends State<TextPreviewEditPage> {
       );
       final newStorageFileName = updatedRecord.storageFileName;
 
-      // 写入新内容到新的存储文件（基于新 hash 的文件名）
-      await TextManifest.writeText(newStorageFileName, newContent);
-
-      // 删除旧的存储文件
-      if (oldStorageFileName != newStorageFileName) {
-        final records = await TextManifest.loadRecords();
-        final oldPathIsShared = records.any(
-          (record) =>
-              record.id != _currentFile.id &&
-              record.storageFileName == oldStorageFileName,
-        );
-        if (!oldPathIsShared) {
-          await TextManifest.deleteFile(oldStorageFileName);
-        }
-      }
-
       // 更新 manifest 记录为新 hash；内容未变化时保留原修改时间，
       // 内容变化时把修改时间更新为当前时间（按修改时间排序的依据）
-      await TextManifest.updateRecord(updatedRecord);
+      await TextManifest.updateTextRecord(updatedRecord, newContent);
+
+      // Recheck all persisted references under the old hash lock. The same
+      // record ID may have been repointed to the old content by a stale save.
+      if (oldStorageFileName != newStorageFileName) {
+        await TextManifest.deleteFileIfUnreferenced(
+          _currentFile.hash,
+          oldStorageFileName,
+        );
+      }
 
       if (mounted) {
         setState(() => _isSaving = false);

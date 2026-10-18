@@ -1024,8 +1024,7 @@ extension _ChatPageUiExt on _ChatPageState {
 
       final bytes = Uint8List.fromList(utf8.encode(markdown));
       final hash = computeTextHash(bytes);
-      await TextManifest.writeFile('$hash.txt', bytes);
-      await TextManifest.addRecord(
+      await TextManifest.saveTextRecord(
         TextRecord(
           name: finalName,
           hash: hash,
@@ -1035,6 +1034,7 @@ extension _ChatPageUiExt on _ChatPageState {
           folder: selectedFolder,
           textLength: markdown.length,
         ),
+        markdown,
       );
       await recordsNotifier.loadRecords();
       await foldersNotifier.loadFolders();
