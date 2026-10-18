@@ -577,25 +577,22 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         _currentView == ViewMode.mode2D && parameterNames.isNotEmpty;
     return Stack(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 30),
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-            shrinkWrap: true,
-            controller: _formulaScroll,
-            physics: const ClampingScrollPhysics(),
-            itemCount: _formulas.length + (showParameters ? 1 : 0),
-            itemBuilder: (_, index) => index < _formulas.length
-                ? _buildFormulaRow(cs, index)
-                : MathParameterControls(
-                    key: const ValueKey('math-parameter-controls'),
-                    parameters: {
-                      for (final name in parameterNames)
-                        name: _parameters[name]!,
-                    },
-                    onChanged: _updateParameter,
-                  ),
-          ),
+        ListView.builder(
+          padding: const EdgeInsets.fromLTRB(8, 34, 8, 2),
+          shrinkWrap: true,
+          controller: _formulaScroll,
+          physics: const ClampingScrollPhysics(),
+          itemCount: _formulas.length + (showParameters ? 1 : 0),
+          itemBuilder: (_, index) => index < _formulas.length
+              ? _buildFormulaRow(cs, index)
+              : MathParameterControls(
+                  key: const ValueKey('math-parameter-controls'),
+                  parameters: {
+                    for (final name in parameterNames)
+                      name: _parameters[name]!,
+                  },
+                  onChanged: _updateParameter,
+                ),
         ),
         Positioned(
           top: 0,

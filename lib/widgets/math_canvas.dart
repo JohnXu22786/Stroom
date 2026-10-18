@@ -212,10 +212,12 @@ class MathCanvasState extends State<MathCanvas> {
 
     final aspectRatio = _canvasWidth / _canvasHeight;
     const padding = 1.1;
-    final xRange = dart_math.max(
-      dart_math.max(xMax - xMin, (yMax - yMin) * aspectRatio) * padding,
-      0.1,
-    ).toDouble();
+    final xRange = dart_math
+        .max(
+          dart_math.max(xMax - xMin, (yMax - yMin) * aspectRatio) * padding,
+          0.1,
+        )
+        .toDouble();
     final yRange = xRange / aspectRatio;
     final centerX = (xMin + xMax) / 2;
     final centerY = (yMin + yMax) / 2;
