@@ -1461,6 +1461,43 @@ void main() {
         expect(service.lastResponseStatusCode, equals(200));
       });
 
+      test('recognize captures non-map response body in diagnostics', () async {
+        const responseBody = 'unexpected OCR response body';
+        final service = OcrService(
+          config: _testOcrConfig,
+          dio: _mockDioWithSuccess(responseBody),
+        );
+
+        await expectLater(
+          service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(service.lastResponseData?['raw'], responseBody);
+      });
+
+      test(
+        'recognizeBatch captures non-map response body in diagnostics',
+        () async {
+          const responseBody = 'unexpected batch OCR response body';
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: _mockDioWithSuccess(responseBody),
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+              ],
+            ),
+            throwsA(isA<Exception>()),
+          );
+
+          expect(service.lastResponseData?['raw'], responseBody);
+        },
+      );
+
       test('diagnostic request IDs exclude the configured API key', () async {
         const apiKey = 'opaque-user-secret-87';
         final dio = _mockDioWithSuccess(
