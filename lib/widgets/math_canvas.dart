@@ -229,6 +229,7 @@ class MathCanvasState extends State<MathCanvas> {
       _formulaCurves
         ..clear()
         ..addAll(fittedCurves);
+      _resampleAll();
     });
     widget.onCoordinateUpdate?.call(curvePoints);
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
