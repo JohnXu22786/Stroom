@@ -2417,6 +2417,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
 
         final firstWebView = platform.webView!;
+        final firstViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
         final firstController =
             firstWebView.controllerFromPlatform<InAppWebViewController>(
           firstWebView.controller,
@@ -2435,7 +2437,13 @@ void main() {
 
         await tester.tap(find.byIcon(Icons.image));
         await tester.pump();
-        expect(platform.webViews, hasLength(2));
+        final remountedViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+        expect(
+          remountedViewKey,
+          isNot(same(firstViewKey)),
+          reason: 'returning to preview creates a fresh web view attempt',
+        );
         expect(find.text('加载渲染引擎...'), findsOneWidget);
 
         // The new iframe never delivers onWebViewCreated. Late callbacks from
@@ -2457,7 +2465,13 @@ void main() {
 
         await tester.tap(find.text('重试'));
         await tester.pump();
-        expect(platform.webViews, hasLength(3));
+        final retryViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+        expect(
+          retryViewKey,
+          isNot(same(remountedViewKey)),
+          reason: 'retry creates a fresh web view attempt',
+        );
         expect(find.text(creationError), findsNothing);
         await tester.pumpWidget(const SizedBox.shrink());
       },
@@ -2485,6 +2499,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
 
         final firstWebView = platform.webView!;
+        final firstViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
         final controller =
             firstWebView.controllerFromPlatform<InAppWebViewController>(
                 firstWebView.controller);
@@ -2522,7 +2538,13 @@ void main() {
         );
         await tester.pump();
 
-        expect(platform.webViews, hasLength(2));
+        final remountedViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+        expect(
+          remountedViewKey,
+          isNot(same(firstViewKey)),
+          reason: 'changing source in source mode starts a fresh web view',
+        );
         expect(find.text('加载渲染引擎...'), findsOneWidget);
         firstWebView.params.onWebViewCreated!(controller);
         firstWebView.params.onLoadStop?.call(controller, initialUrl);
@@ -2649,6 +2671,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
 
         final firstWebView = platform.webView!;
+        final firstViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
         final controller =
             firstWebView.controllerFromPlatform<InAppWebViewController>(
                 firstWebView.controller);
@@ -2688,7 +2712,13 @@ void main() {
         );
         await tester.pump();
 
-        expect(platform.webViews, hasLength(2));
+        final remountedViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+        expect(
+          remountedViewKey,
+          isNot(same(firstViewKey)),
+          reason: 'returning from empty code starts a fresh web view',
+        );
         expect(find.text('加载渲染引擎...'), findsOneWidget);
         await tester.pump(const Duration(seconds: 3));
         expect(
@@ -2727,6 +2757,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 400));
 
         final firstWebView = platform.webView!;
+        final firstViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
         final controller =
             firstWebView.controllerFromPlatform<InAppWebViewController>(
                 firstWebView.controller);
@@ -2767,7 +2799,13 @@ void main() {
         );
         await tester.pump();
 
-        expect(platform.webViews, hasLength(2));
+        final remountedViewKey =
+            tester.widget<InAppWebView>(find.byType(InAppWebView)).key;
+        expect(
+          remountedViewKey,
+          isNot(same(firstViewKey)),
+          reason: 'returning from empty code starts a fresh web view',
+        );
         expect(find.text('加载渲染引擎...'), findsOneWidget);
         await tester.pump(const Duration(seconds: 3));
         expect(
