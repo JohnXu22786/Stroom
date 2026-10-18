@@ -1715,6 +1715,110 @@ sequenceDiagram
       expect(code, isNot(contains('NewNode1[新节点]')));
     });
 
+    testWidgets(
+      'repeated flowchart diamond snippets use IDs distinct from existing nodes',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode:
+                'graph TD\n  Condition[Existing decision] --> Next[Continue]',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加菱形判断'));
+        await tester.pump();
+        await tester.tap(find.text('添加菱形判断'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final nodeIds = RegExp(
+          r'^\s*(Condition\d*)\{判断条件\}$',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
+
+        expect(code, contains('Condition[Existing decision]'));
+        expect(nodeIds, ['Condition1', 'Condition2']);
+        expect(nodeIds.toSet(), hasLength(2));
+      },
+    );
+
+    testWidgets(
+      'repeated flowchart connection snippets use distinct endpoint IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode:
+                'graph TD\n  Node1[Existing start] --> Node2[Existing end]',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加连接线'));
+        await tester.pump();
+        await tester.tap(find.text('添加连接线'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final edges = RegExp(
+          r'^\s*(Node\d+) --> (Node\d+)\s*$',
+          multiLine: true,
+        ).allMatches(code).toList();
+        final insertedNodeIds =
+            edges.expand((edge) => [edge[1]!, edge[2]!]).toSet();
+
+        expect(code, contains('Node1[Existing start] --> Node2[Existing end]'));
+        expect(edges, hasLength(2));
+        expect(edges.map((edge) => '${edge[1]} --> ${edge[2]}'), [
+          'Node11 --> Node21',
+          'Node12 --> Node22',
+        ]);
+        expect(insertedNodeIds, hasLength(4));
+        expect(insertedNodeIds, isNot(contains('Node1')));
+        expect(insertedNodeIds, isNot(contains('Node2')));
+      },
+    );
+
+    testWidgets(
+      'repeated flowchart subgraph snippets use distinct declared node IDs',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: 'graph TD\n  Node1[Existing node]',
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+
+        await tester.tap(find.text('添加子图'));
+        await tester.pump();
+        await tester.tap(find.text('添加子图'));
+        await tester.pump();
+
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
+        final code = textField.controller!.text;
+        final nodeIds = RegExp(
+          r'^\s*(Node\d+)\[节点1\]$',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
+
+        expect(code, contains('Node1[Existing node]'));
+        expect(nodeIds, ['Node11', 'Node12']);
+        expect(nodeIds.toSet(), hasLength(2));
+        expect(
+          RegExp(r'^\s*end\s*$', multiLine: true).allMatches(code),
+          hasLength(2),
+        );
+      },
+    );
+
     testWidgets('repeated class snippet insertions use distinct class IDs', (
       tester,
     ) async {
