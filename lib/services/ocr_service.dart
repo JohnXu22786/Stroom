@@ -314,7 +314,7 @@ class OcrService {
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '$response.data'};
+          : <String, dynamic>{'raw': '${response.data}'};
       lastResponseHeaders = response.headers.map;
       _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
@@ -401,7 +401,7 @@ class OcrService {
       lastResponseStatusCode = response.statusCode;
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
-          : <String, dynamic>{'raw': '$response.data'};
+          : <String, dynamic>{'raw': '${response.data}'};
       lastResponseHeaders = response.headers.map;
       _lastRequestId = OcrDiagnosticSnapshot.requestIdFromHeaders(
             response.headers.map,
