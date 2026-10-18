@@ -4145,6 +4145,67 @@ void main() {
 
   group('MermaidRenderWidget - Save as MMD', () {
     testWidgets(
+      'adds one .mmd extension for names entered with or without the suffix',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\n  A-->B'),
+        );
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+        );
+
+        Future<void> saveWithName(
+          String enteredName,
+          String expectedPath,
+        ) async {
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+          await tester.enterText(fileNameField, enteredName);
+          await tester.tap(find.text('根目录'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('确定'));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('已保存到文本储存区: 根目录/$expectedPath'),
+            findsOneWidget,
+          );
+          await tester.pump(const Duration(seconds: 3));
+          await tester.pumpAndSettle();
+        }
+
+        await saveWithName('diagram', 'diagram.mmd');
+        await saveWithName('diagram.mmd', 'diagram (2).mmd');
+        await saveWithName('diagram.MMD', 'diagram (3).mmd');
+
+        final savedRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(
+          savedRecords.map((record) => record.name),
+          ['diagram', 'diagram (2)', 'diagram (3)'],
+        );
+        expect(tester.takeException(), isNull);
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'shows folder lookup failure and unlocks a successful retry',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
