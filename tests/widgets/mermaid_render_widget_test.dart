@@ -4279,6 +4279,62 @@ void main() {
     });
   });
 
+  group('MermaidRenderWidget - native source mode semantics', () {
+    testWidgets(
+      'source mode excludes hidden render controls from accessibility semantics',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final previousTargetPlatform = debugDefaultTargetPlatformOverride;
+        try {
+          final platform = _MermaidWebViewPlatform();
+          InAppWebViewPlatform.instance = platform;
+          debugDefaultTargetPlatformOverride = TargetPlatform.android;
+
+          await _mountReadyMermaidWidget(
+            tester,
+            platform,
+            const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          );
+
+          for (final label in ['缩小', '放大', '全屏', '查看源码']) {
+            expect(
+              find.semantics.byLabel(label),
+              findsOneWidget,
+              reason: 'render mode must expose its $label control',
+            );
+          }
+
+          await tester.tap(find.byIcon(Icons.code));
+          await tester.pump();
+
+          for (final label in ['缩小', '放大', '全屏', '查看源码']) {
+            expect(
+              find.semantics.byLabel(label),
+              findsNothing,
+              reason: 'source mode must hide its underlying $label control',
+            );
+          }
+          for (final label in ['复制', '保存', '换行显示', '查看图表']) {
+            expect(
+              find.semantics.byLabel(label),
+              findsOneWidget,
+              reason: 'source mode must keep its visible $label control',
+            );
+          }
+
+          await tester.pumpWidget(const SizedBox.shrink());
+        } finally {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+          debugDefaultTargetPlatformOverride = previousTargetPlatform;
+          semantics.dispose();
+        }
+      },
+      skip: kIsWeb,
+    );
+  });
+
   group('MermaidRenderWidget - Save as MMD', () {
     testWidgets(
       'adds one .mmd extension for names entered with or without the suffix',
