@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
@@ -1329,6 +1330,63 @@ void main() {
     expect(await TextManifest.loadRecords(), isEmpty);
     expect(await TextManifest.readText('$hash.txt'), isNull);
   });
+
+  for (final recoveryPath in [false, true]) {
+    test(
+        'rollback reports a failed text deletion in the ${recoveryPath ? 'recovery' : 'normal'} path',
+        () async {
+      var failReferenceRead = recoveryPath;
+      String? deleteAttempted;
+      final cleanupMessages = <String?>[];
+      final originalDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) => cleanupMessages.add(message);
+      final saver = OcrResultSaver(
+        taskId: id,
+        notifier: notifier,
+        title: 'owned',
+        folder: '',
+        onSaved: () {},
+        loadRecordsUncached: () async {
+          if (failReferenceRead) {
+            failReferenceRead = false;
+            throw StateError('injected reference read failure');
+          }
+          return TextManifest.loadRecordsUncached();
+        },
+        deleteTextFile: (fileName) async {
+          deleteAttempted = fileName;
+          return false;
+        },
+        addRecord: (record, {beforeCommit}) async {
+          throw StateError('injected record commit failure');
+        },
+      );
+
+      try {
+        await expectLater(
+          saver.saveResult('new OCR text', isComplete: true),
+          throwsA(isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'injected record commit failure',
+          )),
+        );
+      } finally {
+        debugPrint = originalDebugPrint;
+      }
+
+      final fileName =
+          '${computeTextHash(Uint8List.fromList(utf8.encode('new OCR text')))}.txt';
+      expect(deleteAttempted, fileName);
+      expect(
+        cleanupMessages.any((message) =>
+            message?.contains('Rollback cleanup could not be confirmed') ==
+            true),
+        isTrue,
+      );
+      expect(await TextManifest.readText(fileName), 'new OCR text');
+    });
+  }
 
   test('rollback removes its known row when the first reference read fails',
       () async {
