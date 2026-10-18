@@ -27,9 +27,8 @@ Future<void> _expectPlanarArrowsFollowAxes(
         );
   final center = worldToScreen(point, camera, projection);
   final origin = Offset(center.x, center.y);
-  final sampleDistance = projectionType == ProjectionType.perspective
-      ? 0.01
-      : 1.0;
+  final sampleDistance =
+      projectionType == ProjectionType.perspective ? 0.01 : 1.0;
 
   Offset axisOffset(Vector3D axis) {
     final screenPoint = worldToScreen(
@@ -63,12 +62,14 @@ Future<void> _expectPlanarArrowsFollowAxes(
     final recorder = ui.PictureRecorder();
     painter.paint(ui.Canvas(recorder), size);
     final image = await recorder.endRecording().toImage(
-      size.width.toInt(),
-      size.height.toInt(),
-    );
+          size.width.toInt(),
+          size.height.toInt(),
+        );
     final bytes = (await image.toByteData(
       format: ui.ImageByteFormat.rawRgba,
-    ))!.buffer.asUint8List();
+    ))!
+        .buffer
+        .asUint8List();
     image.dispose();
 
     final result = <Offset>[];
