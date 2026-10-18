@@ -135,6 +135,9 @@ class OcrResultSaver {
     required bool isComplete,
     bool allowPartial = false,
   }) async {
+    if (!isComplete && text.isEmpty) {
+      throw StateError('空的 OCR 部分结果不能保存');
+    }
     if (!isComplete && !allowPartial) {
       throw StateError('不完整的 OCR 结果不能自动保存');
     }
