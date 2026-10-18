@@ -1091,6 +1091,49 @@ void main() {
       }
     });
 
+    test(
+        'vertical tab and form feed after Setext underline keep HTML fences out of callback order',
+        () {
+      for (final separator in const ['\u000b', '\u000c']) {
+        final streamingText = [
+          'Paragraph',
+          '---$separator',
+          '<span>',
+          '```mermaid',
+          'fake',
+          '```',
+          '</span>',
+          '',
+          '```mermaid',
+          'A',
+        ].join('\n');
+        final parsed = _parseLikeMarkdownGenerator(streamingText);
+        expect(_findElement(parsed, 'h2'), isNotNull,
+            reason: 'the parser accepts the Setext suffix for $separator');
+        final parsedCode = _findElement(parsed, 'code');
+        expect(parsedCode?.attributes['class'], 'language-mermaid');
+        expect(parsedCode?.textContent.trim(), 'A',
+            reason: 'the fenced text inside standalone HTML is not parsed');
+
+        final config = buildMessageMarkdownConfig(
+          isDark: false,
+          conversationIsStreaming: true,
+          streamingMsgId: 'current-message-id',
+          messageId: 'current-message-id',
+          streamingText: streamingText,
+        );
+        final codeWidgets = _widgetsFromInlineSpans(
+          markdownGenerator.buildWidgets(streamingText, config: config),
+        );
+
+        expect(codeWidgets, hasLength(1),
+            reason: 'only the parsed trailing Mermaid fence gets a callback');
+        expect(codeWidgets.single, isNot(isA<MermaidRenderWidget>()),
+            reason:
+                'the actual parsed open fence should keep loading for $separator');
+      }
+    });
+
     test('vertical tab and form feed do not end raw HTML blocks', () {
       for (final separator in const ['\u000b', '\u000c']) {
         final streamingText =
