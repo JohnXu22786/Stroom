@@ -1837,7 +1837,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
 
-    final userFileName = fileNameController.text.trim();
+    final enteredFileName = fileNameController.text.trim();
+    const mmdExtension = '.mmd';
+    final userFileName = enteredFileName.toLowerCase().endsWith(mmdExtension)
+        ? enteredFileName.substring(
+            0, enteredFileName.length - mmdExtension.length)
+        : enteredFileName;
 
     if (selectedFolder == null || !mounted) {
       _isSaving = false;
@@ -1891,7 +1896,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName.mmd',
+              '已保存到文本储存区: ${selectedFolder.isEmpty ? "根目录" : selectedFolder}/$finalName$mmdExtension',
             ),
             duration: const Duration(seconds: 2),
           ),
