@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:ui' as ui;
 
 import 'package:extended_image/extended_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,7 @@ import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/ocr_service.dart';
 import 'package:stroom/services/ocr_retry_storage.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
@@ -79,6 +81,7 @@ Widget _buildTestApp({
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
+  OcrService Function(OcrConfig config)? testOcrServiceFactory,
   Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer,
   Future<Map<String, dynamic>?> Function({
@@ -119,6 +122,7 @@ Widget _buildTestApp({
     child: MaterialApp(
       home: OcrPage(
         testImages: testImages,
+        testOcrServiceFactory: testOcrServiceFactory,
         retryData: retryData,
         retryTaskId: retryTaskId,
         retryPageOutcomes: retryPageOutcomes,
@@ -147,6 +151,36 @@ class _InspectableBackgroundTaskNotifier extends BackgroundTaskNotifier {
   List<BackgroundTask> get tasksForTest => state;
 
   void setTasksForTest(List<BackgroundTask> tasks) => state = tasks;
+}
+
+class _CapturingOcrAdapter implements HttpClientAdapter {
+  final requests = <RequestOptions>[];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return ResponseBody.fromString(
+      jsonEncode({
+        'choices': [
+          {
+            'message': {'content': 'captured OCR text'},
+            'finish_reason': 'stop',
+          },
+        ],
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 // ============================================================================
@@ -427,6 +461,120 @@ void main() {
       // Should show all models in the dropdown with provider name
       expect(find.text('GPT-4o Mini | OpenAI'), findsWidgets);
       expect(find.text('GPT-4 Vision | OpenAI'), findsWidgets);
+    });
+
+    testWidgets('uses the model selected while image preparation is pending', (
+      tester,
+    ) async {
+      final preparationStarted = Completer<void>();
+      final finishPreparation = Completer<OcrImagePayload>();
+      final adapter = _CapturingOcrAdapter();
+      final notifier = _InspectableBackgroundTaskNotifier();
+      OcrRetrySnapshot? cachedSnapshot;
+      final providerA = ProviderEntry(
+        id: 'provider_a',
+        type: 'ocr',
+        name: 'Provider A',
+        configs: [
+          ProviderConfigItem(
+            id: 'config_a',
+            providerName: 'Provider A',
+            host: 'https://provider-a.test/ocr',
+            key: 'provider-a-key',
+            models: [
+              ModelConfig(
+                id: 'model_a_record',
+                name: 'Model A',
+                modelId: 'model-a',
+              ),
+            ],
+          ),
+        ],
+      );
+      final providerB = ProviderEntry(
+        id: 'provider_b',
+        type: 'ocr',
+        name: 'Provider B',
+        configs: [
+          ProviderConfigItem(
+            id: 'config_b',
+            providerName: 'Provider B',
+            host: 'https://provider-b.test/ocr',
+            key: 'provider-b-key',
+            models: [
+              ModelConfig(
+                id: 'model_b_record',
+                name: 'Model B',
+                modelId: 'model-b',
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [providerA, providerB],
+          testImages: [_createTestImage()],
+          backgroundTasksNotifier: notifier,
+          testImagePayloadPreparer: (bytes) {
+            preparationStarted.complete();
+            return finishPreparation.future;
+          },
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+            cachedSnapshot = snapshot;
+            return Future.value(null);
+          },
+          testOcrServiceFactory: (config) => OcrService(
+            config: config,
+            dio: Dio(
+              BaseOptions(
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': 'Bearer ${config.apiKey}',
+                },
+              ),
+            )..httpClientAdapter = adapter,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      await preparationStarted.future;
+
+      await tester.tap(find.text('Model A | Provider A').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Model B | Provider B').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Model B | Provider B'), findsOneWidget);
+
+      finishPreparation.complete(
+        OcrImagePayload(
+          bytes: _createTestPngBytes(),
+          format: 'png',
+          width: 1,
+          height: 1,
+        ),
+      );
+      await tester.pump();
+
+      await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
+      final request = adapter.requests.single;
+      expect(request.uri.toString(), 'https://provider-b.test/ocr');
+      expect(request.headers['Authorization'], 'Bearer provider-b-key');
+      expect(
+        (request.data as Map<String, dynamic>)['model'],
+        'model-b',
+      );
+      expect(cachedSnapshot?.configId, 'config_b');
+      expect(cachedSnapshot?.modelId, 'model_b_record');
+      await _pumpUntil(
+        tester,
+        () => notifier.tasksForTest.any(
+          (task) => task.status == TaskStatus.completed,
+        ),
+      );
     });
 
     testWidgets('model selector falls back to modelId when name is empty', (
