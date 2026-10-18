@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../catcatch/providers/catcatch_provider.dart';
+import '../../providers/background_task_provider.dart';
+import '../../providers/task_provider.dart';
 import '../../providers/task_provider_shared.dart';
 import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
@@ -14,7 +17,24 @@ import 'persistable_notifier.dart';
 /// Provider for tracking task flow executions (for the unified task list).
 final taskFlowExecutionsProvider =
     StateNotifierProvider<TaskFlowExecutionNotifier, List<TaskFlowExecution>>(
-  (ref) => TaskFlowExecutionNotifier(),
+  (ref) => TaskFlowExecutionNotifier(
+    clearTemporaryTaskFileReference: (step) {
+      switch (step.subTaskType) {
+        case 'catcatch':
+          return ref
+              .read(catcatchTasksProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+        case 'synthesis':
+          return ref
+              .read(taskListProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+        default:
+          return ref
+              .read(backgroundTasksProvider.notifier)
+              .clearDownloadedFilePath(step.subTaskId);
+      }
+    },
+  ),
 );
 
 /// Startup sets this to restoring before loading any task lists. Directly
@@ -27,7 +47,10 @@ final taskFlowExecutionRestoreStatusProvider =
 
 class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     with PersistableNotifier<List<TaskFlowExecution>> {
-  TaskFlowExecutionNotifier() : super([]);
+  TaskFlowExecutionNotifier({this.clearTemporaryTaskFileReference}) : super([]);
+
+  final Future<bool> Function(FlowSubTask step)?
+      clearTemporaryTaskFileReference;
 
   Future<void> _registrationQueue = Future<void>.value();
   final Object _registrationWriteZone = Object();
@@ -151,6 +174,20 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         debugPrint('Failed to clean up task-flow artifacts: $error');
       }
     }
+  }
+
+  Future<bool> _clearTemporaryTaskFileReferences(
+    Iterable<TaskFlowExecution> executions,
+  ) async {
+    final clearReference = clearTemporaryTaskFileReference;
+    if (clearReference == null) return true;
+    for (final execution in executions) {
+      for (final step in execution.subTasks) {
+        if (step.result?.temporaryArtifact == null) continue;
+        if (!await clearReference(step)) return false;
+      }
+    }
+    return true;
   }
 
   Timer? _persistTimer;
@@ -472,12 +509,16 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   /// Removing waiting records itself prevents dispatch, even without a UI
   /// cleanup callback. The service observes removals to cancel active work.
-  Future<void> removeExecution(String id) {
+  Future<void> removeExecution(String id) async {
     if (!mounted) {
-      return Future<void>.value();
+      return;
     }
     final removed = execution(id);
-    if (removed == null) return Future<void>.value();
+    if (removed == null) return;
+    if (!await _clearTemporaryTaskFileReferences([removed])) {
+      debugPrint('Failed to clear temporary task file references for $id');
+      return;
+    }
     state = state.where((e) => e.id != id).map((e) {
       if (removed.batchId == null ||
           e.batchId != removed.batchId ||
@@ -547,6 +588,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
       if (removed.any((e) => !e.isTerminal)) {
         throw StateError('任务流取消后仍在运行');
       }
+      if (!await _clearTemporaryTaskFileReferences(removed)) return false;
 
       final gate = Completer<void>();
       _removalBarrier = gate;

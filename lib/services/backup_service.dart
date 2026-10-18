@@ -1511,6 +1511,7 @@ class BackupService {
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
+        if (kIsWeb || WebFileStore.isTestMode) return relative;
         return p.joinAll([appDir, ...relative.split('/')]);
       }
       if (!restoring) {
@@ -1564,8 +1565,9 @@ class BackupService {
     BackupSelection selection, {
     required Set<String> taskFilesToRestore,
   }) async {
-    if (!selection.tasks || kIsWeb || WebFileStore.isTestMode) return;
-    final appDir = await AppStorage.directory;
+    if (!selection.tasks) return;
+    final isWebStore = kIsWeb || WebFileStore.isTestMode;
+    final appDir = isWebStore ? '' : await AppStorage.directory;
     for (final relativePath in const [
       'synthesis/tasks.json',
       'catcatch/tasks.json',
@@ -1574,18 +1576,31 @@ class BackupService {
       'task_flows/executions.json',
     ]) {
       if (!taskFilesToRestore.contains(relativePath)) continue;
-      final file = File(
-        p.joinAll([appDir, ...relativePath.split('/')]),
-      );
-      if (!await file.exists()) continue;
       try {
-        final decoded = jsonDecode(await file.readAsString());
+        final file = isWebStore
+            ? null
+            : File(p.joinAll([appDir, ...relativePath.split('/')]));
+        final data = isWebStore
+            ? await WebFileStore.read(relativePath)
+            : file != null && await file.exists()
+                ? await file.readAsBytes()
+                : null;
+        if (data == null) continue;
+        final decoded = jsonDecode(utf8.decode(data));
         final restored = _mapPortableTaskPaths(
           decoded,
           appDir: appDir,
           restoring: true,
         );
-        await AtomicFile.writeString(file, jsonEncode(restored));
+        final restoredJson = jsonEncode(restored);
+        if (isWebStore) {
+          await WebFileStore.write(
+            relativePath,
+            Uint8List.fromList(utf8.encode(restoredJson)),
+          );
+        } else {
+          await AtomicFile.writeString(file!, restoredJson);
+        }
       } catch (e) {
         throw Exception('恢复任务文件路径失败：$relativePath ($e)');
       }
