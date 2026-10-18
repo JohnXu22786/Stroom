@@ -644,9 +644,14 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                   ? MermaidTemplates.getSnippets(
                                       'gitGraph',
                                       code: _codeController.text,
-                                    ).singleWhere((item) => item.$1 == label).$2
+                                    ).firstWhere(
+                                      (item) => item.$1 == label,
+                                      orElse: () => (label, ''),
+                                    ).$2
                                   : snippet;
-                              _insertSnippet(snippetToInsert);
+                              if (snippetToInsert.isNotEmpty) {
+                                _insertSnippet(snippetToInsert);
+                              }
                             }
                           }
                         },

@@ -139,6 +139,43 @@ void main() {
       expect(textField.controller?.text, contains('Custom'));
     });
 
+    testWidgets(
+      'stale GitGraph merge chip is safe without an alternate branch',
+      (tester) async {
+        const initialCode = 'gitGraph\n  checkout main';
+        await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+        await tester.pump();
+
+        final mergeChip = find.text('合并分支');
+        expect(mergeChip, findsOneWidget);
+        await tester.ensureVisible(mergeChip);
+        await tester.tap(mergeChip);
+        await tester.pump();
+
+        expect(tester.takeException(), isNull);
+        final textField = tester.widget<TextField>(find.byType(TextField).first);
+        expect(textField.controller?.text, initialCode);
+      },
+    );
+
+    testWidgets('GitGraph merge chip inserts an existing alternate branch', (
+      tester,
+    ) async {
+      const initialCode = 'gitGraph\n  branch feature\n  checkout main';
+      await tester.pumpWidget(_buildTestApp(initialCode: initialCode));
+      await tester.pump();
+
+      final mergeChip = find.text('合并分支');
+      expect(mergeChip, findsOneWidget);
+      await tester.ensureVisible(mergeChip);
+      await tester.tap(mergeChip);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      expect(textField.controller?.text, contains('merge feature'));
+    });
+
     testWidgets('initialCode auto-detects sequenceDiagram type', (
       tester,
     ) async {
