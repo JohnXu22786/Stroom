@@ -1798,7 +1798,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Take a photo using the system camera.
   Future<void> _takePhotoWithSystemCamera() async {
-    final importGeneration = ++_imageImportGeneration;
+    var importGeneration = _imageImportGeneration;
     var importPending = false;
     try {
       final picker = ImagePicker();
@@ -1820,6 +1820,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
+      importGeneration = ++_imageImportGeneration;
       _beginImageImport();
       importPending = true;
       final bytes = await file.readAsBytes();
@@ -1851,7 +1852,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Pick images from the device gallery (supports batch selection).
   Future<void> _pickFromSystemGallery() async {
-    final importGeneration = ++_imageImportGeneration;
+    var importGeneration = _imageImportGeneration;
     var importPending = false;
     try {
       final mode = _imageImportMode;
@@ -1875,6 +1876,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
+      importGeneration = ++_imageImportGeneration;
       _beginImageImport();
       importPending = true;
       final newImages = <SelectedImage>[];
@@ -1936,7 +1938,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
   /// Pick images from the app's album.
   Future<void> _pickFromAppAlbum() async {
-    final importGeneration = ++_imageImportGeneration;
+    var importGeneration = _imageImportGeneration;
     var importPending = false;
     try {
       final result = await showAppAlbumPickerDialog(context);
@@ -1946,6 +1948,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
+      importGeneration = ++_imageImportGeneration;
       _beginImageImport();
       importPending = true;
       var loadedCount = 0;
