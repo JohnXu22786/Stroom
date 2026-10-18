@@ -433,6 +433,40 @@ void main() {
   );
 
   testWidgets(
+    'retains ready-state zoom when JavaScript evaluation fails before retry',
+    (tester) async {
+      final preview = await _openPreviewWithEarlyControls(tester);
+      final controller = preview.webView.controller;
+      controller.zoomHelperAvailable = true;
+      preview.webView.params.onWebViewCreated!(preview.controller);
+      await tester.pump();
+      controller.simulateJsFitToViewport(0.45);
+      preview.webView.params.onLoadStop!(preview.controller, null);
+      await tester.pump();
+      controller.failNextZoomEvaluation = true;
+
+      await tester.tap(find.byIcon(Icons.zoom_in));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(controller.evaluatedScripts, [
+        'window.applyZoomDeltasAfterFit([0.1])',
+      ]);
+      expect(controller.zoomLevel, closeTo(0.45, 0.0001));
+
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+
+      expect(controller.evaluatedScripts, [
+        'window.applyZoomDeltasAfterFit([0.1])',
+        'window.applyZoomDeltasAfterFit([0.1])',
+      ]);
+      expect(controller.zoomLevel, closeTo(0.55, 0.0001));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'toolbar zoom controls continue from the JavaScript-fitted zoom '
     'without a transform handler',
     (tester) async {
