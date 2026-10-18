@@ -25,6 +25,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
         "browser_page_test.dart",
         "providers/catcatch_provider_test.dart",
         "services/browser_cookie_service_test.dart",
+        "utils/mermaid_folder_name_lock_test.dart",
         "utils/mermaid_templates_test.dart",
         "widgets/mermaid_render_widget*_test.dart",
         "pages/content/mermaid_*_test.dart",
