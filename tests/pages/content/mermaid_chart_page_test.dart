@@ -50,6 +50,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ManifestDatabase.beforeJsonRecordRegistrationForTesting = null;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     TextManifest.beforeFolderLoadForTesting = null;
     TextManifest.invalidateCache();
   });
@@ -794,6 +795,96 @@ void main() {
         expect(
           await TextManifest.readText(existingRecord.storagePath),
           content,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'failed chart update removes unreferenced content and '
+      'preserves the original',
+      (tester) async {
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+        });
+        const originalContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalRecord = TextRecord(
+          id: 'existing-chart-id',
+          name: 'existing-chart',
+          hash: computeTextHash(
+            Uint8List.fromList(utf8.encode(originalContent)),
+          ),
+          format: 'mmd',
+          createdAt: DateTime.utc(2024, 1, 1),
+          size: utf8.encode(originalContent).length,
+          textLength: originalContent.length,
+        );
+        final editedHash = computeTextHash(
+          Uint8List.fromList(utf8.encode(editedContent)),
+        );
+        await TextManifest.writeText(
+          originalRecord.storagePath,
+          originalContent,
+        );
+        await TextManifest.addRecord(originalRecord);
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: originalContent,
+            existingRecord: originalRecord,
+            initialShowPreview: false,
+          ),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).first, editedContent);
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        expect(find.text('保存图表'), findsOneWidget);
+
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+
+        final updateReadStarted = Completer<void>();
+        final releaseUpdateRead = Completer<void>();
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          updateReadStarted.complete();
+          await releaseUpdateRead.future;
+          throw StateError('simulated update failure');
+        };
+
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await updateReadStarted.future.timeout(const Duration(seconds: 5));
+        try {
+          expect(
+            await TextManifest.readText('$editedHash.txt'),
+            editedContent,
+          );
+        } finally {
+          if (!releaseUpdateRead.isCompleted) releaseUpdateRead.complete();
+        }
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(
+          find.text('保存失败: Bad state: simulated update failure'),
+          findsOneWidget,
+        );
+        expect(await TextManifest.readText('$editedHash.txt'), isNull);
+        final savedRecords = await TextManifest.loadRecords();
+        expect(savedRecords.map((record) => record.id), [originalRecord.id]);
+        expect(savedRecords.single.hash, originalRecord.hash);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          originalContent,
         );
         expect(tester.takeException(), isNull);
       },
