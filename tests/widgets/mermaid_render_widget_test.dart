@@ -911,13 +911,16 @@ void main() {
               .cast<Map<String, dynamic>>();
       expect(queuedOperations, hasLength(3));
       expect(
-        queuedOperations.every((operation) => operation['inputTimestamp'] is num),
+        queuedOperations
+            .every((operation) => operation['inputTimestamp'] is num),
         isTrue,
       );
       expect(
         queuedOperations.first['inputTimestamp'],
-        inInclusiveRange(firstTapTimestampLowerBound, firstTapTimestampUpperBound),
-        reason: 'the queued command must retain its click time through the load delay',
+        inInclusiveRange(
+            firstTapTimestampLowerBound, firstTapTimestampUpperBound),
+        reason:
+            'the queued command must retain its click time through the load delay',
       );
 
       // Load completion can precede Mermaid's asynchronous render and fit.

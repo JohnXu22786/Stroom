@@ -276,8 +276,16 @@ function createTouchZoomHarness(
   const zoomState = templateSource.match(
     /^    var zoomLevel = 1;\s*var panX = 0;\s*var panY = 0;\s*var fitComplete = false;\s*var pendingZoomOperations = \[\];/m,
   );
+  const timestampHelper = templateSource.match(
+    /^    function zoomInputTimestamp\(\) \{[\s\S]*?^    \}/m,
+  );
+  const queueHelper = templateSource.match(
+    /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
+  );
   assert.ok(setZoom, `Could not find ${templateName} setZoom`);
   assert.ok(zoomState, `Could not find ${templateName} zoom state`);
+  assert.ok(timestampHelper, `Could not find ${templateName} timestamp helper`);
+  assert.ok(queueHelper, `Could not find ${templateName} queue helper`);
 
   const listeners = new Map();
   const viewport = {
@@ -291,7 +299,7 @@ function createTouchZoomHarness(
   };
   const container = {querySelector: () => svg};
   const context = {
-    window: {},
+    window: {performance: {timeOrigin: 1000, now: () => 1}},
     document: {
       addEventListener: (type, listener) => {
         const registered = listeners.get(type) || [];
@@ -308,7 +316,14 @@ function createTouchZoomHarness(
   };
 
   vm.runInNewContext(
-    [zoomState[0], setZoom[0], fit[0], touchGestureScript].join('\n'),
+    [
+      zoomState[0],
+      timestampHelper[0],
+      queueHelper[0],
+      setZoom[0],
+      fit[0],
+      touchGestureScript,
+    ].join('\n'),
     context,
   );
 

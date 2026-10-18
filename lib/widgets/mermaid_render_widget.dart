@@ -1075,12 +1075,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   double _zoomLevel = 1.0;
 
   /// Zoom inputs made before the WebView is ready to accept commands.
-  final List<({
-    double delta,
-    double? centerX,
-    double? centerY,
-    double inputTimestamp,
-  })> _pendingZoomOperations = [];
+  final List<
+      ({
+        double delta,
+        double? centerX,
+        double? centerY,
+        double inputTimestamp,
+      })> _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
