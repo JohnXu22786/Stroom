@@ -312,13 +312,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=16&code='));
+      expect(url, contains('mermaid_render.html?v=17&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=16?')));
+      expect(url, isNot(contains('v=17?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '16',
+        'v': '17',
         'code': 'graph TD\nA-->B',
       });
 
@@ -342,7 +342,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=16');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=17');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -809,7 +809,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v16');
+      expect(templateVersion, 'v17');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');

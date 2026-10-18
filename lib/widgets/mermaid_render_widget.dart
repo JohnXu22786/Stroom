@@ -429,7 +429,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=16';
+    final base = '$webAssetTemplateUrl?v=17';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -894,6 +894,29 @@ MERMAID_LOADER_PLACEHOLDER
     var dragSlop = 4;
     var suppressClickAfterPan = false;
     var suppressClickTimer = null;
+    var dragParentWindow = null;
+
+    function finishMouseDrag() {
+      if (isDragging && hasDragged) {
+        suppressClickAfterPan = true;
+        suppressClickTimer = setTimeout(function() {
+          suppressClickAfterPan = false;
+          suppressClickTimer = null;
+        }, 0);
+      }
+      isDragging = false;
+      hasDragged = false;
+      if (dragParentWindow !== null) {
+        try {
+          dragParentWindow.removeEventListener('mouseup', finishMouseDrag);
+        } catch(_) {}
+        dragParentWindow = null;
+      }
+    }
+
+    document.addEventListener('mouseup', finishMouseDrag);
+    window.addEventListener('blur', finishMouseDrag);
+    window.addEventListener('unload', finishMouseDrag);
 
     // Drag-to-pan with mouse
     document.addEventListener('mousedown', function(e) {
@@ -909,6 +932,15 @@ MERMAID_LOADER_PLACEHOLDER
         dragStartY = e.clientY;
         panStartX = panX;
         panStartY = panY;
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            parentWindow.addEventListener('mouseup', finishMouseDrag);
+            dragParentWindow = parentWindow;
+          }
+        } catch(_) {
+          dragParentWindow = null;
+        }
         e.preventDefault();
       }
     });
@@ -926,18 +958,6 @@ MERMAID_LOADER_PLACEHOLDER
         notifyTransform();
         e.preventDefault();
       }
-    });
-
-    document.addEventListener('mouseup', function() {
-      if (isDragging && hasDragged) {
-        suppressClickAfterPan = true;
-        suppressClickTimer = setTimeout(function() {
-          suppressClickAfterPan = false;
-          suppressClickTimer = null;
-        }, 0);
-      }
-      isDragging = false;
-      hasDragged = false;
     });
 
     document.addEventListener('click', function(e) {
