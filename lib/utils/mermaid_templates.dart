@@ -74,7 +74,11 @@ class MermaidTemplates {
     };
     if (patterns == null) return snippet;
 
-    final snippetId = RegExp(patterns.$1).firstMatch(snippet);
+    final snippetIdPattern = diagramTypeId == 'block' &&
+            RegExp(r'^[ \t]*block[ \t]*\r?\n').hasMatch(snippet)
+        ? RegExp(r'^([ \t]*)(\S+)(?=\[)', multiLine: true)
+        : RegExp(patterns.$1);
+    final snippetId = snippetIdPattern.firstMatch(snippet);
     if (snippetId == null) return snippet;
 
     final existingIds = <String>{};
