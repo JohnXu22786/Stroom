@@ -107,11 +107,13 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
   Future<void> load() => _loadFuture ??= _doLoad();
 
   Future<void> _doLoad() async {
-    // Capture the entries synchronously — reading through [Ref] after an
-    // async gap may fail once the provider has been disposed.
-    final legacyEntries = _ref.read(providerEntriesProvider).entries;
+    // Capture the notifier and its load future before any async gap; reading
+    // through [Ref] later may fail if this provider has been disposed.
+    final providerEntriesNotifier = _ref.read(providerEntriesProvider.notifier);
+    final providerEntriesReady = providerEntriesNotifier.ready;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
       final json = prefs.getString(_storageKey);
       if (json != null && json.trim().isNotEmpty) {
         final list = (jsonDecode(json) as List)
@@ -125,8 +127,12 @@ class OcrInstructionsNotifier extends StateNotifier<List<OcrInstruction>> {
     } catch (e) {
       debugPrint('Failed to load OCR instructions: $e');
     }
+    await providerEntriesReady;
+    if (!mounted || !providerEntriesNotifier.mounted) return;
     // 旧版本按模型配置的指令一次性迁移进通用列表（仅当新存储从未写入时）。
-    final legacy = migrateLegacyOcrInstructions(legacyEntries);
+    final legacy = migrateLegacyOcrInstructions(
+      providerEntriesNotifier.state.entries,
+    );
     if (legacy.isNotEmpty) {
       state = legacy;
       await _persist();
