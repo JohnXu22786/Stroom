@@ -72,6 +72,88 @@
     var panY = 0;
     var fitComplete = false;
     var pendingZoomOperations = [];
+    window.zoomInputQueueReady = false;
+
+    function zoomInputTimestamp() {
+      var performance = window.performance;
+      if (performance && typeof performance.timeOrigin === 'number' &&
+          typeof performance.now === 'function') {
+        return performance.timeOrigin + performance.now();
+      }
+      return Date.now();
+    }
+
+    function queuePendingZoomOperation(operation) {
+      if (typeof operation.inputTimestamp !== 'number') {
+        operation.inputTimestamp = zoomInputTimestamp();
+      }
+      if (typeof operation.inputSequence !== 'number') {
+        try {
+          var parentWindow = window.parent;
+          if (parentWindow && parentWindow !== window) {
+            var sequence = Number(
+              parentWindow.__stroomMermaidZoomInputSequence
+            ) || 0;
+            operation.inputSequence = sequence + 1;
+            parentWindow.__stroomMermaidZoomInputSequence =
+              operation.inputSequence;
+          }
+        } catch (error) {
+          // Cross-origin parents cannot share the Dart/iframe sequence.
+        }
+      }
+      pendingZoomOperations.push(operation);
+    }
+
+    function replayPendingZoomOperations() {
+      if (!fitComplete || window.zoomInputQueueReady === false ||
+          pendingZoomOperations.length === 0) return;
+      var zoomOperations = pendingZoomOperations;
+      pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        if (typeof a.inputSequence === 'number' &&
+            typeof b.inputSequence === 'number') {
+          return a.inputSequence - b.inputSequence;
+        }
+        return a.inputTimestamp - b.inputTimestamp;
+      });
+      var viewport = document.getElementById('viewport');
+      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
+        var zoomOperation = zoomOperations[zoomIndex];
+        if (zoomOperation.kind === 'touch-pan') {
+          panX += zoomOperation.panDeltaX;
+          panY += zoomOperation.panDeltaY;
+          updateTransform();
+          notifyTransform();
+        } else if (zoomOperation.kind === 'touch-pinch') {
+          window.setZoom(
+            zoomLevel * zoomOperation.scale,
+            zoomOperation.centerX,
+            zoomOperation.centerY,
+            true
+          );
+        } else if (zoomOperation.anchored) {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            zoomOperation.centerX,
+            zoomOperation.centerY
+          );
+        } else {
+          window.setZoom(
+            zoomLevel + zoomOperation.delta,
+            viewport.clientWidth / 2,
+            viewport.clientHeight / 2
+          );
+        }
+      }
+      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
+          touchLastY !== undefined) {
+        touchStartX = touchLastX;
+        touchStartY = touchLastY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
+      }
+    }
 
     function updateTransform() {
       var container = document.getElementById('diagram-container');
@@ -131,11 +213,15 @@
       updateTransform();
     };
 
-    window.applyZoomDeltasAfterFit = function(deltas) {
+    window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
-      if (!fitComplete) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
         for (var i = 0; i < deltas.length; i++) {
-          pendingZoomOperations.push({delta: deltas[i], anchored: false});
+          queuePendingZoomOperation({
+            delta: deltas[i],
+            anchored: false,
+            inputTimestamp: inputTimestamp
+          });
         }
         return;
       }
@@ -149,13 +235,14 @@
       }
     };
 
-    window.applyWheelZoomAfterFit = function(delta, centerX, centerY) {
-      if (!fitComplete) {
-        pendingZoomOperations.push({
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
+      if (!fitComplete || window.zoomInputQueueReady === false) {
+        queuePendingZoomOperation({
           delta: delta,
           anchored: true,
           centerX: centerX,
-          centerY: centerY
+          centerY: centerY,
+          inputTimestamp: inputTimestamp
         });
         return;
       }
@@ -168,14 +255,26 @@
         var operation = operations[i];
         if (!operation || typeof operation.delta !== 'number') continue;
         if (operation.kind === 'wheel') {
-          window.applyWheelZoomAfterFit(
-            operation.delta,
-            operation.centerX,
-            operation.centerY
-          );
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: true,
+            centerX: operation.centerX,
+            centerY: operation.centerY,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
         } else if (operation.kind === 'toolbar') {
-          window.applyZoomDeltasAfterFit([operation.delta]);
+          queuePendingZoomOperation({
+            delta: operation.delta,
+            anchored: false,
+            inputTimestamp: operation.inputTimestamp,
+            inputSequence: operation.inputSequence
+          });
         }
+      }
+      window.zoomInputQueueReady = true;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -231,42 +330,8 @@
       updateTransform();
       notifyTransform();
       fitComplete = true;
-      var zoomOperations = pendingZoomOperations;
-      pendingZoomOperations = [];
-      for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
-        var zoomOperation = zoomOperations[zoomIndex];
-        if (zoomOperation.kind === 'touch-pan') {
-          panX += zoomOperation.panDeltaX;
-          panY += zoomOperation.panDeltaY;
-          updateTransform();
-          notifyTransform();
-        } else if (zoomOperation.kind === 'touch-pinch') {
-          window.setZoom(
-            zoomLevel * zoomOperation.scale,
-            zoomOperation.centerX,
-            zoomOperation.centerY,
-            true
-          );
-        } else if (zoomOperation.anchored) {
-          window.setZoom(
-            zoomLevel + zoomOperation.delta,
-            zoomOperation.centerX,
-            zoomOperation.centerY
-          );
-        } else {
-          window.setZoom(
-            zoomLevel + zoomOperation.delta,
-            vw / 2,
-            vh / 2
-          );
-        }
-      }
-      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
-          touchLastY !== undefined) {
-        touchStartX = touchLastX;
-        touchStartY = touchLastY;
-        touchPanStartX = panX;
-        touchPanStartY = panY;
+      if (typeof replayPendingZoomOperations === 'function') {
+        replayPendingZoomOperations();
       }
     };
 
@@ -386,7 +451,7 @@
         touchLastX = touchX;
         touchLastY = touchY;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pan',
             panDeltaX: panDeltaX,
             panDeltaY: panDeltaY
@@ -410,7 +475,7 @@
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pinch',
             scale: scale,
             centerX: centerX,
@@ -453,7 +518,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v14';
+    var TEMPLATE_VERSION = 'v16';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;

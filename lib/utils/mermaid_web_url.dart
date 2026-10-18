@@ -7,3 +7,7 @@ import 'mermaid_web_url_stub.dart'
 /// `document.baseURI` on web.
 String resolveMermaidWebUrl(String url, {Uri? baseUri}) =>
     (baseUri ?? platform.mermaidWebBaseUri).resolve(url).toString();
+
+double get mermaidZoomInputTimestamp => platform.mermaidZoomInputTimestamp;
+
+int? get mermaidZoomInputSequence => platform.mermaidZoomInputSequence;

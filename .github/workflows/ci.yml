@@ -253,6 +253,11 @@ jobs:
         run: flutter test --reporter expanded --platform chrome --plain-name 'web source updates keep queued zoom until current load completes' test/widgets/mermaid_render_widget_test.dart
         env:
           CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
+      - name: Run Mermaid queued zoom timestamp regression in Chrome
+        if: matrix.suite == 'chat-ai-ui'
+        run: flutter test --reporter expanded --platform chrome --plain-name 'zoom tapped while loading is applied after WebView readiness' test/widgets/mermaid_render_widget_test.dart
+        env:
+          CHROME_EXECUTABLE: ${{ steps.setup-chrome.outputs.chrome-path }}
       - name: Run Mermaid inline overlay pointer regression in Chrome
         if: matrix.suite == 'chat-ai-ui'
         run: flutter test --reporter expanded --platform chrome --plain-name 'MermaidRenderWidget - web overlay pointer routing' test/widgets/mermaid_render_widget_test.dart
