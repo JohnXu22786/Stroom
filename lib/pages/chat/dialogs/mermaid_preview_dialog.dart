@@ -185,8 +185,6 @@ class _MermaidPreviewDialogContentState
 
   Future<void> _zoomAroundCenter(double delta) async {
     final controller = _webViewController;
-    final canApplyZoomDeltas =
-        controller != null && _canApplyZoomDeltasAfterFit;
 
     // Keep native state current for other dialog behavior, but let JS apply
     // the button delta to its live zoom. On web the JS callback bridge is
@@ -199,17 +197,17 @@ class _MermaidPreviewDialogContentState
       _zoomLevel = target;
     }
 
-    if (!canApplyZoomDeltas || _flushingPendingZoomDeltas) {
-      _pendingZoomDeltas.add(delta);
-      if (controller != null && !canApplyZoomDeltas) {
+    _pendingZoomDeltas.add(delta);
+    if (controller == null ||
+        !_canApplyZoomDeltasAfterFit ||
+        _flushingPendingZoomDeltas) {
+      if (controller != null && !_canApplyZoomDeltasAfterFit) {
         unawaited(_checkZoomReadiness());
       }
       return;
     }
 
-    await controller.evaluateJavascript(
-      source: 'window.applyZoomDeltasAfterFit([$delta])',
-    );
+    await _flushPendingZoomDeltas(controller);
   }
 
   Future<void> _flushPendingZoomDeltas(
