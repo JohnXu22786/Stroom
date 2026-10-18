@@ -492,7 +492,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                         constraints: BoxConstraints(
                             maxHeight: (constraints.maxHeight - 48)
                                     .clamp(0.0, double.infinity) *
-                                (_keyboardVisible ? 0.28 : 0.4)),
+                                (_keyboardVisible ? 0.28 : 0.4) +
+                                30),
                         child: _buildFormulaList(cs),
                       ),
                       // Canvas + 3D canvas kept alive via IndexedStack
@@ -577,22 +578,25 @@ class _MathDrawingPageState extends State<MathDrawingPage>
         _currentView == ViewMode.mode2D && parameterNames.isNotEmpty;
     return Stack(
       children: [
-        ListView.builder(
-          padding: const EdgeInsets.fromLTRB(8, 34, 8, 2),
-          shrinkWrap: true,
-          controller: _formulaScroll,
-          physics: const ClampingScrollPhysics(),
-          itemCount: _formulas.length + (showParameters ? 1 : 0),
-          itemBuilder: (_, index) => index < _formulas.length
-              ? _buildFormulaRow(cs, index)
-              : MathParameterControls(
-                  key: const ValueKey('math-parameter-controls'),
-                  parameters: {
-                    for (final name in parameterNames)
-                      name: _parameters[name]!,
-                  },
-                  onChanged: _updateParameter,
-                ),
+        Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+            shrinkWrap: true,
+            controller: _formulaScroll,
+            physics: const ClampingScrollPhysics(),
+            itemCount: _formulas.length + (showParameters ? 1 : 0),
+            itemBuilder: (_, index) => index < _formulas.length
+                ? _buildFormulaRow(cs, index)
+                : MathParameterControls(
+                    key: const ValueKey('math-parameter-controls'),
+                    parameters: {
+                      for (final name in parameterNames)
+                        name: _parameters[name]!,
+                    },
+                    onChanged: _updateParameter,
+                  ),
+          ),
         ),
         Positioned(
           top: 0,
@@ -777,6 +781,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             right: 8,
             bottom: 8,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _floatingControl(
                   icon: Icons.filter_center_focus,
