@@ -725,6 +725,10 @@ void main() {
 
       expect(restored.result, 'partial text');
       expect(restored.resultIsComplete, isFalse);
+      expect(
+        restored.error,
+        'OCR识别失败: Exception: OCR 返回了不完整结果（finish_reason=length）',
+      );
     });
 
     // ==================================================================
@@ -1992,6 +1996,7 @@ void main() {
 
     test('OCR task error sanitizer preserves safe Dio failure types', () {
       const safeError = 'OCR 请求失败（connectionTimeout）';
+      const wrappedLegacyError = 'OCR识别失败: $safeError';
       final task = BackgroundTask.fromMap({
         'id': 'ocr-safe-transport-error',
         'type': 'ocr',
@@ -2007,7 +2012,61 @@ void main() {
       expect(task.error, safeError);
       expect(task.steps.single.error, safeError);
       expect(jsonEncode(task.toMap()), contains(safeError));
+
+      final wrappedTask = BackgroundTask.fromMap({
+        'id': 'legacy-ocr-safe-wrapped-dio-error',
+        'type': 'ocr',
+        'title': '旧版 OCR 任务',
+        'status': 'failed',
+        'error': wrappedLegacyError,
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+      });
+      expect(wrappedTask.error, wrappedLegacyError);
     });
+
+    test(
+      'legacy OCR task and step errors hide unclassified provider echoes',
+      () {
+        const providerEcho = 'HTTP 400: invoice for Jane Doe';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-unclassified-provider-error',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'error': providerEcho,
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': [
+            {'label': '请求 OCR', 'status': 'failed', 'error': providerEcho},
+          ],
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(task.error, 'OCR 错误详情已隐藏（HTTP 400）');
+        expect(task.steps.single.error, 'OCR 错误详情已隐藏（HTTP 400）');
+        expect(persisted, contains('HTTP 400'));
+        expect(persisted, isNot(contains('invoice for Jane Doe')));
+
+        final statusOnly = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-status-only-error',
+          'type': 'ocr',
+          'title': '旧版 OCR 任务',
+          'status': 'failed',
+          'error': 'HTTP 400',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        });
+        expect(statusOnly.error, 'HTTP 400');
+
+        final nonOcr = BackgroundTask.fromMap({
+          'id': 'legacy-asr-provider-error',
+          'type': 'asr',
+          'title': '旧版 ASR 任务',
+          'status': 'failed',
+          'error': providerEcho,
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        });
+        expect(nonOcr.error, providerEcho);
+      },
+    );
 
     test('legacy OCR task and step errors redact response bodies on load', () {
       final apiKey = 'AIza${List.filled(35, 'a').join()}';

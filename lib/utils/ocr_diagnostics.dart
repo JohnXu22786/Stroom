@@ -23,6 +23,38 @@ class OcrDiagnosticSnapshot {
     'function_call',
     'tool_calls',
   };
+  static const _knownSafeStoredTaskErrorSummaries = {
+    'OCR 图片格式无法识别',
+    'OCR 任务因格式问题未完成',
+    'API 返回格式异常（非 JSON 对象）',
+    'API 返回了空的 choices 列表',
+    'API 返回中的 choice 格式异常',
+    'API 返回中的 finish_reason 格式异常',
+    'API 返回中缺少 message 字段',
+    'OCR 处理失败（_Exception）',
+    'OCR 处理失败（ArgumentError）',
+    'OCR 处理失败（RangeError）',
+    'OCR 处理失败（StateError）',
+    'OCR 处理失败（TypeError）',
+    'OCR 处理失败（TimeoutException）',
+    'OCR 处理失败（UnsupportedError）',
+    'OCR 返回格式无效',
+    'OCR 结果保存失败',
+    'OCR 部分页面未完成',
+    'OCR 返回了格式异常的 content block',
+    'OCR 返回了不支持的非文本 content block',
+    'OCR 返回了格式异常的 text block',
+    'OCR 返回了未知格式的内容',
+    'OCR 未识别到文字内容',
+    'OCR 未识别到文字内容（content 列表为空）',
+    'OCR 返回了异常内容（仅包含 JSON 括号），请检查 API 返回格式或更换模型',
+  };
+  static const _storedTaskErrorWrappers = [
+    'OCR识别失败: ',
+    'OCR结果保存失败: ',
+    'OCR结果不完整: ',
+    'Exception: ',
+  ];
   static final _credentialAssignment = RegExp(
     r'''(?:api[\s_-]*key|private[_-]?key|client[_-]?secret|secret[_-]?key|(?:^|[^a-z0-9])key|token|access[_-]?token|refresh[_-]?token|authorization|bearer|password|secret)["']?\s*[:=]''',
     caseSensitive: false,
@@ -321,20 +353,34 @@ class OcrDiagnosticSnapshot {
     return '';
   }
 
-  /// Drop legacy OCR exception text that could contain a provider response
-  /// body, credentials, or image data while keeping safe task messages bounded.
+  /// Keep known OCR diagnostic summaries while hiding unclassified legacy
+  /// error text that could contain provider response data.
   static String? sanitizeStoredTaskError(
     String? value, {
     Iterable<String> excludedValues = const [],
   }) {
     if (value == null || value.isEmpty) return value;
     final credentialValues = excludedValues.toList(growable: false);
-    final safeDioType = RegExp(
-      r'^OCR 请求失败（([a-zA-Z]+)）$',
-    ).firstMatch(value)?.group(1);
-    if (DioExceptionType.values.any((type) => type.name == safeDioType) &&
-        !containsCredential(value, excludedValues: credentialValues)) {
-      return value;
+    if (value.length <= _maxTextLength) {
+      var safeDioCandidate = value;
+      while (true) {
+        String? wrapper;
+        for (final prefix in _storedTaskErrorWrappers) {
+          if (safeDioCandidate.startsWith(prefix)) {
+            wrapper = prefix;
+            break;
+          }
+        }
+        if (wrapper == null) break;
+        safeDioCandidate = safeDioCandidate.substring(wrapper.length);
+      }
+      final safeDioType = RegExp(
+        r'^OCR 请求失败（([a-zA-Z]+)）$',
+      ).firstMatch(safeDioCandidate)?.group(1);
+      if (DioExceptionType.values.any((type) => type.name == safeDioType) &&
+          !containsCredential(value, excludedValues: credentialValues)) {
+        return value;
+      }
     }
     final containsProviderBody = RegExp(
           r'(?:DioException|(?:Exception:\s*)?(?:请求失败|OCR\s*请求被模型拒绝)|请求失败\s*[（(]|data:image/|base64,)',
@@ -347,7 +393,11 @@ class OcrDiagnosticSnapshot {
     );
     if (value.length <= _maxTextLength &&
         !containsProviderBody &&
-        !containsCredentialValue) {
+        !containsCredentialValue &&
+        _isKnownSafeStoredTaskErrorSummary(
+          value,
+          excludedValues: credentialValues,
+        )) {
       return value;
     }
 
@@ -370,6 +420,89 @@ class OcrDiagnosticSnapshot {
         'finish_reason=$finishReason',
     ];
     return _hiddenTaskError(excludedValues: credentialValues, details: details);
+  }
+
+  static bool _isKnownSafeStoredTaskErrorSummary(
+    String value, {
+    Iterable<String> excludedValues = const [],
+  }) {
+    if (containsCredential(value, excludedValues: excludedValues)) return false;
+
+    var candidate = value;
+    while (candidate.isNotEmpty) {
+      if (_knownSafeStoredTaskErrorSummaries.contains(candidate) ||
+          RegExp(
+            r'^HTTP\s+[1-5]\d{2}$',
+            caseSensitive: false,
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^OCR 请求的 JSON 大小为 \d+ 字节，超过 \d+ 字节上限$',
+          ).hasMatch(candidate) ||
+          RegExp(
+            r'^部分图片 OCR 未完成：第 \d+ 张图片(?:识别失败|结果不完整)(?:；第 \d+ 张图片(?:识别失败|结果不完整))*$',
+          ).hasMatch(candidate)) {
+        return true;
+      }
+
+      final incompleteResult = RegExp(
+        r'^OCR 返回了不完整结果（finish_reason=([A-Za-z0-9_-]{1,48})）$',
+      ).firstMatch(candidate);
+      final finishReason = incompleteResult?.group(1);
+      if (finishReason == 'unknown' ||
+          (finishReason != null &&
+              _safeReason(finishReason, excludedValues: excludedValues) ==
+                  finishReason)) {
+        return true;
+      }
+
+      if (_isSafeHiddenTaskErrorSummary(
+        candidate,
+        excludedValues: excludedValues,
+      )) {
+        return true;
+      }
+
+      String? wrapper;
+      for (final prefix in _storedTaskErrorWrappers) {
+        if (candidate.startsWith(prefix)) {
+          wrapper = prefix;
+          break;
+        }
+      }
+      if (wrapper == null) return false;
+      candidate = candidate.substring(wrapper.length);
+    }
+    return false;
+  }
+
+  static bool _isSafeHiddenTaskErrorSummary(
+    String value, {
+    Iterable<String> excludedValues = const [],
+  }) {
+    const prefixes = ['OCR 错误详情已隐藏', '错误详情已隐藏', '请求失败', '请重试'];
+    for (final prefix in prefixes) {
+      if (value == prefix) return true;
+      if (!value.startsWith('$prefix（') || !value.endsWith('）')) continue;
+
+      final details = value.substring(prefix.length + 1, value.length - 1);
+      final parts = details.split('，');
+      if (parts.isEmpty || parts.length > 2) return false;
+      return parts.every((part) {
+        if (RegExp(
+          r'^HTTP\s+[1-5]\d{2}$',
+          caseSensitive: false,
+        ).hasMatch(part)) {
+          return true;
+        }
+        final finishReason = RegExp(
+          r'^finish_reason=([A-Za-z0-9_-]{1,48})$',
+        ).firstMatch(part)?.group(1);
+        return finishReason != null &&
+            _safeReason(finishReason, excludedValues: excludedValues) ==
+                finishReason;
+      });
+    }
+    return false;
   }
 
   /// Whether text contains a credential-shaped value or a supplied secret.
