@@ -2549,6 +2549,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       setState(() => _errorMessage = '图片列表已变化，请重新开始识别。');
       return;
     }
+    final requestModelOptions = _getOcrModelOptions(ref);
+    final requestModelIndex = _selectedModelOptionIndex(requestModelOptions);
+    if (requestModelOptions.isEmpty || requestModelIndex == null) {
+      _ocrStarting = false;
+      if (mounted) {
+        setState(() {
+          _errorMessage = requestModelOptions.isEmpty
+              ? '请先在设置中配置 OCR 供应商和模型'
+              : _modelSelectionMessage(requestModelIndex) ?? '请重新选择 OCR 供应商和模型';
+        });
+      }
+      return;
+    }
     setState(() {
       _selectedImages
         ..clear()
@@ -2563,8 +2576,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // ensuring host/API key match the model's provider.
     // Also passes through the model's typeConfig and customParams
     // for built-in OCR parameters and custom parameters.
-    final selectedOption = modelOptions[modelIndex];
-    _selectedModelIndex = modelIndex;
+    final selectedOption = requestModelOptions[requestModelIndex];
+    _selectedModelIndex = requestModelIndex;
     _selectedConfigId = selectedOption.configId;
     _selectedModelRecordId = selectedOption.modelRecordId;
     final requestSizeBudgetBytes = _requestSizeBudgetBytes(
