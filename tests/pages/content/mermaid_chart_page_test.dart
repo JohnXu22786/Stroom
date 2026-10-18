@@ -840,6 +840,12 @@ void main() {
         addTearDown(() {
           ManifestDatabase.beforeWebDataReadForTesting = null;
         });
+        final updateReadStarted = Completer<void>();
+        final releaseUpdateRead = Completer<void>();
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          if (!releaseUpdateRead.isCompleted) releaseUpdateRead.complete();
+        });
         const originalContent = 'graph TD\n  A-->B';
         const editedContent = 'graph TD\n  A-->C';
         final originalRecord = TextRecord(
@@ -867,6 +873,18 @@ void main() {
             initialCode: originalContent,
             existingRecord: originalRecord,
             initialShowPreview: false,
+            testOnlyAfterChartNameAllocation: (_) async {
+              // The chart-page reservation now reads the manifest before it
+              // writes the edited content. Invalidate again after that read
+              // so this failure still occurs during record update.
+              ManifestDatabase.invalidateWebDataCacheForTesting();
+              ManifestDatabase.beforeWebDataReadForTesting = () async {
+                ManifestDatabase.beforeWebDataReadForTesting = null;
+                updateReadStarted.complete();
+                await releaseUpdateRead.future;
+                throw StateError('simulated update failure');
+              };
+            },
           ),
         );
         await tester.pump();
@@ -880,15 +898,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
 
-        final updateReadStarted = Completer<void>();
-        final releaseUpdateRead = Completer<void>();
         ManifestDatabase.invalidateWebDataCacheForTesting();
-        ManifestDatabase.beforeWebDataReadForTesting = () async {
-          ManifestDatabase.beforeWebDataReadForTesting = null;
-          updateReadStarted.complete();
-          await releaseUpdateRead.future;
-          throw StateError('simulated update failure');
-        };
 
         await tester.tap(find.text('确定'));
         await tester.pump();

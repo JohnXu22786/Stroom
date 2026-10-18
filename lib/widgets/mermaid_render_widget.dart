@@ -1849,7 +1849,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         () async {
           // Name selection and record insertion must be one serialized
           // operation so concurrent saves cannot choose the same visible name.
-          final records = await TextManifest.loadRecords();
+          final records = await TextManifest.loadRecordsUncached();
           var finalName = userFileName;
           var counter = 2;
           while (records
