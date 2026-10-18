@@ -1974,7 +1974,7 @@ sequenceDiagram
     );
 
     testWidgets(
-      'repeated flowchart subgraph snippets use distinct declared node IDs',
+      'repeated flowchart subgraph snippets use distinct subgraph and node IDs',
       (tester) async {
         await tester.pumpWidget(
           _buildTestApp(
@@ -1996,10 +1996,16 @@ sequenceDiagram
           r'^\s*(Node\d+)\[节点1\]$',
           multiLine: true,
         ).allMatches(code).map((match) => match[1]).toList();
+        final subgraphIds = RegExp(
+          r'^\s*subgraph\s+(\S+)\s*$',
+          multiLine: true,
+        ).allMatches(code).map((match) => match[1]).toList();
 
         expect(code, contains('Node1[Existing node]'));
         expect(nodeIds, ['Node11', 'Node12']);
         expect(nodeIds.toSet(), hasLength(2));
+        expect(subgraphIds, ['子图名称', '子图名称1']);
+        expect(subgraphIds.toSet(), hasLength(2));
         expect(
           RegExp(r'^\s*end\s*$', multiLine: true).allMatches(code),
           hasLength(2),

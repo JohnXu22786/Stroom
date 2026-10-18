@@ -140,6 +140,40 @@ class MermaidTemplates {
     );
   }
 
+  /// Assigns an unused ID to a subgraph declared in a flowchart snippet.
+  static String assignUniqueFlowchartSubgraphId(String code, String snippet) {
+    final subgraphIdPattern = RegExp(
+      r'^[ \t]*subgraph[ \t]+(\S+)',
+      multiLine: true,
+    );
+    final snippetSubgraphId = subgraphIdPattern.firstMatch(snippet);
+    if (snippetSubgraphId == null) return snippet;
+
+    final existingIds = <String>{};
+    for (final line in code.split('\n')) {
+      if (line.trimLeft().startsWith('%%')) continue;
+      final existingSubgraphId = subgraphIdPattern.firstMatch(line);
+      if (existingSubgraphId != null) {
+        existingIds.add(existingSubgraphId[1]!);
+      }
+    }
+
+    final baseId = snippetSubgraphId[1]!;
+    var subgraphId = baseId;
+    var suffix = 1;
+    while (existingIds.contains(subgraphId)) {
+      subgraphId = '$baseId${suffix++}';
+    }
+
+    if (subgraphId == baseId) return snippet;
+    final subgraphIdStart = snippetSubgraphId.end - baseId.length;
+    return snippet.replaceRange(
+      subgraphIdStart,
+      snippetSubgraphId.end,
+      subgraphId,
+    );
+  }
+
   /// Finds existing IDs from flowchart statements and their link endpoints.
   static Set<String> _flowchartNodeIds(String code) {
     final nodeIdPattern = RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\b');
