@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
 import '../models/math_3d_object.dart';
+import '../models/formula_entry.dart';
 import '../models/math_3d_scene.dart';
 import '../models/math_3d_tool.dart';
 import '../models/math_3d_construction.dart';
@@ -22,6 +23,12 @@ typedef On3DToolInstruction = void Function(String instruction);
 
 const double _planeGridRange = 5.0;
 const double _pointMarkerRadius = 4.0;
+
+Color solidEdgeContrastColor(Color fillColor) {
+  final target =
+      fillColor.computeLuminance() < 0.5 ? Colors.white : Colors.black;
+  return Color.lerp(fillColor.withValues(alpha: 1), target, 0.45)!;
+}
 
 double _perspectiveFarPlane(
   List<Object3D> objects,
@@ -313,6 +320,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   // Scene objects
   final List<Object3D> _objects = [];
+  int? _selectedObjectIndex;
   int _objectsVersion = 0;
   final Map<int, int> _pointAttachments = {};
   final Map<int, _SolidSourceDependency> _solidSourceDependencies = {};
@@ -354,7 +362,32 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   Object3D? get selectedPoint =>
       _selectedPointIndex == null ? null : _objects[_selectedPointIndex!];
+  Object3D? get selectedObject =>
+      _selectedObjectIndex == null ? null : _objects[_selectedObjectIndex!];
   PointDragMode get pointDragMode => _pointDragMode;
+
+  void updateSelectedObjectStyle({
+    int? color,
+    double? edgeWidth,
+    bool? showEdges,
+  }) {
+    final index = _selectedObjectIndex;
+    if (index == null || index < 0 || index >= _objects.length) return;
+    setState(() {
+      _objects[index] = _objects[index].copyWith(
+        color: color,
+        edgeWidth: edgeWidth,
+        showEdges: showEdges,
+      );
+      _objectsVersion++;
+    });
+  }
+
+  void deleteSelectedObject() {
+    final index = _selectedObjectIndex;
+    if (index == null || index < 0 || index >= _objects.length) return;
+    _removeObjectAt(index);
+  }
 
   // Gesture state
   Offset? _lastFocalPoint;
@@ -670,6 +703,11 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     setState(() {
       _selectedPointIndex = null;
       _pointEditPointer = null;
+      if (!preservesExistingObjects ||
+          _selectedObjectIndex == null ||
+          _selectedObjectIndex! >= objects.length) {
+        _selectedObjectIndex = null;
+      }
       if (!preservesExistingObjects) {
         _pointAttachments.clear();
         _solidSourceDependencies.clear();
@@ -690,6 +728,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   void clearObjects() {
     setState(() {
       _selectedPointIndex = null;
+      _selectedObjectIndex = null;
       _pointEditPointer = null;
       _pointAttachments.clear();
       _solidSourceDependencies.clear();
@@ -742,6 +781,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     setState(() {
       _cancelPointDrag();
       _selectedPointIndex = null;
+      _selectedObjectIndex = null;
       _currentTool = tool;
       _styleSourceIndex = null;
       _intersectionSourceIndex = null;
@@ -3353,6 +3393,12 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       } else if (_selectedPointIndex != null && _selectedPointIndex! > index) {
         _selectedPointIndex = _selectedPointIndex! - 1;
       }
+      if (_selectedObjectIndex == index) {
+        _selectedObjectIndex = null;
+      } else if (_selectedObjectIndex != null &&
+          _selectedObjectIndex! > index) {
+        _selectedObjectIndex = _selectedObjectIndex! - 1;
+      }
       final attachments = Map<int, int>.from(_pointAttachments);
       _pointAttachments
         ..clear()
@@ -3509,6 +3555,8 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         label: original.label,
         color: original.color,
         opacity: original.opacity,
+        edgeWidth: original.edgeWidth,
+        showEdges: original.showEdges,
         visible: original.visible,
       );
     }
@@ -3808,9 +3856,13 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         (_currentTool == ConstructionTool.move ||
             _currentTool == ConstructionTool.point)) {
       final hit = _hitPoint(event.localPosition);
+      final objectHit = hit == null && _currentTool == ConstructionTool.move
+          ? _hitObjectIndex(event.localPosition)
+          : null;
       _pointWasSelected = hit != null && hit == _selectedPointIndex;
       setState(() {
         _selectedPointIndex = hit;
+        _selectedObjectIndex = objectHit;
         if (hit != null) {
           if (!_pointWasSelected) _pointDragMode = PointDragMode.plane;
           _pointEditPointer = event.pointer;
@@ -3818,8 +3870,9 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           _pointMoved = false;
           _suppressScale = true;
         }
+        if (objectHit != null) _suppressScale = true;
       });
-      if (hit != null) return;
+      if (hit != null || objectHit != null) return;
     }
     if (event.kind != PointerDeviceKind.mouse) return;
     final navigationTool =
@@ -4982,6 +5035,32 @@ class MathCanvas3DState extends State<MathCanvas3D> {
                         ),
                       ),
                     ),
+                  if (_currentTool == ConstructionTool.move &&
+                      selectedObject != null)
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
+                      right: 60,
+                      child: Align(
+                        alignment: Alignment.bottomLeft,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 340),
+                          child: _SolidStyleControls(
+                            key: const ValueKey('solid-style-controls'),
+                            object: selectedObject!,
+                            onColorChanged: (color) =>
+                                updateSelectedObjectStyle(color: color),
+                            onEdgeWidthChanged: (width) =>
+                                updateSelectedObjectStyle(edgeWidth: width),
+                            onShowEdgesChanged: (showEdges) =>
+                                updateSelectedObjectStyle(
+                              showEdges: showEdges,
+                            ),
+                            onDelete: deleteSelectedObject,
+                          ),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 8,
                     right: 8,
@@ -5037,6 +5116,208 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 // ======================================================================
 // MathCanvas3DPainter
 // ======================================================================
+
+class _SolidStyleControls extends StatefulWidget {
+  final Object3D object;
+  final ValueChanged<int> onColorChanged;
+  final ValueChanged<double> onEdgeWidthChanged;
+  final ValueChanged<bool> onShowEdgesChanged;
+  final VoidCallback onDelete;
+
+  const _SolidStyleControls({
+    super.key,
+    required this.object,
+    required this.onColorChanged,
+    required this.onEdgeWidthChanged,
+    required this.onShowEdgesChanged,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SolidStyleControls> createState() => _SolidStyleControlsState();
+}
+
+class _SolidStyleControlsState extends State<_SolidStyleControls> {
+  late final TextEditingController _edgeWidthController;
+
+  bool get _hasEdges => widget.object.type == Object3DType.polyhedron;
+
+  @override
+  void initState() {
+    super.initState();
+    _edgeWidthController = TextEditingController(
+      text: _formatEdgeWidth(widget.object.edgeWidth),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_SolidStyleControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.object.edgeWidth != widget.object.edgeWidth) {
+      _edgeWidthController.text = _formatEdgeWidth(widget.object.edgeWidth);
+    }
+  }
+
+  @override
+  void dispose() {
+    _edgeWidthController.dispose();
+    super.dispose();
+  }
+
+  String _formatEdgeWidth(double width) =>
+      width.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
+  void _commitEdgeWidth(String value) {
+    final parsed = double.tryParse(value);
+    if (parsed == null || !parsed.isFinite) {
+      _edgeWidthController.text = _formatEdgeWidth(widget.object.edgeWidth);
+      return;
+    }
+    final width = parsed.clamp(0.0, maxSolidEdgeWidth).toDouble();
+    _edgeWidthController.text = _formatEdgeWidth(width);
+    widget.onEdgeWidthChanged(width);
+  }
+
+  void _showColorPicker() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('选择颜色'),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var index = 0; index < formulaPalette.length; index++)
+              GestureDetector(
+                key: ValueKey('solid-color-$index'),
+                onTap: () {
+                  widget.onColorChanged(formulaPalette[index].toARGB32());
+                  Navigator.pop(dialogContext);
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: formulaPalette[index],
+                    shape: BoxShape.circle,
+                    border:
+                        widget.object.color == formulaPalette[index].toARGB32()
+                            ? Border.all(color: Colors.black87, width: 3)
+                            : null,
+                  ),
+                  child: widget.object.color == formulaPalette[index].toARGB32()
+                      ? const Icon(Icons.check, color: Colors.white, size: 20)
+                      : null,
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      color: cs.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.object.label ?? '立体图形',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('solid-delete'),
+                  tooltip: '删除对象',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: widget.onDelete,
+                  icon: Icon(Icons.delete_outline, color: cs.error),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                IconButton(
+                  key: const ValueKey('solid-fill-color'),
+                  tooltip: '选择填充颜色',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _showColorPicker,
+                  icon: Icon(
+                    Icons.palette_outlined,
+                    color: Color(widget.object.color),
+                  ),
+                ),
+                const Text('填充色'),
+                if (_hasEdges) ...[
+                  const Spacer(),
+                  SizedBox(
+                    width: 86,
+                    height: 50,
+                    child: TextField(
+                      key: const ValueKey('solid-edge-width'),
+                      controller: _edgeWidthController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                        signed: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[-0-9.]')),
+                      ],
+                      textAlign: TextAlign.center,
+                      onSubmitted: _commitEdgeWidth,
+                      onTapOutside: (_) =>
+                          _commitEdgeWidth(_edgeWidthController.text),
+                      decoration: const InputDecoration(
+                        labelText: '棱宽 (0–6)',
+                        suffixText: 'px',
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 8,
+                        ),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (_hasEdges)
+              Row(
+                children: [
+                  Checkbox(
+                    key: const ValueKey('solid-show-edges'),
+                    value: widget.object.showEdges,
+                    onChanged: (value) {
+                      if (value != null) widget.onShowEdgesChanged(value);
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const Text('显示棱'),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// CustomPainter that renders a 3D scene onto a 2D Canvas.
 ///
@@ -6191,8 +6472,125 @@ class MathCanvas3DPainter extends CustomPainter {
     Camera3D camera,
     Projection3D projection,
   ) {
-    // Same as surface: triangulated faces
-    _collectSurface(renderables, obj, camera, projection);
+    final vertices = obj.vertices;
+    final indices = obj.indices;
+    if (vertices.isEmpty || indices.length < 3) return;
+
+    final objAlpha = ((obj.color >> 24) & 0xFF) / 255.0;
+    final fillColor =
+        Color(obj.color).withValues(alpha: objAlpha * obj.opacity);
+    final fillPaint = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.fill;
+    final edgeNormals = <(int, int), List<Vector3D>>{};
+    final edgeFaces = <(int, int), List<int>>{};
+    final facePaths = <List<Path>>[];
+    final faceDepths = <double>[];
+    final faceEdges = <List<(Offset, Offset)>>[];
+    void addEdge(int first, int second, Vector3D normal, int faceIndex) {
+      final key = first < second ? (first, second) : (second, first);
+      edgeNormals.putIfAbsent(key, () => []).add(normal);
+      edgeFaces.putIfAbsent(key, () => []).add(faceIndex);
+    }
+
+    for (var i = 0; i + 2 < indices.length; i += 3) {
+      final ia = indices[i];
+      final ib = indices[i + 1];
+      final ic = indices[i + 2];
+      if (ia < 0 ||
+          ib < 0 ||
+          ic < 0 ||
+          ia >= vertices.length ||
+          ib >= vertices.length ||
+          ic >= vertices.length) {
+        continue;
+      }
+      final a = vertices[ia];
+      final b = vertices[ib];
+      final c = vertices[ic];
+      final normal = _normalizedTriangleNormal(a, b, c);
+      if (normal == null) continue;
+
+      final clipped = _clipPolygonToDepthRange([a, b, c], camera, projection);
+      if (clipped.length < 3) continue;
+      final projected = clipped
+          .map((point) => worldToScreen(point, camera, projection))
+          .toList();
+      final paths = <Path>[];
+      for (var fan = 1; fan + 1 < projected.length; fan++) {
+        paths.add(
+          Path()
+            ..moveTo(projected[0].x, projected[0].y)
+            ..lineTo(projected[fan].x, projected[fan].y)
+            ..lineTo(projected[fan + 1].x, projected[fan + 1].y)
+            ..close(),
+        );
+      }
+      final depth = projected.fold<double>(0, (sum, point) => sum + point.z) /
+          projected.length;
+      final faceIndex = facePaths.length;
+      facePaths.add(paths);
+      faceDepths.add(depth);
+      faceEdges.add([]);
+      addEdge(ia, ib, normal, faceIndex);
+      addEdge(ib, ic, normal, faceIndex);
+      addEdge(ic, ia, normal, faceIndex);
+    }
+
+    final edgePaint = Paint()
+      ..color = solidEdgeContrastColor(Color(obj.color))
+          .withValues(alpha: objAlpha * obj.opacity)
+      ..strokeWidth = obj.edgeWidth.clamp(0.0, maxSolidEdgeWidth).toDouble()
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    if (obj.showEdges && obj.edgeWidth > 0) {
+      for (final entry in edgeNormals.entries) {
+        final normals = entry.value;
+        final firstNormal = normals.first;
+        final isCrease = normals.length == 1 ||
+            normals.any((normal) => firstNormal.dot(normal).abs() < 0.9999);
+        if (!isCrease) continue;
+
+        final (first, second) = entry.key;
+        final clipped = clipLineToView(
+          Object3D.line(
+            vertices[first],
+            vertices[second],
+            lineKind: Line3DKind.segment,
+          ),
+          camera,
+          projection,
+        );
+        if (clipped.length != 2) continue;
+        final start = worldToScreen(clipped[0], camera, projection);
+        final end = worldToScreen(clipped[1], camera, projection);
+        final incidentFaces = edgeFaces[entry.key]!;
+        final ownerFace = incidentFaces.reduce(
+          (first, second) =>
+              faceDepths[first] <= faceDepths[second] ? first : second,
+        );
+        faceEdges[ownerFace]
+            .add((Offset(start.x, start.y), Offset(end.x, end.y)));
+      }
+    }
+
+    for (var faceIndex = 0; faceIndex < facePaths.length; faceIndex++) {
+      final paths = facePaths[faceIndex];
+      final edges = faceEdges[faceIndex];
+      renderables.add(
+        _Renderable(
+          depth: faceDepths[faceIndex],
+          draw: (canvas) {
+            for (final path in paths) {
+              canvas.drawPath(path, fillPaint);
+            }
+            for (final (start, end) in edges) {
+              canvas.drawLine(start, end, edgePaint);
+            }
+          },
+        ),
+      );
+    }
   }
 
   void _collectVector(
