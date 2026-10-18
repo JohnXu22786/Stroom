@@ -17,6 +17,7 @@ typedef OcrTextWriter = Future<String> Function(
 typedef OcrTextRecordWriter = Future<void> Function(TextRecord record,
     {void Function()? beforeCommit});
 typedef OcrTextRecordsLoader = Future<List<TextRecord>> Function();
+typedef OcrTextFileDeleter = Future<bool> Function(String fileName);
 
 /// Publishes an OCR result and its manifest record as one cancellable save.
 /// The OCR runner and the task-list save-only retry share this implementation.
@@ -30,6 +31,7 @@ class OcrResultSaver {
   final OcrTextWriter _writeText;
   final OcrTextRecordWriter _addRecord;
   final OcrTextRecordsLoader _loadRecordsUncached;
+  final OcrTextFileDeleter _deleteTextFile;
   final BackgroundTask? _taskGeneration;
 
   OcrResultSaver({
@@ -42,12 +44,14 @@ class OcrResultSaver {
     OcrTextWriter? writeText,
     OcrTextRecordWriter? addRecord,
     OcrTextRecordsLoader? loadRecordsUncached,
+    OcrTextFileDeleter? deleteTextFile,
   })  : _taskGeneration = notifier.taskById(taskId),
         _cancelToken = cancelToken ?? CancelToken(),
         _writeText = writeText ?? TextManifest.writeText,
         _addRecord = addRecord ?? TextManifest.addRecord,
         _loadRecordsUncached =
-            loadRecordsUncached ?? TextManifest.loadRecordsUncached;
+            loadRecordsUncached ?? TextManifest.loadRecordsUncached,
+        _deleteTextFile = deleteTextFile ?? TextManifest.deleteFile;
 
   void cancel() => _cancelToken.cancel('已取消');
 
@@ -211,7 +215,7 @@ class OcrResultSaver {
         if (records.any((item) => item.id == record.id)) return;
       }
       if (!existed && !records.any((item) => item.hash == hash)) {
-        await TextManifest.deleteFile(fileName);
+        await _deleteUnreferencedTextFile(fileName);
       }
     } catch (error) {
       debugPrint('[OcrResultSaver] Rollback lookup failed: $error');
@@ -224,13 +228,22 @@ class OcrResultSaver {
         final records = await _loadRecordsUncached();
         if (records.any((item) => item.id == record.id)) return;
         if (!existed && !records.any((item) => item.hash == hash)) {
-          await TextManifest.deleteFile(fileName);
+          await _deleteUnreferencedTextFile(fileName);
         }
       } catch (cleanupError) {
         // Without a confirmed reference list, preserve the content-addressed file.
         debugPrint(
             '[OcrResultSaver] Rollback cleanup could not be confirmed: $cleanupError');
       }
+    }
+  }
+
+  Future<void> _deleteUnreferencedTextFile(String fileName) async {
+    if (!await _deleteTextFile(fileName)) {
+      debugPrint(
+        '[OcrResultSaver] Rollback cleanup could not be confirmed: '
+        'deleteFile returned false for $fileName',
+      );
     }
   }
 }
