@@ -13,6 +13,7 @@ import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/models/ocr_output_template.dart';
+import 'package:stroom/pages/ocr/ocr_instruction_dialog.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -2564,6 +2565,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
       await tester.pumpAndSettle();
+      expect(find.byType(OcrInstructionManageDialog), findsOneWidget);
       await tester.tap(find.byTooltip('删除指令').at(1));
       try {
         await tester.pump();
