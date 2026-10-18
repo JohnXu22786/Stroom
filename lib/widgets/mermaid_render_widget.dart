@@ -419,7 +419,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=13';
+    final base = '$webAssetTemplateUrl?v=14';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -756,6 +756,18 @@ MERMAID_CODE_PLACEHOLDER
             zoomOperation.centerX,
             zoomOperation.centerY
           );
+        } else if (zoomOperation.kind === 'touch-pan') {
+          panX += zoomOperation.panDeltaX;
+          panY += zoomOperation.panDeltaY;
+          updateTransform();
+          notifyTransform();
+        } else if (zoomOperation.kind === 'touch-pinch') {
+          window.setZoom(
+            zoomLevel * zoomOperation.scale,
+            zoomOperation.centerX,
+            zoomOperation.centerY,
+            true
+          );
         } else if (zoomOperation.anchored) {
           window.setZoom(
             zoomLevel + zoomOperation.delta,
@@ -769,6 +781,13 @@ MERMAID_CODE_PLACEHOLDER
             vh / 2
           );
         }
+      }
+      if (typeof touchLastX !== 'undefined' && touchLastX !== undefined &&
+          touchLastY !== undefined) {
+        touchStartX = touchLastX;
+        touchStartY = touchLastY;
+        touchPanStartX = panX;
+        touchPanStartY = panY;
       }
     };
 
@@ -872,12 +891,15 @@ MERMAID_LOADER_PLACEHOLDER
     // Touch events for mobile pan
     var touchStartX, touchStartY;
     var touchPanStartX, touchPanStartY;
+    var touchLastX, touchLastY;
     var lastTouchDist = 0;
 
     document.addEventListener('touchstart', function(e) {
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
       } else if (e.touches.length === 2) {
@@ -890,8 +912,21 @@ MERMAID_LOADER_PLACEHOLDER
 
     document.addEventListener('touchmove', function(e) {
       if (e.touches.length === 1) {
-        panX = touchPanStartX + (e.touches[0].clientX - touchStartX);
-        panY = touchPanStartY + (e.touches[0].clientY - touchStartY);
+        var touchX = e.touches[0].clientX;
+        var touchY = e.touches[0].clientY;
+        var panDeltaX = touchX - touchLastX;
+        var panDeltaY = touchY - touchLastY;
+        touchLastX = touchX;
+        touchLastY = touchY;
+        if (!fitComplete) {
+          pendingZoomOperations.push({
+            kind: 'touch-pan',
+            panDeltaX: panDeltaX,
+            panDeltaY: panDeltaY
+          });
+        }
+        panX = touchPanStartX + (touchX - touchStartX);
+        panY = touchPanStartY + (touchY - touchStartY);
         updateTransform();
         notifyTransform();
         e.preventDefault();
@@ -907,6 +942,14 @@ MERMAID_LOADER_PLACEHOLDER
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
+        if (!fitComplete) {
+          pendingZoomOperations.push({
+            kind: 'touch-pinch',
+            scale: scale,
+            centerX: centerX,
+            centerY: centerY
+          });
+        }
         window.setZoom(zoomLevel * scale, centerX, centerY, true);
         e.preventDefault();
       }
@@ -924,6 +967,8 @@ MERMAID_LOADER_PLACEHOLDER
       if (e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchLastX = touchStartX;
+        touchLastY = touchStartY;
         touchPanStartX = panX;
         touchPanStartY = panY;
       }

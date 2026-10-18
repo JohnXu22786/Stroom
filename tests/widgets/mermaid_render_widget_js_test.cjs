@@ -242,6 +242,7 @@ function createTouchGestureHarness(touchGestureScript) {
     zoomLevel: 1,
     panX: 0,
     panY: 0,
+    fitComplete: true,
     updateTransform: () => {},
     notifyTransform: () => {},
   };
@@ -327,6 +328,65 @@ function createTouchZoomHarness(
     },
   };
 }
+
+test('native and web pre-fit DOM touch pan replays after first auto-fit', () => {
+  for (const [templateName, templateSource, fit, touchGestureScript] of [
+    ['native', dartSource, fitFunction, extractInlineTouchGestureScript()],
+    ['web', webTemplateSource, webFitFunction, extractTouchGestureScript()],
+  ]) {
+    const harness = createTouchZoomHarness(
+      templateName,
+      templateSource,
+      fit,
+      touchGestureScript,
+      {width: 50, height: 50},
+    );
+
+    harness.dispatch('touchstart', [{clientX: 20, clientY: 30}]);
+    const move = harness.dispatch('touchmove', [{clientX: 45, clientY: 55}]);
+    assert.equal(move.defaultPrevented, true);
+
+    harness.fit();
+
+    assert.equal(harness.context.panX, 75, `${templateName} must retain touch pan X`);
+    assert.equal(harness.context.panY, 25, `${templateName} must retain touch pan Y`);
+
+    harness.dispatch('touchmove', [{clientX: 50, clientY: 65}]);
+    assert.equal(harness.context.panX, 80, `${templateName} must continue touch pan X after fit`);
+    assert.equal(harness.context.panY, 35, `${templateName} must continue touch pan Y after fit`);
+  }
+});
+
+test('native and web pre-fit DOM touch pinch replays after first auto-fit', () => {
+  for (const [templateName, templateSource, fit, touchGestureScript] of [
+    ['native', dartSource, fitFunction, extractInlineTouchGestureScript()],
+    ['web', webTemplateSource, webFitFunction, extractTouchGestureScript()],
+  ]) {
+    const harness = createTouchZoomHarness(
+      templateName,
+      templateSource,
+      fit,
+      touchGestureScript,
+      {width: 100, height: 50},
+    );
+
+    harness.dispatch('touchstart', [
+      {clientX: 30, clientY: 40},
+      {clientX: 50, clientY: 40},
+    ]);
+    const move = harness.dispatch('touchmove', [
+      {clientX: 20, clientY: 50},
+      {clientX: 80, clientY: 50},
+    ]);
+    assert.equal(move.defaultPrevented, true);
+
+    harness.fit();
+
+    assert.equal(harness.context.zoomLevel, 6, `${templateName} must apply pinch scale to fit zoom`);
+    assert.equal(harness.context.panX, -80, `${templateName} must preserve pinch center X`);
+    assert.equal(harness.context.panY, -60, `${templateName} must preserve pinch center Y`);
+  }
+});
 
 test('native and web touch pinches scale from a sub-floor fit and keep the normal zoom floor', () => {
   for (const [templateName, templateSource, fit, touchGestureScript] of [
