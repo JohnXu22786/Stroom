@@ -930,7 +930,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               onPressed: () {
                 showDialog<void>(
                   context: context,
-                  builder: (_) => const OcrInstructionManageDialog(),
+                  builder: (_) => OcrInstructionManageDialog(
+                    onInstructionDeleted: (deletedIndex) {
+                      if (mounted &&
+                          deletedIndex == _selectedInstructionIndex) {
+                        setState(() => _selectedInstructionIndex = -1);
+                      }
+                    },
+                  ),
                 );
               },
             ),

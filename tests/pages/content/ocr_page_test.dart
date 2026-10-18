@@ -13,6 +13,7 @@ import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/models/ocr_output_template.dart';
+import 'package:stroom/pages/ocr/ocr_instruction_dialog.dart';
 import 'package:stroom/pages/ocr_page.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/pages/extended_image_editor_page.dart';
@@ -241,6 +242,28 @@ class _InstructionsLoadFailsOnRetryNotifier extends OcrInstructionsNotifier {
       OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
       OcrInstruction(name: '表格提取', content: '提取表格内容'),
     ];
+  }
+}
+
+class _DelayedRemoveInstructionsNotifier extends OcrInstructionsNotifier {
+  _DelayedRemoveInstructionsNotifier(
+    super.ref, {
+    required List<OcrInstruction> instructions,
+    required this.removeStarted,
+    required this.finishRemove,
+  }) {
+    state = instructions;
+  }
+
+  final Completer<void> removeStarted;
+  final Completer<void> finishRemove;
+
+  @override
+  Future<void> remove(int index) async {
+    final removal = super.remove(index);
+    if (!removeStarted.isCompleted) removeStarted.complete();
+    await finishRemove.future;
+    await removal;
   }
 }
 
@@ -2508,22 +2531,32 @@ void main() {
       expect(find.text('发票提取v2'), findsWidgets);
     });
 
-    testWidgets('deleting the selected instruction falls back to the default', (
+    testWidgets('deleting a selected middle instruction selects the default', (
       tester,
     ) async {
       final entry = _createOcrEntry(withModels: true);
+      final removeStarted = Completer<void>();
+      final finishRemove = Completer<void>();
+      const instructions = [
+        OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+        OcrInstruction(name: '表格提取', content: '提取表格内容'),
+        OcrInstruction(name: '备注提取', content: '提取备注内容'),
+      ];
       await tester.pumpWidget(
         _buildTestApp(
           entries: [entry],
-          ocrInstructions: const [
-            OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
-            OcrInstruction(name: '表格提取', content: '提取表格内容'),
-          ],
+          testInstructionsNotifierBuilder: (ref) =>
+              _DelayedRemoveInstructionsNotifier(
+            ref,
+            instructions: instructions,
+            removeStarted: removeStarted,
+            finishRemove: finishRemove,
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Select the second instruction, then delete it via the manage dialog.
+      // Select the middle instruction, then delete it via the manage dialog.
       await tester.tap(find.text('默认（仅发送图片）'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('表格提取').last);
@@ -2532,18 +2565,26 @@ void main() {
 
       await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.delete_outline).last);
-      await tester.pumpAndSettle();
+      expect(find.byType(OcrInstructionManageDialog), findsOneWidget);
+      await tester.tap(find.byTooltip('删除指令').at(1));
+      try {
+        await tester.pump();
+        await removeStarted.future;
 
-      // Only the first instruction remains in the dialog.
-      expect(find.text('发票提取'), findsOneWidget);
-      expect(find.text('表格提取'), findsNothing);
+        // The first and third instructions remain in the dialog.
+        expect(find.text('发票提取'), findsOneWidget);
+        expect(find.text('表格提取'), findsNothing);
+        expect(find.text('备注提取'), findsOneWidget);
 
-      // Closing falls back to the default — the deleted selection never
-      // sticks.
-      await tester.tap(find.text('关闭'));
-      await tester.pumpAndSettle();
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
+        // The deletion has updated the list, but persistence is still pending.
+        // Closing the dialog must not leave its former index selected.
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+      } finally {
+        if (!finishRemove.isCompleted) finishRemove.complete();
+        await tester.pumpAndSettle();
+      }
     });
 
     testWidgets('save is disabled while the instruction content is blank', (
