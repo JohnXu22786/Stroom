@@ -75,8 +75,6 @@ Future<String?> saveTextForFlow(
   if (text.isEmpty) return null;
   final bytes = Uint8List.fromList(utf8.encode(text));
   final hash = computeTextHash(bytes);
-  final storageFileName = '$hash.txt';
-  final filePath = await TextManifest.writeText(storageFileName, text);
 
   if (shouldCommit != null && !shouldCommit()) return null;
 
@@ -104,7 +102,7 @@ Future<String?> saveTextForFlow(
     folder: saveFolder,
     textLength: text.length,
   );
-  await TextManifest.addRecord(record);
+  final filePath = await TextManifest.saveTextRecord(record, text);
   if (shouldCommit != null && !shouldCommit()) {
     await TextManifest.deleteRecord(record.id);
     return null;

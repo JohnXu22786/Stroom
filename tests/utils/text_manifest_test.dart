@@ -159,6 +159,66 @@ void main() {
     );
 
     test(
+      'keeps the hash lock until edited content and record are updated',
+      () async {
+        const oldContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalRecord = _textRecordWithContent(
+          'edited-chart',
+          oldContent,
+        );
+        final editedRecord = _textRecordWithContent(
+          originalRecord.id,
+          editedContent,
+          createdAt: DateTime.utc(2025),
+        );
+        final readStarted = Completer<void>();
+        final releaseRead = Completer<void>();
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          if (!releaseRead.isCompleted) releaseRead.complete();
+        });
+        await TextManifest.writeText(originalRecord.storagePath, oldContent);
+        await TextManifest.addRecord(originalRecord);
+
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          readStarted.complete();
+          await releaseRead.future;
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        TextManifest.invalidateCache();
+
+        final saving =
+            TextManifest.updateTextRecord(editedRecord, editedContent);
+        await readStarted.future.timeout(const Duration(seconds: 5));
+
+        var cleanupFinished = false;
+        final cleanup = TextManifest.deleteFileIfUnreferenced(
+          editedRecord.hash,
+          editedRecord.storagePath,
+        ).then((deleted) {
+          cleanupFinished = true;
+          return deleted;
+        });
+        await Future<void>.delayed(Duration.zero);
+        expect(cleanupFinished, isFalse);
+        expect(await TextManifest.readText(editedRecord.storagePath),
+            editedContent);
+
+        releaseRead.complete();
+        await saving;
+        expect(await cleanup, isFalse);
+        expect(await TextManifest.readText(editedRecord.storagePath),
+            editedContent);
+        expect(
+          (await TextManifest.loadRecords()).single.hash,
+          editedRecord.hash,
+        );
+      },
+    );
+
+    test(
       'preserves a stale save that repoints the same record ID to old hash',
       () async {
         const oldContent = 'graph TD\n  A-->B';
