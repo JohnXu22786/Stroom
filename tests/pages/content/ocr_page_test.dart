@@ -1485,6 +1485,82 @@ void main() {
       },
     );
 
+    for (final laterPicker in ['camera', 'system gallery', 'app album']) {
+      testWidgets(
+        'cancelling a later $laterPicker picker preserves an accepted import',
+        (tester) async {
+          final importedBytes = _createValidOcrTestImage().bytes;
+          final importPreparationStarted = Completer<void>();
+          final finishImportPreparation = Completer<OcrImagePayload>();
+          var cameraPickerCalls = 0;
+
+          await tester.pumpWidget(
+            _buildTestApp(
+              entries: [_createOcrEntry(withModels: true)],
+              testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async {
+                cameraPickerCalls++;
+                if (cameraPickerCalls > 1) return null;
+                return XFile.fromData(importedBytes, name: 'accepted.png');
+              },
+              testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                  [],
+              testImagePayloadPreparer: (_) {
+                importPreparationStarted.complete();
+                return finishImportPreparation.future;
+              },
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.text('拍照识别'));
+          await tester.pump();
+          await _pumpUntil(tester, () => importPreparationStarted.isCompleted);
+          expect(find.text('正在导入图片...'), findsOneWidget);
+
+          if (laterPicker == 'camera') {
+            await tester.tap(find.text('拍照识别'));
+            await tester.pumpAndSettle();
+          } else {
+            await tester.tap(find.text('相册选择'));
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.text(
+                laterPicker == 'app album' ? '从应用相册选择' : '从系统相册选择',
+              ),
+            );
+            await tester.pumpAndSettle();
+            if (laterPicker == 'app album') {
+              await tester.pump(const Duration(milliseconds: 500));
+              await tester.tap(find.byIcon(Icons.close).last);
+              await tester.pumpAndSettle();
+            }
+          }
+
+          finishImportPreparation.complete(
+            prepareOcrImagePayloadSync(importedBytes),
+          );
+          await _pumpUntil(
+            tester,
+            () => find.text('已选 1 张图片').evaluate().isNotEmpty,
+          );
+
+          expect(find.text('已选 1 张图片'), findsOneWidget);
+          expect(find.text('正在导入图片...'), findsNothing);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.widgetWithText(FilledButton, '开始识别'),
+                )
+                .onPressed,
+            isNotNull,
+          );
+          expect(tester.takeException(), isNull);
+
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+
     testWidgets(
       'clearing an unavailable retry invalidates a pending camera import',
       (tester) async {
