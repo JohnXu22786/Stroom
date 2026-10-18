@@ -153,6 +153,30 @@ class FlowBlockCard extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (!readOnly &&
+                          !isLast &&
+                          hasFileOutput(block) &&
+                          onTemporaryOutputChanged != null)
+                        Tooltip(
+                          message: '临时文件（下一步成功后清理）',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: temporaryOutput,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    onTemporaryOutputChanged!(value);
+                                  }
+                                },
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              const Text('临时', style: TextStyle(fontSize: 10)),
+                            ],
+                          ),
+                        ),
                       // Settings button (hidden in readOnly)
                       if (!readOnly)
                         IconButton(
@@ -214,41 +238,6 @@ class FlowBlockCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-
-                  if (!readOnly &&
-                      !isLast &&
-                      hasFileOutput(block) &&
-                      onTemporaryOutputChanged != null) ...[
-                    const SizedBox(height: 4),
-                    InkWell(
-                      onTap: () => onTemporaryOutputChanged!(!temporaryOutput),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Checkbox(
-                              value: temporaryOutput,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  onTemporaryOutputChanged!(value);
-                                }
-                              },
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '临时文件（下一步成功后清理）',
-                                style: TextStyle(
-                                    fontSize: 11, color: cs.onSurfaceVariant),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
 
                   // Parameter summary (shows non-default values)
                   if (nonDefaultParams.isNotEmpty) ...[
