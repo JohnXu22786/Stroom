@@ -68,8 +68,6 @@ class BlockChainEditor extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             children: [
-              if (temporaryOutputIndices.isNotEmpty)
-                _buildTemporaryOutputControl(context, allTemporary),
               _buildInitialInputCard(context),
               ...List.generate(blocks.length, (index) {
                 final block = blocks[index];
@@ -123,43 +121,32 @@ class BlockChainEditor extends StatelessWidget {
             ],
           ),
         ),
-        _buildBottomBar(context),
+        _buildBottomBar(
+          context,
+          allTemporary,
+          showTemporaryOutputControl: temporaryOutputIndices.isNotEmpty,
+        ),
       ],
     );
   }
 
   Widget _buildTemporaryOutputControl(BuildContext context, bool? value) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant),
-      ),
+    return Tooltip(
+      message: '下一个步骤成功保存结果后清理；最终步骤始终保留',
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Checkbox(
             tristate: true,
             value: value,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             onChanged: onTemporaryOutputsChanged == null
                 ? null
                 : (_) =>
                     onTemporaryOutputsChanged!(value == true ? false : true),
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('中间文件临时保存',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                Text('下一个步骤成功保存结果后清理；最终步骤始终保留',
-                    style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-              ],
-            ),
-          ),
+          const Text('临时中间文件', style: TextStyle(fontSize: 11)),
         ],
       ),
     );
@@ -288,7 +275,11 @@ class BlockChainEditor extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomBar(BuildContext context) {
+  Widget _buildBottomBar(
+    BuildContext context,
+    bool? allTemporary, {
+    required bool showTemporaryOutputControl,
+  }) {
     final cs = Theme.of(context).colorScheme;
 
     return SafeArea(
@@ -300,19 +291,28 @@ class BlockChainEditor extends StatelessWidget {
           color: cs.surface,
           border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: () => _showAddBlockSheet(context),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('添加功能块', style: TextStyle(fontSize: 14)),
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+        child: Row(
+          children: [
+            if (showTemporaryOutputControl) ...[
+              _buildTemporaryOutputControl(context, allTemporary),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: SizedBox(
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showAddBlockSheet(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加功能块', style: TextStyle(fontSize: 14)),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -183,19 +183,25 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     final clearReference = clearTemporaryTaskFileReference;
     if (clearReference == null) return true;
     for (final execution in executions) {
-      final blocks = execution.snapshot?.flow.blocks;
-      for (var index = 0; index < execution.subTasks.length; index++) {
-        final step = execution.subTasks[index];
-        final hasTemporaryResult = step.result?.temporaryArtifact != null;
-        final blockIsTemporary = blocks != null &&
-            index < blocks.length &&
-            blocks[index].typeKey.name == step.blockTypeKey &&
-            isFlowBlockTemporary(blocks, index);
-        if (!hasTemporaryResult && !blockIsTemporary) continue;
+      for (final step in _temporaryTaskFileReferenceSteps(execution)) {
         if (!await clearReference(step)) return false;
       }
     }
     return true;
+  }
+
+  Iterable<FlowSubTask> _temporaryTaskFileReferenceSteps(
+      TaskFlowExecution execution) sync* {
+    final blocks = execution.snapshot?.flow.blocks;
+    for (var index = 0; index < execution.subTasks.length; index++) {
+      final step = execution.subTasks[index];
+      final hasTemporaryResult = step.result?.temporaryArtifact != null;
+      final blockIsTemporary = blocks != null &&
+          index < blocks.length &&
+          blocks[index].typeKey.name == step.blockTypeKey &&
+          isFlowBlockTemporary(blocks, index);
+      if (hasTemporaryResult || blockIsTemporary) yield step;
+    }
   }
 
   Timer? _persistTimer;
@@ -538,7 +544,11 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     }
     final removed = execution(id);
     if (removed == null) return;
-    if (!await _clearTemporaryTaskFileReferences([removed])) {
+    // Preserve the legacy synchronous state update for ordinary executions.
+    // Only temporary outputs need the provider write to finish before the
+    // execution can be removed.
+    if (_temporaryTaskFileReferenceSteps(removed).isNotEmpty &&
+        !await _clearTemporaryTaskFileReferences([removed])) {
       debugPrint('Failed to clear temporary task file references for $id');
       return;
     }
