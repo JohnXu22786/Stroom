@@ -2118,6 +2118,41 @@ sequenceDiagram
       expect(code, contains('  NewBlock2["新块"]'));
     });
 
+    testWidgets('repeated child block snippets use distinct child IDs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          initialCode: 'block-beta\n  A["existing"]',
+          initialShowPreview: false,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('添加子块'));
+      await tester.pump();
+      await tester.tap(find.text('添加子块'));
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField).first);
+      final code = textField.controller!.text;
+      final childIds = RegExp(
+        r'^[ \t]*(A\d*)\["块A"\]$',
+        multiLine: true,
+      ).allMatches(code).map((match) => match[1]).toList();
+
+      expect(childIds, ['A1', 'A2']);
+      expect(code, contains('A["existing"]'));
+      expect(
+        RegExp(r'^[ \t]*block$', multiLine: true).allMatches(code),
+        hasLength(2),
+      );
+      expect(
+        RegExp(r'^[ \t]*end$', multiLine: true).allMatches(code),
+        hasLength(2),
+      );
+    });
+
     testWidgets('repeated block snippets skip bare IDs before later blocks', (
       tester,
     ) async {
