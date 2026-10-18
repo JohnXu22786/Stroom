@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
@@ -14,11 +12,11 @@ import 'package:stroom/services/llm_credential_store.dart';
 
 void main() {
   final bridge = LlmAiStudioWebViewSessionBridge.instance;
-  late _FakeWebViewDriver driver;
+  late _FakeInAppWebViewController controller;
 
   setUp(() {
     bridge.resetForTest();
-    driver = _FakeWebViewDriver();
+    controller = _FakeInAppWebViewController();
   });
 
   tearDown(() => bridge.resetForTest());
@@ -28,7 +26,7 @@ void main() {
     () async {
       bridge.attach(
         pageUrl: 'https://aistudio.google.com/app/prompts/new_chat',
-        driver: driver,
+        driver: LlmAiStudioInAppWebViewDriver(controller),
       );
       final accounts = LlmAccountConnectorService(
         preferences: _MemoryPreferences(),
@@ -50,16 +48,14 @@ void main() {
         body: const {'contents': []},
       );
 
-      expect(driver.requests, hasLength(1));
+      final requestUrl = controller.arguments['url'];
       expect(
-        driver.requests.single.uri.toString(),
+        requestUrl,
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
       );
-      expect(
-        driver.requests.single.headers.keys,
-        containsAll(['Accept', 'Content-Type']),
-      );
-      expect(driver.requests.single.headers, isNot(contains('Authorization')));
+      final headers = controller.arguments['headers'] as Map<String, String>;
+      expect(headers.keys, containsAll(['accept', 'content-type']));
+      expect(headers.keys, isNot(contains('authorization')));
       expect(response.statusCode, 200);
       expect(response.body, {'candidates': []});
 
@@ -79,7 +75,7 @@ void main() {
         ),
         throwsA(isA<LlmConnectorTransportUnavailable>()),
       );
-      expect(driver.requests, hasLength(1));
+      expect(controller.arguments['url'], requestUrl);
     },
   );
 
@@ -117,6 +113,60 @@ void main() {
       expect(controller.removedHandlerName, controller.handlerName);
     },
   );
+
+  test(
+    'production WebView driver rejects non-GenerateContent paths directly',
+    () async {
+      final controller = _FakeInAppWebViewController();
+      final webViewDriver = LlmAiStudioInAppWebViewDriver(controller);
+      final request = LlmPreparedNativeRequest(
+        uri: Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/users/list',
+        ),
+        method: 'POST',
+        headers: const {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: const {'contents': []},
+      );
+
+      await expectLater(
+        webViewDriver.execute(request, requestId: 'invalid-path'),
+        throwsA(isA<LlmAiStudioWebViewBridgeException>()),
+      );
+      expect(controller.arguments, isEmpty);
+    },
+  );
+
+  test('opaque redirects remain generic transport errors', () async {
+    final controller = _FakeInAppWebViewController()..opaqueRedirect = true;
+    bridge.attach(
+      pageUrl: 'https://aistudio.google.com/',
+      driver: LlmAiStudioInAppWebViewDriver(controller),
+    );
+    final accounts = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentials(),
+    );
+    final account = await accounts.saveAccount(
+      LlmAccount(
+        id: 'aistudio-opaque-redirect',
+        connectorType: 'aistudio',
+        authType: 'relay',
+        displayName: 'AI Studio session',
+      ),
+    );
+
+    await expectLater(
+      LlmConnectorHttpClient(accountService: accounts).request(
+        account: account,
+        modelId: 'gemini-3.1-pro',
+        body: const {'contents': []},
+      ),
+      throwsA(isA<LlmConnectorHttpException>()),
+    );
+  });
 
   test(
     'production WebView driver streams and aborts on consumer cancel',
@@ -165,14 +215,14 @@ void main() {
       expect(
         bridge.attach(
           pageUrl: 'http://aistudio.google.com/app',
-          driver: driver,
+          driver: LlmAiStudioInAppWebViewDriver(controller),
         ),
         isNull,
       );
       expect(
         bridge.attach(
           pageUrl: 'https://accounts.google.com/signin',
-          driver: driver,
+          driver: LlmAiStudioInAppWebViewDriver(controller),
         ),
         isNull,
       );
@@ -188,13 +238,16 @@ void main() {
         ),
         throwsA(isA<LlmAiStudioWebViewBridgeException>()),
       );
-      expect(driver.requests, isEmpty);
+      expect(controller.arguments, isEmpty);
     },
   );
 
   test('maps an expired browser session to a safe re-login error', () async {
-    bridge.attach(pageUrl: 'https://aistudio.google.com/', driver: driver);
-    driver.response = LlmAiStudioWebViewResponse(statusCode: 401, headers: {});
+    controller.responseStatusCode = 401;
+    bridge.attach(
+      pageUrl: 'https://aistudio.google.com/',
+      driver: LlmAiStudioInAppWebViewDriver(controller),
+    );
     final accounts = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentials(),
@@ -256,10 +309,10 @@ void main() {
 
   test('does not treat a Google API 403 as an expired browser session',
       () async {
-    bridge.attach(pageUrl: 'https://aistudio.google.com/', driver: driver);
-    driver.response = LlmAiStudioWebViewResponse(
-      statusCode: 403,
-      headers: const {},
+    controller.responseStatusCode = 403;
+    bridge.attach(
+      pageUrl: 'https://aistudio.google.com/',
+      driver: LlmAiStudioInAppWebViewDriver(controller),
     );
     final accounts = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
@@ -293,7 +346,10 @@ void main() {
   test(
     'rejects API keys, cookies, and credentials at the bridge boundary',
     () async {
-      bridge.attach(pageUrl: 'https://aistudio.google.com/', driver: driver);
+      bridge.attach(
+        pageUrl: 'https://aistudio.google.com/',
+        driver: LlmAiStudioInAppWebViewDriver(controller),
+      );
 
       await expectLater(
         bridge.execute(
@@ -313,24 +369,18 @@ void main() {
         ),
         throwsA(isA<LlmAiStudioWebViewBridgeException>()),
       );
-      expect(driver.requests, isEmpty);
+      expect(controller.arguments, isEmpty);
     },
   );
 
   test('streams response bytes and propagates consumer cancellation', () async {
-    final source = StreamController<List<int>>();
-    var sourceCancelled = false;
-    source.onCancel = () {
-      sourceCancelled = true;
-    };
-    driver.response = LlmAiStudioWebViewResponse(
-      statusCode: 200,
-      headers: const {
-        'content-type': ['text/event-stream'],
-      },
-      stream: source.stream,
+    final controller = _FakeInAppWebViewController()
+      ..pauseStreamAfterStart = true
+      ..responseContentType = 'text/event-stream';
+    bridge.attach(
+      pageUrl: 'https://aistudio.google.com/',
+      driver: LlmAiStudioInAppWebViewDriver(controller),
     );
-    bridge.attach(pageUrl: 'https://aistudio.google.com/', driver: driver);
     final accounts = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentials(),
@@ -356,29 +406,25 @@ void main() {
       chunks.add(List<int>.from(chunk));
       if (!receivedChunk.isCompleted) receivedChunk.complete();
     });
-    source.add([1]);
+    await controller.emitChunk('data: {"candidates":[]}\n\n');
     await receivedChunk.future;
 
     await subscription.cancel();
 
-    expect(chunks, [
-      [1],
-    ]);
-    expect(sourceCancelled, isTrue);
+    expect(utf8.decode(chunks.single), 'data: {"candidates":[]}\n\n');
+    expect(controller.evaluatedJavascript, contains('?.abort()'));
     await response.completedObservation;
   });
 
   test('maps an in-flight WebView cancellation to request cancellation',
       () async {
-    final source = StreamController<List<int>>();
-    driver.response = LlmAiStudioWebViewResponse(
-      statusCode: 200,
-      headers: const {
-        'content-type': ['text/event-stream'],
-      },
-      stream: source.stream,
+    final controller = _FakeInAppWebViewController()
+      ..pauseStreamAfterStart = true
+      ..responseContentType = 'text/event-stream';
+    bridge.attach(
+      pageUrl: 'https://aistudio.google.com/',
+      driver: LlmAiStudioInAppWebViewDriver(controller),
     );
-    bridge.attach(pageUrl: 'https://aistudio.google.com/', driver: driver);
     final accounts = LlmAccountConnectorService(
       preferences: _MemoryPreferences(),
       credentialStore: _MemoryCredentials(),
@@ -404,39 +450,12 @@ void main() {
       (_) {},
       onError: (Object value) => error.complete(value),
     );
-    source.addError(const LlmAiStudioWebViewRequestCancelled());
+    await controller.emitEvent('cancelled');
 
     expect(await error.future, isA<LlmConnectorRequestCancelled>());
     await subscription.cancel();
     await response.completedObservation;
   });
-}
-
-class _FakeWebViewDriver implements LlmAiStudioWebViewDriver {
-  final List<LlmPreparedNativeRequest> requests = [];
-  LlmAiStudioWebViewResponse response = LlmAiStudioWebViewResponse(
-    statusCode: 200,
-    headers: const {
-      'content-type': ['application/json'],
-    },
-    body: Uint8List.fromList(utf8.encode('{"candidates":[]}')),
-  );
-  int disposeCalls = 0;
-
-  @override
-  Future<LlmAiStudioWebViewResponse> execute(
-    LlmPreparedNativeRequest request, {
-    required String requestId,
-    CancelToken? cancelToken,
-  }) async {
-    requests.add(request);
-    return response;
-  }
-
-  @override
-  void dispose() {
-    disposeCalls++;
-  }
 }
 
 class _FakeInAppWebViewController extends Fake
@@ -449,6 +468,9 @@ class _FakeInAppWebViewController extends Fake
   String? evaluatedJavascript;
   bool pauseStreamAfterStart = false;
   String? errorType;
+  bool opaqueRedirect = false;
+  int responseStatusCode = 200;
+  String responseContentType = 'application/json';
   Completer<CallAsyncJavaScriptResult?>? pendingCallResult;
 
   @override
@@ -494,6 +516,12 @@ class _FakeInAppWebViewController extends Fake
   }) async {
     this.functionBody = functionBody;
     this.arguments = arguments;
+    if (opaqueRedirect) {
+      final type =
+          functionBody.contains("requestId, 'auth'") ? 'auth' : 'network_error';
+      await callback!([arguments['requestId'], type]);
+      return CallAsyncJavaScriptResult(value: false);
+    }
     final error = errorType;
     if (error != null) {
       await callback!([arguments['requestId'], error]);
@@ -503,9 +531,12 @@ class _FakeInAppWebViewController extends Fake
       await callback!([
         arguments['requestId'],
         'start',
-        200,
-        'text/event-stream',
+        responseStatusCode,
+        responseContentType,
       ]);
+      if (responseStatusCode < 200 || responseStatusCode >= 300) {
+        return CallAsyncJavaScriptResult(value: true);
+      }
       if (pauseStreamAfterStart) {
         pendingCallResult = Completer<CallAsyncJavaScriptResult?>();
         return pendingCallResult!.future;
@@ -517,8 +548,8 @@ class _FakeInAppWebViewController extends Fake
     await callback!([
       arguments['requestId'],
       'complete',
-      200,
-      'application/json',
+      responseStatusCode,
+      responseContentType,
       '{"candidates":[]}',
     ]);
     return CallAsyncJavaScriptResult(value: true);
@@ -526,6 +557,14 @@ class _FakeInAppWebViewController extends Fake
 
   Future<void> emitChunk(String chunk) async {
     await callback!([arguments['requestId'], 'chunk', chunk]);
+  }
+
+  Future<void> emitEvent(String event) async {
+    await callback!([arguments['requestId'], event]);
+    final pending = pendingCallResult;
+    if (pending != null && !pending.isCompleted) {
+      pending.complete(CallAsyncJavaScriptResult(value: true));
+    }
   }
 }
 

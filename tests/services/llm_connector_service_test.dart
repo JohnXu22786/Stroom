@@ -517,6 +517,34 @@ void main() {
           service.saveAccount(headerAccount, secret: 'secure-api-key'),
           throwsA(isA<LlmAccountConnectorException>()),
         );
+        final customKeyHeaderAccount = LlmAccount(
+          id: 'unsafe-config-header-key',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Custom',
+          endpointConfig: const {
+            'baseUrl': 'https://api.example.test/v1',
+            'headers': {'X-Key': 'must-not-be-persisted'},
+          },
+        );
+        await expectLater(
+          service.saveAccount(customKeyHeaderAccount, secret: 'secure-api-key'),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        final authHeaderAccount = LlmAccount(
+          id: 'unsafe-config-header-auth',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Custom',
+          endpointConfig: const {
+            'baseUrl': 'https://api.example.test/v1',
+            'headers': {'X-Auth': 'must-not-be-persisted'},
+          },
+        );
+        await expectLater(
+          service.saveAccount(authHeaderAccount, secret: 'secure-api-key'),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
         final cookieHeaderAccount = LlmAccount(
           id: 'unsafe-config-header-cookie',
           connectorType: 'openai-compatibility',
@@ -556,6 +584,29 @@ void main() {
         service.saveAccount(account, secret: 'secure-api-key'),
         throwsA(isA<LlmAccountConnectorException>()),
       );
+      for (final header in ['X-Key', 'X-Auth']) {
+        final modelHeaderAccount = LlmAccount(
+          id: 'unsafe-model-config-header-${header.toLowerCase()}',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Custom',
+          models: [
+            LlmUpstreamModel(
+              id: 'model-1',
+              upstreamModelId: 'model-1',
+              displayName: 'Model 1',
+              config: {
+                'headers': {header: 'must-not-be-persisted'},
+              },
+            ),
+          ],
+        );
+
+        await expectLater(
+          service.saveAccount(modelHeaderAccount, secret: 'secure-api-key'),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      }
       expect(preferences.values, isEmpty);
       expect(credentials.values, isEmpty);
     });
@@ -592,7 +643,17 @@ void main() {
     test(
       'rejects credential query parameters in configured endpoint URLs',
       () async {
-        for (final field in ['api_key', 'key', 'access_key', 'x-access-key']) {
+        for (final field in [
+          'api_key',
+          'key',
+          'access_key',
+          'x-access-key',
+          'signature',
+          'sig',
+          'X-Amz-Signature',
+          'x-key',
+          'x-auth',
+        ]) {
           final account = LlmAccount(
             id: 'unsafe-url-$field',
             connectorType: 'openai-compatibility',
@@ -1256,6 +1317,25 @@ void main() {
         }
       },
     );
+
+    test('accepts digits-only opaque API keys for custom endpoints', () {
+      final request = builder.build(
+        account: LlmAccount(
+          id: 'custom-numeric-api-key',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Custom numeric API key',
+          endpointConfig: const {'baseUrl': 'https://api.example.test/v1'},
+        ),
+        credential: '1234567890',
+        modelId: 'vendor-model',
+        body: const {'model': 'vendor-model', 'messages': []},
+      );
+
+      expect(request.headers['Authorization'], 'Bearer 1234567890');
+      expect(request.uri.toString(),
+          'https://api.example.test/v1/chat/completions');
+    });
 
     test('uses Anthropic Messages with Claude Code OAuth credentials', () {
       final request = builder.build(
@@ -2100,39 +2180,6 @@ void main() {
       expect(requests, hasLength(scenarios.length));
     });
 
-    test('dispatches AI Studio through its connected relay executor', () async {
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final account = await accounts.saveAccount(
-        _account('aistudio-relay', 'aistudio', authType: 'relay'),
-      );
-      LlmPreparedNativeRequest? captured;
-      final client = LlmConnectorHttpClient(
-        accountService: accounts,
-        aiStudioRelayExecutor: (receivedAccount, request) async {
-          expect(receivedAccount.id, account.id);
-          captured = request;
-          return LlmConnectorResponse(
-            statusCode: 200,
-            body: const {'candidates': []},
-            observation: LlmConnectorObservation(),
-          );
-        },
-      );
-
-      final response = await client.request(
-        account: account,
-        modelId: 'gemini-3.1-pro',
-        body: const {'contents': []},
-      );
-
-      expect(captured?.transport, LlmNativeTransport.websocketRelay);
-      expect(captured?.uri.host, 'generativelanguage.googleapis.com');
-      expect(response.statusCode, 200);
-    });
-
     test(
       'mints Meta OAuth credentials before the native Responses request',
       () async {
@@ -2414,6 +2461,52 @@ void main() {
         expect(observation?.quotaSignals['primaryRemainingPercent']?.value, 35);
       },
     );
+
+    test('combines Claude Code usage from native stream events', () async {
+      final source = StreamController<Uint8List>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          expect(options.responseType, ResponseType.stream);
+          return ResponseBody(
+            source.stream,
+            200,
+            headers: const {
+              'content-type': ['text/event-stream'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('claude-stream-usage', 'claude', authType: 'oauth'),
+        secret: jsonEncode({'access_token': 'claude-stream-token'}),
+      );
+      final response = await LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'claude-sonnet-4-6',
+        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+        stream: true,
+      );
+
+      final events = utf8.encode(
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","usage":{"output_tokens":4}}\n\n',
+      );
+      source.add(Uint8List.fromList(events));
+      await source.close();
+      final delivered = await (response.body as Stream<List<int>>).toList();
+      final observation = await response.completedObservation;
+
+      expect(delivered, hasLength(1));
+      expect(observation?.requestUsage.value, 9);
+    });
 
     test(
       'bounds accumulated SSE event data across multiple data lines',
@@ -3196,6 +3289,20 @@ void main() {
       expect(observation.remainingQuota.isKnown, isFalse);
     },
   );
+
+  test('combines Claude Code message start and delta stream usage', () {
+    final bytes = utf8.encode(
+      'event: message_start\n'
+      'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}\n\n'
+      'event: message_delta\n'
+      'data: {"type":"message_delta","usage":{"output_tokens":4}}\n\n',
+    );
+
+    final observation = parseLlmConnectorSseObservation('claude', bytes);
+
+    expect(observation.requestUsage.isKnown, isTrue);
+    expect(observation.requestUsage.value, 9);
+  });
 
   test('bounds accumulated nonstream SSE event data', () {
     final padding = 'x' * 12000;

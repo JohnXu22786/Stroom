@@ -25,7 +25,8 @@ class LlmAiStudioWebViewResponse {
         });
 }
 
-abstract interface class LlmAiStudioWebViewDriver {
+/// Sealed to keep bridge sessions on the in-app WebView transport.
+sealed class LlmAiStudioWebViewDriver {
   Future<LlmAiStudioWebViewResponse> execute(
     LlmPreparedNativeRequest request, {
     required String requestId,
@@ -209,7 +210,7 @@ class LlmAiStudioWebViewRequestCancelled implements Exception {
 
 /// Executes native GenerateContent requests from the active AI Studio WebView
 /// so the platform WebView supplies its own protected session cookies.
-class LlmAiStudioInAppWebViewDriver implements LlmAiStudioWebViewDriver {
+final class LlmAiStudioInAppWebViewDriver extends LlmAiStudioWebViewDriver {
   final InAppWebViewController controller;
   final Map<String, Future<void> Function()> _cancelRequests = {};
   bool _disposed = false;
@@ -222,6 +223,7 @@ class LlmAiStudioInAppWebViewDriver implements LlmAiStudioWebViewDriver {
     required String requestId,
     CancelToken? cancelToken,
   }) async {
+    LlmAiStudioWebViewSessionBridge._validateRequest(request);
     if (_disposed || !await _isOnAiStudioPage()) {
       throw const LlmAiStudioWebViewBridgeException();
     }
@@ -288,10 +290,6 @@ class LlmAiStudioInAppWebViewDriver implements LlmAiStudioWebViewDriver {
         }
         if (!await _isOnAiStudioPage()) return false;
         final type = args[1];
-        if (type == 'auth') {
-          fail(const LlmAiStudioWebViewSessionExpired());
-          return true;
-        }
         if (type == 'network_error') {
           fail(const LlmAiStudioWebViewNetworkException());
           return true;
@@ -402,12 +400,12 @@ class LlmAiStudioInAppWebViewDriver implements LlmAiStudioWebViewDriver {
           signal: abortController.signal
         });
         if (response.type === 'opaqueredirect' || response.status === 0) {
-          await window.flutter_inappwebview.callHandler(handlerName, requestId, 'auth');
-          return true;
+          await window.flutter_inappwebview.callHandler(handlerName, requestId, 'network_error');
+          return false;
         }
         if (new URL(response.url).origin !== expectedOrigin) {
-          await window.flutter_inappwebview.callHandler(handlerName, requestId, 'auth');
-          return true;
+          await window.flutter_inappwebview.callHandler(handlerName, requestId, 'network_error');
+          return false;
         }
         const contentType = response.headers.get('content-type') || '';
         if (!stream) {
@@ -503,11 +501,4 @@ class LlmAiStudioInAppWebViewDriver implements LlmAiStudioWebViewDriver {
           : {
               'content-type': [contentType],
             };
-}
-
-class LlmAiStudioWebViewSessionExpired implements Exception {
-  const LlmAiStudioWebViewSessionExpired();
-
-  @override
-  String toString() => 'Google AI Studio session expired or needs sign-in.';
 }

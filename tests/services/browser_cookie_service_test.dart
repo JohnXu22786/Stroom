@@ -247,6 +247,68 @@ void main() {
       expect(cookies.keys, {'example.test'});
     });
 
+    test('browser cookie settings omit Google session cookies', () async {
+      BrowserCookieService.cookiePlatform = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+            name: 'sid',
+            value: 'private-google-session',
+            domain: '.google.com',
+          ),
+          Cookie(
+            name: 'api-session',
+            value: 'private-google-api-session',
+            domain: 'generativelanguage.googleapis.com',
+          ),
+          Cookie(name: 'theme', value: 'dark', domain: 'example.test'),
+        ];
+
+      final grouped = await BrowserCookieService.getCookiesGrouped();
+
+      expect(grouped.keys, {'example.test'});
+      expect(jsonEncode(grouped), isNot(contains('private-google-session')));
+      expect(
+        jsonEncode(grouped),
+        isNot(contains('private-google-api-session')),
+      );
+    });
+
+    test('browser cookie settings filter Google cookies from partial stores',
+        () async {
+      final fake = _FakeCookiePlatform()..throwOnGetAll = true;
+      BrowserCookieService.cookiePlatform = fake;
+      BrowserCookieService.noteVisitedUrl('https://accounts.google.com/');
+      fake.perUrlCookies['https://accounts.google.com'] = [
+        Cookie(
+          name: 'sid',
+          value: 'private-platform-google-session',
+          domain: '.google.com',
+        ),
+      ];
+      await BrowserCookieService.persistCookiesRawForTest([
+        {
+          'name': 'sid',
+          'value': 'private-file-google-session',
+          'domain': '.google.com',
+          'path': '/',
+        },
+        {
+          'name': 'theme',
+          'value': 'dark',
+          'domain': 'example.test',
+          'path': '/',
+        },
+      ]);
+
+      final grouped = await BrowserCookieService.getCookiesGrouped();
+
+      expect(grouped.keys, {'example.test'});
+      expect(jsonEncode(grouped),
+          isNot(contains('private-platform-google-session')));
+      expect(
+          jsonEncode(grouped), isNot(contains('private-file-google-session')));
+    });
+
     test('page startup scrubs and does not restore old Google cookies',
         () async {
       final fake = _FakeCookiePlatform();

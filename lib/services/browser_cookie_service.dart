@@ -746,12 +746,19 @@ class BrowserCookieService {
 
     if (platformComplete) {
       // Authoritative snapshot — show it as-is (even when empty, so cookies
-      // deleted on the platform do not resurface from the file).
-      return _groupAndSort(platformCookies);
+      // deleted on the platform do not resurface from the file). Google
+      // session cookies stay in the platform WebView store and are hidden
+      // from the browser data settings page.
+      return _groupAndSort(_withoutGoogleSessionCookies(platformCookies));
     }
     // Partial or failed platform data: merge file + platform (platform wins
     // on conflicts).
-    return _groupAndSort(_mergeCookies(fileCookies, platformCookies));
+    return _groupAndSort(
+      _mergeCookies(
+        _withoutGoogleSessionCookies(fileCookies),
+        _withoutGoogleSessionCookies(platformCookies),
+      ),
+    );
   }
 
   /// Enumerates cookies for every visited host and visited URL path (in

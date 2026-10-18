@@ -8,11 +8,6 @@ import '../models/llm_account.dart';
 import 'llm_ai_studio_webview_session_bridge.dart';
 import 'llm_connector_service.dart';
 
-typedef LlmAiStudioRelayExecutor = Future<LlmConnectorResponse> Function(
-  LlmAccount account,
-  LlmPreparedNativeRequest request,
-);
-
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
 /// explicitly supported observation.
@@ -37,14 +32,12 @@ class LlmConnectorHttpClient {
   final LlmAccountConnectorService accountService;
   final Dio _dio;
   final LlmNativeRequestBuilder _requestBuilder;
-  final LlmAiStudioRelayExecutor? _aiStudioRelayExecutor;
   final LlmAiStudioWebViewSessionBridge _aiStudioWebViewSessionBridge;
 
   LlmConnectorHttpClient({
     required this.accountService,
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
-    LlmAiStudioRelayExecutor? aiStudioRelayExecutor,
     LlmAiStudioWebViewSessionBridge? aiStudioWebViewSessionBridge,
   })  : _dio = dio ??
             Dio(
@@ -54,7 +47,6 @@ class LlmConnectorHttpClient {
               ),
             ),
         _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder(),
-        _aiStudioRelayExecutor = aiStudioRelayExecutor,
         _aiStudioWebViewSessionBridge = aiStudioWebViewSessionBridge ??
             LlmAiStudioWebViewSessionBridge.instance;
 
@@ -85,7 +77,6 @@ class LlmConnectorHttpClient {
       }
     }
     if (storedAccount.connectorType == 'aistudio') {
-      final relay = _aiStudioRelayExecutor;
       final prepared = _requestBuilder.build(
         account: storedAccount,
         credential: null,
@@ -95,7 +86,6 @@ class LlmConnectorHttpClient {
         nativeFormat: nativeFormat,
       );
       try {
-        if (relay != null) return await relay(storedAccount, prepared);
         final response = await _aiStudioWebViewSessionBridge.execute(
           storedAccount.id,
           prepared,
@@ -157,8 +147,6 @@ class LlmConnectorHttpClient {
         rethrow;
       } on LlmConnectorRequestCancelled {
         rethrow;
-      } on LlmAiStudioWebViewSessionExpired {
-        throw const LlmConnectorAuthenticationRequired();
       } on LlmAiStudioWebViewRequestCancelled {
         throw const LlmConnectorRequestCancelled();
       } on LlmAiStudioWebViewNetworkException {
@@ -306,6 +294,9 @@ class LlmConnectorHttpClient {
     var dataLinesLength = 0;
     var discardingOversizedFrame = false;
     const maxSseFrameCharacters = 1048576;
+    final usageAccumulator = LlmConnectorSseObservationAccumulator(
+      connectorType,
+    );
 
     void discardCurrentFrame() {
       partialLine = '';
@@ -342,7 +333,7 @@ class LlmConnectorHttpClient {
         if (decoded is Map) {
           observation = mergeLlmConnectorObservations(
             observation,
-            parseLlmConnectorObservation(connectorType, decoded),
+            usageAccumulator.observe(decoded),
           );
         }
       } catch (_) {

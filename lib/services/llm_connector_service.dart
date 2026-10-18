@@ -1303,20 +1303,26 @@ class LlmAccountConnectorService {
       'privatekey',
       'clientsecret',
       'cookie',
+      'sig',
+      'signature',
     };
     if (value is Map) {
       for (final entry in value.entries) {
         final key = entry.key.toString();
         final normalized = key.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
         if (forbiddenKeys.contains(normalized) ||
+            normalized.endsWith('key') ||
+            normalized.endsWith('sig') ||
             normalized.contains('apikey') ||
             normalized.contains('accesskey') ||
             normalized.contains('token') ||
             normalized.contains('secret') ||
             normalized.contains('password') ||
+            normalized.contains('auth') ||
             normalized.contains('credential') ||
             normalized.contains('authorization') ||
             normalized.contains('privatekey') ||
+            normalized.contains('signature') ||
             normalized.contains('cookie')) {
           throw const LlmAccountConnectorException();
         }
@@ -1336,6 +1342,8 @@ class LlmAccountConnectorService {
             'password',
             'authorization',
             'credential',
+            'sig',
+            'signature',
           };
           if (uri.queryParameters.keys.any((key) {
             final normalizedQueryKey = key.toLowerCase().replaceAll(
@@ -1348,9 +1356,13 @@ class LlmAccountConnectorService {
                 normalizedQueryKey.contains('token') ||
                 normalizedQueryKey.contains('secret') ||
                 normalizedQueryKey.contains('password') ||
+                normalizedQueryKey.contains('auth') ||
                 normalizedQueryKey.contains('authorization') ||
                 normalizedQueryKey.contains('credential') ||
                 normalizedQueryKey.contains('privatekey') ||
+                normalizedQueryKey.contains('signature') ||
+                normalizedQueryKey.endsWith('key') ||
+                normalizedQueryKey.endsWith('sig') ||
                 normalizedQueryKey.contains('cookie');
           })) {
             throw const LlmAccountConnectorException();
@@ -1373,13 +1385,17 @@ class LlmAccountConnectorService {
               '',
             );
         if (normalized == 'key' ||
+            normalized.endsWith('key') ||
             normalized == 'token' ||
             normalized.startsWith('token') ||
             normalized.endsWith('token') ||
+            normalized.endsWith('sig') ||
+            normalized.contains('signature') ||
             normalized.contains('apikey') ||
             normalized.contains('accesskey') ||
             normalized.contains('secret') ||
             normalized.contains('password') ||
+            normalized.contains('auth') ||
             normalized.contains('authorization') ||
             normalized.contains('credential') ||
             normalized.contains('privatekey') ||
@@ -1626,8 +1642,7 @@ class LlmNativeRequestBuilder {
     } catch (_) {
       // API keys and session tokens are commonly stored as opaque strings.
     }
-    if (isJson) {
-      if (decoded is! Map) throw const LlmAccountConnectorException();
+    if (isJson && decoded is Map) {
       final candidates = switch (account.authType) {
         'api_key' => const ['api_key', 'apiKey', 'key'],
         'oauth' => account.connectorType == 'meta'
@@ -1654,6 +1669,9 @@ class LlmNativeRequestBuilder {
           return value;
         }
       }
+      throw const LlmAccountConnectorException();
+    }
+    if (isJson && (account.authType != 'api_key' || decoded is! num)) {
       throw const LlmAccountConnectorException();
     }
     if (account.authType == 'service_account') {
@@ -2148,6 +2166,9 @@ LlmConnectorObservation parseLlmConnectorObservation(
   } else if (responseBody['response'] is Map &&
       (responseBody['response'] as Map)['usage'] is Map) {
     usage = (responseBody['response'] as Map)['usage'] as Map;
+  } else if (responseBody['message'] is Map &&
+      (responseBody['message'] as Map)['usage'] is Map) {
+    usage = (responseBody['message'] as Map)['usage'] as Map;
   }
   final input = _firstNumber(usage, const [
     'input_tokens',
@@ -2224,6 +2245,62 @@ LlmConnectorObservation mergeLlmConnectorObservations(
       quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
     );
 
+class LlmConnectorSseObservationAccumulator {
+  final String connectorType;
+  final DateTime? observedAt;
+  num? _claudeInputTokens;
+  num? _claudeOutputTokens;
+
+  LlmConnectorSseObservationAccumulator(
+    this.connectorType, {
+    this.observedAt,
+  });
+
+  LlmConnectorObservation observe(Map frame) {
+    final frameObservation = parseLlmConnectorObservation(
+      connectorType,
+      frame,
+      observedAt: observedAt,
+    );
+    if (connectorType != 'claude') return frameObservation;
+
+    final eventType = frame['type'];
+    final Map? usage = switch (eventType) {
+      'message_start' when frame['message'] is Map =>
+        (frame['message'] as Map)['usage'] is Map
+            ? (frame['message'] as Map)['usage'] as Map
+            : null,
+      'message_delta' when frame['usage'] is Map => frame['usage'] as Map,
+      _ => null,
+    };
+    if (usage == null) return frameObservation;
+
+    final inputTokens = _firstNumber(usage, const [
+      'input_tokens',
+      'prompt_tokens',
+    ]);
+    final outputTokens = _firstNumber(usage, const [
+      'output_tokens',
+      'completion_tokens',
+    ]);
+    if (inputTokens != null) _claudeInputTokens = inputTokens;
+    if (outputTokens != null) _claudeOutputTokens = outputTokens;
+    if (_claudeInputTokens == null && _claudeOutputTokens == null) {
+      return frameObservation;
+    }
+    return LlmConnectorObservation(
+      requestUsage: LlmMetricObservation.reported(
+        (_claudeInputTokens ?? 0) + (_claudeOutputTokens ?? 0),
+        unit: 'tokens',
+        source: connectorType,
+        observedAt: observedAt ?? DateTime.now().toUtc(),
+      ),
+      remainingQuota: frameObservation.remainingQuota,
+      quotaSignals: frameObservation.quotaSignals,
+    );
+  }
+}
+
 LlmConnectorObservation parseLlmConnectorSseObservation(
   String connectorType,
   List<int> bytes, {
@@ -2234,6 +2311,10 @@ LlmConnectorObservation parseLlmConnectorSseObservation(
   var observation = LlmConnectorObservation();
   var dataLinesLength = 0;
   var discardingOversizedFrame = false;
+  final accumulator = LlmConnectorSseObservationAccumulator(
+    connectorType,
+    observedAt: observedAt,
+  );
   const maxSseFrameCharacters = 1048576;
 
   void clearFrame() {
@@ -2267,11 +2348,7 @@ LlmConnectorObservation parseLlmConnectorSseObservation(
       if (decoded is Map) {
         observation = mergeLlmConnectorObservations(
           observation,
-          parseLlmConnectorObservation(
-            connectorType,
-            decoded,
-            observedAt: observedAt,
-          ),
+          accumulator.observe(decoded),
         );
       }
     } catch (_) {
