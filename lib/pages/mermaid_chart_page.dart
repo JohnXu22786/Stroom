@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
-import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
+import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -73,11 +73,21 @@ class MermaidChartPage extends StatefulWidget {
   /// InAppWebView 平台未初始化导致的崩溃。
   final bool initialShowPreview;
 
+  /// Test-only hook called immediately before the folder name lock is taken.
+  @visibleForTesting
+  final VoidCallback? testOnlyBeforeChartFolderNameLock;
+
+  /// Test-only hook called after a name is selected but before it is saved.
+  @visibleForTesting
+  final Future<void> Function(String name)? testOnlyAfterChartNameAllocation;
+
   const MermaidChartPage({
     super.key,
     this.initialCode,
     this.existingRecord,
     this.initialShowPreview = true,
+    this.testOnlyBeforeChartFolderNameLock,
+    this.testOnlyAfterChartNameAllocation,
   });
 
   @override
@@ -376,91 +386,103 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final baseName = userFileName;
       final saveName =
           existingRecord == null ? '$baseName-$typeLabel' : baseName;
-      final records = await TextManifest.loadRecords();
-      String finalName = saveName;
-      int counter = 2;
-      bool hasNameConflict(TextRecord record) =>
-          record.id != existingRecord?.id &&
-          record.name == finalName &&
-          record.folder == selectedFolder;
-      while (records.any(hasNameConflict)) {
-        finalName = '$saveName ($counter)';
-        counter++;
-      }
+      widget.testOnlyBeforeChartFolderNameLock?.call();
+      final finalName = await MermaidFolderNameLock.withLock(
+        selectedFolder,
+        () async {
+          // Name selection and record publication must stay together so a
+          // concurrent Mermaid save sees the newly published name.
+          final records = await TextManifest.loadRecordsUncached();
+          var finalName = saveName;
+          var counter = 2;
+          bool hasNameConflict(TextRecord record) =>
+              record.id != existingRecord?.id &&
+              record.name == finalName &&
+              record.folder == selectedFolder;
+          while (records.any(hasNameConflict)) {
+            finalName = '$saveName ($counter)';
+            counter++;
+          }
 
-      if (existingRecord == null) {
-        await TextManifest.withSaveLock(hash, () async {
-          await TextManifest.writeText(storageFileName, content);
-          try {
-            await TextManifest.addRecord(
-              TextRecord(
-                name: finalName,
-                hash: hash,
-                format: 'mmd',
-                createdAt: DateTime.now(),
-                size: bytes.length,
-                folder: selectedFolder,
-                textLength: content.length,
-              ),
-            );
-          } catch (error, stackTrace) {
-            try {
+          await widget.testOnlyAfterChartNameAllocation?.call(finalName);
+
+          if (existingRecord == null) {
+            await TextManifest.withSaveLock(hash, () async {
+              await TextManifest.writeText(storageFileName, content);
+              try {
+                await TextManifest.addRecord(
+                  TextRecord(
+                    name: finalName,
+                    hash: hash,
+                    format: 'mmd',
+                    createdAt: DateTime.now(),
+                    size: bytes.length,
+                    folder: selectedFolder,
+                    textLength: content.length,
+                  ),
+                );
+              } catch (error, stackTrace) {
+                try {
+                  await TextManifest.deleteFileIfUnreferenced(
+                    hash,
+                    storageFileName,
+                  );
+                } catch (cleanupError) {
+                  debugPrint(
+                    'Failed to clean up Mermaid chart file $storageFileName '
+                    'after record registration failed: $cleanupError',
+                  );
+                }
+                Error.throwWithStackTrace(error, stackTrace);
+              }
+            });
+          } else {
+            await TextManifest.withSaveLock(hash, () async {
+              await TextManifest.writeText(storageFileName, content);
+              try {
+                await TextManifest.updateRecord(
+                  TextRecord(
+                    id: existingRecord.id,
+                    name: finalName,
+                    hash: hash,
+                    format: existingRecord.format,
+                    createdAt: existingRecord.createdAt,
+                    modifiedAt: hash == existingRecord.hash
+                        ? existingRecord.modifiedAt
+                        : DateTime.now(),
+                    size: bytes.length,
+                    folder: selectedFolder,
+                    textLength: content.length,
+                  ),
+                );
+              } catch (error, stackTrace) {
+                try {
+                  await TextManifest.deleteFileIfUnreferenced(
+                    hash,
+                    storageFileName,
+                  );
+                } catch (cleanupError) {
+                  debugPrint(
+                    'Failed to clean up Mermaid chart file $storageFileName '
+                    'after record update failed: $cleanupError',
+                  );
+                }
+                TextManifest.invalidateCache();
+                Error.throwWithStackTrace(error, stackTrace);
+              }
+            });
+
+            if (hash != existingRecord.hash) {
               await TextManifest.deleteFileIfUnreferenced(
-                hash,
-                storageFileName,
-              );
-            } catch (cleanupError) {
-              debugPrint(
-                'Failed to clean up Mermaid chart file $storageFileName '
-                'after record registration failed: $cleanupError',
+                existingRecord.hash,
+                existingRecord.storagePath,
               );
             }
-            Error.throwWithStackTrace(error, stackTrace);
           }
-        });
-      } else {
-        await TextManifest.withSaveLock(hash, () async {
-          await TextManifest.writeText(storageFileName, content);
-          try {
-            await TextManifest.updateRecord(
-              TextRecord(
-                id: existingRecord.id,
-                name: finalName,
-                hash: hash,
-                format: existingRecord.format,
-                createdAt: existingRecord.createdAt,
-                modifiedAt: hash == existingRecord.hash
-                    ? existingRecord.modifiedAt
-                    : DateTime.now(),
-                size: bytes.length,
-                folder: selectedFolder,
-                textLength: content.length,
-              ),
-            );
-          } catch (error, stackTrace) {
-            try {
-              await TextManifest.deleteFileIfUnreferenced(
-                hash,
-                storageFileName,
-              );
-            } catch (cleanupError) {
-              debugPrint(
-                'Failed to clean up Mermaid chart file $storageFileName '
-                'after record update failed: $cleanupError',
-              );
-            }
-            TextManifest.invalidateCache();
-            Error.throwWithStackTrace(error, stackTrace);
-          }
-        });
 
-        if (hash != existingRecord.hash) {
-          await TextManifest.deleteFileIfUnreferenced(
-            existingRecord.hash,
-            existingRecord.storagePath,
-          );
-        }
-      }
+          return finalName;
+        },
+      );
 
       if (mounted) {
         setState(() {

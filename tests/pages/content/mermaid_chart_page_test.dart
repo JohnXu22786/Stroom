@@ -27,6 +27,8 @@ Widget _buildTestApp({
   String? initialCode,
   TextRecord? existingRecord,
   bool initialShowPreview = false,
+  VoidCallback? testOnlyBeforeChartFolderNameLock,
+  Future<void> Function(String name)? testOnlyAfterChartNameAllocation,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -34,10 +36,41 @@ Widget _buildTestApp({
         initialCode: initialCode,
         existingRecord: existingRecord,
         initialShowPreview: initialShowPreview,
+        testOnlyBeforeChartFolderNameLock: testOnlyBeforeChartFolderNameLock,
+        testOnlyAfterChartNameAllocation: testOnlyAfterChartNameAllocation,
       ),
       localizationsDelegates: [
         DefaultMaterialLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
+      ],
+    ),
+  );
+}
+
+Widget _buildConcurrentChartTestApp({
+  required Future<void> Function(String name) onFirstChartNameAllocation,
+  required VoidCallback onSecondFolderNameLockAttempt,
+  required Future<void> Function(String name) onSecondChartNameAllocation,
+}) {
+  return Directionality(
+    textDirection: TextDirection.ltr,
+    child: Row(
+      children: [
+        Expanded(
+          child: _buildTestApp(
+            initialCode: 'graph TD\n  A-->B',
+            initialShowPreview: false,
+            testOnlyAfterChartNameAllocation: onFirstChartNameAllocation,
+          ),
+        ),
+        Expanded(
+          child: _buildTestApp(
+            initialCode: 'graph TD\n  A-->C',
+            initialShowPreview: false,
+            testOnlyBeforeChartFolderNameLock: onSecondFolderNameLockAttempt,
+            testOnlyAfterChartNameAllocation: onSecondChartNameAllocation,
+          ),
+        ),
       ],
     ),
   );
@@ -807,6 +840,12 @@ void main() {
         addTearDown(() {
           ManifestDatabase.beforeWebDataReadForTesting = null;
         });
+        final updateReadStarted = Completer<void>();
+        final releaseUpdateRead = Completer<void>();
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          if (!releaseUpdateRead.isCompleted) releaseUpdateRead.complete();
+        });
         const originalContent = 'graph TD\n  A-->B';
         const editedContent = 'graph TD\n  A-->C';
         final originalRecord = TextRecord(
@@ -834,6 +873,18 @@ void main() {
             initialCode: originalContent,
             existingRecord: originalRecord,
             initialShowPreview: false,
+            testOnlyAfterChartNameAllocation: (_) async {
+              // The chart-page reservation now reads the manifest before it
+              // writes the edited content. Invalidate again after that read
+              // so this failure still occurs during record update.
+              ManifestDatabase.invalidateWebDataCacheForTesting();
+              ManifestDatabase.beforeWebDataReadForTesting = () async {
+                ManifestDatabase.beforeWebDataReadForTesting = null;
+                updateReadStarted.complete();
+                await releaseUpdateRead.future;
+                throw StateError('simulated update failure');
+              };
+            },
           ),
         );
         await tester.pump();
@@ -847,15 +898,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
 
-        final updateReadStarted = Completer<void>();
-        final releaseUpdateRead = Completer<void>();
         ManifestDatabase.invalidateWebDataCacheForTesting();
-        ManifestDatabase.beforeWebDataReadForTesting = () async {
-          ManifestDatabase.beforeWebDataReadForTesting = null;
-          updateReadStarted.complete();
-          await releaseUpdateRead.future;
-          throw StateError('simulated update failure');
-        };
 
         await tester.tap(find.text('确定'));
         await tester.pump();
@@ -1168,6 +1211,119 @@ void main() {
         hasLength(2),
       );
     });
+
+    testWidgets(
+      'concurrent new charts in one folder get unique names and both save',
+      (tester) async {
+        const destinationFolder = 'chart-race-folder';
+        final firstNameAllocated = Completer<void>();
+        final secondFolderNameLockAttempted = Completer<void>();
+        final bothNamesAllocated = Completer<void>();
+        final releaseFirstNameAllocation = Completer<void>();
+        final bothManifestSavesStarted = Completer<void>();
+        final selectedNames = <String>[];
+        var manifestSaveCount = 0;
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          if (!releaseFirstNameAllocation.isCompleted) {
+            releaseFirstNameAllocation.complete();
+          }
+        });
+
+        Future<void> holdFirstNameAllocation(String name) async {
+          selectedNames.add(name);
+          firstNameAllocated.complete();
+          await releaseFirstNameAllocation.future;
+        }
+
+        Future<void> recordSecondNameAllocation(String name) async {
+          selectedNames.add(name);
+          if (selectedNames.length == 2) bothNamesAllocated.complete();
+        }
+
+        await TextManifest.addFolder(destinationFolder);
+        await tester.pumpWidget(
+          _buildConcurrentChartTestApp(
+            onFirstChartNameAllocation: holdFirstNameAllocation,
+            onSecondFolderNameLockAttempt: () {
+              secondFolderNameLockAttempted.complete();
+            },
+            onSecondChartNameAllocation: recordSecondNameAllocation,
+          ),
+        );
+        await tester.tap(find.byIcon(Icons.save).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.save).last);
+        await tester.pumpAndSettle();
+        expect(find.byType(FolderPickerDialog), findsNWidgets(2));
+
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          manifestSaveCount++;
+          if (manifestSaveCount == 2) bothManifestSavesStarted.complete();
+        };
+
+        await tester.tap(find.text(destinationFolder).first);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定').first);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.runAsync(
+          () => firstNameAllocated.future.timeout(
+            const Duration(seconds: 5),
+          ),
+        );
+
+        await tester.tap(find.text(destinationFolder).last);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.tap(find.text('确定').last);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.runAsync(
+          () async {
+            await secondFolderNameLockAttempted.future.timeout(
+              const Duration(seconds: 5),
+            );
+            await Future<void>.delayed(Duration.zero);
+          },
+        );
+        final secondNameSelectedBeforeFirstWasPublished =
+            selectedNames.length > 1;
+
+        releaseFirstNameAllocation.complete();
+        await tester.runAsync(() async {
+          await bothNamesAllocated.future.timeout(const Duration(seconds: 5));
+          await bothManifestSavesStarted.future.timeout(
+            const Duration(seconds: 5),
+          );
+          await Future<void>.delayed(Duration.zero);
+        });
+
+        expect(secondNameSelectedBeforeFirstWasPublished, isFalse);
+        expect(
+          selectedNames,
+          unorderedEquals(['我的图表-流程图', '我的图表-流程图 (2)']),
+        );
+        final savedRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(savedRecords, hasLength(2));
+        expect(
+          savedRecords.map((record) => record.name),
+          unorderedEquals(['我的图表-流程图', '我的图表-流程图 (2)']),
+        );
+        expect(
+          savedRecords.map((record) => record.folder),
+          everyElement(destinationFolder),
+        );
+        expect(
+          await Future.wait(
+            savedRecords
+                .map((record) => TextManifest.readText(record.storagePath)),
+          ),
+          unorderedEquals(['graph TD\n  A-->B', 'graph TD\n  A-->C']),
+        );
+      },
+    );
 
     testWidgets('saving an edited chart updates its existing record in place', (
       tester,

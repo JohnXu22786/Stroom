@@ -4206,6 +4206,80 @@ void main() {
     );
 
     testWidgets(
+      'allocates names from persisted records when the manifest cache is stale',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        ManifestDatabase.enableTestMode();
+        TextManifest.invalidateCache();
+
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+          TextManifest.invalidateCache();
+        });
+
+        // Prime TextManifest's in-memory snapshot before another writer adds a
+        // record directly to persisted storage.
+        expect(await TextManifest.loadRecords(), isEmpty);
+        final persistedRecord = TextRecord(
+          name: 'diagram',
+          hash: 'persisted-diagram-hash',
+          format: 'mmd',
+          createdAt: DateTime(2024),
+          size: 1,
+          folder: '',
+          textLength: 1,
+        );
+        await ManifestDatabase.insertRecordWithFolders(
+          recordTable: ManifestTables.textRecords,
+          record: persistedRecord.toMap(),
+          folderPaths: const [],
+        );
+
+        await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\n  A-->B'),
+        );
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+        );
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.enterText(fileNameField, 'diagram');
+        await tester.tap(find.text('根目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+
+        final savedRecords = (await TextManifest.loadRecordsUncached())
+            .where((record) => record.format == 'mmd')
+            .toList();
+        expect(savedRecords, hasLength(2));
+        expect(
+          savedRecords.map((record) => record.name),
+          unorderedEquals(['diagram', 'diagram (2)']),
+        );
+        final newRecord = savedRecords.singleWhere(
+          (record) => record.hash != persistedRecord.hash,
+        );
+        expect(newRecord.folder, isEmpty);
+        expect(
+          await TextManifest.readText(newRecord.storagePath),
+          'graph TD\n  A-->B',
+        );
+      },
+      skip: kIsWeb,
+    );
+
+    testWidgets(
       'shows folder lookup failure and unlocks a successful retry',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
