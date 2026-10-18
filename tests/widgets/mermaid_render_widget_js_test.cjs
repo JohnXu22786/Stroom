@@ -128,10 +128,30 @@ function extractMouseGestureScript(templateName, templateSource) {
 
 function createMouseGestureHarness(mouseGestureScript) {
   const listeners = new Map();
+  const parentListeners = new Map();
   const timers = new Map();
   const panUpdates = [];
   let nextTimerId = 0;
   let mermaidTargetClicks = 0;
+  const parentWindow = {
+    addEventListener: (type, listener, options) => {
+      const registered = parentListeners.get(type) || [];
+      registered.push({listener, options});
+      parentListeners.set(type, registered);
+    },
+    removeEventListener: (type, listener) => {
+      parentListeners.set(
+        type,
+        (parentListeners.get(type) || []).filter(
+          (registered) => registered.listener !== listener,
+        ),
+      );
+    },
+  };
+  const childWindow = {
+    parent: parentWindow,
+    addEventListener() {},
+  };
   const context = {
     document: {
       addEventListener: (type, listener, options) => {
@@ -140,7 +160,7 @@ function createMouseGestureHarness(mouseGestureScript) {
         listeners.set(type, registered);
       },
     },
-    window: {},
+    window: childWindow,
     panX: 0,
     panY: 0,
     zoomLevel: 1,
@@ -188,8 +208,20 @@ function createMouseGestureHarness(mouseGestureScript) {
     return {defaultPrevented, propagationStopped};
   }
 
+  function dispatchOutside(type, properties = {}) {
+    const event = {
+      preventDefault() {},
+      stopPropagation() {},
+      ...properties,
+    };
+    for (const {listener} of parentListeners.get(type) || []) {
+      listener(event);
+    }
+  }
+
   return {
     dispatch,
+    dispatchOutside,
     get mermaidTargetClicks() { return mermaidTargetClicks; },
     panUpdates,
     runPendingTimers() {
@@ -1735,6 +1767,29 @@ for (const [templateName, templateSource] of mouseGestureTargets) {
     assert.equal(harness.mermaidTargetClicks, 1);
   });
 }
+
+test('web and fullscreen inline mouse pan stops after release outside the iframe', () => {
+  const observedPanUpdates = [];
+  for (const [templateName, templateSource] of mouseGestureTargets) {
+    const harness = createMouseGestureHarness(
+      extractMouseGestureScript(templateName, templateSource),
+    );
+
+    harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+    harness.dispatch('mousemove', {clientX: 25, clientY: 40});
+    harness.dispatchOutside('mouseup');
+    harness.dispatch('mousemove', {clientX: 50, clientY: 60});
+    observedPanUpdates.push({templateName, updates: harness.panUpdates});
+  }
+
+  assert.deepEqual(
+    observedPanUpdates.map(({updates}) => updates),
+    [[[15, 20]], [[15, 20]]],
+    observedPanUpdates
+      .map(({templateName, updates}) => `${templateName}: ${JSON.stringify(updates)}`)
+      .join('; '),
+  );
+});
 
 test('web mouse click after slight pointer jitter reaches Mermaid', () => {
   const harness = createMouseGestureHarness(
