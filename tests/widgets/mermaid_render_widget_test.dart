@@ -898,10 +898,11 @@ void main() {
       await tester.pump();
       expect(fakeController.evaluatedScripts, isEmpty);
 
-      webView.params.onLoadStop?.call(
-        controller,
-        webView.params.initialData?.baseUrl,
-      );
+      final loadStopUrl = kIsWeb
+          ? fakeController.loadedUrls.last
+          : webView.params.initialData?.baseUrl;
+      expect(loadStopUrl, isNotNull);
+      webView.params.onLoadStop?.call(controller, loadStopUrl);
       await tester.pump();
 
       expect(fakeController.zoomLevel, 1.0);
