@@ -73,6 +73,22 @@
     var fitComplete = false;
     var pendingZoomOperations = [];
 
+    function zoomInputTimestamp() {
+      var performance = window.performance;
+      if (performance && typeof performance.timeOrigin === 'number' &&
+          typeof performance.now === 'function') {
+        return performance.timeOrigin + performance.now();
+      }
+      return Date.now();
+    }
+
+    function queuePendingZoomOperation(operation) {
+      if (typeof operation.inputTimestamp !== 'number') {
+        operation.inputTimestamp = zoomInputTimestamp();
+      }
+      pendingZoomOperations.push(operation);
+    }
+
     function updateTransform() {
       var container = document.getElementById('diagram-container');
       container.style.transform =
@@ -131,11 +147,15 @@
       updateTransform();
     };
 
-    window.applyZoomDeltasAfterFit = function(deltas) {
+    window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
       if (!fitComplete) {
         for (var i = 0; i < deltas.length; i++) {
-          pendingZoomOperations.push({delta: deltas[i], anchored: false});
+          queuePendingZoomOperation({
+            delta: deltas[i],
+            anchored: false,
+            inputTimestamp: inputTimestamp
+          });
         }
         return;
       }
@@ -149,13 +169,14 @@
       }
     };
 
-    window.applyWheelZoomAfterFit = function(delta, centerX, centerY) {
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
       if (!fitComplete) {
-        pendingZoomOperations.push({
+        queuePendingZoomOperation({
           delta: delta,
           anchored: true,
           centerX: centerX,
-          centerY: centerY
+          centerY: centerY,
+          inputTimestamp: inputTimestamp
         });
         return;
       }
@@ -171,10 +192,14 @@
           window.applyWheelZoomAfterFit(
             operation.delta,
             operation.centerX,
-            operation.centerY
+            operation.centerY,
+            operation.inputTimestamp
           );
         } else if (operation.kind === 'toolbar') {
-          window.applyZoomDeltasAfterFit([operation.delta]);
+          window.applyZoomDeltasAfterFit(
+            [operation.delta],
+            operation.inputTimestamp
+          );
         }
       }
     };
@@ -233,6 +258,9 @@
       fitComplete = true;
       var zoomOperations = pendingZoomOperations;
       pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        return a.inputTimestamp - b.inputTimestamp;
+      });
       for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
         var zoomOperation = zoomOperations[zoomIndex];
         if (zoomOperation.kind === 'touch-pan') {
@@ -386,7 +414,7 @@
         touchLastX = touchX;
         touchLastY = touchY;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pan',
             panDeltaX: panDeltaX,
             panDeltaY: panDeltaY
@@ -410,7 +438,7 @@
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pinch',
             scale: scale,
             centerX: centerX,
@@ -453,7 +481,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v14';
+    var TEMPLATE_VERSION = 'v15';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;

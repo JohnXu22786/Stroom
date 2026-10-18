@@ -306,13 +306,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=14&code='));
+      expect(url, contains('mermaid_render.html?v=15&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=14?')));
+      expect(url, isNot(contains('v=15?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '14',
+        'v': '15',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +336,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=14');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=15');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -740,7 +740,7 @@ void main() {
       expect(
         html,
         contains(
-          'window.applyWheelZoomAfterFit = function(delta, centerX, centerY)',
+          'window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp)',
         ),
         reason:
             'native programmatic wheel zoom support should remain available',
@@ -799,7 +799,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v14');
+      expect(templateVersion, 'v15');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -862,7 +862,11 @@ void main() {
       // The control is visible while loading, but its WebView controller has
       // not reported creation yet.
       expect(find.byIcon(Icons.zoom_in), findsOneWidget);
+      final firstTapTimestampLowerBound =
+          DateTime.now().microsecondsSinceEpoch / 1000.0;
       await tester.tap(find.byIcon(Icons.zoom_in));
+      final firstTapTimestampUpperBound =
+          DateTime.now().microsecondsSinceEpoch / 1000.0;
       await tester.pump();
       expect(
         fakeController.evaluatedScripts,
@@ -893,10 +897,27 @@ void main() {
       await tester.pump();
 
       expect(fakeController.zoomLevel, 1.0);
+      final queuedZoomScripts = fakeController.evaluatedScripts
+          .where((script) =>
+              script.contains('window.applyZoomOperationsAfterFit(['))
+          .toList();
+      expect(queuedZoomScripts, hasLength(1));
+      final queuedOperationsMatch = RegExp(
+        r'window\.applyZoomOperationsAfterFit\((\[[\s\S]*\])\)',
+      ).firstMatch(queuedZoomScripts.single);
+      expect(queuedOperationsMatch, isNotNull);
+      final queuedOperations =
+          (jsonDecode(queuedOperationsMatch!.group(1)!) as List)
+              .cast<Map<String, dynamic>>();
+      expect(queuedOperations, hasLength(3));
       expect(
-        fakeController.evaluatedScripts,
-        contains(predicate<String>((script) =>
-            script.contains('window.applyZoomDeltasAfterFit([0.1,0.1,0.1])'))),
+        queuedOperations.every((operation) => operation['inputTimestamp'] is num),
+        isTrue,
+      );
+      expect(
+        queuedOperations.first['inputTimestamp'],
+        inInclusiveRange(firstTapTimestampLowerBound, firstTapTimestampUpperBound),
+        reason: 'the queued command must retain its click time through the load delay',
       );
 
       // Load completion can precede Mermaid's asynchronous render and fit.
@@ -967,7 +988,7 @@ void main() {
       expect(
         fakeController.evaluatedScripts,
         contains(predicate<String>((script) =>
-            script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+            script.contains('window.applyZoomOperationsAfterFit(['))),
       );
 
       // Once the fallback exposes the preview, later taps must also reach
@@ -979,7 +1000,14 @@ void main() {
             .where((script) =>
                 script.contains('window.applyZoomDeltasAfterFit([0.1])'))
             .length,
-        2,
+        1,
+      );
+      expect(
+        fakeController.evaluatedScripts
+            .where((script) =>
+                script.contains('window.applyZoomOperationsAfterFit(['))
+            .length,
+        1,
       );
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -2648,7 +2676,7 @@ void main() {
         expect(
           webView.controller.evaluatedScripts,
           contains(predicate<String>((script) =>
-              script.contains('window.applyZoomDeltasAfterFit([0.1])'))),
+              script.contains('window.applyZoomOperationsAfterFit(['))),
         );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

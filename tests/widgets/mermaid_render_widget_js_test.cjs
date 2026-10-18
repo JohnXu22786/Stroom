@@ -566,12 +566,22 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
       /    var fitComplete = false;/,
       'fit state',
     );
+    const timestampHelper = extract(
+      /^    function zoomInputTimestamp\(\) \{[\s\S]*?^    \}/m,
+      'zoom input timestamp helper',
+      true,
+    );
+    const queueHelper = extract(
+      /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
+      'pending zoom queue helper',
+      true,
+    );
     const setZoom = extract(
       /    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
       'setZoom',
     );
     const applyWheelZoom = extract(
-      /    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      /    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
       'applyWheelZoomAfterFit',
       true,
     );
@@ -580,7 +590,7 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
       'applyZoomOperationsAfterFit',
     );
     const applyZoomDeltas = extract(
-      /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+      /    window\.applyZoomDeltasAfterFit = function\(deltas(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
       'applyZoomDeltasAfterFit',
     );
     const fit = extract(
@@ -615,7 +625,8 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
     };
 
     vm.runInNewContext(
-      [state, setZoom, applyWheelZoom, applyZoomOperations, applyZoomDeltas, fit]
+      [state, timestampHelper, queueHelper, setZoom, applyWheelZoom,
+        applyZoomOperations, applyZoomDeltas, fit]
         .filter(Boolean)
         .join('\n'),
       context,
@@ -704,6 +715,104 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
   assert.deepEqual(failures, []);
 });
 
+test('web toolbar zoom queued before iframe wheel keeps input order through fit', () => {
+  const extract = (pattern, description, optional = false) => {
+    const match = webTemplateSource.match(pattern);
+    if (optional && !match) return null;
+    assert.ok(match, `Could not find ${description} in the web template`);
+    return match[0];
+  };
+  const state = extract(
+    /^    var zoomLevel = 1;\s*var panX = 0;\s*var panY = 0;\s*var fitComplete = false;\s*var pendingZoomOperations = \[\];/m,
+    'zoom state',
+  );
+  const timestampHelper = extract(
+    /^    function zoomInputTimestamp\(\) \{[\s\S]*?^    \}/m,
+    'zoom input timestamp helper',
+    true,
+  );
+  const queueHelper = extract(
+    /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
+    'pending zoom queue helper',
+    true,
+  );
+  const setZoom = extract(
+    /^    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
+    'setZoom',
+  );
+  const applyWheelZoom = extract(
+    /^    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
+    'applyWheelZoomAfterFit',
+  );
+  const applyZoomDeltas = extract(
+    /^    window\.applyZoomDeltasAfterFit = function\(deltas(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
+    'applyZoomDeltasAfterFit',
+  );
+  const applyZoomOperations = extract(
+    /^    window\.applyZoomOperationsAfterFit = function\(operations\) \{[\s\S]*?^    \};/m,
+    'applyZoomOperationsAfterFit',
+  );
+  const fit = extract(
+    /^    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
+    'fitToViewport',
+  );
+  const viewport = {
+    clientWidth: 200,
+    clientHeight: 100,
+    getBoundingClientRect: () => ({left: 10, top: 20}),
+  };
+  const svg = {getBBox: () => ({width: 100, height: 50}), setAttribute: () => {}};
+  const container = {querySelector: () => svg};
+  const context = {
+    window: {performance: {timeOrigin: 1000, now: () => 20}},
+    document: {
+      getElementById: (id) =>
+        id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+    },
+    zoomLevel: 1,
+    panX: 0,
+    panY: 0,
+    fitComplete: false,
+    pendingZoomOperations: [],
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+
+  vm.runInNewContext(
+    [state, timestampHelper, queueHelper, setZoom, applyWheelZoom,
+      applyZoomDeltas, applyZoomOperations, fit].filter(Boolean).join('\n'),
+    context,
+  );
+  const handleWheel = vm.runInNewContext(
+    `(function(e) {${webWheelZoomHandler[1]}\n})`,
+    context,
+  );
+
+  // The first toolbar click is still queued in Dart when the iframe receives
+  // the later wheel event. onLoadStop then transfers that earlier click.
+  handleWheel({
+    ctrlKey: true,
+    deltaY: -10,
+    clientX: 160,
+    clientY: 100,
+    preventDefault: () => {},
+  });
+  context.window.applyZoomOperationsAfterFit([
+    {kind: 'toolbar', delta: 0.1, inputTimestamp: 1010},
+  ]);
+  assert.equal(context.zoomLevel, 1, 'both inputs must wait for the first fit');
+
+  context.window.fitToViewport();
+
+  assert.equal(context.zoomLevel, 2.2);
+  const anchor = (pan, center, oldZoom, newZoom) =>
+    center - (center - pan) * (newZoom / oldZoom);
+  const expectedPanX = anchor(anchor(0, 100, 2, 2.1), 150, 2.1, 2.2);
+  const expectedPanY = anchor(anchor(0, 50, 2, 2.1), 80, 2.1, 2.2);
+  assert.ok(Math.abs(context.panX - expectedPanX) < 1e-9);
+  assert.ok(Math.abs(context.panY - expectedPanY) < 1e-9);
+});
+
 test('native and web auto-fit contain diagrams that need less than 0.1 zoom', () => {
   for (const [templateName, fit] of [
     ['native', fitFunction],
@@ -761,10 +870,10 @@ test('manual zoom-out keeps sub-0.1 fitted diagrams at their fitted scale', () =
       /^    window\.setPanZoom = function\(x, y, level\) \{[\s\S]*?^    \};/m,
     );
     const applyZoomDeltas = templateSource.match(
-      /^    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+      /^    window\.applyZoomDeltasAfterFit = function\(deltas(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
     );
     const applyWheelZoom = templateSource.match(
-      /^    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      /^    window\.applyWheelZoomAfterFit = function\(delta, centerX, centerY(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
     );
     assert.ok(setZoom, `Could not find ${templateName} setZoom`);
     assert.ok(setPanZoom, `Could not find ${templateName} setPanZoom`);
@@ -1127,8 +1236,16 @@ test('native and web templates apply queued zoom after auto-fit', () => {
       'setZoom',
     );
     const applyAfterFit = extract(
-      /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+      /    window\.applyZoomDeltasAfterFit = function\(deltas(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
       'applyZoomDeltasAfterFit',
+    );
+    const timestampHelper = extract(
+      /^    function zoomInputTimestamp\(\) \{[\s\S]*?^    \}/m,
+      'zoom input timestamp helper',
+    );
+    const queueHelper = extract(
+      /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
+      'pending zoom queue helper',
     );
     const fit = extract(
       /    window\.fitToViewport = function\(\) \{[\s\S]*?^    \};/m,
@@ -1157,7 +1274,7 @@ test('native and web templates apply queued zoom after auto-fit', () => {
     };
 
     vm.runInNewContext(
-      `${state}\n${setZoom}\n${applyAfterFit}\n${fit}`,
+      `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyAfterFit}\n${fit}`,
       context,
     );
 
@@ -1192,7 +1309,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     'applyGestureTransformAfterFit',
   );
   const applyZoomDeltas = extract(
-    /    window\.applyZoomDeltasAfterFit = function\(deltas\) \{[\s\S]*?^    \};/m,
+    /    window\.applyZoomDeltasAfterFit = function\(deltas(?:, inputTimestamp)?\) \{[\s\S]*?^    \};/m,
     'applyZoomDeltasAfterFit',
   );
   const fit = extract(
@@ -1222,8 +1339,16 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     updateTransform: () => {},
     notifyTransform: () => {},
   };
+  const timestampHelper = extract(
+    /^    function zoomInputTimestamp\(\) \{[\s\S]*?^    \}/m,
+    'zoom input timestamp helper',
+  );
+  const queueHelper = extract(
+    /^    function queuePendingZoomOperation\(operation\) \{[\s\S]*?^    \}/m,
+    'pending zoom queue helper',
+  );
   vm.runInNewContext(
-    `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
     context,
   );
 
@@ -1270,7 +1395,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     notifyTransform: () => {},
   };
   vm.runInNewContext(
-    `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+    `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
     clampedContext,
   );
 
@@ -1299,7 +1424,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
       notifyTransform: () => {},
     };
     vm.runInNewContext(
-      `${state}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
+      `${state}\n${timestampHelper}\n${queueHelper}\n${setZoom}\n${applyGestureTransform}\n${applyZoomDeltas}\n${fit}`,
       targetContext,
     );
     return targetContext;

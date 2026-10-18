@@ -419,7 +419,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=14';
+    final base = '$webAssetTemplateUrl?v=15';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -541,6 +541,22 @@ MERMAID_CODE_PLACEHOLDER
     var activeNativeGestureId = null;
     var nativeGestureZoomLevel = 1;
 
+    function zoomInputTimestamp() {
+      var performance = window.performance;
+      if (performance && typeof performance.timeOrigin === 'number' &&
+          typeof performance.now === 'function') {
+        return performance.timeOrigin + performance.now();
+      }
+      return Date.now();
+    }
+
+    function queuePendingZoomOperation(operation) {
+      if (typeof operation.inputTimestamp !== 'number') {
+        operation.inputTimestamp = zoomInputTimestamp();
+      }
+      pendingZoomOperations.push(operation);
+    }
+
     function updateTransform() {
       var container = document.getElementById('diagram-container');
       container.style.transform =
@@ -609,7 +625,7 @@ MERMAID_CODE_PLACEHOLDER
     // establish its base zoom and center before replaying the gesture.
     window.applyGestureTransformAfterFit = function(gestureId, scale, panDeltaX, panDeltaY, centerX, centerY) {
       if (!fitComplete) {
-        pendingZoomOperations.push({
+        queuePendingZoomOperation({
           kind: 'gesture',
           gestureId: gestureId,
           scale: scale,
@@ -641,11 +657,15 @@ MERMAID_CODE_PLACEHOLDER
       notifyTransform();
     };
 
-    window.applyZoomDeltasAfterFit = function(deltas) {
+    window.applyZoomDeltasAfterFit = function(deltas, inputTimestamp) {
       if (!Array.isArray(deltas)) return;
       if (!fitComplete) {
         for (var i = 0; i < deltas.length; i++) {
-          pendingZoomOperations.push({delta: deltas[i], anchored: false});
+          queuePendingZoomOperation({
+            delta: deltas[i],
+            anchored: false,
+            inputTimestamp: inputTimestamp
+          });
         }
         return;
       }
@@ -659,13 +679,14 @@ MERMAID_CODE_PLACEHOLDER
       }
     };
 
-    window.applyWheelZoomAfterFit = function(delta, centerX, centerY) {
+    window.applyWheelZoomAfterFit = function(delta, centerX, centerY, inputTimestamp) {
       if (!fitComplete) {
-        pendingZoomOperations.push({
+        queuePendingZoomOperation({
           delta: delta,
           anchored: true,
           centerX: centerX,
-          centerY: centerY
+          centerY: centerY,
+          inputTimestamp: inputTimestamp
         });
         return;
       }
@@ -681,10 +702,14 @@ MERMAID_CODE_PLACEHOLDER
           window.applyWheelZoomAfterFit(
             operation.delta,
             operation.centerX,
-            operation.centerY
+            operation.centerY,
+            operation.inputTimestamp
           );
         } else if (operation.kind === 'toolbar') {
-          window.applyZoomDeltasAfterFit([operation.delta]);
+          window.applyZoomDeltasAfterFit(
+            [operation.delta],
+            operation.inputTimestamp
+          );
         }
       }
     };
@@ -745,6 +770,9 @@ MERMAID_CODE_PLACEHOLDER
       fitComplete = true;
       var zoomOperations = pendingZoomOperations;
       pendingZoomOperations = [];
+      zoomOperations.sort(function(a, b) {
+        return a.inputTimestamp - b.inputTimestamp;
+      });
       for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {
         var zoomOperation = zoomOperations[zoomIndex];
         if (zoomOperation.kind === 'gesture') {
@@ -919,7 +947,7 @@ MERMAID_LOADER_PLACEHOLDER
         touchLastX = touchX;
         touchLastY = touchY;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pan',
             panDeltaX: panDeltaX,
             panDeltaY: panDeltaY
@@ -943,7 +971,7 @@ MERMAID_LOADER_PLACEHOLDER
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
         if (!fitComplete) {
-          pendingZoomOperations.push({
+          queuePendingZoomOperation({
             kind: 'touch-pinch',
             scale: scale,
             centerX: centerX,
@@ -1047,8 +1075,12 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   double _zoomLevel = 1.0;
 
   /// Zoom inputs made before the WebView is ready to accept commands.
-  final List<({double delta, double? centerX, double? centerY})>
-      _pendingZoomOperations = [];
+  final List<({
+    double delta,
+    double? centerX,
+    double? centerY,
+    double inputTimestamp,
+  })> _pendingZoomOperations = [];
 
   /// Pan offset tracked on the Flutter side for mouse/trackpad gesture
   /// handling (desktop). Updated by [_onScaleUpdate] and sent to JS via
@@ -1492,6 +1524,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         delta: delta,
         centerX: centerX,
         centerY: centerY,
+        inputTimestamp: platform.mermaidZoomInputTimestamp,
       ));
       return;
     }
@@ -1699,6 +1732,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         delta: delta,
         centerX: null,
         centerY: null,
+        inputTimestamp: platform.mermaidZoomInputTimestamp,
       ));
       return;
     }
@@ -1727,29 +1761,23 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
     final pendingOperations = List.of(_pendingZoomOperations);
     _pendingZoomOperations.clear();
-    final hasWheelZoom = pendingOperations.any(
-      (operation) => operation.centerX != null && operation.centerY != null,
-    );
-    if (!hasWheelZoom) {
-      final pendingDeltas =
-          pendingOperations.map((operation) => operation.delta).toList();
-      await ctrl.evaluateJavascript(
-        source: 'window.applyZoomDeltasAfterFit(${jsonEncode(pendingDeltas)})',
-      );
-      return;
-    }
 
     final operations = pendingOperations.map<Map<String, Object?>>((operation) {
       final centerX = operation.centerX;
       final centerY = operation.centerY;
       if (centerX == null || centerY == null) {
-        return {'kind': 'toolbar', 'delta': operation.delta};
+        return {
+          'kind': 'toolbar',
+          'delta': operation.delta,
+          'inputTimestamp': operation.inputTimestamp,
+        };
       }
       return {
         'kind': 'wheel',
         'delta': operation.delta,
         'centerX': centerX,
         'centerY': centerY,
+        'inputTimestamp': operation.inputTimestamp,
       };
     }).toList();
     await ctrl.evaluateJavascript(
