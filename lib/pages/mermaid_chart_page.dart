@@ -491,10 +491,18 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             });
 
             if (hash != existingRecord.hash) {
-              await TextManifest.deleteFileIfUnreferenced(
-                existingRecord.hash,
-                existingRecord.storagePath,
-              );
+              try {
+                await TextManifest.deleteFileIfUnreferenced(
+                  existingRecord.hash,
+                  existingRecord.storagePath,
+                );
+              } catch (cleanupError) {
+                debugPrint(
+                  'Failed to clean up old Mermaid chart file '
+                  '${existingRecord.storagePath} after record update succeeded: '
+                  '$cleanupError',
+                );
+              }
             }
           }
 

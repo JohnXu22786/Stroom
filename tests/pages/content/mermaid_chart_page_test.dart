@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -79,6 +80,7 @@ Widget _buildConcurrentChartTestApp({
 Widget _buildSavedChartNavigationTestApp({
   required TextRecord record,
   required String content,
+  Future<void> Function(String name)? testOnlyAfterChartNameAllocation,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -92,6 +94,8 @@ Widget _buildSavedChartNavigationTestApp({
                     initialCode: content,
                     existingRecord: record,
                     initialShowPreview: false,
+                    testOnlyAfterChartNameAllocation:
+                        testOnlyAfterChartNameAllocation,
                   ),
                 ),
               ),
@@ -1637,6 +1641,90 @@ void main() {
         originalContent,
       );
     });
+
+    testWidgets(
+      'committed chart edit still succeeds when old-file cleanup fails',
+      (tester) async {
+        final cleanupLogs = <String>[];
+        final originalDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) {
+          if (message != null) cleanupLogs.add(message);
+        };
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+        });
+
+        const originalContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        late final TextRecord originalRecord;
+        late final String editedHash;
+        try {
+          originalRecord = await _addSavedMermaidChart(originalContent);
+          editedHash = computeTextHash(
+            Uint8List.fromList(utf8.encode(editedContent)),
+          );
+          await tester.pumpWidget(
+            _buildSavedChartNavigationTestApp(
+              record: originalRecord,
+              content: originalContent,
+              testOnlyAfterChartNameAllocation: (_) async {
+                ManifestDatabase.beforeWebDataSaveForTesting = () async {
+                  ManifestDatabase.beforeWebDataSaveForTesting = null;
+                  ManifestDatabase.beforeWebDataReadForTesting = () async {
+                    ManifestDatabase.beforeWebDataReadForTesting = null;
+                    throw StateError('simulated old-file cleanup failure');
+                  };
+                  ManifestDatabase.invalidateWebDataCacheForTesting();
+                };
+              },
+            ),
+          );
+          await tester.tap(find.text('Open saved chart'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField).first, editedContent);
+          await tester.pump();
+          await tester.tap(find.byIcon(Icons.save));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('根目录'));
+          await tester.pump(const Duration(milliseconds: 500));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('确定'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.pumpAndSettle();
+        } finally {
+          debugPrint = originalDebugPrint;
+        }
+
+        final savedRecord = (await TextManifest.loadRecordsUncached()).single;
+        expect(savedRecord.id, originalRecord.id);
+        expect(savedRecord.hash, editedHash);
+        expect(await TextManifest.readText('$editedHash.txt'), editedContent);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          originalContent,
+        );
+
+        // The update is already persisted despite the cleanup failure. It
+        // must not leave the editor open with a false save-error message.
+        expect(find.textContaining('保存失败:'), findsNothing);
+        expect(find.text('Open saved chart'), findsOneWidget);
+        expect(find.byType(MermaidChartPage), findsNothing);
+        expect(
+          cleanupLogs,
+          contains(
+            contains(
+              'Failed to clean up old Mermaid chart file '
+              '${originalRecord.storagePath}',
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     // ═══════════════════════════════════════════════════
     // Editor Mode Switching (UI only, no WebView)
