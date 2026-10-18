@@ -475,11 +475,12 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           appBar: AppBar(
             title: const Text('数学绘图'),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.center_focus_strong, size: 20),
-                tooltip: '重置视图',
-                onPressed: _onResetView,
-              ),
+              if (_currentView == ViewMode.mode2D)
+                IconButton(
+                  icon: const Icon(Icons.center_focus_strong, size: 20),
+                  tooltip: '重置视图',
+                  onPressed: _onResetView,
+                ),
             ],
           ),
           body: LayoutBuilder(
@@ -574,21 +575,40 @@ class _MathDrawingPageState extends State<MathDrawingPage>
     final parameterNames = _activeParameterNames.toList()..sort();
     final showParameters =
         _currentView == ViewMode.mode2D && parameterNames.isNotEmpty;
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-      shrinkWrap: true,
-      controller: _formulaScroll,
-      physics: const ClampingScrollPhysics(),
-      itemCount: _formulas.length + (showParameters ? 1 : 0),
-      itemBuilder: (_, index) => index < _formulas.length
-          ? _buildFormulaRow(cs, index)
-          : MathParameterControls(
-              key: const ValueKey('math-parameter-controls'),
-              parameters: {
-                for (final name in parameterNames) name: _parameters[name]!,
-              },
-              onChanged: _updateParameter,
-            ),
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+            shrinkWrap: true,
+            controller: _formulaScroll,
+            physics: const ClampingScrollPhysics(),
+            itemCount: _formulas.length + (showParameters ? 1 : 0),
+            itemBuilder: (_, index) => index < _formulas.length
+                ? _buildFormulaRow(cs, index)
+                : MathParameterControls(
+                    key: const ValueKey('math-parameter-controls'),
+                    parameters: {
+                      for (final name in parameterNames)
+                        name: _parameters[name]!,
+                    },
+                    onChanged: _updateParameter,
+                  ),
+          ),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: _buildActionButton(
+            icon: Icons.add_circle,
+            iconSize: 18,
+            color: cs.primary,
+            tooltip: '添加公式',
+            onPressed: _addFormula,
+          ),
+        ),
+      ],
     );
   }
 
@@ -652,10 +672,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
           ),
 
           // ---- Action buttons ----
-          // Each button carries a uniform 12px leading gap so the spacing
-          // stays identical whether or not a row shows the add/remove
-          // buttons. The 12px gap also matches the left side's gap between
-          // the color circle and the input, which is the intended rhythm.
+          // Each action button carries a uniform 12px leading gap. This also
+          // matches the left-side gap between the color circle and the input.
           _buildActionButton(
             icon: f.visible ? Icons.visibility : Icons.visibility_off,
             iconSize: 20,
@@ -663,16 +681,6 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             tooltip: f.visible ? '隐藏公式' : '显示公式',
             onPressed: () => _toggleVisibility(index),
           ),
-
-          // ---- Add formula (+) button (first row only) ----
-          if (index == 0)
-            _buildActionButton(
-              icon: Icons.add_circle,
-              iconSize: 18,
-              color: cs.primary,
-              tooltip: '添加公式',
-              onPressed: _addFormula,
-            ),
 
           // ---- Remove formula (X) button ----
           if (_formulas.length > 1)
@@ -738,29 +746,82 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   Widget _buildCanvas(ColorScheme cs) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: cs.outlineVariant, width: 0.5),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: MathCanvas(
-            key: _canvasKey,
-            initialExpression: null,
-            onReady: () => debugPrint('[MathDrawing] Canvas ready'),
-            onError: (msg) {
-              debugPrint('[MathDrawing] Canvas error: $msg');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(msg),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              }
-            },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.outlineVariant, width: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: MathCanvas(
+                  key: _canvasKey,
+                  initialExpression: null,
+                  onReady: () => debugPrint('[MathDrawing] Canvas ready'),
+                  onError: (msg) {
+                    debugPrint('[MathDrawing] Canvas error: $msg');
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(msg),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Column(
+              children: [
+                _floatingControl(
+                  icon: Icons.filter_center_focus,
+                  tooltip: '缩放至适合',
+                  onPressed: () => _canvasKey.currentState?.fitToView(),
+                ),
+                _floatingControl(
+                  icon: Icons.zoom_in,
+                  tooltip: '放大',
+                  onPressed: () => _canvasKey.currentState?.zoomIn(),
+                ),
+                _floatingControl(
+                  icon: Icons.zoom_out,
+                  tooltip: '缩小',
+                  onPressed: () => _canvasKey.currentState?.zoomOut(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _floatingControl({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        elevation: 2,
+        shape: const CircleBorder(),
+        child: IconButton(
+          icon: Icon(icon, size: 21),
+          tooltip: tooltip,
+          onPressed: onPressed,
+          style: IconButton.styleFrom(
+            fixedSize: const Size(40, 40),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
       ),

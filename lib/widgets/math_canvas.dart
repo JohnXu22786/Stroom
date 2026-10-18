@@ -173,6 +173,97 @@ class MathCanvasState extends State<MathCanvas> {
     widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
   }
 
+  /// Fit the plotted formulas into the current canvas.
+  Future<void> fitToView() async {
+    if (_canvasWidth <= 0 || _canvasHeight <= 0) return;
+
+    // Keep fitting to this finite domain, since expressions can be unbounded.
+    final fittedCurves = _formulaCurves
+        .map((curve) => _FormulaCurve(
+              formula: curve.formula,
+              polylines: _sampleCurve(
+                curve.formula,
+                includePanMargin: false,
+              ),
+            ))
+        .toList();
+    final points = fittedCurves
+        .expand((curve) => curve.polylines)
+        .expand((polyline) => polyline)
+        .where((point) =>
+            (point['x'] ?? double.nan).isFinite &&
+            (point['y'] ?? double.nan).isFinite);
+    var xMin = double.infinity;
+    var xMax = double.negativeInfinity;
+    var yMin = double.infinity;
+    var yMax = double.negativeInfinity;
+    for (final point in points) {
+      final x = point['x']!;
+      final y = point['y']!;
+      if (x < xMin) xMin = x;
+      if (x > xMax) xMax = x;
+      if (y < yMin) yMin = y;
+      if (y > yMax) yMax = y;
+    }
+    if (!xMin.isFinite || !xMax.isFinite || !yMin.isFinite || !yMax.isFinite) {
+      await resetView();
+      return;
+    }
+
+    final aspectRatio = _canvasWidth / _canvasHeight;
+    const padding = 1.1;
+    final xRange = dart_math.max(
+      dart_math.max(xMax - xMin, (yMax - yMin) * aspectRatio) * padding,
+      0.1,
+    ).toDouble();
+    final yRange = xRange / aspectRatio;
+    final centerX = (xMin + xMax) / 2;
+    final centerY = (yMin + yMax) / 2;
+    setState(() {
+      _xMin = centerX - xRange / 2;
+      _yMin = centerY - yRange / 2;
+      _xMax = centerX + xRange / 2;
+      _yMax = centerY + yRange / 2;
+      _formulaCurves
+        ..clear()
+        ..addAll(fittedCurves);
+    });
+    widget.onCoordinateUpdate?.call(curvePoints);
+    widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
+  }
+
+  /// Zoom toward the canvas center by one toolbar step.
+  void zoomIn() => _zoomByRangeFactor(1 / 1.2);
+
+  /// Zoom away from the canvas center by one toolbar step.
+  void zoomOut() => _zoomByRangeFactor(1.2);
+
+  void _zoomByRangeFactor(double factor, {Offset? focalPoint}) {
+    if (!factor.isFinite ||
+        factor <= 0 ||
+        _canvasWidth <= 0 ||
+        _canvasHeight <= 0) {
+      return;
+    }
+    final point = focalPoint ?? Offset(_canvasWidth / 2, _canvasHeight / 2);
+    final fx = _screenToMathX(point.dx);
+    final fy = _screenToMathY(point.dy);
+    final oldXRange = _xMax - _xMin;
+    final (oldYMin, oldYMax) = _effectiveYBounds();
+    final newXRange = oldXRange * factor;
+    final newYRange = (oldYMax - oldYMin) * factor;
+
+    setState(() {
+      _xMin = fx - (fx - _xMin) * factor;
+      _xMax = _xMin + newXRange;
+      _yMin = fy - (fy - oldYMin) * factor;
+      _yMax = _yMin + newYRange;
+      _resampleAll();
+    });
+    widget.onCoordinateUpdate?.call(curvePoints);
+    widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
+  }
+
   /// Set the viewport to specific bounds.
   Future<void> setViewport(
       double xMin, double yMin, double xMax, double yMax) async {
@@ -243,26 +334,31 @@ class MathCanvasState extends State<MathCanvas> {
   /// which comfortably accommodates normal interaction.
   static const double _renderMarginScale = 1.0;
 
-  /// Sample a single formula at the current viewport, extended by
+  /// Sample a formula at the current viewport, optionally extending it by
   /// [_renderMarginScale] on each side for smooth drag rendering.
   ///
   /// For explicit functions this returns a single polyline; for implicit
   /// equations it returns many short contour segments (marching squares).
-  List<List<Map<String, double>>> _sampleCurve(FormulaEntry formula) {
+  List<List<Map<String, double>>> _sampleCurve(
+    FormulaEntry formula, {
+    bool includePanMargin = true,
+  }) {
     if (!formula.isValid) return [];
     final parsed = formula.parsed!;
-    final marginX = (_xMax - _xMin) * _renderMarginScale;
+    final marginScale = includePanMargin ? _renderMarginScale : 0.0;
+    final marginX = (_xMax - _xMin) * marginScale;
     if (parsed.type == MathExpressionType.implicit) {
-      final marginY = (_yMax - _yMin) * _renderMarginScale;
+      final (effectiveYMin, effectiveYMax) = _effectiveYBounds();
+      final marginY = (effectiveYMax - effectiveYMin) * marginScale;
       // Contour segments — each is a short line across one grid cell.
       // Extend bounds and proportionally increase grid cells so that
       // contour detail remains consistent across the visible area.
-      final scale = 1.0 + 2.0 * _renderMarginScale; // e.g. 3.0 for 1.0 margin
+      final scale = 1.0 + 2.0 * marginScale;
       return parsed.sampleContourSegments(
         xMin: _xMin - marginX,
         xMax: _xMax + marginX,
-        yMin: _yMin - marginY,
-        yMax: _yMax + marginY,
+        yMin: effectiveYMin - marginY,
+        yMax: effectiveYMax + marginY,
         gridX: (80 * scale).round().clamp(80, 200),
         gridY: (80 * scale).round().clamp(80, 200),
       );
@@ -270,7 +366,7 @@ class MathCanvasState extends State<MathCanvas> {
     // Sample well beyond viewport bounds to ensure curves reach the
     // canvas edges during pan/zoom without visible holes in the graph.
     // With _renderMarginScale=1.0, this yields scalePoints=3.0 (3× points).
-    final scalePoints = 1.0 + 2.0 * _renderMarginScale;
+    final scalePoints = 1.0 + 2.0 * marginScale;
     final pts = parsed.samplePoints(
       xMin: _xMin - marginX,
       xMax: _xMax + marginX,
@@ -284,12 +380,12 @@ class MathCanvasState extends State<MathCanvas> {
   // ==================================================================
 
   void _onScaleStart(ScaleStartDetails details) {
-    _lastFocalPoint = details.focalPoint;
+    _lastFocalPoint = details.localFocalPoint;
     _lastScale = 1.0;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    final focalPoint = details.focalPoint;
+    final focalPoint = details.localFocalPoint;
     final scale = details.scale;
 
     // Calculate focal point in math coordinates before zoom
@@ -322,12 +418,13 @@ class MathCanvasState extends State<MathCanvas> {
       // Zoom: scale around focal point
       final scaleChange = scale / _lastScale!;
       final newXRange = (_xMax - _xMin) / scaleChange;
-      final newYRange = (_yMax - _yMin) / scaleChange;
+      final (effectiveYMin, effectiveYMax) = _effectiveYBounds();
+      final newYRange = (effectiveYMax - effectiveYMin) / scaleChange;
 
       setState(() {
         _xMin = fx - (fx - _xMin) / scaleChange;
         _xMax = _xMin + newXRange;
-        _yMin = fy - (fy - _yMin) / scaleChange;
+        _yMin = fy - (fy - effectiveYMin) / scaleChange;
         _yMax = _yMin + newYRange;
       });
     }
@@ -360,34 +457,12 @@ class MathCanvasState extends State<MathCanvas> {
 
   // Mouse wheel zoom
   void _onPointerSignal(PointerSignalEvent event) {
-    if (event is PointerScrollEvent) {
-      final scrollDelta = event.scrollDelta;
-      final focalPoint = event.localPosition;
+    if (event is! PointerScrollEvent) return;
 
-      final fx = _screenToMathX(focalPoint.dx);
-      final fy = _screenToMathY(focalPoint.dy);
-
-      // Scroll down (negative dy on some platforms / positive on others):
-      // we want scroll UP = zoom in, scroll DOWN = zoom out.
-      // Use + so that scrolling away from user (negative trackpad direction)
-      // results in zoom in (smaller factor = smaller viewport).
-      final zoomFactor = 1.0 + scrollDelta.dy * 0.001;
-      final clampedFactor = zoomFactor.clamp(0.1, 10.0);
-
-      final newXRange = (_xMax - _xMin) * clampedFactor;
-      final newYRange = (_yMax - _yMin) * clampedFactor;
-
-      setState(() {
-        _xMin = fx - (fx - _xMin) * clampedFactor;
-        _xMax = _xMin + newXRange;
-        _yMin = fy - (fy - _yMin) * clampedFactor;
-        _yMax = _yMin + newYRange;
-        _resampleAll();
-      });
-      final allPoints = curvePoints;
-      widget.onCoordinateUpdate?.call(allPoints);
-      widget.onViewportChange?.call(_xMin, _yMin, _xMax, _yMax);
-    }
+    // Scroll up zooms in; scroll down zooms out.
+    final zoomFactor = 1.0 + event.scrollDelta.dy * 0.001;
+    final clampedFactor = zoomFactor.clamp(0.1, 10.0).toDouble();
+    _zoomByRangeFactor(clampedFactor, focalPoint: event.localPosition);
   }
 
   // ==================================================================
@@ -399,7 +474,20 @@ class MathCanvasState extends State<MathCanvas> {
   }
 
   double _screenToMathY(double screenY) {
-    return (1.0 - screenY / _canvasHeight) * (_yMax - _yMin) + _yMin;
+    final (effectiveYMin, effectiveYMax) = _effectiveYBounds();
+    return (1.0 - screenY / _canvasHeight) *
+            (effectiveYMax - effectiveYMin) +
+        effectiveYMin;
+  }
+
+  /// Match the aspect-corrected vertical bounds used by [GraphPainter].
+  (double, double) _effectiveYBounds() {
+    if (_canvasWidth <= 0 || _canvasHeight <= 0) return (_yMin, _yMax);
+    final aspectRatio = _canvasWidth / _canvasHeight;
+    if (!aspectRatio.isFinite || aspectRatio <= 0) return (_yMin, _yMax);
+    final yRange = (_xMax - _xMin) / aspectRatio;
+    final yCenter = (_yMin + _yMax) / 2;
+    return (yCenter - yRange / 2, yCenter + yRange / 2);
   }
 
   // ==================================================================
