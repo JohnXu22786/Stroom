@@ -1705,7 +1705,7 @@ void main() {
               .onPressed,
           isNull,
         );
-        expect(find.widgetWithText(TextButton, '清空'), findsOneWidget);
+        expect(find.byKey(const Key('ocr_clear_button')), findsOneWidget);
       },
     );
 
