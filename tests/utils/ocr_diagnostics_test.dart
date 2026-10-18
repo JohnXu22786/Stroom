@@ -439,9 +439,32 @@ void main() {
   });
 
   test(
-    'legacy OCR exception refusal text is hidden while safe text remains',
+    'legacy OCR refusal text is hidden while known safe summaries remain',
     () {
       const refusal = 'Exception: OCR 请求被模型拒绝: 发票姓名张三，订单金额 1280 元';
+      const safeSummaries = [
+        'API 返回格式异常（非 JSON 对象）',
+        'API 返回了空的 choices 列表',
+        'API 返回中的 choice 格式异常',
+        'API 返回中的 finish_reason 格式异常',
+        'API 返回中缺少 message 字段',
+        'OCR 处理失败（_Exception）',
+        'OCR 处理失败（ArgumentError）',
+        'OCR 处理失败（RangeError）',
+        'OCR 处理失败（StateError）',
+        'OCR 处理失败（TypeError）',
+        'OCR 处理失败（TimeoutException）',
+        'OCR 处理失败（UnsupportedError）',
+        'OCR 未识别到文字内容',
+        'OCR 未识别到文字内容（content 列表为空）',
+        'OCR 返回了不支持的非文本 content block',
+        '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
+        'OCR request failed',
+        'OCR失败',
+        '上传超时',
+        '已取消',
+        '识别失败',
+      ];
 
       expect(
         OcrDiagnosticSnapshot.sanitizeStoredTaskError(refusal),
@@ -451,6 +474,15 @@ void main() {
         OcrDiagnosticSnapshot.sanitizeStoredTaskError('OCR 图片格式无法识别'),
         'OCR 图片格式无法识别',
       );
+      expect(
+        OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+          'OCR 处理失败（InvoiceForJaneDoe）',
+        ),
+        'OCR 错误详情已隐藏',
+      );
+      for (final summary in safeSummaries) {
+        expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
+      }
     },
   );
 
