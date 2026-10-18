@@ -2126,7 +2126,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // container — it sits directly on top of the render layer.
     return Stack(
       children: [
-        _buildRenderLayer(cs, effectiveHeight),
+        ExcludeSemantics(
+          excluding: _showSourceCode,
+          child: _buildRenderLayer(cs, effectiveHeight),
+        ),
         if (_showSourceCode)
           Positioned.fill(
             child: _buildSourceCodeView(cs, isDark, effectiveHeight),
