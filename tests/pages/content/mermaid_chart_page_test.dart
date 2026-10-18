@@ -153,7 +153,8 @@ void main() {
         await tester.pump();
 
         expect(tester.takeException(), isNull);
-        final textField = tester.widget<TextField>(find.byType(TextField).first);
+        final textField =
+            tester.widget<TextField>(find.byType(TextField).first);
         expect(textField.controller?.text, initialCode);
       },
     );

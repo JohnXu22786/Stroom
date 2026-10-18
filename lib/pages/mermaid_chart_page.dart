@@ -638,17 +638,19 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                 _insertSnippet(currentSnippet);
                               }
                             } else {
-                              final snippetToInsert = _selectedTypeId ==
-                                          'gitGraph' &&
-                                      label == '合并分支'
-                                  ? MermaidTemplates.getSnippets(
-                                      'gitGraph',
-                                      code: _codeController.text,
-                                    ).firstWhere(
-                                      (item) => item.$1 == label,
-                                      orElse: () => (label, ''),
-                                    ).$2
-                                  : snippet;
+                              final snippetToInsert =
+                                  _selectedTypeId == 'gitGraph' &&
+                                          label == '合并分支'
+                                      ? MermaidTemplates.getSnippets(
+                                          'gitGraph',
+                                          code: _codeController.text,
+                                        )
+                                          .firstWhere(
+                                            (item) => item.$1 == label,
+                                            orElse: () => (label, ''),
+                                          )
+                                          .$2
+                                      : snippet;
                               if (snippetToInsert.isNotEmpty) {
                                 _insertSnippet(snippetToInsert);
                               }
