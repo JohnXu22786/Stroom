@@ -54,6 +54,7 @@ class _MermaidPreviewDialogContentState
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _webNavigationTimedOut = false;
   double _zoomLevel = 1.0;
   bool _canApplyZoomDeltasAfterFit = false;
   bool _checkingZoomReadiness = false;
@@ -68,10 +69,9 @@ class _MermaidPreviewDialogContentState
   String? _inlineMermaidJs;
   bool _mermaidJsLoading = true;
 
-  /// Fallback timer that force-ends the loading state if [onLoadStop] never
-  /// fires (e.g. the web platform's iframe load event or its JS bridge is
-  /// unavailable). Without it the loading overlay could spin forever while
-  /// the WebView actually rendered (or failed to render) underneath.
+  /// Fallback timer that settles the preview if [onLoadStop] never fires.
+  /// Web shows an error because it does not use the Flutter loading overlay;
+  /// native platforms end their loading overlay as before.
   Timer? _readyFallbackTimer;
   Timer? _zoomReadinessRetryTimer;
 
@@ -115,8 +115,8 @@ class _MermaidPreviewDialogContentState
   }
 
   /// Arms a timeout once the WebView is eligible to mount. It reports a
-  /// visible error if no controller is created, or ends the loading overlay
-  /// if a created WebView never fires [onLoadStop].
+  /// visible error if no controller is created, or settles navigation if a
+  /// created WebView never fires [onLoadStop].
   void _armReadyFallback() {
     _readyFallbackTimer?.cancel();
     _readyFallbackTimer = Timer(const Duration(seconds: 3), () {
@@ -126,6 +126,14 @@ class _MermaidPreviewDialogContentState
         setState(() {
           _isLoading = false;
           _hasError = true;
+        });
+      } else if (kIsWeb && !_hasError) {
+        debugPrint('[MermaidPreviewDialog] web navigation did not settle '
+            'within 3s');
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _webNavigationTimedOut = true;
         });
       } else if (_isLoading) {
         debugPrint('[MermaidPreviewDialog] onLoadStop did not fire within '
@@ -380,18 +388,17 @@ class _MermaidPreviewDialogContentState
                     setState(() {
                       _hasError = false;
                       _isLoading = !kIsWeb;
+                      _webNavigationTimedOut = false;
                     });
                   }
                   if (_pendingZoomDeltas.isNotEmpty) {
                     unawaited(_checkZoomReadiness());
                   }
-                  // Give a created native WebView its own load-stop fallback
-                  // window, separate from the deadline for platform creation.
-                  if (!kIsWeb) _armReadyFallback();
-                  // On web the iframe manages its own loading state (the
-                  // asset template shows a hint until the diagram renders),
-                  // so the dialog is immediately ready and no fallback
-                  // timer is armed — the diagram appears when rendered.
+                  // Give a created WebView its own navigation deadline,
+                  // separate from the deadline for platform creation.
+                  _armReadyFallback();
+                  // On web the iframe manages its loading state; the fallback
+                  // reports an error only if navigation never settles.
                   if (kIsWeb) {
                     _isLoading = false;
                     _loadCode();
@@ -406,7 +413,10 @@ class _MermaidPreviewDialogContentState
                       handlerName: 'onMermaidError',
                       callback: (args) {
                         if (mounted) {
-                          setState(() => _hasError = true);
+                          setState(() {
+                            _hasError = true;
+                            _webNavigationTimedOut = false;
+                          });
                         }
                       },
                     );
@@ -435,7 +445,13 @@ class _MermaidPreviewDialogContentState
                   _canApplyZoomDeltasAfterFit = true;
                   unawaited(_flushPendingZoomDeltas(ctrl));
                   if (mounted) {
-                    setState(() => _isLoading = false);
+                    setState(() {
+                      _isLoading = false;
+                      if (kIsWeb && _webNavigationTimedOut) {
+                        _hasError = false;
+                        _webNavigationTimedOut = false;
+                      }
+                    });
                   }
                 },
                 onReceivedError: (controller, request, error) {
@@ -447,6 +463,7 @@ class _MermaidPreviewDialogContentState
                     setState(() {
                       _isLoading = false;
                       _hasError = true;
+                      _webNavigationTimedOut = false;
                     });
                   }
                 },
