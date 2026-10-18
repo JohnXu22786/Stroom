@@ -3457,6 +3457,58 @@ void main() {
     );
 
     testWidgets(
+      'nonempty web source update retries after WebView creation timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final timedOutWebViewElement =
+            tester.element(find.byType(InAppWebView));
+        const creationError = '图表渲染引擎初始化失败，请重试';
+        await tester.pump(const Duration(seconds: 12));
+        expect(find.text(creationError), findsOneWidget);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nC-->D'),
+            ),
+          ),
+        );
+
+        expect(find.text(creationError), findsNothing);
+        expect(
+          tester.element(find.byType(InAppWebView)),
+          isNot(same(timedOutWebViewElement)),
+          reason: 'a nonempty source update after a creation timeout must '
+              'remount the WebView',
+        );
+
+        await tester.pump(const Duration(seconds: 12));
+        expect(
+          find.text(creationError),
+          findsOneWidget,
+          reason: 'the remounted WebView must get a fresh creation deadline',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
       'retry after WebView creation timeout mounts a fresh platform view',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;

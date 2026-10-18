@@ -1211,6 +1211,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       final wasShowingWebSource = kIsWeb && _showSourceCode;
       final hasNonEmptyCode = widget.mermaidCode.trim().isNotEmpty;
       final wasEmptyCode = oldWidget.mermaidCode.trim().isEmpty;
+      final shouldRetryWebViewCreation = kIsWeb &&
+          hasNonEmptyCode &&
+          _hasWebViewCreationTimeoutError &&
+          _webViewController == null;
       final isPendingWebRetry = kIsWeb &&
           !_isReady &&
           _webViewController != null &&
@@ -1238,7 +1242,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // retained-view retry instead keeps Flutter's overlay until its
       // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb || shouldRearmWebRetry || !hasNonEmptyCode) {
+      if (!kIsWeb ||
+          shouldRearmWebRetry ||
+          shouldRetryWebViewCreation ||
+          !hasNonEmptyCode) {
         _isReady = false;
       }
       _hasLoadedPage = false;
@@ -1260,6 +1267,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         _webRetryUrl = null;
         _isReady = false;
       }
+      if (shouldRetryWebViewCreation) {
+        // The creation fallback reported a failed mount while no controller
+        // existed. A source update starts a fresh WebView creation attempt.
+        _webViewKey = UniqueKey();
+      }
       if (!kIsWeb &&
           defaultTargetPlatform != TargetPlatform.windows &&
           hasNonEmptyCode &&
@@ -1271,7 +1283,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       }
       _loadMermaidCode();
       if (hasNonEmptyCode &&
-          (wasShowingWebSource || (kIsWeb && wasEmptyCode))) {
+          (wasShowingWebSource ||
+              (kIsWeb && (wasEmptyCode || shouldRetryWebViewCreation)))) {
         _armWebViewCreationFallback();
       }
     }
