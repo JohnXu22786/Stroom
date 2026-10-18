@@ -334,6 +334,16 @@ void main() {
 
   test('failed empty per-image batch stays incomplete', () async {
     final emptyFailedAdapter = _OutOfOrderAdapter();
+    var partialSaveWrites = 0;
+    Future<String> writePartialText(
+      String name,
+      String text, {
+      void Function()? beforeCommit,
+    }) async {
+      partialSaveWrites++;
+      return TextManifest.writeText(name, text, beforeCommit: beforeCommit);
+    }
+
     final emptyFailedRunner = OcrTaskRunner(
       taskId: id,
       notifier: notifier,
@@ -350,7 +360,7 @@ void main() {
         config: config,
         dio: Dio()..httpClientAdapter = emptyFailedAdapter,
       ),
-      writeText: TextManifest.writeText,
+      writeText: writePartialText,
       onSaved: () {},
     );
 
@@ -372,6 +382,24 @@ void main() {
       OcrPageOutcomeStatus.failed,
       OcrPageOutcomeStatus.failed,
     ]);
+
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: 'captured folder',
+      onSaved: () {},
+      writeText: writePartialText,
+    );
+    await expectLater(
+      saver.retryTaskResult(allowPartial: true),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(partialSaveWrites, 0);
+    expect(await TextManifest.loadRecords(), isEmpty);
+    expect(notifier.state.single.status, TaskStatus.failed);
+    expect(notifier.state.single.downloadedFilePath, isNull);
   });
 
   test('queued per-image requests prevent aggregate stages from completing',
