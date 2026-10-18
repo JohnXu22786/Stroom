@@ -143,7 +143,7 @@ class MermaidTemplates {
   /// Assigns an unused ID to a subgraph declared in a flowchart snippet.
   static String assignUniqueFlowchartSubgraphId(String code, String snippet) {
     final subgraphIdPattern = RegExp(
-      r'^[ \t]*subgraph[ \t]+(\S+)',
+      r'(?:^|;)[ \t]*subgraph[ \t]+([^\s;\[]+)',
       multiLine: true,
     );
     final snippetSubgraphId = subgraphIdPattern.firstMatch(snippet);
@@ -151,9 +151,9 @@ class MermaidTemplates {
 
     final existingIds = <String>{};
     for (final line in code.split('\n')) {
-      if (line.trimLeft().startsWith('%%')) continue;
-      final existingSubgraphId = subgraphIdPattern.firstMatch(line);
-      if (existingSubgraphId != null) {
+      final flowchartSyntax = line.split('%%').first;
+      for (final existingSubgraphId
+          in subgraphIdPattern.allMatches(flowchartSyntax)) {
         existingIds.add(existingSubgraphId[1]!);
       }
     }
