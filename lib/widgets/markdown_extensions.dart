@@ -830,7 +830,7 @@ bool _isParagraphBoundaryLine(
       _thematicBreakLine.hasMatch(line)) {
     return true;
   }
-  return paragraphOpen && RegExp(r'^ {0,3}(?:=+|-+)[ \t]*$').hasMatch(line);
+  return paragraphOpen && RegExp(r'^ {0,3}(?:=+|-+)\s*$').hasMatch(line);
 }
 
 bool _isMarkdownBlankLine(String line) {
