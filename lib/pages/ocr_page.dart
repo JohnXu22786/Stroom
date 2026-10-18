@@ -507,10 +507,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               !_isRetryImagesLoading &&
               (!_hasReusablePageResults || _retryImagesUnavailable) &&
               !_reorderMode)
-            TextButton.icon(
+            IconButton(
+              key: const Key('ocr_clear_button'),
+              tooltip: '清空',
               onPressed: _clearAll,
-              icon: const Icon(Icons.clear_all, size: 18),
-              label: const Text('清空'),
+              icon: const Icon(Icons.delete_outline),
             ),
         ],
       ),
@@ -2122,39 +2123,44 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Future<void> _clearAll() async {
-    final resetReusableResults =
-        _retryImagesUnavailable && _hasReusablePageResults;
     if (_isProcessing ||
         _isRetryImagesLoading ||
-        (_hasReusablePageResults && !resetReusableResults)) {
+        (_hasReusablePageResults && !_retryImagesUnavailable)) {
       return;
     }
     final imageCountUnknown = _retryImageCountUnknown;
-    if (imageCountUnknown) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          key: const Key('ocr_unknown_retry_reset_dialog'),
-          title: const Text('无法确认原图片数量'),
-          content: const Text(
-            '原始 OCR 图片缓存不可用，且图片数量无法恢复。确认后会清空旧重试状态，请重新选择本次 OCR 的全部图片。',
-          ),
-          actions: [
-            TextButton(
-              key: const Key('ocr_cancel_unknown_retry_reset'),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              key: const Key('ocr_confirm_unknown_retry_reset'),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认重置并重新选择'),
-            ),
-          ],
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('ocr_clear_confirmation_dialog'),
+        title: Text(imageCountUnknown ? '无法确认原图片数量' : '确认清空'),
+        content: Text(
+          imageCountUnknown
+              ? '原始 OCR 图片缓存不可用，且图片数量无法恢复。确认后会清空旧重试状态，请重新选择本次 OCR 的全部图片。'
+              : '确定清空已选择的 OCR 图片吗？',
         ),
-      );
-      if (!mounted || confirmed != true) return;
+        actions: [
+          TextButton(
+            key: const Key('ocr_cancel_clear'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('ocr_confirm_clear'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(imageCountUnknown ? '确认重置并重新选择' : '确认清空'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+    if (_isProcessing ||
+        _isRetryImagesLoading ||
+        (_hasReusablePageResults && !_retryImagesUnavailable)) {
+      return;
     }
+    final resetReusableResults =
+        _retryImagesUnavailable && _hasReusablePageResults;
     _imageImportGeneration++;
     setState(() {
       _selectedImages.clear();

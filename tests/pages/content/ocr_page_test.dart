@@ -135,6 +135,13 @@ Widget _buildTestApp({
   );
 }
 
+Future<void> _tapClearAndConfirm(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('ocr_clear_button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
+  await tester.pumpAndSettle();
+}
+
 class _InspectableBackgroundTaskNotifier extends BackgroundTaskNotifier {
   List<BackgroundTask> get tasksForTest => state;
 
@@ -866,6 +873,39 @@ void main() {
       }
     });
 
+    testWidgets('clear action is icon-only and confirms before clearing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImages: [_createValidOcrTestImage()],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+      expect(find.text('清空'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('ocr_clear_confirmation_dialog')),
+        findsOneWidget,
+      );
+      expect(find.text('确定清空已选择的 OCR 图片吗？'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('ocr_cancel_clear')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 张图片'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 张图片'), findsNothing);
+    });
+
     testWidgets('unknown retry image count requires explicit input reset', (
       tester,
     ) async {
@@ -877,6 +917,13 @@ void main() {
           entries: [_createOcrEntry(withModels: true)],
           testImages: [_createValidOcrTestImage()],
           retryTaskId: 'failed-ocr-task',
+          retryPageOutcomes: const [
+            OcrPageOutcome(
+              imageIndex: 0,
+              status: OcrPageOutcomeStatus.succeeded,
+              text: 'reusable OCR result',
+            ),
+          ],
           backgroundTasksNotifier: notifier,
           testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
             gallerySelections++;
@@ -905,14 +952,21 @@ void main() {
       );
       expect(startButton.onPressed, isNull);
 
-      await tester.tap(find.text('清空'));
+      await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
       expect(
-        find.byKey(const Key('ocr_unknown_retry_reset_dialog')),
+        find.byKey(const Key('ocr_clear_confirmation_dialog')),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const Key('ocr_cancel_unknown_retry_reset')));
+      expect(
+        find.text(
+          '原始 OCR 图片缓存不可用，且图片数量无法恢复。确认后会清空旧重试状态，请重新选择本次 OCR 的全部图片。',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('ocr_cancel_clear')));
       await tester.pumpAndSettle();
+      expect(find.text('已选 1 张图片'), findsOneWidget);
       startButton = tester.widget<FilledButton>(
         find.ancestor(
           of: find.text('开始识别'),
@@ -920,14 +974,28 @@ void main() {
         ),
       );
       expect(startButton.onPressed, isNull);
-
-      await tester.tap(find.text('清空'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const Key('ocr_confirm_unknown_retry_reset')),
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.widgetWithText(ElevatedButton, '拍照识别'),
+            )
+            .onPressed,
+        isNull,
       );
+
+      await tester.tap(find.byIcon(Icons.delete_outline));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
       await tester.pumpAndSettle();
       expect(find.text('已选 1 张图片'), findsNothing);
+      expect(
+        tester
+            .widget<ElevatedButton>(
+              find.widgetWithText(ElevatedButton, '拍照识别'),
+            )
+            .onPressed,
+        isNotNull,
+      );
       expect(notifier.tasksForTest, isEmpty);
 
       await tester.tap(find.text('相册选择'));
@@ -1163,8 +1231,7 @@ void main() {
           await tester.pump();
           expect(notifier.tasksForTest, isEmpty);
 
-          await tester.tap(find.text('清空'));
-          await tester.pumpAndSettle();
+          await _tapClearAndConfirm(tester);
 
           Future<void> selectOneImage() async {
             await tester.tap(find.text('相册选择'));
@@ -1266,9 +1333,8 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(find.text('已选 1 张图片'), findsOneWidget);
-          expect(find.text('清空'), findsOneWidget);
-          await tester.tap(find.text('清空'));
-          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('ocr_clear_button')), findsOneWidget);
+          await _tapClearAndConfirm(tester);
 
           Future<void> selectOneImage() async {
             await tester.tap(find.text('相册选择'));
@@ -1372,11 +1438,13 @@ void main() {
         ]);
         await _pumpUntil(tester, () => importPreparationStarted.isCompleted);
 
-        await tester.tap(find.text('清空'));
+        await tester.tap(find.byKey(const Key('ocr_clear_button')));
         await tester.pump();
         finishImportPreparation.complete(
           prepareOcrImagePayloadSync(replacementBytes),
         );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
         await tester.pumpAndSettle();
 
         expect(find.text('已选 1 张图片'), findsNothing);
@@ -1437,11 +1505,13 @@ void main() {
         );
         await _pumpUntil(tester, () => importPreparationStarted.isCompleted);
 
-        await tester.tap(find.text('清空'));
+        await tester.tap(find.byKey(const Key('ocr_clear_button')));
         await tester.pump();
         finishImportPreparation.complete(
           prepareOcrImagePayloadSync(replacementBytes),
         );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
         await tester.pumpAndSettle();
 
         expect(find.text('已选 1 张图片'), findsNothing);
@@ -1551,8 +1621,7 @@ void main() {
           );
           expect(notifier.tasksForTest, isEmpty);
 
-          await tester.tap(find.text('清空'));
-          await tester.pumpAndSettle();
+          await _tapClearAndConfirm(tester);
 
           Future<void> selectOneImage() async {
             await tester.tap(find.text('相册选择'));
@@ -1636,7 +1705,7 @@ void main() {
               .onPressed,
           isNull,
         );
-        expect(find.widgetWithText(TextButton, '清空'), findsOneWidget);
+        expect(find.byKey(const Key('ocr_clear_button')), findsOneWidget);
       },
     );
 
@@ -2695,7 +2764,9 @@ void main() {
       await tester.pump();
       await validationStarted.future;
 
-      await tester.tap(find.text('清空'));
+      await tester.tap(find.byKey(const Key('ocr_clear_button')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
       await tester.pump();
       finishValidation.complete();
       await tester.pump();
@@ -3257,15 +3328,15 @@ void main() {
       await tester.pumpWidget(_buildTestApp(testImages: images));
       await tester.pumpAndSettle();
 
-      // Clear button visible initially
-      expect(find.text('清空'), findsOneWidget);
+      // Clear action visible initially
+      expect(find.byKey(const Key('ocr_clear_button')), findsOneWidget);
 
       // Enter reorder mode via sort button
       await tester.tap(find.byKey(const Key('ocr_sort_btn')));
       await tester.pumpAndSettle();
 
       // Clear button should be hidden during reorder mode
-      expect(find.text('清空'), findsNothing);
+      expect(find.byKey(const Key('ocr_clear_button')), findsNothing);
     });
 
     testWidgets(
@@ -3348,7 +3419,9 @@ void main() {
       await tester.pumpAndSettle();
       await validationStarted.future;
 
-      await tester.tap(find.text('清空'));
+      await tester.tap(find.byKey(const Key('ocr_clear_button')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('ocr_confirm_clear')));
       await tester.pump();
       finishValidation.complete();
       await tester.pump();
