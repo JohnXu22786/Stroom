@@ -1517,6 +1517,10 @@ class BackupService {
         if (value.startsWith('attachments/')) {
           return '$_portableAppDataPathPrefix$value';
         }
+        if (value.startsWith('task_flow_temporary/') &&
+            _isSafeRelativeArchivePath(value)) {
+          return '$_portableAppDataPathPrefix$value';
+        }
         if (value.startsWith('temp_edited/')) {
           return '$_portableAppDataPathPrefix'
               'attachments/${p.posix.basename(value)}';
