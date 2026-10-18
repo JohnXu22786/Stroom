@@ -141,6 +141,92 @@ void main() {
     expect(state.pointDragMode, PointDragMode.height);
   });
 
+  testWidgets(
+      'moving a source point updates its solid and deleting it preserves the solid',
+      (tester) async {
+    final state = await setup(tester);
+    const first = Point3D(-2, 0, 0);
+    const second = Point3D(-1, 0, 0);
+    state.setObjects([
+      const Object3D.point(first, label: 'A'),
+      const Object3D.point(second, label: 'B'),
+    ]);
+    state.setTool(ConstructionTool.tetrahedron);
+    await tester.pump();
+
+    await tester.tapAt(screen(state, first));
+    await tester.pump();
+    await tester.tapAt(screen(state, second));
+    await tester.pump();
+
+    final initialSolid = state.objects.last;
+    expect(initialSolid.type, Object3DType.polyhedron);
+    expect(initialSolid.vertices[0], first);
+    expect(initialSolid.vertices[1], second);
+
+    state.setTool(ConstructionTool.move);
+    await tester.pump();
+    await tester.dragFrom(screen(state, first), const Offset(-45, 24));
+    await tester.pump();
+
+    final movedPoint = state.objects[0].point;
+    final movedSolid = state.objects.last;
+    expect(movedPoint.distanceTo(first), greaterThan(0.1));
+    expect(movedSolid.vertices[0], movedPoint);
+    expect(movedSolid.vertices[2].distanceTo(initialSolid.vertices[2]),
+        greaterThan(0.1));
+
+    state.setTool(ConstructionTool.deleteObject);
+    await tester.pump();
+    await tester.tapAt(screen(state, movedPoint));
+    await tester.pump();
+
+    expect(state.objects, hasLength(2));
+    expect(
+      state.objects.any(
+        (object) =>
+            object.type == Object3DType.point && object.point == movedPoint,
+      ),
+      isFalse,
+    );
+    final preservedSolid = state.objects.singleWhere(
+      (object) => object.type == Object3DType.polyhedron,
+    );
+    expect(preservedSolid.vertices, movedSolid.vertices);
+  });
+
+  testWidgets('a snapped solid vertex can begin a later construction',
+      (tester) async {
+    final state = await setup(tester);
+    const vertex = Point3D(-2, 0, 0);
+    state.setObjects([
+      Object3D.polyhedron(
+        vertices: const [
+          vertex,
+          Point3D(-1, 0, 0),
+          Point3D(-2, 1, 0),
+          Point3D(-2, 0, 1),
+        ],
+        indices: const [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+      ),
+    ]);
+    state.setTool(ConstructionTool.segment);
+    await tester.pump();
+
+    await tester.tapAt(screen(state, vertex));
+    await tester.pump();
+    expect(state.constructionState!.points, [vertex]);
+
+    const endpoint = Point3D(2, 2, 0);
+    await tester.tapAt(screen(state, endpoint));
+    await tester.pump();
+
+    final segment = state.objects.singleWhere(
+      (object) => object.type == Object3DType.line,
+    );
+    expect([segment.pointA, segment.pointB], contains(vertex));
+  });
+
   testWidgets('visible points beyond the parallel camera remain editable',
       (tester) async {
     final state = await setup(tester);

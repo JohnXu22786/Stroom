@@ -227,6 +227,23 @@ enum PointDragMode { plane, height }
 
 enum _NavigationGesture { none, orbit, pan }
 
+class _SolidSourceDependency {
+  final ConstructionTool tool;
+  final List<Point3D> points;
+  final List<int?> sourcePointIndices;
+  final Vector3D workingPlaneNormal;
+  final int polygonSides;
+
+  _SolidSourceDependency({
+    required this.tool,
+    required List<Point3D> points,
+    required List<int?> sourcePointIndices,
+    required this.workingPlaneNormal,
+    required this.polygonSides,
+  })  : points = List.of(points),
+        sourcePointIndices = List.of(sourcePointIndices);
+}
+
 enum _ViewAction {
   toggleAxes,
   togglePlane,
@@ -298,6 +315,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   final List<Object3D> _objects = [];
   int _objectsVersion = 0;
   final Map<int, int> _pointAttachments = {};
+  final Map<int, _SolidSourceDependency> _solidSourceDependencies = {};
   int? _styleSourceIndex;
   int? _intersectionSourceIndex;
   int? _pointIntersectionSourceIndex;
@@ -310,6 +328,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   // Construction state
   ConstructionState? _construction;
   Object3D? _constructionPreview;
+  final List<int?> _constructionPointSources = [];
   ConstructionTool _currentTool = ConstructionTool.move;
 
   // Construction gesture tracking (for 3D point placement with height)
@@ -653,6 +672,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _pointEditPointer = null;
       if (!preservesExistingObjects) {
         _pointAttachments.clear();
+        _solidSourceDependencies.clear();
         _attachmentPointIndex = null;
         _styleSourceIndex = null;
         _intersectionSourceIndex = null;
@@ -672,6 +692,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       _selectedPointIndex = null;
       _pointEditPointer = null;
       _pointAttachments.clear();
+      _solidSourceDependencies.clear();
       _attachmentPointIndex = null;
       _styleSourceIndex = null;
       _intersectionSourceIndex = null;
@@ -730,12 +751,14 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       if (ToolInfo.all[tool]!.behavior != ToolBehavior.construction) {
         _construction = null;
         _constructionPreview = null;
+        _constructionPointSources.clear();
       } else {
         _construction = ConstructionState(
           tool: tool,
           polygonSides: widget.polygonSides,
         );
         _constructionPreview = null;
+        _constructionPointSources.clear();
       }
       _constPointPlaced = false;
       _constGroundPos = null;
@@ -3306,6 +3329,24 @@ class MathCanvas3DState extends State<MathCanvas3D> {
 
   void _removeObjectAt(int index) {
     setState(() {
+      final dependencies = <int, _SolidSourceDependency>{};
+      for (final entry in _solidSourceDependencies.entries) {
+        if (entry.key == index) continue;
+        final dependency = entry.value;
+        for (var i = 0; i < dependency.sourcePointIndices.length; i++) {
+          final sourceIndex = dependency.sourcePointIndices[i];
+          if (sourceIndex == index) {
+            dependency.sourcePointIndices[i] = null;
+          } else if (sourceIndex != null && sourceIndex > index) {
+            dependency.sourcePointIndices[i] = sourceIndex - 1;
+          }
+        }
+        dependencies[entry.key > index ? entry.key - 1 : entry.key] =
+            dependency;
+      }
+      _solidSourceDependencies
+        ..clear()
+        ..addAll(dependencies);
       _objects.removeAt(index);
       if (_selectedPointIndex == index) {
         _selectedPointIndex = null;
@@ -3392,9 +3433,84 @@ class MathCanvas3DState extends State<MathCanvas3D> {
         );
         if (position != attachedPoint.point) {
           _objects[attachedIndex] = attachedPoint.copyWith(point: position);
+          _updateSolidObjectsForSourcePoint(attachedIndex);
         }
         pending.add(attachedIndex);
       }
+    }
+  }
+
+  int? _sourcePointIndexAt(Point3D position) {
+    for (var i = 0; i < _objects.length; i++) {
+      final object = _objects[i];
+      if (object.type == Object3DType.point &&
+          !object.isTextAnnotation &&
+          object.visible &&
+          object.opacity > 0 &&
+          ((object.color >> 24) & 0xFF) > 0 &&
+          object.point.distanceTo(position) <= 1e-8) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  void _updateSolidObjectsForSourcePoint(int sourcePointIndex) {
+    for (final entry in _solidSourceDependencies.entries) {
+      final solidIndex = entry.key;
+      final dependency = entry.value;
+      if (!dependency.sourcePointIndices.contains(sourcePointIndex) ||
+          solidIndex < 0 ||
+          solidIndex >= _objects.length) {
+        continue;
+      }
+
+      for (var i = 0; i < dependency.sourcePointIndices.length; i++) {
+        final sourceIndex = dependency.sourcePointIndices[i];
+        if (sourceIndex == null ||
+            sourceIndex < 0 ||
+            sourceIndex >= _objects.length) {
+          continue;
+        }
+        final sourcePoint = _objects[sourceIndex];
+        if (sourcePoint.type == Object3DType.point &&
+            !sourcePoint.isTextAnnotation) {
+          dependency.points[i] = sourcePoint.point;
+        }
+      }
+
+      final original = _objects[solidIndex];
+      final construction = ConstructionState(
+        tool: dependency.tool,
+        polygonSides: dependency.polygonSides,
+      );
+      var acceptedAllPoints = true;
+      for (var i = 0; i < dependency.points.length; i++) {
+        final previousCount = construction.points.length;
+        construction.addPoint(
+          dependency.points[i],
+          workingPlaneNormal: dependency.workingPlaneNormal,
+        );
+        if (construction.points.length != previousCount + 1) {
+          acceptedAllPoints = false;
+          break;
+        }
+      }
+      if (!acceptedAllPoints) continue;
+
+      final updated = construction.result;
+      if (updated == null ||
+          (updated.type != Object3DType.polyhedron &&
+              updated.type != Object3DType.surface &&
+              updated.type != Object3DType.sphere)) {
+        continue;
+      }
+      _objects[solidIndex] = updated.copyWith(
+        label: original.label,
+        color: original.color,
+        opacity: original.opacity,
+        visible: original.visible,
+      );
     }
   }
 
@@ -3658,6 +3774,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
   void _cancelPointDrag() {
     if (_pointBeforeDrag != null && _selectedPointIndex != null) {
       _objects[_selectedPointIndex!] = _pointBeforeDrag!;
+      _updateSolidObjectsForSourcePoint(_selectedPointIndex!);
       _propagateAttachedPointMoves(_selectedPointIndex!);
       _objectsVersion++;
     }
@@ -3795,6 +3912,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
       setState(() {
         final selectedIndex = _selectedPointIndex!;
         _objects[selectedIndex] = _pointBeforeDrag!.copyWith(point: position);
+        _updateSolidObjectsForSourcePoint(selectedIndex);
         _propagateAttachedPointMoves(selectedIndex);
         _objectsVersion++;
       });
@@ -4473,15 +4591,21 @@ class MathCanvas3DState extends State<MathCanvas3D> {
     }
     if (_construction == null) return;
 
+    final construction = _construction!;
+    final previousPointCount = construction.points.length;
+    final sourcePointIndex = _sourcePointIndexAt(worldPt);
     final closeToFirstPoint = _isConstructionClosureClick();
-    final action = _construction!.addPoint(
+    final action = construction.addPoint(
       worldPt,
       workingPlaneNormal: _constPlaneNormal,
       closeToFirstPoint: closeToFirstPoint,
     );
+    if (construction.points.length > previousPointCount) {
+      _constructionPointSources.add(sourcePointIndex);
+    }
     switch (action) {
       case ConstructionAction.complete:
-        final result = _construction!.result;
+        final result = construction.result;
         if (result != null) {
           final name = ToolInfo.all[_currentTool]!.name;
           var number = 1;
@@ -4504,6 +4628,21 @@ class MathCanvas3DState extends State<MathCanvas3D> {
               _objectsVersion++;
             });
           }
+          final objectIndex = _objects.indexOf(obj);
+          if (objectIndex >= 0 &&
+              ToolGroup.solids.tools.contains(_currentTool) &&
+              (obj.type == Object3DType.polyhedron ||
+                  obj.type == Object3DType.surface ||
+                  obj.type == Object3DType.sphere) &&
+              _constructionPointSources.any((index) => index != null)) {
+            _solidSourceDependencies[objectIndex] = _SolidSourceDependency(
+              tool: _currentTool,
+              points: construction.points,
+              sourcePointIndices: _constructionPointSources,
+              workingPlaneNormal: _constPlaneNormal ?? Vector3D.unitZ,
+              polygonSides: widget.polygonSides,
+            );
+          }
           if (_currentTool == ConstructionTool.point ||
               _currentTool == ConstructionTool.pointOnObject) {
             final index = _objects.indexOf(obj);
@@ -4522,6 +4661,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           tool: _currentTool,
           polygonSides: widget.polygonSides,
         );
+        _constructionPointSources.clear();
         break;
       case ConstructionAction.advanceStep:
         // Continue to next step
@@ -4534,6 +4674,7 @@ class MathCanvas3DState extends State<MathCanvas3D> {
           tool: _currentTool,
           polygonSides: widget.polygonSides,
         );
+        _constructionPointSources.clear();
         break;
     }
     widget.onToolInstruction?.call(_construction?.currentInstruction ?? '');
