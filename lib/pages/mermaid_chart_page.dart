@@ -81,6 +81,11 @@ class MermaidChartPage extends StatefulWidget {
   @visibleForTesting
   final Future<void> Function(String name)? testOnlyAfterChartNameAllocation;
 
+  /// Test-only hook called after chart content is written but before the row
+  /// update is attempted.
+  @visibleForTesting
+  final Future<void> Function()? testOnlyBeforeChartRecordUpdate;
+
   const MermaidChartPage({
     super.key,
     this.initialCode,
@@ -88,6 +93,7 @@ class MermaidChartPage extends StatefulWidget {
     this.initialShowPreview = true,
     this.testOnlyBeforeChartFolderNameLock,
     this.testOnlyAfterChartNameAllocation,
+    this.testOnlyBeforeChartRecordUpdate,
   });
 
   @override
@@ -461,6 +467,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               () async {
                 await TextManifest.writeText(storageFileName, content);
                 try {
+                  await widget.testOnlyBeforeChartRecordUpdate?.call();
                   await TextManifest.updateRecord(
                     TextRecord(
                       id: existingRecord.id,

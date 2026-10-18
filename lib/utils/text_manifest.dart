@@ -167,7 +167,9 @@ class TextManifest {
   /// Serialize file and record mutations by content hash so a deletion cannot
   /// remove text while OCR is publishing a new reference to it.
   static Future<T> withSaveLock<T>(
-      String hash, Future<T> Function() action) async {
+    String hash,
+    Future<T> Function() action,
+  ) async {
     final held = Zone.current[_saveLockZoneKey] as Set<String>? ?? const {};
     if (held.contains(hash)) return action();
     final previous = _pendingSaves[hash] ?? Future<void>.value();
@@ -176,9 +178,12 @@ class TextManifest {
     _pendingSaves[hash] = pending;
     await previous;
     try {
-      return await runZoned(action, zoneValues: {
-        _saveLockZoneKey: {...held, hash}
-      });
+      return await runZoned(
+        action,
+        zoneValues: {
+          _saveLockZoneKey: {...held, hash},
+        },
+      );
     } finally {
       release.complete();
       if (identical(_pendingSaves[hash], pending)) _pendingSaves.remove(hash);
@@ -186,7 +191,9 @@ class TextManifest {
   }
 
   static Future<T> _withSaveLocks<T>(
-      Iterable<String> hashes, Future<T> Function() action) {
+    Iterable<String> hashes,
+    Future<T> Function() action,
+  ) {
     final ordered = hashes.toSet().toList()..sort();
     Future<T> acquire(int index) {
       if (index == ordered.length) return action();
@@ -224,7 +231,8 @@ class TextManifest {
   static Future<T> withRecordSaveLock<T>(
     String hash,
     Future<T> Function() action,
-  ) => withSaveLock(hash, () => _withRecordMutationLock(action));
+  ) =>
+      withSaveLock(hash, () => _withRecordMutationLock(action));
 
   /// Serializes every hash-changing row update with saves, deletes, and folder
   /// membership changes. Holding both current and destination hashes keeps a
@@ -277,12 +285,16 @@ class TextManifest {
   /// repointed while the locks were being acquired.
   static Future<void> _deleteRecordsWithCurrentHashLocks(
     Set<String> Function(List<TextRecord> records) selectIds,
-    Future<void> Function() delete, {
+    Future<void> Function(Set<String> ids) delete, {
     bool pauseBeforeLocksForTesting = false,
   }) async {
     while (true) {
       final records = await loadRecordsUncached();
-      final ids = selectIds(records);
+      final selectedIds = selectIds(records);
+      final ids = {
+        for (final record in records)
+          if (selectedIds.contains(record.id)) record.id,
+      };
       final selectedHashes = <String, String>{
         for (final record in records)
           if (ids.contains(record.id)) record.id: record.hash,
@@ -296,8 +308,17 @@ class TextManifest {
 
       await _withSaveLocks(hashes, () async {
         await _withRecordMutationLock(() async {
-          final currentRecords = await loadRecordsUncached();
-          final currentIds = selectIds(currentRecords);
+          // Refresh the cache from the authoritative rows while mutations are
+          // serialized; ManifestOperations uses it to choose file references.
+          final currentRecords = await _ops.loadRecords(
+            forceRefresh: true,
+            throwOnError: true,
+          );
+          final selectedCurrentIds = selectIds(currentRecords);
+          final currentIds = {
+            for (final record in currentRecords)
+              if (selectedCurrentIds.contains(record.id)) record.id,
+          };
           final currentHashes = <String, String>{
             for (final record in currentRecords)
               if (currentIds.contains(record.id)) record.id: record.hash,
@@ -308,7 +329,7 @@ class TextManifest {
             return;
           }
           await beforeDeleteWithCurrentHashLocksForTesting?.call();
-          await delete();
+          await delete(currentIds);
         });
       });
 
@@ -353,10 +374,11 @@ class TextManifest {
   static Future<void> addRecord(
     TextRecord record, {
     void Function()? beforeCommit,
-  }) => withRecordSaveLock(
-    record.hash,
-    () => _ops.addRecord(record, beforeCommit: beforeCommit),
-  );
+  }) =>
+      withRecordSaveLock(
+        record.hash,
+        () => _ops.addRecord(record, beforeCommit: beforeCommit),
+      );
 
   /// Writes text under the content hash lock, then publishes its row under
   /// the manifest mutation lock.
@@ -395,7 +417,9 @@ class TextManifest {
   static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
       _deleteRecordsWithCurrentHashLocks(
         (_) => {id},
-        () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+        (currentIds) => currentIds.contains(id)
+            ? _ops.deleteRecord(id, preserveFiles: preserveFiles)
+            : Future<void>.value(),
       );
 
   /// Rollback already knows the record hash, so it can remove metadata without
@@ -404,15 +428,18 @@ class TextManifest {
     String id,
     String hash, {
     bool preserveFiles = false,
-  }) => withRecordSaveLock(
-    hash,
-    () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
-  );
+  }) =>
+      withRecordSaveLock(
+        hash,
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+      );
 
   static Future<void> deleteRecords(List<String> ids) async {
     await _deleteRecordsWithCurrentHashLocks(
       (_) => ids.toSet(),
-      () => _ops.deleteRecords(ids),
+      (currentIds) => currentIds.isEmpty
+          ? Future<void>.value()
+          : _ops.deleteRecords(currentIds.toList()),
     );
   }
 
@@ -448,14 +475,19 @@ class TextManifest {
   static Future<bool> deleteFile(String fileName) => _ops.deleteFile(fileName);
 
   /// 写入文本内容到文件
-  static Future<String> writeText(String fileName, String text,
-      {void Function()? beforeCommit}) async {
+  static Future<String> writeText(
+    String fileName,
+    String text, {
+    void Function()? beforeCommit,
+  }) async {
     final bytes = Uint8List.fromList(utf8.encode(text));
     final hash = fileName.endsWith('.txt')
         ? fileName.substring(0, fileName.length - 4)
         : fileName;
-    return withSaveLock(hash,
-        () => _ops.writeFile(fileName, bytes, beforeCommit: beforeCommit));
+    return withSaveLock(
+      hash,
+      () => _ops.writeFile(fileName, bytes, beforeCommit: beforeCommit),
+    );
   }
 
   /// 读取文本内容从文件
@@ -490,7 +522,7 @@ class TextManifest {
           )
           .map((record) => record.id)
           .toSet(),
-      () => _ops.removeFolder(name),
+      (_) => _ops.removeFolder(name),
       pauseBeforeLocksForTesting: true,
     );
   }
@@ -498,11 +530,13 @@ class TextManifest {
   static Future<void> removeFolderFromCache(String folderPath) =>
       _withRecordMutationLock(() => _ops.removeFolderFromCache(folderPath));
   static void invalidateCache() {
-    unawaited(_withRecordMutationLock(() async {
-      final beforeInvalidate = beforeCacheInvalidationForTesting;
-      if (beforeInvalidate != null) await beforeInvalidate();
-      _ops.invalidateCache();
-    }));
+    unawaited(
+      _withRecordMutationLock(() async {
+        final beforeInvalidate = beforeCacheInvalidationForTesting;
+        if (beforeInvalidate != null) await beforeInvalidate();
+        _ops.invalidateCache();
+      }),
+    );
   }
 
   // Path utilities — forward to shared utilities
@@ -510,8 +544,10 @@ class TextManifest {
       FolderPathUtils.getFolderBaseName(folderPath);
   static String getParentFolderPath(String folderPath) =>
       FolderPathUtils.getParentFolderPath(folderPath);
-  static List<String> getChildFolderPaths(String parentPath,
-          [List<String>? allPaths]) =>
+  static List<String> getChildFolderPaths(
+    String parentPath, [
+    List<String>? allPaths,
+  ]) =>
       FolderPathUtils.getChildFolderPaths(parentPath, allPaths?.toSet() ?? {});
   static String? validateFolderName(String name) =>
       FolderPathUtils.validateFolderName(name);

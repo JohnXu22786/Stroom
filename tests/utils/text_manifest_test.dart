@@ -55,9 +55,8 @@ Future<void> _exerciseStaleHashDelete(
   final releaseRegistration = Completer<void>();
   final releaseCurrentHash = Completer<void>();
   final referenceRegistered = Completer<void>();
-  final oldHashAcquired = originalRecords
-      .map((_) => Completer<void>())
-      .toList(growable: false);
+  final oldHashAcquired =
+      originalRecords.map((_) => Completer<void>()).toList(growable: false);
   final oldHashLocks = <Future<void>>[];
   for (var i = 0; i < originalRecords.length; i++) {
     oldHashLocks.add(
@@ -396,8 +395,10 @@ void main() {
         ManifestDatabase.invalidateWebDataCacheForTesting();
         TextManifest.invalidateCache();
 
-        final saving =
-            TextManifest.updateTextRecord(editedRecord, editedContent);
+        final saving = TextManifest.updateTextRecord(
+          editedRecord,
+          editedContent,
+        );
         await updateWriteStarted.future.timeout(const Duration(seconds: 5));
 
         var cleanupFinished = false;
@@ -410,14 +411,18 @@ void main() {
         });
         await Future<void>.delayed(Duration.zero);
         expect(cleanupFinished, isFalse);
-        expect(await TextManifest.readText(editedRecord.storagePath),
-            editedContent);
+        expect(
+          await TextManifest.readText(editedRecord.storagePath),
+          editedContent,
+        );
 
         releaseWrite.complete();
         await saving;
         expect(await cleanup, isFalse);
-        expect(await TextManifest.readText(editedRecord.storagePath),
-            editedContent);
+        expect(
+          await TextManifest.readText(editedRecord.storagePath),
+          editedContent,
+        );
         expect(
           (await TextManifest.loadRecords()).single.hash,
           editedRecord.hash,
@@ -499,6 +504,85 @@ void main() {
             originals.map((record) => record.id).toList(),
           ),
         );
+      },
+    );
+
+    test(
+      'single delete ignores a cached ID removed from the manifest',
+      () async {
+        const content = 'graph TD\n  A-->single-stale-cache';
+        final removed = _textRecordWithContent('single-stale-cache', content);
+        final replacement = _textRecordWithContent(
+          'single-stale-cache-reference',
+          content,
+        );
+        await TextManifest.saveTextRecord(removed, content);
+        await TextManifest.loadRecords();
+
+        await ManifestDatabase.deleteTextRecord(removed.id);
+        await ManifestDatabase.insertTextRecord(replacement.toMap());
+        await TextManifest.deleteRecord(removed.id);
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          [replacement.id],
+        );
+        expect(await TextManifest.readText(replacement.storagePath), content);
+      },
+    );
+
+    test(
+      'batch delete ignores a cached ID removed from the manifest',
+      () async {
+        const content = 'graph TD\n  A-->batch-stale-cache';
+        final removed = _textRecordWithContent('batch-stale-cache', content);
+        final replacement = _textRecordWithContent(
+          'batch-stale-cache-reference',
+          content,
+        );
+        await TextManifest.saveTextRecord(removed, content);
+        await TextManifest.loadRecords();
+
+        await ManifestDatabase.deleteTextRecord(removed.id);
+        await ManifestDatabase.insertTextRecord(replacement.toMap());
+        await TextManifest.deleteRecords([removed.id]);
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          [replacement.id],
+        );
+        expect(await TextManifest.readText(replacement.storagePath), content);
+      },
+    );
+
+    test(
+      'folder delete refreshes stale cached rows before removing content',
+      () async {
+        const folder = 'mermaid-charts/stale-cache';
+        const content = 'graph TD\n  A-->folder-stale-cache';
+        final removed = _textRecordWithContent(
+          'folder-stale-cache',
+          content,
+          folder: folder,
+        );
+        final replacement = _textRecordWithContent(
+          'folder-stale-cache-reference',
+          content,
+        );
+        await TextManifest.saveTextRecord(removed, content);
+        await TextManifest.loadRecords();
+
+        await ManifestDatabase.deleteTextRecord(removed.id);
+        await ManifestDatabase.insertTextRecord(replacement.toMap());
+        await TextManifest.removeFolder('mermaid-charts');
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          [replacement.id],
+        );
+        expect(await TextManifest.readText(replacement.storagePath), content);
+        expect(await TextManifest.getAllFolders(),
+            isNot(contains('mermaid-charts/stale-cache')));
       },
     );
 
@@ -848,62 +932,68 @@ void main() {
       expect(await TextManifest.readText(record.storagePath), content);
     });
 
-    test('cache invalidation waits until a record delete releases its lock',
-        () async {
-      const content = 'graph TD\n  A-->shared-cache-delete';
-      final chart = _textRecordWithContent('cache-delete-chart', content);
-      final reference = _textRecordWithContent('cache-delete-reference', content);
-      await TextManifest.saveTextRecord(chart, content);
-      await TextManifest.saveTextRecord(reference, content);
+    test(
+      'cache invalidation waits until a record delete releases its lock',
+      () async {
+        const content = 'graph TD\n  A-->shared-cache-delete';
+        final chart = _textRecordWithContent('cache-delete-chart', content);
+        final reference = _textRecordWithContent(
+          'cache-delete-reference',
+          content,
+        );
+        await TextManifest.saveTextRecord(chart, content);
+        await TextManifest.saveTextRecord(reference, content);
 
-      final deleteReached = Completer<void>();
-      final releaseDelete = Completer<void>();
-      TextManifest.beforeDeleteWithCurrentHashLocksForTesting = () async {
-        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
-        deleteReached.complete();
-        await releaseDelete.future;
-      };
-      final invalidationReached = Completer<void>();
-      TextManifest.beforeCacheInvalidationForTesting = () async {
-        TextManifest.beforeCacheInvalidationForTesting = null;
-        invalidationReached.complete();
-      };
-      var deleting = Future<void>.value();
-      try {
-        deleting = TextManifest.deleteRecord(chart.id);
-        await deleteReached.future.timeout(const Duration(seconds: 5));
+        final deleteReached = Completer<void>();
+        final releaseDelete = Completer<void>();
+        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = () async {
+          TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+          deleteReached.complete();
+          await releaseDelete.future;
+        };
+        final invalidationReached = Completer<void>();
+        TextManifest.beforeCacheInvalidationForTesting = () async {
+          TextManifest.beforeCacheInvalidationForTesting = null;
+          invalidationReached.complete();
+        };
+        var deleting = Future<void>.value();
+        try {
+          deleting = TextManifest.deleteRecord(chart.id);
+          await deleteReached.future.timeout(const Duration(seconds: 5));
 
-        Zone.root.run(() => TextManifest.invalidateCache());
-        await Future<void>.delayed(Duration.zero);
-        expect(invalidationReached.isCompleted, isFalse);
+          Zone.root.run(() => TextManifest.invalidateCache());
+          await Future<void>.delayed(Duration.zero);
+          expect(invalidationReached.isCompleted, isFalse);
 
-        releaseDelete.complete();
-        await deleting.timeout(const Duration(seconds: 5));
-        await invalidationReached.future.timeout(const Duration(seconds: 5));
-      } finally {
-        if (!releaseDelete.isCompleted) releaseDelete.complete();
-        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
-        TextManifest.beforeCacheInvalidationForTesting = null;
-        await deleting;
-      }
+          releaseDelete.complete();
+          await deleting.timeout(const Duration(seconds: 5));
+          await invalidationReached.future.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseDelete.isCompleted) releaseDelete.complete();
+          TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+          TextManifest.beforeCacheInvalidationForTesting = null;
+          await deleting;
+        }
 
-      expect(
-        (await TextManifest.loadRecords()).map((record) => record.id),
-        [reference.id],
-      );
-      expect(await TextManifest.readText(chart.storagePath), content);
-    });
+        expect((await TextManifest.loadRecords()).map((record) => record.id), [
+          reference.id,
+        ]);
+        expect(await TextManifest.readText(chart.storagePath), content);
+      },
+    );
   });
 
-  testWidgets('cancel guard after asynchronous load prevents text insertion',
-      (tester) async {
+  testWidgets('cancel guard after asynchronous load prevents text insertion', (
+    tester,
+  ) async {
     var cancelled = false;
     final saving = TextManifest.addRecord(
       TextRecord(
-          name: 'cancelled',
-          hash: 'cancelled',
-          createdAt: DateTime.now(),
-          size: 1),
+        name: 'cancelled',
+        hash: 'cancelled',
+        createdAt: DateTime.now(),
+        size: 1,
+      ),
       beforeCommit: () {
         if (cancelled) throw StateError('cancelled');
       },
@@ -949,8 +1039,10 @@ void main() {
         'folder': '',
         'textLength': 200,
       });
-      await ManifestDatabase.updateTextRecord(
-          'txt_2', {'name': 'renamed', 'size': 400});
+      await ManifestDatabase.updateTextRecord('txt_2', {
+        'name': 'renamed',
+        'size': 400,
+      });
       final records = await ManifestDatabase.getAllTextRecords();
       expect(records[0]['name'], equals('renamed'));
       expect(records[0]['size'], equals(400));
@@ -996,45 +1088,51 @@ void main() {
 
   group('TextManifest DB operations', () {
     testWidgets('add and load records', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        name: 'test_text',
-        hash: 'hash1',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        textLength: 100,
-      ));
+      await TextManifest.addRecord(
+        TextRecord(
+          name: 'test_text',
+          hash: 'hash1',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          textLength: 100,
+        ),
+      );
       final records = await TextManifest.loadRecords();
       expect(records.length, equals(1));
       expect(records[0].name, equals('test_text'));
     });
 
     testWidgets('rename record (DB only)', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        id: 'txt_rename',
-        name: 'old_name',
-        hash: 'hren',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        textLength: 100,
-      ));
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'txt_rename',
+          name: 'old_name',
+          hash: 'hren',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          textLength: 100,
+        ),
+      );
       await TextManifest.renameRecord('txt_rename', 'new_name');
       final records = await TextManifest.loadRecords();
       expect(records[0].name, equals('new_name'));
     });
 
     testWidgets('move record to folder (DB only)', (WidgetTester t) async {
-      await TextManifest.addRecord(TextRecord(
-        id: 'txt_move',
-        name: 'movable',
-        hash: 'hmov',
-        format: 'txt',
-        createdAt: DateTime.now(),
-        size: 100,
-        folder: '',
-        textLength: 100,
-      ));
+      await TextManifest.addRecord(
+        TextRecord(
+          id: 'txt_move',
+          name: 'movable',
+          hash: 'hmov',
+          format: 'txt',
+          createdAt: DateTime.now(),
+          size: 100,
+          folder: '',
+          textLength: 100,
+        ),
+      );
       await TextManifest.moveRecord('txt_move', 'my_folder');
       final records = await TextManifest.loadRecords();
       expect(records[0].folder, equals('my_folder'));
@@ -1052,7 +1150,8 @@ void main() {
       );
       await TextManifest.addRecord(record);
       await TextManifest.updateRecord(
-          record.copyWith(name: 'after', size: 999));
+        record.copyWith(name: 'after', size: 999),
+      );
       final records = await TextManifest.loadRecords();
       expect(records[0].name, equals('after'));
       expect(records[0].size, equals(999));
@@ -1082,7 +1181,9 @@ void main() {
       expect(restored.folder, equals('subfolder'));
       expect(restored.textLength, equals(42));
       expect(
-          restored.createdAt.toIso8601String(), equals(now.toIso8601String()));
+        restored.createdAt.toIso8601String(),
+        equals(now.toIso8601String()),
+      );
     });
   });
 
@@ -1108,8 +1209,11 @@ void main() {
       final hash1 = computeTextHash(utf8Bytes);
       final hash2 = computeTextHash(Uint8List.fromList(utf8.encode(chinese)));
 
-      expect(hash1, equals(hash2),
-          reason: 'computeTextHash must return identical hash for same input.');
+      expect(
+        hash1,
+        equals(hash2),
+        reason: 'computeTextHash must return identical hash for same input.',
+      );
       expect(hash1, isNotEmpty, reason: 'Hash must not be empty.');
     });
 
@@ -1126,8 +1230,11 @@ void main() {
       // The same hash should be computed from stored file content
       // (once writeText is fixed to use utf8.encode instead of codeUnits)
       expect(hash, isNotEmpty);
-      expect(bytes.length, greaterThan(0),
-          reason: 'UTF-8 encoded bytes must not be empty.');
+      expect(
+        bytes.length,
+        greaterThan(0),
+        reason: 'UTF-8 encoded bytes must not be empty.',
+      );
     });
   });
 
@@ -1167,29 +1274,47 @@ void main() {
   // ====== writeText returns file path (used by ASR/OCR open file button) ======
 
   group('TextManifest writeText returns file path', () {
-    test('writeText returns non-null non-empty file path for valid content',
-        () async {
-      const content = '测试文本内容 for ASR transcription result';
-      final fileName = 'test_asr_result.txt';
-      final filePath = await TextManifest.writeText(fileName, content);
+    test(
+      'writeText returns non-null non-empty file path for valid content',
+      () async {
+        const content = '测试文本内容 for ASR transcription result';
+        final fileName = 'test_asr_result.txt';
+        final filePath = await TextManifest.writeText(fileName, content);
 
-      expect(filePath, isNotNull,
-          reason: 'writeText must return a non-null file path');
-      expect(filePath, isNotEmpty,
-          reason: 'writeText must return a non-empty file path');
-      // Path should contain the file name
-      expect(filePath, contains(fileName),
-          reason: 'Returned file path must contain the requested filename');
-    });
+        expect(
+          filePath,
+          isNotNull,
+          reason: 'writeText must return a non-null file path',
+        );
+        expect(
+          filePath,
+          isNotEmpty,
+          reason: 'writeText must return a non-empty file path',
+        );
+        // Path should contain the file name
+        expect(
+          filePath,
+          contains(fileName),
+          reason: 'Returned file path must contain the requested filename',
+        );
+      },
+    );
 
     test('writeText returns unique path for each file', () async {
-      final path1 =
-          await TextManifest.writeText('unique_test_1.txt', 'content one');
-      final path2 =
-          await TextManifest.writeText('unique_test_2.txt', 'content two');
+      final path1 = await TextManifest.writeText(
+        'unique_test_1.txt',
+        'content one',
+      );
+      final path2 = await TextManifest.writeText(
+        'unique_test_2.txt',
+        'content two',
+      );
 
-      expect(path1, isNot(equals(path2)),
-          reason: 'Different files must return different paths');
+      expect(
+        path1,
+        isNot(equals(path2)),
+        reason: 'Different files must return different paths',
+      );
       expect(path1, contains('unique_test_1.txt'));
       expect(path2, contains('unique_test_2.txt'));
     });
@@ -1198,33 +1323,47 @@ void main() {
   // ====== Empty file handling ======
 
   group('TextManifest empty file handling', () {
-    test('readText returns empty string for empty bytes instead of null',
-        () async {
-      // Create a test file with empty content
-      const emptyContent = '';
-      final bytes = Uint8List.fromList(utf8.encode(emptyContent));
-      final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
+    test(
+      'readText returns empty string for empty bytes instead of null',
+      () async {
+        // Create a test file with empty content
+        const emptyContent = '';
+        final bytes = Uint8List.fromList(utf8.encode(emptyContent));
+        final hash = computeTextHash(bytes);
+        final storageFileName = '$hash.txt';
 
-      // Write empty content
-      await TextManifest.writeText(storageFileName, emptyContent);
+        // Write empty content
+        await TextManifest.writeText(storageFileName, emptyContent);
 
-      // Read back - should return '' not null
-      final result = await TextManifest.readText(storageFileName);
-      expect(result, isNotNull,
-          reason: 'Empty content should return "" not null');
-      expect(result, equals(''),
-          reason: 'readText should return empty string for empty file');
-    });
+        // Read back - should return '' not null
+        final result = await TextManifest.readText(storageFileName);
+        expect(
+          result,
+          isNotNull,
+          reason: 'Empty content should return "" not null',
+        );
+        expect(
+          result,
+          equals(''),
+          reason: 'readText should return empty string for empty file',
+        );
+      },
+    );
 
     test('computeTextHash for empty content is deterministic', () {
       final emptyBytes = Uint8List.fromList(utf8.encode(''));
       final hash1 = computeTextHash(emptyBytes);
       final hash2 = computeTextHash(Uint8List.fromList(utf8.encode('')));
-      expect(hash1, equals(hash2),
-          reason: 'Hash for empty content must be deterministic');
-      expect(hash1, isNotEmpty,
-          reason: 'Hash for empty content must still produce a valid hash');
+      expect(
+        hash1,
+        equals(hash2),
+        reason: 'Hash for empty content must be deterministic',
+      );
+      expect(
+        hash1,
+        isNotEmpty,
+        reason: 'Hash for empty content must still produce a valid hash',
+      );
     });
   });
 }
