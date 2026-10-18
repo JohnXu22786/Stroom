@@ -240,6 +240,41 @@ void main() {
       container.dispose();
     });
 
+    test('waits for provider entries before migrating legacy instructions',
+        () async {
+      final legacyInstructions = [
+        {'name': '发票', 'content': '提取发票号码和金额'},
+      ];
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          _ocrEntryWithInstructions(legacyInstructions).toMap(),
+        ]),
+      });
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final instructionsNotifier =
+          container.read(ocrInstructionsProvider.notifier);
+      final entriesState = container.read(providerEntriesProvider);
+      expect(entriesState.isLoaded, isFalse);
+      expect(entriesState.entries, isEmpty);
+      await instructionsNotifier.load();
+
+      const migrated = [
+        OcrInstruction(name: '发票', content: '提取发票号码和金额'),
+      ];
+      expect(container.read(ocrInstructionsProvider), migrated);
+      expect(container.read(providerEntriesProvider).isLoaded, isTrue);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('ocr_instructions'),
+        jsonEncode([
+          {'name': '发票', 'content': '提取发票号码和金额'},
+        ]),
+      );
+    });
+
     test('does not re-migrate once the store has been written', () async {
       final container = _containerWithEntries([
         _ocrEntryWithInstructions([
