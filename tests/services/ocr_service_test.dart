@@ -446,6 +446,29 @@ void main() {
         },
       );
 
+      test(
+        'recognize retains text and marks a content-filtered result incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'content_filter',
+                'message': {'content': 'filtered OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+          );
+
+          expect(result.text, 'filtered OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'content_filter');
+        },
+      );
+
       test('custom params cannot replace protected request fields', () async {
         for (final protectedName in ['model', 'messages']) {
           var sent = false;
@@ -745,6 +768,32 @@ void main() {
         expect(result.text, equals('批量识别的文字结果'));
         expect(result.imageCount, equals(2));
       });
+
+      test(
+        'recognizeBatch retains text and marks a content-filtered result incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'content_filter',
+                'message': {'content': 'filtered batch OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+              (Uint8List.fromList([4, 5, 6]), 'png'),
+            ],
+          );
+
+          expect(result.text, 'filtered batch OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'content_filter');
+        },
+      );
 
       test('recognizeBatch extracts text when content is a List', () async {
         final dio = _mockDioWithSuccess({
