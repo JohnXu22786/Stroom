@@ -298,7 +298,21 @@ Future<String> executeAudioSeparationBlock({
   final title = '音频分离_${p.basenameWithoutExtension(inputBasename)}';
 
   final taskId = const Uuid().v4();
-  execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+  if (temporaryOutput) {
+    if (!await execNotifier.updateSubTaskIdPersisted(
+      execId,
+      flowSubTask.id,
+      taskId,
+    )) {
+      throw BlockExecutionException(
+        '无法保存临时任务标识',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+  } else {
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+  }
   execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
     type: BackgroundTaskType.audioSeparation,

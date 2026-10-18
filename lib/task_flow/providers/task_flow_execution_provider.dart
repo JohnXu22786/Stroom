@@ -11,6 +11,7 @@ import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_payload.dart';
 import '../models/io_type.dart';
+import '../models/flow_temporary_output.dart';
 import '../services/flow_temporary_artifact_storage.dart';
 import 'persistable_notifier.dart';
 
@@ -182,8 +183,15 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     final clearReference = clearTemporaryTaskFileReference;
     if (clearReference == null) return true;
     for (final execution in executions) {
-      for (final step in execution.subTasks) {
-        if (step.result?.temporaryArtifact == null) continue;
+      final blocks = execution.snapshot?.flow.blocks;
+      for (var index = 0; index < execution.subTasks.length; index++) {
+        final step = execution.subTasks[index];
+        final hasTemporaryResult = step.result?.temporaryArtifact != null;
+        final blockIsTemporary = blocks != null &&
+            index < blocks.length &&
+            blocks[index].typeKey.name == step.blockTypeKey &&
+            isFlowBlockTemporary(blocks, index);
+        if (!hasTemporaryResult && !blockIsTemporary) continue;
         if (!await clearReference(step)) return false;
       }
     }
@@ -334,6 +342,21 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
                           ? st.copyWith(subTaskId: newSubTaskId)
                           : st)
                       .toList()));
+
+  Future<bool> updateSubTaskIdPersisted(
+    String executionId,
+    String subTaskId,
+    String newSubTaskId,
+  ) async {
+    updateSubTaskId(executionId, subTaskId, newSubTaskId);
+    if (!await persist()) return false;
+    final current = execution(executionId);
+    return current != null &&
+        !current.isTerminal &&
+        current.subTasks.any(
+          (step) => step.id == subTaskId && step.subTaskId == newSubTaskId,
+        );
+  }
 
   /// Child callbacks cannot reopen a terminal execution. The service owns the
   /// final lifecycle; a completed child is not a durable checkpoint yet.
