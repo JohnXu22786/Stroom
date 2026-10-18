@@ -484,17 +484,31 @@ class _MathDrawingPageState extends State<MathDrawingPage>
             ],
           ),
           body: LayoutBuilder(
-              builder: (context, constraints) => Column(
+              builder: (context, constraints) {
+                final availableHeight =
+                    (constraints.maxHeight - 48)
+                        .clamp(0.0, double.infinity)
+                        .toDouble();
+                final formulaListBaseHeight =
+                    availableHeight * (_keyboardVisible ? 0.28 : 0.4);
+                final keyboardBaseHeight =
+                    _keyboardVisible ? availableHeight * 0.56 : 0.0;
+                final formulaHeaderHeight = dart_math
+                    .min(30.0, availableHeight - formulaListBaseHeight)
+                    .toDouble();
+                final keyboardMaxHeight = dart_math
+                    .max(0.0, keyboardBaseHeight - formulaHeaderHeight)
+                    .toDouble();
+
+                return Column(
                     children: [
                       _buildTabBar(cs),
                       // Formula list (always shown)
                       ConstrainedBox(
                         constraints: BoxConstraints(
-                            maxHeight: (constraints.maxHeight - 48)
-                                    .clamp(0.0, double.infinity) *
-                                (_keyboardVisible ? 0.28 : 0.4) +
-                                30),
-                        child: _buildFormulaList(cs),
+                            maxHeight:
+                                formulaListBaseHeight + formulaHeaderHeight),
+                        child: _buildFormulaList(cs, formulaHeaderHeight),
                       ),
                       // Canvas + 3D canvas kept alive via IndexedStack
                       Expanded(
@@ -506,9 +520,7 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                       if (_keyboardVisible && _activeFormula != null)
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                              maxHeight: (constraints.maxHeight - 48)
-                                      .clamp(0.0, double.infinity) *
-                                  0.56),
+                              maxHeight: keyboardMaxHeight),
                           child: MathKeyboard(
                             enabled: !widget.initialShowWebView ||
                                 (_activeFormula
@@ -533,7 +545,8 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                           ),
                         ),
                     ],
-                  )),
+                  );
+              }),
         ));
   }
 
@@ -572,14 +585,14 @@ class _MathDrawingPageState extends State<MathDrawingPage>
   // Formula list
   // ==================================================================
 
-  Widget _buildFormulaList(ColorScheme cs) {
+  Widget _buildFormulaList(ColorScheme cs, double headerHeight) {
     final parameterNames = _activeParameterNames.toList()..sort();
     final showParameters =
         _currentView == ViewMode.mode2D && parameterNames.isNotEmpty;
     return Stack(
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 30),
+          padding: EdgeInsets.only(top: headerHeight),
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
             shrinkWrap: true,
