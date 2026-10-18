@@ -478,8 +478,7 @@ class MathCanvasState extends State<MathCanvas> {
 
   double _screenToMathY(double screenY) {
     final (effectiveYMin, effectiveYMax) = _effectiveYBounds();
-    return (1.0 - screenY / _canvasHeight) *
-            (effectiveYMax - effectiveYMin) +
+    return (1.0 - screenY / _canvasHeight) * (effectiveYMax - effectiveYMin) +
         effectiveYMin;
   }
 

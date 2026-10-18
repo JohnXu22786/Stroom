@@ -483,70 +483,64 @@ class _MathDrawingPageState extends State<MathDrawingPage>
                 ),
             ],
           ),
-          body: LayoutBuilder(
-              builder: (context, constraints) {
-                final availableHeight =
-                    (constraints.maxHeight - 48)
-                        .clamp(0.0, double.infinity)
-                        .toDouble();
-                final formulaListBaseHeight =
-                    availableHeight * (_keyboardVisible ? 0.28 : 0.4);
-                final keyboardBaseHeight =
-                    _keyboardVisible ? availableHeight * 0.56 : 0.0;
-                final formulaHeaderHeight = dart_math
-                    .min(30.0, availableHeight - formulaListBaseHeight)
-                    .toDouble();
-                final keyboardMaxHeight = dart_math
-                    .max(0.0, keyboardBaseHeight - formulaHeaderHeight)
-                    .toDouble();
+          body: LayoutBuilder(builder: (context, constraints) {
+            final availableHeight = (constraints.maxHeight - 48)
+                .clamp(0.0, double.infinity)
+                .toDouble();
+            final formulaListBaseHeight =
+                availableHeight * (_keyboardVisible ? 0.28 : 0.4);
+            final keyboardBaseHeight =
+                _keyboardVisible ? availableHeight * 0.56 : 0.0;
+            final formulaHeaderHeight = dart_math
+                .min(30.0, availableHeight - formulaListBaseHeight)
+                .toDouble();
+            final keyboardMaxHeight = dart_math
+                .max(0.0, keyboardBaseHeight - formulaHeaderHeight)
+                .toDouble();
 
-                return Column(
-                    children: [
-                      _buildTabBar(cs),
-                      // Formula list (always shown)
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                            maxHeight:
-                                formulaListBaseHeight + formulaHeaderHeight),
-                        child: _buildFormulaList(cs, formulaHeaderHeight),
-                      ),
-                      // Canvas + 3D canvas kept alive via IndexedStack
-                      Expanded(
-                        child: IndexedStack(
-                          index: _currentView == ViewMode.mode2D ? 0 : 1,
-                          children: [_buildCanvas(cs), _build3DCanvas(cs)],
-                        ),
-                      ),
-                      if (_keyboardVisible && _activeFormula != null)
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                              maxHeight: keyboardMaxHeight),
-                          child: MathKeyboard(
-                            enabled: !widget.initialShowWebView ||
-                                (_activeFormula
-                                        ?.editorKey.currentState?.ready ??
-                                    false),
-                            activeLabel:
-                                '公式 ${_formulas.indexOf(_activeFormula!) + 1}',
-                            location: _activeFormula
-                                    ?.editorKey.currentState?.location ??
-                                '公式',
-                            onCommand: (kind, value) async {
-                              final editor =
-                                  _activeFormula?.editorKey.currentState;
-                              if (kind == 'clipboard') {
-                                await editor?.clipboard(value);
-                              } else {
-                                await editor?.command(kind, value);
-                              }
-                            },
-                            onDismiss: _dismissKeyboard,
-                            onPlot: _plotAll,
-                          ),
-                        ),
-                    ],
-                  );
-              }),
+            return Column(
+              children: [
+                _buildTabBar(cs),
+                // Formula list (always shown)
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxHeight: formulaListBaseHeight + formulaHeaderHeight),
+                  child: _buildFormulaList(cs, formulaHeaderHeight),
+                ),
+                // Canvas + 3D canvas kept alive via IndexedStack
+                Expanded(
+                  child: IndexedStack(
+                    index: _currentView == ViewMode.mode2D ? 0 : 1,
+                    children: [_buildCanvas(cs), _build3DCanvas(cs)],
+                  ),
+                ),
+                if (_keyboardVisible && _activeFormula != null)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: keyboardMaxHeight),
+                    child: MathKeyboard(
+                      enabled: !widget.initialShowWebView ||
+                          (_activeFormula?.editorKey.currentState?.ready ??
+                              false),
+                      activeLabel:
+                          '公式 ${_formulas.indexOf(_activeFormula!) + 1}',
+                      location:
+                          _activeFormula?.editorKey.currentState?.location ??
+                              '公式',
+                      onCommand: (kind, value) async {
+                        final editor = _activeFormula?.editorKey.currentState;
+                        if (kind == 'clipboard') {
+                          await editor?.clipboard(value);
+                        } else {
+                          await editor?.command(kind, value);
+                        }
+                      },
+                      onDismiss: _dismissKeyboard,
+                      onPlot: _plotAll,
+                    ),
+                  ),
+              ],
+            );
+          }),
         ));
   }
 
