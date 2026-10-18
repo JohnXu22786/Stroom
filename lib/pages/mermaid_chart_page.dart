@@ -81,6 +81,11 @@ class MermaidChartPage extends StatefulWidget {
   @visibleForTesting
   final Future<void> Function(String name)? testOnlyAfterChartNameAllocation;
 
+  /// Test-only hook called after chart content is written but before the row
+  /// update is attempted.
+  @visibleForTesting
+  final Future<void> Function()? testOnlyBeforeChartRecordUpdate;
+
   const MermaidChartPage({
     super.key,
     this.initialCode,
@@ -88,6 +93,7 @@ class MermaidChartPage extends StatefulWidget {
     this.initialShowPreview = true,
     this.testOnlyBeforeChartFolderNameLock,
     this.testOnlyAfterChartNameAllocation,
+    this.testOnlyBeforeChartRecordUpdate,
   });
 
   @override
@@ -425,7 +431,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           await widget.testOnlyAfterChartNameAllocation?.call(finalName);
 
           if (existingRecord == null) {
-            await TextManifest.withSaveLock(hash, () async {
+            await TextManifest.withRecordSaveLock(hash, () async {
               await TextManifest.writeText(storageFileName, content);
               try {
                 await TextManifest.addRecord(
@@ -455,40 +461,48 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
               }
             });
           } else {
-            await TextManifest.withSaveLock(hash, () async {
-              await TextManifest.writeText(storageFileName, content);
-              try {
-                await TextManifest.updateRecord(
-                  TextRecord(
-                    id: existingRecord.id,
-                    name: finalName,
-                    hash: hash,
-                    format: existingRecord.format,
-                    createdAt: existingRecord.createdAt,
-                    modifiedAt: hash == existingRecord.hash
-                        ? existingRecord.modifiedAt
-                        : DateTime.now(),
-                    size: bytes.length,
-                    folder: selectedFolder,
-                    textLength: content.length,
-                  ),
-                );
-              } catch (error, stackTrace) {
+            final updated = await TextManifest.withRecordSaveLocks(
+              existingRecord.id,
+              hash,
+              () async {
+                await TextManifest.writeText(storageFileName, content);
                 try {
-                  await TextManifest.deleteFileIfUnreferenced(
-                    hash,
-                    storageFileName,
+                  await widget.testOnlyBeforeChartRecordUpdate?.call();
+                  await TextManifest.updateRecord(
+                    TextRecord(
+                      id: existingRecord.id,
+                      name: finalName,
+                      hash: hash,
+                      format: existingRecord.format,
+                      createdAt: existingRecord.createdAt,
+                      modifiedAt: hash == existingRecord.hash
+                          ? existingRecord.modifiedAt
+                          : DateTime.now(),
+                      size: bytes.length,
+                      folder: selectedFolder,
+                      textLength: content.length,
+                    ),
                   );
-                } catch (cleanupError) {
-                  debugPrint(
-                    'Failed to clean up Mermaid chart file $storageFileName '
-                    'after record update failed: $cleanupError',
-                  );
+                } catch (error, stackTrace) {
+                  try {
+                    await TextManifest.deleteFileIfUnreferenced(
+                      hash,
+                      storageFileName,
+                    );
+                  } catch (cleanupError) {
+                    debugPrint(
+                      'Failed to clean up Mermaid chart file $storageFileName '
+                      'after record update failed: $cleanupError',
+                    );
+                  }
+                  TextManifest.invalidateCache();
+                  Error.throwWithStackTrace(error, stackTrace);
                 }
-                TextManifest.invalidateCache();
-                Error.throwWithStackTrace(error, stackTrace);
-              }
-            });
+              },
+            );
+            if (!updated) {
+              throw StateError('The Mermaid chart was deleted before saving.');
+            }
 
             if (hash != existingRecord.hash) {
               try {
