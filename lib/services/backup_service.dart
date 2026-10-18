@@ -551,6 +551,13 @@ class BackupService {
             useStreaming: useStreaming,
           );
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'task_flow_temporary',
+          sourcePath: p.join(appDir, 'task_flow_temporary'),
+          useStreaming: useStreaming,
+        );
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -1047,6 +1054,7 @@ class BackupService {
         return [
           'task_state/',
           'task_flow_attachments/',
+          'task_flow_temporary/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -1870,6 +1878,11 @@ class BackupService {
             archive,
             archivePrefix: 'catcatch/completed',
             sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'task_flow_temporary',
+            sourcePath: p.join(appDir, 'task_flow_temporary'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -3366,7 +3379,11 @@ class BackupService {
         final isTaskAttachment = relative.startsWith('attachments/');
         final isCatCatchFile = relative.startsWith('catcatch/') &&
             _isCatCatchMediaPath(relative.substring('catcatch/'.length));
-        if (!isTaskAttachment && !isCatCatchFile) return;
+        final isTemporaryFlowArtifact =
+            relative.startsWith('task_flow_temporary/');
+        if (!isTaskAttachment && !isCatCatchFile && !isTemporaryFlowArtifact) {
+          return;
+        }
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
                 '${relative.substring('attachments/'.length)}'
@@ -3376,8 +3393,14 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        for (final child in value.values) {
-          inspect(child);
+        final cleanedFlowStep =
+            value['artifactCleanupStatus'] == 'cleaned';
+        for (final entry in value.entries) {
+          // A cleaned flow result keeps its historical reference so execution
+          // resume can skip that step. Its owned file is intentionally gone
+          // and therefore is not a required backup entry.
+          if (cleanedFlowStep && entry.key == 'result') continue;
+          inspect(entry.value);
         }
       } else if (value is Iterable) {
         for (final child in value) {
@@ -5802,6 +5825,7 @@ const List<String> _restoreKnownDirs = [
   'anki',
   'task_state',
   'task_flow_attachments',
+  'task_flow_temporary',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -5828,6 +5852,7 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'task_state':
       return selection.tasks;
     case 'task_flow_attachments':
+    case 'task_flow_temporary':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;

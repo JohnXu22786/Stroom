@@ -16,6 +16,7 @@ import '../engine/task_executor.dart';
 import '../config/default_rules.dart';
 import '../engine/executor_save.dart';
 import '../../utils/atomic_file.dart';
+import '../../task_flow/services/flow_temporary_artifact_storage.dart';
 
 // =============================================================================
 // Provider 定义
@@ -121,11 +122,16 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      String? temporaryExecutionId,
+      String? temporaryBlockId,
       bool deferSingleResourceSelection = false}) {
     final id = taskId ?? const Uuid().v4();
     final metadata = <String, String>{
       if (videoFolder.isNotEmpty) 'videoFolder': videoFolder,
       if (audioFolder.isNotEmpty) 'audioFolder': audioFolder,
+      if (temporaryExecutionId != null)
+        flowTemporaryExecutionIdKey: temporaryExecutionId,
+      if (temporaryBlockId != null) flowTemporaryBlockIdKey: temporaryBlockId,
       if (deferSingleResourceSelection) 'deferSingleResourceSelection': 'true',
     };
     final task = CatCatchTask(
@@ -305,6 +311,19 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
     state = remainingTasks;
     _persistTasks();
+  }
+
+  Future<bool> clearDownloadedFilePath(String id) async {
+    if (!mounted) return false;
+    state = state
+        .map((task) => task.id == id
+            ? task.copyWith(clearDownloadedFilePath: true)
+            : task)
+        .toList();
+    final barrier = _removalBarrier;
+    if (barrier != null) await barrier.future;
+    if (!mounted) return false;
+    return _writeSnapshot(state);
   }
 
   /// Save removals before publishing them; absent IDs also retry disk cleanup.

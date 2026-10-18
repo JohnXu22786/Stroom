@@ -19,6 +19,7 @@ import '../../widgets/app_media_picker_dialog.dart';
 import '../models/block_type_definition.dart';
 import '../models/flow_payload.dart'
     show flowFileMimeType, flowMimeType, maxFlowImageInputBytes;
+import '../models/flow_temporary_output.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_chain_editor.dart';
@@ -408,6 +409,16 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         setState(() => _chain.duplicate(index)),
                     onMoveBlock: (index, destination) =>
                         setState(() => _chain.move(index, destination)),
+                    onTemporaryOutputsChanged: (enabled) => setState(
+                        () => _chain.setTemporaryOutputs(enabled)),
+                    onTemporaryOutputChanged: (index, enabled) {
+                      if (index < 0 || index >= _blocks.length) return;
+                      final block = _blocks[index];
+                      setState(() => _chain.updateParams(
+                          block.id,
+                          Map<String, dynamic>.from(block.params)
+                            ..[flowTemporaryOutputParam] = enabled));
+                    },
                   ),
                 ),
               ],
@@ -500,8 +511,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     setState(() => _chain.select(block.id));
     // Settings receive their own nested values so cancellation cannot mutate
     // the draft, the persisted flow, or an undo snapshot.
-    final updated = await showBlockEditorDialog(context,
-        block: TaskFlowChainEditor.copyBlock(block));
+    final updated = await showBlockEditorDialog(
+      context,
+      block: TaskFlowChainEditor.copyBlock(block),
+      allowTemporaryOutput: isFlowTemporaryOutputEligible(_blocks, index),
+    );
     if (updated != null && mounted) {
       setState(() => _chain.updateParams(block.id, updated.params));
     }

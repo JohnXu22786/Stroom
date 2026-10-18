@@ -8,6 +8,7 @@ import '../../services/attachment_storage.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_payload.dart';
 import '../models/io_type.dart';
+import '../services/flow_temporary_artifact_storage.dart';
 import 'persistable_notifier.dart';
 
 /// Provider for tracking task flow executions (for the unified task list).
@@ -139,6 +140,16 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
           _deletingInputPaths.remove(path);
         }
       });
+    }
+  }
+
+  Future<void> cleanupTemporaryArtifacts(Iterable<String> executionIds) async {
+    for (final id in executionIds.toSet()) {
+      try {
+        await FlowTemporaryArtifactStorage.deleteExecution(id);
+      } catch (error) {
+        debugPrint('Failed to clean up task-flow artifacts: $error');
+      }
     }
   }
 
@@ -355,6 +366,24 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     return persist();
   }
 
+  Future<bool> setArtifactCleanupStatus(
+    String executionId,
+    String stepId,
+    FlowArtifactCleanupStatus status,
+  ) {
+    _update(executionId, (execution) {
+      final steps = execution.subTasks.map((step) {
+        if (step.id != stepId ||
+            step.result?.temporaryArtifact?.executionId != executionId) {
+          return step;
+        }
+        return step.copyWith(artifactCleanupStatus: status);
+      }).toList();
+      return execution.copyWith(subTasks: steps);
+    });
+    return persist();
+  }
+
   void prepareResume(String id) => _update(id, (e) {
         var prefix = true;
         final steps = e.subTasks.map((st) {
@@ -497,6 +526,7 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
         return;
       }
       _pendingInputRemovals.remove(id);
+      await cleanupTemporaryArtifacts([id]);
       await cleanupInputStoragePaths([removed.inputStoragePath]);
     });
     _inputRemovalQueue = operation.catchError((Object error, StackTrace stack) {
@@ -545,7 +575,10 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     });
     // A retry can hold a picker-file lock while awaiting registration. Release
     // the mutation queue before taking those same locks for input cleanup.
-    if (saved) await cleanupInputStoragePaths(inputPaths);
+    if (saved) {
+      await cleanupTemporaryArtifacts(removedIds);
+      await cleanupInputStoragePaths(inputPaths);
+    }
     if (!mounted && _disposedSnapshot != null) {
       // The removal can finish after dispose has queued its barrier-dependent
       // flush. Persist the resolved snapshot last so a flush queued before the

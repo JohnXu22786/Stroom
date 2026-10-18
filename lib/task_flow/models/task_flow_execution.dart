@@ -42,6 +42,10 @@ enum FlowStepOutcome {
   interrupted
 }
 
+/// Durable progress for cleaning a temporary result after its successor has
+/// stored a result. `pending` is safe to retry if the app exits mid-delete.
+enum FlowArtifactCleanupStatus { none, pending, cleaned }
+
 @immutable
 class FlowSubTask {
   final String id;
@@ -52,6 +56,7 @@ class FlowSubTask {
   final TaskStatus status;
   final FlowStepOutcome outcome;
   final FlowPayload? result;
+  final FlowArtifactCleanupStatus artifactCleanupStatus;
   FlowSubTask(
       {String? id,
       required this.blockTypeKey,
@@ -60,7 +65,8 @@ class FlowSubTask {
       required this.subTaskType,
       this.status = TaskStatus.running,
       FlowStepOutcome? outcome,
-      this.result})
+      this.result,
+      this.artifactCleanupStatus = FlowArtifactCleanupStatus.none})
       : id = id ?? const Uuid().v4(),
         outcome = outcome ?? outcomeFor(status);
 
@@ -78,6 +84,7 @@ class FlowSubTask {
           TaskStatus? status,
           FlowStepOutcome? outcome,
           FlowPayload? result,
+          FlowArtifactCleanupStatus? artifactCleanupStatus,
           bool clearResult = false}) =>
       FlowSubTask(
           id: id,
@@ -87,7 +94,9 @@ class FlowSubTask {
           subTaskType: subTaskType,
           status: status ?? this.status,
           outcome: outcome ?? this.outcome,
-          result: clearResult ? null : result ?? this.result);
+          result: clearResult ? null : result ?? this.result,
+          artifactCleanupStatus:
+              artifactCleanupStatus ?? this.artifactCleanupStatus);
   Map<String, dynamic> toMap() => {
         'id': id,
         'blockTypeKey': blockTypeKey,
@@ -96,7 +105,9 @@ class FlowSubTask {
         'subTaskType': subTaskType,
         'status': status.name,
         'outcome': outcome.name,
-        if (result != null) 'result': result!.toMap()
+        if (result != null) 'result': result!.toMap(),
+        if (artifactCleanupStatus != FlowArtifactCleanupStatus.none)
+          'artifactCleanupStatus': artifactCleanupStatus.name,
       };
   factory FlowSubTask.fromMap(Map<String, dynamic> map) => FlowSubTask(
       id: map['id'] as String?,
@@ -110,6 +121,9 @@ class FlowSubTask {
       outcome: FlowStepOutcome.values
           .where((s) => s.name == map['outcome'])
           .firstOrNull,
+      artifactCleanupStatus: FlowArtifactCleanupStatus.values
+          .where((status) => status.name == map['artifactCleanupStatus'])
+          .firstOrNull ?? FlowArtifactCleanupStatus.none,
       result: map['result'] is Map
           ? FlowPayload.fromMap(Map<String, dynamic>.from(map['result'] as Map))
           : null);

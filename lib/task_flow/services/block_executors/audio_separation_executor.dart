@@ -23,7 +23,9 @@ import '../../models/block_type_definition.dart';
 import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
+import '../../models/flow_payload.dart';
 import '../../providers/task_flow_execution_provider.dart';
+import '../flow_temporary_artifact_storage.dart';
 import 'shared_helpers.dart';
 
 /// Runs [work] while polling whether the flow execution is still active.
@@ -264,6 +266,7 @@ Future<String> executeAudioSeparationBlock({
   required TaskFlowExecutionNotifier execNotifier,
   required FlowSubTask flowSubTask,
   required BackgroundTaskNotifier bgNotifier,
+  bool temporaryOutput = false,
 
   /// Allows the extraction wait to be controlled in cancellation tests.
   Future<Uint8List> Function(String, String)? extractAudio,
@@ -414,6 +417,46 @@ Future<String> executeAudioSeparationBlock({
     );
     final hash = meta.$1;
     final format = meta.$2;
+    if (temporaryOutput) {
+      if (!isFlowExecutionActive(execNotifier, execId)) {
+        throw BlockExecutionException(
+          '任务流已结束或删除',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      final filePath = await FlowTemporaryArtifactStorage.writeBytes(
+        executionId: execId,
+        blockId: block.id,
+        fileName: '$hash.$format',
+        bytes: audioBytes,
+      );
+      await onAudioFileWritten?.call();
+      if (!isFlowExecutionActive(execNotifier, execId)) {
+        await FlowTemporaryArtifactStorage.deleteArtifact(
+          FlowTemporaryArtifact(
+            executionId: execId,
+            blockId: block.id,
+            reference: filePath,
+          ),
+        );
+        throw BlockExecutionException(
+          '任务流已结束或删除',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      await _yieldFrame();
+      bgNotifier.updateStep(taskId, 1, completed: true);
+      await _yieldFrame();
+      bgNotifier.completeTask(taskId, downloadedFilePath: filePath);
+      execNotifier.updateSubTaskStatus(
+        execId,
+        flowSubTask.id,
+        TaskStatus.completed,
+      );
+      return filePath;
+    }
     return await FileManifest.withStorageFileSaveLock(
       '$hash.$format',
       () async {

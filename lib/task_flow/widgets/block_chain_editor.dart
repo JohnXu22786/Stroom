@@ -4,6 +4,7 @@ import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_chain_editor.dart';
+import '../models/flow_temporary_output.dart';
 import 'flow_block_card.dart';
 import 'io_type_indicator.dart';
 
@@ -19,6 +20,8 @@ class BlockChainEditor extends StatelessWidget {
   final void Function(int index)? onDuplicateBlock;
   final void Function(int index, int destination)? onMoveBlock;
   final String? selectedBlockId;
+  final ValueChanged<bool>? onTemporaryOutputsChanged;
+  final void Function(int index, bool enabled)? onTemporaryOutputChanged;
 
   const BlockChainEditor({
     super.key,
@@ -33,6 +36,8 @@ class BlockChainEditor extends StatelessWidget {
     this.onDuplicateBlock,
     this.onMoveBlock,
     this.selectedBlockId,
+    this.onTemporaryOutputsChanged,
+    this.onTemporaryOutputChanged,
   });
 
   /// The types users can pick for the initial input — text/audio/image/
@@ -43,12 +48,28 @@ class BlockChainEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final issues = TaskFlowChainEditor.validateConnections(blocks, inputType);
+    final temporaryOutputIndices = [
+      for (var index = 0; index < blocks.length; index++)
+        if (isFlowTemporaryOutputEligible(blocks, index)) index,
+    ];
+    final temporaryOutputCount = temporaryOutputIndices
+        .where((index) => isFlowTemporaryOutputEnabled(blocks[index]))
+        .length;
+    final bool? allTemporary = temporaryOutputIndices.isEmpty
+        ? false
+        : temporaryOutputCount == temporaryOutputIndices.length
+            ? true
+            : temporaryOutputCount == 0
+                ? false
+                : null;
     return Column(
       children: [
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             children: [
+              if (temporaryOutputIndices.isNotEmpty)
+                _buildTemporaryOutputControl(context, allTemporary),
               _buildInitialInputCard(context),
               ...List.generate(blocks.length, (index) {
                 final block = blocks[index];
@@ -64,6 +85,11 @@ class BlockChainEditor extends StatelessWidget {
                       index: displayIndex,
                       isFirst: index == 0,
                       isLast: isLast,
+                      onTemporaryOutputChanged: isFlowTemporaryOutputEligible(
+                              blocks, index)
+                          ? (enabled) =>
+                              onTemporaryOutputChanged?.call(index, enabled)
+                          : null,
                       selected: selectedBlockId == block.id,
                       validationMessage: issues
                           .where((issue) => issue.blockId == block.id)
@@ -99,6 +125,42 @@ class BlockChainEditor extends StatelessWidget {
         ),
         _buildBottomBar(context),
       ],
+    );
+  }
+
+  Widget _buildTemporaryOutputControl(BuildContext context, bool? value) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Checkbox(
+            tristate: true,
+            value: value,
+            onChanged: onTemporaryOutputsChanged == null
+                ? null
+                : (_) => onTemporaryOutputsChanged!(value == true ? false : true),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('中间文件临时保存',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text('下一个步骤成功保存结果后清理；最终步骤始终保留',
+                    style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

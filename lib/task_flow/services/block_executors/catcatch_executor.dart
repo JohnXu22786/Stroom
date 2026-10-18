@@ -31,6 +31,7 @@ Future<String> executeCatCatchBlock({
   required CatCatchNotifier catcatchNotifier,
   String videoFolder = '',
   String audioFolder = '',
+  bool temporaryOutput = false,
 
   /// Per-run duration (seconds) from the run-mode input box. When > 0 it
   /// overrides the block's configured `durationSec`; 0 = use the block's
@@ -56,9 +57,11 @@ Future<String> executeCatCatchBlock({
     input,
     durationSec,
     taskId: taskId,
-    videoFolder: videoFolder,
-    audioFolder: audioFolder,
+    videoFolder: temporaryOutput ? '' : videoFolder,
+    audioFolder: temporaryOutput ? '' : audioFolder,
     deferSingleResourceSelection: automatic,
+    temporaryExecutionId: temporaryOutput ? execId : null,
+    temporaryBlockId: temporaryOutput ? block.id : null,
   );
 
   // Stall detection instead of a wall-clock deadline: a large download or
@@ -197,8 +200,9 @@ Future<String> executeCatCatchBlock({
       // Native saves have already registered this exact completed path.
       // Legacy and mocked tasks still use the cancellation-aware fallback.
       CompletedMediaRegistration? registration;
-      if (task.metadata[catcatch.CatCatchTask.nativeRegisteredPathKey] !=
-          path) {
+      if (!temporaryOutput &&
+          task.metadata[catcatch.CatCatchTask.nativeRegisteredPathKey] !=
+              path) {
         try {
           onFallbackRegistration?.call();
           registration = await registerFlowCatCatchOutput(path, task,
