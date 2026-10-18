@@ -104,35 +104,48 @@ class MermaidTemplates {
     );
   }
 
-  /// Assigns an unused ID to the flowchart "add node" snippet.
-  static String assignUniqueFlowchartNodeId(String code, String snippet) {
-    final snippetId = RegExp(r'^([ \t]*)NewNode(?=[ \t]*\[)').firstMatch(
-      snippet,
-    );
-    if (snippetId == null) return snippet;
+  /// Assigns unused IDs to the nodes declared in a flowchart snippet.
+  static String assignUniqueFlowchartNodeIds(String code, String snippet) {
+    final snippetNodeIds = _flowchartNodeIds(snippet);
+    if (snippetNodeIds.isEmpty) return snippet;
 
     final existingIds = _flowchartNodeIds(code);
-    var nodeId = 'NewNode';
-    var suffix = 1;
-    while (existingIds.contains(nodeId)) {
-      nodeId = 'NewNode${suffix++}';
+    final replacements = <String, String>{};
+    for (final baseId in snippetNodeIds) {
+      var nodeId = baseId;
+      var suffix = 1;
+      while (existingIds.contains(nodeId)) {
+        nodeId = '$baseId${suffix++}';
+      }
+      existingIds.add(nodeId);
+      replacements[baseId] = nodeId;
     }
 
-    return snippet.replaceRange(
-      snippetId.start + snippetId[1]!.length,
-      snippetId.end,
-      nodeId,
+    if (replacements.entries.every((entry) => entry.key == entry.value)) {
+      return snippet;
+    }
+
+    final nodeIds = replacements.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final nodeIdPattern = RegExp(
+      r'\b(?:' + nodeIds.map(RegExp.escape).join('|') + r')\b',
+    );
+    return snippet.replaceAllMapped(
+      nodeIdPattern,
+      (match) => replacements[match[0]]!,
     );
   }
 
   /// Finds existing IDs from flowchart statements and their link endpoints.
   static Set<String> _flowchartNodeIds(String code) {
-    final nodeIdPattern = RegExp(r'\b(NewNode\d*)\b');
+    final nodeIdPattern = RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\b');
     final usedIds = <String>{};
 
     for (final line in code.split('\n')) {
       final flowchartSyntax = _stripFlowchartLabelsAndComments(line);
       for (final statement in flowchartSyntax.split(';')) {
+        if (statement.trim() == 'end') continue;
+
         for (final match in nodeIdPattern.allMatches(statement)) {
           final before = statement.substring(0, match.start).trimRight();
           final after = statement.substring(match.end).trimLeft();

@@ -229,15 +229,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       snippet,
       _selectedTypeId,
     );
-    final snippetWithUniqueFlowchartNodeId =
-        MermaidTemplates.assignUniqueFlowchartNodeId(
-      currentCode,
-      snippetWithUniqueDiagramEntityId,
-    );
+    final snippetWithUniqueFlowchartNodeIds = _selectedTypeId == 'flowchart'
+        ? MermaidTemplates.assignUniqueFlowchartNodeIds(
+            currentCode,
+            snippetWithUniqueDiagramEntityId,
+          )
+        : snippetWithUniqueDiagramEntityId;
     final snippetWithUniqueRequirementId =
         MermaidTemplates.assignUniqueRequirementId(
       currentCode,
-      snippetWithUniqueFlowchartNodeId,
+      snippetWithUniqueFlowchartNodeIds,
     );
     final insertionPoint = currentCode.lastIndexOf('\n');
     if (insertionPoint >= 0) {
