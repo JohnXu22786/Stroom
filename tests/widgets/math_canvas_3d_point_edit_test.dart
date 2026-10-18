@@ -1,9 +1,101 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
 import 'package:stroom/models/math_3d_scene.dart';
 import 'package:stroom/widgets/math_canvas_3d.dart';
+
+Future<void> _expectPlanarArrowsFollowAxes(
+  WidgetTester tester, {
+  required Camera3D camera,
+  required ProjectionType projectionType,
+  required Point3D point,
+}) async {
+  const size = Size(800, 600);
+  final projection = projectionType == ProjectionType.parallel
+      ? Projection3D.parallel(
+          width: size.width,
+          height: size.height,
+          scale: camera.distance * 0.6,
+        )
+      : Projection3D.perspective(
+          width: size.width,
+          height: size.height,
+          fov: 60,
+        );
+  final center = worldToScreen(point, camera, projection);
+  final origin = Offset(center.x, center.y);
+  final sampleDistance = projectionType == ProjectionType.perspective
+      ? 0.01
+      : 1.0;
+
+  Offset axisOffset(Vector3D axis) {
+    final screenPoint = worldToScreen(
+      point + axis * sampleDistance,
+      camera,
+      projection,
+    );
+    final projectedAxis = Offset(
+      screenPoint.x - center.x,
+      screenPoint.y - center.y,
+    );
+    return projectedAxis / projectedAxis.distance * 28;
+  }
+
+  final xAxis = axisOffset(Vector3D.unitX);
+  final yAxis = axisOffset(Vector3D.unitY);
+  final painter = MathCanvas3DPainter(
+    cameraTarget: camera.target,
+    cameraDistance: camera.distance,
+    cameraTheta: camera.theta,
+    cameraPhi: camera.phi,
+    projectionType: projectionType,
+    showAxes: false,
+    showPlane: false,
+    showGrid: false,
+    showLabels: false,
+    selectedPoint: Object3D.point(point),
+    pointDragMode: PointDragMode.plane,
+  );
+  final pixels = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    painter.paint(ui.Canvas(recorder), size);
+    final image = await recorder.endRecording().toImage(
+      size.width.toInt(),
+      size.height.toInt(),
+    );
+    final bytes = (await image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    ))!.buffer.asUint8List();
+    image.dispose();
+
+    final result = <Offset>[];
+    for (var y = 0; y < size.height; y++) {
+      for (var x = 0; x < size.width; x++) {
+        final index = (y * size.width.toInt() + x) * 4;
+        final red = bytes[index];
+        final green = bytes[index + 1];
+        final blue = bytes[index + 2];
+        if (red > 100 && green < 140 && blue > 100) {
+          result.add(Offset(x.toDouble(), y.toDouble()));
+        }
+      }
+    }
+    return result;
+  });
+
+  expect(pixels, isNotNull);
+  for (final direction in [xAxis, -xAxis, yAxis, -yAxis]) {
+    final expectedArrowPoint = origin + direction * (20 / 28);
+    expect(
+      pixels!.any((pixel) => (pixel - expectedArrowPoint).distance < 2),
+      isTrue,
+      reason: 'Expected an arrow along projected direction $direction',
+    );
+  }
+}
 
 void main() {
   Future<MathCanvas3DState> setup(WidgetTester tester) async {
@@ -193,6 +285,27 @@ void main() {
     await pointer.cancel();
     await tester.pump();
     expect(state.objects, [initial]);
+  });
+
+  testWidgets(
+      'planar drag arrows follow projected axes in parallel and perspective views',
+      (tester) async {
+    await _expectPlanarArrowsFollowAxes(
+      tester,
+      camera: const Camera3D(theta: 0.9, phi: 0.8),
+      projectionType: ProjectionType.parallel,
+      point: Point3D.origin,
+    );
+
+    const camera = Camera3D(theta: 0.9, phi: 0.8);
+    final forward = (camera.target - camera.position).normalized();
+    final point = camera.position + forward * 0.2;
+    await _expectPlanarArrowsFollowAxes(
+      tester,
+      camera: camera,
+      projectionType: ProjectionType.perspective,
+      point: point,
+    );
   });
 
   testWidgets('two fingers navigate without moving or creating a point',

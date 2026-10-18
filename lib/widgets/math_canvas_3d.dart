@@ -5010,14 +5010,29 @@ class MathCanvas3DPainter extends CustomPainter {
         guide..color = const Color(0x807C4DFF),
       );
       guide.color = const Color(0xFF7C4DFF);
-      final directions = pointDragMode == PointDragMode.height
-          ? [const Offset(0, 28), const Offset(0, -28)]
-          : [
-              const Offset(28, 0),
-              const Offset(-28, 0),
-              const Offset(0, 28),
-              const Offset(0, -28),
-            ];
+      final axisStep = projection.type == ProjectionType.perspective
+          ? dart_math.min(1.0, screen.z.abs() * 0.5).toDouble()
+          : 1.0;
+      Offset projectedAxis(Vector3D axis) {
+        final axisEnd = worldToScreen(
+          point + axis * axisStep,
+          camera,
+          projection,
+        );
+        final projected = Offset(axisEnd.x - center.dx, axisEnd.y - center.dy);
+        final length = projected.distance;
+        if (length < 1e-8 || !length.isFinite) return Offset.zero;
+        return projected * (28 / length);
+      }
+
+      final List<Offset> directions;
+      if (pointDragMode == PointDragMode.height) {
+        directions = [const Offset(0, 28), const Offset(0, -28)];
+      } else {
+        final xAxis = projectedAxis(Vector3D.unitX);
+        final yAxis = projectedAxis(Vector3D.unitY);
+        directions = [xAxis, -xAxis, yAxis, -yAxis];
+      }
       for (final direction in directions) {
         canvas.drawLine(center + direction * 0.5, center + direction, guide);
         _drawArrowHead(
