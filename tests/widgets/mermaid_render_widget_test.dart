@@ -510,6 +510,10 @@ void main() {
     test('HTML setZoom reports transform changes via onTransformChanged', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(html, contains('onTransformChanged'));
+      expect(
+        html,
+        contains("callHandler('onTransformChanged', zoomLevel, panX, panY);"),
+      );
     });
 
     test('HTML queues native gesture transforms until after the first fit', () {
@@ -2074,6 +2078,89 @@ void main() {
         expect(
           controller.loadedDataDocuments[1],
           contains("callHandler('onMermaidError', msg, 2);"),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb || defaultTargetPlatform == TargetPlatform.windows,
+    );
+
+    testWidgets(
+      'native source updates ignore stale transforms and accept current document transforms',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() {
+          InAppWebViewPlatform.instance =
+              previousPlatform ?? _MermaidWebViewPlatform();
+        });
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(mermaidCode: 'graph TD\nA-->B'),
+          supportsJavaScriptHandlers: true,
+        );
+        final controller = webView.controller;
+        final platformController =
+            webView.controllerFromPlatform<InAppWebViewController>(controller);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+        final activeDocumentUrl = controller.loadedDataBaseUrls.last;
+        webView.params.onLoadStop?.call(platformController, activeDocumentUrl);
+        await tester.pump();
+        expect(find.text('加载渲染引擎...'), findsNothing);
+
+        // The old document's delayed transform must not make Flutter think
+        // the new document is already at its maximum zoom.
+        controller.simulateTransformChanged(
+          10,
+          30,
+          40,
+          documentGeneration: 0,
+        );
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          controller.evaluatedScripts
+              .where((script) =>
+                  script.contains('window.applyZoomDeltasAfterFit([0.1])'))
+              .length,
+          1,
+          reason:
+              'the stale callback must not suppress a zoom command; scripts: ${controller.evaluatedScripts}',
+        );
+
+        // A transform from the new document still synchronizes Flutter's
+        // zoom state and prevents a command beyond the maximum zoom.
+        controller.simulateTransformChanged(
+          10,
+          30,
+          40,
+          documentGeneration: 1,
+        );
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          controller.evaluatedScripts
+              .where((script) =>
+                  script.contains('window.applyZoomDeltasAfterFit([0.1])'))
+              .length,
+          1,
+        );
+        expect(
+          controller.loadedDataDocuments.last,
+          contains(
+            "callHandler('onTransformChanged', zoomLevel, panX, panY, 1);",
+          ),
         );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -4762,7 +4849,24 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     _javascriptHandlers['onMermaidError']?.call([message, documentGeneration]);
   }
 
-  void simulateJsFitToViewport(double fittedZoom) {
+  void simulateTransformChanged(
+    double zoom,
+    double panX,
+    double panY, {
+    required int documentGeneration,
+  }) {
+    _javascriptHandlers['onTransformChanged']?.call([
+      zoom,
+      panX,
+      panY,
+      documentGeneration,
+    ]);
+  }
+
+  void simulateJsFitToViewport(
+    double fittedZoom, {
+    int documentGeneration = 0,
+  }) {
     zoomLevel = fittedZoom;
     panX = 0;
     panY = 0;
@@ -4777,6 +4881,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       zoomLevel,
       panX,
       panY,
+      documentGeneration,
     ]);
   }
 
