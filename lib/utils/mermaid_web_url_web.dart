@@ -1,5 +1,6 @@
 import 'dart:html' as html;
-import 'dart:js_util' as js_util;
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 Uri get mermaidWebBaseUri =>
     Uri.parse(html.document.baseUri ?? html.window.location.href);
@@ -16,8 +17,9 @@ double get mermaidZoomInputTimestamp {
 /// Returns the next sequence shared with the Mermaid iframe's parent page.
 int? get mermaidZoomInputSequence {
   const sequenceKey = '__stroomMermaidZoomInputSequence';
-  final previous = js_util.getProperty<num?>(html.window, sequenceKey) ?? 0;
-  final sequence = previous.toInt() + 1;
-  js_util.setProperty(html.window, sequenceKey, sequence);
+  final window = JSObject.fromInteropObject(html.window);
+  final previous = window[sequenceKey]?.dartify();
+  final sequence = (previous is num ? previous.toInt() : 0) + 1;
+  window[sequenceKey] = sequence.toJS;
   return sequence;
 }
