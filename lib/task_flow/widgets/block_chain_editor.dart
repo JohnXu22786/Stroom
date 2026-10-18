@@ -85,11 +85,11 @@ class BlockChainEditor extends StatelessWidget {
                       index: displayIndex,
                       isFirst: index == 0,
                       isLast: isLast,
-                      onTemporaryOutputChanged: isFlowTemporaryOutputEligible(
-                              blocks, index)
-                          ? (enabled) =>
-                              onTemporaryOutputChanged?.call(index, enabled)
-                          : null,
+                      onTemporaryOutputChanged:
+                          isFlowTemporaryOutputEligible(blocks, index)
+                              ? (enabled) =>
+                                  onTemporaryOutputChanged?.call(index, enabled)
+                              : null,
                       selected: selectedBlockId == block.id,
                       validationMessage: issues
                           .where((issue) => issue.blockId == block.id)
@@ -145,7 +145,8 @@ class BlockChainEditor extends StatelessWidget {
             value: value,
             onChanged: onTemporaryOutputsChanged == null
                 ? null
-                : (_) => onTemporaryOutputsChanged!(value == true ? false : true),
+                : (_) =>
+                    onTemporaryOutputsChanged!(value == true ? false : true),
           ),
           Expanded(
             child: Column(

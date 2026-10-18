@@ -171,8 +171,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         def.typeKey == BlockType.catcatch && _params['audioOutput'] == true
             ? IOType.audio
             : def.outputType;
-    final temporaryOutput =
-        widget.allowTemporaryOutput && isFlowTemporaryOutputEnabled(widget.block);
+    final temporaryOutput = widget.allowTemporaryOutput &&
+        isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
     // the (keyboard-reduced) available height, and the fixed chrome

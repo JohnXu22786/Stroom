@@ -3393,8 +3393,7 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        final cleanedFlowStep =
-            value['artifactCleanupStatus'] == 'cleaned';
+        final cleanedFlowStep = value['artifactCleanupStatus'] == 'cleaned';
         for (final entry in value.entries) {
           // A cleaned flow result keeps its historical reference so execution
           // resume can skip that step. Its owned file is intentionally gone

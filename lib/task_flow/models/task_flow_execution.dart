@@ -122,8 +122,9 @@ class FlowSubTask {
           .where((s) => s.name == map['outcome'])
           .firstOrNull,
       artifactCleanupStatus: FlowArtifactCleanupStatus.values
-          .where((status) => status.name == map['artifactCleanupStatus'])
-          .firstOrNull ?? FlowArtifactCleanupStatus.none,
+              .where((status) => status.name == map['artifactCleanupStatus'])
+              .firstOrNull ??
+          FlowArtifactCleanupStatus.none,
       result: map['result'] is Map
           ? FlowPayload.fromMap(Map<String, dynamic>.from(map['result'] as Map))
           : null);

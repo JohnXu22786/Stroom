@@ -122,6 +122,32 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
       {String videoFolder = '',
       String audioFolder = '',
       String? taskId,
+      bool deferSingleResourceSelection = false}) {
+    return _addTask(url, expectedDurationSec,
+        videoFolder: videoFolder,
+        audioFolder: audioFolder,
+        taskId: taskId,
+        deferSingleResourceSelection: deferSingleResourceSelection);
+  }
+
+  /// Adds a task-flow download whose saved file belongs to its execution and
+  /// block rather than the user's selected media folder.
+  String addTemporaryTask(String url, int expectedDurationSec,
+      {String? taskId,
+      required String executionId,
+      required String blockId,
+      bool deferSingleResourceSelection = false}) {
+    return _addTask(url, expectedDurationSec,
+        taskId: taskId,
+        temporaryExecutionId: executionId,
+        temporaryBlockId: blockId,
+        deferSingleResourceSelection: deferSingleResourceSelection);
+  }
+
+  String _addTask(String url, int expectedDurationSec,
+      {String videoFolder = '',
+      String audioFolder = '',
+      String? taskId,
       String? temporaryExecutionId,
       String? temporaryBlockId,
       bool deferSingleResourceSelection = false}) {
@@ -316,9 +342,8 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
   Future<bool> clearDownloadedFilePath(String id) async {
     if (!mounted) return false;
     state = state
-        .map((task) => task.id == id
-            ? task.copyWith(clearDownloadedFilePath: true)
-            : task)
+        .map((task) =>
+            task.id == id ? task.copyWith(clearDownloadedFilePath: true) : task)
         .toList();
     final barrier = _removalBarrier;
     if (barrier != null) await barrier.future;

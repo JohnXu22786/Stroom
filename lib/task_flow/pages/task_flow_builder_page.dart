@@ -409,8 +409,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                         setState(() => _chain.duplicate(index)),
                     onMoveBlock: (index, destination) =>
                         setState(() => _chain.move(index, destination)),
-                    onTemporaryOutputsChanged: (enabled) => setState(
-                        () => _chain.setTemporaryOutputs(enabled)),
+                    onTemporaryOutputsChanged: (enabled) =>
+                        setState(() => _chain.setTemporaryOutputs(enabled)),
                     onTemporaryOutputChanged: (index, enabled) {
                       if (index < 0 || index >= _blocks.length) return;
                       final block = _blocks[index];

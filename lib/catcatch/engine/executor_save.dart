@@ -83,11 +83,11 @@ Future<String> executeSave({
     void finishStep() {
       _throwIfCancelled(cancelled);
       markExecutorStep(steps, 7, done: true);
-      onUpdate(task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+      onUpdate(
+          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
     }
 
-    final temporaryExecutionId =
-        task.metadata[flowTemporaryExecutionIdKey];
+    final temporaryExecutionId = task.metadata[flowTemporaryExecutionIdKey];
     final temporaryBlockId = task.metadata[flowTemporaryBlockIdKey];
     if (temporaryExecutionId != null && temporaryBlockId != null) {
       final temporaryPath = await FlowTemporaryArtifactStorage.copyNativeFile(

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'block_type_definition.dart';
 import 'flow_payload.dart';
 import 'task_flow_definition.dart';
 

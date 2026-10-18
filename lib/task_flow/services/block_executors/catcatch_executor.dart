@@ -53,16 +53,25 @@ Future<String> executeCatCatchBlock({
       ? durationSecOverride
       : asIntParam(block.params, 'durationSec', 0);
   final automatic = block.params['automaticResourceSelection'] == true;
-  catcatchNotifier.addTask(
-    input,
-    durationSec,
-    taskId: taskId,
-    videoFolder: temporaryOutput ? '' : videoFolder,
-    audioFolder: temporaryOutput ? '' : audioFolder,
-    deferSingleResourceSelection: automatic,
-    temporaryExecutionId: temporaryOutput ? execId : null,
-    temporaryBlockId: temporaryOutput ? block.id : null,
-  );
+  if (temporaryOutput) {
+    catcatchNotifier.addTemporaryTask(
+      input,
+      durationSec,
+      taskId: taskId,
+      executionId: execId,
+      blockId: block.id,
+      deferSingleResourceSelection: automatic,
+    );
+  } else {
+    catcatchNotifier.addTask(
+      input,
+      durationSec,
+      taskId: taskId,
+      videoFolder: videoFolder,
+      audioFolder: audioFolder,
+      deferSingleResourceSelection: automatic,
+    );
+  }
 
   // Stall detection instead of a wall-clock deadline: a large download or
   // long conversion updates step progress continuously, so a healthy task

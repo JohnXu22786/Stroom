@@ -5,7 +5,8 @@ import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, visibleForTesting, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_kind.dart';
@@ -568,8 +569,8 @@ class TaskFlowExecutionService {
     await _ref.read(assistantProvider.notifier).ready;
     current = _currentControl(id, revision);
     if (current == null) return;
-    await _reconcileTemporaryArtifacts(
-        id, current.snapshot!.flow, allowPausedOrFailed: true);
+    await _reconcileTemporaryArtifacts(id, current.snapshot!.flow,
+        allowPausedOrFailed: true);
     current = _currentControl(id, revision);
     if (current == null) return;
     for (final step in current.subTasks) {
@@ -910,8 +911,7 @@ class TaskFlowExecutionService {
         artifact.executionId != executionId ||
         artifact.blockId != expectedBlockId ||
         artifact.reference != result!.fileReference) {
-      throw const TaskFlowPersistenceException(
-          '临时步骤文件的所有权无法验证，已保留文件');
+      throw const TaskFlowPersistenceException('临时步骤文件的所有权无法验证，已保留文件');
     }
     if (step.artifactCleanupStatus == FlowArtifactCleanupStatus.cleaned) return;
 
@@ -929,12 +929,10 @@ class TaskFlowExecutionService {
     if (!canDelete) return;
 
     if (!await _clearTemporaryTaskFileReference(step)) {
-      throw const TaskFlowPersistenceException(
-          '无法保存临时文件引用清理状态，原文件已保留');
+      throw const TaskFlowPersistenceException('无法保存临时文件引用清理状态，原文件已保留');
     }
     if (!await FlowTemporaryArtifactStorage.deleteArtifact(artifact)) {
-      throw const TaskFlowPersistenceException(
-          '临时步骤文件的存储位置无法验证，已保留文件');
+      throw const TaskFlowPersistenceException('临时步骤文件的存储位置无法验证，已保留文件');
     }
     if (!await _notifier.setArtifactCleanupStatus(
         executionId, step.id, FlowArtifactCleanupStatus.cleaned)) {
@@ -990,8 +988,7 @@ class TaskFlowExecutionService {
         }
         final step = _execution(id)!.subTasks[i];
         if (step.outcome == FlowStepOutcome.succeeded && step.result != null) {
-          if (step.artifactCleanupStatus !=
-              FlowArtifactCleanupStatus.cleaned) {
+          if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned) {
             await _readable(step.result!, flow.id);
           }
           current = step.result!;
@@ -1247,10 +1244,8 @@ class TaskFlowExecutionService {
           execNotifier: execNotifier,
           flowSubTask: flowSubTask,
           catcatchNotifier: catcatchNotifier,
-          videoFolder:
-              temporaryOutput ? '' : block.params['videoFolder'] ?? '',
-          audioFolder:
-              temporaryOutput ? '' : block.params['audioFolder'] ?? '',
+          videoFolder: temporaryOutput ? '' : block.params['videoFolder'] ?? '',
+          audioFolder: temporaryOutput ? '' : block.params['audioFolder'] ?? '',
           temporaryOutput: temporaryOutput,
           // Per-run duration from the run-mode input box wins over the
           // block's configured duration (0 = use the configured value).

@@ -59,9 +59,8 @@ class FlowBlockCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final def = block.getDefinition();
-    final temporaryOutput = !isLast &&
-        hasFileOutput(block) &&
-        isFlowTemporaryOutputEnabled(block);
+    final temporaryOutput =
+        !isLast && hasFileOutput(block) && isFlowTemporaryOutputEnabled(block);
 
     if (def == null) {
       return _buildUnknownBlock(cs);
@@ -242,8 +241,7 @@ class FlowBlockCard extends ConsumerWidget {
                               child: Text(
                                 '临时文件（下一步成功后清理）',
                                 style: TextStyle(
-                                    fontSize: 11,
-                                    color: cs.onSurfaceVariant),
+                                    fontSize: 11, color: cs.onSurfaceVariant),
                               ),
                             ),
                           ],

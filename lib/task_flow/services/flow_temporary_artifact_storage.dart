@@ -64,8 +64,8 @@ class FlowTemporaryArtifactStorage {
       return key;
     }
 
-    final directory = Directory(
-        await _nativeBlockDirectory(executionId, blockId));
+    final directory =
+        Directory(await _nativeBlockDirectory(executionId, blockId));
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, safeName));
     try {
@@ -91,10 +91,11 @@ class FlowTemporaryArtifactStorage {
     }
     final source = File(sourcePath);
     if (!await source.exists()) {
-      throw FileSystemException('Temporary output source is missing', sourcePath);
+      throw FileSystemException(
+          'Temporary output source is missing', sourcePath);
     }
-    final directory = Directory(
-        await _nativeBlockDirectory(executionId, blockId));
+    final directory =
+        Directory(await _nativeBlockDirectory(executionId, blockId));
     await directory.create(recursive: true);
     final target = File(p.join(directory.path, _safeFileName(sourcePath)));
     final sink = target.openWrite();
@@ -144,7 +145,10 @@ class FlowTemporaryArtifactStorage {
       final name = reference.startsWith(prefix)
           ? reference.substring(prefix.length)
           : '';
-      return name.isNotEmpty && !name.contains('/') && name != '.' && name != '..';
+      return name.isNotEmpty &&
+          !name.contains('/') &&
+          name != '.' &&
+          name != '..';
     }
     final directory = p.normalize(
         p.absolute(await _nativeBlockDirectory(executionId, blockId)));
@@ -219,8 +223,7 @@ class FlowTemporaryArtifactStorage {
         Directory(p.join(await AppStorage.directory, _storageRoot));
     if (!await directory.exists()) return;
     await for (final entity in directory.list(followLinks: false)) {
-      if (entity is Directory &&
-          !retained.contains(p.basename(entity.path))) {
+      if (entity is Directory && !retained.contains(p.basename(entity.path))) {
         await entity.delete(recursive: true);
       }
     }

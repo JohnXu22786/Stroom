@@ -128,8 +128,7 @@ class FlowPayload {
             mimeType: map['mimeType'] as String?,
             temporaryArtifact: map['temporaryArtifact'] is Map
                 ? FlowTemporaryArtifact.fromMap(
-                    Map<String, dynamic>.from(
-                        map['temporaryArtifact'] as Map))
+                    Map<String, dynamic>.from(map['temporaryArtifact'] as Map))
                 : null,
           );
   }
