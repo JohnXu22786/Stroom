@@ -18,7 +18,12 @@ String ocrInstructionLabel(OcrInstruction instruction) {
 
 /// Dialog for managing the generic OCR instructions (add / edit / delete).
 class OcrInstructionManageDialog extends ConsumerStatefulWidget {
-  const OcrInstructionManageDialog({super.key});
+  final ValueChanged<int>? onInstructionDeleted;
+
+  const OcrInstructionManageDialog({
+    super.key,
+    this.onInstructionDeleted,
+  });
 
   @override
   ConsumerState<OcrInstructionManageDialog> createState() =>
@@ -175,9 +180,15 @@ class _OcrInstructionManageDialogState
                                     color: cs.error,
                                   ),
                                   tooltip: '删除指令',
-                                  onPressed: () => ref
-                                      .read(ocrInstructionsProvider.notifier)
-                                      .remove(index),
+                                  onPressed: () async {
+                                    final removal = ref
+                                        .read(
+                                          ocrInstructionsProvider.notifier,
+                                        )
+                                        .remove(index);
+                                    widget.onInstructionDeleted?.call(index);
+                                    await removal;
+                                  },
                                 ),
                               ],
                             ),
