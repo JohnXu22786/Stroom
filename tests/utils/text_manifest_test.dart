@@ -83,14 +83,13 @@ void main() {
         await readStarted.future.timeout(const Duration(seconds: 5));
 
         var cleanupFinished = false;
-        final cleanup =
-            TextManifest.deleteFileIfUnreferenced(
-              oldHash,
-              originalRecord.storagePath,
-            ).then((deleted) {
-              cleanupFinished = true;
-              return deleted;
-            });
+        final cleanup = TextManifest.deleteFileIfUnreferenced(
+          oldHash,
+          originalRecord.storagePath,
+        ).then((deleted) {
+          cleanupFinished = true;
+          return deleted;
+        });
         await Future<void>.delayed(Duration.zero);
         expect(cleanupFinished, isFalse);
 
@@ -137,14 +136,13 @@ void main() {
         await readStarted.future.timeout(const Duration(seconds: 5));
 
         var cleanupFinished = false;
-        final cleanup =
-            TextManifest.deleteFileIfUnreferenced(
-              hash,
-              record.storagePath,
-            ).then((deleted) {
-              cleanupFinished = true;
-              return deleted;
-            });
+        final cleanup = TextManifest.deleteFileIfUnreferenced(
+          hash,
+          record.storagePath,
+        ).then((deleted) {
+          cleanupFinished = true;
+          return deleted;
+        });
         await Future<void>.delayed(Duration.zero);
         expect(cleanupFinished, isFalse);
         expect(await TextManifest.readText(record.storagePath), content);
