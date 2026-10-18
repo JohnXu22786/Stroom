@@ -2465,6 +2465,88 @@ void main() {
     );
 
     testWidgets(
+      'web source updates keep queued zoom until current load completes: '
+      'source code changes after retry timeout',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        const initialCode = 'graph TD\nA-->B';
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: initialCode),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final firstWebView = platform.webView!;
+        final controller =
+            firstWebView.controllerFromPlatform<InAppWebViewController>(
+                firstWebView.controller);
+        firstWebView.params.onWebViewCreated!(controller);
+        await tester.pump();
+        final initialUrl = firstWebView.controller.loadedUrls.last;
+        firstWebView.params.onLoadStop?.call(controller, initialUrl);
+        await tester.pump();
+
+        firstWebView.params.onReceivedError!(
+          controller,
+          WebResourceRequest(url: initialUrl, isForMainFrame: true),
+          WebResourceError(
+            type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+            description: 'Initial navigation failed',
+          ),
+        );
+        await tester.pump();
+        await tester.tap(find.text('重试'));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('页面加载超时，请重试'), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.code));
+        await tester.pump();
+        expect(find.text(initialCode), findsOneWidget);
+        expect(find.byType(InAppWebView), findsNothing);
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: MermaidRenderWidget(mermaidCode: 'graph TD\nA-->C'),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(platform.webViews, hasLength(2));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        firstWebView.params.onWebViewCreated!(controller);
+        firstWebView.params.onLoadStop?.call(controller, initialUrl);
+        await tester.pump();
+        expect(
+          find.text('加载渲染引擎...'),
+          findsOneWidget,
+          reason:
+              'the disposed iframe cannot satisfy a source-mode code update',
+        );
+
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.text('加载渲染引擎...'), findsOneWidget);
+        expect(find.text('页面加载超时，请重试'), findsNothing);
+        await tester.pump(const Duration(seconds: 10));
+        expect(find.text('图表渲染引擎初始化失败，请重试'), findsOneWidget);
+        expect(find.text('重试'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets(
       'web source updates keep queued zoom until current load completes',
       (tester) async {
         final previousPlatform = InAppWebViewPlatform.instance;
