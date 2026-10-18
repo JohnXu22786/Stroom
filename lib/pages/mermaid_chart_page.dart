@@ -421,22 +421,42 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           }
         });
       } else {
-        await TextManifest.writeText(storageFileName, content);
-        await TextManifest.updateRecord(
-          TextRecord(
-            id: existingRecord.id,
-            name: finalName,
-            hash: hash,
-            format: existingRecord.format,
-            createdAt: existingRecord.createdAt,
-            modifiedAt: hash == existingRecord.hash
-                ? existingRecord.modifiedAt
-                : DateTime.now(),
-            size: bytes.length,
-            folder: selectedFolder,
-            textLength: content.length,
-          ),
-        );
+        await TextManifest.withSaveLock(hash, () async {
+          await TextManifest.writeText(storageFileName, content);
+          try {
+            await TextManifest.updateRecord(
+              TextRecord(
+                id: existingRecord.id,
+                name: finalName,
+                hash: hash,
+                format: existingRecord.format,
+                createdAt: existingRecord.createdAt,
+                modifiedAt: hash == existingRecord.hash
+                    ? existingRecord.modifiedAt
+                    : DateTime.now(),
+                size: bytes.length,
+                folder: selectedFolder,
+                textLength: content.length,
+              ),
+            );
+          } catch (error, stackTrace) {
+            try {
+              final currentRecords = await TextManifest.loadRecordsUncached();
+              if (!currentRecords.any(
+                (record) => record.storagePath == storageFileName,
+              )) {
+                await TextManifest.deleteFile(storageFileName);
+              }
+            } catch (cleanupError) {
+              debugPrint(
+                'Failed to clean up Mermaid chart file $storageFileName '
+                'after record update failed: $cleanupError',
+              );
+            }
+            TextManifest.invalidateCache();
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+        });
 
         if (hash != existingRecord.hash &&
             !records.any(
