@@ -470,6 +470,57 @@ void main() {
     expect(notifier.state.single.status, TaskStatus.completed);
   });
 
+  test(
+    'pre-upload per-image failure does not complete later aggregate stages',
+    () async {
+      final failedBeforeUploadAdapter = _OutOfOrderAdapter();
+      final failedBeforeUploadRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+        ],
+        executionMode: OcrBatchMode.perImage,
+        perImageConcurrency: 1,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) => OcrService(
+          config: config,
+          dio: Dio()..httpClientAdapter = failedBeforeUploadAdapter,
+        ),
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = failedBeforeUploadRunner.run();
+      await failedBeforeUploadAdapter.firstRequest.future.timeout(
+        const Duration(seconds: 2),
+      );
+      // The adapter leaves this failed request's upload-progress callback
+      // untouched, so the page never advances past its initial stage.
+      failedBeforeUploadAdapter.complete(
+        1,
+        text: 'pre-upload failure',
+        statusCode: 500,
+      );
+      await failedBeforeUploadAdapter.twoRequests.future.timeout(
+        const Duration(seconds: 2),
+      );
+      failedBeforeUploadAdapter.requestOptionsByImageId[2]!.onSendProgress!(
+          10, 10);
+      failedBeforeUploadAdapter.complete(2, text: 'succeeded page');
+      await running;
+
+      final task = notifier.state.single;
+      expect(task.ocrPageOutcomes[0].status, OcrPageOutcomeStatus.failed);
+      expect(task.ocrPageOutcomes[1].status, OcrPageOutcomeStatus.succeeded);
+      expect(task.steps[1].status, isNot(BgStepStatus.completed));
+      expect(task.steps[2].status, isNot(BgStepStatus.completed));
+    },
+  );
+
   test('out-of-order page success preserves failure diagnostics', () async {
     final diagnosticsAdapter = _OutOfOrderAdapter();
     final failedPagePublished = Completer<void>();

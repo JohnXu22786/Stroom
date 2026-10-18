@@ -44,6 +44,7 @@ class OcrTaskRunner {
   final Set<OcrService> _activeServices = {};
   final Map<int, int> _perImageRequestStages = {};
   final Map<int, int> _perImageUploadPercent = {};
+  bool _hasPerImageFailureBeforeUpload = false;
   Future<void>? _running;
   late final BackgroundTask? _taskGeneration;
   Object? _cancellationOwner;
@@ -173,8 +174,11 @@ class OcrTaskRunner {
     final steps = List<BgTaskStep>.of(task.steps);
     for (var index = 0; index <= 3; index++) {
       final running = activeStages.contains(index);
-      final completed =
-          !hasPendingPages && activeStages.every((stage) => stage > index);
+      final blockedByPreUploadFailure =
+          _hasPerImageFailureBeforeUpload && index >= 1 && index <= 2;
+      final completed = !hasPendingPages &&
+          !blockedByPreUploadFailure &&
+          activeStages.every((stage) => stage > index);
       final status = running
           ? BgStepStatus.running
           : completed
@@ -466,6 +470,9 @@ class OcrTaskRunner {
             rethrow;
           }
           _checkActive();
+          if (_perImageRequestStages[imageIndex] == 0) {
+            _hasPerImageFailureBeforeUpload = true;
+          }
           _failedDiagnosticService ??= service;
           outcomes[imageIndex] = OcrPageOutcome(
             imageIndex: imageIndex,
