@@ -419,7 +419,7 @@ class MermaidRenderWidget extends StatefulWidget {
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
   static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=12';
+    final base = '$webAssetTemplateUrl?v=13';
     final trimmed = code.trim();
     return trimmed.isEmpty
         ? base
@@ -576,9 +576,10 @@ MERMAID_CODE_PLACEHOLDER
     // Called from Flutter or local handlers to set zoom level.
     // When centerX / centerY are provided, the zoom is anchored at that
     // point (in viewport coordinates) instead of the top-left corner.
-    window.setZoom = function(level, centerX, centerY) {
+    window.setZoom = function(level, centerX, centerY, preserveSubFloorPinch) {
       var oldZoom = zoomLevel;
-      var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;
+      var minZoom = oldZoom < 0.1 && (level <= oldZoom || preserveSubFloorPinch)
+        ? oldZoom : 0.1;
       zoomLevel = Math.max(minZoom, Math.min(10, level));
       if (centerX !== undefined && centerY !== undefined) {
         panX = centerX - (centerX - panX) * (zoomLevel / oldZoom);
@@ -906,7 +907,7 @@ MERMAID_LOADER_PLACEHOLDER
         var rect = document.getElementById('viewport').getBoundingClientRect();
         var centerX = midX - rect.left;
         var centerY = midY - rect.top;
-        window.setZoom(zoomLevel * scale, centerX, centerY);
+        window.setZoom(zoomLevel * scale, centerX, centerY, true);
         e.preventDefault();
       }
     }, { passive: false });

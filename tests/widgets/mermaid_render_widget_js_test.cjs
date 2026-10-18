@@ -262,6 +262,121 @@ function createTouchGestureHarness(touchGestureScript) {
   return {dispatch, zoomCalls};
 }
 
+function createTouchZoomHarness(
+  templateName,
+  templateSource,
+  fit,
+  touchGestureScript,
+  diagramSize,
+) {
+  const setZoom = templateSource.match(
+    /^    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
+  );
+  const zoomState = templateSource.match(
+    /^    var zoomLevel = 1;\s*var panX = 0;\s*var panY = 0;\s*var fitComplete = false;\s*var pendingZoomOperations = \[\];/m,
+  );
+  assert.ok(setZoom, `Could not find ${templateName} setZoom`);
+  assert.ok(zoomState, `Could not find ${templateName} zoom state`);
+
+  const listeners = new Map();
+  const viewport = {
+    clientWidth: 200,
+    clientHeight: 100,
+    getBoundingClientRect: () => ({left: 10, top: 20}),
+  };
+  const svg = {
+    getBBox: () => diagramSize,
+    setAttribute: () => {},
+  };
+  const container = {querySelector: () => svg};
+  const context = {
+    window: {},
+    document: {
+      addEventListener: (type, listener) => {
+        const registered = listeners.get(type) || [];
+        registered.push(listener);
+        listeners.set(type, registered);
+      },
+      getElementById: (id) =>
+        id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
+    },
+    activeNativeGestureId: null,
+    nativeGestureZoomLevel: 1,
+    updateTransform: () => {},
+    notifyTransform: () => {},
+  };
+
+  vm.runInNewContext(
+    [zoomState[0], setZoom[0], fit[0], touchGestureScript].join('\n'),
+    context,
+  );
+
+  return {
+    context,
+    fit: () => context.window.fitToViewport(),
+    dispatch(type, touches) {
+      let defaultPrevented = false;
+      const event = {
+        touches,
+        preventDefault: () => { defaultPrevented = true; },
+      };
+      for (const listener of listeners.get(type) || []) {
+        listener(event);
+      }
+      return {defaultPrevented};
+    },
+  };
+}
+
+test('native and web touch pinches scale from a sub-floor fit and keep the normal zoom floor', () => {
+  for (const [templateName, templateSource, fit, touchGestureScript] of [
+    ['native', dartSource, fitFunction, extractInlineTouchGestureScript()],
+    ['web', webTemplateSource, webFitFunction, extractTouchGestureScript()],
+  ]) {
+    const subFloor = createTouchZoomHarness(
+      templateName,
+      templateSource,
+      fit,
+      touchGestureScript,
+      {width: 3000, height: 1000},
+    );
+    subFloor.fit();
+    const fittedZoom = subFloor.context.zoomLevel;
+    assert.ok(fittedZoom < 0.1, `${templateName} fit should produce a sub-floor zoom`);
+    assert.ok(Math.abs(fittedZoom - 1 / 15) < 1e-12);
+    const touchesAtDistance = (distance) => [
+      {clientX: 110 - distance / 2, clientY: 70},
+      {clientX: 110 + distance / 2, clientY: 70},
+    ];
+    subFloor.dispatch('touchstart', touchesAtDistance(100));
+    const pinch = subFloor.dispatch('touchmove', touchesAtDistance(120));
+
+    assert.equal(pinch.defaultPrevented, true);
+    assert.ok(
+      Math.abs(subFloor.context.zoomLevel - fittedZoom * 1.2) < 1e-12,
+      `${templateName} modest pinch-in should scale from the fit instead of jumping to 0.1`,
+    );
+    assert.ok(subFloor.context.zoomLevel < 0.1);
+
+    const normalFloor = createTouchZoomHarness(
+      templateName,
+      templateSource,
+      fit,
+      touchGestureScript,
+      {width: 1000, height: 500},
+    );
+    normalFloor.fit();
+    assert.equal(normalFloor.context.zoomLevel, 0.2);
+    normalFloor.dispatch('touchstart', touchesAtDistance(100));
+    normalFloor.dispatch('touchmove', touchesAtDistance(25));
+    assert.equal(
+      normalFloor.context.zoomLevel,
+      0.1,
+      `${templateName} pinch-out from a normal fit should stop at the 0.1 floor`,
+    );
+  }
+});
+
 for (const [templateName, templateSource] of reportErrorTargets) {
   const reportErrorFunction = templateSource.match(
     /function reportError\(msg\)\s*\{([\s\S]*?)^    \}/m,
@@ -392,7 +507,7 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
       'fit state',
     );
     const setZoom = extract(
-      /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      /    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
       'setZoom',
     );
     const applyWheelZoom = extract(
@@ -580,7 +695,7 @@ test('manual zoom-out keeps sub-0.1 fitted diagrams at their fitted scale', () =
     ['web', webTemplateSource, webFitFunction, false],
   ]) {
     const setZoom = templateSource.match(
-      /^    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      /^    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
     );
     const setPanZoom = templateSource.match(
       /^    window\.setPanZoom = function\(x, y, level\) \{[\s\S]*?^    \};/m,
@@ -948,7 +1063,7 @@ test('native and web templates apply queued zoom after auto-fit', () => {
       'queued zoom state',
     );
     const setZoom = extract(
-      /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+      /    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
       'setZoom',
     );
     const applyAfterFit = extract(
@@ -1009,7 +1124,7 @@ test('native pre-fit pan and pinch transforms apply after the first fit', () => 
     'queued transform state',
   );
   const setZoom = extract(
-    /    window\.setZoom = function\(level, centerX, centerY\) \{[\s\S]*?^    \};/m,
+    /    window\.setZoom = function\(level, centerX, centerY(?:, preserveSubFloorPinch)?\) \{[\s\S]*?^    \};/m,
     'setZoom',
   );
   const applyGestureTransform = extract(
@@ -1424,7 +1539,7 @@ test('web pinch restarts from the remaining fingers after a three-to-two touch t
   ]);
 
   assert.equal(move.defaultPrevented, true);
-  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10]]);
+  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10, true]]);
 });
 
 test('fullscreen inline pinch restarts from the remaining fingers after a three-to-two touch transition', () => {
@@ -1446,5 +1561,5 @@ test('fullscreen inline pinch restarts from the remaining fingers after a three-
   ]);
 
   assert.equal(move.defaultPrevented, true);
-  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10]]);
+  assert.deepEqual(harness.zoomCalls, [[1.1, 11, -10, true]]);
 });

@@ -306,13 +306,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=12&code='));
+      expect(url, contains('mermaid_render.html?v=13&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=12?')));
+      expect(url, isNot(contains('v=13?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '12',
+        'v': '13',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +336,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=12');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=13');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -629,10 +629,9 @@ void main() {
         () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
       expect(
-        html,
-        contains(
-            'var minZoom = oldZoom < 0.1 && level <= oldZoom ? oldZoom : 0.1;'),
-      );
+          html,
+          contains(
+              'oldZoom < 0.1 && (level <= oldZoom || preserveSubFloorPinch)'));
       expect(html, contains('Math.max(minZoom,'));
       expect(html, contains('Math.min(10'));
     });
@@ -646,12 +645,16 @@ void main() {
 
     // ---- Zoom center fix tests ----
 
-    test('setZoom accepts optional centerX and centerY parameters', () {
+    test('setZoom accepts an anchor and touch-pinch floor override', () {
       final html = MermaidRenderWidget.buildMermaidHtml('graph TD');
-      // Should declare setZoom with centerX and centerY parameters
+      // The touch pinch override is optional for other setZoom callers.
       expect(
-          html, contains('window.setZoom = function(level, centerX, centerY)'),
-          reason: 'setZoom must accept centerX and centerY parameters');
+        html,
+        contains(
+          'window.setZoom = function(level, centerX, centerY, preserveSubFloorPinch)',
+        ),
+        reason: 'setZoom must accept a center and optional pinch override',
+      );
     });
 
     test('setZoom adjusts pan when centerX/centerY provided', () {
@@ -688,7 +691,8 @@ void main() {
           html, contains('(e.touches[0].clientY + e.touches[1].clientY) / 2'),
           reason: 'touch handler should compute midpoint Y');
       // Should pass centerX/centerY to setZoom
-      expect(html, contains('setZoom(zoomLevel * scale, centerX, centerY)'),
+      expect(
+          html, contains('setZoom(zoomLevel * scale, centerX, centerY, true)'),
           reason: 'touch handler should pass center to setZoom');
     });
 
@@ -794,7 +798,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v12');
+      expect(templateVersion, 'v13');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
