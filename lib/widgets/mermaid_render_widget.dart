@@ -1862,7 +1862,6 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final hash = computeTextHash(bytes);
-      final storageFileName = '$hash.txt';
 
       widget.testOnlyBeforeMmdFolderNameLock?.call();
       final finalName = await _withMmdFolderNameLock(selectedFolder, () async {
@@ -1878,16 +1877,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         }
 
         await widget.testOnlyAfterMmdNameAllocation?.call(finalName);
-        await TextManifest.writeText(storageFileName, content);
-        await TextManifest.addRecord(TextRecord(
-          name: finalName,
-          hash: hash,
-          format: 'mmd',
-          createdAt: DateTime.now(),
-          size: bytes.length,
-          folder: selectedFolder,
-          textLength: content.length,
-        ));
+        await TextManifest.saveTextRecord(
+          TextRecord(
+            name: finalName,
+            hash: hash,
+            format: 'mmd',
+            createdAt: DateTime.now(),
+            size: bytes.length,
+            folder: selectedFolder,
+            textLength: content.length,
+          ),
+          content,
+        );
         return finalName;
       });
 

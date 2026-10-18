@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -6,15 +7,198 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
+TextRecord _textRecordWithContent(
+  String id,
+  String content, {
+  DateTime? createdAt,
+}) {
+  final bytes = Uint8List.fromList(utf8.encode(content));
+  return TextRecord(
+    id: id,
+    name: id,
+    hash: computeTextHash(bytes),
+    format: 'mmd',
+    createdAt: createdAt ?? DateTime.utc(2024),
+    size: bytes.length,
+    textLength: content.length,
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataReadForTesting = null;
     TextManifest.invalidateCache();
   });
 
+  group('TextManifest hash-locked content changes', () {
+    test(
+      'keeps old content when another record references it before cleanup',
+      () async {
+        const oldContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalRecord = _textRecordWithContent(
+          'edited-chart',
+          oldContent,
+        );
+        final oldHash = originalRecord.hash;
+        final editedRecord = _textRecordWithContent(
+          originalRecord.id,
+          editedContent,
+          createdAt: DateTime.utc(2025),
+        );
+        final concurrentReference = _textRecordWithContent(
+          'concurrent-reference',
+          oldContent,
+          createdAt: DateTime.utc(2025),
+        );
+        final readStarted = Completer<void>();
+        final releaseRead = Completer<void>();
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          if (!releaseRead.isCompleted) releaseRead.complete();
+        });
+
+        await TextManifest.writeText(originalRecord.storagePath, oldContent);
+        await TextManifest.addRecord(originalRecord);
+        final staleRecords = await TextManifest.loadRecordsUncached();
+        await TextManifest.writeText(editedRecord.storagePath, editedContent);
+        await TextManifest.updateRecord(editedRecord);
+        expect(staleRecords.single.hash, oldHash);
+
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          readStarted.complete();
+          await releaseRead.future;
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        TextManifest.invalidateCache();
+        final concurrentSave = TextManifest.saveTextRecord(
+          concurrentReference,
+          oldContent,
+        );
+        await readStarted.future.timeout(const Duration(seconds: 5));
+
+        var cleanupFinished = false;
+        final cleanup =
+            TextManifest.deleteFileIfUnreferenced(
+              oldHash,
+              originalRecord.storagePath,
+            ).then((deleted) {
+              cleanupFinished = true;
+              return deleted;
+            });
+        await Future<void>.delayed(Duration.zero);
+        expect(cleanupFinished, isFalse);
+
+        releaseRead.complete();
+        await concurrentSave;
+
+        expect(await cleanup, isFalse);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          oldContent,
+        );
+        expect(
+          (await TextManifest.loadRecords()).map((record) => record.hash),
+          contains(oldHash),
+        );
+      },
+    );
+
+    test(
+      'keeps the hash lock until text content is published as a record',
+      () async {
+        const content = 'graph TD\n  A-->B';
+        final record = _textRecordWithContent(
+          'new-chart',
+          content,
+          createdAt: DateTime.utc(2025),
+        );
+        final hash = record.hash;
+        final readStarted = Completer<void>();
+        final releaseRead = Completer<void>();
+        addTearDown(() {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          if (!releaseRead.isCompleted) releaseRead.complete();
+        });
+        ManifestDatabase.beforeWebDataReadForTesting = () async {
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          readStarted.complete();
+          await releaseRead.future;
+        };
+        ManifestDatabase.invalidateWebDataCacheForTesting();
+        TextManifest.invalidateCache();
+
+        final saving = TextManifest.saveTextRecord(record, content);
+        await readStarted.future.timeout(const Duration(seconds: 5));
+
+        var cleanupFinished = false;
+        final cleanup =
+            TextManifest.deleteFileIfUnreferenced(
+              hash,
+              record.storagePath,
+            ).then((deleted) {
+              cleanupFinished = true;
+              return deleted;
+            });
+        await Future<void>.delayed(Duration.zero);
+        expect(cleanupFinished, isFalse);
+        expect(await TextManifest.readText(record.storagePath), content);
+
+        releaseRead.complete();
+        await saving;
+        expect(await cleanup, isFalse);
+        expect(await TextManifest.readText(record.storagePath), content);
+        expect(
+          (await TextManifest.loadRecords()).map((saved) => saved.id),
+          contains(record.id),
+        );
+      },
+    );
+
+    test(
+      'preserves a stale save that repoints the same record ID to old hash',
+      () async {
+        const oldContent = 'graph TD\n  A-->B';
+        const editedContent = 'graph TD\n  A-->C';
+        final originalRecord = _textRecordWithContent(
+          'edited-chart',
+          oldContent,
+        );
+        final oldHash = originalRecord.hash;
+        final editedRecord = _textRecordWithContent(
+          originalRecord.id,
+          editedContent,
+          createdAt: DateTime.utc(2025),
+        );
+
+        await TextManifest.writeText(originalRecord.storagePath, oldContent);
+        await TextManifest.addRecord(originalRecord);
+        await TextManifest.writeText(editedRecord.storagePath, editedContent);
+        await TextManifest.updateRecord(editedRecord);
+        await TextManifest.writeText(originalRecord.storagePath, oldContent);
+        await TextManifest.updateRecord(originalRecord);
+
+        final deleted = await TextManifest.deleteFileIfUnreferenced(
+          oldHash,
+          originalRecord.storagePath,
+        );
+
+        expect(deleted, isFalse);
+        expect(
+          await TextManifest.readText(originalRecord.storagePath),
+          oldContent,
+        );
+        final savedRecords = await TextManifest.loadRecords();
+        expect(savedRecords.single.id, originalRecord.id);
+        expect(savedRecords.single.hash, oldHash);
+      },
+    );
+  });
   testWidgets('cancel guard after asynchronous load prevents text insertion',
       (tester) async {
     var cancelled = false;

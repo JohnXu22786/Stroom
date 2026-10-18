@@ -405,12 +405,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             );
           } catch (error, stackTrace) {
             try {
-              final currentRecords = await TextManifest.loadRecordsUncached();
-              if (!currentRecords.any(
-                (record) => record.storagePath == storageFileName,
-              )) {
-                await TextManifest.deleteFile(storageFileName);
-              }
+              await TextManifest.deleteFileIfUnreferenced(
+                hash,
+                storageFileName,
+              );
             } catch (cleanupError) {
               debugPrint(
                 'Failed to clean up Mermaid chart file $storageFileName '
@@ -441,12 +439,10 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             );
           } catch (error, stackTrace) {
             try {
-              final currentRecords = await TextManifest.loadRecordsUncached();
-              if (!currentRecords.any(
-                (record) => record.storagePath == storageFileName,
-              )) {
-                await TextManifest.deleteFile(storageFileName);
-              }
+              await TextManifest.deleteFileIfUnreferenced(
+                hash,
+                storageFileName,
+              );
             } catch (cleanupError) {
               debugPrint(
                 'Failed to clean up Mermaid chart file $storageFileName '
@@ -458,13 +454,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           }
         });
 
-        if (hash != existingRecord.hash &&
-            !records.any(
-              (r) =>
-                  r.id != existingRecord.id &&
-                  r.storagePath == existingRecord.storagePath,
-            )) {
-          await TextManifest.deleteFile(existingRecord.storagePath);
+        if (hash != existingRecord.hash) {
+          await TextManifest.deleteFileIfUnreferenced(
+            existingRecord.hash,
+            existingRecord.storagePath,
+          );
         }
       }
 

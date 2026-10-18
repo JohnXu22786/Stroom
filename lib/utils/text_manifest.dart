@@ -216,6 +216,25 @@ class TextManifest {
           {void Function()? beforeCommit}) =>
       withSaveLock(record.hash,
           () => _ops.addRecord(record, beforeCommit: beforeCommit));
+
+  /// Writes text and publishes its manifest record under the same hash lock.
+  static Future<void> saveTextRecord(TextRecord record, String text) =>
+      withSaveLock(record.hash, () async {
+        await writeText(record.storagePath, text);
+        await addRecord(record);
+      });
+
+  /// Deletes content only after rechecking persisted references under its hash
+  /// lock, so saves publishing that hash cannot race the reference check.
+  static Future<bool> deleteFileIfUnreferenced(String hash, String fileName) =>
+      withSaveLock(hash, () async {
+        final records = await loadRecordsUncached();
+        if (records.any((record) => record.storagePath == fileName)) {
+          return false;
+        }
+        return deleteFile(fileName);
+      });
+
   static Future<void> deleteRecord(String id,
       {bool preserveFiles = false}) async {
     final records = await loadRecordsUncached();
