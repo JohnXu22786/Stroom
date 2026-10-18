@@ -306,13 +306,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=13&code='));
+      expect(url, contains('mermaid_render.html?v=14&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=13?')));
+      expect(url, isNot(contains('v=14?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '13',
+        'v': '14',
         'code': 'graph TD\nA-->B',
       });
 
@@ -336,7 +336,7 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=13');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=14');
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -551,10 +551,11 @@ void main() {
       expect(html, contains('panX = panStartX + deltaX;'));
       expect(html, contains('panY = panStartY + deltaY;'));
       expect(html, contains('panX = touchPanStartX'));
-      // Exactly one notify per mutation path: setZoom, fitToViewport,
-      // native pan/pinch, mouse-drag pan, touch pan. This pins the notify
-      // calls to the transform handlers (not just to zoom and fit paths).
-      expect('notifyTransform();'.allMatches(html).length, 5);
+      // The notification paths include setZoom, fitToViewport, native
+      // pan/pinch, mouse-drag pan, touch pan, and queued pre-fit touch pan.
+      // This pins the notify calls to the transform handlers (not just to
+      // zoom and fit paths).
+      expect('notifyTransform();'.allMatches(html).length, 6);
     });
 
     test('fitToViewport uses contain-fit (min ratio) and centers the diagram',
