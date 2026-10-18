@@ -1081,6 +1081,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   void didUpdateWidget(MermaidRenderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
+      final wasShowingWebSource = kIsWeb && _showSourceCode;
+      final hasNonEmptyCode = widget.mermaidCode.trim().isNotEmpty;
+      final wasEmptyCode = oldWidget.mermaidCode.trim().isEmpty;
       final isPendingWebRetry = kIsWeb &&
           !_isReady &&
           _webViewController != null &&
@@ -1089,49 +1092,61 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           _hasWebRetryTimeoutError &&
           _webRetryUrl != null &&
           _webViewController != null;
-      final shouldRearmWebRetry = isPendingWebRetry || isTimedOutWebRetry;
+      final shouldRearmWebRetry =
+          hasNonEmptyCode && (isPendingWebRetry || isTimedOutWebRetry);
+      if (!hasNonEmptyCode) {
+        _webViewCreationFallbackTimer?.cancel();
+        _readyFallbackTimer?.cancel();
+        _webRetryUrl = null;
+      }
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
-      // stays alive the code change goes through loadData below. (The
-      // source-code toggle keeps the WebView mounted — see [build].)
+      // stays alive the code change goes through loadData below. On native,
+      // the source-code toggle keeps the WebView mounted; web remount handling
+      // lives in [_toggleSourceCode].
       _initialHtml = null;
       _nativeLoadBaseUrl = null;
       // Ordinary web source updates use the iframe's own loading hint. A
       // retained-view retry instead keeps Flutter's overlay until its
       // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb || shouldRearmWebRetry) {
+      if (!kIsWeb || shouldRearmWebRetry || !hasNonEmptyCode) {
         _isReady = false;
       }
       _hasLoadedPage = false;
       _errorMessage = null;
       _hasWebViewCreationTimeoutError = false;
       _hasWebRetryTimeoutError = false;
+      if (wasShowingWebSource) _prepareWebPreviewRemount();
       _showSourceCode = false;
       _zoomLevel = 1.0;
       _pendingZoomOperations.clear();
       _panX = 0;
       _panY = 0;
-      if (oldWidget.mermaidCode.trim().isEmpty &&
-          widget.mermaidCode.trim().isNotEmpty) {
+      if (wasEmptyCode && hasNonEmptyCode) {
         // The empty-code placeholder unmounts the WebView. Drop its stale
         // controller and give the remounted platform view a fresh key and
         // creation deadline, so stale callbacks and failed mounts are handled.
         _webViewController = null;
         _webViewKey = UniqueKey();
         _webRetryUrl = null;
+        _isReady = false;
       }
       if (!kIsWeb &&
           defaultTargetPlatform != TargetPlatform.windows &&
-          widget.mermaidCode.trim().isNotEmpty &&
+          hasNonEmptyCode &&
           _webViewController == null) {
         _armWebViewCreationFallback();
       }
-      if (shouldRearmWebRetry) {
+      if (shouldRearmWebRetry && !wasShowingWebSource) {
         _armReadyFallback(showNavigationTimeoutError: true);
       }
       _loadMermaidCode();
+      if (hasNonEmptyCode &&
+          (wasShowingWebSource || (kIsWeb && wasEmptyCode))) {
+        _armWebViewCreationFallback();
+      }
     }
   }
 
@@ -1151,10 +1166,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// still does not exist after 12s (the platform view failed to mount —
   /// onWebViewCreated never fired), show an error instead of loading forever.
   void _armWebViewCreationFallback() {
-    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) return;
+    if (!_shouldCreateWebView ||
+        (!kIsWeb && _mermaidJsLoading) ||
+        widget.mermaidCode.trim().isEmpty) {
+      return;
+    }
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
-      if (mounted && _webViewController == null && _errorMessage == null) {
+      if (mounted &&
+          widget.mermaidCode.trim().isNotEmpty &&
+          _webViewController == null &&
+          _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] WebView was not created within '
             '12s, showing an error');
         setState(() {
@@ -1710,7 +1732,37 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _toggleSourceCode() {
+    final enteringWebSourceMode = kIsWeb && !_showSourceCode;
+    final returningToWebPreview = kIsWeb && _showSourceCode;
+    if (enteringWebSourceMode) {
+      // Web unmounts its iframe while the source view is shown. Invalidate
+      // callbacks from that iframe and stop its creation/readiness timers.
+      _webViewKey = UniqueKey();
+      _webViewCreationFallbackTimer?.cancel();
+      _readyFallbackTimer?.cancel();
+    } else if (returningToWebPreview) {
+      _prepareWebPreviewRemount();
+    }
     setState(() => _showSourceCode = !_showSourceCode);
+    if (returningToWebPreview) _armWebViewCreationFallback();
+  }
+
+  void _prepareWebPreviewRemount() {
+    // The iframe will be recreated, so the old controller/readiness cannot
+    // represent the new render attempt. Give the new platform view its own
+    // identity and clear the old navigation state and fallbacks.
+    _webViewKey = UniqueKey();
+    _webViewController = null;
+    _isReady = false;
+    _hasLoadedPage = false;
+    _canApplyZoomCommands = false;
+    _errorMessage = null;
+    _hasWebViewCreationTimeoutError = false;
+    _hasWebRetryTimeoutError = false;
+    _webLoadUrl = null;
+    _webRetryUrl = null;
+    _readyFallbackTimer?.cancel();
+    _webViewCreationFallbackTimer?.cancel();
   }
 
   void _openFullScreen() {
@@ -1917,23 +1969,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // ---- Source code mode on web ----
     // On web the WebView is an iframe (HtmlElementView) that the engine
     // composites ABOVE the Flutter canvas, so a Flutter overlay cannot
-    // reliably cover it. Unmount the iframe as before — re-creation is
-    // cheap on web (no platform-view teardown), and the source view
-    // renders unconditionally.
+    // reliably cover it. Unmount the iframe while showing source; returning
+    // to preview starts a new render attempt with a fresh creation fallback.
     if (_showSourceCode && kIsWeb) {
       return _buildSourceCodeView(cs, isDark, effectiveHeight);
     }
 
     // ---- Render layer + source-code overlay (stable root) ----
-    // The render layer is ALWAYS the Stack's base child, so its element —
-    // and with it the InAppWebView platform view on native — keeps the
-    // same tree slot across source↔preview toggles. The source code view
-    // is drawn ON TOP of the live render layer only while the source is
-    // shown; toggling back just removes the overlay and the
-    // already-rendered diagram is visible instantly — no blank flash, no
-    // loading animation, no platform-view re-creation. This mirrors
-    // MermaidChartPage's split mode, which keeps the preview mounted while
-    // the code editor is visible.
+    // On native platforms the render layer stays mounted as the Stack's base
+    // child, so its InAppWebView keeps the same tree slot across source↔preview
+    // toggles. The source view is drawn over the live render layer. Web uses
+    // the iframe-unmounting path above because an iframe cannot be covered
+    // reliably by Flutter overlays.
     //
     // CodeBlockSourceView provides its own border, background, line
     // numbers, and wrap toggle, so the source view needs no extra border
@@ -1954,8 +2001,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Builds the render layer: the deferred-creation loading placeholder
   /// (before the WebView exists), or the WebView with its overlays and
-  /// button row. Kept mounted underneath the source code view when
-  /// [_showSourceCode] is true (see [build]).
+  /// button row. Kept mounted underneath source mode on native platforms
+  /// (see [build]).
   Widget _buildRenderLayer(ColorScheme cs, double? effectiveHeight) {
     // ---- Loading placeholder (deferred WebView creation) ----
     // On native platforms the WebView is created only after the bundled
@@ -2063,7 +2110,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   ctrl.addJavaScriptHandler(
                     handlerName: 'onMermaidError',
                     callback: (args) {
-                      if (!mounted || args.length < 2) return;
+                      if (!mounted ||
+                          (kIsWeb && currentWebViewKey != _webViewKey) ||
+                          args.length < 2) {
+                        return;
+                      }
                       final generation = int.tryParse(args[1].toString());
                       if (generation != _mermaidDocumentGeneration) return;
                       final msg = args[0].toString();
@@ -2084,7 +2135,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       //
                       // No setState: these values are not read in build();
                       // the WebView itself reflects the transform visually.
-                      if (!mounted || args.length < 3) return;
+                      if (!mounted ||
+                          (kIsWeb && currentWebViewKey != _webViewKey) ||
+                          args.length < 3) {
+                        return;
+                      }
                       final zoom = double.tryParse(args[0].toString());
                       final px = double.tryParse(args[1].toString());
                       final py = double.tryParse(args[2].toString());
@@ -2100,6 +2155,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
               },
               onLoadStop: (ctrl, url) {
+                if (kIsWeb && currentWebViewKey != _webViewKey) return;
                 if (!kIsWeb &&
                     (ctrl != _webViewController ||
                         (_nativeLoadBaseUrl != null &&
