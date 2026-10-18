@@ -41,6 +41,75 @@ const reportErrorTargets = [
   ['web', webTemplateSource],
 ];
 
+const generationScopedResourceErrorListener = dartSource.match(
+  /skeleton\.replaceFirst\(\s*'\/\*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER\*\/',\s*'''([\s\S]*?)''',\s*\);/,
+);
+assert.ok(
+  generationScopedResourceErrorListener,
+  'Could not find the generation-scoped resource error listener',
+);
+
+function createResourceErrorListenerHarness() {
+  const listeners = new Map();
+  const reportedErrors = [];
+  const diagramContainer = {contains: () => true};
+  const context = {
+    document: {
+      baseURI: 'https://app.example/mermaid/',
+      getElementById: (id) => id === 'diagram-container' ? diagramContainer : null,
+    },
+    window: {
+      location: {origin: 'https://app.example'},
+      addEventListener: (type, listener, options) => {
+        const registered = listeners.get(type) || [];
+        registered.push({listener, options});
+        listeners.set(type, registered);
+      },
+    },
+    URL,
+    reportError: (message) => reportedErrors.push(message),
+  };
+  vm.runInNewContext(generationScopedResourceErrorListener[1], context);
+
+  return {
+    dispatchResourceError(resourceUrl) {
+      const errorListener = listeners.get('error')?.[0]?.listener;
+      assert.ok(errorListener, 'The resource error listener was not registered');
+      errorListener({
+        target: {
+          currentSrc: resourceUrl,
+          getAttribute: () => null,
+        },
+      });
+    },
+    reportedErrors,
+  };
+}
+
+test('generation-scoped resource error listener ignores malformed URLs', () => {
+  const harness = createResourceErrorListenerHarness();
+
+  harness.dispatchResourceError('http://[');
+
+  assert.deepEqual(harness.reportedErrors, []);
+});
+
+test('generation-scoped resource error listener suppresses same-origin failures', () => {
+  const harness = createResourceErrorListenerHarness();
+
+  harness.dispatchResourceError('/assets/node.svg');
+
+  assert.deepEqual(harness.reportedErrors, []);
+});
+
+test('generation-scoped resource error listener reports external failures', () => {
+  const harness = createResourceErrorListenerHarness();
+
+  harness.dispatchResourceError('https://cdn.example.com/assets/node.svg');
+
+  assert.deepEqual(harness.reportedErrors, ['Mermaid resource failed to load']);
+});
+
 const mouseGestureTargets = [
   ['web', webTemplateSource],
   ['fullscreen inline', dartSource],

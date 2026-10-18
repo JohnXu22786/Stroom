@@ -228,7 +228,7 @@ class MermaidRenderWidget extends StatefulWidget {
         (target.getAttribute &&
           (target.getAttribute('src') || target.getAttribute('href')));
       if (!resourceUrl) return;
-      var sameOrigin = false;
+      var sameOrigin = true;
       try {
         sameOrigin = new URL(resourceUrl, document.baseURI).origin ===
           window.location.origin;
