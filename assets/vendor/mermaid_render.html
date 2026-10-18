@@ -111,13 +111,11 @@
       var zoomOperations = pendingZoomOperations;
       pendingZoomOperations = [];
       zoomOperations.sort(function(a, b) {
-        var timestampOrder = a.inputTimestamp - b.inputTimestamp;
-        if (timestampOrder !== 0) return timestampOrder;
         if (typeof a.inputSequence === 'number' &&
             typeof b.inputSequence === 'number') {
           return a.inputSequence - b.inputSequence;
         }
-        return 0;
+        return a.inputTimestamp - b.inputTimestamp;
       });
       var viewport = document.getElementById('viewport');
       for (var zoomIndex = 0; zoomIndex < zoomOperations.length; zoomIndex++) {

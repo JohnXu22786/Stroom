@@ -841,7 +841,9 @@ void main() {
       addTearDown(() => InAppWebViewPlatform.instance =
           previousPlatform ?? _MermaidWebViewPlatform());
 
-      await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      if (!kIsWeb) {
+        await tester.runAsync(MermaidRenderWidget.loadBundledMermaidJs);
+      }
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(

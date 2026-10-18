@@ -632,7 +632,10 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
     };
     const container = {querySelector: () => svg};
     const context = {
-      window: {},
+      window: {
+        performance: {timeOrigin: 1000, now: () => 20},
+        parent: {__stroomMermaidZoomInputSequence: 1},
+      },
       document: {
         getElementById: (id) =>
           id === 'viewport' ? viewport : id === 'diagram-container' ? container : null,
@@ -690,17 +693,24 @@ test('pre-fit Ctrl/Meta wheel zoom stays anchored through fit in both templates'
       );
       dispatch(handleWheel, 'ctrlKey', -10, 60, 50);
       context.window.applyZoomOperationsAfterFit([
-        {kind: 'toolbar', delta: -0.1},
+        {
+          kind: 'toolbar',
+          delta: -0.1,
+          // The toolbar event was first even though its timestamp appears
+          // later than the iframe wheel event's timestamp.
+          inputTimestamp: 1021,
+          inputSequence: 1,
+        },
       ]);
       dispatch(handleWheel, 'metaKey', -10, 160, 70);
       assert.equal(context.zoomLevel, 1, `${templateName} should queue zoom before fit`);
 
       context.window.fitToViewport();
       assert.equal(context.zoomLevel, 2.1, `${templateName} should apply queued zooms in input order`);
-      let expectedPanX = anchor(0, 50, 2, 2.1);
-      let expectedPanY = anchor(0, 30, 2, 2.1);
-      expectedPanX = anchor(expectedPanX, 100, 2.1, 2);
-      expectedPanY = anchor(expectedPanY, 50, 2.1, 2);
+      let expectedPanX = anchor(0, 100, 2, 1.9);
+      let expectedPanY = anchor(0, 50, 2, 1.9);
+      expectedPanX = anchor(expectedPanX, 50, 1.9, 2);
+      expectedPanY = anchor(expectedPanY, 30, 1.9, 2);
       expectedPanX = anchor(expectedPanX, 150, 2, 2.1);
       expectedPanY = anchor(expectedPanY, 50, 2, 2.1);
       assert.ok(Math.abs(context.panX - expectedPanX) < 1e-9);
@@ -837,13 +847,14 @@ test('web toolbar zoom queued before iframe wheel keeps input order through fit'
   assert.equal(context.pendingZoomOperations.length, 1);
   assert.equal(context.pendingZoomOperations[0].inputTimestamp, 1020);
 
-  // Both events can share a fallback timestamp. The parent-window sequence
-  // keeps the earlier toolbar input ahead of the later iframe wheel input.
+  // A Dart wall-clock fallback or timestamp precision can make the earlier
+  // toolbar event appear later than this iframe wheel event. The shared
+  // parent-window sequence must still preserve input order.
   context.window.applyZoomOperationsAfterFit([
     {
       kind: 'toolbar',
       delta: 0.1,
-      inputTimestamp: 1020,
+      inputTimestamp: 1021,
       inputSequence: 1,
     },
   ]);
