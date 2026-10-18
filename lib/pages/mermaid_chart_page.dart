@@ -101,6 +101,8 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
   bool _isSaving = false;
   bool _isSaveFlowActive = false;
   late EditorMode _editorMode;
+  late final String _originalCode;
+  bool _isCodeDirty = false;
 
   /// Whether the left/right panels in wide split mode are swapped.
   /// Wide mode occurs when the available space is wider than tall.
@@ -121,9 +123,12 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     } else {
       _codeController.text = MermaidTemplates.getTemplate(_selectedTypeId);
     }
+    _originalCode = _codeController.text;
     _previewCode = _codeController.text.trim();
     _codeController.addListener(_onCodeChanged);
   }
+
+  bool get _hasUnsavedChanges => widget.existingRecord != null && _isCodeDirty;
 
   /// 从 Mermaid 代码中检测图表类型
   ///
@@ -180,9 +185,13 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   void _onCodeChanged() {
     final detectedTypeId = _detectTypeFromCode(_codeController.text);
-    if (detectedTypeId != _selectedTypeId) {
+    final hasUnsavedChanges =
+        widget.existingRecord != null && _codeController.text != _originalCode;
+    if (detectedTypeId != _selectedTypeId ||
+        hasUnsavedChanges != _isCodeDirty) {
       setState(() {
         _selectedTypeId = detectedTypeId;
+        _isCodeDirty = hasUnsavedChanges;
       });
     }
     _schedulePreviewUpdate();
@@ -529,7 +538,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       code: _selectedTypeId == 'requirement' ? _codeController.text : null,
     );
 
-    return Scaffold(
+    final scaffold = Scaffold(
       appBar: AppBar(
         title: const Text('图表制作'),
         actions: [
@@ -670,6 +679,34 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
           Expanded(child: _buildMainContent(cs)),
         ],
       ),
+    );
+    return PopScope(
+      canPop: !_hasUnsavedChanges,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop || !_hasUnsavedChanges) return;
+
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('放弃修改？'),
+            content: const Text('当前有未保存的修改，确定要放弃吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                child: const Text('放弃'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || discard != true) return;
+        Navigator.pop(this.context, result);
+      },
+      child: scaffold,
     );
   }
 

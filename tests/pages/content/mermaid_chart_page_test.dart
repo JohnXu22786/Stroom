@@ -76,6 +76,60 @@ Widget _buildConcurrentChartTestApp({
   );
 }
 
+Widget _buildSavedChartNavigationTestApp({
+  required TextRecord record,
+  required String content,
+}) {
+  return ProviderScope(
+    child: MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => MermaidChartPage(
+                    initialCode: content,
+                    existingRecord: record,
+                    initialShowPreview: false,
+                  ),
+                ),
+              ),
+              child: const Text('Open saved chart'),
+            ),
+          ),
+        ),
+      ),
+      localizationsDelegates: [
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+    ),
+  );
+}
+
+Future<TextRecord> _addSavedMermaidChart(String content) async {
+  final bytes = Uint8List.fromList(utf8.encode(content));
+  final record = TextRecord(
+    id: 'saved-mermaid-chart',
+    name: 'saved-chart',
+    hash: computeTextHash(bytes),
+    format: 'mmd',
+    createdAt: DateTime.utc(2026, 1, 1),
+    size: bytes.length,
+    textLength: content.length,
+  );
+  await TextManifest.writeText(record.storagePath, content);
+  await TextManifest.addRecord(record);
+  return record;
+}
+
+Future<void> _simulateSystemBack(WidgetTester tester) async {
+  // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -89,6 +143,102 @@ void main() {
   });
 
   group('MermaidChartPage', () {
+    testWidgets('app-bar back can stay editing or discard the draft', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      const draft = 'graph TD\n  A-->Unsaved';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      expect(find.text('当前有未保存的修改，确定要放弃吗？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(await TextManifest.readText(record.storagePath), original);
+      expect((await TextManifest.loadRecords()).single.hash, record.hash);
+    });
+
+    testWidgets('system back can stay editing or discard the draft', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      const draft = 'graph TD\n  A-->Unsaved';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await _simulateSystemBack(tester);
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(await TextManifest.readText(record.storagePath), original);
+      expect((await TextManifest.loadRecords()).single.hash, record.hash);
+    });
+
+    testWidgets('unmodified saved chart still pops without confirmation', (
+      tester,
+    ) async {
+      const original = 'graph TD\n  A-->B';
+      final record = await _addSavedMermaidChart(original);
+
+      await tester.pumpWidget(
+        _buildSavedChartNavigationTestApp(record: record, content: original),
+      );
+      await tester.tap(find.text('Open saved chart'));
+      await tester.pumpAndSettle();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('Open saved chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(find.text('放弃修改？'), findsNothing);
+    });
+
     testWidgets('selecting flowchart loads template in editor', (tester) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pump();
