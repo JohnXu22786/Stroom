@@ -11,6 +11,7 @@ TextRecord _textRecordWithContent(
   String id,
   String content, {
   DateTime? createdAt,
+  String folder = '',
 }) {
   final bytes = Uint8List.fromList(utf8.encode(content));
   return TextRecord(
@@ -20,8 +21,208 @@ TextRecord _textRecordWithContent(
     format: 'mmd',
     createdAt: createdAt ?? DateTime.utc(2024),
     size: bytes.length,
+    folder: folder,
     textLength: content.length,
   );
+}
+
+Future<void> _exerciseStaleHashDelete(
+  List<TextRecord> originalRecords,
+  Future<void> Function() delete,
+) async {
+  const editedContent = 'graph TD\n  A-->edited';
+  final editedRecords = originalRecords
+      .map(
+        (record) => _textRecordWithContent(
+          record.id,
+          editedContent,
+          createdAt: DateTime.utc(2025),
+          folder: record.folder,
+        ),
+      )
+      .toList();
+  final currentHash = editedRecords.first.hash;
+  final concurrentReference = _textRecordWithContent(
+    'concurrent-reference',
+    editedContent,
+  );
+
+  for (final record in originalRecords) {
+    await TextManifest.saveTextRecord(record, 'graph TD\n  A-->${record.id}');
+  }
+
+  final releaseOldHashes = Completer<void>();
+  final releaseRegistration = Completer<void>();
+  final releaseCurrentHash = Completer<void>();
+  final referenceRegistered = Completer<void>();
+  final oldHashAcquired = originalRecords
+      .map((_) => Completer<void>())
+      .toList(growable: false);
+  final oldHashLocks = <Future<void>>[];
+  for (var i = 0; i < originalRecords.length; i++) {
+    oldHashLocks.add(
+      TextManifest.withSaveLock(originalRecords[i].hash, () async {
+        oldHashAcquired[i].complete();
+        await releaseOldHashes.future;
+      }),
+    );
+  }
+  final registrationStarted = Completer<void>();
+  var deleting = Future<void>.value();
+  var concurrentSave = Future<void>.value();
+  var hashGuardedSave = Future<void>.value();
+  var deleteFinished = false;
+  try {
+    await Future.wait(oldHashAcquired.map((lock) => lock.future));
+
+    deleting = delete().whenComplete(() => deleteFinished = true);
+    await Future<void>.delayed(Duration.zero);
+
+    // Emulate a row repoint that predates hash locking, so this also checks
+    // that delete retries when its initial hash snapshot becomes stale.
+    await TextManifest.writeText(
+      editedRecords.first.storagePath,
+      editedContent,
+    );
+    for (final record in editedRecords) {
+      await ManifestDatabase.updateTextRecord(record.id, record.toMap());
+    }
+    TextManifest.invalidateCache();
+
+    ManifestDatabase.beforeWebDataSaveForTesting = () async {
+      ManifestDatabase.beforeWebDataSaveForTesting = null;
+      registrationStarted.complete();
+      await releaseRegistration.future;
+    };
+    hashGuardedSave = TextManifest.withSaveLock(currentHash, () async {
+      concurrentSave = TextManifest.saveTextRecord(
+        concurrentReference,
+        editedContent,
+      );
+      await registrationStarted.future.timeout(const Duration(seconds: 5));
+      await concurrentSave;
+      referenceRegistered.complete();
+      await releaseCurrentHash.future;
+    });
+    await registrationStarted.future.timeout(const Duration(seconds: 5));
+
+    releaseOldHashes.complete();
+    await Future<void>.delayed(Duration.zero);
+    releaseRegistration.complete();
+    await referenceRegistered.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(Duration.zero);
+    expect(deleteFinished, isFalse);
+    expect(
+      await TextManifest.readText(editedRecords.first.storagePath),
+      editedContent,
+    );
+    releaseCurrentHash.complete();
+    await Future.wait([
+      ...oldHashLocks,
+      deleting,
+      concurrentSave,
+      hashGuardedSave,
+    ]).timeout(const Duration(seconds: 5));
+  } finally {
+    if (!releaseOldHashes.isCompleted) releaseOldHashes.complete();
+    if (!releaseRegistration.isCompleted) releaseRegistration.complete();
+    if (!releaseCurrentHash.isCompleted) releaseCurrentHash.complete();
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
+    try {
+      await Future.wait([
+        ...oldHashLocks,
+        deleting,
+        concurrentSave,
+        hashGuardedSave,
+      ]).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  final remaining = await TextManifest.loadRecordsUncached();
+  expect(
+    remaining.map((record) => record.id),
+    contains(concurrentReference.id),
+  );
+  for (final record in originalRecords) {
+    expect(remaining.map((saved) => saved.id), isNot(contains(record.id)));
+  }
+  expect(
+    await TextManifest.readText(editedRecords.first.storagePath),
+    editedContent,
+  );
+}
+
+Future<void> _exerciseDeleteSerializesHashRepoint(
+  List<TextRecord> originalRecords,
+  Future<void> Function() delete,
+) async {
+  for (final record in originalRecords) {
+    await TextManifest.saveTextRecord(record, 'graph TD\n  A-->${record.id}');
+  }
+  TextManifest.invalidateCache();
+
+  const editedContent = 'graph TD\n  A-->edited';
+  final editedRecords = originalRecords
+      .map(
+        (record) => _textRecordWithContent(
+          record.id,
+          editedContent,
+          createdAt: DateTime.utc(2025),
+          folder: record.folder,
+        ),
+      )
+      .toList(growable: false);
+  final releaseDelete = Completer<void>();
+  final hashCheckReached = Completer<void>();
+  final updateLoadStarted = Completer<void>();
+  var deleteFinished = false;
+  var updateFinished = false;
+  var deleting = Future<void>.value();
+  var updating = Future<void>.value();
+  TextManifest.beforeDeleteWithCurrentHashLocksForTesting = () async {
+    TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+    hashCheckReached.complete();
+    await releaseDelete.future;
+  };
+
+  try {
+    deleting = delete().whenComplete(() => deleteFinished = true);
+    await hashCheckReached.future.timeout(const Duration(seconds: 5));
+
+    ManifestDatabase.beforeWebDataReadForTesting = () async {
+      ManifestDatabase.beforeWebDataReadForTesting = null;
+      updateLoadStarted.complete();
+    };
+    ManifestDatabase.invalidateWebDataCacheForTesting();
+    updating = Future.wait(
+      editedRecords.map(TextManifest.updateRecord),
+    ).whenComplete(() => updateFinished = true);
+    await updateLoadStarted.future.timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(Duration.zero);
+    expect(updateFinished, isFalse);
+    expect(deleteFinished, isFalse);
+
+    releaseDelete.complete();
+    await Future.wait([deleting, updating]).timeout(const Duration(seconds: 5));
+  } finally {
+    if (!releaseDelete.isCompleted) releaseDelete.complete();
+    TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+    ManifestDatabase.beforeWebDataReadForTesting = null;
+    try {
+      await Future.wait([
+        deleting,
+        updating,
+      ]).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  final remainingIds = (await TextManifest.loadRecordsUncached()).map(
+    (record) => record.id,
+  );
+  for (final record in originalRecords) {
+    expect(remainingIds, isNot(contains(record.id)));
+    expect(await TextManifest.readText(record.storagePath), isNull);
+  }
 }
 
 void main() {
@@ -30,7 +231,12 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    ManifestDatabase.beforeWebDataSaveForTesting = null;
     ManifestDatabase.beforeWebDataReadForTesting = null;
+    TextManifest.beforeFolderLoadForTesting = null;
+    TextManifest.beforeCacheInvalidationForTesting = null;
+    TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+    TextManifest.beforeFolderDeleteLocksForTesting = null;
     TextManifest.invalidateCache();
   });
 
@@ -172,26 +378,27 @@ void main() {
           editedContent,
           createdAt: DateTime.utc(2025),
         );
-        final readStarted = Completer<void>();
-        final releaseRead = Completer<void>();
+        final updateWriteStarted = Completer<void>();
+        final releaseWrite = Completer<void>();
         addTearDown(() {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
           ManifestDatabase.beforeWebDataReadForTesting = null;
-          if (!releaseRead.isCompleted) releaseRead.complete();
+          if (!releaseWrite.isCompleted) releaseWrite.complete();
         });
         await TextManifest.writeText(originalRecord.storagePath, oldContent);
         await TextManifest.addRecord(originalRecord);
 
-        ManifestDatabase.beforeWebDataReadForTesting = () async {
-          ManifestDatabase.beforeWebDataReadForTesting = null;
-          readStarted.complete();
-          await releaseRead.future;
+        ManifestDatabase.beforeWebDataSaveForTesting = () async {
+          ManifestDatabase.beforeWebDataSaveForTesting = null;
+          updateWriteStarted.complete();
+          await releaseWrite.future;
         };
         ManifestDatabase.invalidateWebDataCacheForTesting();
         TextManifest.invalidateCache();
 
         final saving =
             TextManifest.updateTextRecord(editedRecord, editedContent);
-        await readStarted.future.timeout(const Duration(seconds: 5));
+        await updateWriteStarted.future.timeout(const Duration(seconds: 5));
 
         var cleanupFinished = false;
         final cleanup = TextManifest.deleteFileIfUnreferenced(
@@ -206,7 +413,7 @@ void main() {
         expect(await TextManifest.readText(editedRecord.storagePath),
             editedContent);
 
-        releaseRead.complete();
+        releaseWrite.complete();
         await saving;
         expect(await cleanup, isFalse);
         expect(await TextManifest.readText(editedRecord.storagePath),
@@ -257,6 +464,437 @@ void main() {
       },
     );
   });
+  group('TextManifest hash-locked record deletions', () {
+    test(
+      'single delete protects the row current hash after a stale snapshot',
+      () async {
+        final original = _textRecordWithContent(
+          'single-delete',
+          'graph TD\n  A-->single-delete',
+        );
+
+        await _exerciseStaleHashDelete([
+          original,
+        ], () => TextManifest.deleteRecord(original.id));
+      },
+    );
+
+    test(
+      'batch delete protects current hashes after stale snapshots',
+      () async {
+        final originals = [
+          _textRecordWithContent(
+            'batch-delete-a',
+            'graph TD\n  A-->batch-delete-a',
+          ),
+          _textRecordWithContent(
+            'batch-delete-b',
+            'graph TD\n  A-->batch-delete-b',
+          ),
+        ];
+
+        await _exerciseStaleHashDelete(
+          originals,
+          () => TextManifest.deleteRecords(
+            originals.map((record) => record.id).toList(),
+          ),
+        );
+      },
+    );
+
+    test('single delete serializes with a concurrent hash repoint', () async {
+      final original = _textRecordWithContent(
+        'single-delete-repoint',
+        'graph TD\n  A-->single-delete-repoint',
+      );
+
+      await _exerciseDeleteSerializesHashRepoint([
+        original,
+      ], () => TextManifest.deleteRecord(original.id));
+    });
+
+    test('batch delete serializes with concurrent hash repoints', () async {
+      final originals = [
+        _textRecordWithContent(
+          'batch-delete-repoint-a',
+          'graph TD\n  A-->batch-delete-repoint-a',
+        ),
+        _textRecordWithContent(
+          'batch-delete-repoint-b',
+          'graph TD\n  A-->batch-delete-repoint-b',
+        ),
+      ];
+
+      await _exerciseDeleteSerializesHashRepoint(
+        originals,
+        () => TextManifest.deleteRecords(
+          originals.map((record) => record.id).toList(),
+        ),
+      );
+    });
+
+    test('folder delete serializes with a concurrent hash repoint', () async {
+      const folder = 'mermaid-charts/subfolder';
+      final original = _textRecordWithContent(
+        'folder-delete-repoint',
+        'graph TD\n  A-->folder-delete-repoint',
+        folder: folder,
+      );
+
+      await _exerciseDeleteSerializesHashRepoint([
+        original,
+      ], () => TextManifest.removeFolder('mermaid-charts'));
+    });
+
+    test(
+      'root folder no-op serializes its cache refresh with hash repoints',
+      () async {
+        const folder = 'mermaid-charts';
+        const chartContent = 'graph TD\n  A-->shared-chart';
+        const previousContent = 'graph TD\n  A-->previous-content';
+        final chart = _textRecordWithContent(
+          'folder-delete-shared-chart',
+          chartContent,
+          folder: folder,
+        );
+        final sharedReference = _textRecordWithContent(
+          'folder-delete-shared-reference',
+          previousContent,
+        );
+        final repointedReference = _textRecordWithContent(
+          sharedReference.id,
+          chartContent,
+        );
+        await TextManifest.saveTextRecord(chart, chartContent);
+        await TextManifest.saveTextRecord(sharedReference, previousContent);
+        TextManifest.invalidateCache();
+
+        final refreshReached = Completer<void>();
+        final releaseRefresh = Completer<void>();
+        TextManifest.beforeFolderLoadForTesting = () async {
+          TextManifest.beforeFolderLoadForTesting = null;
+          refreshReached.complete();
+          await releaseRefresh.future;
+        };
+        var updateFinished = false;
+        var removingRoot = Future<void>.value();
+        var updating = Future<void>.value();
+        try {
+          removingRoot = TextManifest.removeFolder('');
+          await refreshReached.future.timeout(const Duration(seconds: 5));
+
+          final updateReadStarted = Completer<void>();
+          ManifestDatabase.beforeWebDataReadForTesting = () async {
+            ManifestDatabase.beforeWebDataReadForTesting = null;
+            updateReadStarted.complete();
+          };
+          ManifestDatabase.invalidateWebDataCacheForTesting();
+          updating = TextManifest.updateRecord(
+            repointedReference,
+          ).whenComplete(() => updateFinished = true);
+          await updateReadStarted.future.timeout(const Duration(seconds: 5));
+          await Future<void>.delayed(Duration.zero);
+          expect(updateFinished, isFalse);
+
+          releaseRefresh.complete();
+          await Future.wait([
+            removingRoot,
+            updating,
+          ]).timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseRefresh.isCompleted) releaseRefresh.complete();
+          TextManifest.beforeFolderLoadForTesting = null;
+          ManifestDatabase.beforeWebDataReadForTesting = null;
+          try {
+            await Future.wait([
+              removingRoot,
+              updating,
+            ]).timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          containsAll([chart.id, repointedReference.id]),
+        );
+
+        await TextManifest.removeFolder(folder);
+
+        final remaining = await TextManifest.loadRecordsUncached();
+        final remainingIds = remaining.map((record) => record.id);
+        expect(remainingIds, isNot(contains(chart.id)));
+        expect(remainingIds, contains(repointedReference.id));
+        expect(
+          remaining
+              .singleWhere((record) => record.id == repointedReference.id)
+              .hash,
+          chart.hash,
+        );
+        expect(await TextManifest.readText(chart.storagePath), chartContent);
+      },
+    );
+
+    test(
+      'folder delete includes rows added after its initial selection',
+      () async {
+        const folder = 'mermaid-charts';
+        const nestedFolder = '$folder/subfolder';
+        const content = 'graph TD\n  A-->added-after-selection';
+        final addedRecord = _textRecordWithContent(
+          'folder-delete-added-after-selection',
+          content,
+          folder: nestedFolder,
+        );
+        await TextManifest.addFolder(folder);
+
+        final selectionReached = Completer<void>();
+        final releaseDelete = Completer<void>();
+        TextManifest.beforeFolderDeleteLocksForTesting = () async {
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          selectionReached.complete();
+          await releaseDelete.future;
+        };
+        final deleting = TextManifest.removeFolder(folder);
+        try {
+          await selectionReached.future.timeout(const Duration(seconds: 5));
+          await TextManifest.saveTextRecord(addedRecord, content);
+          releaseDelete.complete();
+          await deleting.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseDelete.isCompleted) releaseDelete.complete();
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          await deleting;
+        }
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          isNot(contains(addedRecord.id)),
+        );
+        expect(await TextManifest.readText(addedRecord.storagePath), isNull);
+        expect(await TextManifest.getAllFolders(), isNot(contains(folder)));
+        expect(
+          await TextManifest.getAllFolders(),
+          isNot(contains(nestedFolder)),
+        );
+      },
+    );
+
+    test(
+      'folder delete includes rows moved into descendants after selection',
+      () async {
+        const folder = 'mermaid-charts';
+        const nestedFolder = '$folder/subfolder';
+        const content = 'graph TD\n  A-->moved-after-selection';
+        final movedRecord = _textRecordWithContent(
+          'folder-delete-moved-after-selection',
+          content,
+          folder: 'outside',
+        );
+        await TextManifest.addFolder(folder);
+        await TextManifest.saveTextRecord(movedRecord, content);
+
+        final selectionReached = Completer<void>();
+        final releaseDelete = Completer<void>();
+        TextManifest.beforeFolderDeleteLocksForTesting = () async {
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          selectionReached.complete();
+          await releaseDelete.future;
+        };
+        final deleting = TextManifest.removeFolder(folder);
+        try {
+          await selectionReached.future.timeout(const Duration(seconds: 5));
+          await TextManifest.moveRecord(movedRecord.id, nestedFolder);
+          releaseDelete.complete();
+          await deleting.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseDelete.isCompleted) releaseDelete.complete();
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          await deleting;
+        }
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          isNot(contains(movedRecord.id)),
+        );
+        expect(await TextManifest.readText(movedRecord.storagePath), isNull);
+        expect(await TextManifest.getAllFolders(), isNot(contains(folder)));
+        expect(
+          await TextManifest.getAllFolders(),
+          isNot(contains(nestedFolder)),
+        );
+      },
+    );
+
+    test(
+      'folder delete includes a row repointed into descendants after selection',
+      () async {
+        const folder = 'mermaid-charts';
+        const nestedFolder = '$folder/subfolder';
+        const originalContent = 'graph TD\n  A-->before-folder';
+        const editedContent = 'graph TD\n  A-->after-folder';
+        final originalRecord = _textRecordWithContent(
+          'folder-delete-repointed-after-selection',
+          originalContent,
+          folder: 'outside',
+        );
+        final updatedRecord = _textRecordWithContent(
+          originalRecord.id,
+          editedContent,
+          folder: nestedFolder,
+        );
+        await TextManifest.addFolder(folder);
+        await TextManifest.addRecord(originalRecord);
+
+        final selectionReached = Completer<void>();
+        final releaseDelete = Completer<void>();
+        TextManifest.beforeFolderDeleteLocksForTesting = () async {
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          selectionReached.complete();
+          await releaseDelete.future;
+        };
+        final deleting = TextManifest.removeFolder(folder);
+        try {
+          await selectionReached.future.timeout(const Duration(seconds: 5));
+          await TextManifest.writeText(
+            updatedRecord.storagePath,
+            editedContent,
+          );
+          await TextManifest.updateRecord(updatedRecord);
+          releaseDelete.complete();
+          await deleting.timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseDelete.isCompleted) releaseDelete.complete();
+          TextManifest.beforeFolderDeleteLocksForTesting = null;
+          await deleting;
+        }
+
+        expect(
+          (await TextManifest.loadRecordsUncached()).map((record) => record.id),
+          isNot(contains(updatedRecord.id)),
+        );
+        expect(await TextManifest.readText(updatedRecord.storagePath), isNull);
+        expect(await TextManifest.getAllFolders(), isNot(contains(folder)));
+        expect(
+          await TextManifest.getAllFolders(),
+          isNot(contains(nestedFolder)),
+        );
+      },
+    );
+
+    test(
+      'folder delete orders a move after its final membership check',
+      () async {
+        const folder = 'mermaid-charts';
+        const nestedFolder = '$folder/subfolder';
+        const content = 'graph TD\n  A-->moved-after-final-check';
+        final record = _textRecordWithContent(
+          'folder-delete-final-move',
+          content,
+          folder: 'outside',
+        );
+        await TextManifest.addFolder(folder);
+        await TextManifest.saveTextRecord(record, content);
+
+        final checkReached = Completer<void>();
+        final releaseDelete = Completer<void>();
+        var moveFinished = false;
+        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = () async {
+          TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+          checkReached.complete();
+          await releaseDelete.future;
+        };
+        final deleting = TextManifest.removeFolder(folder);
+        var moving = Future<void>.value();
+        try {
+          await checkReached.future.timeout(const Duration(seconds: 5));
+          moving = TextManifest.moveRecord(
+            record.id,
+            nestedFolder,
+          ).whenComplete(() => moveFinished = true);
+          await Future<void>.delayed(Duration.zero);
+          expect(moveFinished, isFalse);
+
+          releaseDelete.complete();
+          await Future.wait([
+            deleting,
+            moving,
+          ]).timeout(const Duration(seconds: 5));
+        } finally {
+          if (!releaseDelete.isCompleted) releaseDelete.complete();
+          TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+          await Future.wait([deleting, moving]);
+        }
+
+        final remaining = await TextManifest.loadRecordsUncached();
+        expect(remaining.single.id, record.id);
+        expect(remaining.single.folder, nestedFolder);
+        expect(await TextManifest.readText(record.storagePath), content);
+        expect(await TextManifest.getAllFolders(), contains(folder));
+        expect(await TextManifest.getAllFolders(), contains(nestedFolder));
+      },
+    );
+
+    test('root folder delete remains a no-op for Mermaid charts', () async {
+      const content = 'graph TD\n  A-->root-chart';
+      final record = _textRecordWithContent('root-chart', content);
+      await TextManifest.saveTextRecord(record, content);
+
+      await TextManifest.removeFolder('');
+
+      expect(
+        (await TextManifest.loadRecordsUncached()).map((saved) => saved.id),
+        contains(record.id),
+      );
+      expect(await TextManifest.readText(record.storagePath), content);
+    });
+
+    test('cache invalidation waits until a record delete releases its lock',
+        () async {
+      const content = 'graph TD\n  A-->shared-cache-delete';
+      final chart = _textRecordWithContent('cache-delete-chart', content);
+      final reference = _textRecordWithContent('cache-delete-reference', content);
+      await TextManifest.saveTextRecord(chart, content);
+      await TextManifest.saveTextRecord(reference, content);
+
+      final deleteReached = Completer<void>();
+      final releaseDelete = Completer<void>();
+      TextManifest.beforeDeleteWithCurrentHashLocksForTesting = () async {
+        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+        deleteReached.complete();
+        await releaseDelete.future;
+      };
+      final invalidationReached = Completer<void>();
+      TextManifest.beforeCacheInvalidationForTesting = () async {
+        TextManifest.beforeCacheInvalidationForTesting = null;
+        invalidationReached.complete();
+      };
+      var deleting = Future<void>.value();
+      try {
+        deleting = TextManifest.deleteRecord(chart.id);
+        await deleteReached.future.timeout(const Duration(seconds: 5));
+
+        Zone.root.run(() => TextManifest.invalidateCache());
+        await Future<void>.delayed(Duration.zero);
+        expect(invalidationReached.isCompleted, isFalse);
+
+        releaseDelete.complete();
+        await deleting.timeout(const Duration(seconds: 5));
+        await invalidationReached.future.timeout(const Duration(seconds: 5));
+      } finally {
+        if (!releaseDelete.isCompleted) releaseDelete.complete();
+        TextManifest.beforeDeleteWithCurrentHashLocksForTesting = null;
+        TextManifest.beforeCacheInvalidationForTesting = null;
+        await deleting;
+      }
+
+      expect(
+        (await TextManifest.loadRecords()).map((record) => record.id),
+        [reference.id],
+      );
+      expect(await TextManifest.readText(chart.storagePath), content);
+    });
+  });
+
   testWidgets('cancel guard after asynchronous load prevents text insertion',
       (tester) async {
     var cancelled = false;

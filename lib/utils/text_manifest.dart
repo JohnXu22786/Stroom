@@ -161,6 +161,8 @@ String computeTextHash(Uint8List data) {
 class TextManifest {
   static final Map<String, Future<void>> _pendingSaves = {};
   static final Object _saveLockZoneKey = Object();
+  static Future<void>? _pendingRecordMutation;
+  static final Object _recordMutationZoneKey = Object();
 
   /// Serialize file and record mutations by content hash so a deletion cannot
   /// remove text while OCR is publishing a new reference to it.
@@ -194,6 +196,134 @@ class TextManifest {
     return acquire(0);
   }
 
+  /// Serializes text-row and folder membership changes with folder deletion.
+  /// Callers that also need a content hash lock must acquire that lock first.
+  static Future<T> _withRecordMutationLock<T>(
+    Future<T> Function() action,
+  ) async {
+    final held = Zone.current[_recordMutationZoneKey] as bool? ?? false;
+    if (held) return action();
+
+    final previous = _pendingRecordMutation ?? Future<void>.value();
+    final release = Completer<void>();
+    final pending = previous.then((_) => release.future);
+    _pendingRecordMutation = pending;
+    await previous;
+    try {
+      return await runZoned(action, zoneValues: {_recordMutationZoneKey: true});
+    } finally {
+      release.complete();
+      if (identical(_pendingRecordMutation, pending)) {
+        _pendingRecordMutation = null;
+      }
+    }
+  }
+
+  /// Keeps a text-row insertion ordered with folder removal. Hash comes first
+  /// to keep one lock order across content saves and deletes.
+  static Future<T> withRecordSaveLock<T>(
+    String hash,
+    Future<T> Function() action,
+  ) => withSaveLock(hash, () => _withRecordMutationLock(action));
+
+  /// Serializes every hash-changing row update with saves, deletes, and folder
+  /// membership changes. Holding both current and destination hashes keeps a
+  /// delete from reselecting a repointed row under only its old hash.
+  static Future<bool> withRecordSaveLocks(
+    String id,
+    String hash,
+    Future<void> Function() action,
+  ) async {
+    while (true) {
+      final records = await loadRecordsUncached();
+      final currentHashes = records
+          .where((record) => record.id == id)
+          .map((record) => record.hash)
+          .toSet();
+      if (currentHashes.isEmpty) return false;
+      final hashes = {...currentHashes, hash};
+      var retry = false;
+      var found = false;
+
+      await _withSaveLocks(hashes, () async {
+        await _withRecordMutationLock(() async {
+          final lockedHashes = (await loadRecordsUncached())
+              .where((record) => record.id == id)
+              .map((record) => record.hash)
+              .toSet();
+          if (lockedHashes.isEmpty) return;
+          if (!hashes.containsAll(lockedHashes)) {
+            retry = true;
+            return;
+          }
+          found = true;
+          await action();
+        });
+      });
+
+      if (!retry) return found;
+    }
+  }
+
+  /// Pauses a deletion after its hash check, before the manifest operation.
+  @visibleForTesting
+  static Future<void> Function()? beforeDeleteWithCurrentHashLocksForTesting;
+
+  /// Pauses folder deletion after its initial row selection, before locks.
+  @visibleForTesting
+  static Future<void> Function()? beforeFolderDeleteLocksForTesting;
+
+  /// Recheck rows after locking their hashes and retry if any row was
+  /// repointed while the locks were being acquired.
+  static Future<void> _deleteRecordsWithCurrentHashLocks(
+    Set<String> Function(List<TextRecord> records) selectIds,
+    Future<void> Function() delete, {
+    bool pauseBeforeLocksForTesting = false,
+  }) async {
+    while (true) {
+      final records = await loadRecordsUncached();
+      final ids = selectIds(records);
+      final selectedHashes = <String, String>{
+        for (final record in records)
+          if (ids.contains(record.id)) record.id: record.hash,
+      };
+      final hashes = selectedHashes.values.toSet();
+      var retry = false;
+
+      if (pauseBeforeLocksForTesting) {
+        await beforeFolderDeleteLocksForTesting?.call();
+      }
+
+      await _withSaveLocks(hashes, () async {
+        await _withRecordMutationLock(() async {
+          final currentRecords = await loadRecordsUncached();
+          final currentIds = selectIds(currentRecords);
+          final currentHashes = <String, String>{
+            for (final record in currentRecords)
+              if (currentIds.contains(record.id)) record.id: record.hash,
+          };
+          if (!_sameRecordHashes(selectedHashes, currentHashes) ||
+              !hashes.containsAll(currentHashes.values)) {
+            retry = true;
+            return;
+          }
+          await beforeDeleteWithCurrentHashLocksForTesting?.call();
+          await delete();
+        });
+      });
+
+      if (!retry) return;
+    }
+  }
+
+  static bool _sameRecordHashes(
+    Map<String, String> first,
+    Map<String, String> second,
+  ) {
+    if (first.length != second.length) return false;
+    return first.entries.every((entry) => second[entry.key] == entry.value);
+  }
+
   static final _ops = ManifestOperations<TextRecord>(
     manifestKey: 'text_manifest',
     storageDirName: 'texts',
@@ -209,15 +339,27 @@ class TextManifest {
     _ops.beforeFolderLoadForTesting = callback;
   }
 
-  static Future<List<TextRecord>> loadRecords() => _ops.loadRecords();
+  /// Pauses cache invalidation in tests after it acquires the mutation lock.
+  @visibleForTesting
+  static Future<void> Function()? beforeCacheInvalidationForTesting;
+
+  /// Cached refreshes share the mutation lock because they can otherwise
+  /// install a snapshot read before a hash update; deletes use this cache for
+  /// file reference counts after rechecking authoritative rows.
+  static Future<List<TextRecord>> loadRecords() =>
+      _withRecordMutationLock(() => _ops.loadRecords());
   static Future<List<TextRecord>> loadRecordsUncached() =>
       _ops.loadRecordsUncached();
-  static Future<void> addRecord(TextRecord record,
-          {void Function()? beforeCommit}) =>
-      withSaveLock(record.hash,
-          () => _ops.addRecord(record, beforeCommit: beforeCommit));
+  static Future<void> addRecord(
+    TextRecord record, {
+    void Function()? beforeCommit,
+  }) => withRecordSaveLock(
+    record.hash,
+    () => _ops.addRecord(record, beforeCommit: beforeCommit),
+  );
 
-  /// Writes text and publishes its manifest record under the same hash lock.
+  /// Writes text under the content hash lock, then publishes its row under
+  /// the manifest mutation lock.
   static Future<String> saveTextRecord(TextRecord record, String text) =>
       withSaveLock(record.hash, () async {
         final filePath = await writeText(record.storagePath, text);
@@ -226,13 +368,18 @@ class TextManifest {
       });
 
   /// Writes edited text and updates its manifest record under the content
-  /// hash lock, so cleanup cannot remove the new content before publication.
-  static Future<String> updateTextRecord(TextRecord record, String text) =>
-      withSaveLock(record.hash, () async {
-        final filePath = await writeText(record.storagePath, text);
-        await updateRecord(record);
-        return filePath;
-      });
+  /// locks, so deletion cannot race a change to the record's content hash.
+  static Future<String> updateTextRecord(TextRecord record, String text) async {
+    late String filePath;
+    final updated = await withRecordSaveLocks(record.id, record.hash, () async {
+      filePath = await writeText(record.storagePath, text);
+      await _ops.updateRecord(record);
+    });
+    if (!updated) {
+      throw StateError('The text record was deleted before saving.');
+    }
+    return filePath;
+  }
 
   /// Deletes content only after rechecking persisted references under its hash
   /// lock, so saves publishing that hash cannot race the reference check.
@@ -245,37 +392,42 @@ class TextManifest {
         return deleteFile(fileName);
       });
 
-  static Future<void> deleteRecord(String id,
-      {bool preserveFiles = false}) async {
-    final records = await loadRecordsUncached();
-    final index = records.indexWhere((record) => record.id == id);
-    if (index == -1) return;
-    await withSaveLock(records[index].hash,
-        () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
-  }
+  static Future<void> deleteRecord(String id, {bool preserveFiles = false}) =>
+      _deleteRecordsWithCurrentHashLocks(
+        (_) => {id},
+        () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+      );
 
   /// Rollback already knows the record hash, so it can remove metadata without
   /// first reading the manifest again when that lookup is the failing step.
-  static Future<void> deleteRecordWithKnownHash(String id, String hash,
-          {bool preserveFiles = false}) =>
-      withSaveLock(
-          hash, () => _ops.deleteRecord(id, preserveFiles: preserveFiles));
+  static Future<void> deleteRecordWithKnownHash(
+    String id,
+    String hash, {
+    bool preserveFiles = false,
+  }) => withRecordSaveLock(
+    hash,
+    () => _ops.deleteRecord(id, preserveFiles: preserveFiles),
+  );
 
   static Future<void> deleteRecords(List<String> ids) async {
-    final idSet = ids.toSet();
-    final records = await loadRecordsUncached();
-    final hashes = records
-        .where((record) => idSet.contains(record.id))
-        .map((record) => record.hash);
-    await _withSaveLocks(hashes, () => _ops.deleteRecords(ids));
+    await _deleteRecordsWithCurrentHashLocks(
+      (_) => ids.toSet(),
+      () => _ops.deleteRecords(ids),
+    );
   }
 
-  static Future<void> updateRecord(TextRecord updated) =>
-      withSaveLock(updated.hash, () => _ops.updateRecord(updated));
+  static Future<void> updateRecord(TextRecord updated) async {
+    await withRecordSaveLocks(
+      updated.id,
+      updated.hash,
+      () => _ops.updateRecord(updated),
+    );
+  }
+
   static Future<void> renameRecord(String id, String newName) =>
-      _ops.renameRecord(id, newName);
+      _withRecordMutationLock(() => _ops.renameRecord(id, newName));
   static Future<void> moveRecord(String id, String targetFolder) =>
-      _ops.moveRecord(id, targetFolder);
+      _withRecordMutationLock(() => _ops.moveRecord(id, targetFolder));
 
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
@@ -316,12 +468,42 @@ class TextManifest {
 
   // Folder management
   static Future<Set<String>> getAllFolders({bool throwOnError = false}) =>
-      _ops.getAllFolders(throwOnError: throwOnError);
-  static Future<void> addFolder(String name) => _ops.addFolder(name);
-  static Future<void> removeFolder(String name) => _ops.removeFolder(name);
+      _withRecordMutationLock(
+        () => _ops.getAllFolders(throwOnError: throwOnError),
+      );
+  static Future<void> addFolder(String name) =>
+      _withRecordMutationLock(() => _ops.addFolder(name));
+  static Future<void> removeFolder(String name) async {
+    if (name.isEmpty) {
+      await _withRecordMutationLock(() => _ops.removeFolder(name));
+      return;
+    }
+    // Folder removal selects records in the folder and descendants. Its
+    // selection must be reconciled while row membership is serialized so an
+    // add or move into the subtree cannot escape the hash locks.
+    final folderPrefix = '$name/';
+    await _deleteRecordsWithCurrentHashLocks(
+      (records) => records
+          .where(
+            (record) =>
+                record.folder == name || record.folder.startsWith(folderPrefix),
+          )
+          .map((record) => record.id)
+          .toSet(),
+      () => _ops.removeFolder(name),
+      pauseBeforeLocksForTesting: true,
+    );
+  }
+
   static Future<void> removeFolderFromCache(String folderPath) =>
-      _ops.removeFolderFromCache(folderPath);
-  static void invalidateCache() => _ops.invalidateCache();
+      _withRecordMutationLock(() => _ops.removeFolderFromCache(folderPath));
+  static void invalidateCache() {
+    unawaited(_withRecordMutationLock(() async {
+      final beforeInvalidate = beforeCacheInvalidationForTesting;
+      if (beforeInvalidate != null) await beforeInvalidate();
+      _ops.invalidateCache();
+    }));
+  }
 
   // Path utilities — forward to shared utilities
   static String getFolderBaseName(String folderPath) =>
@@ -336,8 +518,9 @@ class TextManifest {
 
   /// Get descendant folder paths using the manifest's internal state.
   static Future<List<String>> getAllDescendantFolderPaths(
-      String parentPath) async {
-    final allPaths = await _ops.getAllFolders();
+    String parentPath,
+  ) async {
+    final allPaths = await getAllFolders();
     return FolderPathUtils.getAllDescendantFolderPaths(parentPath, allPaths);
   }
 }
