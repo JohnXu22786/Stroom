@@ -336,7 +336,8 @@ class OcrService {
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: 1,
-        isComplete: parsed.finishReason != 'length',
+        isComplete: parsed.finishReason != 'length' &&
+            parsed.finishReason != 'content_filter',
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
@@ -423,7 +424,8 @@ class OcrService {
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: imageBytesList.length,
-        isComplete: parsed.finishReason != 'length',
+        isComplete: parsed.finishReason != 'length' &&
+            parsed.finishReason != 'content_filter',
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
