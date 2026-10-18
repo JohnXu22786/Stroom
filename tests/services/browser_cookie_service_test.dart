@@ -197,6 +197,152 @@ void main() {
         reason: 'WebFileStore mode must not resolve a native documents path');
   });
 
+  group('Google session cookie protections', () {
+    test('backup snapshots omit Google login and API cookies', () async {
+      BrowserCookieService.cookiePlatform = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+            name: 'sid',
+            value: 'private-google-session',
+            domain: '.google.com',
+          ),
+          Cookie(
+            name: 'api-session',
+            value: 'private-google-api-session',
+            domain: 'generativelanguage.googleapis.com',
+          ),
+          Cookie(name: 'theme', value: 'dark', domain: 'example.test'),
+        ];
+
+      final snapshot = await BrowserCookieService.snapshotCookiesForBackup();
+
+      expect(snapshot, hasLength(1));
+      expect(snapshot!.single['domain'], 'example.test');
+      expect(jsonEncode(snapshot), isNot(contains('private-google-session')));
+      expect(
+          jsonEncode(snapshot), isNot(contains('private-google-api-session')));
+    });
+
+    test('retention files omit Google login and API cookies', () async {
+      final fake = _FakeCookiePlatform()
+        ..allCookies = [
+          Cookie(
+            name: 'sid',
+            value: 'private-google-session',
+            domain: '.google.com',
+          ),
+          Cookie(
+            name: 'api-session',
+            value: 'private-google-api-session',
+            domain: '.googleapis.com',
+          ),
+          Cookie(name: 'theme', value: 'dark', domain: 'example.test'),
+        ];
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+
+      await BrowserCookieService.persistCookiesToFile();
+
+      final cookies = await BrowserCookieService.getCookiesFromFile();
+      expect(cookies.keys, {'example.test'});
+    });
+
+    test('page startup scrubs and does not restore old Google cookies',
+        () async {
+      final fake = _FakeCookiePlatform();
+      BrowserCookieService.cookiePlatform = fake;
+      await BrowserCookieService.setRetentionMode(true);
+      await BrowserCookieService.persistCookiesRawForTest([
+        {
+          'name': 'sid',
+          'value': 'private-google-session',
+          'domain': '.google.com',
+          'path': '/',
+        },
+        {
+          'name': 'theme',
+          'value': 'dark',
+          'domain': 'example.test',
+          'path': '/',
+        },
+      ]);
+
+      final prepared = await BrowserCookieService.prepareForBrowserPageLoad();
+
+      expect(prepared, isTrue);
+      expect(fake.setCookieCalls, hasLength(1));
+      expect(fake.setCookieCalls.single['url'], 'https://example.test/');
+      expect((await BrowserCookieService.getCookiesFromFile()).keys,
+          {'example.test'});
+    });
+
+    test('page startup continues when the saved cookie file is malformed',
+        () async {
+      BrowserCookieService.disableTestMode();
+      WebFileStore.enableTestMode();
+      addTearDown(WebFileStore.disableTestMode);
+      await WebFileStore.write(
+        '/browser_cookies.json',
+        Uint8List.fromList(utf8.encode('{malformed')),
+      );
+      await BrowserCookieService.setRetentionMode(true);
+
+      final prepared = await BrowserCookieService.prepareForBrowserPageLoad();
+
+      expect(prepared, isTrue);
+    });
+
+    test('cookie imports and merges omit Google login and API cookies',
+        () async {
+      final fake = _FakeCookiePlatform();
+      BrowserCookieService.cookiePlatform = fake;
+
+      final restored = await BrowserCookieService.restoreCookiesFromSnapshot([
+        {
+          'name': 'sid',
+          'value': 'private-google-session',
+          'domain': '.google.com',
+          'path': '/',
+        },
+        {
+          'name': 'api-session',
+          'value': 'private-google-api-session',
+          'domain': 'generativelanguage.googleapis.com',
+          'path': '/',
+        },
+        {
+          'name': 'theme',
+          'value': 'dark',
+          'domain': 'example.test',
+          'path': '/',
+        },
+      ], force: true);
+
+      expect(restored, isTrue);
+      expect(fake.setCookieCalls, hasLength(1));
+      expect(fake.setCookieCalls.single['url'], 'https://example.test/');
+      final merged = BrowserCookieService.mergeCookieSnapshots(
+        [
+          {
+            'name': 'sid',
+            'value': 'private-google-session',
+            'domain': '.google.com'
+          },
+        ],
+        [
+          {'name': 'theme', 'value': 'dark', 'domain': 'example.test'},
+          {
+            'name': 'api-session',
+            'value': 'private-google-api-session',
+            'domain': 'generativelanguage.googleapis.com',
+          },
+        ],
+      );
+      expect(merged, hasLength(1));
+      expect(merged.single['domain'], 'example.test');
+    });
+  });
+
   // ====================================================================
   // getRetentionMode — default value
   // ====================================================================
