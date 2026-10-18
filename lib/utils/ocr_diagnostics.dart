@@ -26,6 +26,12 @@ class OcrDiagnosticSnapshot {
   static const _knownSafeStoredTaskErrorSummaries = {
     'OCR 图片格式无法识别',
     'OCR 任务因格式问题未完成',
+    '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
+    'OCR request failed',
+    'OCR失败',
+    '上传超时',
+    '已取消',
+    '识别失败',
     'API 返回格式异常（非 JSON 对象）',
     'API 返回了空的 choices 列表',
     'API 返回中的 choice 格式异常',

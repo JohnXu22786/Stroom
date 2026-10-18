@@ -442,7 +442,7 @@ void main() {
     'legacy OCR refusal text is hidden while known safe summaries remain',
     () {
       const refusal = 'Exception: OCR 请求被模型拒绝: 发票姓名张三，订单金额 1280 元';
-      const safeParserSummaries = [
+      const safeSummaries = [
         'API 返回格式异常（非 JSON 对象）',
         'API 返回了空的 choices 列表',
         'API 返回中的 choice 格式异常',
@@ -458,6 +458,12 @@ void main() {
         'OCR 未识别到文字内容',
         'OCR 未识别到文字内容（content 列表为空）',
         'OCR 返回了不支持的非文本 content block',
+        '图片内容损坏或无法解码，请重新选择，或转换为 PNG、JPEG、WebP 后重试。',
+        'OCR request failed',
+        'OCR失败',
+        '上传超时',
+        '已取消',
+        '识别失败',
       ];
 
       expect(
@@ -474,7 +480,7 @@ void main() {
         ),
         'OCR 错误详情已隐藏',
       );
-      for (final summary in safeParserSummaries) {
+      for (final summary in safeSummaries) {
         expect(OcrDiagnosticSnapshot.sanitizeStoredTaskError(summary), summary);
       }
     },
