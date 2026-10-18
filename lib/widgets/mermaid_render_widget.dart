@@ -200,13 +200,16 @@ class MermaidRenderWidget extends StatefulWidget {
   /// built once and reused ([_buildMermaidSkeleton] caches it). Each
   /// render only pays a small number of passes over the skeleton to splice
   /// in the diagram code and optional error-document generation.
+  /// [transformDocumentGeneration], when supplied, is included with transform
+  /// bridge notifications so callers can reject callbacks from old documents.
   ///
   /// This is the single source of truth for the Mermaid HTML/JS template.
   /// Both [MermaidRenderWidget] and [MermaidChartPage] use this method.
   static String buildMermaidHtml(String mermaidCode,
       {bool withJsGestures = true,
       String? inlineMermaidJs,
-      int? errorDocumentGeneration}) {
+      int? errorDocumentGeneration,
+      int? transformDocumentGeneration}) {
     final escaped = _escapeMermaidCode(mermaidCode);
     final loader = _buildMermaidLoader(inlineMermaidJs);
     var skeleton = _buildMermaidSkeleton(withJsGestures, loader);
@@ -238,6 +241,13 @@ class MermaidRenderWidget extends StatefulWidget {
       if (sameOrigin) return;
       reportError('Mermaid resource failed to load');
     }, true);''',
+      );
+    }
+    if (transformDocumentGeneration != null) {
+      skeleton = skeleton.replaceFirst(
+        "callHandler('onTransformChanged', zoomLevel, panX, panY);",
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, "
+            "$transformDocumentGeneration);",
       );
     }
     return skeleton.replaceFirst('MERMAID_CODE_PLACEHOLDER', escaped);
@@ -1380,6 +1390,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       code,
       inlineMermaidJs: _inlineMermaidJs,
       errorDocumentGeneration: _mermaidDocumentGeneration,
+      transformDocumentGeneration: _mermaidDocumentGeneration,
     );
     _armReadyFallback();
     ctrl.loadData(
@@ -2054,6 +2065,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       code,
       inlineMermaidJs: _inlineMermaidJs,
       errorDocumentGeneration: _mermaidDocumentGeneration,
+      transformDocumentGeneration: _mermaidDocumentGeneration,
     );
   }
 
@@ -2244,8 +2256,15 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                       // the WebView itself reflects the transform visually.
                       if (!mounted ||
                           (kIsWeb && currentWebViewKey != _webViewKey) ||
+                          (!kIsWeb && ctrl != _webViewController) ||
                           args.length < 3) {
                         return;
+                      }
+                      if (!kIsWeb) {
+                        final generation = args.length < 4
+                            ? null
+                            : int.tryParse(args[3].toString());
+                        if (generation != _mermaidDocumentGeneration) return;
                       }
                       final zoom = double.tryParse(args[0].toString());
                       final px = double.tryParse(args[1].toString());
