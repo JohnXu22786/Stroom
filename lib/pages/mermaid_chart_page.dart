@@ -399,7 +399,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final baseName = userFileName;
+      final baseName = existingRecord == null && userFileName.endsWith('.mmd')
+          ? userFileName.substring(0, userFileName.length - '.mmd'.length)
+          : userFileName;
       final saveName =
           existingRecord == null ? '$baseName-$typeLabel' : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();

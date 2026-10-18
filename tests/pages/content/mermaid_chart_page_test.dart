@@ -1262,6 +1262,42 @@ void main() {
       expect(savedRecord.folder, '');
     });
 
+    testWidgets(
+      'new chart filename with mmd suffix gets type before extension',
+      (tester) async {
+        await tester.pumpWidget(_buildTestApp());
+        await tester.pump();
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'graph TD\n  A-->B',
+        );
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+
+        final fileNameField = find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+        );
+        await tester.enterText(fileNameField, 'chart.mmd');
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(savedRecord.name, 'chart-流程图');
+      },
+    );
+
     testWidgets('save with empty filename shows error, does not save', (
       tester,
     ) async {
