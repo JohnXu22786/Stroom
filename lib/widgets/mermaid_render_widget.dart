@@ -1082,6 +1082,8 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mermaidCode != widget.mermaidCode) {
       final wasShowingWebSource = kIsWeb && _showSourceCode;
+      final hasNonEmptyCode = widget.mermaidCode.trim().isNotEmpty;
+      final wasEmptyCode = oldWidget.mermaidCode.trim().isEmpty;
       final isPendingWebRetry = kIsWeb &&
           !_isReady &&
           _webViewController != null &&
@@ -1090,7 +1092,13 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
           _hasWebRetryTimeoutError &&
           _webRetryUrl != null &&
           _webViewController != null;
-      final shouldRearmWebRetry = isPendingWebRetry || isTimedOutWebRetry;
+      final shouldRearmWebRetry =
+          hasNonEmptyCode && (isPendingWebRetry || isTimedOutWebRetry);
+      if (!hasNonEmptyCode) {
+        _webViewCreationFallbackTimer?.cancel();
+        _readyFallbackTimer?.cancel();
+        _webRetryUrl = null;
+      }
       // Invalidate the memoized initial HTML: if the WebView is recreated
       // (e.g. the widget was unmounted and mounted again) it reads
       // initialData anew and must see the NEW code. While the WebView
@@ -1103,7 +1111,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       // retained-view retry instead keeps Flutter's overlay until its
       // navigation completes or the retry fallback resolves it. On native
       // platforms the overlay tracks onLoadStop.
-      if (!kIsWeb || shouldRearmWebRetry) {
+      if (!kIsWeb || shouldRearmWebRetry || !hasNonEmptyCode) {
         _isReady = false;
       }
       _hasLoadedPage = false;
@@ -1116,18 +1124,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       _pendingZoomOperations.clear();
       _panX = 0;
       _panY = 0;
-      if (oldWidget.mermaidCode.trim().isEmpty &&
-          widget.mermaidCode.trim().isNotEmpty) {
+      if (wasEmptyCode && hasNonEmptyCode) {
         // The empty-code placeholder unmounts the WebView. Drop its stale
         // controller and give the remounted platform view a fresh key and
         // creation deadline, so stale callbacks and failed mounts are handled.
         _webViewController = null;
         _webViewKey = UniqueKey();
         _webRetryUrl = null;
+        _isReady = false;
       }
       if (!kIsWeb &&
           defaultTargetPlatform != TargetPlatform.windows &&
-          widget.mermaidCode.trim().isNotEmpty &&
+          hasNonEmptyCode &&
           _webViewController == null) {
         _armWebViewCreationFallback();
       }
@@ -1135,7 +1143,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
         _armReadyFallback(showNavigationTimeoutError: true);
       }
       _loadMermaidCode();
-      if (wasShowingWebSource) _armWebViewCreationFallback();
+      if (hasNonEmptyCode &&
+          (wasShowingWebSource || (kIsWeb && wasEmptyCode))) {
+        _armWebViewCreationFallback();
+      }
     }
   }
 
@@ -1155,10 +1166,17 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// still does not exist after 12s (the platform view failed to mount —
   /// onWebViewCreated never fired), show an error instead of loading forever.
   void _armWebViewCreationFallback() {
-    if (!_shouldCreateWebView || (!kIsWeb && _mermaidJsLoading)) return;
+    if (!_shouldCreateWebView ||
+        (!kIsWeb && _mermaidJsLoading) ||
+        widget.mermaidCode.trim().isEmpty) {
+      return;
+    }
     _webViewCreationFallbackTimer?.cancel();
     _webViewCreationFallbackTimer = Timer(const Duration(seconds: 12), () {
-      if (mounted && _webViewController == null && _errorMessage == null) {
+      if (mounted &&
+          widget.mermaidCode.trim().isNotEmpty &&
+          _webViewController == null &&
+          _errorMessage == null) {
         debugPrint('[MermaidRenderWidget] WebView was not created within '
             '12s, showing an error');
         setState(() {
