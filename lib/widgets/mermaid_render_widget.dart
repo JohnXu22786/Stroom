@@ -952,10 +952,12 @@ MERMAID_LOADER_PLACEHOLDER
         if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
           hasDragged = true;
         }
-        panX = panStartX + deltaX;
-        panY = panStartY + deltaY;
-        updateTransform();
-        notifyTransform();
+        if (hasDragged) {
+          panX = panStartX + deltaX;
+          panY = panStartY + deltaY;
+          updateTransform();
+          notifyTransform();
+        }
         e.preventDefault();
       }
     });
