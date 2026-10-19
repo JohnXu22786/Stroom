@@ -245,8 +245,8 @@ class MermaidRenderWidget extends StatefulWidget {
     }
     if (transformDocumentGeneration != null) {
       skeleton = skeleton.replaceFirst(
-        "callHandler('onTransformChanged', zoomLevel, panX, panY);",
-        "callHandler('onTransformChanged', zoomLevel, panX, panY, "
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);",
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete, "
             "$transformDocumentGeneration);",
       );
     }
@@ -669,7 +669,7 @@ MERMAID_CODE_PLACEHOLDER
     function notifyTransform() {
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY);
+          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);
         }
       } catch(_) {}
     }
@@ -859,8 +859,8 @@ MERMAID_CODE_PLACEHOLDER
       activeNativeGestureId = null;
       nativeGestureZoomLevel = zoomLevel;
       updateTransform();
-      notifyTransform();
       fitComplete = true;
+      notifyTransform();
       if (typeof replayPendingZoomOperations === 'function') {
         replayPendingZoomOperations();
       }
@@ -1141,6 +1141,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
 
+  /// Whether this native document has reported a JavaScript transform.
+  bool _hasReceivedNativeTransform = false;
+
   /// Zoom inputs made before the WebView is ready to accept commands.
   final List<
       ({
@@ -1357,6 +1360,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     _mermaidDocumentGeneration++;
     _hasLoadedPage = false;
     _canApplyZoomCommands = false;
+    _hasReceivedNativeTransform = false;
     final code = widget.mermaidCode.trim();
 
     if (!kIsWeb &&
@@ -1822,16 +1826,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
-    // Keep native-side state current for Flutter gesture handling, but let
-    // JavaScript apply the toolbar delta to its live zoom. The web platform
-    // has no JS handler bridge, so Flutter's cached level may not reflect
-    // auto-fit or JS gesture changes.
+    // JavaScript applies the toolbar delta to its live zoom. Keep the native
+    // cache current for gesture handling, but don't discard input based on a
+    // stale limit before this document reports its initial transform: fit can
+    // reset JS zoom before the queued toolbar deltas are replayed.
     if (!kIsWeb) {
       final target = _clampManualZoom(
         _zoomLevel + delta,
         currentZoom: _zoomLevel,
       );
-      if (target == _zoomLevel) return;
+      if (_hasReceivedNativeTransform && target == _zoomLevel) return;
       _zoomLevel = target;
     }
 
@@ -2297,10 +2301,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                         return;
                       }
                       if (!kIsWeb) {
-                        final generation = args.length < 4
+                        final generation = args.length < 5
                             ? null
-                            : int.tryParse(args[3].toString());
+                            : int.tryParse(args[4].toString());
                         if (generation != _mermaidDocumentGeneration) return;
+                        if (args[3] == true) _hasReceivedNativeTransform = true;
                       }
                       final zoom = double.tryParse(args[0].toString());
                       final px = double.tryParse(args[1].toString());
