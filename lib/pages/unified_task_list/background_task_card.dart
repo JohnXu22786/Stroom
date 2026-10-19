@@ -548,8 +548,8 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
     // 立即开始/重试 buttons would be dead taps, so hide them.
     final hasRetryPage =
         !widget.isFlowManaged && task.type != BackgroundTaskType.chat;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.end,
       children: [
         // "立即开始" button for waiting tasks
         if (hasRetryPage && task.status == TaskStatus.waiting)
