@@ -41,7 +41,7 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets(
-      'common arithmetic stays in one column and long categories split evenly',
+      'common first page swaps the operator and function columns',
       (tester) async {
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
@@ -58,13 +58,26 @@ void main() {
       expect(
           operatorRects[index].top, greaterThan(operatorRects[index - 1].top));
     }
+
     final fraction = tester.getRect(find.byTooltip('分数：选区放入分子'));
+    final power = tester.getRect(find.byTooltip('幂：进入指数'));
+    final root = tester.getRect(find.byTooltip(r'\sqrt{x}'));
+    final parentheses = tester.getRect(find.byTooltip(r'\left(x\right)'));
+    final functionRects = [fraction, power, root, parentheses];
+    expect(functionRects.map((rect) => rect.left).toSet(), hasLength(1));
+    expect(functionRects.first.left, lessThan(operatorRects.first.left));
+    for (var index = 0; index < functionRects.length; index++) {
+      expect(functionRects[index].top, operatorRects[index].top);
+    }
+
     final equals = tester.getRect(find.byTooltip('等于'));
     expect(equals.top, operatorRects.last.top);
     expect(
       equals.left,
-      closeTo((operatorRects.first.left + fraction.left) / 2, 1),
+      closeTo((operatorRects.first.left + functionRects.first.left) / 2, 1),
     );
+    expect(tester.getRect(find.byTooltip('7')).left,
+        greaterThan(operatorRects.first.left));
     expect(find.text('1/2'), findsOneWidget);
 
     await _selectCategory(tester, '微积分');
