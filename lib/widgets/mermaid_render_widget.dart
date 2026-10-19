@@ -2130,7 +2130,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // reliably cover it. Unmount the iframe while showing source; returning
     // to preview starts a new render attempt with a fresh creation fallback.
     if (_showSourceCode && kIsWeb) {
-      return _buildSourceCodeView(cs, isDark, effectiveHeight);
+      final sourceView = _buildSourceCodeView(cs, isDark, effectiveHeight);
+      if (!widget.expand) return sourceView;
+
+      // A Row gives its children loose height constraints. Keep expanded
+      // previews full-height in that layout while retaining adaptive source
+      // height when no bounded preview height is available.
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (!constraints.hasBoundedHeight) return sourceView;
+          return SizedBox(height: constraints.maxHeight, child: sourceView);
+        },
+      );
     }
 
     // ---- Render layer + source-code overlay (stable root) ----
