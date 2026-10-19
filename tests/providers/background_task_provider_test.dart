@@ -15277,6 +15277,25 @@ void main() {
       'malformed OCR retry data preserves the task and blocks incomplete retry',
       () async {
         final file = _tasksFileIn(testDir.path);
+        final legacyRequest = <String, dynamic>{
+          'imageCount': 2,
+          'body': {
+            'model': 'legacy-ocr-model',
+            'messages': [
+              {
+                'role': 'user',
+                'content': [
+                  {'type': 'text', 'text': 'Extract the invoice total.'},
+                ],
+              },
+            ],
+          },
+        };
+        final currentRetryData = OcrRetryStorage.unavailableSnapshotForCount(
+          taskId: 'valid-current-ocr-retry-data',
+          imageCount: 1,
+          modelId: 'current-ocr-model',
+        );
         await file.parent.create(recursive: true);
         await file.writeAsString(
           jsonEncode([
@@ -15299,6 +15318,50 @@ void main() {
               'createdAt': DateTime(2025, 1, 1).toIso8601String(),
               'steps': [],
               'retryData': 'not a map',
+            },
+            {
+              'id': 'malformed-ocr-retry-map',
+              'type': 'ocr',
+              'title': 'OCR task with recoverable legacy metadata',
+              'status': 'failed',
+              'error': 'OCR request failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [],
+              'retryData': {'version': 'bad'},
+              'rawRequest': legacyRequest,
+            },
+            {
+              'id': 'empty-ocr-retry-map',
+              'type': 'ocr',
+              'title': 'OCR task with empty legacy retry metadata',
+              'status': 'failed',
+              'error': 'OCR request failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [],
+              'retryData': <String, dynamic>{},
+              'rawRequest': legacyRequest,
+            },
+            {
+              'id': 'invalid-image-ocr-retry-map',
+              'type': 'ocr',
+              'title': 'OCR task with invalid legacy image metadata',
+              'status': 'failed',
+              'error': 'OCR request failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [],
+              'retryData': {
+                'images': [null]
+              },
+              'rawRequest': legacyRequest,
+            },
+            {
+              'id': 'valid-current-ocr-retry-data',
+              'type': 'ocr',
+              'title': 'Current OCR retry snapshot',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'steps': [],
+              'retryData': currentRetryData,
             },
           ]),
         );
@@ -15333,6 +15396,36 @@ void main() {
             OcrRetrySnapshot.fromMap(unknownCountData!).imageEntryCount,
             0,
           );
+
+          for (final taskId in [
+            'malformed-ocr-retry-map',
+            'empty-ocr-retry-map',
+            'invalid-image-ocr-retry-map',
+          ]) {
+            final malformedMapTask = notifier.taskById(taskId);
+            expect(malformedMapTask, isNotNull);
+            expect(malformedMapTask!.id, taskId);
+            expect(malformedMapTask.error, 'OCR request failed');
+            final malformedMapRetryData = malformedMapTask.retryData;
+            expect(malformedMapRetryData, isNotNull);
+            final malformedMapSnapshot =
+                OcrRetrySnapshot.fromMap(malformedMapRetryData!);
+            expect(malformedMapSnapshot.imageEntryCount, 2);
+            expect(malformedMapSnapshot.modelId, 'legacy-ocr-model');
+            expect(
+              malformedMapSnapshot.instructionContent,
+              'Extract the invoice total.',
+            );
+            final malformedMapImages =
+                await OcrRetryStorage.restoreImages(malformedMapSnapshot);
+            expect(malformedMapImages.isComplete, isFalse);
+            expect(malformedMapImages.images, isEmpty);
+            expect(malformedMapImages.missingImageCount, 2);
+          }
+
+          final currentTask = notifier.taskById('valid-current-ocr-retry-data');
+          expect(currentTask, isNotNull);
+          expect(currentTask!.retryData, currentRetryData);
 
           final persistedTasks =
               jsonDecode(await file.readAsString()) as List<dynamic>;
