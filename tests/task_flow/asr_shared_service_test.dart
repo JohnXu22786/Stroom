@@ -15,6 +15,7 @@ import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/providers/tts_state_provider.dart';
+import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/asr_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
@@ -100,6 +101,28 @@ class _AsrAdapter implements HttpClientAdapter {
   void close({bool force = false}) => closeCalls++;
 }
 
+class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
+  final Map<String, Uint8List> files = {};
+
+  @override
+  Future<void> write(String key, Uint8List bytes) async {
+    files[key] = Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<Uint8List?> read(String key) async =>
+      files[key] == null ? null : Uint8List.fromList(files[key]!);
+
+  @override
+  Future<void> delete(String key) async {
+    files.remove(key);
+  }
+
+  @override
+  Future<List<String>> keysWithPrefix(String prefix) async =>
+      files.keys.where((key) => key.startsWith(prefix)).toList();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -122,6 +145,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    BackgroundTaskNotifier.debugDisablePersistence = true;
     FileManifest.invalidateCache();
     TextManifest.invalidateCache();
     executions = TaskFlowExecutionNotifier();
@@ -140,6 +164,7 @@ void main() {
   tearDown(() async {
     if (executions.mounted) executions.dispose();
     background.dispose();
+    BackgroundTaskNotifier.debugDisablePersistence = false;
   });
 
   ProviderEntriesState providers({
@@ -437,6 +462,9 @@ void main() {
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => AsrPage(
+                      retryAudioStore: AsrRetryAudioStore(
+                        adapter: _MemoryRetryAdapter(),
+                      ),
                       retryData: {
                         'audios': [
                           {
@@ -461,22 +489,27 @@ void main() {
     );
     await tester.tap(find.text('open ASR'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test ASR').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('开始识别'));
     await tester.pump(const Duration(seconds: 1));
 
-    await tester.runAsync(() async {
-      final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (standaloneBackground.state.isEmpty ||
-          standaloneBackground.state.single.status != TaskStatus.failed) {
-        if (DateTime.now().isAfter(deadline)) {
-          fail('standalone ASR task did not fail after the chunk error');
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-    });
+    for (var attempt = 0;
+        attempt < 100 &&
+            (standaloneBackground.state.isEmpty ||
+                standaloneBackground.state.single.status != TaskStatus.failed);
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
 
+    expect(
+      standaloneBackground.state.single.status,
+      TaskStatus.failed,
+      reason: 'standalone ASR task should fail after the chunk error',
+    );
     expect(standaloneBackground.state.single.result, 'first chunk last chunk');
-    expect(standaloneBackground.state.single.status, TaskStatus.failed);
     expect(standaloneBackground.state.single.resultIsComplete, isFalse);
     expect(adapter.requests, hasLength(3));
     await tester.pumpWidget(const SizedBox.shrink());

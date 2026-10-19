@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -177,6 +178,13 @@ void main() {
       Dio(BaseOptions(baseUrl: 'https://api.test.com'))
         ..httpClientAdapter = adapter;
 
+  Dio testDioAcceptingErrorStatuses(_RouteAdapter adapter) => Dio(
+        BaseOptions(
+          baseUrl: 'https://api.test.com',
+          validateStatus: (_) => true,
+        ),
+      )..httpClientAdapter = adapter;
+
   ResponseBody ok(String text) => ResponseBody.fromString(
         '{"text":"$text"}',
         200,
@@ -188,6 +196,14 @@ void main() {
   ResponseBody err500() => ResponseBody.fromString(
         '{"error":{"message":"boom"}}',
         500,
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType]
+        },
+      );
+
+  ResponseBody err400() => ResponseBody.fromString(
+        '{"error":{"message":"rejected"}}',
+        400,
         headers: {
           Headers.contentTypeHeader: [Headers.jsonContentType]
         },
@@ -560,6 +576,69 @@ void main() {
     );
 
     test(
+      'generic fallback ignores successful chunks from a prior plan',
+      () async {
+        final audioBytes = _buildNoisyWav(seconds: 1, sampleRate: 120);
+        final base64BodyBytes = utf8
+            .encode(
+              jsonEncode({
+                'model': 'whisper-1',
+                'response_format': 'json',
+                'file': base64Encode(audioBytes),
+              }),
+            )
+            .length;
+        final previousPlanFingerprint = fingerprintAsrChunkPlan([
+          (startSeconds: 0, endSeconds: 0.5),
+          (startSeconds: 0.5, endSeconds: 1),
+        ]);
+        final adapter = _RouteAdapter();
+        var requestNumber = 0;
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          requestNumber++;
+          return requestNumber == 1
+              ? err400()
+              : ok('generic chunk $requestNumber');
+        });
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: base64BodyBytes,
+            compression: 'flac',
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDio(adapter),
+        );
+
+        final result = await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+          priorChunks: [
+            AsrChunkResult(
+              index: 1,
+              startSeconds: 0.5,
+              endSeconds: 1,
+              totalChunks: 2,
+              planFingerprint: previousPlanFingerprint,
+              status: AsrChunkStatus.succeeded,
+              text: 'stale prior-plan transcript',
+            ),
+          ],
+        );
+
+        expect(adapter.requests, hasLength(10));
+        expect(
+          result.text,
+          List.generate(9, (index) => 'generic chunk ${index + 2}').join(' '),
+        );
+        expect(result.text, isNot(contains('stale prior-plan transcript')));
+      },
+    );
+
+    test(
       'fallbackMethod=all reaches generic after a Base64 provider failure',
       () async {
         final audioBytes = _buildNoisyWav(seconds: 1, sampleRate: 120);
@@ -605,7 +684,7 @@ void main() {
         adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
           requestNumber++;
           return requestNumber == 1
-              ? err500()
+              ? err400()
               : ok('generic chunk $requestNumber');
         });
         final service = AsrService(
@@ -658,6 +737,727 @@ void main() {
     );
 
     test(
+      'direct retry blocks uncertain chunks from a changed plan',
+      () async {
+        final audioBytes = _buildWav(seconds: 1);
+        final previousPlanFingerprint = fingerprintAsrChunkPlan([
+          (startSeconds: 0, endSeconds: 0.5),
+          (startSeconds: 0.5, endSeconds: 1),
+        ]);
+        const priorUncertainChunk = AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: 0.5,
+          totalChunks: 2,
+          status: AsrChunkStatus.uncertain,
+        );
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return ok('unexpected replay');
+        });
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 1024 * 1024,
+            compression: 'none',
+            chunking: 'fixedSize',
+            fallbackMethod: 'none',
+          ),
+          dio: testDio(adapter),
+        );
+        final priorChunks = [
+          AsrChunkResult(
+            index: priorUncertainChunk.index,
+            startSeconds: priorUncertainChunk.startSeconds,
+            endSeconds: priorUncertainChunk.endSeconds,
+            totalChunks: priorUncertainChunk.totalChunks,
+            planFingerprint: previousPlanFingerprint,
+            status: priorUncertainChunk.status,
+          ),
+        ];
+
+        await expectLater(
+          () => service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+            priorChunks: priorChunks,
+          ),
+          throwsA(isA<AsrChunkedTranscriptionException>()),
+        );
+
+        expect(adapter.requests, isEmpty);
+      },
+    );
+
+    test(
+      'legacy chunks from a sub-millisecond plan change are not reused',
+      () async {
+        var requestNumber = 0;
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          requestNumber++;
+          return ok('fresh chunk $requestNumber');
+        });
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.base64Json,
+            maxFileSizeBytes: 800,
+            compression: 'none',
+            chunking: 'fixedSize',
+            fallbackMethod: 'generic',
+          ),
+          dio: testDio(adapter),
+        );
+        final audioBytes = _buildWav(seconds: 2, sampleRate: 500);
+
+        final original = await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
+        final originalChunks = original.chunks!;
+        expect(originalChunks.length, greaterThan(1));
+        final legacyChunks = [
+          for (final chunk in originalChunks)
+            AsrChunkResult(
+              index: chunk.index,
+              startSeconds: chunk.startSeconds + 0.0005,
+              endSeconds: chunk.endSeconds + 0.0005,
+              totalChunks: chunk.totalChunks,
+              status: AsrChunkStatus.succeeded,
+              text: 'stale chunk ${chunk.index}',
+            ),
+        ];
+        final firstRequestCount = adapter.requests.length;
+
+        final retried = await service.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+          priorChunks: legacyChunks,
+        );
+
+        expect(adapter.requests, hasLength(firstRequestCount * 2));
+        expect(retried.text, contains('fresh chunk'));
+        expect(retried.text, isNot(contains('stale chunk')));
+      },
+    );
+
+    test(
+      'legacy single-request results require exact audio bounds',
+      () async {
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return ok('fresh single-request transcript');
+        });
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 64 * 1024,
+            compression: 'none',
+            chunking: 'none',
+            fallbackMethod: 'none',
+          ),
+          dio: testDio(adapter),
+        );
+
+        final result = await service.transcribe(
+          audioBytes: _buildWav(seconds: 1),
+          audioFormat: 'wav',
+          priorChunks: const [
+            AsrChunkResult(
+              index: 0,
+              startSeconds: 0,
+              endSeconds: 1.0005,
+              totalChunks: 1,
+              status: AsrChunkStatus.succeeded,
+              text: 'stale single-request transcript',
+            ),
+          ],
+        );
+
+        expect(adapter.requests, hasLength(1));
+        expect(result.text, 'fresh single-request transcript');
+      },
+    );
+
+    test(
+      'cached plain text is not relabeled as an empty subtitle format',
+      () async {
+        final audioBytes = _buildWav(seconds: 1, sampleRate: 120);
+        for (final format in ['srt', 'vtt']) {
+          final adapter = _RouteAdapter();
+          adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+            return ok('plain provider transcript');
+          });
+          final service = AsrService(
+            config: AsrConfig(
+              apiKey: 'k',
+              host: host,
+              uploadMethod: AudioUploadMethod.multipart,
+              maxFileSizeBytes: 64 * 1024,
+              compression: 'none',
+              chunking: 'none',
+              fallbackMethod: 'none',
+              typeConfig: {
+                'enableResponseFormat': true,
+                'responseFormat': format,
+              },
+            ),
+            dio: testDio(adapter),
+          );
+
+          final original = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          expect(original.text, 'plain provider transcript');
+          expect(original.outputFormat, 'txt');
+
+          final retried = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+            priorChunks: original.chunks!,
+          );
+
+          expect(retried.text, 'plain provider transcript');
+          expect(retried.subtitle, isNull);
+          expect(retried.outputFormat, 'txt');
+          expect(adapter.requests, hasLength(1));
+        }
+      },
+    );
+
+    test(
+      'cached timed JSON keeps its plain-text output format',
+      () async {
+        final audioBytes = _buildWav(seconds: 1, sampleRate: 120);
+        for (final format in ['srt', 'vtt']) {
+          final adapter = _RouteAdapter();
+          adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'text': 'timed provider transcript',
+                'segments': [
+                  {
+                    'start': 0.0,
+                    'end': 1.0,
+                    'text': 'timed provider transcript',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          });
+          final service = AsrService(
+            config: AsrConfig(
+              apiKey: 'k',
+              host: host,
+              uploadMethod: AudioUploadMethod.multipart,
+              maxFileSizeBytes: 64 * 1024,
+              compression: 'none',
+              chunking: 'none',
+              fallbackMethod: 'none',
+              typeConfig: {
+                'enableResponseFormat': true,
+                'responseFormat': format,
+              },
+            ),
+            dio: testDio(adapter),
+          );
+
+          final original = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          expect(original.text, 'timed provider transcript');
+          expect(original.subtitle, isNull);
+          expect(original.outputFormat, 'txt');
+          expect(original.segments, hasLength(1));
+
+          final retried = await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+            priorChunks: original.chunks!,
+          );
+
+          expect(retried.text, 'timed provider transcript');
+          expect(retried.subtitle, isNull);
+          expect(retried.outputFormat, 'txt');
+          expect(retried.segments, hasLength(1));
+          expect(adapter.requests, hasLength(1));
+        }
+      },
+    );
+
+    test(
+      'cached URL timed JSON keeps its plain-text output format',
+      () async {
+        for (final format in ['srt', 'vtt']) {
+          final adapter = _RouteAdapter();
+          adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+            return ResponseBody.fromString(
+              jsonEncode({
+                'text': 'timed URL transcript',
+                'segments': [
+                  {
+                    'start': 0.0,
+                    'end': 1.0,
+                    'text': 'timed URL transcript',
+                  },
+                ],
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          });
+          final service = AsrService(
+            config: AsrConfig(
+              apiKey: 'k',
+              host: host,
+              uploadMethod: AudioUploadMethod.url,
+              maxFileSizeBytes: 64 * 1024,
+              compression: 'none',
+              chunking: 'none',
+              fallbackMethod: 'none',
+              typeConfig: {
+                'enableResponseFormat': true,
+                'responseFormat': format,
+              },
+            ),
+            dio: testDio(adapter),
+          );
+
+          final original = await service.transcribeFromUrl(
+            'https://example.com/audio.wav',
+          );
+          expect(original.text, 'timed URL transcript');
+          expect(original.subtitle, isNull);
+          expect(original.outputFormat, 'txt');
+          expect(original.segments, hasLength(1));
+
+          final retried = await service.transcribeFromUrl(
+            'https://example.com/audio.wav',
+            priorChunks: original.chunks!,
+          );
+
+          expect(retried.text, 'timed URL transcript');
+          expect(retried.subtitle, isNull);
+          expect(retried.outputFormat, 'txt');
+          expect(retried.segments, hasLength(1));
+          expect(adapter.requests, hasLength(1));
+        }
+      },
+    );
+
+    test(
+      'uncertain HTTP 500 does not issue a generic fallback request',
+      () async {
+        final audioBytes = _buildNoisyWav(seconds: 1, sampleRate: 120);
+        final base64BodyBytes = utf8
+            .encode(
+              jsonEncode({
+                'model': 'whisper-1',
+                'response_format': 'json',
+                'file': base64Encode(audioBytes),
+              }),
+            )
+            .length;
+        final measurementAdapter = _RouteAdapter();
+        measurementAdapter.onPost('/audio/transcriptions', (options, body) {
+          return ok('measure compressed body');
+        });
+        final measurementService = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 64 * 1024,
+            compression: 'flac',
+            fallbackMethod: 'none',
+          ),
+          dio: testDio(measurementAdapter),
+        );
+        await measurementService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
+        final fullCompressedBodyBytes =
+            (measurementAdapter.requests.single['bodyBytes'] as Uint8List)
+                .length;
+        expect(fullCompressedBodyBytes, greaterThan(base64BodyBytes));
+
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+          return err500();
+        });
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: base64BodyBytes,
+            compression: 'flac',
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDio(adapter),
+        );
+
+        Object? thrown;
+        try {
+          await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+        } catch (error) {
+          thrown = error;
+        }
+
+        expect(thrown, isA<AsrChunkedTranscriptionException>());
+        final failure = thrown! as AsrChunkedTranscriptionException;
+        expect(failure.recoveryChunks, hasLength(1));
+        expect(failure.recoveryChunks.single.status, AsrChunkStatus.uncertain);
+        expect(failure.toString(), contains('结果不确定'));
+        expect(adapter.requests, hasLength(1));
+        expect(
+          adapter.requests.single['contentType'],
+          contains('application/json'),
+        );
+      },
+    );
+
+    test(
+      'accepted HTTP 500 provider error remains uncertain and stops fallback',
+      () async {
+        final audioBytes = _buildNoisyWav(seconds: 1, sampleRate: 120);
+        final base64BodyBytes = utf8
+            .encode(
+              jsonEncode({
+                'model': 'whisper-1',
+                'response_format': 'json',
+                'file': base64Encode(audioBytes),
+              }),
+            )
+            .length;
+        final measurementAdapter = _RouteAdapter();
+        measurementAdapter.onPost('/audio/transcriptions', (options, body) {
+          return ok('measure compressed body');
+        });
+        final measurementService = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: 64 * 1024,
+            compression: 'flac',
+            fallbackMethod: 'none',
+          ),
+          dio: testDio(measurementAdapter),
+        );
+        await measurementService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+        );
+        final fullCompressedBodyBytes =
+            (measurementAdapter.requests.single['bodyBytes'] as Uint8List)
+                .length;
+        expect(fullCompressedBodyBytes, greaterThan(base64BodyBytes));
+
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, body) => err500());
+        final service = AsrService(
+          config: AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.multipart,
+            maxFileSizeBytes: base64BodyBytes,
+            compression: 'flac',
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDioAcceptingErrorStatuses(adapter),
+        );
+
+        AsrChunkedTranscriptionException? failure;
+        try {
+          await service.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+        } catch (error) {
+          if (error is AsrChunkedTranscriptionException) failure = error;
+        }
+
+        expect(failure, isNotNull);
+        expect(failure!.recoveryChunks, hasLength(1));
+        expect(failure.recoveryChunks.single.status, AsrChunkStatus.uncertain);
+        expect(failure.toString(), contains('结果不确定'));
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+
+    test(
+      'accepted HTTP 500 provider error remains uncertain in chunked transcription',
+      () async {
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, body) => err500());
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.base64Json,
+            maxFileSizeBytes: 800,
+            chunking: 'fixedSize',
+            fallbackMethod: 'all',
+          ),
+          dio: testDioAcceptingErrorStatuses(adapter),
+        );
+
+        AsrChunkedTranscriptionException? failure;
+        try {
+          await service.transcribe(
+            audioBytes: _buildWav(seconds: 2, sampleRate: 500),
+            audioFormat: 'wav',
+          );
+        } catch (error) {
+          if (error is AsrChunkedTranscriptionException) failure = error;
+        }
+
+        expect(failure, isNotNull);
+        expect(failure!.recoveryChunks, hasLength(1));
+        expect(failure.recoveryChunks.single.status, AsrChunkStatus.uncertain);
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+
+    test(
+      'accepted HTTP 500 provider error remains uncertain for URL transcription',
+      () async {
+        final adapter = _RouteAdapter();
+        adapter.onPost('/audio/transcriptions', (options, body) => err500());
+        final service = AsrService(
+          config: const AsrConfig(
+            apiKey: 'k',
+            host: host,
+            uploadMethod: AudioUploadMethod.url,
+            fallbackMethod: 'none',
+          ),
+          dio: testDioAcceptingErrorStatuses(adapter),
+        );
+
+        AsrChunkedTranscriptionException? failure;
+        try {
+          await service.transcribeFromUrl('https://files.test/audio.wav');
+        } catch (error) {
+          if (error is AsrChunkedTranscriptionException) failure = error;
+        }
+
+        expect(failure, isNotNull);
+        expect(failure!.recoveryChunks, hasLength(1));
+        expect(failure.recoveryChunks.single.status, AsrChunkStatus.uncertain);
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+
+    test('DNS lookup failure remains retryable', () async {
+      final adapter = _RouteAdapter();
+      adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+        if (adapter.requests.length == 1) {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionError,
+            error: const SocketException(
+              'Failed host lookup: api.test.com',
+            ),
+          );
+        }
+        return ok('retry succeeded');
+      });
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'k',
+          host: host,
+          uploadMethod: AudioUploadMethod.multipart,
+          maxFileSizeBytes: 64 * 1024,
+          compression: 'none',
+          chunking: 'fixedSize',
+          fallbackMethod: 'none',
+        ),
+        dio: testDio(adapter),
+      );
+      final audioBytes = _buildWav(seconds: 1, sampleRate: 120);
+
+      AsrChunkedTranscriptionException? failure;
+      try {
+        await service.transcribe(audioBytes: audioBytes, audioFormat: 'wav');
+      } catch (error) {
+        if (error is AsrChunkedTranscriptionException) failure = error;
+      }
+
+      expect(failure, isNotNull);
+      expect(failure!.recoveryChunks, hasLength(1));
+      expect(failure.recoveryChunks.single.status, AsrChunkStatus.failed);
+      final retry = await service.transcribe(
+        audioBytes: audioBytes,
+        audioFormat: 'wav',
+        priorChunks: failure.recoveryChunks,
+      );
+
+      expect(retry.text, 'retry succeeded');
+      expect(adapter.requests, hasLength(2));
+    });
+
+    test('network unreachable before connect remains retryable', () async {
+      final adapter = _RouteAdapter();
+      adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+        if (adapter.requests.length == 1) {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionError,
+            error: const SocketException('Network is unreachable'),
+          );
+        }
+        return ok('retry succeeded');
+      });
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'k',
+          host: host,
+          uploadMethod: AudioUploadMethod.multipart,
+          maxFileSizeBytes: 64 * 1024,
+          compression: 'none',
+          chunking: 'fixedSize',
+          fallbackMethod: 'none',
+        ),
+        dio: testDio(adapter),
+      );
+      final audioBytes = _buildWav(seconds: 1, sampleRate: 120);
+
+      AsrChunkedTranscriptionException? failure;
+      try {
+        await service.transcribe(audioBytes: audioBytes, audioFormat: 'wav');
+      } catch (error) {
+        if (error is AsrChunkedTranscriptionException) failure = error;
+      }
+
+      expect(failure, isNotNull);
+      expect(failure!.recoveryChunks, hasLength(1));
+      expect(failure.recoveryChunks.single.status, AsrChunkStatus.failed);
+      final retry = await service.transcribe(
+        audioBytes: audioBytes,
+        audioFormat: 'wav',
+        priorChunks: failure.recoveryChunks,
+      );
+
+      expect(retry.text, 'retry succeeded');
+      expect(adapter.requests, hasLength(2));
+    });
+
+    test(
+      'endpoint rejected by HttpClient before dispatch remains retryable',
+      () async {
+        final audioBytes = _buildWav(seconds: 1, sampleRate: 120);
+        const invalidEndpoint = 'http://127.0.0.1:65536/audio/transcriptions';
+        const invalidConfig = AsrConfig(
+          apiKey: 'k',
+          host: invalidEndpoint,
+          uploadMethod: AudioUploadMethod.multipart,
+          maxFileSizeBytes: 64 * 1024,
+          compression: 'none',
+          chunking: 'fixedSize',
+          fallbackMethod: 'none',
+        );
+        final invalidService = AsrService(config: invalidConfig);
+
+        AsrChunkedTranscriptionException? failure;
+        try {
+          await invalidService.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+        } catch (error) {
+          if (error is AsrChunkedTranscriptionException) failure = error;
+        }
+
+        expect(failure, isNotNull);
+        expect(failure!.recoveryChunks, hasLength(1));
+        expect(
+          failure.recoveryChunks.single.error,
+          contains('Invalid port'),
+        );
+        expect(failure.recoveryChunks.single.status, AsrChunkStatus.failed);
+
+        final adapter = _RouteAdapter();
+        adapter.onPost(
+          '/audio/transcriptions',
+          (options, bodyBytes) => ok('retry after endpoint correction'),
+        );
+        final correctedService = AsrService(
+          config: invalidConfig.copyWith(host: host),
+          dio: testDio(adapter),
+        );
+        final retry = await correctedService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+          priorChunks: failure.recoveryChunks,
+        );
+
+        expect(retry.text, 'retry after endpoint correction');
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+
+    test('early uncertain chunk reports the full plan size', () async {
+      final adapter = _RouteAdapter();
+      adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
+        return adapter.requests.length == 1 ? ok('first chunk') : err500();
+      });
+      final service = AsrService(
+        config: const AsrConfig(
+          apiKey: 'k',
+          host: host,
+          uploadMethod: AudioUploadMethod.base64Json,
+          maxFileSizeBytes: 800,
+          chunking: 'fixedSize',
+          fallbackMethod: 'all',
+        ),
+        dio: testDio(adapter),
+      );
+      AsrChunkedTranscriptionException? failure;
+      try {
+        await service.transcribe(
+          audioBytes: _buildWav(seconds: 2, sampleRate: 500),
+          audioFormat: 'wav',
+        );
+      } catch (error) {
+        if (error is AsrChunkedTranscriptionException) failure = error;
+      }
+
+      expect(failure, isNotNull);
+      final totalChunks = failure!.recoveryChunks.first.totalChunks!;
+      expect(totalChunks, greaterThan(1));
+      expect(failure.recoveryChunks, hasLength(2));
+      expect(failure.recoveryChunks.first.status, AsrChunkStatus.succeeded);
+      expect(failure.recoveryChunks.last.status, AsrChunkStatus.uncertain);
+      expect(totalChunks, greaterThan(failure.recoveryChunks.length));
+      expect(
+        failure.toString(),
+        contains('1/$totalChunks 个片段成功'),
+      );
+      expect(adapter.requests, hasLength(2));
+    });
+
+    test(
       'fallbackMethod=all retains a Base64 provider failure when generic cannot fit',
       () async {
         final audioBytes = Uint8List.fromList([1, 2, 3]);
@@ -700,7 +1500,7 @@ void main() {
 
         final adapter = _RouteAdapter();
         adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
-          return err500();
+          return err400();
         });
         final service = AsrService(
           config: AsrConfig(
@@ -721,7 +1521,7 @@ void main() {
         }
 
         expect(thrown, isA<Exception>());
-        expect(thrown.toString(), contains('500'));
+        expect(thrown.toString(), contains('400'));
         expect(thrown.toString(), contains('非 WAV 音频不能安全切分'));
         expect(adapter.requests, hasLength(1));
         expect(
@@ -777,7 +1577,7 @@ void main() {
 
         final adapter = _RouteAdapter();
         adapter.onPost('/audio/transcriptions', (options, bodyBytes) {
-          return err500();
+          return err400();
         });
         final service = AsrService(
           config: AsrConfig(
@@ -800,7 +1600,7 @@ void main() {
         }
 
         expect(thrown, isA<Exception>());
-        expect(thrown.toString(), contains('500'));
+        expect(thrown.toString(), contains('400'));
         expect(thrown.toString(), contains('单个 PCM 帧'));
         expect(adapter.requests, hasLength(1));
         expect(
@@ -1407,7 +2207,60 @@ void main() {
         throwsA(predicate((e) =>
             e is Exception && e.toString().contains('transcribeFromUrl'))),
       );
+
       expect(adapter.requests, isEmpty);
     });
+
+    test(
+      'pre-dispatch URL mode rejection remains retryable after switching to multipart',
+      () async {
+        final audioBytes = _buildWav(seconds: 1);
+        final adapter = _RouteAdapter();
+        adapter.onPost(
+          '/audio/transcriptions',
+          (options, bodyBytes) => ok('corrected upload'),
+        );
+        const urlConfig = AsrConfig(
+          apiKey: 'k',
+          host: host,
+          uploadMethod: AudioUploadMethod.url,
+        );
+        final urlService = AsrService(
+          config: urlConfig,
+          dio: testDio(adapter),
+        );
+
+        AsrChunkedTranscriptionException? firstFailure;
+        try {
+          await urlService.transcribe(
+            audioBytes: audioBytes,
+            audioFormat: 'wav',
+          );
+          fail('expected URL-mode byte transcription to be rejected');
+        } on AsrChunkedTranscriptionException catch (error) {
+          firstFailure = error;
+        }
+
+        expect(adapter.requests, isEmpty);
+        expect(firstFailure.recoveryChunks, hasLength(1));
+        expect(
+          firstFailure.recoveryChunks.single.status,
+          AsrChunkStatus.failed,
+        );
+
+        final correctedService = AsrService(
+          config: urlConfig.copyWith(uploadMethod: AudioUploadMethod.multipart),
+          dio: testDio(adapter),
+        );
+        final result = await correctedService.transcribe(
+          audioBytes: audioBytes,
+          audioFormat: 'wav',
+          priorChunks: firstFailure.recoveryChunks,
+        );
+
+        expect(result.text, 'corrected upload');
+        expect(adapter.requests, hasLength(1));
+      },
+    );
   });
 }
