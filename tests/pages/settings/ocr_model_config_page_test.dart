@@ -205,6 +205,39 @@ void main() {
       ]);
     });
 
+    testWidgets('saves valid number and boolean options without fallbacks',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: '',
+            options: ['1.25'],
+          ),
+          CustomParam(
+            paramName: 'enabled',
+            type: 'boolean',
+            defaultValue: '',
+            options: ['TRUE'],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.map((param) => param.options.first), [
+        '1.25',
+        'TRUE',
+      ]);
+    });
+
     testWidgets('rejects an invalid numeric option when saving',
         (tester) async {
       ModelConfig? saved;
