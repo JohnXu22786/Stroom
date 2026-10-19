@@ -16,10 +16,12 @@ void main() {
       'power': 4,
       'power2': 4,
       'power10': 100,
-      'reciprocal': 0.5,
-      'negativePower': 0.25,
-      'scientific': 200,
     };
+    final shortcutNames = mathExponentialInputs.map((key) => key.name).toSet();
+    expect(
+      shortcutNames.intersection({'reciprocal', 'negativePower', 'scientific'}),
+      isEmpty,
+    );
     for (final key in mathExponentialInputs) {
       final latex = key.latex
           .replaceAll('#0', '2')

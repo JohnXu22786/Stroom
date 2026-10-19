@@ -18,6 +18,17 @@ The separate variants tab contains eight additional forms. Swipe horizontally
 across the keys, or press Page Up/Page Down while a symbol key is focused, to
 page through more symbols. Screen readers can use the increase/decrease actions
 on the symbol grid; the centered page count is read-only.
+The common page keeps `+`, `−`, `×` and `÷` in one column and places `=` at the
+bottom of the symbol grid. Pages split long groups evenly, so the second
+calculus page is not left with only a couple of keys. The category button at
+the end of the tab strip opens a centered list for selecting or dragging
+categories into a preferred order; that order is saved on the device. New
+categories are added to a saved order, while unknown and duplicate entries are
+ignored. Inverse functions use short `a`-prefix labels such as `asin` and
+`asinh`, while their inserted LaTeX keeps the parser's existing `arcsin` and
+related names. The one-tap reciprocal, negative-power and scientific-notation
+shortcuts have been removed; their expressions remain constructible from the
+existing fraction, power and exponent keys.
 In the Greek tab, Shift has a separate labeled position. Previous, the
 read-only page count, and Next form a centered group that wraps on narrow screens.
 The alphabet tab shows all 26 keys on one page, with a read-only `1/1` indicator

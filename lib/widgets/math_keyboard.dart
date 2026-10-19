@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/math_input_catalog.dart';
 
@@ -29,6 +32,8 @@ class MathKeyboard extends StatefulWidget {
 
 class _MathKeyboardState extends State<MathKeyboard> {
   String _category = '常用';
+  List<String> _categoryOrder = _defaultCategoryOrder;
+  late final Future<void> _categoryOrderLoad;
   int _page = 0;
   bool _shifted = false;
   final _categoryScrollController = ScrollController();
@@ -37,6 +42,15 @@ class _MathKeyboardState extends State<MathKeyboard> {
   final _categoryKeys = {
     for (final category in _groups.keys) category: GlobalKey(),
   };
+
+  static const _categoryOrderPreferenceKey =
+      'math_keyboard_category_order_v1';
+
+  @override
+  void initState() {
+    super.initState();
+    _categoryOrderLoad = _loadCategoryOrder();
+  }
 
   @override
   void dispose() {
@@ -53,6 +67,42 @@ class _MathKeyboardState extends State<MathKeyboard> {
     if (_keyScrollController.hasClients) {
       _keyScrollController.jumpTo(0);
     }
+    _ensureCategoryVisible(category);
+  }
+
+  Future<void> _loadCategoryOrder() async {
+    final preferences = await SharedPreferences.getInstance();
+    final storedOrder = preferences.getStringList(_categoryOrderPreferenceKey);
+    if (!mounted) return;
+    setState(() => _categoryOrder = _mergeCategoryOrder(storedOrder));
+    _ensureCategoryVisible(_category);
+  }
+
+  List<String> _mergeCategoryOrder(List<String>? storedOrder) {
+    final order = <String>[];
+    for (final category in storedOrder ?? const <String>[]) {
+      if (_groups.containsKey(category) && !order.contains(category)) {
+        order.add(category);
+      }
+    }
+    for (final category in _defaultCategoryOrder) {
+      if (!order.contains(category)) order.add(category);
+    }
+    for (final category in _groups.keys) {
+      if (!order.contains(category)) order.add(category);
+    }
+    return order;
+  }
+
+  Future<void> _saveCategoryOrder() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      _categoryOrderPreferenceKey,
+      _categoryOrder,
+    );
+  }
+
+  void _ensureCategoryVisible(String category) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final chipContext = _categoryKeys[category]?.currentContext;
@@ -65,6 +115,90 @@ class _MathKeyboardState extends State<MathKeyboard> {
             );
       }
     });
+  }
+
+  void _reorderCategories(
+    int oldIndex,
+    int newIndex,
+    StateSetter setDialogState,
+  ) {
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+    final nextOrder = List<String>.of(_categoryOrder);
+    final category = nextOrder.removeAt(oldIndex);
+    nextOrder.insert(newIndex, category);
+    setState(() => _categoryOrder = nextOrder);
+    setDialogState(() {});
+    _ensureCategoryVisible(_category);
+    unawaited(_saveCategoryOrder());
+  }
+
+  Future<void> _showCategoryOrderDialog() async {
+    await _categoryOrderLoad;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final cs = Theme.of(context).colorScheme;
+          return AlertDialog(
+            title: const Text('选择符号分类'),
+            content: SizedBox(
+              width: 320,
+              height: 420,
+              child: ReorderableListView.builder(
+                itemCount: _categoryOrder.length,
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) => _reorderCategories(
+                  oldIndex,
+                  newIndex,
+                  setDialogState,
+                ),
+                itemBuilder: (context, index) {
+                  final category = _categoryOrder[index];
+                  return ListTile(
+                    key: ValueKey('category-row-$category'),
+                    selected: category == _category,
+                    selectedTileColor: cs.secondaryContainer,
+                    title: Text(category),
+                    subtitle: Text(
+                      _categoryDescriptions[category]!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () {
+                      _selectCategory(category);
+                      Navigator.of(dialogContext).pop();
+                    },
+                    trailing: ReorderableDragStartListener(
+                      key: ValueKey('category-order-handle-$category'),
+                      index: index,
+                      child: const Icon(Icons.drag_handle),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  final defaults = List<String>.of(_defaultCategoryOrder);
+                  setState(() => _categoryOrder = defaults);
+                  setDialogState(() {});
+                  _ensureCategoryVisible(_category);
+                  unawaited(_saveCategoryOrder());
+                },
+                child: const Text('恢复默认'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('完成'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _changePage(int pageCount, int direction) {
@@ -128,6 +262,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
     final keys =
         _category == '希腊字母' && _shifted ? _greekUpperKeys : _groups[_category]!;
     final pageCount = isAlphabetCategory ? 1 : (keys.length / 12).ceil();
+    final keysPerPage = (keys.length / pageCount).ceil();
     return Material(
       color: cs.surfaceContainer,
       child: SafeArea(
@@ -197,7 +332,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Row(
                           children: [
-                            for (final category in _groups.keys)
+                            for (final category in _categoryOrder)
                               Padding(
                                 key: _categoryKeys[category],
                                 padding: const EdgeInsets.only(right: 6),
@@ -214,30 +349,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
                         ),
                       ),
                     ),
-                    PopupMenuButton<String>(
+                    IconButton(
                       tooltip: '全部符号分类',
                       icon: const Icon(Icons.apps, size: 20),
-                      constraints: const BoxConstraints(minWidth: 220),
-                      onSelected: _selectCategory,
-                      itemBuilder: (_) => [
-                        for (final category in _groups.keys)
-                          PopupMenuItem(
-                            value: category,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(category),
-                                Text(
-                                  _categoryDescriptions[category]!,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
+                      onPressed: _showCategoryOrderDialog,
                     ),
                   ],
                 ),
@@ -248,9 +363,9 @@ class _MathKeyboardState extends State<MathKeyboard> {
             final input = compact
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [...heading, _keyArea(keys, pageCount)],
+                    children: [...heading, _keyArea(keys, pageCount, keysPerPage)],
                   )
-                : _keyArea(keys, pageCount);
+                : _keyArea(keys, pageCount, keysPerPage);
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -290,7 +405,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
     );
   }
 
-  Widget _keyArea(List<_MathKey> keys, int pageCount) {
+  Widget _keyArea(List<_MathKey> keys, int pageCount, int keysPerPage) {
     final canSwipePages = pageCount > 1 && _category != '字母';
     final canNavigate = widget.enabled && _category != '字母';
     final keyGrid = Padding(
@@ -308,8 +423,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
                             padding: const EdgeInsets.all(2),
                             child: _key(
                               col < 3
-                                  ? (_page * 12 + row * 3 + col < keys.length
-                                      ? keys[_page * 12 + row * 3 + col]
+                                  ? (row * 3 + col < keysPerPage &&
+                                          _page * keysPerPage + row * 3 + col <
+                                              keys.length
+                                      ? keys[_page * keysPerPage + row * 3 + col]
                                       : null)
                                   : _MathKey(
                                       _numbers[row * 3 + col - 3],
@@ -744,21 +861,38 @@ class _NumericMathKey {
         cursorFromEnd = null;
 }
 
+const _defaultCategoryOrder = <String>[
+  '常用',
+  '字母',
+  '指数/对数',
+  '函数',
+  '常量',
+  '括号/区间',
+  '关系',
+  '希腊字母',
+  '希腊变体',
+  '微积分',
+  '集合/逻辑',
+  '矩阵',
+  '箭头',
+  '样式',
+];
+
 const _categoryDescriptions = {
   '常用': '四则运算、分数、根式与下标',
-  '指数/对数': '指数、对数、倒数与科学计数法',
+  '指数/对数': '指数、自然常数 e 与不同底数的对数',
   '函数': '三角、双曲与其他常用函数',
   '常量': '圆周率、自然常数与常用数值',
-  '希腊字母': '全部 24 个希腊字母，Shift 切换大小写',
-  '希腊变体': '常用希腊字母变体',
-  '微积分': '求和、积分、极限与导数',
-  '矩阵': '矩阵、行列式、分段式与行列编辑',
-  '集合/逻辑': '数集、集合运算与逻辑符号',
-  '关系': '等式、不等式与几何关系',
-  '箭头': '方向、映射与带注释的箭头',
   '括号/区间': '成对括号、绝对值与区间',
+  '关系': '等式、不等式与常用关系符号',
+  '微积分': '求和、积分、极限与导数',
+  '集合/逻辑': '数集、集合运算与逻辑符号',
+  '矩阵': '矩阵、行列式、分段式与行列编辑',
+  '箭头': '方向、映射与带注释的箭头',
   '样式': '重音、上下标注与数学字体',
   '字母': 'QWERTY 全部 26 个拉丁字母，Shift 切换大小写',
+  '希腊字母': '全部 24 个希腊字母，Shift 切换大小写',
+  '希腊变体': '常用希腊字母变体',
 };
 
 const _exponentialDescriptions = {
@@ -771,40 +905,43 @@ const _exponentialDescriptions = {
   'power': '幂：选区或左侧完整项作为底数',
   'power2': '2 的幂',
   'power10': '10 的幂',
-  'reciprocal': '倒数：填写分母或使用选区',
-  'negativePower': '负指数：选区或左侧完整项',
-  'scientific': '科学计数法：乘以 10 的幂',
+};
+
+const _inverseFunctionLabels = {
+  'arccot': 'acot',
+  'arcsec': 'asec',
+  'arccsc': 'acsc',
+  'arsinh': 'asinh',
+  'arcosh': 'acosh',
+  'artanh': 'atanh',
 };
 
 final Map<String, List<_MathKey>> _groups = {
   '常用': const [
+    _MathKey('+', '+', description: '加法'),
     _MathKey('x', 'x'),
-    _MathKey('y', 'y'),
-    _MathKey('=', '='),
     _MathKey(r'\frac{a}{b}', r'\frac{#0}{#?}', description: '分数：选区放入分子'),
-    _MathKey(r'x^2', r'#@^{2}', description: '平方：选区或左侧完整项'),
+    _MathKey('−', '-', description: '减法'),
+    _MathKey('y', 'y'),
     _MathKey(r'x^n', r'#@^{#?}', description: '幂：进入指数'),
+    _MathKey('×', r'\times', description: '乘法'),
+    _MathKey('e', 'e'),
     _MathKey(r'\sqrt{x}', r'\sqrt{#0}'),
+    _MathKey('÷', r'\div', description: '除法'),
+    _MathKey('=', '=', description: '等于'),
     _MathKey(r'\left(x\right)', r'\left(#0\right)'),
-    _MathKey('+', '+'),
-    _MathKey('-', '-'),
     _MathKey(r'\cdot', r'\cdot', description: '乘法（点号）'),
     _MathKey(r'\pi', r'\pi'),
-    _MathKey('e', 'e'),
-    _MathKey(r'x\div y', r'\frac{#@}{#?}', description: '除法：左侧完整项放入分子'),
-    _MathKey(r'\left|x\right|', r'\left|#0\right|'),
+    _MathKey(r'x^2', r'#@^{2}', description: '平方：选区或左侧完整项'),
     _MathKey(r'\sqrt[n]{x}', r'\sqrt[#?]{#0}'),
     _MathKey(r'x_n', r'#@_{#?}'),
+    _MathKey(r'\left|x\right|', r'\left|#0\right|'),
     _MathKey(r'\pm', r'\pm'),
     _MathKey(r'\%', r'\%', description: '百分比：左侧表达式除以 100'),
     _MathKey(r'\operatorname{mod}', r'\bmod', description: '余数 / 取模'),
-    _MathKey(r'\times10^n', r'#@\cdot10^{#?}', description: '科学计数法'),
     _MathKey(r'\infty', r'\infty'),
     _MathKey(', ', ','),
-    _MathKey(r'\times', r'\times', description: '乘法（叉号）'),
-    _MathKey(r'\div', r'\div', description: '除号'),
     _MathKey(r'\mp', r'\mp'),
-    _MathKey(r'\colon', r'\colon'),
   ],
   '指数/对数': [
     for (final input in mathExponentialInputs)
@@ -850,9 +987,9 @@ final Map<String, List<_MathKey>> _groups = {
       'artanh',
     ])
       _MathKey(
-        '\\operatorname{$name}',
+        '\\operatorname{${_inverseFunctionLabels[name]!}}',
         '\\operatorname{$name}\\left(#0\\right)',
-        description: '$name（公式排版）',
+        description: '${_inverseFunctionLabels[name]}（公式排版）',
       ),
   ],
   '常量': [
@@ -886,9 +1023,6 @@ final Map<String, List<_MathKey>> _groups = {
     _MathKey(r'\limsup', r'\limsup_{x\to#?}#0'),
     _MathKey(r'\liminf', r'\liminf_{x\to#?}#0'),
     _MathKey(r'\iiint', r'\iiint_{#?}#0'),
-    _MathKey(r'\bigcup', r'\bigcup_{#?}^{#?}#0'),
-    _MathKey(r'\bigcap', r'\bigcap_{#?}^{#?}#0'),
-    _MathKey(r'\coprod', r'\coprod_{#?}^{#?}#0'),
   ],
   '矩阵': const [
     _MathKey(
@@ -949,10 +1083,12 @@ final Map<String, List<_MathKey>> _groups = {
       r'\mid',
     ])
       _MathKey(symbol, symbol),
+    _MathKey(r'\bigcup', r'\bigcup_{#?}^{#?}#0'),
+    _MathKey(r'\bigcap', r'\bigcap_{#?}^{#?}#0'),
+    _MathKey(r'\coprod', r'\coprod_{#?}^{#?}#0'),
   ],
   '关系': [
     for (final symbol in [
-      '=',
       r'\ne',
       r'\le',
       r'\ge',
@@ -973,6 +1109,7 @@ final Map<String, List<_MathKey>> _groups = {
       r'\cdots',
       r'\vdots',
       r'\ddots',
+      r'\colon',
     ])
       _MathKey(symbol, symbol),
   ],
