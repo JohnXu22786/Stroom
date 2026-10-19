@@ -9,7 +9,9 @@ import 'package:uuid/uuid.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
+import '../../../services/llm_chat_runtime.dart';
 import '../../../services/ocr_service.dart';
+import '../../../services/llm_model_group_provider.dart';
 import '../../../utils/http_timeout.dart';
 import '../../../utils/ocr_image_payload.dart';
 import '../../../utils/provider_models.dart';
@@ -44,6 +46,7 @@ Future<String> executeOcrBlock({
 
   /// Controlled Dio client for request/response contract tests.
   Dio? ocrDio,
+  Future<LlmChatRoutingRuntime>? routingRuntime,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';
@@ -118,8 +121,11 @@ Future<String> executeOcrBlock({
 
   // Model-level selection, same granularity as the OCR page: the shared
   // flattened list (configs without host/key are excluded).
-  final selected =
-      resolveProviderModel(providerEntries, 'ocr', block.params['modelRef']);
+  final selected = resolveProviderModel(
+    providerEntries,
+    'ocr',
+    block.params['modelRef'],
+  );
   if (selected == null) {
     failSubTask(
       bgNotifier,
@@ -138,6 +144,8 @@ Future<String> executeOcrBlock({
 
   final config = selected.config;
   final model = selected.model;
+  final selectedGroupId = llmModelGroupIdForConfig(config);
+  final isLegacyOcrConfig = selectedGroupId == null;
 
   try {
     bgNotifier.updateStep(taskId, 0, running: true);
@@ -152,8 +160,17 @@ Future<String> executeOcrBlock({
           model: model.modelId,
           typeConfig: model.typeConfig,
           customParams: model.customParams,
+          routingGroupId:
+              selectedGroupId ??
+              llmOcrModelGroupIdForConfig(config.id, model.id),
+          routingLocalModelId: model.id,
+          routingAccountId: isLegacyOcrConfig
+              ? llmOcrAccountIdForConfig(config.id)
+              : null,
+          routingDisplayName: '${config.providerName} · ${model.name}',
         ),
         dio: ocrDio,
+        routingRuntime: routingRuntime,
         connectTimeout: connectTimeoutDefault,
         sendTimeout: sendTimeoutForBytes(
           _encodedBodyLength(imageBytes, imageFormat),

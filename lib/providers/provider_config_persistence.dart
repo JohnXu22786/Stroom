@@ -20,8 +20,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (json == null || json.isEmpty) return;
 
       // 兜底：使用 whereType 安全过滤非 Map 条目，避免 `.cast<>()` 或 `as Map` 闪退
-      final list =
-          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
+      final list = (jsonDecode(json) as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -73,8 +74,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final json = prefs.getString('provider_entries');
       if (json == null || json.isEmpty) return;
 
-      final list =
-          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
+      final list = (jsonDecode(json) as List)
+          .whereType<Map<String, dynamic>>()
+          .toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -467,8 +469,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
         return;
       }
-      final groupsJson =
-          jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList());
+      final groupsJson = jsonEncode(
+        state.mcpGroups.map((group) => group.toMap()).toList(),
+      );
       if (!_jsonPreferenceEquals(
         prefs.getString('mcp_provider_groups'),
         mcpGroupsBeforeMigration,
@@ -477,19 +480,38 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       attemptedMcpGroups = groupsJson;
       pairedWriteStarted = true;
-      final groupsSaved =
-          await prefs.setString('mcp_provider_groups', groupsJson);
+      final groupsSaved = await prefs.setString(
+        'mcp_provider_groups',
+        groupsJson,
+      );
       if (!groupsSaved ||
           prefs.getString('mcp_provider_groups') != groupsJson) {
         throw StateError('Failed to persist provider configuration.');
       }
 
+      final persistedSourceEntries = state.entries
+          .map((entry) {
+            if (entry.type != 'llm') return entry;
+            return ProviderEntry(
+              id: entry.id,
+              type: entry.type,
+              name: entry.name,
+              enabled: entry.enabled,
+              legacyFields: entry.legacyFields,
+              configs: entry.configs
+                  .where((config) => !isLlmModelGroupProviderConfig(config))
+                  .toList(),
+            );
+          })
+          .toList(growable: false);
       _applyCredentialReferencesFromSavedEntries(
-        state.entries,
+        persistedSourceEntries,
         prefs.getString('provider_entries'),
       );
       final migrationInput = jsonEncode(
-        state.entries.map((entry) => entry.toCredentialMigrationMap()).toList(),
+        persistedSourceEntries
+            .map((entry) => entry.toCredentialMigrationMap())
+            .toList(),
       );
       try {
         await LlmAccountMigrationService(
@@ -508,7 +530,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         state.entries,
         prefs.getString('provider_entries'),
       );
-      final persistedEntries = state.entries.map((entry) {
+      final persistedEntries = persistedSourceEntries.map((entry) {
         final serialized = entry.toMap();
         if (entry.type == 'llm') {
           serialized.remove('key');
@@ -539,10 +561,13 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         prefs.getString('provider_entries'),
         json,
       );
-      final entriesSaved = entriesAlreadySaved ||
+      final entriesSaved =
+          entriesAlreadySaved ||
           await prefs.setString('provider_entries', json);
-      final entriesVerified =
-          _jsonPreferenceEquals(prefs.getString('provider_entries'), json);
+      final entriesVerified = _jsonPreferenceEquals(
+        prefs.getString('provider_entries'),
+        json,
+      );
       final groupsVerified =
           prefs.getString('mcp_provider_groups') == groupsJson;
       if (!entriesSaved || !entriesVerified || !groupsVerified) {
@@ -644,6 +669,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       for (final entry in entries.where((entry) => entry.type == 'llm')) {
         for (final config in entry.configs) {
+          if (config.legacyFields['authType'] == 'none' ||
+              config.legacyFields['authType'] == 'relay') {
+            continue;
+          }
           final reference = referencesByConfigId[config.id];
           if (reference != null && config.credentialRef == null) {
             config.credentialRef = reference;

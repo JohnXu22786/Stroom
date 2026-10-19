@@ -18,6 +18,7 @@ import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/ocr_instructions_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/image_manifest.dart';
 import 'package:stroom/utils/ocr_image_payload.dart';
 import 'package:stroom/utils/text_manifest.dart';
@@ -32,10 +33,7 @@ Future<Uint8List> _createEnginePng({
 }) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  canvas.drawRect(
-    Rect.fromLTWH(0, 0, 8, 8),
-    Paint()..color = color,
-  );
+  canvas.drawRect(Rect.fromLTWH(0, 0, 8, 8), Paint()..color = color);
   final picture = recorder.endRecording();
   final image = await picture.toImage(8, 8);
   final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -57,7 +55,8 @@ Future<void> _pumpUntil(
       fail('Timed out waiting for condition');
     }
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -77,7 +76,8 @@ Widget _buildTestApp({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testGalleryPicker,
+  })?
+  testGalleryPicker,
 }) {
   return ProviderScope(
     overrides: [
@@ -188,17 +188,14 @@ Uint8List _createTestPngBytes() {
 
 /// Create a test SelectedImage with dummy PNG bytes
 SelectedImage _createTestImage({int seed = 1}) {
-  return SelectedImage(
-    bytes: _createTestPngBytes(),
-    format: 'png',
-  );
+  return SelectedImage(bytes: _createTestPngBytes(), format: 'png');
 }
 
 SelectedImage _createValidOcrTestImage() => SelectedImage.fromPayload(
-      payload: prepareOcrImagePayloadSync(
-        img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
-      ),
-    );
+  payload: prepareOcrImagePayloadSync(
+    img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
+  ),
+);
 
 Future<void> _storeAppAlbumImage({
   required String name,
@@ -221,20 +218,19 @@ Map<String, dynamic> _createVersionedRetryData({
   required String modelId,
   String? instructionContent,
   String saveFolder = '',
-}) =>
-    OcrRetrySnapshot.capture(
-      configId: configId,
-      modelId: modelId,
-      images: [
-        OcrRetryImage(
-          bytes: _createTestPngBytes(),
-          format: 'png',
-          name: 'retry-image.png',
-        ),
-      ],
-      instructionContent: instructionContent,
-      saveFolder: saveFolder,
-    ).toMap();
+}) => OcrRetrySnapshot.capture(
+  configId: configId,
+  modelId: modelId,
+  images: [
+    OcrRetryImage(
+      bytes: _createTestPngBytes(),
+      format: 'png',
+      name: 'retry-image.png',
+    ),
+  ],
+  instructionContent: instructionContent,
+  saveFolder: saveFolder,
+).toMap();
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -259,37 +255,45 @@ void main() {
 
   for (final gallery in [false, true]) {
     testWidgets(
-        'late ${gallery ? "gallery" : "camera"} picker ignores disposed page',
-        (tester) async {
-      final file = _UnreadPickerFile();
-      final camera = Completer<XFile?>();
-      final images = Completer<List<XFile>>();
-      await tester.pumpWidget(ProviderScope(
-          child: MaterialApp(
+      'late ${gallery ? "gallery" : "camera"} picker ignores disposed page',
+      (tester) async {
+        final file = _UnreadPickerFile();
+        final camera = Completer<XFile?>();
+        final images = Completer<List<XFile>>();
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
               home: OcrPage(
-        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
-            camera.future,
-        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
-            images.future,
-      ))));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
-      await tester.pumpAndSettle();
-      if (gallery) {
-        await tester.tap(find.text('从系统相册选择'));
+                testCameraPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                    camera.future,
+                testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) =>
+                    images.future,
+              ),
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
-      }
-      await tester.pumpWidget(const SizedBox.shrink());
-      if (gallery) {
-        images.complete([file]);
-      } else {
-        camera.complete(file);
-      }
-      await tester.pump();
-      expect(file.reads, 0,
-          reason: 'disposed picker must stop before file I/O');
-      expect(tester.takeException(), isNull);
-    });
+        await tester.tap(find.text(gallery ? '相册选择' : '拍照识别'));
+        await tester.pumpAndSettle();
+        if (gallery) {
+          await tester.tap(find.text('从系统相册选择'));
+          await tester.pumpAndSettle();
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        if (gallery) {
+          images.complete([file]);
+        } else {
+          camera.complete(file);
+        }
+        await tester.pump();
+        expect(
+          file.reads,
+          0,
+          reason: 'disposed picker must stop before file I/O',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   group('OcrPage - model selector', () {
@@ -332,9 +336,7 @@ void main() {
             providerName: 'TestAI',
             host: 'https://api.test.ai',
             key: 'test-key',
-            models: [
-              ModelConfig(name: '', modelId: 'test-model-v1'),
-            ],
+            models: [ModelConfig(name: '', modelId: 'test-model-v1')],
           ),
         ],
       );
@@ -357,9 +359,7 @@ void main() {
             providerName: '',
             host: 'https://api.test.ai',
             key: 'test-key',
-            models: [
-              ModelConfig(name: 'TestModel', modelId: 'test-model-v1'),
-            ],
+            models: [ModelConfig(name: 'TestModel', modelId: 'test-model-v1')],
           ),
         ],
       );
@@ -373,120 +373,170 @@ void main() {
 
   group('OcrPage - stable retry context', () {
     testWidgets(
-        'restores the referenced model, folder and instruction snapshot', (
-      tester,
-    ) async {
-      final firstEntry = ProviderEntry(
-        id: 'ocr-entry-first',
-        type: 'ocr',
-        name: 'First OCR',
-        configs: [
-          ProviderConfigItem(
-            id: 'ocr-config-first',
-            providerName: 'First Provider',
-            host: 'https://first.example/v1',
-            key: 'first-secret',
-            models: [
-              ModelConfig(
-                id: 'ocr-model-first',
-                name: 'First Model',
-                modelId: 'first-model',
-              ),
-            ],
-          ),
-        ],
-      );
-      final reorderedEntry = ProviderEntry(
-        id: 'ocr-entry-reordered',
-        type: 'ocr',
-        name: 'Second OCR',
-        configs: [
-          ProviderConfigItem(
-            id: 'ocr-config-reordered',
-            providerName: 'Second Provider',
-            host: 'https://second.example/v1',
-            key: 'second-secret',
-            models: [
-              ModelConfig(
-                id: 'ocr-model-other',
-                name: 'Other Model',
-                modelId: 'other-model',
-              ),
-              ModelConfig(
-                id: 'ocr-model-target',
-                name: 'Target Model',
-                modelId: 'target-model',
-              ),
-            ],
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(
-        _buildTestApp(
-          entries: [firstEntry, reorderedEntry],
-          ocrInstructions: const [
-            OcrInstruction(name: 'Edited prompt', content: 'new prompt'),
+      'restores the referenced model, folder and instruction snapshot',
+      (tester) async {
+        final firstEntry = ProviderEntry(
+          id: 'ocr-entry-first',
+          type: 'ocr',
+          name: 'First OCR',
+          configs: [
+            ProviderConfigItem(
+              id: 'ocr-config-first',
+              providerName: 'First Provider',
+              host: 'https://first.example/v1',
+              key: 'first-secret',
+              models: [
+                ModelConfig(
+                  id: 'ocr-model-first',
+                  name: 'First Model',
+                  modelId: 'first-model',
+                ),
+              ],
+            ),
           ],
-          retryData: _createVersionedRetryData(
-            configId: 'ocr-config-reordered',
-            modelId: 'ocr-model-target',
-            instructionContent: 'captured prompt removed from generic list',
-            saveFolder: 'receipts/2026',
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        final reorderedEntry = ProviderEntry(
+          id: 'ocr-entry-reordered',
+          type: 'ocr',
+          name: 'Second OCR',
+          configs: [
+            ProviderConfigItem(
+              id: 'ocr-config-reordered',
+              providerName: 'Second Provider',
+              host: 'https://second.example/v1',
+              key: 'second-secret',
+              models: [
+                ModelConfig(
+                  id: 'ocr-model-other',
+                  name: 'Other Model',
+                  modelId: 'other-model',
+                ),
+                ModelConfig(
+                  id: 'ocr-model-target',
+                  name: 'Target Model',
+                  modelId: 'target-model',
+                ),
+              ],
+            ),
+          ],
+        );
 
-      expect(find.text('Target Model | Second Provider'), findsOneWidget);
-      expect(find.text('receipts/2026'), findsOneWidget);
-      expect(find.text('已保存的指令快照'), findsOneWidget);
-    });
-
-    testWidgets('a deleted model reference blocks submission until reselection',
-        (
-      tester,
-    ) async {
-      final bgNotifier = _InspectableBackgroundTaskNotifier();
-      final availableEntry = ProviderEntry(
-        id: 'ocr-entry-current',
-        type: 'ocr',
-        name: 'Current OCR',
-        configs: [
-          ProviderConfigItem(
-            id: 'current-config',
-            providerName: 'Current Provider',
-            host: 'https://current.example/v1',
-            key: 'current-secret',
-            models: [
-              ModelConfig(
-                id: 'current-model',
-                name: 'Current Model',
-                modelId: 'current-model-api',
-              ),
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [firstEntry, reorderedEntry],
+            ocrInstructions: const [
+              OcrInstruction(name: 'Edited prompt', content: 'new prompt'),
             ],
+            retryData: _createVersionedRetryData(
+              configId: 'ocr-config-reordered',
+              modelId: 'ocr-model-target',
+              instructionContent: 'captured prompt removed from generic list',
+              saveFolder: 'receipts/2026',
+            ),
           ),
-        ],
-      );
-      await tester.pumpWidget(
-        _buildTestApp(
-          entries: [availableEntry],
-          backgroundTasksNotifier: bgNotifier,
-          retryData: _createVersionedRetryData(
-            configId: 'deleted-config',
-            modelId: 'deleted-model',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Target Model | Second Provider'), findsOneWidget);
+        expect(find.text('receipts/2026'), findsOneWidget);
+        expect(find.text('已保存的指令快照'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a deleted model reference blocks submission until reselection',
+      (tester) async {
+        final bgNotifier = _InspectableBackgroundTaskNotifier();
+        final availableEntry = ProviderEntry(
+          id: 'ocr-entry-current',
+          type: 'ocr',
+          name: 'Current OCR',
+          configs: [
+            ProviderConfigItem(
+              id: 'current-config',
+              providerName: 'Current Provider',
+              host: 'https://current.example/v1',
+              key: 'current-secret',
+              models: [
+                ModelConfig(
+                  id: 'current-model',
+                  name: 'Current Model',
+                  modelId: 'current-model-api',
+                ),
+              ],
+            ),
+          ],
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [availableEntry],
+            backgroundTasksNotifier: bgNotifier,
+            retryData: _createVersionedRetryData(
+              configId: 'deleted-config',
+              modelId: 'deleted-model',
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
-      expect(find.text('Current Model | Current Provider'), findsNothing);
-      await tester.tap(find.text('开始识别'));
-      await tester.pump();
+        expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsOneWidget);
+        expect(find.text('Current Model | Current Provider'), findsNothing);
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
 
-      expect(bgNotifier.tasksForTest, isEmpty);
-    });
+        expect(bgNotifier.tasksForTest, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'legacy retry reference selects its namespaced group after source deletion',
+      (tester) async {
+        const sourceConfigId = 'deleted-legacy-ocr-config';
+        const localModelId = 'legacy-local-model';
+        final groupId = llmOcrModelGroupIdForConfig(
+          sourceConfigId,
+          localModelId,
+        );
+        final groupConfig = ProviderConfigItem(
+          id: groupId,
+          providerName: 'Migrated OCR',
+          models: [
+            ModelConfig(
+              id: localModelId,
+              name: 'Migrated vision model',
+              modelId: 'vision-upstream-model',
+              legacyFields: {
+                kLlmModelCapabilitiesConfigField: {'vision': true},
+              },
+            ),
+          ],
+          legacyFields: {kLlmModelGroupConfigField: groupId},
+        );
+        final groupEntry = ProviderEntry(
+          id: 'llm-account-groups',
+          type: 'llm',
+          name: 'LLM accounts',
+          configs: [groupConfig],
+        );
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [groupEntry],
+            retryData: _createVersionedRetryData(
+              configId: sourceConfigId,
+              modelId: localModelId,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Migrated vision model | Migrated OCR'),
+          findsOneWidget,
+        );
+        expect(find.text('原 OCR 供应商或模型已不存在，请重新选择'), findsNothing);
+      },
+    );
 
     testWidgets('legacy model index needs confirmation before submission', (
       tester,
@@ -571,9 +621,7 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           entries: [entry],
-          ocrInstructions: const [
-            OcrInstruction(content: '提取图片中的全部文字并翻译'),
-          ],
+          ocrInstructions: const [OcrInstruction(content: '提取图片中的全部文字并翻译')],
         ),
       );
       await tester.pumpAndSettle();
@@ -666,159 +714,164 @@ void main() {
     });
 
     testWidgets(
-        'retry restores the instruction by content when the list changed', (
-      tester,
-    ) async {
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(
-        _buildTestApp(
-          entries: [entry],
-          ocrInstructions: const [
-            OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
-            OcrInstruction(name: '表格提取', content: '提取表格内容'),
-          ],
-          retryData: {
-            'type': 'ocr',
-            'images': <Map<String, dynamic>>[],
-            'modelIndex': 0,
-            // Stale index (the list changed since the task failed) — the
-            // content wins and resolves to the correct instruction.
-            'instructionIndex': 1,
-            'instructionContent': '提取发票号码和金额',
-          },
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('已保存的指令快照'), findsOneWidget);
-    });
-
-    testWidgets(
-        'retry keeps the instruction snapshot when its generic entry is gone',
-        (tester) async {
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(
-        _buildTestApp(
-          entries: [entry],
-          ocrInstructions: const [
-            OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
-          ],
-          retryData: {
-            'type': 'ocr',
-            'images': <Map<String, dynamic>>[],
-            'modelIndex': 0,
-            'instructionIndex': 0,
-            'instructionContent': '已删除的指令内容',
-          },
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('已保存的指令快照'), findsOneWidget);
-      expect(find.text('默认（仅发送图片）'), findsNothing);
-    });
-
-    testWidgets(
-        'retry instruction restore survives the async list load (production '
-        'race: list arrives after the first build)', (tester) async {
-      // Simulates the real provider: initial state is empty, the list
-      // arrives only after load() completes asynchronously.
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            providerEntriesProvider.overrideWith((ref) {
-              final notifier = ProviderEntriesNotifier();
-              notifier.state = ProviderEntriesState(entries: [entry]);
-              return notifier;
-            }),
-            ocrInstructionsProvider.overrideWith((ref) {
-              final notifier = _DelayedInstructionsNotifier(ref);
-              notifier.load();
-              return notifier;
-            }),
-          ],
-          child: MaterialApp(
-            home: OcrPage(
-              retryData: {
-                'type': 'ocr',
-                'images': <Map<String, dynamic>>[],
-                'modelIndex': 0,
-                'instructionIndex': 1,
-              },
-            ),
-            localizationsDelegates: const [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
+      'retry restores the instruction by content when the list changed',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            ocrInstructions: const [
+              OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+              OcrInstruction(name: '表格提取', content: '提取表格内容'),
             ],
+            retryData: {
+              'type': 'ocr',
+              'images': <Map<String, dynamic>>[],
+              'modelIndex': 0,
+              // Stale index (the list changed since the task failed) — the
+              // content wins and resolves to the correct instruction.
+              'instructionIndex': 1,
+              'instructionContent': '提取发票号码和金额',
+            },
           ),
-        ),
-      );
-      // No time advance — the delayed load has not completed yet.
-      await tester.pump();
+        );
+        await tester.pumpAndSettle();
 
-      // The list has not arrived yet — the dropdown shows the default
-      // instead of crashing on an out-of-range value.
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
-
-      // The list arrives — the restored instruction selection applies.
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.pumpAndSettle();
-
-      expect(find.text('表格提取'), findsOneWidget);
-    });
+        expect(find.text('已保存的指令快照'), findsOneWidget);
+      },
+    );
 
     testWidgets(
-        'user picking 默认 during the pending restore wins over the retry '
-        'instruction', (tester) async {
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            providerEntriesProvider.overrideWith((ref) {
-              final notifier = ProviderEntriesNotifier();
-              notifier.state = ProviderEntriesState(entries: [entry]);
-              return notifier;
-            }),
-            ocrInstructionsProvider.overrideWith((ref) {
-              final notifier = _DelayedInstructionsNotifier(ref);
-              notifier.load();
-              return notifier;
-            }),
-          ],
-          child: MaterialApp(
-            home: OcrPage(
-              retryData: {
-                'type': 'ocr',
-                'images': <Map<String, dynamic>>[],
-                'modelIndex': 0,
-                'instructionIndex': 1,
-              },
-            ),
-            localizationsDelegates: const [
-              DefaultMaterialLocalizations.delegate,
-              DefaultWidgetsLocalizations.delegate,
+      'retry keeps the instruction snapshot when its generic entry is gone',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            ocrInstructions: const [
+              OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
             ],
+            retryData: {
+              'type': 'ocr',
+              'images': <Map<String, dynamic>>[],
+              'modelIndex': 0,
+              'instructionIndex': 0,
+              'instructionContent': '已删除的指令内容',
+            },
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pumpAndSettle();
 
-      // Inside the pending window the dropdown has only the default item —
-      // explicitly pick it.
-      await tester.tap(find.text('默认（仅发送图片）'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('默认（仅发送图片）').last);
-      await tester.pumpAndSettle();
+        expect(find.text('已保存的指令快照'), findsOneWidget);
+        expect(find.text('默认（仅发送图片）'), findsNothing);
+      },
+    );
 
-      // The load lands — the user's explicit choice sticks and the retry
-      // instruction does not resurrect.
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'retry instruction restore survives the async list load (production '
+      'race: list arrives after the first build)',
+      (tester) async {
+        // Simulates the real provider: initial state is empty, the list
+        // arrives only after load() completes asynchronously.
+        final entry = _createOcrEntry(withModels: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              providerEntriesProvider.overrideWith((ref) {
+                final notifier = ProviderEntriesNotifier();
+                notifier.state = ProviderEntriesState(entries: [entry]);
+                return notifier;
+              }),
+              ocrInstructionsProvider.overrideWith((ref) {
+                final notifier = _DelayedInstructionsNotifier(ref);
+                notifier.load();
+                return notifier;
+              }),
+            ],
+            child: MaterialApp(
+              home: OcrPage(
+                retryData: {
+                  'type': 'ocr',
+                  'images': <Map<String, dynamic>>[],
+                  'modelIndex': 0,
+                  'instructionIndex': 1,
+                },
+              ),
+              localizationsDelegates: const [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
+            ),
+          ),
+        );
+        // No time advance — the delayed load has not completed yet.
+        await tester.pump();
 
-      expect(find.text('默认（仅发送图片）'), findsOneWidget);
-      expect(find.text('表格提取'), findsNothing);
-    });
+        // The list has not arrived yet — the dropdown shows the default
+        // instead of crashing on an out-of-range value.
+        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+
+        // The list arrives — the restored instruction selection applies.
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+
+        expect(find.text('表格提取'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'user picking 默认 during the pending restore wins over the retry '
+      'instruction',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              providerEntriesProvider.overrideWith((ref) {
+                final notifier = ProviderEntriesNotifier();
+                notifier.state = ProviderEntriesState(entries: [entry]);
+                return notifier;
+              }),
+              ocrInstructionsProvider.overrideWith((ref) {
+                final notifier = _DelayedInstructionsNotifier(ref);
+                notifier.load();
+                return notifier;
+              }),
+            ],
+            child: MaterialApp(
+              home: OcrPage(
+                retryData: {
+                  'type': 'ocr',
+                  'images': <Map<String, dynamic>>[],
+                  'modelIndex': 0,
+                  'instructionIndex': 1,
+                },
+              ),
+              localizationsDelegates: const [
+                DefaultMaterialLocalizations.delegate,
+                DefaultWidgetsLocalizations.delegate,
+              ],
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // Inside the pending window the dropdown has only the default item —
+        // explicitly pick it.
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('默认（仅发送图片）').last);
+        await tester.pumpAndSettle();
+
+        // The load lands — the user's explicit choice sticks and the retry
+        // instruction does not resurrect.
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pumpAndSettle();
+
+        expect(find.text('默认（仅发送图片）'), findsOneWidget);
+        expect(find.text('表格提取'), findsNothing);
+      },
+    );
 
     testWidgets('double-tap 开始识别 during the pending restore starts one task', (
       tester,
@@ -907,40 +960,42 @@ void main() {
       expect(find.text('添加指令'), findsOneWidget);
     });
 
-    testWidgets('adding an instruction via manage dialog shows it in dropdown',
-        (tester) async {
-      final entry = _createOcrEntry(withModels: true);
-      await tester.pumpWidget(_buildTestApp(entries: [entry]));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'adding an instruction via manage dialog shows it in dropdown',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        await tester.pumpWidget(_buildTestApp(entries: [entry]));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('添加指令'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('添加指令'));
+        await tester.pumpAndSettle();
 
-      await tester.enterText(
-        find.widgetWithText(TextField, '指令名称（可选）'),
-        '发票提取',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, '指令内容'),
-        '提取发票号码和金额',
-      );
-      // Rebuild so the save button's enabled state reflects the content.
-      await tester.pump();
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, '指令名称（可选）'),
+          '发票提取',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, '指令内容'),
+          '提取发票号码和金额',
+        );
+        // Rebuild so the save button's enabled state reflects the content.
+        await tester.pump();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
 
-      // The new instruction appears in the manage dialog list.
-      expect(find.text('发票提取'), findsOneWidget);
+        // The new instruction appears in the manage dialog list.
+        expect(find.text('发票提取'), findsOneWidget);
 
-      // Close the dialog and open the dropdown — instruction is selectable.
-      await tester.tap(find.text('关闭'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('默认（仅发送图片）'));
-      await tester.pumpAndSettle();
-      expect(find.text('发票提取'), findsWidgets);
-    });
+        // Close the dialog and open the dropdown — instruction is selectable.
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        expect(find.text('发票提取'), findsWidgets);
+      },
+    );
 
     testWidgets('editing an instruction via manage dialog updates the list', (
       tester,
@@ -1034,17 +1089,13 @@ void main() {
       await tester.tap(find.text('添加指令'));
       await tester.pumpAndSettle();
 
-      FilledButton saveButton() => tester.widget<FilledButton>(
-            find.widgetWithText(FilledButton, '保存'),
-          );
+      FilledButton saveButton() =>
+          tester.widget<FilledButton>(find.widgetWithText(FilledButton, '保存'));
 
       // Blank content — save disabled.
       expect(saveButton().onPressed, isNull);
 
-      await tester.enterText(
-        find.widgetWithText(TextField, '指令内容'),
-        '提取发票号码',
-      );
+      await tester.enterText(find.widgetWithText(TextField, '指令内容'), '提取发票号码');
       await tester.pump();
       expect(saveButton().onPressed, isNotNull);
     });
@@ -1083,8 +1134,7 @@ void main() {
       expect(tc.containsKey('userInstruction'), isFalse);
     });
 
-    test(
-        'default selection removes a legacy per-model instruction from the '
+    test('default selection removes a legacy per-model instruction from the '
         'request copy', () {
       // The request copy inherits the model's stored typeConfig, which may
       // still carry a legacy per-model userInstruction (kept in storage for
@@ -1101,9 +1151,7 @@ void main() {
     test('blank-content instruction is not injected', () {
       final tc = applySelectedOcrInstruction(
         {'maxTokens': 4096},
-        const [
-          OcrInstruction(name: '空白', content: '   \n\n  '),
-        ],
+        const [OcrInstruction(name: '空白', content: '   \n\n  ')],
         0,
       );
       expect(tc.containsKey('userInstruction'), isFalse);
@@ -1111,8 +1159,9 @@ void main() {
   });
 
   group('OcrPage - camera button (no choice panel)', () {
-    testWidgets('tapping camera button does NOT show choice panel',
-        (tester) async {
+    testWidgets('tapping camera button does NOT show choice panel', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildTestApp());
       await tester.pumpAndSettle();
 
@@ -1157,16 +1206,18 @@ void main() {
       tester,
     ) async {
       final calls = <({double? maxWidth, double? maxHeight, int? quality})>[];
-      await tester.pumpWidget(_buildTestApp(
-        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
-          calls.add((
-            maxWidth: maxWidth,
-            maxHeight: maxHeight,
-            quality: imageQuality,
-          ));
-          return [];
-        },
-      ));
+      await tester.pumpWidget(
+        _buildTestApp(
+          testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
+            calls.add((
+              maxWidth: maxWidth,
+              maxHeight: maxHeight,
+              quality: imageQuality,
+            ));
+            return [];
+          },
+        ),
+      );
       await tester.pumpAndSettle();
 
       Future<void> pickFromSystemGallery() async {
@@ -1184,8 +1235,9 @@ void main() {
       await pickFromSystemGallery();
       expect(calls.last, (maxWidth: null, maxHeight: null, quality: null));
 
-      final denseTextImage =
-          img.encodePng(img.Image(width: 3000, height: 2200));
+      final denseTextImage = img.encodePng(
+        img.Image(width: 3000, height: 2200),
+      );
       final prepared = prepareOcrImagePayloadSync(denseTextImage);
       expect(prepared.width, 3000);
       expect(prepared.height, 2200);
@@ -1209,11 +1261,13 @@ void main() {
         return validPayload;
       }
 
-      await tester.pumpWidget(_buildTestApp(
-        entries: [_createOcrEntry()],
-        testImages: [_createTestImage(), _createTestImage(seed: 2)],
-        testImagePayloadPreparer: delayedValidation,
-      ));
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImages: [_createTestImage(), _createTestImage(seed: 2)],
+          testImagePayloadPreparer: delayedValidation,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('开始识别'));
@@ -1251,13 +1305,15 @@ void main() {
         return prepareOcrImagePayloadSync(bytes);
       }
 
-      await tester.pumpWidget(_buildTestApp(
-        testImages: [
-          SelectedImage(bytes: imageA!, format: 'png'),
-          SelectedImage(bytes: imageB!, format: 'png'),
-        ],
-        testImagePayloadPreparer: delayedValidation,
-      ));
+      await tester.pumpWidget(
+        _buildTestApp(
+          testImages: [
+            SelectedImage(bytes: imageA!, format: 'png'),
+            SelectedImage(bytes: imageB!, format: 'png'),
+          ],
+          testImagePayloadPreparer: delayedValidation,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
@@ -1659,11 +1715,13 @@ void main() {
       tester,
     ) async {
       final validPng = img.encodePng(img.Image(width: 2, height: 2));
-      await tester.runAsync(() => _storeAppAlbumImage(
-            name: 'A_valid',
-            hash: 'app_album_pending_valid',
-            bytes: validPng,
-          ));
+      await tester.runAsync(
+        () => _storeAppAlbumImage(
+          name: 'A_valid',
+          hash: 'app_album_pending_valid',
+          bytes: validPng,
+        ),
+      );
       final validationStarted = Completer<void>();
       final finishValidation = Completer<void>();
       Future<OcrImagePayload> delayedValidation(Uint8List bytes) async {
@@ -1672,10 +1730,12 @@ void main() {
         return prepareOcrImagePayloadSync(bytes);
       }
 
-      await tester.pumpWidget(_buildTestApp(
-        testImages: [_createTestImage()],
-        testImagePayloadPreparer: delayedValidation,
-      ));
+      await tester.pumpWidget(
+        _buildTestApp(
+          testImages: [_createTestImage()],
+          testImagePayloadPreparer: delayedValidation,
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('相册选择'));
@@ -1688,10 +1748,7 @@ void main() {
         () => find.text('A_valid.png').evaluate().isNotEmpty,
       );
       await tester.tap(find.text('A_valid.png'));
-      await _pumpUntil(
-        tester,
-        () => find.text('确定 (1)').evaluate().isNotEmpty,
-      );
+      await _pumpUntil(tester, () => find.text('确定 (1)').evaluate().isNotEmpty);
       await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
       await tester.pumpAndSettle();
       await validationStarted.future;
@@ -1710,22 +1767,26 @@ void main() {
       tester,
     ) async {
       final validPng = img.encodePng(img.Image(width: 2, height: 2));
-      await tester.runAsync(() => _storeAppAlbumImage(
-            name: 'A_valid',
-            hash: 'app_album_mixed_valid',
-            bytes: validPng,
-          ));
-      await tester.runAsync(() => _storeAppAlbumImage(
-            name: 'B_corrupt',
-            hash: 'app_album_mixed_corrupt',
-            bytes: Uint8List.fromList([0x01, 0x02, 0x03]),
-          ));
+      await tester.runAsync(
+        () => _storeAppAlbumImage(
+          name: 'A_valid',
+          hash: 'app_album_mixed_valid',
+          bytes: validPng,
+        ),
+      );
+      await tester.runAsync(
+        () => _storeAppAlbumImage(
+          name: 'B_corrupt',
+          hash: 'app_album_mixed_corrupt',
+          bytes: Uint8List.fromList([0x01, 0x02, 0x03]),
+        ),
+      );
       Future<OcrImagePayload> validate(Uint8List bytes) async =>
           prepareOcrImagePayloadSync(bytes);
 
-      await tester.pumpWidget(_buildTestApp(
-        testImagePayloadPreparer: validate,
-      ));
+      await tester.pumpWidget(
+        _buildTestApp(testImagePayloadPreparer: validate),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('相册选择'));
@@ -1740,15 +1801,9 @@ void main() {
             find.text('B_corrupt.png').evaluate().isNotEmpty,
       );
       await tester.tap(find.text('A_valid.png'));
-      await _pumpUntil(
-        tester,
-        () => find.text('确定 (1)').evaluate().isNotEmpty,
-      );
+      await _pumpUntil(tester, () => find.text('确定 (1)').evaluate().isNotEmpty);
       await tester.tap(find.text('B_corrupt.png'));
-      await _pumpUntil(
-        tester,
-        () => find.text('确定 (2)').evaluate().isNotEmpty,
-      );
+      await _pumpUntil(tester, () => find.text('确定 (2)').evaluate().isNotEmpty);
       await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
       await tester.pumpAndSettle();
 
@@ -2207,118 +2262,108 @@ void main() {
       },
     );
 
-    testWidgets(
-      'shows models from ALL valid configs (not just first)',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_ocr',
-          type: 'ocr',
-          name: 'OCR供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'First',
-              host: 'https://api.first.com',
-              key: 'first-key',
-              models: [
-                ModelConfig(name: 'First-Model', modelId: 'first-model'),
-              ],
-            ),
-            ProviderConfigItem(
-              providerName: 'Second',
-              host: 'https://api.second.com',
-              key: 'second-key',
-              models: [
-                ModelConfig(name: 'Second-Model', modelId: 'second-model'),
-              ],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows models from ALL valid configs (not just first)', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'First',
+            host: 'https://api.first.com',
+            key: 'first-key',
+            models: [ModelConfig(name: 'First-Model', modelId: 'first-model')],
+          ),
+          ProviderConfigItem(
+            providerName: 'Second',
+            host: 'https://api.second.com',
+            key: 'second-key',
+            models: [
+              ModelConfig(name: 'Second-Model', modelId: 'second-model'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // First model is selected by default (visible in collapsed dropdown)
-        expect(find.text('First-Model | First'), findsOneWidget);
+      // First model is selected by default (visible in collapsed dropdown)
+      expect(find.text('First-Model | First'), findsOneWidget);
 
-        // Tap the dropdown to open it and see all items
-        await tester.tap(find.text('First-Model | First'));
-        await tester.pumpAndSettle();
+      // Tap the dropdown to open it and see all items
+      await tester.tap(find.text('First-Model | First'));
+      await tester.pumpAndSettle();
 
-        // Should show models from ALL valid configs in the dropdown
-        expect(find.text('Second-Model | Second'), findsWidgets);
-      },
-    );
+      // Should show models from ALL valid configs in the dropdown
+      expect(find.text('Second-Model | Second'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no config has valid host/key',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_ocr',
-          type: 'ocr',
-          name: 'OCR供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'Empty',
-              host: '',
-              key: '',
-              models: [
-                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
-              ],
-            ),
-            ProviderConfigItem(
-              providerName: 'Also Empty',
-              host: '',
-              key: '',
-              models: [
-                ModelConfig(name: 'Also-Empty', modelId: 'also-empty'),
-              ],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no config has valid host/key', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Empty',
+            host: '',
+            key: '',
+            models: [ModelConfig(name: 'Empty-Model', modelId: 'empty-model')],
+          ),
+          ProviderConfigItem(
+            providerName: 'Also Empty',
+            host: '',
+            key: '',
+            models: [ModelConfig(name: 'Also-Empty', modelId: 'also-empty')],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt instead of hiding the selector
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt instead of hiding the selector
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no OCR models exist',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_ocr',
-          type: 'ocr',
-          name: 'OCR供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'Empty',
-              host: '',
-              key: '',
-              models: [],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no OCR models exist', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_ocr',
+        type: 'ocr',
+        name: 'OCR供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Empty',
+            host: '',
+            key: '',
+            models: [],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no OCR entry exists',
-      (tester) async {
-        await tester.pumpWidget(_buildTestApp(entries: []));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no OCR entry exists', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp(entries: []));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────
@@ -2338,10 +2383,16 @@ void main() {
       await tester.pumpAndSettle();
 
       // Should see TWO edit icon buttons: crop + full editor
-      expect(find.byIcon(Icons.crop), findsOneWidget,
-          reason: 'Crop button should be visible');
-      expect(find.byIcon(Icons.edit), findsOneWidget,
-          reason: 'Full editor button should be visible');
+      expect(
+        find.byIcon(Icons.crop),
+        findsOneWidget,
+        reason: 'Crop button should be visible',
+      );
+      expect(
+        find.byIcon(Icons.edit),
+        findsOneWidget,
+        reason: 'Full editor button should be visible',
+      );
     });
 
     testWidgets('preview dialog shows close button in top-left', (
@@ -2471,8 +2522,11 @@ void main() {
       final editorWidget = tester.widget<ExtendedImageEditorPage>(
         find.byType(ExtendedImageEditorPage),
       );
-      expect(editorWidget.imageBytes, pngB,
-          reason: 'the editor must edit the image that was swiped to');
+      expect(
+        editorWidget.imageBytes,
+        pngB,
+        reason: 'the editor must edit the image that was swiped to',
+      );
     });
   });
 
@@ -2483,71 +2537,79 @@ void main() {
   // ====================================================================
   group('OcrPage - quick edit flow', () {
     testWidgets(
-        'the quick editor processes in place, then the edited bytes are '
-        'applied to the selected image', (tester) async {
-      // Engine-generated PNG — the quick editor only builds after the
-      // image decodes, which needs a real-async window.
-      final png = await tester.runAsync(_createEnginePng);
-      final images = [SelectedImage(bytes: png!, format: 'png')];
-      await tester.pumpWidget(_buildTestApp(testImages: images));
-      await tester.pumpAndSettle();
+      'the quick editor processes in place, then the edited bytes are '
+      'applied to the selected image',
+      (tester) async {
+        // Engine-generated PNG — the quick editor only builds after the
+        // image decodes, which needs a real-async window.
+        final png = await tester.runAsync(_createEnginePng);
+        final images = [SelectedImage(bytes: png!, format: 'png')];
+        await tester.pumpWidget(_buildTestApp(testImages: images));
+        await tester.pumpAndSettle();
 
-      // Open the preview and the quick editor.
-      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.crop));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        // Open the preview and the quick editor.
+        await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.crop));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      // Wait for the editor image to decode (engine work — real async).
-      await _pumpUntil(
-        tester,
-        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
-      );
+        // Wait for the editor image to decode (engine work — real async).
+        await _pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
 
-      // Confirm the edit — the editor must NOT close immediately: it
-      // processes the image in place with a spinner until the pipeline
-      // finishes.
-      await tester.tap(find.text('保存'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+        // Confirm the edit — the editor must NOT close immediately: it
+        // processes the image in place with a spinner until the pipeline
+        // finishes.
+        await tester.tap(find.text('保存'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.byType(ExtendedImageEditorPage), findsOneWidget,
-          reason: 'the editor must stay on screen while processing');
-      expect(
-        find.descendant(
-          of: find.byType(ExtendedImageEditorPage),
-          matching: find.byType(CircularProgressIndicator),
-        ),
-        findsOneWidget,
-        reason: 'a processing spinner must be visible',
-      );
+        expect(
+          find.byType(ExtendedImageEditorPage),
+          findsOneWidget,
+          reason: 'the editor must stay on screen while processing',
+        );
+        expect(
+          find.descendant(
+            of: find.byType(ExtendedImageEditorPage),
+            matching: find.byType(CircularProgressIndicator),
+          ),
+          findsOneWidget,
+          reason: 'a processing spinner must be visible',
+        );
 
-      // Only after the pipeline finishes does the editor pop back to the
-      // OCR page.
-      await _pumpUntil(
-        tester,
-        () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
-      );
+        // Only after the pipeline finishes does the editor pop back to the
+        // OCR page.
+        await _pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
 
-      // Re-open the preview and the quick editor — it must now show the
-      // EDITED bytes (a new instance), proving the edit was applied to
-      // the selected image.
-      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.crop));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await _pumpUntil(
-        tester,
-        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
-      );
+        // Re-open the preview and the quick editor — it must now show the
+        // EDITED bytes (a new instance), proving the edit was applied to
+        // the selected image.
+        await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.crop));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await _pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
 
-      final editorWidget = tester.widget<ExtendedImageEditorPage>(
-        find.byType(ExtendedImageEditorPage),
-      );
-      expect(editorWidget.imageBytes, isNot(same(png)),
-          reason: 'the selected image must hold the edited bytes');
-    });
+        final editorWidget = tester.widget<ExtendedImageEditorPage>(
+          find.byType(ExtendedImageEditorPage),
+        );
+        expect(
+          editorWidget.imageBytes,
+          isNot(same(png)),
+          reason: 'the selected image must hold the edited bytes',
+        );
+      },
+    );
   });
 }

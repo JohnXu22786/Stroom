@@ -87,7 +87,7 @@ class LlmAccountMigrationService {
   }
 
   static Future<LlmCredentialTransactionLease>
-      acquireCredentialTransaction() async {
+  acquireCredentialTransaction() async {
     final predecessor = _credentialTransactionQueue;
     final release = Completer<void>();
     _credentialTransactionQueue = release.future;
@@ -102,8 +102,9 @@ class LlmAccountMigrationService {
     final preferenceSnapshot = <String, String?>{
       'provider_entries': storedSource,
       accountsPreferenceKey: await preferences.getString(accountsPreferenceKey),
-      modelGroupsPreferenceKey:
-          await preferences.getString(modelGroupsPreferenceKey),
+      modelGroupsPreferenceKey: await preferences.getString(
+        modelGroupsPreferenceKey,
+      ),
       migrationStateKey: marker,
     };
     final decodedSource = jsonDecode(source);
@@ -131,8 +132,10 @@ class LlmAccountMigrationService {
     var accountsMigrated = 0;
     var groupsCreated = 0;
     final seenAccountIds = <String>{};
-    final credentialSnapshot =
-        await _preflightCredentialReferences(entries, accountsById);
+    final credentialSnapshot = await _preflightCredentialReferences(
+      entries,
+      accountsById,
+    );
     final migrationWrites = <String, String>{};
     final migrationCredentialWrites = <String, String>{};
 
@@ -217,7 +220,9 @@ class LlmAccountMigrationService {
 
           final modelMappings = _mapModels(accountId, config);
           final oldAccountFields = Map<String, dynamic>.from(oldAccount)
-            ..remove('credentialRef');
+            ..remove('credentialRef')
+            ..remove('remainingQuota')
+            ..remove('quotaSignals');
           final endpointConfig = Map<String, dynamic>.from(config)
             ..remove('id')
             ..remove('key')
@@ -229,8 +234,8 @@ class LlmAccountMigrationService {
             'connectorType': config['connectorType'] is String
                 ? config['connectorType']
                 : (config['endpointType'] is String
-                    ? config['endpointType']
-                    : 'openai'),
+                      ? config['endpointType']
+                      : 'openai'),
             'authType': config['authType'] is String
                 ? config['authType']
                 : (credentialRef == null ? 'none' : 'api_key'),
@@ -242,6 +247,10 @@ class LlmAccountMigrationService {
             'models': modelMappings,
             'policy': oldAccount['policy'] ?? LlmRoutingPolicy().toMap(),
             'usageByWindow': oldAccount['usageByWindow'] ?? _unknownUsage(),
+            'remainingQuota':
+                oldAccount['remainingQuota'] ??
+                const LlmMetricObservation.unknown().toMap(),
+            'quotaSignals': oldAccount['quotaSignals'] ?? const {},
           };
           if (credentialRef != null) {
             account['credentialRef'] = credentialRef;
@@ -286,6 +295,16 @@ class LlmAccountMigrationService {
               'displayName': oldGroup?['displayName'] ?? model['displayName'],
               'members': members,
               'policy': oldGroup?['policy'] ?? LlmRoutingPolicy().toMap(),
+              // Preserve the old (provider, modelId) reference even if this
+              // account is later removed and a group member uses another ID.
+              'legacyModelId': oldGroup?['legacyModelId'] ?? upstreamModelId,
+              'legacyProviderName':
+                  oldGroup?['legacyProviderName'] ??
+                  (config['providerName'] is String
+                      ? config['providerName']
+                      : (config['name'] is String
+                            ? config['name']
+                            : accountId)),
             };
             if (!_jsonEqual(oldGroup, group)) {
               groupsById[groupId] = group;
@@ -309,11 +328,10 @@ class LlmAccountMigrationService {
         }
       }
 
-      groupsChanged = _reconcileStaleGeneratedMembers(
-            groupsById,
-            accountsById,
-            entries,
-          ) ||
+      accountsChanged =
+          _normalizeAccountQuotaFields(accountsById) || accountsChanged;
+      groupsChanged =
+          _reconcileStaleGeneratedMembers(groupsById, accountsById, entries) ||
           groupsChanged;
 
       final orderedAccounts = accountsById.values.toList();
@@ -398,10 +416,11 @@ class LlmAccountMigrationService {
   }
 
   Future<void> _validateMappedReferences(
-      List<dynamic> entries,
-      Map<String, Map<String, dynamic>> accounts,
-      Map<String, Map<String, dynamic>> groups,
-      {required bool requireCredentialPresence}) async {
+    List<dynamic> entries,
+    Map<String, Map<String, dynamic>> accounts,
+    Map<String, Map<String, dynamic>> groups, {
+    required bool requireCredentialPresence,
+  }) async {
     for (final entry in entries.whereType<Map<String, dynamic>>()) {
       if (entry['type'] != 'llm') continue;
       final configs = entry['configs'];
@@ -441,18 +460,19 @@ class LlmAccountMigrationService {
           final localModelId = model['id'] as String;
           final upstreamModelId = model['upstreamModelId'];
           final hasAccountModel = accountModels.whereType<Map>().any(
-                (item) =>
-                    item['id'] == localModelId &&
-                    item['upstreamModelId'] == upstreamModelId,
-              );
+            (item) =>
+                item['id'] == localModelId &&
+                item['upstreamModelId'] == upstreamModelId,
+          );
           final group = groups[_modelGroupId(accountId, localModelId)];
           final members = group?['members'];
-          final hasGroupMember = members is List &&
+          final hasGroupMember =
+              members is List &&
               members.whereType<Map>().any(
-                    (item) =>
-                        item['accountId'] == accountId &&
-                        item['upstreamModelId'] == upstreamModelId,
-                  );
+                (item) =>
+                    item['accountId'] == accountId &&
+                    item['upstreamModelId'] == upstreamModelId,
+              );
           if (!hasAccountModel || !hasGroupMember) {
             throw const LlmAccountMigrationException();
           }
@@ -531,7 +551,8 @@ class LlmAccountMigrationService {
           throw const LlmAccountMigrationException();
         }
         final key = config['key'] is String ? config['key'] as String : '';
-        final rawReference = config['credentialRef'] ??
+        final rawReference =
+            config['credentialRef'] ??
             oldAccount['credentialRef'] ??
             (key.isNotEmpty ? _credentialReference(accountId) : null);
         if (rawReference != null && rawReference is! String) {
@@ -546,9 +567,10 @@ class LlmAccountMigrationService {
         }
         _mapModels(accountId, config);
         if (rawReference is String) {
-          usages
-              .putIfAbsent(rawReference, () => [])
-              .add((key: key.isEmpty ? null : key, hasKey: key.isNotEmpty));
+          usages.putIfAbsent(rawReference, () => []).add((
+            key: key.isEmpty ? null : key,
+            hasKey: key.isNotEmpty,
+          ));
         } else if (key.isEmpty && oldAccount['credentialRef'] is String) {
           throw const LlmAccountMigrationException();
         }
@@ -571,8 +593,10 @@ class LlmAccountMigrationService {
       final usage = entry.value;
       final existing = await credentialStore.read(reference);
       snapshots[reference] = existing;
-      final inlineValues =
-          usage.where((item) => item.hasKey).map((item) => item.key!).toSet();
+      final inlineValues = usage
+          .where((item) => item.hasKey)
+          .map((item) => item.key!)
+          .toSet();
       if (inlineValues.length > 1) {
         throw const LlmAccountMigrationException();
       }
@@ -634,10 +658,7 @@ class LlmAccountMigrationService {
         return desired[accountId]!.contains(signature);
       }).toList();
       if (!_jsonEqual(oldMembers, newMembers)) {
-        groups[groupEntry.key] = {
-          ...groupEntry.value,
-          'members': newMembers,
-        };
+        groups[groupEntry.key] = {...groupEntry.value, 'members': newMembers};
         changed = true;
       }
     }
@@ -705,8 +726,11 @@ class LlmAccountMigrationService {
   }
 
   Future<void> _writeAndVerify(
-      String key, String value, Map<String, String> migrationWrites,
-      {required String? expectedCurrent}) async {
+    String key,
+    String value,
+    Map<String, String> migrationWrites, {
+    required String? expectedCurrent,
+  }) async {
     if (await preferences.getString(key) != expectedCurrent) {
       throw const LlmAccountMigrationException();
     }
@@ -741,10 +765,29 @@ class LlmAccountMigrationService {
           ? raw['modelId'] as String
           : (raw['name'] is String ? raw['name'] as String : '');
       final capabilities = <String, dynamic>{
-        if (raw['supportStream'] is bool) 'streaming': raw['supportStream'],
-        if (raw['supportInstruction'] is bool)
-          'instruction': raw['supportInstruction'],
+        if (raw['capabilities'] is Map)
+          ...Map<String, dynamic>.from(raw['capabilities'] as Map),
       };
+      // ChatServiceStreaming has always used chatStream regardless of the
+      // legacy UI-only supportStream flag. Keep migrated legacy models
+      // eligible for that existing runtime behavior unless explicit account
+      // capability metadata says otherwise.
+      final accountCapabilitiesEdited =
+          raw['accountCapabilitiesEdited'] == true;
+      if (!capabilities.containsKey('streaming') &&
+          !accountCapabilitiesEdited) {
+        capabilities['streaming'] = true;
+      }
+      // The legacy chat route passed tool requests through without a
+      // capability gate. Preserve that behavior unless account metadata has
+      // explicitly disabled tools.
+      if (!capabilities.containsKey('tools') && !accountCapabilitiesEdited) {
+        capabilities['tools'] = true;
+      }
+      if (!capabilities.containsKey('instruction') &&
+          raw['supportInstruction'] is bool) {
+        capabilities['instruction'] = raw['supportInstruction'];
+      }
       models.add({
         'id': localId,
         'upstreamModelId': modelId,
@@ -756,6 +799,47 @@ class LlmAccountMigrationService {
       });
     }
     return models;
+  }
+
+  bool _normalizeAccountQuotaFields(
+    Map<String, Map<String, dynamic>> accounts,
+  ) {
+    var changed = false;
+    for (final account in accounts.values) {
+      final rawRemainingQuota = account['remainingQuota'];
+      final remainingQuota = _quotaObservation(rawRemainingQuota);
+      final normalizedRemainingQuota = remainingQuota.toMap();
+      if (!_jsonEqual(rawRemainingQuota, normalizedRemainingQuota)) {
+        account['remainingQuota'] = normalizedRemainingQuota;
+        changed = true;
+      }
+
+      final rawQuotaSignals = account['quotaSignals'];
+      final quotaSignals = <String, dynamic>{};
+      if (rawQuotaSignals is Map) {
+        for (final entry in rawQuotaSignals.entries) {
+          if (entry.key is! String || entry.value is! Map) continue;
+          quotaSignals[entry.key as String] = _quotaObservation(
+            entry.value,
+          ).toMap();
+        }
+      }
+      if (!_jsonEqual(rawQuotaSignals, quotaSignals)) {
+        account['quotaSignals'] = quotaSignals;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  LlmMetricObservation _quotaObservation(Object? raw) {
+    if (raw is! Map) return const LlmMetricObservation.unknown();
+    final metric = LlmMetricObservation.fromMap(Map<String, dynamic>.from(raw));
+    final value = metric.value;
+    if (!metric.isKnown || value == null || !value.isFinite || value < 0) {
+      return const LlmMetricObservation.unknown();
+    }
+    return metric;
   }
 
   List<Map<String, dynamic>> _readRecords(String? encoded) {
@@ -792,9 +876,9 @@ class LlmAccountMigrationService {
       jsonEncode({'version': 1, 'items': items});
 
   Map<String, dynamic> _unknownUsage() => {
-        for (final window in LlmUsageWindow.values)
-          window.name: const LlmUsageWindowState().toMap(),
-      };
+    for (final window in LlmUsageWindow.values)
+      window.name: const LlmUsageWindowState().toMap(),
+  };
 
   String _credentialReference(String accountId) =>
       'stroom.llm.credential.${Uri.encodeComponent(accountId)}';
@@ -820,10 +904,4 @@ class LlmAccountMigrationService {
       jsonEncode(left) == jsonEncode(right);
 }
 
-const _knownNonLlmProviderTypes = {
-  'tts',
-  'ocr',
-  'asr',
-  'mcp',
-  'builtin',
-};
+const _knownNonLlmProviderTypes = {'tts', 'ocr', 'asr', 'mcp', 'builtin'};

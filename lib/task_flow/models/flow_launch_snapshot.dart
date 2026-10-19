@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
+import '../../services/llm_chat_runtime.dart';
+import '../../services/llm_model_group_provider.dart';
 import '../../utils/provider_models.dart';
 import 'task_flow_definition.dart';
 import 'block_type_definition.dart';
@@ -11,55 +13,55 @@ import 'block_type_definition.dart';
 class FlowLaunchSnapshot {
   final String _encoded;
   FlowLaunchSnapshot._(Map<String, dynamic> map)
-      : _encoded = jsonEncode(_publicValue(map, snapshotRoot: true));
+    : _encoded = jsonEncode(_publicValue(map, snapshotRoot: true));
 
   static const _unreadableJson = '[stroom:redacted-invalid-json]';
   static const _unreadableEndpoint = '[stroom:redacted-invalid-endpoint]';
   static const _redactedUrlCredential = 'stroom-redacted-url-credential';
 
   static bool _credentialName(String name) => const {
-        'key',
-        'apikey',
-        'xapikey',
-        'authorization',
-        'password',
-        'secret',
-        'accesstoken',
-        'token',
-        'credentials',
-        'credential',
-        'clientsecret',
-        'apisecret',
-        'authtoken',
-        'refreshtoken',
-        'sessiontoken',
-        'idtoken',
-        'clienttoken',
-        'privatekey',
-        'signingkey',
-        'signature',
-        'xamzsignature',
-        'xamzcredential',
-        'xamzsecuritytoken',
-        'xgoogsignature',
-        'xgoogcredential',
-        'sig',
-        'auth',
-        'xauthtoken',
-        'xauthkey',
-        'xaccesstoken',
-        'cookie',
-        'setcookie',
-        'proxyauthorization',
-      }.contains(name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''));
+    'key',
+    'apikey',
+    'xapikey',
+    'authorization',
+    'password',
+    'secret',
+    'accesstoken',
+    'token',
+    'credentials',
+    'credential',
+    'clientsecret',
+    'apisecret',
+    'authtoken',
+    'refreshtoken',
+    'sessiontoken',
+    'idtoken',
+    'clienttoken',
+    'privatekey',
+    'signingkey',
+    'signature',
+    'xamzsignature',
+    'xamzcredential',
+    'xamzsecuritytoken',
+    'xgoogsignature',
+    'xgoogcredential',
+    'sig',
+    'auth',
+    'xauthtoken',
+    'xauthkey',
+    'xaccesstoken',
+    'cookie',
+    'setcookie',
+    'proxyauthorization',
+  }.contains(name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''));
 
   static bool _endpointField(String? name) => const {
-        'host',
-        'url',
-        'baseurl',
-        'endpointurl',
-        'endpoint',
-      }.contains(name?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''));
+    'host',
+    'url',
+    'baseurl',
+    'endpointurl',
+    'endpoint',
+  }.contains(name?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''));
 
   static bool _urlContainsCredentials(String value) {
     final uri = Uri.tryParse(value);
@@ -74,8 +76,9 @@ class FlowLaunchSnapshot {
     return uri != null &&
         (uri.userInfo == _redactedUrlCredential ||
             uri.fragment == _redactedUrlCredential ||
-            uri.queryParametersAll.values
-                .any((values) => values.contains(_redactedUrlCredential)));
+            uri.queryParametersAll.values.any(
+              (values) => values.contains(_redactedUrlCredential),
+            ));
   }
 
   /// Keep the destination and nonsecret query settings, while retaining only
@@ -89,12 +92,14 @@ class FlowLaunchSnapshot {
         !uri.hasFragment) {
       return value;
     }
-    final query = uri.queryParametersAll.map((key, values) => MapEntry(
-          key,
-          _credentialName(key)
-              ? List.filled(values.length, _redactedUrlCredential)
-              : values,
-        ));
+    final query = uri.queryParametersAll.map(
+      (key, values) => MapEntry(
+        key,
+        _credentialName(key)
+            ? List.filled(values.length, _redactedUrlCredential)
+            : values,
+      ),
+    );
     return (uri.hasAuthority
             ? uri.replace(
                 userInfo: uri.userInfo.isEmpty ? '' : _redactedUrlCredential,
@@ -103,15 +108,17 @@ class FlowLaunchSnapshot {
               )
             : uri.replace(
                 queryParameters: query.isEmpty ? null : query,
-                fragment: uri.fragment.isEmpty ? null : _redactedUrlCredential))
+                fragment: uri.fragment.isEmpty ? null : _redactedUrlCredential,
+              ))
         .toString();
   }
 
   static bool _hasSignedQuery(Uri uri) => uri.queryParametersAll.keys.any(
-        (key) => const {'xamzsignature', 'xgoogsignature'}.contains(
-          key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''),
-        ),
-      );
+    (key) => const {
+      'xamzsignature',
+      'xgoogsignature',
+    }.contains(key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')),
+  );
 
   static bool _signedEndpointInputsMatch(Uri launch, Uri live) {
     if (launch.scheme != live.scheme ||
@@ -123,8 +130,9 @@ class FlowLaunchSnapshot {
     final launchQuery = launch.queryParametersAll;
     final liveQuery = live.queryParametersAll;
     final publicKeys = launchQuery.keys.where((key) => !_credentialName(key));
-    final livePublicKeys =
-        liveQuery.keys.where((key) => !_credentialName(key)).toSet();
+    final livePublicKeys = liveQuery.keys
+        .where((key) => !_credentialName(key))
+        .toSet();
     if (publicKeys.length != livePublicKeys.length ||
         !livePublicKeys.containsAll(publicKeys)) {
       return false;
@@ -153,8 +161,9 @@ class FlowLaunchSnapshot {
         !_signedEndpointInputsMatch(launch, live)) {
       throw StateError('运行快照中的签名 URL 服务端点或公开签名参数已改变，请使用最新配置重新运行');
     }
-    final fragment =
-        launch.fragment == _redactedUrlCredential ? live.fragment : null;
+    final fragment = launch.fragment == _redactedUrlCredential
+        ? live.fragment
+        : null;
     if (fragment != null && fragment.isEmpty) {
       throw StateError('运行快照中的 URL 片段凭据已移除，请使用最新配置重试');
     }
@@ -183,18 +192,20 @@ class FlowLaunchSnapshot {
             ? launch.replace(
                 userInfo: userInfo,
                 queryParameters: query.isEmpty ? null : query,
-                fragment: fragment)
+                fragment: fragment,
+              )
             : launch.replace(
                 queryParameters: query.isEmpty ? null : query,
-                fragment: fragment))
+                fragment: fragment,
+              ))
         .toString();
   }
 
   static bool _parameterList(String? field) => const {
-        'customParams',
-        'customParameters',
-        'reasoningParams'
-      }.contains(field);
+    'customParams',
+    'customParameters',
+    'reasoningParams',
+  }.contains(field);
 
   static String _parameterName(Map item) =>
       (item['paramName'] ?? item['name'] ?? '').toString();
@@ -205,7 +216,7 @@ class FlowLaunchSnapshot {
     'options',
     'optionOrder',
     'onValue',
-    'offValue'
+    'offValue',
   };
 
   static bool _jsonParameter(Map item) =>
@@ -273,8 +284,11 @@ class FlowLaunchSnapshot {
     }
     // Matching failures must reach the caller; silently returning redacted
     // snapshot JSON could make a retry run with the wrong credentials.
-    final hydrated =
-        _withCurrentCredentials(frozenJson, currentJson, jsonStrings: true);
+    final hydrated = _withCurrentCredentials(
+      frozenJson,
+      currentJson,
+      jsonStrings: true,
+    );
     return frozenJson is String && hydrated == frozenJson
         ? frozen
         : jsonEncode(hydrated);
@@ -282,9 +296,11 @@ class FlowLaunchSnapshot {
 
   static bool _containsCredential(dynamic value) {
     if (value is Map) {
-      return value.entries.any((entry) =>
-          _credentialName(entry.key.toString()) ||
-          _containsCredential(entry.value));
+      return value.entries.any(
+        (entry) =>
+            _credentialName(entry.key.toString()) ||
+            _containsCredential(entry.value),
+      );
     }
     if (value is List) return value.any(_containsCredential);
     if (value is String) {
@@ -327,9 +343,7 @@ class FlowLaunchSnapshot {
   static dynamic _canonicalPublicValue(dynamic value) {
     if (value is Map) {
       final keys = value.keys.map((key) => key.toString()).toList()..sort();
-      return {
-        for (final key in keys) key: _canonicalPublicValue(value[key]),
-      };
+      return {for (final key in keys) key: _canonicalPublicValue(value[key])};
     }
     if (value is List) return value.map(_canonicalPublicValue).toList();
     if (value is String && _looksLikeJsonValue(value)) {
@@ -346,9 +360,13 @@ class FlowLaunchSnapshot {
         final keys = query.keys.toList()..sort();
         // Compare public query inputs without changing frozen request URLs.
         // Sorting values retains duplicate counts and ignores query order.
-        return uri.replace(queryParameters: {
-          for (final key in keys) key: query[key]!.toList()..sort(),
-        }).toString();
+        return uri
+            .replace(
+              queryParameters: {
+                for (final key in keys) key: query[key]!.toList()..sort(),
+              },
+            )
+            .toString();
       }
     }
     return value;
@@ -374,17 +392,17 @@ class FlowLaunchSnapshot {
       if (!current.every((item) => hasIdentity(item, field))) {
         mismatch();
       }
-      final frozenKeys =
-          frozen.map((item) => jsonEncode((item as Map)[field])).toList();
-      final currentKeys =
-          current.map((item) => jsonEncode((item as Map)[field])).toList();
+      final frozenKeys = frozen
+          .map((item) => jsonEncode((item as Map)[field]))
+          .toList();
+      final currentKeys = current
+          .map((item) => jsonEncode((item as Map)[field]))
+          .toList();
       if (frozenKeys.toSet().length != frozenKeys.length ||
           currentKeys.toSet().length != currentKeys.length) {
         mismatch();
       }
-      final matches = [
-        for (final key in frozenKeys) currentKeys.indexOf(key),
-      ];
+      final matches = [for (final key in frozenKeys) currentKeys.indexOf(key)];
       if (matches.contains(-1)) {
         mismatch();
       }
@@ -399,9 +417,7 @@ class FlowLaunchSnapshot {
         currentKeys.toSet().length != currentKeys.length) {
       mismatch();
     }
-    final matches = [
-      for (final key in frozenKeys) currentKeys.indexOf(key),
-    ];
+    final matches = [for (final key in frozenKeys) currentKeys.indexOf(key)];
     if (matches.contains(-1)) {
       mismatch();
     }
@@ -411,10 +427,12 @@ class FlowLaunchSnapshot {
   static Map _matchingJsonParameter(List frozen, List current, Map item) {
     final name = _parameterName(item);
     final frozenMatches = frozen
-        .where((candidate) =>
-            candidate is Map &&
-            _jsonParameter(candidate) &&
-            _parameterName(candidate) == name)
+        .where(
+          (candidate) =>
+              candidate is Map &&
+              _jsonParameter(candidate) &&
+              _parameterName(candidate) == name,
+        )
         .length;
     final liveMatches = current
         .whereType<Map>()
@@ -429,8 +447,9 @@ class FlowLaunchSnapshot {
   static Map _matchingUrlParameter(List frozen, List current, Map item) {
     final name = _parameterName(item);
     final frozenMatches = frozen
-        .where((candidate) =>
-            candidate is Map && _parameterName(candidate) == name)
+        .where(
+          (candidate) => candidate is Map && _parameterName(candidate) == name,
+        )
         .length;
     final liveMatches = current
         .whereType<Map>()
@@ -445,58 +464,73 @@ class FlowLaunchSnapshot {
     return liveMatches.single;
   }
 
-  static Map<String, dynamic> _publicParameter(Map item,
-          {bool jsonStrings = false}) =>
-      {
-        for (final entry in item.entries)
-          if (!_credentialName(entry.key.toString()))
-            entry.key.toString(): _publicValue(entry.value,
-                field: entry.key.toString(),
-                urlStrings: _jsonParameterFields.contains(entry.key.toString()),
-                jsonStrings: jsonStrings ||
-                    (_jsonParameter(item) &&
-                        _jsonParameterFields.contains(entry.key.toString())),
-                strictJson: _jsonParameter(item) &&
-                    _jsonParameterFields.contains(entry.key.toString()) &&
-                    (entry.value is String ||
-                        entry.key == 'options' ||
-                        entry.key == 'optionOrder'))
-      };
+  static Map<String, dynamic> _publicParameter(
+    Map item, {
+    bool jsonStrings = false,
+  }) => {
+    for (final entry in item.entries)
+      if (!_credentialName(entry.key.toString()))
+        entry.key.toString(): _publicValue(
+          entry.value,
+          field: entry.key.toString(),
+          urlStrings: _jsonParameterFields.contains(entry.key.toString()),
+          jsonStrings:
+              jsonStrings ||
+              (_jsonParameter(item) &&
+                  _jsonParameterFields.contains(entry.key.toString())),
+          strictJson:
+              _jsonParameter(item) &&
+              _jsonParameterFields.contains(entry.key.toString()) &&
+              (entry.value is String ||
+                  entry.key == 'options' ||
+                  entry.key == 'optionOrder'),
+        ),
+  };
 
-  static dynamic _publicValue(dynamic value,
-      {String? field,
-      bool jsonStrings = false,
-      bool strictJson = false,
-      bool providerSettings = false,
-      bool snapshotRoot = false,
-      bool urlStrings = false}) {
+  static dynamic _publicValue(
+    dynamic value, {
+    String? field,
+    bool jsonStrings = false,
+    bool strictJson = false,
+    bool providerSettings = false,
+    bool snapshotRoot = false,
+    bool urlStrings = false,
+  }) {
     if (value is Map) {
       return <String, dynamic>{
         for (final entry in value.entries)
           if (!_credentialName(entry.key.toString()))
-            entry.key.toString(): _publicValue(entry.value,
-                field: entry.key.toString(),
-                providerSettings: providerSettings ||
-                    (snapshotRoot &&
-                        (entry.key == 'models' || entry.key == 'configs')),
-                urlStrings: urlStrings,
-                jsonStrings:
-                    jsonStrings || entry.key.toString() == 'typeConfig')
+            entry.key.toString(): _publicValue(
+              entry.value,
+              field: entry.key.toString(),
+              providerSettings:
+                  providerSettings ||
+                  (snapshotRoot &&
+                      (entry.key == 'models' || entry.key == 'configs')),
+              urlStrings: urlStrings,
+              jsonStrings: jsonStrings || entry.key.toString() == 'typeConfig',
+            ),
       };
     }
     if (value is List) {
       return value
-          .where((item) =>
-              !_parameterList(field) ||
-              item is! Map ||
-              !_credentialName(_parameterName(item)))
-          .map((item) => _parameterList(field) && item is Map
-              ? _publicParameter(item, jsonStrings: jsonStrings)
-              : _publicValue(item,
-                  jsonStrings: jsonStrings,
-                  strictJson: strictJson,
-                  providerSettings: providerSettings,
-                  urlStrings: urlStrings))
+          .where(
+            (item) =>
+                !_parameterList(field) ||
+                item is! Map ||
+                !_credentialName(_parameterName(item)),
+          )
+          .map(
+            (item) => _parameterList(field) && item is Map
+                ? _publicParameter(item, jsonStrings: jsonStrings)
+                : _publicValue(
+                    item,
+                    jsonStrings: jsonStrings,
+                    strictJson: strictJson,
+                    providerSettings: providerSettings,
+                    urlStrings: urlStrings,
+                  ),
+          )
           .toList();
     }
     if (value is String && jsonStrings && value.trimLeft().startsWith('"')) {
@@ -519,8 +553,12 @@ class FlowLaunchSnapshot {
 
   /// Secret fields intentionally absent from the snapshot are hydrated only
   /// from the same current model/config identity, including custom auth params.
-  static dynamic _withCurrentCredentials(dynamic frozen, dynamic current,
-      {String? field, bool jsonStrings = false}) {
+  static dynamic _withCurrentCredentials(
+    dynamic frozen,
+    dynamic current, {
+    String? field,
+    bool jsonStrings = false,
+  }) {
     if (frozen is Map && current is Map) {
       final result = Map<String, dynamic>.from(frozen);
       for (final entry in current.entries) {
@@ -528,8 +566,12 @@ class FlowLaunchSnapshot {
         if (_credentialName(key)) {
           result[key] = entry.value;
         } else if (result.containsKey(key)) {
-          result[key] = _withCurrentCredentials(result[key], entry.value,
-              field: key, jsonStrings: jsonStrings || key == 'typeConfig');
+          result[key] = _withCurrentCredentials(
+            result[key],
+            entry.value,
+            field: key,
+            jsonStrings: jsonStrings || key == 'typeConfig',
+          );
         }
       }
       return result;
@@ -540,16 +582,23 @@ class FlowLaunchSnapshot {
           for (final item in frozen)
             if (item is Map && _jsonParameter(item))
               _withCurrentParameter(
-                  item, _matchingJsonParameter(frozen, current, item),
-                  jsonStrings: true)
+                item,
+                _matchingJsonParameter(frozen, current, item),
+                jsonStrings: true,
+              )
             else if (item is Map && _containsEndpointMarker(item))
               _withCurrentParameter(
-                  item, _matchingUrlParameter(frozen, current, item))
+                item,
+                _matchingUrlParameter(frozen, current, item),
+              )
             else
-              item
+              item,
         ];
-        result.addAll(current.where(
-            (item) => item is Map && _credentialName(_parameterName(item))));
+        result.addAll(
+          current.where(
+            (item) => item is Map && _credentialName(_parameterName(item)),
+          ),
+        );
         return result;
       }
       if (jsonStrings || _containsEndpointMarker(frozen)) {
@@ -562,13 +611,20 @@ class FlowLaunchSnapshot {
         // arrays, only a unique match of public settings may receive secrets.
         if (frozen.length == 1 && current.length == 1) {
           if (frozen.single is Map &&
-              ['id', 'name', 'route', 'path']
-                  .any((field) => (frozen.single as Map).containsKey(field))) {
+              [
+                'id',
+                'name',
+                'route',
+                'path',
+              ].any((field) => (frozen.single as Map).containsKey(field))) {
             _jsonArrayCredentialMatches(frozen, current);
           }
           return [
-            _withCurrentCredentials(frozen.single, current.single,
-                jsonStrings: true),
+            _withCurrentCredentials(
+              frozen.single,
+              current.single,
+              jsonStrings: true,
+            ),
           ];
         }
         final matches = _jsonArrayCredentialMatches(frozen, current);
@@ -604,14 +660,21 @@ class FlowLaunchSnapshot {
     return frozen;
   }
 
-  static Map<String, dynamic> _withCurrentParameter(Map frozen, dynamic current,
-      {bool jsonStrings = false}) {
+  static Map<String, dynamic> _withCurrentParameter(
+    Map frozen,
+    dynamic current, {
+    bool jsonStrings = false,
+  }) {
     if (current is! Map) return Map<String, dynamic>.from(frozen);
     final result = Map<String, dynamic>.from(frozen);
     for (final field in _jsonParameterFields) {
       if (result.containsKey(field) && current.containsKey(field)) {
-        result[field] = _withCurrentCredentials(result[field], current[field],
-            field: field, jsonStrings: jsonStrings);
+        result[field] = _withCurrentCredentials(
+          result[field],
+          current[field],
+          field: field,
+          jsonStrings: jsonStrings,
+        );
       }
     }
     return result;
@@ -628,17 +691,22 @@ class FlowLaunchSnapshot {
     return hydrated;
   }
 
-  factory FlowLaunchSnapshot.capture(TaskFlowDefinition flow,
-      ProviderEntriesState providers, List<Assistant> assistants,
-      {Map<String, dynamic> synthesisDefaults = const {},
-      Map<String, String>? selectedChatModel}) {
+  factory FlowLaunchSnapshot.capture(
+    TaskFlowDefinition flow,
+    ProviderEntriesState providers,
+    List<Assistant> assistants, {
+    Map<String, dynamic> synthesisDefaults = const {},
+    Map<String, String>? selectedChatModel,
+  }) {
     final models = <Map<String, dynamic>>[];
     final selectedAssistants = <Map<String, dynamic>>[];
     final configs = <Map<String, dynamic>>[];
     final chatModels = <Map<String, dynamic>>[];
     void capture(ProviderModel selected) {
-      models.add(
-          {'configId': selected.config.id, 'model': selected.model.toMap()});
+      models.add({
+        'configId': selected.config.id,
+        'model': selected.model.toMap(),
+      });
       // Freeze the public endpoint; hydrate credentials from its stable identity.
       final settings = selected.config.toMap()
         ..remove('key')
@@ -664,31 +732,90 @@ class FlowLaunchSnapshot {
         final requestedId = boundId != null && boundId.isNotEmpty
             ? boundId
             : assistant.defaultModelId;
-        final byId =
-            available.where((s) => s.model.modelId == requestedId).toList();
+        final hasBoundId = boundId != null && boundId.isNotEmpty;
+        final hasRequestedId = requestedId != null && requestedId.isNotEmpty;
+        final savedProviderName = assistant.defaultProviderName?.trim();
+        final hasLegacyModelReference =
+            !hasRequestedId &&
+            (savedProviderName?.isNotEmpty == true ||
+                assistant.defaultModelName?.trim().isNotEmpty == true);
+        // Custom-group member IDs encode the group ID, so a stale provider
+        // label after a group rename must not hide the same stable member.
+        final stableGroupReference = llmModelGroupMemberReferenceForModelId(
+          requestedId,
+        );
+        final constrainToDefaultProvider =
+            !hasBoundId &&
+            savedProviderName?.isNotEmpty == true &&
+            stableGroupReference == null;
+        final byId = available
+            .where((s) => s.model.modelId == requestedId)
+            .toList();
         final byProvider = byId
-            .where(
-                (s) => s.config.providerName == assistant.defaultProviderName)
+            .where((s) => s.config.providerName == savedProviderName)
             .toList();
         final byName = available
-            .where((s) =>
-                '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
-                assistant.defaultModelName)
+            .where(
+              (s) =>
+                  '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
+                      assistant.defaultModelName &&
+                  (!constrainToDefaultProvider ||
+                      s.config.providerName == savedProviderName),
+            )
             .toList();
+        ProviderModel? uniqueMatch(
+          List<ProviderModel> matches, {
+          String? displayName,
+        }) {
+          if (matches.length == 1) return matches.single;
+          if (matches.length < 2 ||
+              displayName == null ||
+              displayName.isEmpty) {
+            return null;
+          }
+          final named = matches
+              .where(
+                (s) =>
+                    '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
+                    displayName,
+              )
+              .toList(growable: false);
+          return named.length == 1 ? named.single : null;
+        }
+
         final bySelectedIdentity = selectedChatModel == null
             ? null
             : available
-                .where((s) =>
-                    s.config.id == selectedChatModel['configId'] &&
-                    s.model.id == selectedChatModel['modelId'])
-                .firstOrNull;
-        final selected = boundId != null && boundId.isNotEmpty
-            ? byId.firstOrNull
-            : requestedId != null && requestedId.isNotEmpty
-                ? byProvider.firstOrNull ??
-                    byId.firstOrNull ??
-                    byName.firstOrNull
-                : byName.firstOrNull ?? bySelectedIdentity;
+                  .where(
+                    (s) =>
+                        s.config.id == selectedChatModel['configId'] &&
+                        s.model.id == selectedChatModel['modelId'] &&
+                        (!constrainToDefaultProvider ||
+                            s.config.providerName == savedProviderName),
+                  )
+                  .firstOrNull;
+        final identityCandidates = stableGroupReference != null
+            ? byId
+                  .where(
+                    (selected) =>
+                        llmModelGroupIdForConfig(selected.config) ==
+                            stableGroupReference.groupId &&
+                        selected.model.id == stableGroupReference.localModelId,
+                  )
+                  .toList(growable: false)
+            : constrainToDefaultProvider
+            ? byProvider
+            : byId;
+        final selected = hasRequestedId
+            ? uniqueMatch(
+                identityCandidates,
+                displayName: hasBoundId ? boundId : assistant.defaultModelName,
+              )
+            : uniqueMatch(byName, displayName: assistant.defaultModelName) ??
+                  (hasLegacyModelReference ? null : bySelectedIdentity);
+        if (selected == null && hasLegacyModelReference) {
+          throw StateError('助手保存的模型引用已删除或供应商配置不可用，请重新选择模型');
+        }
         if (selected == null &&
             selectedChatModel != null &&
             bySelectedIdentity == null &&
@@ -699,8 +826,10 @@ class FlowLaunchSnapshot {
         final map = assistant.toMap();
         if (selected != null) {
           capture(selected);
-          chatModels
-              .add({'blockId': block.id, ...providerModelReference(selected)});
+          chatModels.add({
+            'blockId': block.id,
+            ...providerModelReference(selected),
+          });
           map.remove('modelId');
           map['defaultModelId'] = selected.model.modelId;
           map['defaultProviderName'] = selected.config.providerName;
@@ -709,36 +838,47 @@ class FlowLaunchSnapshot {
         }
         selectedAssistants.add(map);
       } else if (block.typeKey == BlockType.chat && selectedChatModel != null) {
-        final selected =
-            resolveProviderModel(providers, 'llm', selectedChatModel);
+        final selected = resolveProviderModel(
+          providers,
+          'llm',
+          selectedChatModel,
+        );
         if (selected == null) {
           throw StateError('当前选择的对话模型已删除或供应商配置不可用，请重新选择模型');
         }
         capture(selected);
-        chatModels
-            .add({'blockId': block.id, ...providerModelReference(selected)});
+        chatModels.add({
+          'blockId': block.id,
+          ...providerModelReference(selected),
+        });
       }
     }
     return FlowLaunchSnapshot._({
       'flow': flow
           .copyWith(
-              blocks: flow.blocks
-                  .map((b) =>
+            blocks: flow.blocks
+                .map(
+                  (b) =>
                       b.typeKey == BlockType.tts && synthesisDefaults.isNotEmpty
-                          ? b.copyWithParam(
-                              '_launchSynthesisConfig', synthesisDefaults)
-                          : b)
-                  .toList())
+                      ? b.copyWithParam(
+                          '_launchSynthesisConfig',
+                          synthesisDefaults,
+                        )
+                      : b,
+                )
+                .toList(),
+          )
           .toMap(),
       'models': models,
       'configs': configs,
       'assistants': selectedAssistants,
-      'chatModels': chatModels
+      'chatModels': chatModels,
     });
   }
 
   TaskFlowDefinition get flow => TaskFlowDefinition.fromMap(
-      Map<String, dynamic>.from(toMap()['flow'] as Map));
+    Map<String, dynamic>.from(toMap()['flow'] as Map),
+  );
   List<Assistant> get assistants => (toMap()['assistants'] as List? ?? [])
       .map((a) => Assistant.fromMap(Map<String, dynamic>.from(a as Map)))
       .toList();
@@ -775,28 +915,36 @@ class FlowLaunchSnapshot {
         .where((id) => id.isNotEmpty)
         .toSet();
     return assistants
-        .where((assistant) =>
-            requiredIds == null || requiredIds.contains(assistant.id))
+        .where(
+          (assistant) =>
+              requiredIds == null || requiredIds.contains(assistant.id),
+        )
         .map((assistant) {
-      final matches = current.where((a) => a.id == assistant.id).toList();
-      if (matches.length != 1) {
-        throw StateError('运行快照引用的助手已删除或身份不唯一，请使用最新配置重试');
-      }
-      return Assistant.fromMap(Map<String, dynamic>.from(
-          _resolvedCredentials(assistant.toMap(), matches.single.toMap())
-              as Map));
-    }).toList();
+          final matches = current.where((a) => a.id == assistant.id).toList();
+          if (matches.length != 1) {
+            throw StateError('运行快照引用的助手已删除或身份不唯一，请使用最新配置重试');
+          }
+          return Assistant.fromMap(
+            Map<String, dynamic>.from(
+              _resolvedCredentials(assistant.toMap(), matches.single.toMap())
+                  as Map,
+            ),
+          );
+        })
+        .toList();
   }
 
   /// Scope resolution to the blocks that will run. Dispatch resolves one block
   /// at a time so chat's API-ID lookup cannot choose a competing live model.
-  ProviderEntriesState resolveProviders(ProviderEntriesState current,
-      {Iterable<TaskFlowBlock>? blocks}) {
+  ProviderEntriesState resolveProviders(
+    ProviderEntriesState current, {
+    Iterable<TaskFlowBlock>? blocks,
+  }) {
     final map = toMap();
     final frozen = (map['models'] as List? ?? []).cast<Map>();
     final configs = (map['configs'] as List? ?? []).cast<Map>();
     final chatModels = (map['chatModels'] as List? ?? []).cast<Map>();
-    final references = <(String, String)>{};
+    final references = <(String, String, String)>{};
     for (final block in blocks ?? flow.blocks) {
       final reference = block.typeKey == BlockType.chat
           ? chatModels.where((m) => m['blockId'] == block.id).firstOrNull
@@ -804,58 +952,148 @@ class FlowLaunchSnapshot {
       if (reference is Map &&
           reference['configId'] is String &&
           reference['modelId'] is String) {
-        references.add(
-            (reference['configId'] as String, reference['modelId'] as String));
+        references.add((
+          reference['configId'] as String,
+          reference['modelId'] as String,
+          block.typeKey == BlockType.chat ? 'llm' : block.typeKey.name,
+        ));
       }
     }
     final selectedModels = <Map>[];
     for (final reference in references) {
-      final captured = frozen
-          .where((m) =>
-              m['configId'] == reference.$1 &&
-              (m['model'] as Map)['id'] == reference.$2)
+      var captured = frozen
+          .where(
+            (m) =>
+                m['configId'] == reference.$1 &&
+                (m['model'] as Map)['id'] == reference.$2,
+          )
           .firstOrNull;
-      final matches = current.entries
-          .expand((e) => e.configs)
-          .where((config) =>
-              config.id == reference.$1 &&
-              config.host.trim().isNotEmpty &&
-              config.key.trim().isNotEmpty &&
-              config.models.any((model) => model.id == reference.$2))
-          .toList();
-      if (captured == null || matches.length != 1) {
+      if (captured == null &&
+          (reference.$3 == 'llm' || reference.$3 == 'ocr')) {
+        final groupId = reference.$3 == 'ocr'
+            ? llmOcrModelGroupIdForConfig(reference.$1, reference.$2)
+            : stableLlmModelGroupId(reference.$1, reference.$2);
+        captured = frozen
+            .where(
+              (m) =>
+                  m['configId'] == groupId &&
+                  (m['model'] as Map)['id'] == reference.$2,
+            )
+            .firstOrNull;
+      }
+      if (captured == null) {
         throw StateError('运行快照引用的模型或供应商配置已删除或不可用，请使用最新配置重试');
       }
-      selectedModels.add(captured);
+      var matches = current.entries
+          .expand((e) => e.configs)
+          .where(
+            (config) =>
+                config.id == reference.$1 &&
+                (isLlmModelGroupProviderConfig(config) ||
+                    (config.host.trim().isNotEmpty &&
+                        config.key.trim().isNotEmpty)) &&
+                config.models.any((model) => model.id == reference.$2),
+          )
+          .toList();
+      if (matches.isEmpty && (reference.$3 == 'llm' || reference.$3 == 'ocr')) {
+        final groupId = reference.$3 == 'ocr'
+            ? llmOcrModelGroupIdForConfig(reference.$1, reference.$2)
+            : stableLlmModelGroupId(reference.$1, reference.$2);
+        matches = current.entries
+            .expand((e) => e.configs)
+            .where(
+              (config) =>
+                  isLlmModelGroupProviderConfig(config) &&
+                  llmModelGroupIdForConfig(config) == groupId &&
+                  config.models.any(
+                    (model) =>
+                        model.id == reference.$2 &&
+                        (reference.$3 != 'ocr' ||
+                            llmModelConfigSupportsCapability(model, 'vision')),
+                  ),
+            )
+            .toList();
+      }
+      if (matches.length != 1) {
+        throw StateError('运行快照引用的模型或供应商配置已删除或不可用，请使用最新配置重试');
+      }
+      selectedModels.add({
+        ...Map<String, dynamic>.from(captured),
+        'configId': matches.single.id,
+        'legacyConfigId': reference.$1,
+      });
     }
-    return ProviderEntriesState(entries: [
-      for (final entry in current.entries)
-        if (entry.configs.any(
-            (config) => selectedModels.any((m) => m['configId'] == config.id)))
-          ProviderEntry.fromMap({
-            ...entry.toMap(),
-            'configs': [
-              for (final config in entry.configs)
-                if (selectedModels.any((m) => m['configId'] == config.id))
-                  {
-                    ...config.toMap(),
-                    ...Map<String, dynamic>.from(_resolvedCredentials(
-                        configs.firstWhere((s) => s['id'] == config.id),
-                        config.toMap()) as Map),
-                    'models': [
-                      for (final model in config.models)
-                        if (references.contains((config.id, model.id)))
+    final resolvedReferences = selectedModels
+        .map(
+          (item) => (
+            item['configId'] as String,
+            (item['model'] as Map)['id'] as String,
+          ),
+        )
+        .toSet();
+    Map<String, dynamic> resolveModel(
+      ProviderConfigItem config,
+      ModelConfig model,
+    ) {
+      final selected = selectedModels.firstWhere(
+        (item) =>
+            item['configId'] == config.id &&
+            (item['model'] as Map)['id'] == model.id,
+      );
+      final resolved = Map<String, dynamic>.from(
+        _resolvedCredentials(selected['model'], model.toMap()) as Map,
+      );
+      if (isLlmModelGroupProviderConfig(config)) {
+        for (final entry in model.legacyFields.entries) {
+          resolved.putIfAbsent(entry.key, () => entry.value);
+        }
+      }
+      return resolved;
+    }
+
+    Map snapshotConfigFor(ProviderConfigItem config) {
+      final selected = selectedModels.firstWhere(
+        (item) => item['configId'] == config.id,
+      );
+      return configs.firstWhere(
+        (snapshot) => snapshot['id'] == selected['legacyConfigId'],
+      );
+    }
+
+    return ProviderEntriesState(
+      entries: [
+        for (final entry in current.entries)
+          if (entry.configs.any(
+            (config) => selectedModels.any((m) => m['configId'] == config.id),
+          ))
+            ProviderEntry.fromMap({
+              ...entry.toMap(),
+              'configs': [
+                for (final config in entry.configs)
+                  if (selectedModels.any((m) => m['configId'] == config.id))
+                    {
+                      ...config.toMap(),
+                      if (!isLlmModelGroupProviderConfig(config))
+                        ...Map<String, dynamic>.from(
                           _resolvedCredentials(
-                              selectedModels.firstWhere((m) =>
-                                  m['configId'] == config.id &&
-                                  (m['model'] as Map)['id'] ==
-                                      model.id)['model'],
-                              model.toMap())
-                    ]
-                  }
-            ]
-          })
-    ]);
+                                snapshotConfigFor(config),
+                                config.toMap(),
+                              )
+                              as Map,
+                        ),
+                      'models': [
+                        for (final model in config.models)
+                          if (resolvedReferences.contains((
+                            config.id,
+                            model.id,
+                          )))
+                            resolveModel(config, model),
+                      ],
+                    },
+              ],
+            }),
+      ],
+    );
   }
 
   Map<String, dynamic> toMap() => jsonDecode(_encoded) as Map<String, dynamic>;

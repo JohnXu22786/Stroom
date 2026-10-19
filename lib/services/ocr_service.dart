@@ -2,12 +2,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
-
 import '../utils/http_utils.dart';
 import '../utils/http_timeout.dart';
 import 'app_log_service.dart';
+import 'llm_chat_runtime.dart';
+import 'llm_connector_http_client.dart';
+import 'llm_connector_service.dart';
+import 'llm_routing_service.dart';
 
 // ============================================================================
 // OCR Config
@@ -19,6 +23,10 @@ class OcrConfig {
   final String apiKey;
   final String host;
   final String? systemPrompt;
+  final String? routingGroupId;
+  final String? routingLocalModelId;
+  final String? routingAccountId;
+  final String? routingDisplayName;
 
   /// Type-specific config (temperature, topP, maxTokens, userInstruction, etc.)
   final Map<String, dynamic> typeConfig;
@@ -31,6 +39,10 @@ class OcrConfig {
     required this.apiKey,
     required this.host,
     this.systemPrompt,
+    this.routingGroupId,
+    this.routingLocalModelId,
+    this.routingAccountId,
+    this.routingDisplayName,
     this.typeConfig = const {},
     this.customParams = const [],
   });
@@ -63,17 +75,24 @@ class OcrConfig {
     String? apiKey,
     String? host,
     String? systemPrompt,
+    String? routingGroupId,
+    String? routingLocalModelId,
+    String? routingAccountId,
+    String? routingDisplayName,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
-  }) =>
-      OcrConfig(
-        model: model ?? this.model,
-        apiKey: apiKey ?? this.apiKey,
-        host: host ?? this.host,
-        systemPrompt: systemPrompt ?? this.systemPrompt,
-        typeConfig: typeConfig ?? this.typeConfig,
-        customParams: customParams ?? this.customParams,
-      );
+  }) => OcrConfig(
+    model: model ?? this.model,
+    apiKey: apiKey ?? this.apiKey,
+    host: host ?? this.host,
+    systemPrompt: systemPrompt ?? this.systemPrompt,
+    routingGroupId: routingGroupId ?? this.routingGroupId,
+    routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
+    routingAccountId: routingAccountId ?? this.routingAccountId,
+    routingDisplayName: routingDisplayName ?? this.routingDisplayName,
+    typeConfig: typeConfig ?? this.typeConfig,
+    customParams: customParams ?? this.customParams,
+  );
 }
 
 // ============================================================================
@@ -115,6 +134,7 @@ class OcrService {
   final OcrConfig config;
   final Dio _dio;
   final Duration? _sendTimeoutOverride;
+  final Future<LlmChatRoutingRuntime>? _routingRuntime;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -149,19 +169,26 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
-  })  : _sendTimeoutOverride = sendTimeout,
-        _dio = dio ??
-            Dio(BaseOptions(
-              headers: {
-                'Content-Type': 'application/json',
-                if (config.apiKey.isNotEmpty)
-                  'Authorization': 'Bearer ${config.apiKey}',
-                ...openRouterAppHeaders,
-              },
-              connectTimeout: connectTimeout ?? connectTimeoutDefault,
-              sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
-              receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
-            )) {
+    Future<LlmChatRoutingRuntime>? routingRuntime,
+  }) : _sendTimeoutOverride = sendTimeout,
+       _routingRuntime = config.routingGroupId == null
+           ? null
+           : routingRuntime ?? LlmChatRoutingRuntime.sharedPlatform(),
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               headers: {
+                 'Content-Type': 'application/json',
+                 if (config.apiKey.isNotEmpty)
+                   'Authorization': 'Bearer ${config.apiKey}',
+                 ...openRouterAppHeaders,
+               },
+               connectTimeout: connectTimeout ?? connectTimeoutDefault,
+               sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+               receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+             ),
+           ) {
     _dio.options.connectTimeout =
         connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
     _dio.options.receiveTimeout =
@@ -201,7 +228,9 @@ class OcrService {
     void Function(OcrRequestStage)? onStage,
   }) async {
     await AppLogService.info(
-        'OcrService', '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节');
+      'OcrService',
+      '开始 OCR 识别: 格式=$imageFormat, 大小=${imageBytes.length} 字节',
+    );
     final stopwatch = Stopwatch()..start();
 
     final base64Image = base64Encode(imageBytes);
@@ -209,9 +238,7 @@ class OcrService {
 
     // Images first, optional instruction text after them — matches the
     // official qwen-vl-ocr / DeepSeek-OCR request examples.
-    final contents = <Map<String, dynamic>>[
-      _buildImageContent(dataUri),
-    ];
+    final contents = <Map<String, dynamic>>[_buildImageContent(dataUri)];
     final instruction = config.effectiveUserInstruction;
     if (instruction.isNotEmpty) {
       contents.add({'type': 'text', 'text': instruction});
@@ -232,12 +259,11 @@ class OcrService {
     lastResponseHeaders = null;
 
     try {
-      final response = await _dio.post(
-        _chatUrl,
-        data: body,
-        options: _requestOptions(body),
+      final response = await _sendRequest(
+        body: body,
         cancelToken: cancelToken,
-        onSendProgress: _uploadProgress(onSendProgress, onStage),
+        onSendProgress: onSendProgress,
+        onStage: onStage,
       );
 
       stopwatch.stop();
@@ -247,14 +273,16 @@ class OcrService {
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
-      lastResponseHeaders = response.headers.map;
+      lastResponseHeaders = response.headers;
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
-      await AppLogService.info('OcrService',
-          'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
+      await AppLogService.info(
+        'OcrService',
+        'OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
+      );
       return OcrResult(
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -280,7 +308,9 @@ class OcrService {
     void Function(OcrRequestStage)? onStage,
   }) async {
     await AppLogService.info(
-        'OcrService', '开始批量 OCR 识别: ${imageBytesList.length} 张图片');
+      'OcrService',
+      '开始批量 OCR 识别: ${imageBytesList.length} 张图片',
+    );
     if (imageBytesList.isEmpty) {
       throw ArgumentError('imageBytesList must not be empty');
     }
@@ -313,12 +343,11 @@ class OcrService {
     lastResponseHeaders = null;
 
     try {
-      final response = await _dio.post(
-        _chatUrl,
-        data: body,
-        options: _requestOptions(body),
+      final response = await _sendRequest(
+        body: body,
         cancelToken: cancelToken,
-        onSendProgress: _uploadProgress(onSendProgress, onStage),
+        onSendProgress: onSendProgress,
+        onStage: onStage,
       );
 
       stopwatch.stop();
@@ -328,14 +357,16 @@ class OcrService {
       lastResponseData = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : <String, dynamic>{'raw': '$response.data'};
-      lastResponseHeaders = response.headers.map;
+      lastResponseHeaders = response.headers;
 
       if (cancelToken?.isCancelled == true) throw cancelToken!.cancelError!;
       onStage?.call(OcrRequestStage.parsing);
       final parsed = _extractResponse(response.data);
 
-      await AppLogService.info('OcrService',
-          '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}');
+      await AppLogService.info(
+        'OcrService',
+        '批量 OCR 识别完成: ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
+      );
       return OcrResult(
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
@@ -350,21 +381,201 @@ class OcrService {
     }
   }
 
-  Options _requestOptions(Map<String, dynamic> body) => Options(
-        sendTimeout: _sendTimeoutOverride ??
-            sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
-        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+  Future<_OcrResponse> _sendRequest({
+    required Map<String, dynamic> body,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    void Function(OcrRequestStage)? onStage,
+  }) async {
+    final groupId = config.routingGroupId;
+    if (groupId == null) {
+      final response = await _dio.post(
+        _chatUrl,
+        data: body,
+        options: _requestOptions(body),
+        cancelToken: cancelToken,
+        onSendProgress: _uploadProgress(onSendProgress, onStage),
       );
+      return _OcrResponse(
+        statusCode: response.statusCode ?? 0,
+        data: response.data,
+        headers: response.headers.map,
+      );
+    }
+
+    final runtime = await _routingRuntime!;
+    final localModelId = config.routingLocalModelId ?? config.model;
+    final legacyAccountId = config.routingAccountId;
+    if (legacyAccountId != null) {
+      await runtime.ensureLegacyOcrModelGroup(
+        accountId: legacyAccountId,
+        groupId: groupId,
+        localModelId: localModelId,
+        upstreamModelId: config.model,
+        displayName: config.routingDisplayName ?? config.model,
+        baseUrl: config.normalizedHost,
+        apiKey: config.apiKey,
+      );
+    }
+    final total = utf8.encode(jsonEncode(body)).length;
+    onStage?.call(OcrRequestStage.uploading);
+    onSendProgress?.call(0, total);
+    final execution = await runtime.executeForGroupId<_OcrResponse>(
+      groupId: groupId,
+      localModelId: localModelId,
+      requiredCapabilities: const {'vision'},
+      supportedConnectorTypes: const {
+        'openai-compatibility',
+        'kimi',
+        'kimi-ai',
+        'kimi.ai',
+      },
+      request: (candidate, progress) async {
+        if (cancelToken?.isCancelled == true) {
+          throw cancelToken!.cancelError!;
+        }
+        final routedBody = {...body, 'model': candidate.upstreamModelId};
+        lastRequestBody = routedBody;
+        final baseUrl =
+            candidate.account.endpointConfig['baseUrl'] ??
+            candidate.account.endpointConfig['host'] ??
+            candidate.account.endpointConfig['apiBase'];
+        lastRequestUrl = baseUrl is String ? baseUrl : null;
+        lastRequestHeaders = const {'Content-Type': 'application/json'};
+        lastResponseData = null;
+        lastResponseStatusCode = null;
+        lastResponseHeaders = null;
+        final LlmConnectorResponse response;
+        try {
+          response = await runtime.connectorClient.request(
+            account: candidate.account,
+            modelId: candidate.upstreamModelId,
+            body: routedBody,
+            cancelToken: cancelToken,
+            onSendProgress: _uploadProgress(onSendProgress, onStage),
+            onRequestSent: progress.markRequestSent,
+            connectTimeout:
+                _dio.options.connectTimeout ?? connectTimeoutDefault,
+            sendTimeout:
+                _sendTimeoutOverride ??
+                sendTimeoutForBytes(utf8.encode(jsonEncode(routedBody)).length),
+            receiveTimeout:
+                _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+          );
+        } on LlmConnectorHttpException catch (error) {
+          throw LlmRouteRequestException(
+            statusCode: error.statusCode,
+            code: error.code,
+            headers: error.headers,
+          );
+        }
+        final data = _decodeRoutedResponse(response.body);
+        lastResponseStatusCode = response.statusCode;
+        lastResponseData = data is Map
+            ? Map<String, dynamic>.from(data)
+            : <String, dynamic>{'raw': '$data'};
+        final apiError = data is Map ? data['error'] : null;
+        if (apiError is Map) {
+          final rawCode = apiError['code'] ?? apiError['type'];
+          throw LlmRouteRequestException(
+            code: rawCode is String ? rawCode : null,
+          );
+        }
+        await _recordRoutedUsage(
+          progress,
+          data,
+          response.observation,
+          runtime: runtime,
+          accountId: candidate.account.id,
+        );
+        return _OcrResponse(
+          statusCode: response.statusCode,
+          data: data,
+          headers: const {},
+        );
+      },
+    );
+    return execution.value;
+  }
+
+  Future<void> _recordRoutedUsage(
+    LlmRouteProgress progress,
+    Object? response,
+    LlmConnectorObservation observation, {
+    required LlmChatRoutingRuntime runtime,
+    required String accountId,
+  }) async {
+    final reported = observation.requestUsage;
+    if (reported.isKnown &&
+        reported.unit != null &&
+        reported.value != null &&
+        reported.unit != 'requests') {
+      await progress.recordUsage(
+        unit: reported.unit!,
+        value: reported.value!,
+        source: 'provider',
+      );
+    }
+    if (observation.remainingQuota.isKnown ||
+        observation.quotaSignals.values.any((metric) => metric.isKnown)) {
+      try {
+        await runtime.accountService.recordQuotaObservation(
+          accountId: accountId,
+          remainingQuota: observation.remainingQuota,
+          quotaSignals: observation.quotaSignals,
+        );
+      } catch (_) {
+        // Connector quota is observational and cannot fail successful OCR.
+      }
+    }
+    if (response is! Map || response['usage'] is! Map) return;
+    final usage = OpenAICompatibleChatProvider.normalizeUsage(
+      response['usage'],
+    );
+    if (usage == null) return;
+    final observedUnit = reported.isKnown && reported.value != null
+        ? reported.unit
+        : null;
+    final input = usage['inputTokens'];
+    final output = usage['outputTokens'];
+    if ((input is num || output is num) && observedUnit != 'tokens') {
+      await progress.recordUsage(
+        unit: 'tokens',
+        value: (input is num ? input : 0) + (output is num ? output : 0),
+        source: 'provider',
+      );
+    }
+    final cost = usage['cost'];
+    if (cost is num && observedUnit != 'usd') {
+      await progress.recordUsage(unit: 'usd', value: cost, source: 'provider');
+    }
+  }
+
+  Object? _decodeRoutedResponse(Object? response) {
+    if (response is List<int>) {
+      return jsonDecode(utf8.decode(response));
+    }
+    if (response is String) return jsonDecode(response);
+    return response;
+  }
+
+  Options _requestOptions(Map<String, dynamic> body) => Options(
+    sendTimeout:
+        _sendTimeoutOverride ??
+        sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
+    receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+  );
 
   ProgressCallback _uploadProgress(
-          ProgressCallback? progress, void Function(OcrRequestStage)? stage) =>
-      (sent, total) {
-        stage?.call(OcrRequestStage.uploading);
-        progress?.call(sent, total);
-        if (total > 0 && sent >= total) {
-          stage?.call(OcrRequestStage.waiting);
-        }
-      };
+    ProgressCallback? progress,
+    void Function(OcrRequestStage)? stage,
+  ) => (sent, total) {
+    stage?.call(OcrRequestStage.uploading);
+    progress?.call(sent, total);
+    if (total > 0 && sent >= total) {
+      stage?.call(OcrRequestStage.waiting);
+    }
+  };
 
   /// Capture response-level diagnostic fields from a [DioException].
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
@@ -387,14 +598,8 @@ class OcrService {
     final body = <String, dynamic>{
       'model': config.model,
       'messages': [
-        {
-          'role': 'system',
-          'content': config.effectiveSystemPrompt,
-        },
-        {
-          'role': 'user',
-          'content': contentList,
-        },
+        {'role': 'system', 'content': config.effectiveSystemPrompt},
+        {'role': 'user', 'content': contentList},
       ],
     };
 
@@ -423,12 +628,12 @@ class OcrService {
       final rawValue = param.type == 'json'
           ? param.defaultValue
           : param.options.isNotEmpty
-              ? param.options.first
-              : param.defaultValue.trim().isNotEmpty
-                  ? param.defaultValue
-                  : param.type == 'boolean'
-                      ? 'true'
-                      : '';
+          ? param.options.first
+          : param.defaultValue.trim().isNotEmpty
+          ? param.defaultValue
+          : param.type == 'boolean'
+          ? 'true'
+          : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (name == 'model' || name == 'messages') {
@@ -489,9 +694,7 @@ class OcrService {
   Map<String, dynamic> _buildImageContent(String dataUri) {
     return {
       'type': 'image_url',
-      'image_url': {
-        'url': dataUri,
-      },
+      'image_url': {'url': dataUri},
     };
   }
 
@@ -582,6 +785,18 @@ class OcrService {
       throw Exception('解析 OCR 结果失败: $e');
     }
   }
+}
+
+class _OcrResponse {
+  final int statusCode;
+  final Object? data;
+  final Map<String, List<String>> headers;
+
+  const _OcrResponse({
+    required this.statusCode,
+    required this.data,
+    required this.headers,
+  });
 }
 
 // ============================================================================

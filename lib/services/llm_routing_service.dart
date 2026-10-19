@@ -13,6 +13,8 @@ final _routingIdentifierPattern = RegExp(
   r'^[A-Za-z0-9_][A-Za-z0-9._:/-]{0,127}$',
 );
 
+final _routingStateIdentityPattern = RegExp(r'^[^\s\x00-\x1f\x7f]{1,1024}$');
+
 enum LlmRequestFailureKind {
   authentication,
   quotaExhausted,
@@ -467,9 +469,9 @@ class LlmPendingUsage {
     if (id is! String ||
         !_routingIdentifierPattern.hasMatch(id) ||
         accountId is! String ||
-        !_routingIdentifierPattern.hasMatch(accountId) ||
+        !_routingStateIdentityPattern.hasMatch(accountId) ||
         groupId is! String ||
-        !_routingIdentifierPattern.hasMatch(groupId) ||
+        !_routingStateIdentityPattern.hasMatch(groupId) ||
         started == null) {
       throw const LlmRoutingStateException();
     }
@@ -541,8 +543,8 @@ class LlmRoutingStateStore {
     required String accountId,
     required String groupId,
   }) async {
-    if (!_routingIdentifierPattern.hasMatch(accountId) ||
-        !_routingIdentifierPattern.hasMatch(groupId)) {
+    if (!_routingStateIdentityPattern.hasMatch(accountId) ||
+        !_routingStateIdentityPattern.hasMatch(groupId)) {
       throw const LlmRoutingStateException();
     }
     late String id;
@@ -1026,7 +1028,7 @@ class LlmRoutingService {
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
   }) async {
-    if (!_routingIdentifierPattern.hasMatch(group.id) ||
+    if (!_routingStateIdentityPattern.hasMatch(group.id) ||
         requestedModelId.trim().isEmpty) {
       throw LlmRoutingUnavailableException(const []);
     }
@@ -1204,7 +1206,7 @@ class LlmRoutingService {
         );
         continue;
       }
-      if (!_routingIdentifierPattern.hasMatch(account.id)) {
+      if (!_routingStateIdentityPattern.hasMatch(account.id)) {
         decisions.add(
           LlmRouteDecision(subjectId: account.id, reason: 'account_id_invalid'),
         );

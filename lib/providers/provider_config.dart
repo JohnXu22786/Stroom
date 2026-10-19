@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mcp.dart';
 import '../models/mcp_provider_group.dart';
+import '../models/llm_account.dart';
 import '../models/tts_models.dart';
 import '../services/llm_account_migration_service.dart';
+import '../services/llm_model_group_provider.dart';
 import '../services/llm_credential_store.dart';
 import '../services/provider_model_migration.dart';
 import '../services/data_migration_service.dart';
@@ -25,10 +27,10 @@ const kBuiltinWebSearchEntryName = 'Built-in Web Search';
 /// Static read-only catalog row for local web search; it is never persisted
 /// with the configurable provider entries.
 ProviderEntry createBuiltinWebSearchEntry() => ProviderEntry(
-      id: kBuiltinWebSearchEntryId,
-      type: kBuiltinWebSearchEntryType,
-      name: kBuiltinWebSearchEntryName,
-    );
+  id: kBuiltinWebSearchEntryId,
+  type: kBuiltinWebSearchEntryType,
+  name: kBuiltinWebSearchEntryName,
+);
 
 // ============================================================================
 // 供应商条目列表状态
@@ -48,6 +50,49 @@ class ProviderEntriesState {
   });
 }
 
+/// Removes legacy selector source rows when their account is explicitly
+/// deleted. OCR rows keep a source config ID in the migrated account so stale
+/// Task Flow inputs cannot lazily recreate that account and credential.
+ProviderEntriesState removeLegacyLlmAccountSourceConfigs(
+  ProviderEntriesState state,
+  LlmAccount account,
+) {
+  final legacyOcrConfigId = account.endpointConfig['legacyOcrProviderConfigId'];
+  var changed = false;
+  final entries = state.entries
+      .map((entry) {
+        final configs = entry.configs
+            .where((config) {
+              final removeLlmSource =
+                  entry.type == 'llm' && config.id == account.id;
+              final removeOcrSource =
+                  legacyOcrConfigId is String &&
+                  legacyOcrConfigId.isNotEmpty &&
+                  entry.type == 'ocr' &&
+                  config.id == legacyOcrConfigId;
+              return !(removeLlmSource || removeOcrSource);
+            })
+            .toList(growable: false);
+        if (configs.length == entry.configs.length) return entry;
+        changed = true;
+        return ProviderEntry(
+          id: entry.id,
+          type: entry.type,
+          name: entry.name,
+          enabled: entry.enabled,
+          legacyFields: entry.legacyFields,
+          configs: configs,
+        );
+      })
+      .toList(growable: false);
+  if (!changed) return state;
+  return ProviderEntriesState(
+    entries: entries,
+    mcpGroups: state.mcpGroups,
+    isLoaded: state.isLoaded,
+  );
+}
+
 bool isMcpProviderConfigEnabled(
   ProviderConfigItem config,
   List<McpProviderGroup> groups,
@@ -58,7 +103,8 @@ bool isMcpProviderConfigEnabled(
 }
 
 String defaultMcpGroupIdForConfig(ProviderConfigItem config) {
-  final stableHttpToolName = config.models.isNotEmpty &&
+  final stableHttpToolName =
+      config.models.isNotEmpty &&
           config.models[0].typeConfig['isHttpTool'] == true
       ? config.models[0].name
       : null;
@@ -76,8 +122,9 @@ Map<String, String> mcpPlaceholderToolNamesByConfigId(
   final serverNamesByConfigId = <String, String>{};
   final configIdsByBaseName = <String, List<String>>{};
   for (final config in configs) {
-    final typeConfig =
-        config.models.isNotEmpty ? config.models[0].typeConfig : null;
+    final typeConfig = config.models.isNotEmpty
+        ? config.models[0].typeConfig
+        : null;
     if (typeConfig?['isHttpTool'] == true) continue;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
@@ -134,8 +181,8 @@ String _uniqueMcpPlaceholderToolName(
     final stem = maxStemLength <= 0
         ? ''
         : baseStem.length <= maxStemLength
-            ? baseStem
-            : _truncateMcpToolNameStem(baseStem, maxStemLength);
+        ? baseStem
+        : _truncateMcpToolNameStem(baseStem, maxStemLength);
     final name = '${stem}_${suffix}_mcp';
     if (usedNames.add(name)) return name;
     if (suffixLength < maxSuffixLength) {
@@ -143,11 +190,12 @@ String _uniqueMcpPlaceholderToolName(
       if (suffixLength > maxSuffixLength) suffixLength = maxSuffixLength;
       continue;
     }
-    for (var index = 2;; index++) {
+    for (var index = 2; ; index++) {
       final indexText = index.toString();
       final suffixBudget = 58 - indexText.length;
-      final duplicateSuffixLength =
-          stableId.length <= suffixBudget ? stableId.length : suffixBudget;
+      final duplicateSuffixLength = stableId.length <= suffixBudget
+          ? stableId.length
+          : suffixBudget;
       final duplicateSuffix = stableId.substring(
         stableId.length - duplicateSuffixLength,
       );
@@ -156,8 +204,8 @@ String _uniqueMcpPlaceholderToolName(
       final duplicateStem = duplicateStemLength <= 0
           ? ''
           : baseStem.length <= duplicateStemLength
-              ? baseStem
-              : _truncateMcpToolNameStem(baseStem, duplicateStemLength);
+          ? baseStem
+          : _truncateMcpToolNameStem(baseStem, duplicateStemLength);
       final duplicateName =
           '${duplicateStem}_${duplicateSuffix}_${indexText}_mcp';
       if (usedNames.add(duplicateName)) return duplicateName;
@@ -181,8 +229,9 @@ String? mcpProviderConfigToolName(
   ProviderConfigItem config, {
   Map<String, String>? placeholderNamesByConfigId,
 }) {
-  final typeConfig =
-      config.models.isNotEmpty ? config.models[0].typeConfig : null;
+  final typeConfig = config.models.isNotEmpty
+      ? config.models[0].typeConfig
+      : null;
   if (typeConfig?['isHttpTool'] == true) {
     // The provider name is editable in the settings panel. Keep matching the
     // registered HTTP handler through the model's stable built-in name.
@@ -205,8 +254,9 @@ String? mcpProviderConfigToolName(
 }
 
 Set<String> disabledMcpToolNames(ProviderEntriesState state) {
-  final mcpEntry =
-      state.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  final mcpEntry = state.entries
+      .where((entry) => entry.type == 'mcp')
+      .firstOrNull;
   final mcpConfigs = mcpEntry?.configs ?? const <ProviderConfigItem>[];
   final placeholderNamesByConfigId = mcpPlaceholderToolNamesByConfigId(
     mcpConfigs,
@@ -236,10 +286,10 @@ Set<String> disabledMcpToolNames(ProviderEntriesState state) {
 /// 供应商条目列表提供器（持久化）
 final providerEntriesProvider =
     StateNotifierProvider<ProviderEntriesNotifier, ProviderEntriesState>((ref) {
-  final notifier = ProviderEntriesNotifier();
-  notifier._loading = notifier.load();
-  return notifier;
-});
+      final notifier = ProviderEntriesNotifier();
+      notifier._loading = notifier.load();
+      return notifier;
+    });
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final LlmCredentialStore _credentialStore;
@@ -248,8 +298,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   bool _lastLoadSucceeded = false;
 
   ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
-      : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
-        super(const ProviderEntriesState(isLoaded: false));
+    : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
+      super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
   Future<void> get ready => _loading;
@@ -290,10 +340,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             // service leaves provider_entries untouched until secure writes
             // and account/group validation succeed; later saves retry it.
             _reloadBeforeNextMutation = true;
-            state = ProviderEntriesState(
-              isLoaded: false,
-              mcpGroups: mcpGroups,
-            );
+            state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
             debugPrint(
               'Secure credential migration is unavailable; legacy LLM settings are preserved.',
             );
@@ -406,6 +453,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           }
         }
 
+        await _appendLlmModelGroupConfigs(entries, prefs);
+
         state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
         _reloadBeforeNextMutation = false;
         if (entriesChanged ||
@@ -425,13 +474,72 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       return;
     }
 
-    // 默认预置
-    state = _defaultEntries(mcpGroups: mcpGroups);
+    // 默认预置。 Account/group records can exist before a provider_entries
+    // document is created, so expose them in the same selector catalog.
+    final defaultState = _defaultEntries(mcpGroups: mcpGroups);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await _appendLlmModelGroupConfigs(defaultState.entries, prefs);
+    } catch (_) {
+      debugPrint('Failed to load LLM model groups for model selectors.');
+    }
+    state = defaultState;
     if (!_providerEntriesSourceUnreadable) {
       _reloadBeforeNextMutation = false;
     }
     _lastLoadSucceeded =
         !_providerEntriesSourceUnreadable && !_reloadBeforeNextMutation;
+  }
+
+  Future<void> _appendLlmModelGroupConfigs(
+    List<ProviderEntry> entries,
+    SharedPreferences prefs,
+  ) async {
+    List<Map<String, dynamic>> readItems(String key) {
+      final encoded = prefs.getString(key);
+      if (encoded == null || encoded.isEmpty) return const [];
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map || decoded['items'] is! List) {
+        throw const LlmAccountMigrationException();
+      }
+      return (decoded['items'] as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    }
+
+    final accounts = readItems(
+      LlmAccountMigrationService.accountsPreferenceKey,
+    ).map(LlmAccount.fromMap).toList(growable: false);
+    final groups = readItems(
+      LlmAccountMigrationService.modelGroupsPreferenceKey,
+    ).map(LlmModelGroup.fromMap).toList(growable: false);
+
+    final llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
+    if (llmEntryIndex < 0 && groups.isEmpty) return;
+    if (llmEntryIndex < 0) {
+      entries.add(
+        ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
+      );
+    }
+    final index = entries.indexWhere((entry) => entry.type == 'llm');
+    final entry = entries[index];
+    final realConfigs = markUnsupportedLegacyLlmConfigs(
+      entry.configs.where((config) => !isLlmModelGroupProviderConfig(config)),
+      accounts,
+    );
+    final groupConfigs = buildLlmModelGroupProviderConfigs(
+      accounts: accounts,
+      groups: groups,
+    );
+    entries[index] = ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      enabled: entry.enabled,
+      legacyFields: entry.legacyFields,
+      configs: [...realConfigs, ...groupConfigs],
+    );
   }
 
   Future<void> _reloadBeforeMutationIfNeeded() async {
@@ -501,10 +609,13 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       for (final builtin in builtinMcpProviderGroups)
         builtin.copyWith(enabled: saved[builtin.id]?.enabled ?? true),
     ];
-    final builtinIds =
-        builtinMcpProviderGroups.map((group) => group.id).toSet();
+    final builtinIds = builtinMcpProviderGroups
+        .map((group) => group.id)
+        .toSet();
     groups.addAll(
-      saved.values.where((group) => !builtinIds.contains(group.id)).map(
+      saved.values
+          .where((group) => !builtinIds.contains(group.id))
+          .map(
             (group) => McpProviderGroup(
               id: group.id,
               name: group.name.trim(),
@@ -585,8 +696,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   Future<void> updateMcpGroup(McpProviderGroup updated) async {
     await _reloadBeforeMutationIfNeeded();
-    final current =
-        state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
+    final current = state.mcpGroups
+        .where((group) => group.id == updated.id)
+        .firstOrNull;
     if (current == null || current.isBuiltin) return;
     await _setStateAndPersist(
       ProviderEntriesState(

@@ -10,6 +10,10 @@ import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_quota_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/utils/provider_models.dart';
 
 void main() {
   group('LlmConnectorRegistry', () {
@@ -60,6 +64,149 @@ void main() {
       );
     });
 
+    Future<void> recordKnownQuota(String accountId) =>
+        service.recordQuotaObservation(
+          accountId: accountId,
+          remainingQuota: const LlmMetricObservation.reported(
+            72,
+            unit: 'credits',
+            source: 'connector',
+          ),
+          quotaSignals: const {
+            'primaryRemainingPercent': LlmMetricObservation.reported(
+              43,
+              unit: 'percent',
+              source: 'connector',
+            ),
+          },
+        );
+
+    test(
+      'account settings save preserves newer telemetry from a stale snapshot',
+      () async {
+        final saved = await service.saveAccount(
+          _account('telemetry-edit', 'openai-compatibility', authType: 'none'),
+        );
+        final staleSnapshot = LlmAccount.fromMap(saved.toMap());
+        final observedAt = DateTime.utc(2026, 10, 19, 12);
+
+        await service.recordQuotaObservation(
+          accountId: saved.id,
+          remainingQuota: LlmMetricObservation.reported(
+            72,
+            unit: 'credits',
+            source: 'connector',
+            observedAt: observedAt,
+          ),
+          quotaSignals: {
+            'primaryRemainingPercent': LlmMetricObservation.reported(
+              43,
+              unit: 'percent',
+              source: 'connector',
+              observedAt: observedAt,
+            ),
+          },
+        );
+
+        await service.saveAccount(
+          LlmAccount(
+            id: staleSnapshot.id,
+            connectorType: staleSnapshot.connectorType,
+            authType: staleSnapshot.authType,
+            displayName: 'Edited account',
+            status: staleSnapshot.status,
+            credentialRef: staleSnapshot.credentialRef,
+            endpointConfig: staleSnapshot.endpointConfig,
+            models: staleSnapshot.models,
+            policy: LlmRoutingPolicy(concurrencyLimit: 3),
+            usageByWindow: staleSnapshot.usageByWindow,
+            remainingQuota: staleSnapshot.remainingQuota,
+            quotaSignals: staleSnapshot.quotaSignals,
+          ),
+        );
+
+        final reloaded = (await service.listAccounts()).single;
+        expect(reloaded.displayName, 'Edited account');
+        expect(reloaded.policy.concurrencyLimit, 3);
+        expect(reloaded.remainingQuota.value, 72);
+        expect(reloaded.quotaSignals['primaryRemainingPercent']?.value, 43);
+        expect(
+          reloaded.usageByWindow[LlmUsageWindow.fiveHour]?.remaining.value,
+          43,
+        );
+      },
+    );
+
+    test(
+      'endpoint change invalidates quota from the previous endpoint',
+      () async {
+        final saved = await service.saveAccount(
+          LlmAccount(
+            id: 'endpoint-quota-change',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Custom endpoint',
+            endpointConfig: const {'baseUrl': 'https://old.example.test/v1'},
+          ),
+        );
+        final staleSnapshot = LlmAccount.fromMap(saved.toMap());
+        await recordKnownQuota(saved.id);
+
+        final updated = await service.saveAccount(
+          LlmAccount(
+            id: staleSnapshot.id,
+            connectorType: staleSnapshot.connectorType,
+            authType: staleSnapshot.authType,
+            displayName: staleSnapshot.displayName,
+            endpointConfig: const {'baseUrl': 'https://new.example.test/v1'},
+            usageByWindow: staleSnapshot.usageByWindow,
+            remainingQuota: staleSnapshot.remainingQuota,
+            quotaSignals: staleSnapshot.quotaSignals,
+          ),
+        );
+
+        expect(
+          updated.endpointConfig['baseUrl'],
+          'https://new.example.test/v1',
+        );
+        expect(updated.remainingQuota.isKnown, isFalse);
+        expect(updated.quotaSignals, isEmpty);
+        expect(updated.usageByWindow, isEmpty);
+      },
+    );
+
+    test(
+      'connector change invalidates quota from the previous connector',
+      () async {
+        final saved = await service.saveAccount(
+          _account('connector-quota-change', 'openai-compatibility'),
+          secret: 'old-connector-secret',
+        );
+        final staleSnapshot = LlmAccount.fromMap(saved.toMap());
+        await recordKnownQuota(saved.id);
+
+        final updated = await service.saveAccount(
+          LlmAccount(
+            id: staleSnapshot.id,
+            connectorType: 'claude',
+            authType: staleSnapshot.authType,
+            displayName: staleSnapshot.displayName,
+            credentialRef: staleSnapshot.credentialRef,
+            endpointConfig: staleSnapshot.endpointConfig,
+            usageByWindow: staleSnapshot.usageByWindow,
+            remainingQuota: staleSnapshot.remainingQuota,
+            quotaSignals: staleSnapshot.quotaSignals,
+          ),
+          secret: 'new-connector-secret',
+        );
+
+        expect(updated.connectorType, 'claude');
+        expect(updated.remainingQuota.isKnown, isFalse);
+        expect(updated.quotaSignals, isEmpty);
+        expect(updated.usageByWindow, isEmpty);
+      },
+    );
+
     test(
       'stores secrets by reference and removes them with account deletion',
       () async {
@@ -84,6 +231,441 @@ void main() {
     );
 
     test(
+      'account deletion preserves a stable group legacy model reference',
+      () async {
+        final account = LlmAccount(
+          id: 'legacy-anchor',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Legacy account',
+          models: const [
+            LlmUpstreamModel(
+              id: 'local-model',
+              upstreamModelId: 'old-upstream-model',
+              displayName: 'Old model',
+            ),
+          ],
+        );
+        await service.saveAccount(account);
+        const stableGroupId =
+            'stroom.model-group.13:legacy-anchor11:local-model';
+        await service.saveModelGroup(
+          LlmModelGroup(
+            id: stableGroupId,
+            displayName: 'Old model',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'legacy-anchor',
+                localModelId: 'local-model',
+                upstreamModelId: 'old-upstream-model',
+              ),
+            ],
+          ),
+        );
+
+        await service.deleteAccount('legacy-anchor');
+
+        final group = (await service.listModelGroups()).single;
+        expect(group.id, stableGroupId);
+        expect(group.members, isEmpty);
+        expect(group.legacyModelId, 'old-upstream-model');
+        expect(group.legacyProviderName, 'Legacy account');
+      },
+    );
+
+    test(
+      'account deletion transfers the stable legacy alias to a fallback member',
+      () async {
+        const anchorId = 'stable-anchor';
+        const legacyLocalModelId = 'legacy-local-model';
+        const fallbackId = 'fallback-account';
+        final anchor = LlmAccount(
+          id: anchorId,
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Original provider',
+          models: const [
+            LlmUpstreamModel(
+              id: legacyLocalModelId,
+              upstreamModelId: 'old-upstream-model',
+              displayName: 'Legacy model',
+            ),
+          ],
+        );
+        final fallback = LlmAccount(
+          id: fallbackId,
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Fallback provider',
+          models: const [
+            LlmUpstreamModel(
+              id: 'fallback-local-model',
+              upstreamModelId: 'new-upstream-model',
+              displayName: 'Replacement model',
+            ),
+          ],
+        );
+        await service.saveAccount(anchor);
+        await service.saveAccount(fallback);
+        final stableGroupId = stableLlmModelGroupId(
+          anchorId,
+          legacyLocalModelId,
+        );
+        await service.saveModelGroup(
+          LlmModelGroup(
+            id: stableGroupId,
+            displayName: 'Legacy model',
+            legacyModelId: 'old-upstream-model',
+            legacyProviderName: 'Original provider',
+            members: const [
+              LlmModelGroupMember(
+                accountId: anchorId,
+                localModelId: legacyLocalModelId,
+                upstreamModelId: 'old-upstream-model',
+              ),
+              LlmModelGroupMember(
+                accountId: fallbackId,
+                localModelId: 'fallback-local-model',
+                upstreamModelId: 'new-upstream-model',
+              ),
+            ],
+          ),
+        );
+
+        await service.deleteAccount(anchorId);
+
+        final groups = await service.listModelGroups();
+        expect(groups.single.members, hasLength(2));
+        expect(
+          groups.single.members.map((member) => member.localModelId),
+          containsAll(['fallback-local-model', legacyLocalModelId]),
+        );
+        final legacyAliasMember = groups.single.members.firstWhere(
+          (member) => member.localModelId == legacyLocalModelId,
+        );
+        expect(legacyAliasMember.accountId, fallbackId);
+        expect(legacyAliasMember.upstreamModelId, 'new-upstream-model');
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: await service.listAccounts(),
+          groups: groups,
+        ).single;
+        final legacyAliasModel = config.models.firstWhere(
+          (model) => model.id == legacyLocalModelId,
+        );
+        expect(legacyAliasModel.modelId, 'old-upstream-model');
+        expect(config.providerName, 'Original provider');
+        final state = ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'llm',
+              type: 'llm',
+              name: 'LLM',
+              configs: [config],
+            ),
+          ],
+        );
+        expect(
+          resolveProviderModel(state, 'llm', {
+            'configId': anchorId,
+            'modelId': legacyLocalModelId,
+          }),
+          isNotNull,
+        );
+      },
+    );
+
+    test(
+      'removing the anchor model transfers its stable alias to a fallback member',
+      () async {
+        const anchorId = 'model-removal-anchor';
+        const legacyLocalModelId = 'legacy-local-model';
+        const fallbackId = 'model-removal-fallback';
+        await service.saveAccount(
+          LlmAccount(
+            id: anchorId,
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Original provider',
+            models: const [
+              LlmUpstreamModel(
+                id: legacyLocalModelId,
+                upstreamModelId: 'old-upstream-model',
+                displayName: 'Legacy model',
+              ),
+              LlmUpstreamModel(
+                id: 'retained-model',
+                upstreamModelId: 'retained-upstream-model',
+                displayName: 'Retained model',
+              ),
+            ],
+          ),
+        );
+        await service.saveAccount(
+          LlmAccount(
+            id: fallbackId,
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Fallback provider',
+            models: const [
+              LlmUpstreamModel(
+                id: 'fallback-local-model',
+                upstreamModelId: 'new-upstream-model',
+                displayName: 'Replacement model',
+              ),
+            ],
+          ),
+        );
+        final stableGroupId = stableLlmModelGroupId(
+          anchorId,
+          legacyLocalModelId,
+        );
+        await service.saveModelGroup(
+          LlmModelGroup(
+            id: stableGroupId,
+            displayName: 'Legacy model',
+            legacyModelId: 'old-upstream-model',
+            legacyProviderName: 'Original provider',
+            members: const [
+              LlmModelGroupMember(
+                accountId: anchorId,
+                localModelId: legacyLocalModelId,
+                upstreamModelId: 'old-upstream-model',
+              ),
+              LlmModelGroupMember(
+                accountId: fallbackId,
+                localModelId: 'fallback-local-model',
+                upstreamModelId: 'new-upstream-model',
+              ),
+            ],
+          ),
+        );
+
+        await service.saveAccount(
+          LlmAccount(
+            id: anchorId,
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Original provider',
+            models: const [
+              LlmUpstreamModel(
+                id: 'retained-model',
+                upstreamModelId: 'retained-upstream-model',
+                displayName: 'Retained model',
+              ),
+            ],
+          ),
+        );
+
+        final groups = await service.listModelGroups();
+        final config = buildLlmModelGroupProviderConfigs(
+          accounts: await service.listAccounts(),
+          groups: groups,
+        ).single;
+        final state = ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'llm',
+              type: 'llm',
+              name: 'LLM',
+              configs: [config],
+            ),
+          ],
+        );
+        expect(
+          resolveProviderModel(state, 'llm', {
+            'configId': anchorId,
+            'modelId': legacyLocalModelId,
+          }),
+          isNotNull,
+        );
+        final aliasMember = groups.single.members.firstWhere(
+          (member) => member.localModelId == legacyLocalModelId,
+        );
+        expect(aliasMember.accountId, fallbackId);
+        expect(aliasMember.upstreamModelId, 'new-upstream-model');
+        expect(
+          groups.single.members.map((member) => member.localModelId),
+          contains('fallback-local-model'),
+        );
+      },
+    );
+
+    test(
+      'rejects multiple upstream mappings for one account and local model',
+      () async {
+        await service.saveAccount(
+          LlmAccount(
+            id: 'mapping-account',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Mapping account',
+            models: const [
+              LlmUpstreamModel(
+                id: 'upstream-a-record',
+                upstreamModelId: 'upstream-a',
+                displayName: 'Upstream A',
+              ),
+              LlmUpstreamModel(
+                id: 'upstream-b-record',
+                upstreamModelId: 'upstream-b',
+                displayName: 'Upstream B',
+              ),
+            ],
+          ),
+        );
+
+        await expectLater(
+          service.saveModelGroup(
+            LlmModelGroup(
+              id: 'duplicate-mapping-group',
+              displayName: 'Duplicate mapping group',
+              members: const [
+                LlmModelGroupMember(
+                  accountId: 'mapping-account',
+                  localModelId: 'shared-local-model',
+                  upstreamModelId: 'upstream-a',
+                ),
+                LlmModelGroupMember(
+                  accountId: 'mapping-account',
+                  localModelId: 'shared-local-model',
+                  upstreamModelId: 'upstream-b',
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+      },
+    );
+
+    test('rejects mixed ChatAdapter protocols for one local model', () async {
+      await service.saveAccount(
+        LlmAccount(
+          id: 'mixed-claude',
+          connectorType: 'claude',
+          authType: 'api_key',
+          displayName: 'Claude',
+          models: const [
+            LlmUpstreamModel(
+              id: 'claude-local',
+              upstreamModelId: 'claude-sonnet',
+              displayName: 'Claude model',
+            ),
+          ],
+        ),
+        secret: 'claude-key',
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'mixed-openai',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'OpenAI compatible',
+          models: const [
+            LlmUpstreamModel(
+              id: 'openai-local',
+              upstreamModelId: 'gpt-model',
+              displayName: 'OpenAI model',
+            ),
+          ],
+        ),
+      );
+
+      await expectLater(
+        service.saveModelGroup(
+          LlmModelGroup(
+            id: 'mixed-protocol-group',
+            displayName: 'Mixed protocol group',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'mixed-claude',
+                localModelId: 'shared-model',
+                upstreamModelId: 'claude-sonnet',
+              ),
+              LlmModelGroupMember(
+                accountId: 'mixed-openai',
+                localModelId: 'shared-model',
+                upstreamModelId: 'gpt-model',
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
+
+    test(
+      'rejects connector changes that invalidate existing group protocols',
+      () async {
+        final unsupported = LlmAccount(
+          id: 'connector-change-codex',
+          connectorType: 'codex',
+          authType: 'api_key',
+          displayName: 'Codex member',
+          models: const [
+            LlmUpstreamModel(
+              id: 'codex-model-record',
+              upstreamModelId: 'codex-upstream-model',
+              displayName: 'Codex model',
+            ),
+          ],
+        );
+        await service.saveAccount(unsupported, secret: 'codex-key');
+        await service.saveAccount(
+          LlmAccount(
+            id: 'connector-change-openai',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'OpenAI member',
+            models: const [
+              LlmUpstreamModel(
+                id: 'openai-model-record',
+                upstreamModelId: 'openai-upstream-model',
+                displayName: 'OpenAI model',
+              ),
+            ],
+          ),
+        );
+        await service.saveModelGroup(
+          LlmModelGroup(
+            id: 'connector-change-group',
+            displayName: 'Connector change group',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'connector-change-codex',
+                localModelId: 'shared-local-model',
+                upstreamModelId: 'codex-upstream-model',
+              ),
+              LlmModelGroupMember(
+                accountId: 'connector-change-openai',
+                localModelId: 'shared-local-model',
+                upstreamModelId: 'openai-upstream-model',
+              ),
+            ],
+          ),
+        );
+
+        await expectLater(
+          service.saveAccount(
+            LlmAccount(
+              id: unsupported.id,
+              connectorType: 'claude',
+              authType: 'api_key',
+              displayName: unsupported.displayName,
+              models: unsupported.models,
+            ),
+            secret: 'claude-key',
+          ),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(
+          (await service.getAccount(unsupported.id))?.connectorType,
+          'codex',
+        );
+      },
+    );
+
+    test(
       'rolls secure credential updates back when preference write fails',
       () async {
         final account = _account('custom-2', 'openai-compatibility');
@@ -100,9 +682,13 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved = (jsonDecode(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ) as Map)['items'] as List;
+        final saved =
+            (jsonDecode(
+                      preferences.values[LlmAccountMigrationService
+                          .accountsPreferenceKey]!,
+                    )
+                    as Map)['items']
+                as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -292,26 +878,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            {
-              'id': 'legacy-anthropic',
-              'connectorType': 'anthropic',
-              'authType': 'api_key',
-              'displayName': 'Legacy Anthropic',
-              'credentialRef': sharedRef,
-              'endpointConfig': {'host': 'https://claude.example.test'},
-            },
-            {
-              'id': 'legacy-openai',
-              'connectorType': 'openai',
-              'authType': 'api_key',
-              'displayName': 'Legacy OpenAI',
-              'credentialRef': 'legacy-openai-credential',
-              'endpointConfig': {'host': 'https://openai.example.test/v1'},
-            },
-          ],
-        });
+              'version': 1,
+              'items': [
+                {
+                  'id': 'legacy-anthropic',
+                  'connectorType': 'anthropic',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy Anthropic',
+                  'credentialRef': sharedRef,
+                  'endpointConfig': {'host': 'https://claude.example.test'},
+                },
+                {
+                  'id': 'legacy-openai',
+                  'connectorType': 'openai',
+                  'authType': 'api_key',
+                  'displayName': 'Legacy OpenAI',
+                  'credentialRef': 'legacy-openai-credential',
+                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
+                },
+              ],
+            });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -368,19 +954,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -421,19 +1007,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-          'version': 1,
-          'items': [
-            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-              {
-                'id': id,
-                'connectorType': 'codex',
-                'authType': 'oauth',
-                'displayName': id,
-                'credentialRef': sharedRef,
-                'endpointConfig': {},
-              },
-          ],
-        });
+              'version': 1,
+              'items': [
+                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+                  {
+                    'id': id,
+                    'connectorType': 'codex',
+                    'authType': 'oauth',
+                    'displayName': id,
+                    'credentialRef': sharedRef,
+                    'endpointConfig': {},
+                  },
+              ],
+            });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -1101,8 +1687,9 @@ void main() {
           'kimi.ai',
           'xai',
         ]) {
-          final endpoint =
-              connector == 'xai' ? 'https://auth.x.ai/oauth/token' : null;
+          final endpoint = connector == 'xai'
+              ? 'https://auth.x.ai/oauth/token'
+              : null;
           final tokenEndpointFields = <String, String>{};
           if (endpoint != null) {
             tokenEndpointFields['token_endpoint'] = endpoint;
@@ -1174,37 +1761,39 @@ void main() {
       },
     );
 
-    test('requires secure Antigravity OAuth app credentials for refresh',
-        () async {
-      var refreshRequests = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          refreshRequests++;
-          return ResponseBody.fromString(
-            jsonEncode({'access_token': 'unexpected-access-token'}),
-            200,
-          );
-        });
-      final refreshService = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await refreshService.saveAccount(
-        _account(
-          'antigravity-missing-oauth-app-credentials',
-          'antigravity',
-          authType: 'oauth',
-        ),
-        secret: jsonEncode({
-          'access_token': 'antigravity-access-token',
-          'refresh_token': 'antigravity-refresh-token',
-        }),
-      );
+    test(
+      'requires secure Antigravity OAuth app credentials for refresh',
+      () async {
+        var refreshRequests = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            refreshRequests++;
+            return ResponseBody.fromString(
+              jsonEncode({'access_token': 'unexpected-access-token'}),
+              200,
+            );
+          });
+        final refreshService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await refreshService.saveAccount(
+          _account(
+            'antigravity-missing-oauth-app-credentials',
+            'antigravity',
+            authType: 'oauth',
+          ),
+          secret: jsonEncode({
+            'access_token': 'antigravity-access-token',
+            'refresh_token': 'antigravity-refresh-token',
+          }),
+        );
 
-      expect(await refreshService.refreshCredential(account), isFalse);
-      expect(refreshRequests, 0);
-    });
+        expect(await refreshService.refreshCredential(account), isFalse);
+        expect(refreshRequests, 0);
+      },
+    );
 
     test(
       'mints Meta Muse API keys from accepted DCA OAuth credentials',
@@ -1333,8 +1922,10 @@ void main() {
       );
 
       expect(request.headers['Authorization'], 'Bearer 1234567890');
-      expect(request.uri.toString(),
-          'https://api.example.test/v1/chat/completions');
+      expect(
+        request.uri.toString(),
+        'https://api.example.test/v1/chat/completions',
+      );
     });
 
     test('uses Anthropic Messages with Claude Code OAuth credentials', () {
@@ -1948,6 +2539,287 @@ void main() {
 
   group('LlmConnectorHttpClient', () {
     test(
+      'does not mark a request sent before Dio dispatches any bytes',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            throw DioException(
+              requestOptions: options,
+              type: DioExceptionType.connectionError,
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'pre-dispatch-account',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Pre-dispatch account',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+        );
+        var requestSent = false;
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+
+        await expectLater(
+          client.request(
+            account: account,
+            modelId: 'test-model',
+            body: const {'model': 'test-model', 'messages': []},
+            onRequestSent: () async {
+              requestSent = true;
+            },
+          ),
+          throwsA(
+            isA<LlmConnectorHttpException>().having(
+              (error) => error.code,
+              'code',
+              'connection_error',
+            ),
+          ),
+        );
+
+        expect(requestSent, isFalse);
+      },
+    );
+
+    test(
+      'cancels a non-2xx body stream after the error capture limit',
+      () async {
+        var responseCancelled = false;
+        final cancellationObserved = Completer<void>();
+        final source = StreamController<Uint8List>(
+          onCancel: () {
+            responseCancelled = true;
+            if (!cancellationObserved.isCompleted) {
+              cancellationObserved.complete();
+            }
+          },
+        );
+        source.add(Uint8List(32769));
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter(
+            (options) async => ResponseBody(source.stream, 400),
+          );
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'bounded-error-body',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Bounded error body',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+        final callerCancelToken = CancelToken();
+
+        try {
+          await expectLater(
+            client
+                .request(
+                  account: account,
+                  modelId: 'bounded-error-model',
+                  body: const {'model': 'bounded-error-model'},
+                  stream: true,
+                  cancelToken: callerCancelToken,
+                )
+                .timeout(const Duration(seconds: 1)),
+            throwsA(isA<LlmConnectorHttpException>()),
+          );
+          await cancellationObserved.future.timeout(const Duration(seconds: 1));
+          expect(responseCancelled, isTrue);
+          expect(callerCancelToken.isCancelled, isFalse);
+        } finally {
+          await source.close();
+        }
+      },
+    );
+
+    test(
+      'streams non-2xx bodies for non-stream requests before applying the cap',
+      () async {
+        ResponseType? observedResponseType;
+        var responseCancelled = false;
+        final cancellationObserved = Completer<void>();
+        final source = StreamController<Uint8List>(
+          onCancel: () {
+            responseCancelled = true;
+            if (!cancellationObserved.isCompleted) {
+              cancellationObserved.complete();
+            }
+          },
+        );
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            observedResponseType = options.responseType;
+            if (options.responseType != ResponseType.stream) {
+              return ResponseBody(
+                Stream<Uint8List>.value(Uint8List(32769)),
+                400,
+              );
+            }
+            source.add(Uint8List(32769));
+            return ResponseBody(source.stream, 400);
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'bounded-non-stream-error-body',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'Bounded non-stream error body',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+        );
+        final client = LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        );
+
+        try {
+          await expectLater(
+            client
+                .request(
+                  account: account,
+                  modelId: 'bounded-non-stream-model',
+                  body: const {'model': 'bounded-non-stream-model'},
+                )
+                .timeout(const Duration(seconds: 1)),
+            throwsA(isA<LlmConnectorHttpException>()),
+          );
+          expect(observedResponseType, ResponseType.stream);
+          await cancellationObserved.future.timeout(const Duration(seconds: 1));
+          expect(responseCancelled, isTrue);
+        } finally {
+          if (source.hasListener) {
+            await source.close();
+          } else {
+            source.close();
+          }
+        }
+      },
+    );
+
+    test('forwards caller cancellation to its in-flight request', () async {
+      final fetchStarted = Completer<void>();
+      final requestTokenCancelled = Completer<void>();
+      final pendingResponse = Completer<ResponseBody>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) {
+          options.cancelToken!.whenCancel.then((_) {
+            if (!requestTokenCancelled.isCompleted) {
+              requestTokenCancelled.complete();
+            }
+          });
+          fetchStarted.complete();
+          return pendingResponse.future;
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'forward-caller-cancel',
+          connectorType: 'openai-compatibility',
+          authType: 'none',
+          displayName: 'Caller cancellation',
+          endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+        ),
+      );
+      final callerCancelToken = CancelToken();
+      final request = LlmConnectorHttpClient(accountService: accounts, dio: dio)
+          .request(
+            account: account,
+            modelId: 'cancel-model',
+            body: const {'model': 'cancel-model'},
+            cancelToken: callerCancelToken,
+          );
+
+      try {
+        await fetchStarted.future.timeout(const Duration(seconds: 1));
+        callerCancelToken.cancel('caller stopped request');
+        await expectLater(
+          request.timeout(const Duration(seconds: 1)),
+          throwsA(isA<LlmConnectorRequestCancelled>()),
+        );
+        await requestTokenCancelled.future.timeout(const Duration(seconds: 1));
+      } finally {
+        if (!pendingResponse.isCompleted) {
+          pendingResponse.complete(ResponseBody.fromString('{}', 200));
+        }
+      }
+    });
+
+    test(
+      'preserves connection classification when a successful SSE stream fails',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody(
+              Stream<Uint8List>.error(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.receiveTimeout,
+                ),
+              ),
+              200,
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'sse-read-timeout',
+            connectorType: 'openai-compatibility',
+            authType: 'none',
+            displayName: 'SSE read timeout',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+          ),
+        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'sse-timeout-model',
+              body: const {'model': 'sse-timeout-model', 'stream': true},
+              stream: true,
+            );
+
+        await expectLater(
+          (response.body as Stream<List<int>>).drain<void>(),
+          throwsA(
+            isA<LlmConnectorHttpException>().having(
+              (error) => error.code,
+              'code',
+              'connection_error',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
       'discovers and stores an Antigravity project before generation',
       () async {
         RequestOptions? generationRequest;
@@ -2052,8 +2924,7 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route',
-        () async {
+    test('executes each pinned HTTP connector through its native route', () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -2301,11 +3172,13 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims = jsonDecode(
-          utf8.decode(
-            base64Url.decode(base64Url.normalize(assertionParts[1])),
-          ),
-        ) as Map;
+        final claims =
+            jsonDecode(
+                  utf8.decode(
+                    base64Url.decode(base64Url.normalize(assertionParts[1])),
+                  ),
+                )
+                as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -2436,15 +3309,16 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -2483,15 +3357,16 @@ void main() {
         _account('claude-stream-usage', 'claude', authType: 'oauth'),
         secret: jsonEncode({'access_token': 'claude-stream-token'}),
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-sonnet-4-6',
-        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
-        stream: true,
-      );
+      final response =
+          await LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-sonnet-4-6',
+            body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+            stream: true,
+          );
 
       final events = utf8.encode(
         'event: message_start\n'
@@ -2530,15 +3405,16 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -2548,8 +3424,9 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end =
-              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
+          final end = offset + 32768 < bytes.length
+              ? offset + 32768
+              : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -2588,15 +3465,16 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -2638,15 +3516,16 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {'contents': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+              stream: true,
+            );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -2690,15 +3569,16 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response = await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gpt-5.5',
-          body: const {'model': 'gpt-5.5', 'input': []},
-          stream: true,
-        );
+        final response =
+            await LlmConnectorHttpClient(
+              accountService: accounts,
+              dio: dio,
+            ).request(
+              account: account,
+              modelId: 'gpt-5.5',
+              body: const {'model': 'gpt-5.5', 'input': []},
+              stream: true,
+            );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -2878,6 +3758,68 @@ void main() {
       },
     );
 
+    test(
+      'preserves safe retry metadata from non-2xx response bodies',
+      () async {
+        for (final stream in [false, true]) {
+          final dio = Dio()
+            ..httpClientAdapter = _FunctionalAdapter(
+              (options) async => ResponseBody.fromString(
+                jsonEncode({
+                  'error': {
+                    'message': 'private upstream error text',
+                    'code': 'rate_limit_exceeded',
+                  },
+                }),
+                400,
+                headers: const {
+                  'content-type': ['application/json'],
+                  'retry-after': ['45'],
+                  'x-ratelimit-reset': ['1792346400'],
+                  'set-cookie': ['session=private'],
+                },
+              ),
+            );
+          final accounts = LlmAccountConnectorService(
+            preferences: _MemoryPreferences(),
+            credentialStore: _MemoryCredentials(),
+          );
+          final account = await accounts.saveAccount(
+            LlmAccount(
+              id: 'compat-retry-metadata-$stream',
+              connectorType: 'openai-compatibility',
+              authType: 'none',
+              displayName: 'Retry metadata endpoint',
+              endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+            ),
+          );
+          final client = LlmConnectorHttpClient(
+            accountService: accounts,
+            dio: dio,
+          );
+
+          try {
+            await client.request(
+              account: account,
+              modelId: 'retry-model',
+              body: const {'model': 'retry-model', 'messages': []},
+              stream: stream,
+            );
+            fail('Expected a structured connector failure.');
+          } on LlmConnectorHttpException catch (error) {
+            expect(error.statusCode, 400);
+            expect(error.code, 'rate_limit_exceeded');
+            expect(error.headers, {
+              'retry-after': '45',
+              'x-ratelimit-reset': '1792346400',
+            });
+            expect(error.toString(), isNot(contains('private upstream')));
+            expect(error.toString(), isNot(contains('session=private')));
+          }
+        }
+      },
+    );
+
     test('does not expose upstream error text or credentials', () async {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter(
@@ -2929,22 +3871,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-        'version': 1,
-        'items': [
-          {
-            'id': 'legacy-anthropic-quota',
-            'connectorType': 'anthropic',
-            'authType': 'api_key',
-            'displayName': 'Legacy Anthropic',
-          },
-          {
-            'id': 'legacy-openai-quota',
-            'connectorType': 'openai',
-            'authType': 'api_key',
-            'displayName': 'Legacy OpenAI',
-          },
-        ],
-      });
+            'version': 1,
+            'items': [
+              {
+                'id': 'legacy-anthropic-quota',
+                'connectorType': 'anthropic',
+                'authType': 'api_key',
+                'displayName': 'Legacy Anthropic',
+              },
+              {
+                'id': 'legacy-openai-quota',
+                'connectorType': 'openai',
+                'authType': 'api_key',
+                'displayName': 'Legacy OpenAI',
+              },
+            ],
+          });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -3273,15 +4215,9 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation(
-          'gemini',
-          {
-            'usageMetadata': {
-              'promptTokenCount': 12,
-              'candidatesTokenCount': 8
-            },
-          },
-          observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation('gemini', {
+        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
+      }, observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -3402,13 +4338,12 @@ LlmAccount _account(
   String id,
   String connector, {
   String authType = 'api_key',
-}) =>
-    LlmAccount(
-      id: id,
-      connectorType: connector,
-      authType: authType,
-      displayName: connector,
-    );
+}) => LlmAccount(
+  id: id,
+  connectorType: connector,
+  authType: authType,
+  displayName: connector,
+);
 
 const _vertexServiceAccount = {
   'type': 'service_account',
@@ -3507,8 +4442,7 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) =>
-      onFetch(options);
+  ) => onFetch(options);
 
   @override
   void close({bool force = false}) {}

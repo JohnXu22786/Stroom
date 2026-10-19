@@ -64,20 +64,25 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       // 与发送侧同一截断上限（字符数）：估算"实际会发送的内容"，
       // 关闭截断时 0 = 不截断，与协议层渲染一致。
       toolOutputMaxChars: ChatService.getEffectiveToolOutputMaxChars(
-          _adapter.assistantSettings),
+        _adapter.assistantSettings,
+      ),
     );
     final currentTokens = actualInput == null
         ? estimated
         : (actualInput > estimated ? actualInput : estimated);
-    debugPrint('[CTX-MGR] convId=$convId current=$currentTokens'
-        ' (actual=$actualInput estimated=$estimated) threshold=$threshold');
+    debugPrint(
+      '[CTX-MGR] convId=$convId current=$currentTokens'
+      ' (actual=$actualInput estimated=$estimated) threshold=$threshold',
+    );
     if (currentTokens < threshold) return false;
 
     // 2. 解析压缩任务：提示词（自定义优先，默认内置）+ 模型
     //    （配置了独立模型就用它，否则跟随对话页当前模型）
     final settings = ref.read(systemAssistantSettingsProvider);
-    final compactionPrompt = resolveSystemAssistantPrompt(settings.compaction,
-        defaultAssistantId: kBuiltInCompactionAssistantId);
+    final compactionPrompt = resolveSystemAssistantPrompt(
+      settings.compaction,
+      defaultAssistantId: kBuiltInCompactionAssistantId,
+    );
     if (compactionPrompt == null) return false;
 
     // 3. 划分头部（可压缩）与尾部（保留原文）。
@@ -128,8 +133,9 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
           // 摘要转写仅需 200 字符的事实：用默认截断渲染即可，
           // 与助手配置的截断上限差异在此处无实质影响。
           final result = rebuildToolResultText(tc);
-          final trimmed =
-              result.length > 200 ? '${result.substring(0, 200)}…' : result;
+          final trimmed = result.length > 200
+              ? '${result.substring(0, 200)}…'
+              : result;
           sb.writeln('$role 调用了工具 ${tc.name}: $trimmed');
         }
       }
@@ -150,7 +156,12 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
       modelDisplayName: settings.compaction.modelDisplayName,
       convId: convId,
     );
-    if (requestSvc == null) return false;
+    if (requestSvc == null) {
+      if (settings.compaction.hasModel) {
+        debugPrint('[ChatStreamManager] 上下文压缩配置的模型不可用');
+      }
+      return false;
+    }
     requestSvc.onUsageEvent = (usage, {required bool recordInput}) {
       _commitUsage(convId, usage, recordInput: recordInput);
     };
@@ -181,16 +192,19 @@ extension _ChatStreamManagerCompactionExt on ChatStreamManager {
     //    注意：**不裁剪 state.history** —— 对齐 opencode：
     //    存储完整保留全部消息，发给 API 的只是"摘要 + 尾部"子集
     //    （由 startStreaming 的 requestHistory 过滤实现）。
-    await ref.read(conversationsProvider.notifier).updateContextSummary(
+    await ref
+        .read(conversationsProvider.notifier)
+        .updateContextSummary(
           convId,
           summary,
           tailStartId: tail.isNotEmpty ? tail.first.id : null,
         );
     _adapter.getOrCreateService(convId)?.setContextSummary(summary);
     await AppLogService.info(
-        'ChatStreamManager',
-        '[CTX-MGR] 上下文已压缩, convId=$convId, '
-            'head=${head.length} 条消息 → 摘要 ${summary.length} 字符');
+      'ChatStreamManager',
+      '[CTX-MGR] 上下文已压缩, convId=$convId, '
+          'head=${head.length} 条消息 → 摘要 ${summary.length} 字符',
+    );
     return true;
   }
 }

@@ -36,8 +36,10 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
       // 解析标题任务：提示词（自定义优先，默认内置）+ 模型
       // （配置了独立模型就用它，否则跟随对话页当前模型）
       final settings = ref.read(systemAssistantSettingsProvider);
-      final titlePrompt = resolveSystemAssistantPrompt(settings.title,
-          defaultAssistantId: kBuiltInTitleAssistantId);
+      final titlePrompt = resolveSystemAssistantPrompt(
+        settings.title,
+        defaultAssistantId: kBuiltInTitleAssistantId,
+      );
       if (titlePrompt == null) return;
 
       final svc = _adapter.createTransientServiceForModel(
@@ -46,7 +48,12 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
         providerName: settings.title.providerName,
         modelDisplayName: settings.title.modelDisplayName,
       );
-      if (svc == null) return;
+      if (svc == null) {
+        if (settings.title.hasModel) {
+          debugPrint('[ChatStreamManager] 标题助手配置的模型不可用');
+        }
+        return;
+      }
 
       // 标题请求是真实 API 请求（每次发送都会产生），其 cost 同样是
       // 该对话的计费事实：usage 数据返回后立即累加（事件驱动、
@@ -94,7 +101,9 @@ extension _ChatStreamManagerTitleExt on ChatStreamManager {
           .read(conversationsProvider.notifier)
           .updateTitle(convId, cleaned);
       await AppLogService.info(
-          'ChatStreamManager', '[TITLE] 自动标题生成完成: $cleaned');
+        'ChatStreamManager',
+        '[TITLE] 自动标题生成完成: $cleaned',
+      );
     } catch (e) {
       // fire-and-forget 路径：任何异常都静默，避免 unhandled async error
       debugPrint('[ChatStreamManager] 自动标题失败: $e');

@@ -9,8 +9,12 @@ import '../models/chat_message.dart';
 import '../models/mcp.dart';
 import '../models/tool_call.dart';
 import '../providers/chat_api_provider.dart';
+import '../providers/llm_routed_chat_provider.dart';
 import '../providers/provider_config.dart';
-import '../utils/provider_models.dart' show resolveProviderModel;
+import '../utils/provider_models.dart'
+    show flattenProviderModels, resolveProviderModel;
+import 'llm_chat_runtime.dart';
+import 'llm_model_group_provider.dart';
 import 'chat_protocol.dart';
 import 'chat_service.dart';
 import 'http_tool_service.dart';
@@ -34,8 +38,9 @@ const kMcpSearchToolNames = <String>{
 
 bool isMcpMasterSwitchEnabled(ProviderEntriesState entriesState) {
   if (!entriesState.isLoaded) return false;
-  final mcpEntry =
-      entriesState.entries.where((entry) => entry.type == 'mcp').firstOrNull;
+  final mcpEntry = entriesState.entries
+      .where((entry) => entry.type == 'mcp')
+      .firstOrNull;
   return mcpEntry?.enabled ?? true;
 }
 
@@ -54,11 +59,15 @@ class AvailableModel {
   /// 显示名："[model.name ?? model.modelId] | [providerName]"
   final String displayName;
 
-  /// 模型的 API 模型 ID（绝对身份，重命名显示名后不变）
+  /// Model reference used by assistant settings and conversation history.
+  /// Routed group models may use an opaque stable member ID here.
   final String modelId;
 
   /// 供应商名称（与 [displayName] 中的供应商部分一致）
   final String providerName;
+
+  /// Stable group identity for opaque routed-member references.
+  final String? modelGroupId;
 
   /// 指向 llmEntry.configs[configIndex]
   final int configIndex;
@@ -70,6 +79,7 @@ class AvailableModel {
     required this.displayName,
     this.modelId = '',
     this.providerName = '',
+    this.modelGroupId,
     required this.configIndex,
     required this.modelIndex,
   });
@@ -77,6 +87,11 @@ class AvailableModel {
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
+  final Future<LlmChatRoutingRuntime>? _routingRuntime;
+
+  ChatAdapter({Future<LlmChatRoutingRuntime>? routingRuntime})
+    : _routingRuntime = routingRuntime;
+
   /// Per-conversation ChatService instances, keyed by conversation ID.
   /// Each conversation gets its own independent HTTP connection, enabling
   /// multiple conversations to stream concurrently without interference.
@@ -200,8 +215,9 @@ class ChatAdapter {
     final modelEffort = findEffortParam(config.reasoningParams);
     var merged = mergeReasoningParams(providerParams, config.reasoningParams);
     if (modelEffort != null) {
-      merged =
-          merged.where((p) => !p.isEffortParam || p == modelEffort).toList();
+      merged = merged
+          .where((p) => !p.isEffortParam || p == modelEffort)
+          .toList();
     }
     final providerNames = providerParams
         .map((p) => p.paramName.trim())
@@ -213,7 +229,8 @@ class ChatAdapter {
         .toSet();
     return merged.map((p) {
       final name = p.paramName.trim();
-      final isProviderOrigin = name.isNotEmpty &&
+      final isProviderOrigin =
+          name.isNotEmpty &&
           providerNames.contains(name) &&
           !modelNames.contains(name);
       return isProviderOrigin ? p.copy() : p;
@@ -237,9 +254,9 @@ class ChatAdapter {
   /// is NOT touched, so a task-flow chat block and the chat page can run
   /// concurrently with different models/assistants. The assistant model
   /// resolution does NOT depend on the global cache: it works even in a
-  /// fresh session where the chat page was never opened. If the
-  /// assistant's model cannot be resolved, it falls back to the global
-  /// config (still applying the assistant's prompt/settings).
+  /// fresh session where the chat page was never opened. If an assistant has
+  /// a configured model reference and it cannot be resolved, this returns null
+  /// instead of silently switching to the global model.
   /// An explicit [modelReference] selects exact local config/model IDs from
   /// [entriesState], independently of the global cache. An unresolved explicit
   /// reference cannot fall back to another model.
@@ -256,22 +273,20 @@ class ChatAdapter {
       if (selected == null) return null;
       final config = selected.config;
       final model = selected.model;
-      final endpointType =
-          effectiveEndpointType(model.endpointType, config.endpointType);
+      final endpointType = effectiveEndpointType(
+        model.endpointType,
+        config.endpointType,
+      );
       return _activeServices.putIfAbsent(
-          convId,
-          () => _buildService(
-                createChatProviderFromConfig(
-                  providerName: config.providerName,
-                  baseUrl: config.host,
-                  apiKey: config.key,
-                  endpointType: endpointType,
-                ),
-                model,
-                config,
-                endpointType,
-                assistant: assistant,
-              ));
+        convId,
+        () => _buildService(
+          _providerForModel(config, model, endpointType),
+          model,
+          config,
+          endpointType,
+          assistant: assistant,
+        ),
+      );
     }
     if (assistant != null && entriesState != null) {
       // The assistant editor stores the default model as a DISPLAY name
@@ -284,12 +299,19 @@ class ChatAdapter {
       // 供应商信息，带上的话可能把同一 modelId 的错误供应商配对。
       final useDefaultRef =
           assistant.modelId == null || assistant.modelId!.isEmpty;
+      final hasBoundModelId = assistant.modelId?.isNotEmpty == true;
+      final modelRef = hasBoundModelId
+          ? assistant.modelId
+          : assistant.defaultModelId?.isNotEmpty == true
+          ? assistant.defaultModelId
+          : null;
       final resolved = _resolveAssistantModel(
-        assistant.modelId ??
-            assistant.defaultModelId ??
-            assistant.defaultModelName,
+        modelRef,
         entriesState,
         providerName: useDefaultRef ? assistant.defaultProviderName : null,
+        modelDisplayName: hasBoundModelId
+            ? assistant.modelId
+            : assistant.defaultModelName,
       );
       if (resolved != null) {
         final (config, modelConfig) = resolved;
@@ -297,12 +319,7 @@ class ChatAdapter {
           modelConfig.endpointType,
           config.endpointType,
         );
-        final provider = createChatProviderFromConfig(
-          providerName: config.providerName,
-          baseUrl: config.host,
-          apiKey: config.key,
-          endpointType: endpointType,
-        );
+        final provider = _providerForModel(config, modelConfig, endpointType);
         return _activeServices.putIfAbsent(convId, () {
           return _buildService(
             provider,
@@ -314,6 +331,8 @@ class ChatAdapter {
         });
       }
     }
+
+    if (_hasConfiguredAssistantModelReference(assistant)) return null;
 
     // Fallback: the global cached model (requires the adapter to have
     // been configured — e.g. the chat page opened this session).
@@ -369,9 +388,10 @@ class ChatAdapter {
   /// Resolves an assistant's bound model (its `modelId`) to its
   /// (config, model) pair within the LLM provider entries.
   ///
-  /// Matches by (providerName, modelId) first, then by modelId alone,
-  /// then by the model's display name (`name | providerName`). The
-  /// assistant editor stores the default model as its DISPLAY name
+  /// Matches by (providerName, modelId) first when a provider was saved,
+  /// then by modelId alone only for provider-less references, then by the
+  /// model's display name (`name | providerName`) within the saved provider.
+  /// The assistant editor stores the default model as its DISPLAY name
   /// ([Assistant.defaultModelName]) plus its absolute identity
   /// ([Assistant.defaultModelId] / [Assistant.defaultProviderName]),
   /// while `Assistant.modelId` stays null unless set elsewhere — matching
@@ -381,51 +401,103 @@ class ChatAdapter {
     String? modelRef,
     ProviderEntriesState entriesState, {
     String? providerName,
+    String? modelDisplayName,
   }) {
-    if (modelRef == null || modelRef.isEmpty) return null;
+    if ((modelRef == null || modelRef.isEmpty) &&
+        (modelDisplayName == null || modelDisplayName.isEmpty)) {
+      return null;
+    }
     return _resolveModelRefPair(
       entriesState,
       modelId: modelRef,
       providerName: providerName,
-      modelDisplayName: modelRef,
+      modelDisplayName: modelDisplayName,
     );
   }
 
-  /// 按模型引用（绝对身份优先，显示名兜底）解析 (config, model) 对。
+  /// 按模型引用解析唯一的 (config, model) 对。
   ///
-  /// 两遍扫描：先按供应商名精确匹配；无供应商名（旧数据）或供应商名
-  /// 已过期时退化为按模型ID/显示名找第一个（与 resolveModelRef 一致）。
-  /// 不匹配时返回 null（调用方回退到对话页当前模型）。
+  /// Provider/model identity remains the primary match. If multiple stable
+  /// groups preserve that same legacy pair, the saved display name can
+  /// disambiguate them. Opaque custom-group member IDs already encode the
+  /// stable group identity, so they survive changes to the group's provider
+  /// display name. Unresolved ambiguity returns null instead of picking the
+  /// first group.
   (ProviderConfigItem, ModelConfig)? _resolveModelRefPair(
     ProviderEntriesState entriesState, {
     String? modelId,
     String? providerName,
     String? modelDisplayName,
   }) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null) return null;
 
-    final hasProvider = providerName != null && providerName.isNotEmpty;
-    for (var pass = 0; pass < (hasProvider ? 2 : 1); pass++) {
-      for (final config in llmEntry.configs) {
-        if (config.host.isEmpty || config.key.isEmpty) continue;
-        final providerMatches =
-            !hasProvider || pass == 1 || config.providerName == providerName;
-        if (!providerMatches) continue;
-        for (final model in config.models) {
-          final id = modelId;
-          if (id != null && id.isNotEmpty && model.modelId == id) {
-            return (config, model);
-          }
-          final displayName =
-              '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-          final name = modelDisplayName;
-          if (name != null && name.isNotEmpty && displayName == name) {
-            return (config, model);
-          }
-        }
+    final candidates = flattenProviderModels(
+      ProviderEntriesState(entries: [llmEntry]),
+      'llm',
+      includeUnavailableGroupModels: true,
+    ).map((selected) => (selected.config, selected.model)).toList();
+
+    bool matchesDisplayName((ProviderConfigItem, ModelConfig) pair) {
+      final (config, model) = pair;
+      final displayName =
+          '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+      return modelDisplayName != null &&
+          modelDisplayName.isNotEmpty &&
+          displayName == modelDisplayName;
+    }
+
+    final id = modelId;
+    if (id != null && id.isNotEmpty) {
+      final idMatches = candidates
+          .where((pair) => pair.$2.modelId == id)
+          .toList(growable: false);
+      final hasProvider = providerName != null && providerName.isNotEmpty;
+      final providerMatches = hasProvider
+          ? idMatches
+                .where((pair) => pair.$1.providerName == providerName)
+                .toList(growable: false)
+          : const <(ProviderConfigItem, ModelConfig)>[];
+      final groupReference = llmModelGroupMemberReferenceForModelId(id);
+      final stableGroupMatches = groupReference == null
+          ? const <(ProviderConfigItem, ModelConfig)>[]
+          : idMatches
+                .where(
+                  (pair) =>
+                      llmModelGroupIdForConfig(pair.$1) ==
+                          groupReference.groupId &&
+                      pair.$2.id == groupReference.localModelId,
+                )
+                .toList(growable: false);
+      final preferred = hasProvider
+          ? providerMatches.isNotEmpty
+                ? providerMatches
+                : stableGroupMatches
+          : idMatches;
+      if (preferred.length == 1) return preferred.single;
+      if (preferred.length > 1) {
+        final byName = preferred.where(matchesDisplayName).toList();
+        return byName.length == 1 ? byName.single : null;
       }
+      // A saved stable ID is authoritative. Display-name lookup remains for
+      // legacy references that never stored an ID, not as a replacement when
+      // the referenced group has disappeared.
+      return null;
+    }
+
+    if (modelDisplayName != null && modelDisplayName.isNotEmpty) {
+      final byName = candidates
+          .where(matchesDisplayName)
+          .where(
+            (pair) =>
+                providerName == null ||
+                providerName.isEmpty ||
+                pair.$1.providerName == providerName,
+          )
+          .toList();
+      if (byName.length == 1) return byName.single;
     }
     return null;
   }
@@ -436,7 +508,7 @@ class ChatAdapter {
   /// [getOrCreateService] 创建会被 putIfAbsent 缓存，下次流的
   /// cancelService 不会移除它，导致模型切换被旧配置 service 吞掉
   /// （"UI 显示模型 B、请求走模型 A"）。用后即弃，随 GC 回收。
-  /// 返回 null 表示 adapter 未配置。
+  /// 返回 null 表示 adapter 尚未配置当前模型。
   ChatService? createTransientService() {
     if (_cachedProvider == null || _cachedModelConfig == null) return null;
     return _buildTransientService(
@@ -450,8 +522,8 @@ class ChatAdapter {
   /// 按系统助手任务的模型引用创建一次性 [ChatService]。
   ///
   /// 供标题生成 / 上下文压缩等内部任务使用：任务的模型与对话页当前
-  /// 模型独立（设置面板可单独指定）。未配置引用或引用已不存在时
-  /// 回退到 [createTransientService]（对话页当前选中模型）。
+  /// 模型独立（设置面板可单独指定）。仅当没有配置模型引用时才
+  /// 回退到 [createTransientService]；已配置但无法解析时返回 null。
   /// 与 [createTransientService] 一样：不缓存、不进入 _activeServices。
   ///
   /// 传入 [convId] 时注册到 [_pendingTaskServices]，后续
@@ -465,6 +537,9 @@ class ChatAdapter {
     String? modelDisplayName,
     String? convId,
   }) {
+    final hasConfiguredReference =
+        (modelId != null && modelId.isNotEmpty) ||
+        (modelDisplayName != null && modelDisplayName.isNotEmpty);
     final resolved = _resolveModelRefPair(
       entriesState,
       modelId: modelId,
@@ -474,22 +549,16 @@ class ChatAdapter {
     ChatService? svc;
     if (resolved != null) {
       final (config, modelConfig) = resolved;
-      final endpointType =
-          effectiveEndpointType(modelConfig.endpointType, config.endpointType);
-      final provider = createChatProviderFromConfig(
-        providerName: config.providerName,
-        baseUrl: config.host,
-        apiKey: config.key,
-        endpointType: endpointType,
+      final endpointType = effectiveEndpointType(
+        modelConfig.endpointType,
+        config.endpointType,
       );
-      svc = _buildTransientService(
-        provider,
-        modelConfig,
-        config,
-        endpointType,
-      );
-    } else {
+      final provider = _providerForModel(config, modelConfig, endpointType);
+      svc = _buildTransientService(provider, modelConfig, config, endpointType);
+    } else if (!hasConfiguredReference) {
       svc = createTransientService();
+    } else {
+      return null;
     }
     if (svc == null) return null;
     if (convId != null && convId.isNotEmpty) {
@@ -502,6 +571,14 @@ class ChatAdapter {
     }
     return svc;
   }
+
+  bool _hasConfiguredAssistantModelReference(Assistant? assistant) =>
+      assistant != null &&
+      ((assistant.modelId != null && assistant.modelId!.isNotEmpty) ||
+          (assistant.defaultModelId != null &&
+              assistant.defaultModelId!.isNotEmpty) ||
+          (assistant.defaultModelName != null &&
+              assistant.defaultModelName!.isNotEmpty));
 
   /// 用模板配置（缓存/覆盖值）构建一次性 [ChatService]。
   ChatService _buildTransientService(
@@ -574,9 +651,11 @@ class ChatAdapter {
 
   /// 从 ProviderEntriesState 读取 LLM 配置并初始化 ChatService
   void configure(ProviderEntriesState entriesState) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
-    if (llmEntry == null || llmEntry.configs.isEmpty) {
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
+    final firstModel = availableLlmModels(entriesState).firstOrNull;
+    if (llmEntry == null || firstModel == null) {
       debugPrint('ChatAdapter.configure: no LLM entry or configs');
       _cachedProvider = null;
       _cachedModelConfig = null;
@@ -586,46 +665,23 @@ class ChatAdapter {
       currentModelIndex = -1;
       return;
     }
-    final config = llmEntry.configs.first;
-    if (config.host.isEmpty || config.key.isEmpty) {
-      debugPrint('ChatAdapter.configure: first config host or key empty');
-      _cachedProvider = null;
-      _cachedModelConfig = null;
-      _cachedProviderConfig = null;
-      _cachedEndpointType = 'openai';
-      currentConfigIndex = -1;
-      currentModelIndex = -1;
-      return;
-    }
-    final modelConfig = config.models.isNotEmpty ? config.models.first : null;
-    if (modelConfig == null) {
-      debugPrint('ChatAdapter.configure: no models in first config');
-      _cachedProvider = null;
-      _cachedModelConfig = null;
-      _cachedProviderConfig = null;
-      _cachedEndpointType = 'openai';
-      currentConfigIndex = -1;
-      currentModelIndex = -1;
-      return;
-    }
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final config = llmEntry.configs[firstModel.configIndex];
+    final modelConfig = config.models[firstModel.modelIndex];
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.configure: host=${config.host} model=${modelConfig.modelId} '
       'endpoint=$endpointType',
     );
-    final provider = createChatProviderFromConfig(
-      providerName: config.providerName,
-      baseUrl: config.host,
-      apiKey: config.key,
-      endpointType: endpointType,
-    );
+    final provider = _providerForModel(config, modelConfig, endpointType);
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
     _cachedProviderConfig = config;
     _cachedEndpointType = endpointType;
-    currentConfigIndex = 0;
-    currentModelIndex = 0;
+    currentConfigIndex = firstModel.configIndex;
+    currentModelIndex = firstModel.modelIndex;
   }
 
   /// 根据 configIndex / modelIndex 更新模板配置
@@ -636,8 +692,9 @@ class ChatAdapter {
     int configIndex,
     int modelIndex,
   ) {
-    final llmEntry =
-        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
+    final llmEntry = entriesState.entries
+        .where((e) => e.type == 'llm')
+        .firstOrNull;
     if (llmEntry == null ||
         configIndex < 0 ||
         configIndex >= llmEntry.configs.length) {
@@ -651,7 +708,8 @@ class ChatAdapter {
       return;
     }
     final config = llmEntry.configs[configIndex];
-    if (config.host.isEmpty || config.key.isEmpty) {
+    if (!isLlmModelGroupProviderConfig(config) &&
+        (config.host.isEmpty || config.key.isEmpty)) {
       debugPrint(
         'ChatAdapter.selectModel: config[$configIndex] host or key empty',
       );
@@ -674,18 +732,15 @@ class ChatAdapter {
       return;
     }
     final modelConfig = config.models[modelIndex];
-    final endpointType =
-        effectiveEndpointType(modelConfig.endpointType, config.endpointType);
+    final endpointType = effectiveEndpointType(
+      modelConfig.endpointType,
+      config.endpointType,
+    );
     debugPrint(
       'ChatAdapter.selectModel: using config[$configIndex] '
       'host=${config.host} model=${modelConfig.modelId} endpoint=$endpointType',
     );
-    final provider = createChatProviderFromConfig(
-      providerName: config.providerName,
-      baseUrl: config.host,
-      apiKey: config.key,
-      endpointType: endpointType,
-    );
+    final provider = _providerForModel(config, modelConfig, endpointType);
     _cachedProvider = provider;
     _cachedModelConfig = modelConfig;
     _cachedProviderConfig = config;
@@ -699,6 +754,30 @@ class ChatAdapter {
     for (final svc in _activeServices.values) {
       svc.cancel();
     }
+  }
+
+  BaseChatProvider _providerForModel(
+    ProviderConfigItem config,
+    ModelConfig model,
+    String endpointType,
+  ) {
+    final routingRuntime = _routingRuntime;
+    if (routingRuntime != null) {
+      return LlmRoutedChatProvider(
+        runtime: routingRuntime,
+        groupId:
+            llmModelGroupIdForConfig(config) ??
+            stableLlmModelGroupId(config.id, model.id),
+        localModelId: model.id,
+        endpointType: endpointType,
+      );
+    }
+    return createChatProviderFromConfig(
+      providerName: config.providerName,
+      baseUrl: config.host,
+      apiKey: config.key,
+      endpointType: endpointType,
+    );
   }
 
   /// Injects a [ChatService] instance for testing.
@@ -737,9 +816,7 @@ class ChatAdapter {
     return [
       ...filterMcpSearchToolDefinitions(
         ChatService.getRegisteredToolDefinitions()
-            .where(
-              (tool) => !_disabledMcpToolNames.contains(tool.name),
-            )
+            .where((tool) => !_disabledMcpToolNames.contains(tool.name))
             .toList(),
         mcpEnabled: _mcpMasterSwitchEnabled,
       ),
@@ -783,8 +860,9 @@ class ChatAdapter {
     Map<String, String> reasoningParamValues = const {},
     String convId = '',
   }) {
-    final svc =
-        convId.isNotEmpty ? getOrCreateService(convId) : currentChatService;
+    final svc = convId.isNotEmpty
+        ? getOrCreateService(convId)
+        : currentChatService;
     if (svc == null) {
       return Stream.error('请先配置聊天供应商');
     }
@@ -812,11 +890,18 @@ class ChatAdapter {
     ProviderEntriesState? entriesState,
   }) {
     final svc = convId.isNotEmpty
-        ? getOrCreateService(convId,
-            assistant: assistant, entriesState: entriesState)
+        ? getOrCreateService(
+            convId,
+            assistant: assistant,
+            entriesState: entriesState,
+          )
         : currentChatService;
     if (svc == null) {
-      return Stream.error('请先配置聊天供应商');
+      return Stream.error(
+        _hasConfiguredAssistantModelReference(assistant)
+            ? '助手配置的模型不可用，请检查助手模型选择。'
+            : '请先配置聊天供应商',
+      );
     }
     return svc.sendStreamWithTools(
       text,
@@ -905,65 +990,102 @@ String? perConversationModelToRestore({
 /// 与 [ChatAdapter.availableModels] 等效；设置页等无适配器上下文的
 /// 调用方直接使用此顶层函数。
 ///
-/// 过滤掉 host/key 为空的配置：这类配置的模型无法发起任何请求
-/// （[selectModel] / [_resolveModelRefPair] 都会跳过），不应出现在
-/// 可选列表与设置面板中，否则显示与真实请求行为不一致。
+/// Legacy configs need host/key; in-memory model-group configs intentionally
+/// omit both because the routed provider reads endpoint credentials at runtime.
 List<AvailableModel> availableLlmModels(ProviderEntriesState entriesState) {
-  final llmEntry =
-      entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
-  if (llmEntry == null || llmEntry.configs.isEmpty) return const [];
+  final llmEntry = entriesState.entries
+      .where((e) => e.type == 'llm')
+      .firstOrNull;
+  if (llmEntry == null) return const [];
 
   final result = <AvailableModel>[];
-  for (var ci = 0; ci < llmEntry.configs.length; ci++) {
-    final config = llmEntry.configs[ci];
-    if (config.host.isEmpty || config.key.isEmpty) continue;
-    for (var mi = 0; mi < config.models.length; mi++) {
-      final model = config.models[mi];
-      final displayName =
-          '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
-      result.add(
-        AvailableModel(
-          displayName: displayName,
-          modelId: model.modelId,
-          providerName: config.providerName,
-          configIndex: ci,
-          modelIndex: mi,
-        ),
-      );
-    }
+  for (final selected in flattenProviderModels(entriesState, 'llm')) {
+    final ci = llmEntry.configs.indexWhere(
+      (config) => identical(config, selected.config),
+    );
+    if (ci < 0) continue;
+    final mi = selected.config.models.indexWhere(
+      (model) => identical(model, selected.model),
+    );
+    if (mi < 0) continue;
+    final config = selected.config;
+    final model = selected.model;
+    final displayName =
+        '${model.name.isNotEmpty ? model.name : model.modelId} | ${config.providerName}';
+    result.add(
+      AvailableModel(
+        displayName: displayName,
+        modelId: model.modelId,
+        providerName: config.providerName,
+        modelGroupId: llmModelGroupIdForConfig(config),
+        configIndex: ci,
+        modelIndex: mi,
+      ),
+    );
   }
   return result;
 }
 
 /// 按持久化的模型引用解析出当前可用的 [AvailableModel]。
 ///
-/// 匹配优先级（绝对身份优先，显示名兜底）：
-/// 1. `(providerName, modelId)` 精确匹配——模型/供应商被重命名后仍可解析；
-/// 2. 仅 `modelId` 匹配——旧数据没有供应商名时退化为按 ID 找第一个；
-/// 3. `displayName` 精确匹配——旧数据只有显示名（模型未重命名时成立）。
+/// Resolve opaque custom-group member IDs by their stable identity when the
+/// saved provider label is stale after a group rename. Other references keep
+/// their saved provider name authoritative; display names only resolve legacy
+/// references that have no stable model ID.
 ///
-/// 没有任何引用命中时返回 null（调用方回退到助手默认 / 列表第一个）。
+/// 多个模型保留了同一旧身份时，显示名必须唯一指向其中一个，否则返回
+/// null，避免按列表顺序切换到另一个稳定模型组。
 AvailableModel? resolveModelRef({
   required List<AvailableModel> models,
   String? modelId,
   String? providerName,
   String? displayName,
 }) {
-  final id = modelId;
-  if (id != null && id.isNotEmpty) {
-    final provider = providerName;
-    if (provider != null && provider.isNotEmpty) {
-      final exact = models.where(
-        (m) => m.modelId == id && m.providerName == provider,
-      );
-      if (exact.isNotEmpty) return exact.first;
+  AvailableModel? selectUnique(Iterable<AvailableModel> candidates) {
+    final matches = candidates.toList(growable: false);
+    if (matches.length == 1) return matches.single;
+    if (matches.length < 2 || displayName == null || displayName.isEmpty) {
+      return null;
     }
-    final byId = models.where((m) => m.modelId == id);
-    if (byId.isNotEmpty) return byId.first;
+    final named = matches
+        .where((model) => model.displayName == displayName)
+        .toList(growable: false);
+    return named.length == 1 ? named.single : null;
+  }
+
+  final id = modelId;
+  final provider = providerName;
+  final hasProvider = provider != null && provider.isNotEmpty;
+  if (id != null && id.isNotEmpty) {
+    final byId = models.where((model) => model.modelId == id).toList();
+    if (hasProvider) {
+      final exact = byId.where((model) => model.providerName == provider);
+      if (exact.isNotEmpty) return selectUnique(exact);
+      final groupReference = llmModelGroupMemberReferenceForModelId(id);
+      if (groupReference != null) {
+        final stableGroupMatches = byId
+            .where((model) => model.modelGroupId == groupReference.groupId)
+            .toList(growable: false);
+        if (stableGroupMatches.length == 1) {
+          return stableGroupMatches.single;
+        }
+      }
+    } else if (byId.isNotEmpty) {
+      return selectUnique(byId);
+    }
+    // A saved stable identity must not bind another model just because its
+    // display label happens to match. Display-only lookup is for legacy refs.
+    return null;
   }
   if (displayName != null && displayName.isNotEmpty) {
-    final byName = models.where((m) => m.displayName == displayName);
-    if (byName.isNotEmpty) return byName.first;
+    final byName = models
+        .where(
+          (model) =>
+              model.displayName == displayName &&
+              (!hasProvider || model.providerName == provider),
+        )
+        .toList(growable: false);
+    if (byName.length == 1) return byName.single;
   }
   return null;
 }

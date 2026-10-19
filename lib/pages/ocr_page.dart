@@ -15,6 +15,7 @@ import '../providers/ocr_instructions_provider.dart';
 import '../providers/text_provider.dart';
 import '../services/ocr_service.dart';
 import '../services/ocr_task_runner.dart';
+import '../services/llm_model_group_provider.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/ocr_image_payload.dart';
 import '../utils/system_pick_utils.dart';
@@ -42,13 +43,23 @@ class _ModelOption {
   final String providerName;
   final String host;
   final String apiKey;
-  const _ModelOption(this.model, this.configId, this.modelRecordId,
-      this.providerName, this.host, this.apiKey);
+  final String? routingGroupId;
+  final String? routingAccountId;
+  const _ModelOption(
+    this.model,
+    this.configId,
+    this.modelRecordId,
+    this.providerName,
+    this.host,
+    this.apiKey,
+    this.routingGroupId,
+    this.routingAccountId,
+  );
 }
 
 /// Collect all available models with their source provider info from ALL
-/// configured OCR provider configs (not just the first one).
-/// Only includes configs with valid host and API key.
+/// configured OCR provider configs and account-backed LLM groups. Legacy OCR
+/// configs are imported into the account runtime when their model is used.
 List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
   final state = ref.read(providerEntriesProvider);
   return [
@@ -60,6 +71,11 @@ List<_ModelOption> _getOcrModelOptions(WidgetRef ref) {
         e.config.providerName,
         e.config.host,
         e.config.key,
+        llmModelGroupIdForConfig(e.config) ??
+            llmOcrModelGroupIdForConfig(e.config.id, e.model.id),
+        llmModelGroupIdForConfig(e.config) == null
+            ? llmOcrAccountIdForConfig(e.config.id)
+            : null,
       ),
   ];
 }
@@ -132,29 +148,32 @@ Map<String, dynamic> applySelectedOcrInstruction(
 /// Main OCR page — allows taking photos or selecting from gallery,
 /// then performing OCR and saving results to text storage.
 class OcrPage extends ConsumerStatefulWidget {
-  const OcrPage(
-      {super.key,
-      this.testImages,
-      this.retryData,
-      this.testCameraPicker,
-      this.testGalleryPicker,
-      this.testImagePayloadPreparer});
+  const OcrPage({
+    super.key,
+    this.testImages,
+    this.retryData,
+    this.testCameraPicker,
+    this.testGalleryPicker,
+    this.testImagePayloadPreparer,
+  });
 
   @visibleForTesting
   final Future<XFile?> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testCameraPicker;
+  })?
+  testCameraPicker;
   @visibleForTesting
   final Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })? testGalleryPicker;
+  })?
+  testGalleryPicker;
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
-      testImagePayloadPreparer;
+  testImagePayloadPreparer;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -239,11 +258,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final data = widget.retryData;
     if (data == null) return;
     final snapshot = OcrRetrySnapshot.fromMap(data);
-    _selectedImages.addAll(snapshot.images.map((image) => SelectedImage(
+    _selectedImages.addAll(
+      snapshot.images.map(
+        (image) => SelectedImage(
           bytes: image.bytes,
           format: image.format,
           sourceName: image.name,
-        )));
+        ),
+      ),
+    );
     _saveFolder = snapshot.saveFolder;
 
     if (snapshot.version == OcrRetrySnapshot.currentVersion) {
@@ -368,7 +391,22 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           matches.add(index);
         }
       }
-      return matches.length == 1 ? matches.single : null;
+      if (matches.isNotEmpty) {
+        return matches.length == 1 ? matches.single : null;
+      }
+      final migratedGroupId = llmOcrModelGroupIdForConfig(
+        _selectedConfigId!,
+        _selectedModelRecordId!,
+      );
+      final migratedMatches = <int>[];
+      for (var index = 0; index < modelOptions.length; index++) {
+        final option = modelOptions[index];
+        if (option.configId == migratedGroupId &&
+            option.modelRecordId == _selectedModelRecordId) {
+          migratedMatches.add(index);
+        }
+      }
+      return migratedMatches.length == 1 ? migratedMatches.single : null;
     }
     if (_modelSelectionNeedsReselection ||
         _selectedModelIndex < 0 ||
@@ -412,9 +450,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           decoration: BoxDecoration(
             color: cs.errorContainer.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.error.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.error.withValues(alpha: 0.3)),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -455,10 +491,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   foregroundColor: cs.error,
                 ),
-                child: const Text(
-                  '去配置',
-                  style: TextStyle(fontSize: 12),
-                ),
+                child: const Text('去配置', style: TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -487,8 +520,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               // 机器人图标，与对话页面输入框的模型标识一致
-              child:
-                  Icon(Icons.smart_toy_outlined, size: 16, color: cs.primary),
+              child: Icon(
+                Icons.smart_toy_outlined,
+                size: 16,
+                color: cs.primary,
+              ),
             ),
             const SizedBox(width: 10),
             Text(
@@ -698,10 +734,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               // Keep the row height aligned with the model card (the
               // default 48px tap target would inflate the card).
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 32,
-                minHeight: 32,
-              ),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () {
                 showDialog<void>(
                   context: context,
@@ -735,8 +768,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     icon: const Icon(Icons.camera_alt_outlined, size: 20),
                     label: const Text(
                       '拍照识别',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -755,8 +790,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     icon: const Icon(Icons.photo_library_outlined, size: 20),
                     label: const Text(
                       '相册选择',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -779,9 +816,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     value: _useOriginalImageQuality,
                     onChanged: _isProcessing
                         ? null
-                        : (value) => setState(
-                              () => _useOriginalImageQuality = value,
-                            ),
+                        : (value) =>
+                              setState(() => _useOriginalImageQuality = value),
                   ),
                 ],
               ),
@@ -843,8 +879,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight =
-              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
+          final double totalHeight = rowCount > 0
+              ? rowCount * itemSize + (rowCount - 1) * spacing
+              : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -1271,8 +1308,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
+                onPressed: _selectedImages.isEmpty || _isProcessing
+                    ? null
+                    : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -1435,17 +1473,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
-      final file = await (widget.testCameraPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          picker.pickImage(
-            source: ImageSource.camera,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ));
+      final file =
+          await (widget.testCameraPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              picker.pickImage(
+                source: ImageSource.camera,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ));
       if (!mounted || file == null) return;
 
       final bytes = await file.readAsBytes();
@@ -1463,13 +1502,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-          content: Text(
-            e is FormatException ? e.message : '拍照失败: $e',
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is FormatException ? e.message : '拍照失败: $e'),
           ),
-        ));
+        );
       }
     }
   }
@@ -1480,18 +1517,19 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files = await (widget.testGalleryPicker?.call(
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-            imageQuality: mode.imageQuality,
-          ) ??
-          pickGalleryMedia(
-            GalleryMediaKind.image,
-            context: context,
-            imageQuality: mode.imageQuality,
-            maxWidth: mode.maxWidth,
-            maxHeight: mode.maxHeight,
-          ));
+      final files =
+          await (widget.testGalleryPicker?.call(
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+                imageQuality: mode.imageQuality,
+              ) ??
+              pickGalleryMedia(
+                GalleryMediaKind.image,
+                context: context,
+                imageQuality: mode.imageQuality,
+                maxWidth: mode.maxWidth,
+                maxHeight: mode.maxHeight,
+              ));
       if (!mounted || files.isEmpty) return;
 
       final newImages = <SelectedImage>[];
@@ -1509,10 +1547,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               imageQuality: mode.imageQuality,
             );
           }
-          newImages.add(SelectedImage.fromPayload(
-            payload: payload,
-            sourceName: file.name,
-          ));
+          newImages.add(
+            SelectedImage.fromPayload(payload: payload, sourceName: file.name),
+          );
         } on FormatException catch (error) {
           firstError ??= error.message;
         }
@@ -1525,9 +1562,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _errorMessage = firstError;
       });
       if (firstError != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(firstError)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(firstError)));
       }
     } catch (e) {
       if (mounted) {
@@ -1604,8 +1641,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       if (mounted && importGeneration == _appAlbumImportGeneration) {
         final message = e is FormatException ? e.message : '处理图片失败: $e';
         setState(() => _errorMessage = message);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
       return false;
     }
@@ -1632,10 +1670,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // (which may differ from [index] after swiping).
     final result = await showDialog<({String action, int index})>(
       context: context,
-      builder: (_) => _OcrPreviewDialog(
-        images: _selectedImages,
-        initialIndex: index,
-      ),
+      builder: (_) =>
+          _OcrPreviewDialog(images: _selectedImages, initialIndex: index),
     );
 
     if (result == null || !mounted) return;
@@ -1694,16 +1730,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final payload = await _prepareImagePayload(editedBytes);
       if (!mounted) return;
-      final currentIndex =
-          _selectedImages.indexWhere((image) => identical(image, currentImage));
+      final currentIndex = _selectedImages.indexWhere(
+        (image) => identical(image, currentImage),
+      );
       if (currentIndex < 0) return;
       setState(() {
         _selectedImages[currentIndex] = currentImage.withEditedPayload(payload);
       });
     } on FormatException catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     }
   }
@@ -1760,10 +1798,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         if (image.isPrepared) {
           images.add(image);
         } else {
-          images.add(SelectedImage.fromPayload(
-            payload: await _prepareImagePayload(image.bytes),
-            sourceName: image.sourceName,
-          ));
+          images.add(
+            SelectedImage.fromPayload(
+              payload: await _prepareImagePayload(image.bytes),
+              sourceName: image.sourceName,
+            ),
+          );
         }
       }
     } on FormatException catch (error) {
@@ -1807,8 +1847,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams:
-          selectedOption.model.customParams.map((p) => p.copy()).toList(),
+      customParams: selectedOption.model.customParams
+          .map((p) => p.copy())
+          .toList(),
+      routingGroupId: selectedOption.routingGroupId,
+      routingLocalModelId: selectedOption.model.id,
+      routingAccountId: selectedOption.routingAccountId,
+      routingDisplayName:
+          '${selectedOption.providerName} · ${selectedOption.model.name}',
     );
 
     // A retry instruction restore may still be pending (the generic list
@@ -1876,12 +1922,14 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
-    final instructionContent = _retryInstructionSnapshot ??
+    final instructionContent =
+        _retryInstructionSnapshot ??
         ((_selectedInstructionIndex >= 0 &&
                 _selectedInstructionIndex < instructions.length)
             ? instructions[_selectedInstructionIndex].content
             : null);
-    unawaited(_computeOcrRetryData(
+    unawaited(
+      _computeOcrRetryData(
         taskId,
         imageBytesList,
         imageFormatList,
@@ -1890,7 +1938,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         selectedOption.modelRecordId,
         instructionContent,
         folder,
-        bgNotifier));
+        bgNotifier,
+      ),
+    );
 
     _isProcessing = true;
     unawaited(runner.run());
@@ -1911,15 +1961,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     BackgroundTaskNotifier bgNotifier,
   ) async {
     try {
-      final retryData = await Isolate.run(() => _buildOcrRetryData(
-            imageBytesList: imageBytesList,
-            imageFormatList: imageFormatList,
-            imageNameList: imageNameList,
-            configId: configId,
-            modelId: modelId,
-            instructionContent: instructionContent,
-            saveFolder: saveFolder,
-          ));
+      final retryData = await Isolate.run(
+        () => _buildOcrRetryData(
+          imageBytesList: imageBytesList,
+          imageFormatList: imageFormatList,
+          imageNameList: imageNameList,
+          configId: configId,
+          modelId: modelId,
+          instructionContent: instructionContent,
+          saveFolder: saveFolder,
+        ),
+      );
       if (bgNotifier.mounted &&
           bgNotifier.state.any((task) => task.id == taskId)) {
         bgNotifier.setRetryData(taskId, retryData);
@@ -2106,10 +2158,7 @@ class _OcrPreviewDialog extends StatefulWidget {
   final List<SelectedImage> images;
   final int initialIndex;
 
-  const _OcrPreviewDialog({
-    required this.images,
-    required this.initialIndex,
-  });
+  const _OcrPreviewDialog({required this.images, required this.initialIndex});
 
   @override
   State<_OcrPreviewDialog> createState() => _OcrPreviewDialogState();
@@ -2179,11 +2228,16 @@ class _OcrPreviewDialogState extends State<_OcrPreviewDialog> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.broken_image,
-                                  size: 48, color: Colors.white54),
+                              Icon(
+                                Icons.broken_image,
+                                size: 48,
+                                color: Colors.white54,
+                              ),
                               SizedBox(height: 8),
-                              Text('无法加载图片',
-                                  style: TextStyle(color: Colors.white54)),
+                              Text(
+                                '无法加载图片',
+                                style: TextStyle(color: Colors.white54),
+                              ),
                             ],
                           ),
                         );
