@@ -392,6 +392,277 @@ void main() {
     );
 
     test(
+      'removeTask keeps an OCR retry task visible when both removal writes fail',
+      () async {
+        const taskId = 'ocr-removal-write-failure';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR retry task',
+          retryData: OcrRetrySnapshot.capture(images: []).toMap(),
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final restarted = BackgroundTaskNotifier();
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.taskById(taskId)?.retryData, isNotNull);
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeAttempts++;
+            throw StateError('simulated OCR task removal write failure');
+          };
+          notifier.removeTask(taskId);
+          await notifier.pendingPersistence;
+
+          expect(writeAttempts, 4);
+          expect(
+            notifier.taskById(taskId),
+            isNotNull,
+            reason:
+                'a failed removal must not hide a task that remains on disk',
+          );
+          final persistedRows =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          expect(await restarted.restoreFromPersistence(), isTrue);
+          expect(restarted.taskById(taskId)?.retryData, isNotNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          restarted.dispose();
+          await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'repeated removeTask keeps pending OCR rollback ownership',
+      () async {
+        const taskId = 'ocr-repeated-removal-write-failure';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR retry task',
+          retryData: OcrRetrySnapshot.capture(images: []).toMap(),
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final restarted = BackgroundTaskNotifier();
+        final removalWriteStarted = Completer<void>();
+        final resumeRemovalWrite = Completer<void>();
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            writeAttempts++;
+            if (writeAttempts == 1) {
+              removalWriteStarted.complete();
+              await resumeRemovalWrite.future;
+            }
+            throw StateError('simulated OCR task removal write failure');
+          };
+
+          notifier.removeTask(taskId);
+          await removalWriteStarted.future;
+          notifier.removeTask(taskId);
+          resumeRemovalWrite.complete();
+          await notifier.pendingPersistence;
+
+          expect(
+            notifier.taskById(taskId),
+            isNotNull,
+            reason:
+                'a repeated removal must not discard the first failed removal rollback',
+          );
+          expect(writeAttempts, 4);
+          final persistedRows =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          expect(await restarted.restoreFromPersistence(), isTrue);
+          expect(restarted.taskById(taskId)?.retryData, isNotNull);
+        } finally {
+          if (!resumeRemovalWrite.isCompleted) resumeRemovalWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          restarted.dispose();
+          await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'failed same-ID OCR replacement removal persists the restored generation',
+      () async {
+        const taskId = 'ocr-replaced-removal-write-failure';
+        const replacementTitle = 'Replacement OCR retry task';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'Original OCR retry task',
+          retryData: OcrRetrySnapshot.capture(images: []).toMap(),
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final restarted = BackgroundTaskNotifier();
+        final firstWriteStarted = Completer<void>();
+        final resumeFirstWrite = Completer<void>();
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            final attempt = writeAttempts++;
+            if (attempt == 0) {
+              firstWriteStarted.complete();
+              await resumeFirstWrite.future;
+            }
+            if (attempt < 5) {
+              throw StateError('simulated queued OCR snapshot write failure');
+            }
+          };
+
+          notifier.removeTask(taskId);
+          await firstWriteStarted.future;
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: replacementTitle,
+            retryData: OcrRetrySnapshot.capture(images: []).toMap(),
+            startImmediately: false,
+            taskId: taskId,
+          );
+          notifier.removeTask(taskId);
+          resumeFirstWrite.complete();
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById(taskId)?.title, replacementTitle);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          expect(await restarted.restoreFromPersistence(), isTrue);
+          expect(restarted.taskById(taskId)?.title, replacementTitle);
+          expect(writeAttempts, 6);
+        } finally {
+          if (!resumeFirstWrite.isCompleted) resumeFirstWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          restarted.dispose();
+          await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'failed OCR removal keeps queued snapshots consistent after restoring task',
+      () async {
+        const taskId = 'ocr-removal-write-failure-with-queued-write';
+        const addedTaskId = 'task-added-during-ocr-removal-write';
+        final seed = BackgroundTaskNotifier();
+        seed.addTask(
+          type: BackgroundTaskType.ocr,
+          title: 'OCR retry task',
+          retryData: OcrRetrySnapshot.capture(images: []).toMap(),
+          startImmediately: false,
+          taskId: taskId,
+        );
+        await seed.pendingPersistence;
+        seed.dispose();
+        await seed.pendingPersistence;
+
+        final notifier = BackgroundTaskNotifier();
+        final restarted = BackgroundTaskNotifier();
+        final removalWriteStarted = Completer<void>();
+        final resumeRemovalWrite = Completer<void>();
+        var writeAttempts = 0;
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            final attempt = writeAttempts++;
+            if (attempt == 0) {
+              removalWriteStarted.complete();
+              await resumeRemovalWrite.future;
+            }
+            if (attempt < 2) {
+              throw StateError('simulated OCR task removal write failure');
+            }
+          };
+
+          notifier.removeTask(taskId);
+          await removalWriteStarted.future;
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Newer task added while OCR removal writes',
+            startImmediately: false,
+            taskId: addedTaskId,
+          );
+          resumeRemovalWrite.complete();
+          await notifier.pendingPersistence;
+
+          final persistedRows =
+              jsonDecode(await _tasksFileIn(testDir.path).readAsString())
+                  as List;
+          expect(
+            {
+              'liveTaskIds': notifier.state.map((task) => task.id).toList(),
+              'persistedTaskIds': persistedRows
+                  .whereType<Map>()
+                  .map((row) => row['id'])
+                  .toList(),
+            },
+            {
+              'liveTaskIds': [addedTaskId, taskId],
+              'persistedTaskIds': [addedTaskId, taskId],
+            },
+            reason:
+                'queued writes must persist the restored task after a failed removal, in newest-first order',
+          );
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          expect(await restarted.restoreFromPersistence(), isTrue);
+          expect(
+            restarted.state.map((task) => task.id),
+            [addedTaskId, taskId],
+          );
+        } finally {
+          if (!resumeRemovalWrite.isCompleted) resumeRemovalWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          restarted.dispose();
+          await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
       'later successful task write runs cleanup for a persisted removal',
       () async {
         final notifier = BackgroundTaskNotifier();
