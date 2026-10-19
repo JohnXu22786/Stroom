@@ -33,6 +33,7 @@ import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
+import '../task_flow/models/flow_payload.dart' show FlowPayload;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -551,6 +552,13 @@ class BackupService {
             useStreaming: useStreaming,
           );
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'task_flow_temporary',
+          sourcePath: p.join(appDir, 'task_flow_temporary'),
+          useStreaming: useStreaming,
+        );
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -1047,6 +1055,7 @@ class BackupService {
         return [
           'task_state/',
           'task_flow_attachments/',
+          'task_flow_temporary/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -1503,10 +1512,15 @@ class BackupService {
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
+        if (kIsWeb || WebFileStore.isTestMode) return relative;
         return p.joinAll([appDir, ...relative.split('/')]);
       }
       if (!restoring) {
         if (value.startsWith('attachments/')) {
+          return '$_portableAppDataPathPrefix$value';
+        }
+        if (value.startsWith('task_flow_temporary/') &&
+            _isSafeRelativeArchivePath(value)) {
           return '$_portableAppDataPathPrefix$value';
         }
         if (value.startsWith('temp_edited/')) {
@@ -1552,8 +1566,9 @@ class BackupService {
     BackupSelection selection, {
     required Set<String> taskFilesToRestore,
   }) async {
-    if (!selection.tasks || kIsWeb || WebFileStore.isTestMode) return;
-    final appDir = await AppStorage.directory;
+    if (!selection.tasks) return;
+    final isWebStore = kIsWeb || WebFileStore.isTestMode;
+    final appDir = isWebStore ? '' : await AppStorage.directory;
     for (final relativePath in const [
       'synthesis/tasks.json',
       'catcatch/tasks.json',
@@ -1562,18 +1577,31 @@ class BackupService {
       'task_flows/executions.json',
     ]) {
       if (!taskFilesToRestore.contains(relativePath)) continue;
-      final file = File(
-        p.joinAll([appDir, ...relativePath.split('/')]),
-      );
-      if (!await file.exists()) continue;
       try {
-        final decoded = jsonDecode(await file.readAsString());
+        final file = isWebStore
+            ? null
+            : File(p.joinAll([appDir, ...relativePath.split('/')]));
+        final data = isWebStore
+            ? await WebFileStore.read(relativePath)
+            : file != null && await file.exists()
+                ? await file.readAsBytes()
+                : null;
+        if (data == null) continue;
+        final decoded = jsonDecode(utf8.decode(data));
         final restored = _mapPortableTaskPaths(
           decoded,
           appDir: appDir,
           restoring: true,
         );
-        await AtomicFile.writeString(file, jsonEncode(restored));
+        final restoredJson = jsonEncode(restored);
+        if (isWebStore) {
+          await WebFileStore.write(
+            relativePath,
+            Uint8List.fromList(utf8.encode(restoredJson)),
+          );
+        } else {
+          await AtomicFile.writeString(file!, restoredJson);
+        }
       } catch (e) {
         throw Exception('恢复任务文件路径失败：$relativePath ($e)');
       }
@@ -1870,6 +1898,11 @@ class BackupService {
             archive,
             archivePrefix: 'catcatch/completed',
             sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'task_flow_temporary',
+            sourcePath: p.join(appDir, 'task_flow_temporary'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -3360,13 +3393,63 @@ class BackupService {
         .toSet();
     var allPresent = true;
 
-    void inspect(Object? value) {
+    bool hasPortableTemporaryFlowResult(
+      Object? value, {
+      required String executionId,
+      required String expectedBlockId,
+    }) {
+      if (value is! Map) return false;
+      final reference = value['fileReference'];
+      final artifact = value['temporaryArtifact'];
+      final artifactExecutionId =
+          artifact is Map ? artifact['executionId'] : null;
+      final artifactBlockId = artifact is Map ? artifact['blockId'] : null;
+      if (reference is! String ||
+          artifact is! Map ||
+          executionId.isEmpty ||
+          artifactExecutionId is! String ||
+          artifactExecutionId.isEmpty ||
+          artifactExecutionId != executionId ||
+          artifactBlockId is! String ||
+          artifactBlockId.isEmpty ||
+          artifactBlockId != expectedBlockId ||
+          artifact['reference'] != reference ||
+          !reference.startsWith(_portableAppDataPathPrefix)) {
+        return false;
+      }
+      final relative = reference.substring(_portableAppDataPathPrefix.length);
+      if (!_isSafeRelativeArchivePath(relative)) return false;
+      final pathSegments = relative.split('/');
+      return pathSegments.length == 4 &&
+          pathSegments[0] == 'task_flow_temporary' &&
+          pathSegments[1] ==
+              sha256.convert(utf8.encode(artifactExecutionId)).toString() &&
+          pathSegments[2] ==
+              sha256.convert(utf8.encode(artifactBlockId)).toString() &&
+          pathSegments[3].isNotEmpty;
+    }
+
+    bool hasPersistableFlowPayload(Object? value) {
+      if (value is! Map) return false;
+      try {
+        FlowPayload.fromMap(Map<String, dynamic>.from(value));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    void inspect(Object? value, {bool skipResult = false}) {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
         final isCatCatchFile = relative.startsWith('catcatch/') &&
             _isCatCatchMediaPath(relative.substring('catcatch/'.length));
-        if (!isTaskAttachment && !isCatCatchFile) return;
+        final isTemporaryFlowArtifact =
+            relative.startsWith('task_flow_temporary/');
+        if (!isTaskAttachment && !isCatCatchFile && !isTemporaryFlowArtifact) {
+          return;
+        }
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
                 '${relative.substring('attachments/'.length)}'
@@ -3376,8 +3459,74 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        for (final child in value.values) {
-          inspect(child);
+        final skipOwnResult = skipResult;
+        final rawSteps = value['subTasks'];
+        if (rawSteps is Iterable) {
+          final steps = rawSteps.toList();
+          for (var index = 0; index < steps.length; index++) {
+            final step = steps[index];
+            final successor =
+                index + 1 < steps.length ? steps[index + 1] : null;
+            final executionId = value['id'];
+            final cleanupStatus =
+                step is Map ? step['artifactCleanupStatus'] : null;
+            final result = step is Map ? step['result'] : null;
+            final snapshot = value['snapshot'];
+            final snapshotFlow = snapshot is Map ? snapshot['flow'] : null;
+            final snapshotBlocks =
+                snapshotFlow is Map ? snapshotFlow['blocks'] : null;
+            final snapshotBlock =
+                snapshotBlocks is List && index < snapshotBlocks.length
+                    ? snapshotBlocks[index]
+                    : null;
+            final expectedBlockId =
+                snapshotBlock is Map && snapshotBlock['id'] is String
+                    ? snapshotBlock['id'] as String
+                    : '';
+            final hasTemporaryArtifact =
+                result is Map && result.containsKey('temporaryArtifact');
+            final hasValidTemporaryArtifact = hasPortableTemporaryFlowResult(
+              result,
+              executionId: executionId is String ? executionId : '',
+              expectedBlockId: expectedBlockId,
+            );
+            final hasSuccessfulSuccessor = successor is Map &&
+                successor['outcome'] == 'succeeded' &&
+                hasPersistableFlowPayload(successor['result']);
+            // Validate ownership even when the archive contains the referenced
+            // path. A portable file alone cannot prove that this execution
+            // owns it or that cleanup/resume may safely skip it.
+            if ((hasTemporaryArtifact ||
+                    cleanupStatus == 'pending' ||
+                    cleanupStatus == 'cleaned') &&
+                !hasValidTemporaryArtifact) {
+              allPresent = false;
+            }
+            final hasCleanupCheckpoint =
+                hasValidTemporaryArtifact && hasSuccessfulSuccessor;
+            if ((cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                !hasCleanupCheckpoint) {
+              allPresent = false;
+            }
+            final cleanupCanSkip =
+                (cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                    hasCleanupCheckpoint;
+            // Deletion is idempotent and resume reconciles a pending cleanup
+            // after its successor result was durably saved. A crash after the
+            // file delete but before persisting `cleaned` can leave this ref
+            // pointing at a file that is already gone.
+            inspect(step, skipResult: cleanupCanSkip);
+          }
+        }
+        for (final entry in value.entries) {
+          // A cleaned flow result keeps its historical reference so execution
+          // resume can skip that step. Its owned file is intentionally gone
+          // and therefore is not a required backup entry.
+          if ((skipOwnResult && entry.key == 'result') ||
+              (rawSteps is Iterable && entry.key == 'subTasks')) {
+            continue;
+          }
+          inspect(entry.value);
         }
       } else if (value is Iterable) {
         for (final child in value) {
@@ -5802,6 +5951,7 @@ const List<String> _restoreKnownDirs = [
   'anki',
   'task_state',
   'task_flow_attachments',
+  'task_flow_temporary',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -5828,6 +5978,7 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'task_state':
       return selection.tasks;
     case 'task_flow_attachments':
+    case 'task_flow_temporary':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;

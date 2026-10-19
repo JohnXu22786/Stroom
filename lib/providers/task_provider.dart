@@ -20,6 +20,8 @@ import '../utils/audio_trim.dart';
 import '../utils/atomic_file.dart';
 import '../utils/audio_utils.dart';
 import '../utils/file_manifest.dart';
+import '../task_flow/models/flow_payload.dart';
+import '../task_flow/services/flow_temporary_artifact_storage.dart';
 
 // ============================================================================
 // 任务列表提供器
@@ -120,6 +122,8 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
       // 'saveFolder' is an internal key (flow blocks use it to pick the
       // output folder) — strip it so it never reaches the TTS API body.
       params.remove('saveFolder');
+      params.remove(flowTemporaryExecutionIdKey);
+      params.remove(flowTemporaryBlockIdKey);
       // customParams values are String-typed (flow blocks stringify
       // numbers); the API contract for speed is numeric, so coerce it
       // back instead of sending "speed": "1.0" as a JSON string, which
@@ -175,6 +179,32 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
       // 如果已被暂停，不保存
       if (cancelToken.isCancelled) return;
+
+      final temporaryExecutionId =
+          task.customParams?[flowTemporaryExecutionIdKey];
+      final temporaryBlockId = task.customParams?[flowTemporaryBlockIdKey];
+      if (temporaryExecutionId?.isNotEmpty == true &&
+          temporaryBlockId?.isNotEmpty == true) {
+        final temporaryPath = await FlowTemporaryArtifactStorage.writeBytes(
+          executionId: temporaryExecutionId!,
+          blockId: temporaryBlockId!,
+          fileName: '${computeAudioHash(audioData)}.$actualFormat',
+          bytes: audioData,
+        );
+        if (cancelToken.isCancelled || !isCurrent()) {
+          await FlowTemporaryArtifactStorage.deleteArtifact(
+            FlowTemporaryArtifact(
+              executionId: temporaryExecutionId,
+              blockId: temporaryBlockId,
+              reference: temporaryPath,
+            ),
+          );
+          return;
+        }
+        _updateTask(task.id, TaskStatus.completed,
+            downloadedFilePath: temporaryPath);
+        return;
+      }
 
       // 保存音频文件
       final saveFolder = task.customParams?['saveFolder'] ?? '';
@@ -415,6 +445,26 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     token?.cancel();
     state = state.where((t) => t.id != taskId).toList();
     _persistTasks();
+  }
+
+  Future<bool> clearDownloadedFilePath(String taskId) async {
+    if (!mounted) return false;
+    state = state.map((task) {
+      if (task.id != taskId) return task;
+      final customParams = task.customParams == null
+          ? null
+          : (Map<String, String>.from(task.customParams!)
+            ..remove(flowTemporaryExecutionIdKey)
+            ..remove(flowTemporaryBlockIdKey));
+      return task.copyWith(
+        clearDownloadedFilePath: true,
+        customParams: customParams,
+      );
+    }).toList();
+    final barrier = _removalBarrier;
+    if (barrier != null) await barrier.future;
+    if (!mounted) return false;
+    return _writeSnapshot(state);
   }
 
   /// Save removals before publishing them; absent IDs also retry disk cleanup.

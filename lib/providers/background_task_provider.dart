@@ -2946,6 +2946,16 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     );
   }
 
+  Future<bool> clearDownloadedFilePath(String taskId) {
+    if (!mounted) return Future<bool>.value(false);
+    state = state
+        .map((task) => task.id == taskId
+            ? task.copyWith(clearDownloadedFilePath: true)
+            : task)
+        .toList();
+    return _persistTasks();
+  }
+
   /// Mark a task as failed with an optional error message.
   void failTask(
     String taskId, {

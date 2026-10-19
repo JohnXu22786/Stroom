@@ -9,6 +9,7 @@ import '../../models/task_flow_execution.dart';
 import '../../models/task_flow_definition.dart';
 import '../../models/task_flow_exception.dart';
 import '../../providers/task_flow_execution_provider.dart';
+import '../flow_temporary_artifact_storage.dart';
 import 'shared_helpers.dart';
 
 Future<String> executeTtsBlock({
@@ -20,6 +21,7 @@ Future<String> executeTtsBlock({
   required FlowSubTask flowSubTask,
   required TaskListNotifier taskListNotifier,
   required ProviderEntriesState providerEntries,
+  bool temporaryOutput = false,
 }) async {
   // Model-level selection, same granularity as the TTS page: the shared
   // flattened list (configs without host/key excluded).
@@ -52,12 +54,37 @@ Future<String> executeTtsBlock({
 
   try {
     final taskId = const Uuid().v4();
-    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
-    execNotifier.updateSubTaskStatus(
-      execId,
-      flowSubTask.id,
-      TaskStatus.running,
-    );
+    if (temporaryOutput) {
+      if (!await execNotifier.updateSubTaskIdPersisted(
+        execId,
+        flowSubTask.id,
+        taskId,
+      )) {
+        throw BlockExecutionException(
+          '无法保存临时任务标识',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+      if (!execNotifier.startSubTaskIfActive(
+        execId,
+        flowSubTask.id,
+        taskId,
+      )) {
+        throw BlockExecutionException(
+          '任务流已暂停或结束，未启动临时合成任务',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
+    } else {
+      execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+      execNotifier.updateSubTaskStatus(
+        execId,
+        flowSubTask.id,
+        TaskStatus.running,
+      );
+    }
     taskListNotifier.addTask(
       title: title,
       text: input,
@@ -70,7 +97,11 @@ Future<String> executeTtsBlock({
         if (defaults['format'] != null) 'format': defaults['format'].toString(),
         if (defaults['format'] != null)
           'response_format': defaults['format'].toString(),
-        if (saveFolder.isNotEmpty) 'saveFolder': saveFolder,
+        if (temporaryOutput) ...{
+          flowTemporaryExecutionIdKey: execId,
+          flowTemporaryBlockIdKey: block.id,
+        } else if (saveFolder.isNotEmpty)
+          'saveFolder': saveFolder,
       },
       taskId: taskId,
     );
