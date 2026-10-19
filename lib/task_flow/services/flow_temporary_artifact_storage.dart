@@ -158,7 +158,10 @@ class FlowTemporaryArtifactStorage {
 
   /// Deletes a single verified temporary artifact. An invalid owner/reference
   /// pair is retained rather than risking deletion of an input or shared file.
-  static Future<bool> deleteArtifact(FlowTemporaryArtifact artifact) async {
+  static Future<bool> deleteArtifact(
+    FlowTemporaryArtifact artifact, {
+    bool Function()? shouldDelete,
+  }) async {
     if (!await ownsReference(
       executionId: artifact.executionId,
       blockId: artifact.blockId,
@@ -167,12 +170,16 @@ class FlowTemporaryArtifactStorage {
       debugPrint('[TaskFlow] Refused unowned artifact cleanup');
       return false;
     }
+    if (shouldDelete != null && !shouldDelete()) return false;
     if (_useWebStore) {
       await WebFileStore.delete(artifact.reference);
       return true;
     }
     final file = File(artifact.reference);
-    if (await file.exists()) await file.delete();
+    if (await file.exists()) {
+      if (shouldDelete != null && !shouldDelete()) return false;
+      await file.delete();
+    }
     return true;
   }
 

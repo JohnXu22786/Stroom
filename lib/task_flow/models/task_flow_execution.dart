@@ -57,6 +57,7 @@ class FlowSubTask {
   final FlowStepOutcome outcome;
   final FlowPayload? result;
   final FlowArtifactCleanupStatus artifactCleanupStatus;
+  final List<String> temporaryFileReferenceSubTaskIds;
   FlowSubTask(
       {String? id,
       required this.blockTypeKey,
@@ -66,9 +67,17 @@ class FlowSubTask {
       this.status = TaskStatus.running,
       FlowStepOutcome? outcome,
       this.result,
-      this.artifactCleanupStatus = FlowArtifactCleanupStatus.none})
+      this.artifactCleanupStatus = FlowArtifactCleanupStatus.none,
+      this.temporaryFileReferenceSubTaskIds = const []})
       : id = id ?? const Uuid().v4(),
         outcome = outcome ?? outcomeFor(status);
+
+  /// Child tasks whose downloaded file path may still reference this step's
+  /// temporary output, including a previous child replaced during resume.
+  List<String> get temporaryFileReferenceTaskIdsToClear => {
+        ...temporaryFileReferenceSubTaskIds,
+        subTaskId,
+      }.where((taskId) => taskId.isNotEmpty).toList(growable: false);
 
   static FlowStepOutcome outcomeFor(TaskStatus status) => switch (status) {
         TaskStatus.running => FlowStepOutcome.running,
@@ -85,6 +94,7 @@ class FlowSubTask {
           FlowStepOutcome? outcome,
           FlowPayload? result,
           FlowArtifactCleanupStatus? artifactCleanupStatus,
+          List<String>? temporaryFileReferenceSubTaskIds,
           bool clearResult = false}) =>
       FlowSubTask(
           id: id,
@@ -96,7 +106,9 @@ class FlowSubTask {
           outcome: outcome ?? this.outcome,
           result: clearResult ? null : result ?? this.result,
           artifactCleanupStatus:
-              artifactCleanupStatus ?? this.artifactCleanupStatus);
+              artifactCleanupStatus ?? this.artifactCleanupStatus,
+          temporaryFileReferenceSubTaskIds: temporaryFileReferenceSubTaskIds ??
+              this.temporaryFileReferenceSubTaskIds);
   Map<String, dynamic> toMap() => {
         'id': id,
         'blockTypeKey': blockTypeKey,
@@ -108,6 +120,8 @@ class FlowSubTask {
         if (result != null) 'result': result!.toMap(),
         if (artifactCleanupStatus != FlowArtifactCleanupStatus.none)
           'artifactCleanupStatus': artifactCleanupStatus.name,
+        if (temporaryFileReferenceSubTaskIds.isNotEmpty)
+          'temporaryFileReferenceSubTaskIds': temporaryFileReferenceSubTaskIds,
       };
   factory FlowSubTask.fromMap(Map<String, dynamic> map) => FlowSubTask(
       id: map['id'] as String?,
@@ -125,6 +139,11 @@ class FlowSubTask {
               .where((status) => status.name == map['artifactCleanupStatus'])
               .firstOrNull ??
           FlowArtifactCleanupStatus.none,
+      temporaryFileReferenceSubTaskIds:
+          (map['temporaryFileReferenceSubTaskIds'] as List?)
+                  ?.whereType<String>()
+                  .toList(growable: false) ??
+              const [],
       result: map['result'] is Map
           ? FlowPayload.fromMap(Map<String, dynamic>.from(map['result'] as Map))
           : null);

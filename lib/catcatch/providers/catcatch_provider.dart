@@ -341,10 +341,13 @@ class CatCatchNotifier extends StateNotifier<List<CatCatchTask>> {
 
   Future<bool> clearDownloadedFilePath(String id) async {
     if (!mounted) return false;
-    state = state
-        .map((task) =>
-            task.id == id ? task.copyWith(clearDownloadedFilePath: true) : task)
-        .toList();
+    state = state.map((task) {
+      if (task.id != id) return task;
+      final metadata = Map<String, String>.from(task.metadata)
+        ..remove(flowTemporaryExecutionIdKey)
+        ..remove(flowTemporaryBlockIdKey);
+      return task.copyWith(clearDownloadedFilePath: true, metadata: metadata);
+    }).toList();
     final barrier = _removalBarrier;
     if (barrier != null) await barrier.future;
     if (!mounted) return false;

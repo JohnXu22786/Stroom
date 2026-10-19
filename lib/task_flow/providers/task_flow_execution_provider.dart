@@ -184,7 +184,11 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     if (clearReference == null) return true;
     for (final execution in executions) {
       for (final step in _temporaryTaskFileReferenceSteps(execution)) {
-        if (!await clearReference(step)) return false;
+        for (final taskId in step.temporaryFileReferenceTaskIdsToClear) {
+          if (!await clearReference(step.copyWith(subTaskId: taskId))) {
+            return false;
+          }
+        }
       }
     }
     return true;
@@ -358,10 +362,32 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     if (!await persist()) return false;
     final current = execution(executionId);
     return current != null &&
-        !current.isTerminal &&
+        (current.status == FlowExecutionStatus.running ||
+            current.status == FlowExecutionStatus.waiting) &&
         current.subTasks.any(
           (step) => step.id == subTaskId && step.subTaskId == newSubTaskId,
         );
+  }
+
+  /// Atomically checks flow control and marks a persisted child as running
+  /// immediately before its task is registered. Callers must not await between
+  /// this and registering the child task, so pause/cancel cannot miss it.
+  bool startSubTaskIfActive(
+    String executionId,
+    String subTaskId,
+    String expectedSubTaskId,
+  ) {
+    final current = execution(executionId);
+    if (current == null ||
+        (current.status != FlowExecutionStatus.running &&
+            current.status != FlowExecutionStatus.waiting)) {
+      return false;
+    }
+    final step =
+        current.subTasks.where((step) => step.id == subTaskId).firstOrNull;
+    if (step == null || step.subTaskId != expectedSubTaskId) return false;
+    updateSubTaskStatus(executionId, subTaskId, TaskStatus.running);
+    return true;
   }
 
   /// Child callbacks cannot reopen a terminal execution. The service owns the
@@ -452,17 +478,32 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
 
   void prepareResume(String id) => _update(id, (e) {
         var prefix = true;
-        final steps = e.subTasks.map((st) {
+        final blocks = e.snapshot?.flow.blocks;
+        final steps = e.subTasks.asMap().entries.map((entry) {
+          final index = entry.key;
+          final st = entry.value;
           if (prefix &&
               st.outcome == FlowStepOutcome.succeeded &&
               st.result != null) {
             return st;
           }
           prefix = false;
+          final isTemporaryBlock = blocks != null &&
+              index < blocks.length &&
+              blocks[index].typeKey.name == st.blockTypeKey &&
+              isFlowBlockTemporary(blocks, index);
+          final previousTemporaryTaskIds = [
+            ...st.temporaryFileReferenceSubTaskIds,
+            if (isTemporaryBlock &&
+                !st.subTaskId.startsWith('pending_') &&
+                !st.temporaryFileReferenceSubTaskIds.contains(st.subTaskId))
+              st.subTaskId,
+          ];
           return st.copyWith(
               subTaskId: 'pending_${st.blockTypeKey}_${st.id}',
               status: TaskStatus.waiting,
               outcome: FlowStepOutcome.pending,
+              temporaryFileReferenceSubTaskIds: previousTemporaryTaskIds,
               clearResult: true);
         }).toList();
         return e.copyWith(
@@ -546,8 +587,14 @@ class TaskFlowExecutionNotifier extends StateNotifier<List<TaskFlowExecution>>
     if (removed == null) return;
     // Preserve the legacy synchronous state update for ordinary executions.
     // Only temporary outputs need the provider write to finish before the
-    // execution can be removed.
-    if (_temporaryTaskFileReferenceSteps(removed).isNotEmpty &&
+    // execution can be removed. Stop an active producer first so it cannot
+    // restore its file path after that reference has been cleared.
+    final hasTemporaryReferences =
+        _temporaryTaskFileReferenceSteps(removed).isNotEmpty;
+    if (hasTemporaryReferences && !removed.isTerminal) {
+      cancelExecution(id);
+    }
+    if (hasTemporaryReferences &&
         !await _clearTemporaryTaskFileReferences([removed])) {
       debugPrint('Failed to clear temporary task file references for $id');
       return;

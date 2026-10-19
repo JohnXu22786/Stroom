@@ -2,12 +2,126 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/utils/web_file_store.dart';
+
+Uint8List _pendingTemporaryArtifactBackup({
+  required String artifactExecutionId,
+  String artifactBlockId = 'block',
+  String snapshotBlockId = 'block',
+  bool successorHasResult = true,
+  bool successorResultIsMap = true,
+  String cleanupStatus = 'pending',
+  String successorOutcome = 'succeeded',
+  bool includeTemporaryFile = false,
+}) {
+  const executionId = 'execution';
+  final reference = 'stroom-app-data:/task_flow_temporary/'
+      '${sha256.convert(utf8.encode(executionId))}/'
+      '${sha256.convert(utf8.encode(artifactBlockId))}/speech.wav';
+  final archive = Archive();
+  if (includeTemporaryFile) {
+    final relative = reference.substring('stroom-app-data:/'.length);
+    archive.addFile(ArchiveFile('files/$relative', 3, [1, 2, 3]));
+  }
+  void addJson(String name, Object value) {
+    final bytes = utf8.encode(jsonEncode(value));
+    archive.addFile(ArchiveFile(name, bytes.length, bytes));
+  }
+
+  addJson('manifest.json', {
+    'version': 2,
+    'createdAt': DateTime(2026).toIso8601String(),
+    'appVersion': 'test',
+    'dataParts': ['tasks'],
+  });
+  addJson('synthesis/tasks.json', []);
+  addJson('catcatch/tasks.json', []);
+  addJson('background/tasks.json', []);
+  addJson('task_flows/flows.json', []);
+  addJson('task_flows/executions.json', [
+    {
+      'id': executionId,
+      'flowId': 'flow',
+      'flowName': 'Flow',
+      'status': 'paused',
+      'createdAt': DateTime(2026).toIso8601String(),
+      'inputText': 'input',
+      'snapshot': {
+        'flow': {
+          'id': 'flow',
+          'name': 'Flow',
+          'description': '',
+          'inputType': 'text',
+          'blocks': [
+            {'id': snapshotBlockId, 'typeKey': 'tts', 'params': {}},
+            {'id': 'successor-block', 'typeKey': 'asr', 'params': {}},
+          ],
+          'createdAt': DateTime(2026).toIso8601String(),
+          'updatedAt': DateTime(2026).toIso8601String(),
+        },
+        'models': [],
+        'configs': [],
+        'assistants': [],
+        'chatModels': [],
+      },
+      'subTasks': [
+        {
+          'id': 'temporary-step',
+          'blockTypeKey': 'tts',
+          'blockLabel': 'TTS',
+          'subTaskId': 'synthesis-task',
+          'subTaskType': 'synthesis',
+          'status': 'completed',
+          'outcome': 'succeeded',
+          'artifactCleanupStatus': cleanupStatus,
+          'result': {
+            'type': 'audio',
+            'fileReference': reference,
+            'temporaryArtifact': {
+              'executionId': artifactExecutionId,
+              'blockId': artifactBlockId,
+              'reference': reference,
+            },
+          },
+        },
+        {
+          'id': 'successor-step',
+          'blockTypeKey': 'asr',
+          'blockLabel': 'ASR',
+          'subTaskId': 'recognition-task',
+          'subTaskType': 'background',
+          'status': 'completed',
+          'outcome': successorOutcome,
+          if (successorHasResult)
+            'result': successorResultIsMap
+                ? {'type': 'text', 'text': 'recognized'}
+                : 'not-a-flow-payload',
+        },
+      ],
+    },
+  ]);
+
+  return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
+const _taskOnlyBackupSelection = BackupSelection(
+  chatRecordsAndAttachments: false,
+  settings: false,
+  pictures: false,
+  audio: false,
+  videos: false,
+  texts: false,
+  tasks: true,
+  ankiData: false,
+  browserCookies: false,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +132,129 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+  });
+
+  testWidgets(
+      'pending temporary artifact after its successor succeeds is optional in backups',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await BackupService.restoreFromBytesForTest(
+      _pendingTemporaryArtifactBackup(artifactExecutionId: 'execution'),
+      selection: _taskOnlyBackupSelection,
+    );
+
+    expect(await WebFileStore.read('task_flows/executions.json'), isNotNull);
+  });
+
+  testWidgets(
+      'pending temporary artifact with mismatched owner is still required in backups',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'foreign-execution',
+          includeTemporaryFile: true,
+        ),
+        selection: _taskOnlyBackupSelection,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  testWidgets(
+      'temporary artifact block ID must match the execution snapshot step',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          snapshotBlockId: 'different-block',
+          includeTemporaryFile: true,
+        ),
+        selection: _taskOnlyBackupSelection,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  testWidgets(
+      'temporary artifact cannot be skipped for a malformed successor result',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          successorResultIsMap: false,
+        ),
+        selection: _taskOnlyBackupSelection,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  testWidgets(
+      'pending temporary artifact is required when successor result is missing',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          successorHasResult: false,
+        ),
+        selection: _taskOnlyBackupSelection,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  testWidgets(
+      'cleaned temporary artifact requires a persisted successful successor',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(
+        _pendingTemporaryArtifactBackup(
+          artifactExecutionId: 'execution',
+          cleanupStatus: 'cleaned',
+          successorHasResult: false,
+        ),
+        selection: _taskOnlyBackupSelection,
+      ),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  testWidgets(
+      'cleaned temporary artifact is optional after its successor is persisted',
+      (WidgetTester t) async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+
+    await BackupService.restoreFromBytesForTest(
+      _pendingTemporaryArtifactBackup(
+        artifactExecutionId: 'execution',
+        cleanupStatus: 'cleaned',
+      ),
+      selection: _taskOnlyBackupSelection,
+    );
+
+    expect(await WebFileStore.read('task_flows/executions.json'), isNotNull);
   });
 
   // ==================================================================

@@ -66,14 +66,25 @@ Future<String> executeTtsBlock({
           blockTitle: def.label,
         );
       }
+      if (!execNotifier.startSubTaskIfActive(
+        execId,
+        flowSubTask.id,
+        taskId,
+      )) {
+        throw BlockExecutionException(
+          '任务流已暂停或结束，未启动临时合成任务',
+          blockType: def.typeKey.name,
+          blockTitle: def.label,
+        );
+      }
     } else {
       execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+      execNotifier.updateSubTaskStatus(
+        execId,
+        flowSubTask.id,
+        TaskStatus.running,
+      );
     }
-    execNotifier.updateSubTaskStatus(
-      execId,
-      flowSubTask.id,
-      TaskStatus.running,
-    );
     taskListNotifier.addTask(
       title: title,
       text: input,

@@ -33,6 +33,7 @@ import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
+import '../task_flow/models/flow_payload.dart' show FlowPayload;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -3392,7 +3393,53 @@ class BackupService {
         .toSet();
     var allPresent = true;
 
-    void inspect(Object? value) {
+    bool hasPortableTemporaryFlowResult(
+      Object? value, {
+      required String executionId,
+      required String expectedBlockId,
+    }) {
+      if (value is! Map) return false;
+      final reference = value['fileReference'];
+      final artifact = value['temporaryArtifact'];
+      final artifactExecutionId =
+          artifact is Map ? artifact['executionId'] : null;
+      final artifactBlockId = artifact is Map ? artifact['blockId'] : null;
+      if (reference is! String ||
+          artifact is! Map ||
+          executionId.isEmpty ||
+          artifactExecutionId is! String ||
+          artifactExecutionId.isEmpty ||
+          artifactExecutionId != executionId ||
+          artifactBlockId is! String ||
+          artifactBlockId.isEmpty ||
+          artifactBlockId != expectedBlockId ||
+          artifact['reference'] != reference ||
+          !reference.startsWith(_portableAppDataPathPrefix)) {
+        return false;
+      }
+      final relative = reference.substring(_portableAppDataPathPrefix.length);
+      if (!_isSafeRelativeArchivePath(relative)) return false;
+      final pathSegments = relative.split('/');
+      return pathSegments.length == 4 &&
+          pathSegments[0] == 'task_flow_temporary' &&
+          pathSegments[1] ==
+              sha256.convert(utf8.encode(artifactExecutionId)).toString() &&
+          pathSegments[2] ==
+              sha256.convert(utf8.encode(artifactBlockId)).toString() &&
+          pathSegments[3].isNotEmpty;
+    }
+
+    bool hasPersistableFlowPayload(Object? value) {
+      if (value is! Map) return false;
+      try {
+        FlowPayload.fromMap(Map<String, dynamic>.from(value));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    void inspect(Object? value, {bool skipResult = false}) {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
@@ -3412,12 +3459,73 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        final cleanedFlowStep = value['artifactCleanupStatus'] == 'cleaned';
+        final skipOwnResult = skipResult;
+        final rawSteps = value['subTasks'];
+        if (rawSteps is Iterable) {
+          final steps = rawSteps.toList();
+          for (var index = 0; index < steps.length; index++) {
+            final step = steps[index];
+            final successor =
+                index + 1 < steps.length ? steps[index + 1] : null;
+            final executionId = value['id'];
+            final cleanupStatus =
+                step is Map ? step['artifactCleanupStatus'] : null;
+            final result = step is Map ? step['result'] : null;
+            final snapshot = value['snapshot'];
+            final snapshotFlow = snapshot is Map ? snapshot['flow'] : null;
+            final snapshotBlocks =
+                snapshotFlow is Map ? snapshotFlow['blocks'] : null;
+            final snapshotBlock =
+                snapshotBlocks is List && index < snapshotBlocks.length
+                    ? snapshotBlocks[index]
+                    : null;
+            final expectedBlockId =
+                snapshotBlock is Map && snapshotBlock['id'] is String
+                    ? snapshotBlock['id'] as String
+                    : '';
+            final hasTemporaryArtifact =
+                result is Map && result.containsKey('temporaryArtifact');
+            final hasValidTemporaryArtifact = hasPortableTemporaryFlowResult(
+              result,
+              executionId: executionId is String ? executionId : '',
+              expectedBlockId: expectedBlockId,
+            );
+            final hasSuccessfulSuccessor = successor is Map &&
+                successor['outcome'] == 'succeeded' &&
+                hasPersistableFlowPayload(successor['result']);
+            // Validate ownership even when the archive contains the referenced
+            // path. A portable file alone cannot prove that this execution
+            // owns it or that cleanup/resume may safely skip it.
+            if ((hasTemporaryArtifact ||
+                    cleanupStatus == 'pending' ||
+                    cleanupStatus == 'cleaned') &&
+                !hasValidTemporaryArtifact) {
+              allPresent = false;
+            }
+            final hasCleanupCheckpoint =
+                hasValidTemporaryArtifact && hasSuccessfulSuccessor;
+            if ((cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                !hasCleanupCheckpoint) {
+              allPresent = false;
+            }
+            final cleanupCanSkip =
+                (cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                    hasCleanupCheckpoint;
+            // Deletion is idempotent and resume reconciles a pending cleanup
+            // after its successor result was durably saved. A crash after the
+            // file delete but before persisting `cleaned` can leave this ref
+            // pointing at a file that is already gone.
+            inspect(step, skipResult: cleanupCanSkip);
+          }
+        }
         for (final entry in value.entries) {
           // A cleaned flow result keeps its historical reference so execution
           // resume can skip that step. Its owned file is intentionally gone
           // and therefore is not a required backup entry.
-          if (cleanedFlowStep && entry.key == 'result') continue;
+          if ((skipOwnResult && entry.key == 'result') ||
+              (rawSteps is Iterable && entry.key == 'subTasks')) {
+            continue;
+          }
           inspect(entry.value);
         }
       } else if (value is Iterable) {

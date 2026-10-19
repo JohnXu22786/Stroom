@@ -449,11 +449,18 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
 
   Future<bool> clearDownloadedFilePath(String taskId) async {
     if (!mounted) return false;
-    state = state
-        .map((task) => task.id == taskId
-            ? task.copyWith(clearDownloadedFilePath: true)
-            : task)
-        .toList();
+    state = state.map((task) {
+      if (task.id != taskId) return task;
+      final customParams = task.customParams == null
+          ? null
+          : (Map<String, String>.from(task.customParams!)
+            ..remove(flowTemporaryExecutionIdKey)
+            ..remove(flowTemporaryBlockIdKey));
+      return task.copyWith(
+        clearDownloadedFilePath: true,
+        customParams: customParams,
+      );
+    }).toList();
     final barrier = _removalBarrier;
     if (barrier != null) await barrier.future;
     if (!mounted) return false;

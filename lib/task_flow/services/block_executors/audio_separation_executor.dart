@@ -310,10 +310,22 @@ Future<String> executeAudioSeparationBlock({
         blockTitle: def.label,
       );
     }
+    if (!execNotifier.startSubTaskIfActive(
+      execId,
+      flowSubTask.id,
+      taskId,
+    )) {
+      throw BlockExecutionException(
+        '任务流已暂停或结束，未启动临时分离任务',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
   } else {
     execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
   }
-  execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
   bgNotifier.addTask(
     type: BackgroundTaskType.audioSeparation,
     title: title,

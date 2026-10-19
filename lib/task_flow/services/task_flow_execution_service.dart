@@ -904,6 +904,18 @@ class TaskFlowExecutionService {
     FlowSubTask step, {
     bool allowPausedOrFailed = false,
   }) async {
+    final controlRevision = _controlRevisions[executionId];
+    bool mayDelete(TaskFlowExecution? execution) {
+      if (execution == null ||
+          execution.status == FlowExecutionStatus.completed ||
+          execution.status == FlowExecutionStatus.cancelled) {
+        return false;
+      }
+      return allowPausedOrFailed ||
+          execution.status == FlowExecutionStatus.running ||
+          execution.status == FlowExecutionStatus.waiting;
+    }
+
     final result = step.result;
     final artifact = result?.temporaryArtifact;
     if (result?.fileReference == null ||
@@ -921,17 +933,27 @@ class TaskFlowExecutionService {
       throw const TaskFlowPersistenceException('无法保存临时文件清理状态');
     }
 
-    final current = _execution(executionId);
-    if (current == null) return;
-    final canDelete = allowPausedOrFailed ||
-        current.status == FlowExecutionStatus.running ||
-        current.status == FlowExecutionStatus.waiting;
-    if (!canDelete) return;
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
 
     if (!await _clearTemporaryTaskFileReference(step)) {
       throw const TaskFlowPersistenceException('无法保存临时文件引用清理状态，原文件已保留');
     }
-    if (!await FlowTemporaryArtifactStorage.deleteArtifact(artifact)) {
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
+    bool mayDeleteNow() =>
+        _controlRevisions[executionId] == controlRevision &&
+        mayDelete(_execution(executionId));
+
+    if (!await FlowTemporaryArtifactStorage.deleteArtifact(
+      artifact,
+      shouldDelete: mayDeleteNow,
+    )) {
+      if (!mayDeleteNow()) return;
       throw const TaskFlowPersistenceException('临时步骤文件的存储位置无法验证，已保留文件');
     }
     if (!await _notifier.setArtifactCleanupStatus(
@@ -940,21 +962,22 @@ class TaskFlowExecutionService {
     }
   }
 
-  Future<bool> _clearTemporaryTaskFileReference(FlowSubTask step) {
-    switch (step.subTaskType) {
-      case 'catcatch':
-        return _ref
+  Future<bool> _clearTemporaryTaskFileReference(FlowSubTask step) async {
+    for (final taskId in step.temporaryFileReferenceTaskIdsToClear) {
+      final cleared = switch (step.subTaskType) {
+        'catcatch' => await _ref
             .read(catcatchTasksProvider.notifier)
-            .clearDownloadedFilePath(step.subTaskId);
-      case 'synthesis':
-        return _ref
+            .clearDownloadedFilePath(taskId),
+        'synthesis' => await _ref
             .read(taskListProvider.notifier)
-            .clearDownloadedFilePath(step.subTaskId);
-      default:
-        return _ref
+            .clearDownloadedFilePath(taskId),
+        _ => await _ref
             .read(backgroundTasksProvider.notifier)
-            .clearDownloadedFilePath(step.subTaskId);
+            .clearDownloadedFilePath(taskId),
+      };
+      if (!cleared) return false;
     }
+    return true;
   }
 
   Future<void> _runSaved(String id) async {
