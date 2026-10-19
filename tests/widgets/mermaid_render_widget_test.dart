@@ -512,7 +512,9 @@ void main() {
       expect(html, contains('onTransformChanged'));
       expect(
         html,
-        contains("callHandler('onTransformChanged', zoomLevel, panX, panY);"),
+        contains(
+          "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);",
+        ),
       );
     });
 
@@ -1082,6 +1084,80 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets(
+      'native toolbar retains pre-fit zoom taps after cached zoom reaches maximum',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            showZoomControls: true,
+          ),
+          supportsJavaScriptHandlers: true,
+        );
+        final fakeController = webView.controller;
+
+        for (var tap = 0; tap < 100; tap++) {
+          await tester.tap(find.byIcon(Icons.zoom_in));
+        }
+
+        fakeController.simulateTransformChanged(
+          10,
+          0,
+          0,
+          fitComplete: false,
+          documentGeneration: 0,
+        );
+
+        for (var tap = 0; tap < 20; tap++) {
+          await tester.tap(find.byIcon(Icons.zoom_in));
+        }
+
+        expect(
+          fakeController.evaluatedScripts
+              .where(
+                  (script) => script == 'window.applyZoomDeltasAfterFit([0.1])')
+              .length,
+          120,
+          reason:
+              'all toolbar deltas must reach JavaScript before the first fit',
+        );
+
+        fakeController.simulateJsFitToViewport(0.45);
+        expect(
+          fakeController.zoomLevel,
+          10.0,
+          reason: 'queued taps should be applied to fit zoom and capped at 10',
+        );
+
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          fakeController.zoomLevel,
+          10.0,
+          reason: 'a post-fit toolbar tap must remain capped at 10',
+        );
+        expect(
+          fakeController.evaluatedScripts
+              .where(
+                  (script) => script == 'window.applyZoomDeltasAfterFit([0.1])')
+              .length,
+          120,
+          reason: 'the native zoom cache should still suppress post-fit no-ops',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
 
     testWidgets(
         'Ctrl+wheel zoom before fit survives auto-fit and does not scroll parent',
@@ -2159,7 +2235,7 @@ void main() {
         expect(
           controller.loadedDataDocuments.last,
           contains(
-            "callHandler('onTransformChanged', zoomLevel, panX, panY, 1);",
+            "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete, 1);",
           ),
         );
         expect(tester.takeException(), isNull);
@@ -4961,12 +5037,14 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     double zoom,
     double panX,
     double panY, {
+    bool fitComplete = true,
     required int documentGeneration,
   }) {
     _javascriptHandlers['onTransformChanged']?.call([
       zoom,
       panX,
       panY,
+      fitComplete,
       documentGeneration,
     ]);
   }
@@ -4989,6 +5067,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       zoomLevel,
       panX,
       panY,
+      true,
       documentGeneration,
     ]);
   }
