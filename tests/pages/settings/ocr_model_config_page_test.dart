@@ -120,4 +120,170 @@ void main() {
       ]);
     });
   });
+
+  group('OcrModelConfigPage custom parameter validation', () {
+    testWidgets('rejects an invalid numeric default when saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: 'abc',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('参数 "scale" 的值不是有效数字：abc'), findsOneWidget);
+    });
+
+    testWidgets('rejects an invalid boolean default when saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(paramName: 'enabled', type: 'boolean', defaultValue: 'yes'),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(
+        find.text('参数 "enabled" 的值必须是 true 或 false：yes'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'saves valid number and boolean options despite invalid fallbacks',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: 'abc',
+            options: ['1.25'],
+          ),
+          CustomParam(
+            paramName: 'enabled',
+            type: 'boolean',
+            defaultValue: 'yes',
+            options: ['TRUE'],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.map((param) => param.options.first), [
+        '1.25',
+        'TRUE',
+      ]);
+    });
+
+    testWidgets('rejects an invalid numeric option when saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: '1.25',
+            options: ['abc'],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('参数 "scale" 的值不是有效数字：abc'), findsOneWidget);
+    });
+
+    testWidgets('rejects an invalid boolean option when saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'enabled',
+            type: 'boolean',
+            defaultValue: 'true',
+            options: ['yes'],
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('参数 "enabled" 的值必须是 true 或 false：yes'), findsOneWidget);
+    });
+
+    testWidgets('saves valid numeric, boolean, and JSON defaults',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        customParams: [
+          CustomParam(
+            paramName: 'scale',
+            type: 'number',
+            defaultValue: '1.25',
+          ),
+          CustomParam(
+            paramName: 'enabled',
+            type: 'boolean',
+            defaultValue: 'FALSE',
+          ),
+          CustomParam(
+            paramName: 'metadata',
+            type: 'json',
+            defaultValue: '{"source":"test"}',
+          ),
+        ],
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.map((param) => param.defaultValue), [
+        '1.25',
+        'FALSE',
+        '{"source":"test"}',
+      ]);
+    });
+  });
 }

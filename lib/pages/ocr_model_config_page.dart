@@ -191,7 +191,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
 
     // 验证自定义参数：参数名和默认值不能为空，参数名不能重复，
-    // 且 JSON 类型的默认值必须是合法 JSON
+    // 且请求实际使用的参数值必须符合对应类型。
     final seenNames = <String>{};
     for (int i = 0; i < _customParams.length; i++) {
       final param = _customParams[i];
@@ -214,10 +214,13 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
         );
         return;
       }
-      // JSON 类型的默认值必须是合法 JSON
-      if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
+      // OCR requests use the first option for non-JSON parameters.
+      final value = param.type != 'json' && param.options.isNotEmpty
+          ? param.options.first.trim()
+          : param.defaultValue.trim();
+      if (param.type == 'json') {
         try {
-          jsonDecode(param.defaultValue.trim());
+          jsonDecode(value);
         } catch (_) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -227,6 +230,30 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
           );
           return;
         }
+      } else if (param.type == 'number' && value.isNotEmpty) {
+        final number = num.tryParse(value);
+        if (number == null || !number.isFinite) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('参数 "$name" 的值不是有效数字：$value'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      } else if (param.type == 'boolean' &&
+          value.isNotEmpty &&
+          value.toLowerCase() != 'true' &&
+          value.toLowerCase() != 'false') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '参数 "$name" 的值必须是 true 或 false：$value',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
       }
     }
 
