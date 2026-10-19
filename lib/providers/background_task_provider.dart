@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
@@ -560,11 +561,724 @@ bool _legacyOcrTextContainsCredential(
 ) {
   if (OcrDiagnosticSnapshot.containsCredential(
     text,
-    excludedValues: credentialValues,
+    excludedValues: credentialValues.where(
+      (value) => !value.trimRight().endsWith('...'),
+    ),
   )) {
     return true;
   }
   return _legacyOcrTextContainsMaskedCredential(text, credentialValues);
+}
+
+bool _legacyOcrHasAscendingAlphabetRun(String value) {
+  final normalized = value.toLowerCase();
+  var runLength = 1;
+  for (var index = 1; index < normalized.length; index++) {
+    final previous = normalized.codeUnitAt(index - 1);
+    final current = normalized.codeUnitAt(index);
+    if (previous >= 97 && previous <= 121 && current == previous + 1) {
+      runLength++;
+      if (runLength >= 5) return true;
+    } else {
+      runLength = 1;
+    }
+  }
+  return false;
+}
+
+bool _legacyOcrHasHighAlphabeticEntropy(
+  String value, {
+  int minimumLength = 9,
+  double minimumEntropy = 3.3,
+  double maximumVowelRatio = 1,
+  bool allowUnicodeLetterMarks = false,
+}) {
+  final normalized = value.toLowerCase();
+  final letters = allowUnicodeLetterMarks
+      ? normalized.runes.toList()
+      : normalized.codeUnits;
+  final isAlphabetic = allowUnicodeLetterMarks
+      ? RegExp(r'^[\p{L}\p{M}]+$', unicode: true).hasMatch(normalized) &&
+          RegExp(r'\p{L}', unicode: true).hasMatch(normalized)
+      : RegExp(r'^[a-z]+$').hasMatch(normalized);
+  if (letters.length < minimumLength || !isAlphabetic) {
+    return false;
+  }
+
+  final frequencies = <int, int>{};
+  for (final letter in letters) {
+    frequencies.update(letter, (count) => count + 1, ifAbsent: () => 1);
+  }
+
+  var entropy = 0.0;
+  for (final count in frequencies.values) {
+    final probability = count / letters.length;
+    entropy -= probability * math.log(probability) / math.ln2;
+  }
+  final vowelCount = RegExp(r'[aeiou]').allMatches(normalized).length;
+  final vowelRatio = vowelCount / letters.length;
+  return (letters.length == 9 && entropy >= 3.1 && vowelRatio <= 0.25) ||
+      (entropy >= minimumEntropy && vowelRatio <= maximumVowelRatio) ||
+      (entropy >= 3.0 && vowelRatio <= 0.15);
+}
+
+bool _legacyOcrHasShortOpaqueAlphaKey(String value) =>
+    _legacyOcrHasHighAlphabeticEntropy(
+      value,
+      minimumLength: 8,
+      minimumEntropy: 2.7,
+      maximumVowelRatio: 0.1,
+    );
+
+bool _legacyOcrHasLongConsonantRun(String value) =>
+    RegExp(r'[bcdfghjklmnpqrstvwxz]{6,}', caseSensitive: false).hasMatch(value);
+
+bool _legacyOcrHasShortOpaqueUnicodeContinuation(
+  String prefix,
+  String suffix,
+) =>
+    prefix.length >= 2 &&
+    RegExp(r'^\p{L}+$', unicode: true).hasMatch(suffix) &&
+    (suffix.runes.where((rune) => rune > 0x7F).length >= 2 ||
+        (suffix.runes.where((rune) => rune > 0x7F).length == 1 &&
+            RegExp(r'[-_0-9]').hasMatch(prefix)));
+
+bool _legacyOcrHasOpaqueUnicodeContinuation(String prefix, String suffix) =>
+    RegExp(r'[^\x00-\x7F]').hasMatch(suffix) &&
+    RegExp(r'^\p{L}', unicode: true).hasMatch(suffix) &&
+    (_legacyOcrHasShortOpaqueUnicodeContinuation(prefix, suffix) ||
+        _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
+        _legacyOcrHasHighAlphabeticEntropy(
+          prefix,
+          minimumLength: 6,
+          minimumEntropy: 2.5,
+          maximumVowelRatio: 0.1,
+        ) ||
+        (_legacyOcrHasHighAlphabeticEntropy(
+              prefix,
+              minimumLength: 8,
+              minimumEntropy: 3.0,
+              maximumVowelRatio: 0.6,
+            ) &&
+            !_legacyOcrHasNaturalWordContinuation(prefix, suffix)) ||
+        RegExp(r'[0-9_]').hasMatch(prefix) ||
+        prefix.toLowerCase() == 'auth' ||
+        (_legacyOcrHasCredentialWord(prefix) &&
+            !_legacyOcrHasNaturalWordContinuation(prefix, suffix)));
+
+bool _legacyOcrHasRepeatedAlphabeticSequence(String value) =>
+    RegExp(r'([a-z]{2,3})\1{2,}', caseSensitive: false).hasMatch(value);
+
+bool _legacyOcrHasRepeatedCharacterRun(String value) =>
+    RegExp(r'([a-z])\1{3,}', caseSensitive: false).hasMatch(value);
+
+bool _legacyOcrHasCredentialWord(String value) => RegExp(
+      r'^[^a-zA-Z0-9]*(?:secret|token|credential|password|passwd|api[-_]?key|access[-_]?token|private[-_]?key)',
+      caseSensitive: false,
+    ).hasMatch(value);
+
+bool _legacyOcrIsCredentialWord(String value) => RegExp(
+      r'^(?:secrets?|secretar(?:y|ies)|tokens?|tokenizings?|tokenizations?|credentials?|credentialings?|passwords?|passwds?|authorizations?|authenticates?|authentications?|api[-_]?keys?|access[-_]?tokens?|private[-_]?keys?)$',
+      caseSensitive: false,
+    ).hasMatch(value);
+
+bool _legacyOcrHasCredentialCompound(String value) => RegExp(
+      r'^[^a-zA-Z0-9]*(?:secret|access|private|api)[_-]?(?:key|token|credential|password|passwd)(?:$|[^a-zA-Z0-9])',
+      caseSensitive: false,
+    ).hasMatch(value);
+
+bool _legacyOcrHasNaturalAlphaContinuation(String value) => RegExp(
+      r'^(?:s|es|ed|ing|er|est|ly|able|ary|aries|ation|ization|istic|based)$',
+      caseSensitive: false,
+    ).hasMatch(value);
+
+bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
+  if (RegExp(r'[\p{N}_]', unicode: true).hasMatch(suffix)) return false;
+
+  final unicodeWord = '$prefix$suffix'
+      .replaceAll(RegExp(r'[^\p{L}]', unicode: true), '')
+      .toLowerCase();
+  if (const {'secretaría', 'secretária'}.contains(unicodeWord)) return true;
+  final word =
+      '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
+  const naturalWords = {
+    'abstraction',
+    'abstractionism',
+    'accommodate',
+    'application',
+    'apiculture',
+    'architecture',
+    'authbased',
+    'author',
+    'authoring',
+    'authorship',
+    'authorships',
+    'authoritative',
+    'authorities',
+    'authoritarian',
+    'authoritarianism',
+    'authoritarianisms',
+    'authority',
+    'authentic',
+    'authenticity',
+    'authenticate',
+    'authenticating',
+    'authentication',
+    'authenticator',
+    'authenticators',
+    'authorize',
+    'authorizing',
+    'authorized',
+    'recognize',
+    'bookkeeper',
+    'calculate',
+    'categorize',
+    'certificate',
+    'characteristic',
+    'characteristics',
+    'characterization',
+    'characterizations',
+    'characterize',
+    'characters',
+    'configuration',
+    'description',
+    'enumerate',
+    'construction',
+    'cooperate',
+    'transaction',
+    'authorization',
+    'obfuscated',
+    'photograph',
+    'documentaries',
+    'documentary',
+    'documented',
+    'documenting',
+    'documentation',
+    'documentbased',
+    'documents',
+    'credentials',
+    'determine',
+    'credentialing',
+    'instruction',
+    'instructional',
+    'interaction',
+    'interactions',
+    'interpret',
+    'highlight',
+    'handwriting',
+    'handwritten',
+    'messages',
+    'passwords',
+    'passwordless',
+    'passwordprotected',
+    'projectbased',
+    'preliminary',
+    'purchases',
+    'services',
+    'secretary',
+    'secrete',
+    'secretion',
+    'secretariat',
+    'secretarial',
+    'secretive',
+    'secretmenu',
+    'summarize',
+    'translate',
+    'transcribe',
+    'tokenize',
+    'tokenization',
+    'tokenizers',
+    'tokenized',
+    'tokenizing',
+    'tokenbased',
+    'thoughtful',
+    'understand',
+    'userinterface',
+  };
+  final suffixWithoutTerminalPunctuation = suffix.replaceFirst(
+    RegExp(r'''[.,!?;:)}\]"'“”‘’`]+$'''),
+    '',
+  );
+  final isNaturalPossessiveSuffix = RegExp(
+    r"^[a-zA-Z]*['’]s$",
+  ).hasMatch(suffixWithoutTerminalPunctuation);
+  final hasNonNaturalSeparator = suffixWithoutTerminalPunctuation.isNotEmpty &&
+      !RegExp(r'^[a-zA-Z]+$').hasMatch(suffixWithoutTerminalPunctuation) &&
+      !isNaturalPossessiveSuffix;
+  final isKnownNaturalHyphenatedWord =
+      (suffixWithoutTerminalPunctuation.toLowerCase() == '-based' ||
+              (prefix.toLowerCase() == 'secret' &&
+                  suffixWithoutTerminalPunctuation.toLowerCase() == '-menu') ||
+              (prefix.toLowerCase() == 'password' &&
+                  suffixWithoutTerminalPunctuation.toLowerCase() ==
+                      '-protected')) &&
+          naturalWords.contains(word);
+  final hasCredentialWordPrefix =
+      prefix.toLowerCase() == 'auth' || _legacyOcrHasCredentialWord(prefix);
+  if (hasCredentialWordPrefix &&
+      hasNonNaturalSeparator &&
+      !isKnownNaturalHyphenatedWord) {
+    return false;
+  }
+  return naturalWords.contains(word) ||
+      (word.endsWith('s') &&
+          naturalWords.contains(word.substring(0, word.length - 1)));
+}
+
+bool _legacyOcrCanRedactShortNaturalWordEcho(String word) =>
+    const {'documentation', 'obfuscated'}.contains(word);
+
+final _legacyOcrNaturalSourcePhrasePattern = RegExp(
+  r'^\s*from (?:(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its) )?(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*(?:\s+(?!(?:(?:authorization|auth|api[\s_-]*key|keys?|credentials?|tokens?|secrets?|passwords?)(?=\s+(?:header|value|keys?|credentials?|tokens?|secrets?|passwords?|bearer)\b|\s*[,;:.!?]|$))\b)[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*(?=\s*[,;:.!?]|\s*$)',
+  caseSensitive: false,
+  unicode: true,
+);
+
+bool _legacyOcrHasCredentialUseContext(
+  String text,
+  Match match,
+  String prefix,
+  String suffix,
+) {
+  final before = text.substring(0, match.start).trimRight();
+  final after = text.substring(match.end).trimLeft();
+  final actionVerb = RegExp(
+    r'\b(use|using|send|provide|enter|supply|pass|set|read|extract|identify|recognize|transcribe)$',
+    caseSensitive: false,
+  ).firstMatch(before);
+  final credentialTargetAfterConsumedConnector = suffix.toLowerCase() == 'as' &&
+      RegExp(
+        r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  final explicitCredentialTarget = RegExp(
+        r'^as (?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
+        caseSensitive: false,
+      ).hasMatch(after) ||
+      credentialTargetAfterConsumedConnector;
+  final credentialHeaderTarget = RegExp(
+    r'^(?:in(?:to)?|to|for) (?:the )?(?:authorization|auth|api[\s_-]*key|key|token|secret|credential|password)(?: header)(?: value)?\b',
+    caseSensitive: false,
+  ).hasMatch(after);
+  final actionTarget = RegExp(
+        r'^for (?:the )?request\b',
+        caseSensitive: false,
+      ).hasMatch(after) ||
+      _legacyOcrNaturalSourcePhrasePattern.hasMatch(after) ||
+      explicitCredentialTarget ||
+      credentialHeaderTarget;
+  final naturalWord =
+      '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
+  final matchedText = match.group(0)!;
+  final matchedPrefix = RegExp(
+    RegExp.escape(prefix),
+    caseSensitive: false,
+    unicode: true,
+  ).firstMatch(matchedText);
+  final absolutePrefixStart =
+      matchedPrefix == null ? -1 : match.start + matchedPrefix.start;
+  final maskPrefixIsEmbedded = absolutePrefixStart > 0 &&
+      RegExp(
+        r'[\p{L}\p{M}\p{N}._/+~-]',
+        unicode: true,
+      ).hasMatch(text.substring(absolutePrefixStart - 1, absolutePrefixStart));
+  final shortNaturalWordEcho =
+      prefix.length < 8 && _legacyOcrCanRedactShortNaturalWordEcho(naturalWord);
+  final isNaturalContinuation = _legacyOcrHasNaturalAlphaContinuation(suffix);
+  final isNaturalWordContinuation = _legacyOcrHasNaturalWordContinuation(
+    prefix,
+    suffix,
+  );
+  final useVerb = const {
+    'use',
+    'using',
+  }.contains(actionVerb?.group(1)?.toLowerCase());
+  final naturalReadFromSourcePrompt = isNaturalWordContinuation &&
+      actionVerb?.group(1)?.toLowerCase() == 'read' &&
+      _legacyOcrNaturalSourcePhrasePattern.hasMatch(after);
+  final identifiedLabelContext = maskPrefixIsEmbedded &&
+      !isNaturalContinuation &&
+      !isNaturalWordContinuation &&
+      RegExp(
+        r'\b(?:extract|identify|locate|read|record|transcribe) the (?:[\p{L}\p{M}]+ )?(?:identifiers?|numbers?|ids?|values?|codes?|keys?|tokens?|passwords?|credentials?|secrets?)$',
+        unicode: true,
+        caseSensitive: false,
+      ).hasMatch(before);
+  final actionContext = !shortNaturalWordEcho &&
+      !naturalReadFromSourcePrompt &&
+      (credentialHeaderTarget ||
+          credentialTargetAfterConsumedConnector ||
+          (actionVerb != null &&
+              actionTarget &&
+              ((!isNaturalContinuation &&
+                      (!isNaturalWordContinuation || maskPrefixIsEmbedded)) ||
+                  explicitCredentialTarget ||
+                  credentialHeaderTarget ||
+                  (useVerb &&
+                      const {'ed', 'ing'}.contains(suffix.toLowerCase())))));
+  final assignmentContext = RegExp(
+    r'\b(?:authorization|auth|api[\s_-]*key|key|token|secret|credential|password)(?:\s+header)?(?:\s+value)?\s*(?:is|equals|[:=])$',
+    caseSensitive: false,
+  ).hasMatch(before);
+  final setToCredentialContext = RegExp(
+    r'\bset\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:authorization|auth|api[\s_-]*key|key|token|secret|credential|password)(?:\s+header)?(?:\s+value)?\s+to$',
+    caseSensitive: false,
+  ).hasMatch(before);
+  final reportedValueContext = !shortNaturalWordEcho &&
+      _legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
+      suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '').length >= 4 &&
+      RegExp(
+        r'\b(?:says|states|reports|returns)$',
+        caseSensitive: false,
+      ).hasMatch(before);
+  final useToProcessContext = useVerb &&
+      (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+          maskPrefixIsEmbedded ||
+          explicitCredentialTarget ||
+          credentialHeaderTarget) &&
+      RegExp(
+        r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  return actionContext ||
+      assignmentContext ||
+      setToCredentialContext ||
+      reportedValueContext ||
+      useToProcessContext ||
+      identifiedLabelContext;
+}
+
+bool _legacyOcrHasUncommonAlphaContinuation(String value) =>
+    RegExp(r'q(?![aeiou])', caseSensitive: false).hasMatch(value) ||
+    RegExp(r'^[xz](?:[^a-zA-Z0-9_].*)?$', caseSensitive: false).hasMatch(value);
+
+bool _legacyOcrHasKeyboardSequence(String value) {
+  final normalized = value.toLowerCase();
+  for (final row in const ['qwertyuiop', 'asdfghjkl', 'zxcvbnm']) {
+    for (var length = 5; length <= row.length; length++) {
+      for (var start = 0; start + length <= row.length; start++) {
+        final sequence = row.substring(start, start + length);
+        if (normalized.contains(sequence) ||
+            normalized.contains(sequence.split('').reversed.join())) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+bool _legacyOcrCanMatchOpenMaskPrefixWithinToken(String prefix) {
+  if (prefix.length < 8) return false;
+  if (RegExp(r'[-_]').hasMatch(prefix) ||
+      _legacyOcrHasUncommonAlphaContinuation(prefix) ||
+      _legacyOcrHasLongConsonantRun(prefix)) {
+    return true;
+  }
+  if (prefix.length == 9) return false;
+  return _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
+      _legacyOcrHasHighAlphabeticEntropy(
+        prefix,
+        minimumLength: 10,
+        minimumEntropy: 3.3,
+        maximumVowelRatio: 0.45,
+      );
+}
+
+bool _legacyOcrIsNaturalOAuthVersion(String value) =>
+    RegExp(r'^oauth[0-9]+(?:\.[0-9]+)*$', caseSensitive: false).hasMatch(value);
+
+bool _legacyOcrHasEmbeddedShortMaskCredential(
+  String candidate,
+  String prefix, {
+  String? text,
+  Match? match,
+}) {
+  if (_legacyOcrIsNaturalOAuthVersion(candidate)) return false;
+
+  final prefixOffset = candidate.toLowerCase().indexOf(prefix.toLowerCase());
+  if (prefix.length < 3 || prefix.length >= 8 || prefixOffset <= 0) {
+    return false;
+  }
+
+  final continuation = candidate.substring(prefixOffset + prefix.length);
+  final hasMixedCaseContinuation = RegExp(r'[a-z]').hasMatch(continuation) &&
+      RegExp(r'[A-Z]').hasMatch(continuation);
+  final hasShortMixedCaseOpaqueContinuation = continuation.length >= 5 &&
+      hasMixedCaseContinuation &&
+      !_legacyOcrHasNaturalWordContinuation(prefix, continuation);
+  final hasShortUncommonAlphaContinuation = continuation.length >= 5 &&
+      _legacyOcrHasUncommonAlphaContinuation(continuation) &&
+      !_legacyOcrHasNaturalWordContinuation(prefix, continuation);
+  final hasShortKeyboardSequence = continuation.length >= 5 &&
+      _legacyOcrHasKeyboardSequence(continuation) &&
+      !_legacyOcrHasNaturalWordContinuation(prefix, continuation);
+  final hasCredentialUseContext = text != null &&
+      match != null &&
+      _legacyOcrHasCredentialUseContext(text, match, prefix, continuation);
+  final hasNumericMarker = RegExp(
+    r'[\p{N}_]',
+    unicode: true,
+  ).hasMatch(continuation);
+  if ((continuation.length < 6 &&
+          !hasNumericMarker &&
+          !hasCredentialUseContext &&
+          !hasShortMixedCaseOpaqueContinuation &&
+          !hasShortUncommonAlphaContinuation &&
+          !hasShortKeyboardSequence) ||
+      (prefix.length == 3 && !hasNumericMarker && !hasCredentialUseContext)) {
+    return false;
+  }
+
+  final alphaToken = candidate.replaceAll(
+    RegExp(r'[^\p{L}\p{M}]', unicode: true),
+    '',
+  );
+  final hasCombiningMark = RegExp(
+    r'\p{M}',
+    unicode: true,
+  ).hasMatch(continuation);
+  return hasCredentialUseContext ||
+      hasNumericMarker ||
+      _legacyOcrIsCredentialWord('$prefix$continuation') ||
+      hasShortMixedCaseOpaqueContinuation ||
+      hasShortUncommonAlphaContinuation ||
+      hasShortKeyboardSequence ||
+      (hasMixedCaseContinuation &&
+          _legacyOcrHasHighAlphabeticEntropy(
+            alphaToken,
+            minimumLength: 11,
+            minimumEntropy: hasCombiningMark ? 3.2 : 3.25,
+            maximumVowelRatio: 0.45,
+            allowUnicodeLetterMarks: true,
+          )) ||
+      (!hasCombiningMark &&
+          _legacyOcrHasHighAlphabeticEntropy(
+            alphaToken,
+            minimumLength: 11,
+            minimumEntropy: 3.45,
+            maximumVowelRatio: 0.45,
+            allowUnicodeLetterMarks: true,
+          )) ||
+      _legacyOcrHasHighAlphabeticEntropy(
+        alphaToken,
+        minimumLength: 12,
+        minimumEntropy: hasCombiningMark ? 3.2 : 3.3,
+        maximumVowelRatio: 0.45,
+        allowUnicodeLetterMarks: true,
+      );
+}
+
+bool _legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(String prefix) =>
+    RegExp(r'[-_.=/+]').hasMatch(prefix) ||
+    (prefix.length >= 3 && prefix.length < 8) ||
+    _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
+    _legacyOcrHasUncommonAlphaContinuation(prefix) ||
+    _legacyOcrHasLongConsonantRun(prefix) ||
+    _legacyOcrHasInterleavedAlphaNumericKeyPrefix(prefix);
+
+bool _legacyOcrHasInterleavedAlphaNumericKeyPrefix(String prefix) {
+  if (prefix.length < 8 || !RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prefix)) {
+    return false;
+  }
+  final hasLowercase = RegExp(r'[a-z]').hasMatch(prefix);
+  final hasUppercase = RegExp(r'[A-Z]').hasMatch(prefix);
+  final digitCount = RegExp(r'[0-9]').allMatches(prefix).length;
+  if (!hasLowercase || !hasUppercase || digitCount < 2) return false;
+
+  // Interleaved character classes distinguish generated keys from words
+  // that merely end in a version or year.
+  var previousClass = -1;
+  var classTransitions = 0;
+  for (final codeUnit in prefix.codeUnits) {
+    final characterClass = codeUnit >= 48 && codeUnit <= 57
+        ? 2
+        : codeUnit >= 65 && codeUnit <= 90
+            ? 1
+            : 0;
+    if (previousClass >= 0 && characterClass != previousClass) {
+      classTransitions++;
+    }
+    previousClass = characterClass;
+  }
+  return classTransitions >= 3;
+}
+
+bool _legacyOcrHasCredentialUseContextAcrossLineBreak(
+  String text,
+  String prefix,
+) {
+  final splitPrefix = RegExp(
+    '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+    r'[\r\n]+[ \t]*(\S+)',
+    caseSensitive: false,
+  );
+  for (final match in splitPrefix.allMatches(text)) {
+    final suffix = match.group(1)!.replaceFirst(
+          RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
+          '',
+        );
+    if (_legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+String _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
+  String prefix, {
+  String? text,
+}) {
+  return _legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
+          (text != null &&
+              _legacyOcrHasCredentialUseContextAcrossLineBreak(text, prefix))
+      ? r'(?:[\r\n]+[ \t]*)?'
+      : '';
+}
+
+const _legacyOcrNaturalCarefulInstructionActions = {
+  'add',
+  'analyze',
+  'answer',
+  'calculate',
+  'categorize',
+  'check',
+  'classify',
+  'compare',
+  'count',
+  'copy',
+  'compute',
+  'decode',
+  'describe',
+  'determine',
+  'enumerate',
+  'examine',
+  'explain',
+  'extract',
+  'find',
+  'give',
+  'highlight',
+  'identify',
+  'inspect',
+  'interpret',
+  'list',
+  'look',
+  'locate',
+  'note',
+  'ocr',
+  'output',
+  'process',
+  'provide',
+  'read',
+  'record',
+  'recognize',
+  'report',
+  'respond',
+  'return',
+  'review',
+  'scan',
+  'search',
+  'show',
+  'state',
+  'subtract',
+  'sum',
+  'summarize',
+  'tell',
+  'translate',
+  'transcribe',
+  'verify',
+  'write',
+};
+
+bool _legacyOcrHasNaturalConnectorAfterLineBreak(
+  String text,
+  Match match,
+  String prefix,
+  String suffix,
+  Set<String> naturalConnectors,
+) {
+  if (!match.group(0)!.contains(RegExp(r'[\r\n]')) ||
+      _legacyOcrHasCredentialUseContext(text, match, prefix, suffix)) {
+    return false;
+  }
+  final followingText = text.substring(match.end).trimLeft();
+  final beforeMatch = text.substring(0, match.start).trimRight();
+  final ocrSourcePhrase =
+      _legacyOcrNaturalSourcePhrasePattern.firstMatch(followingText);
+  final sourcePhraseTail = ocrSourcePhrase == null
+      ? null
+      : followingText.substring(ocrSourcePhrase.end).trim();
+  final sourceFollowUpAction = RegExp(
+    r'^[,;:]?\s*(?:and|then)\s+(?:please\s+)?([a-z]+)\b',
+    caseSensitive: false,
+  ).firstMatch(sourcePhraseTail ?? followingText)?.group(1)?.toLowerCase();
+  final isReadCarefullyFromOcrSource = prefix.toLowerCase() == 'read' &&
+      ocrSourcePhrase != null &&
+      (sourcePhraseTail!.isEmpty ||
+          RegExp(r'^[.!?]$').hasMatch(sourcePhraseTail) ||
+          (sourceFollowUpAction != null &&
+              _legacyOcrNaturalCarefulInstructionActions
+                  .contains(sourceFollowUpAction)));
+  final isReadCarefullyFollowUp = prefix.toLowerCase() == 'read' &&
+      ocrSourcePhrase == null &&
+      sourceFollowUpAction != null &&
+      _legacyOcrNaturalCarefulInstructionActions.contains(sourceFollowUpAction);
+  if (_legacyOcrNaturalCarefulInstructionActions
+          .contains(prefix.toLowerCase()) &&
+      suffix.toLowerCase() == 'carefully' &&
+      RegExp(
+        r'^(?:(?:can|could|would)\s+you\s+)?please$',
+        caseSensitive: false,
+      ).hasMatch(beforeMatch) &&
+      (followingText.isEmpty ||
+          isReadCarefullyFromOcrSource ||
+          isReadCarefullyFollowUp)) {
+    // The line break in this ordinary OCR prompt can join the action and
+    // adverb into a false extension of an open-ended mask.
+    return true;
+  }
+  if (!naturalConnectors.contains(suffix.toLowerCase())) return false;
+  return RegExp(
+    r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\b',
+    caseSensitive: false,
+  ).hasMatch(followingText);
+}
+
+String _legacyOcrOpenMaskPrefixPattern(String prefix) {
+  final escapedPrefix = RegExp.escape(prefix);
+  if (!_legacyOcrCanBridgeLineBreakAfterOpenMaskPrefix(prefix) ||
+      !RegExp(r'[-_.=/+]$').hasMatch(prefix)) {
+    return escapedPrefix;
+  }
+
+  final delimiter = prefix.substring(prefix.length - 1);
+  final prefixWithoutDelimiter = prefix.substring(0, prefix.length - 1);
+  return '(?:$escapedPrefix|${RegExp.escape(prefixWithoutDelimiter)}'
+      r'[\r\n]+[ \t]*'
+      '${RegExp.escape(delimiter)})';
+}
+
+bool _legacyOcrHasRepeatedHyphenatedAlphaComponent(
+  String prefix,
+  String suffix,
+) {
+  final components = suffix.split('-');
+  if (components.length < 3 ||
+      !components.every(
+        (component) => RegExp(r'^[a-zA-Z0-9]{2,}$').hasMatch(component),
+      )) {
+    return false;
+  }
+  if (components.toSet().length == 1) return true;
+
+  final prefixSegment = prefix.split(RegExp(r'[-_]')).last;
+  final firstCompletedComponent = '$prefixSegment${components.first}';
+  final repeatedComponents = components.skip(1);
+  return repeatedComponents.length >= 2 &&
+      repeatedComponents.every(
+        (component) => component == repeatedComponents.first,
+      ) &&
+      firstCompletedComponent == repeatedComponents.first;
 }
 
 bool _legacyOcrTextContainsMaskedCredential(
@@ -574,13 +1288,462 @@ bool _legacyOcrTextContainsMaskedCredential(
   // Legacy request headers may contain only a masked key; compare its visible
   // edges before preserving any persisted text or diagnostic value.
   final compactedText = text.replaceAll(RegExp(r'\s+'), '');
+  final textWithoutPartMarkers = text.replaceAll('\u0000', '');
+  final partBoundaryOffsets = <int>[];
+  var cleanedTextOffset = 0;
+  for (final codeUnit in text.codeUnits) {
+    if (codeUnit == 0) {
+      partBoundaryOffsets.add(cleanedTextOffset);
+    } else {
+      cleanedTextOffset++;
+    }
+  }
+  const naturalWordsAtPartBoundaries = {
+    'a',
+    'an',
+    'and',
+    'as',
+    'at',
+    'by',
+    'for',
+    'from',
+    'in',
+    'into',
+    'of',
+    'on',
+    'or',
+    'the',
+    'to',
+    'with',
+  };
   for (final value in credentialValues) {
     final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
     if (ellipsis != null) {
-      final prefix = value.substring(0, ellipsis.start);
+      final prefix =
+          value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
       final suffix = value.substring(ellipsis.end);
+      final allowEmbeddedPrefix = _legacyOcrCanMatchOpenMaskPrefixWithinToken(
+        prefix,
+      );
+      if (suffix.isEmpty) {
+        if (prefix.length >= 8) {
+          final leftBoundary = allowEmbeddedPrefix
+              ? r'(?:^|[^a-zA-Z0-9])?'
+              : r'(?:^|[^a-zA-Z0-9])';
+          final lineBreakContinuation =
+              _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
+            prefix,
+            text: textWithoutPartMarkers,
+          );
+          final extendedPrefix = RegExp(
+            '$leftBoundary${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+            '$lineBreakContinuation(\\S+)',
+          );
+          final prefixHasKeyMarker = RegExp(r'[0-9_]').hasMatch(prefix);
+          for (final match in extendedPrefix.allMatches(
+            textWithoutPartMarkers,
+          )) {
+            final rawSuffix = match.group(1)!;
+            final suffix = rawSuffix.replaceFirst(
+              RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
+              '',
+            );
+            if (_legacyOcrHasNaturalConnectorAfterLineBreak(
+              textWithoutPartMarkers,
+              match,
+              prefix,
+              suffix,
+              naturalWordsAtPartBoundaries,
+            )) {
+              continue;
+            }
+            if (suffix.isEmpty) {
+              final hasTerminalCredentialDelimiter = RegExp(
+                r'[-_/=+~]+$',
+              ).hasMatch(rawSuffix);
+              final prefixHasCredentialShape =
+                  RegExp(r'[-_0-9]').hasMatch(prefix) ||
+                      _legacyOcrHasShortOpaqueAlphaKey(prefix) ||
+                      _legacyOcrHasRepeatedAlphabeticSequence(prefix) ||
+                      _legacyOcrHasRepeatedCharacterRun(prefix) ||
+                      _legacyOcrHasHighAlphabeticEntropy(prefix);
+              if (_legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    '',
+                  ) ||
+                  hasTerminalCredentialDelimiter ||
+                  (prefixHasCredentialShape &&
+                      !_legacyOcrHasNaturalWordContinuation(prefix, ''))) {
+                return true;
+              }
+              continue;
+            }
+            final suffixHasKeyMarker = RegExp(r'[0-9_]').hasMatch(suffix);
+            final tokenLength = prefix.length + suffix.length;
+            final token = '$prefix$suffix';
+            final alphaToken = token.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+            final alphaSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+            final unicodeOpaqueContinuation =
+                _legacyOcrHasOpaqueUnicodeContinuation(prefix, suffix);
+            final naturalWordContinuation =
+                _legacyOcrHasNaturalWordContinuation(prefix, suffix);
+            final naturalHyphenatedAlphaContinuation = suffix.startsWith('-') &&
+                RegExp(r'^[a-zA-Z]+$').hasMatch(prefix) &&
+                _legacyOcrHasNaturalAlphaContinuation(
+                  alphaSuffix.toLowerCase(),
+                );
+            final crossesPartBoundary = partBoundaryOffsets.any(
+              (offset) => offset > match.start && offset < match.end,
+            );
+            final beforePartBoundaryWord =
+                textWithoutPartMarkers.substring(0, match.start).trimRight();
+            final afterPartBoundaryWord =
+                textWithoutPartMarkers.substring(match.end).trimLeft();
+            final hasNaturalInstructionAroundPartBoundary = RegExp(
+                  r'\b(?:check|read|review|identify|recognize|describe|summarize|analyze|extract|inspect|scan|transcribe|translate|classify|explain|process)\s*$',
+                  caseSensitive: false,
+                ).hasMatch(beforePartBoundaryWord) &&
+                RegExp(
+                  r'^(?:the|this|that|these|those|a|an)\b',
+                  caseSensitive: false,
+                ).hasMatch(afterPartBoundaryWord);
+            final naturalWordAcrossPartBoundary = crossesPartBoundary &&
+                naturalWordsAtPartBoundaries.contains(suffix.toLowerCase()) &&
+                hasNaturalInstructionAroundPartBoundary;
+            final naturalPrefixAcrossPartBoundary = crossesPartBoundary &&
+                _legacyOcrHasNaturalWordContinuation(prefix, '');
+            final shortUnclassifiedAlphaContinuation = tokenLength >= 10 &&
+                RegExp(r'^[a-zA-Z]{2,5}$').hasMatch(suffix) &&
+                !naturalWordContinuation &&
+                !naturalWordAcrossPartBoundary &&
+                !naturalPrefixAcrossPartBoundary;
+            final oneLetterUnclassifiedAlphaContinuation = tokenLength >= 9 &&
+                RegExp(r'^[a-zA-Z]$').hasMatch(suffix) &&
+                !naturalWordContinuation &&
+                !naturalPrefixAcrossPartBoundary;
+            final unclassifiedAlphaContinuation = tokenLength >= 13 &&
+                RegExp(r'^[a-zA-Z]{5,}$').hasMatch(suffix) &&
+                !naturalWordContinuation &&
+                !naturalPrefixAcrossPartBoundary;
+            final hyphenatedUnclassifiedAlphaContinuation =
+                suffix.startsWith('-') &&
+                    tokenLength >= 12 &&
+                    alphaSuffix.isNotEmpty &&
+                    !naturalWordContinuation &&
+                    !naturalHyphenatedAlphaContinuation;
+            final shortDottedKeyContinuation = tokenLength >= 11 &&
+                RegExp(r'^\.[a-zA-Z0-9]{2}$').hasMatch(suffix);
+            final punctuationDelimitedContinuation =
+                RegExp(r'^[._/=][a-zA-Z0-9]+$').hasMatch(suffix) &&
+                    (RegExp(r'[-_0-9]').hasMatch(prefix) ||
+                        prefix.contains('.') ||
+                        shortDottedKeyContinuation ||
+                        (tokenLength >= 12 &&
+                            RegExp(r'^[._/=][a-zA-Z0-9]{3,}$')
+                                .hasMatch(suffix))) &&
+                    !naturalWordContinuation;
+            final internalBearerPunctuationContinuation = tokenLength >= 11 &&
+                RegExp(r'^[+~][a-zA-Z0-9]+$').hasMatch(suffix) &&
+                !naturalWordContinuation;
+            final repeatedStructuredHyphenatedSuffix = allowEmbeddedPrefix &&
+                _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, suffix);
+            final hasExplicitCredentialUseContext =
+                _legacyOcrHasCredentialUseContext(
+              textWithoutPartMarkers,
+              match,
+              prefix,
+              suffix,
+            );
+            final looksCredentialLike = hasExplicitCredentialUseContext ||
+                unicodeOpaqueContinuation ||
+                prefixHasKeyMarker ||
+                suffixHasKeyMarker ||
+                _legacyOcrHasUncommonAlphaContinuation(suffix) ||
+                _legacyOcrHasCredentialWord(suffix) ||
+                _legacyOcrHasCredentialCompound(token) ||
+                shortUnclassifiedAlphaContinuation ||
+                oneLetterUnclassifiedAlphaContinuation ||
+                unclassifiedAlphaContinuation ||
+                hyphenatedUnclassifiedAlphaContinuation ||
+                repeatedStructuredHyphenatedSuffix ||
+                punctuationDelimitedContinuation ||
+                internalBearerPunctuationContinuation ||
+                (!naturalWordContinuation &&
+                    tokenLength >= 13 &&
+                    (suffix.startsWith('-')
+                        ? _legacyOcrHasHighAlphabeticEntropy(
+                            alphaSuffix,
+                            minimumLength: 8,
+                            minimumEntropy: 3.2,
+                            maximumVowelRatio: 0.32,
+                          )
+                        : _legacyOcrHasHighAlphabeticEntropy(
+                            alphaToken,
+                            minimumEntropy: 3.3,
+                            maximumVowelRatio: 0.32,
+                          ))) ||
+                _legacyOcrHasAscendingAlphabetRun(token) ||
+                _legacyOcrHasRepeatedAlphabeticSequence(token) ||
+                _legacyOcrHasRepeatedCharacterRun(token);
+            if (hasExplicitCredentialUseContext ||
+                unicodeOpaqueContinuation ||
+                (RegExp(r'[a-zA-Z0-9]').hasMatch(suffix) &&
+                    looksCredentialLike)) {
+              return true;
+            }
+          }
+          if (!allowEmbeddedPrefix) {
+            final embeddedPrefixWithTail = RegExp(
+              '(?:^|[^a-zA-Z0-9])([a-zA-Z0-9]+'
+              '${_legacyOcrOpenMaskPrefixPattern(prefix)}(\\S+))',
+            );
+            for (final match in embeddedPrefixWithTail.allMatches(
+              textWithoutPartMarkers,
+            )) {
+              final rawSuffix = match.group(2)!;
+              final suffix = rawSuffix.replaceFirst(
+                RegExp(r'''[.,!?;:)}\]"'“”‘’`/*=_+~—-]+$'''),
+                '',
+              );
+              if (suffix.isEmpty) continue;
+              final naturalWordContinuation =
+                  _legacyOcrHasNaturalWordContinuation(prefix, suffix);
+              if (_legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    suffix,
+                  ) ||
+                  RegExp(r'[0-9_]').hasMatch(suffix) ||
+                  (!naturalWordContinuation &&
+                      ((suffix.length >= 7 &&
+                              _legacyOcrHasUncommonAlphaContinuation(suffix)) ||
+                          _legacyOcrHasShortOpaqueAlphaKey(suffix) ||
+                          _legacyOcrHasHighAlphabeticEntropy(
+                            suffix,
+                            minimumLength: 8,
+                            minimumEntropy: 3.2,
+                            maximumVowelRatio: 0.32,
+                          ))) ||
+                  _legacyOcrHasCredentialWord(suffix) ||
+                  _legacyOcrHasCredentialCompound(suffix)) {
+                return true;
+              }
+            }
+          }
+          if (allowEmbeddedPrefix) {
+            final embeddedExactPrefix = RegExp(
+              '(?:^|[^a-zA-Z0-9])([a-zA-Z0-9]+'
+              '${_legacyOcrOpenMaskPrefixPattern(prefix)})'
+              r'(?=$|[^a-zA-Z0-9])',
+            );
+            for (final match in embeddedExactPrefix.allMatches(
+              textWithoutPartMarkers,
+            )) {
+              if (match.group(1)!.length > prefix.length) return true;
+            }
+          }
+        } else if (prefix.isNotEmpty) {
+          final lineBreakContinuation =
+              _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
+            prefix,
+            text: textWithoutPartMarkers,
+          );
+          if (prefix.length < 8) {
+            final embeddedPrefix = RegExp(
+              '(^|[^\\p{L}\\p{M}\\p{N}])'
+              '([\\p{L}\\p{M}\\p{N}._/+~-]*'
+              '${_legacyOcrOpenMaskPrefixPattern(prefix)}$lineBreakContinuation'
+              '[\\p{L}\\p{M}\\p{N}._/+~-]+)',
+              unicode: true,
+              caseSensitive: false,
+            );
+            for (final match in embeddedPrefix.allMatches(
+              textWithoutPartMarkers,
+            )) {
+              if (_legacyOcrHasEmbeddedShortMaskCredential(
+                match.group(2)!,
+                prefix,
+                text: textWithoutPartMarkers,
+                match: match,
+              )) {
+                return true;
+              }
+            }
+          }
+          final extendedPrefix = RegExp(
+            '(?:^|[^a-zA-Z0-9])'
+            '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+            '$lineBreakContinuation(\\S+)',
+          );
+          for (final match in extendedPrefix.allMatches(
+            textWithoutPartMarkers,
+          )) {
+            final rawSuffix = match.group(1)!;
+            final hasTerminalCredentialDelimiter = RegExp(
+              r'[-_/=+~]+$',
+            ).hasMatch(rawSuffix);
+            final suffix = rawSuffix.replaceFirst(
+              RegExp(r'''[.,!?;:)}\]"'“”‘’`/*=_+~—-]+$'''),
+              '',
+            );
+            final isLineBrokenCarefulActionEcho =
+                _legacyOcrNaturalCarefulInstructionActions
+                        .contains(prefix.toLowerCase()) &&
+                    suffix.toLowerCase() == 'carefully' &&
+                    match.group(0)!.contains(RegExp(r'[\r\n]')) &&
+                    RegExp(
+                      r'^(?:(?:can|could|would)\s+you\s+)?please$',
+                      caseSensitive: false,
+                    ).hasMatch(
+                      textWithoutPartMarkers.substring(0, match.start).trim(),
+                    );
+            if (isLineBrokenCarefulActionEcho) return true;
+            if (_legacyOcrHasNaturalConnectorAfterLineBreak(
+              textWithoutPartMarkers,
+              match,
+              prefix,
+              suffix,
+              naturalWordsAtPartBoundaries,
+            )) {
+              continue;
+            }
+            if (suffix.isEmpty) {
+              // A terminal Bearer-token marker can complete the visible
+              // prefix by itself; very short prefixes are too common to use.
+              if (_legacyOcrHasCredentialUseContext(
+                    textWithoutPartMarkers,
+                    match,
+                    prefix,
+                    '',
+                  ) ||
+                  (hasTerminalCredentialDelimiter && prefix.length >= 4)) {
+                return true;
+              }
+              continue;
+            }
+            // Short visible prefixes also match ordinary words, so length
+            // alone is evidence only when at least four characters are shown.
+            final hasKeyMarker = RegExp(r'[0-9_]').hasMatch(suffix);
+            final prefixHasKeyMarker = RegExp(r'[0-9_]').hasMatch(prefix);
+            final token = '$prefix$suffix';
+            final naturalOAuthVersion = _legacyOcrIsNaturalOAuthVersion(token);
+            final alphaSuffix = suffix.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+            final alphaToken = token.replaceAll(RegExp(r'[^a-zA-Z]'), '');
+            final unicodeOpaqueContinuation =
+                _legacyOcrHasOpaqueUnicodeContinuation(prefix, suffix);
+            final naturalWordContinuation =
+                _legacyOcrHasNaturalWordContinuation(prefix, suffix);
+            final naturalWordAcrossPartBoundary = partBoundaryOffsets.any(
+                  (offset) => offset > match.start && offset < match.end,
+                ) &&
+                naturalWordsAtPartBoundaries.contains(suffix.toLowerCase());
+            final unclassifiedAlphaContinuation =
+                RegExp(r'^[a-zA-Z]{5,}$').hasMatch(suffix) &&
+                    !naturalWordContinuation &&
+                    ((prefix.length >= 4 && token.length >= 10) ||
+                        _legacyOcrHasHighAlphabeticEntropy(
+                          token,
+                          minimumLength: 8,
+                          minimumEntropy: 3.0,
+                          maximumVowelRatio: 0.15,
+                        ));
+            final shortOpaqueAlphaContinuation =
+                RegExp(r'^[a-zA-Z]{1,4}$').hasMatch(suffix) &&
+                    !naturalWordContinuation &&
+                    !naturalWordAcrossPartBoundary &&
+                    (_legacyOcrHasShortOpaqueAlphaKey(token) ||
+                        _legacyOcrHasLongConsonantRun(token));
+            final hyphenatedAlphaContinuation = !naturalWordContinuation &&
+                ((suffix.startsWith('-') &&
+                        token.length >= 12 &&
+                        alphaSuffix.length >= 8 &&
+                        _legacyOcrHasHighAlphabeticEntropy(
+                          alphaSuffix,
+                          minimumLength: 8,
+                          minimumEntropy: 3.2,
+                          maximumVowelRatio: 0.45,
+                        )) ||
+                    (prefix.endsWith('-') &&
+                        token.length >= 10 &&
+                        alphaSuffix.length >= 4));
+            final terminalPunctuationHyphenatedContinuation =
+                hasTerminalCredentialDelimiter &&
+                    suffix.startsWith('-') &&
+                    token.length >= 11 &&
+                    alphaSuffix.length >= 4 &&
+                    !naturalWordContinuation;
+            final internalBearerPunctuationContinuation = token.length >= 11 &&
+                RegExp(r'^[+~][a-zA-Z0-9]+$').hasMatch(suffix) &&
+                !naturalWordContinuation;
+            final internalSeparatorAlphaKeyContinuation = RegExp(
+                  r'^[a-zA-Z0-9]+[-_/=+~][a-zA-Z0-9]+$',
+                ).hasMatch(suffix) &&
+                token.length >= 12 &&
+                !naturalWordContinuation &&
+                _legacyOcrHasHighAlphabeticEntropy(
+                  alphaToken,
+                  minimumLength: 12,
+                  minimumEntropy: 3.3,
+                  maximumVowelRatio: 0.32,
+                );
+            final credentialWordPrefixContinuation =
+                _legacyOcrHasCredentialWord(prefix) &&
+                    RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(suffix) &&
+                    !_legacyOcrHasNaturalAlphaContinuation(suffix) &&
+                    !naturalWordContinuation &&
+                    (!(suffix.startsWith('-') || prefix.endsWith('-')) ||
+                        (alphaSuffix.length >= 8 &&
+                            _legacyOcrHasHighAlphabeticEntropy(
+                              alphaSuffix,
+                              minimumLength: 8,
+                              minimumEntropy: 3.2,
+                              maximumVowelRatio: 0.45,
+                            )));
+            final shortAuthOpaqueContinuation =
+                prefix.toLowerCase() == 'auth' &&
+                    (RegExp(r'^[a-zA-Z0-9]{1,4}$').hasMatch(suffix) ||
+                        RegExp(r'^[a-zA-Z]{5,}$').hasMatch(suffix) ||
+                        RegExp(r'^-[a-zA-Z0-9]{3,}$').hasMatch(suffix) ||
+                        _legacyOcrHasUncommonAlphaContinuation(suffix)) &&
+                    !naturalWordContinuation;
+            final shortCredentialWordHyphenatedContinuation =
+                _legacyOcrHasCredentialWord(prefix) &&
+                    suffix.startsWith('-') &&
+                    alphaSuffix.length >= 4 &&
+                    !naturalWordContinuation;
+            final looksCredentialLike = _legacyOcrHasCredentialUseContext(
+                  textWithoutPartMarkers,
+                  match,
+                  prefix,
+                  suffix,
+                ) ||
+                unicodeOpaqueContinuation ||
+                (hasKeyMarker && !naturalOAuthVersion) ||
+                prefixHasKeyMarker ||
+                credentialWordPrefixContinuation ||
+                shortAuthOpaqueContinuation ||
+                shortCredentialWordHyphenatedContinuation ||
+                shortOpaqueAlphaContinuation ||
+                unclassifiedAlphaContinuation ||
+                hyphenatedAlphaContinuation ||
+                terminalPunctuationHyphenatedContinuation ||
+                internalBearerPunctuationContinuation ||
+                internalSeparatorAlphaKeyContinuation ||
+                _legacyOcrHasAscendingAlphabetRun(token) ||
+                _legacyOcrHasRepeatedAlphabeticSequence(token) ||
+                (!naturalWordContinuation &&
+                    _legacyOcrHasHighAlphabeticEntropy(token)) ||
+                _legacyOcrHasCredentialCompound(token) ||
+                _legacyOcrHasCredentialWord(suffix);
+            if (looksCredentialLike) return true;
+          }
+        }
+        continue;
+      }
       if (prefix.isNotEmpty &&
-          suffix.isNotEmpty &&
           RegExp(
             '${RegExp.escape(prefix)}\\S+${RegExp.escape(suffix)}',
           ).hasMatch(compactedText)) {
@@ -615,7 +1778,10 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
     for (final part in message['content'] as List) {
       if (part is Map && part['type'] == 'text' && part['text'] is String) {
-        final text = part['text'] as String;
+        var text = part['text'] as String;
+        if (_legacyOcrTextContainsCredential(text, credentialValues)) {
+          text = _legacyOcrRedactMaskedCredentialEchoes(text, credentialValues);
+        }
         if (!_legacyOcrTextContainsCredential(text, credentialValues)) {
           textParts.add(text);
         }
@@ -623,16 +1789,431 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
     }
   }
   if (textParts.isEmpty) return null;
-  final instruction = textParts.join('\n');
+  final redactedMarkedInstruction = _legacyOcrRedactNaturalWordCredentialEchoes(
+    textParts.join('\u0000'),
+    credentialValues,
+  );
+  final instruction = redactedMarkedInstruction.replaceAll('\u0000', '\n');
   if (instruction.length > 10000 ||
       RegExp(
         r'(?:data:image/|base64,)',
         caseSensitive: false,
       ).hasMatch(instruction) ||
-      _legacyOcrTextContainsCredential(instruction, credentialValues)) {
+      _legacyOcrTextContainsCredential(instruction, credentialValues) ||
+      // Preserve text-part boundaries separately so an echoed key split
+      // between parts can be identified without removing natural whitespace.
+      _legacyOcrTextContainsMaskedCredential(
+        textParts.join('\u0000'),
+        credentialValues,
+      )) {
     return null;
   }
   return instruction;
+}
+
+String _legacyOcrRedactMaskedCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  final hasSentenceBoundary = RegExp(r'[.!?]\s+\S').hasMatch(text);
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.isEmpty) continue;
+    final allowEmbeddedPrefix = _legacyOcrCanMatchOpenMaskPrefixWithinToken(
+      prefix,
+    );
+    final canMatchWithinToken = prefix.length >= 8;
+    final leftBoundary =
+        canMatchWithinToken ? r'(?:^|[^a-zA-Z0-9])?' : r'(?:^|[^a-zA-Z0-9])';
+    final tokenLead = canMatchWithinToken ? r'[a-zA-Z0-9]*' : '';
+    final lineBreakContinuation =
+        _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
+      prefix,
+      text: sanitized,
+    );
+    final suffixPattern =
+        allowEmbeddedPrefix ? r'(?:\S+|(?=$|[^a-zA-Z0-9]))' : r'\S+';
+    final extendedPrefix = RegExp(
+      '$leftBoundary($tokenLead'
+      '${_legacyOcrOpenMaskPrefixPattern(prefix)}'
+      '$lineBreakContinuation$suffixPattern)',
+    );
+    sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
+      final boundaryLength = match.group(0)!.length - match.group(1)!.length;
+      final beforeEcho = sanitized.substring(0, match.start + boundaryLength);
+      final naturalCarefulInstructionLead =
+          _legacyOcrNaturalCarefulInstructionActions
+                  .contains(prefix.toLowerCase()) &&
+              RegExp(
+                r'^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho);
+      final readFromOcrSourcePrompt = (naturalCarefulInstructionLead ||
+              (prefix.toLowerCase() == 'read' &&
+                  RegExp(
+                    r'^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?$',
+                    caseSensitive: false,
+                  ).hasMatch(beforeEcho)) ||
+              RegExp(
+                r'^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?read\s+$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho)) &&
+          _legacyOcrNaturalSourcePhrasePattern.hasMatch(
+            sanitized.substring(match.end),
+          );
+      final credentialValueTargetAfterEcho = RegExp(
+        r'^\s*(?:as\s+)?(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer)\s+)*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
+        caseSensitive: false,
+      ).hasMatch(sanitized.substring(match.end));
+      final authorizationValueTargetAfterEcho = RegExp(
+        r'^\s*(?:as\s+)?(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer)\s+)*(?:authorization|auth)\b',
+        caseSensitive: false,
+      ).hasMatch(sanitized.substring(match.end));
+      final safeCredentialValueActionLead = credentialValueTargetAfterEcho &&
+              RegExp(
+                r'^\s*(?:(?:please)\s+)?(?:pass|set|provide|enter|supply|send)\s+$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) ||
+          authorizationValueTargetAfterEcho &&
+              RegExp(
+                r'^\s*(?:(?:please)\s+)?use\s+$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho);
+      final hasSafeInstructionLead = RegExp(
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\s+',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho) ||
+          RegExp(
+            r'^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:transcribe|recognize)\s+$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho) ||
+          naturalCarefulInstructionLead ||
+          readFromOcrSourcePrompt ||
+          RegExp(
+            r'^\s*(?:for accurate OCR,\s*)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|search|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode)\s*:\s*$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho) ||
+          RegExp(
+                r'^\s*(?:for page \d+,\s*)?(?:please\s+)?use\s+$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) &&
+              RegExp(
+                r'^\s+to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b',
+                caseSensitive: false,
+              ).hasMatch(sanitized.substring(match.end));
+      final rawEcho = match.group(1)!;
+      final echo = rawEcho.replaceFirst(
+        RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~—-]+$'''),
+        '',
+      );
+      final lineBrokenCarefulActionEcho = naturalCarefulInstructionLead &&
+          rawEcho.contains(RegExp(r'[\r\n]')) &&
+          echo.replaceAll(RegExp(r'\s+'), '').toLowerCase() ==
+              '${prefix.toLowerCase()}carefully';
+      final prefixOffset = echo.indexOf(prefix);
+      final echoSuffix =
+          prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
+      final splitEchoHasCredentialUseContext =
+          match.group(1)!.contains(RegExp(r'[\r\n]')) &&
+              _legacyOcrHasCredentialUseContext(
+                sanitized,
+                match,
+                prefix,
+                echoSuffix,
+              );
+      final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
+          _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
+      final afterEcho = sanitized.substring(match.end);
+      final hasAuthorizationConnectorAfterEcho = RegExp(
+        r'^\s+as\s+',
+        caseSensitive: false,
+      ).hasMatch(afterEcho);
+      final preserveAuthorizationConnector = safeCredentialValueActionLead &&
+          !hasAuthorizationConnectorAfterEcho &&
+          echoSuffix.replaceAll(RegExp(r'\s+'), '').toLowerCase() == 'as';
+      final hasSafeInstructionAfterEcho = RegExp(
+        r'\b(?:and|then)\s+(?:(?:please)\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|answer|extract|interpret|count|copy|compute|find|give|search|transcribe|translate|classify|explain|process|provide|show|tell|check|look|scan|ocr|decode|write|list|record|output|report|note|state|add|return|respond|subtract|sum)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bbefore\s+(?:reading|checking|reviewing|examining|inspecting|identifying|recognizing|describing|summarizing|analyzing|extracting|interpreting|counting|finding|searching|transcribing|translating|classifying|explaining|processing|showing|telling|looking|scanning|decoding|locating)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b|\bto\s+(?:verify|confirm)\s+(?:(?:the|this|that|these|those|a|an)\s+)?[a-z0-9]+\b',
+        caseSensitive: false,
+      ).hasMatch(afterEcho);
+      if ((!hasSentenceBoundary &&
+              !hasSafeInstructionLead &&
+              !hasRepeatedStructuredSuffix &&
+              !hasSafeInstructionAfterEcho &&
+              !safeCredentialValueActionLead) ||
+          echo.length <= prefix.length ||
+          (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
+              !splitEchoHasCredentialUseContext &&
+              !lineBrokenCarefulActionEcho)) {
+        return match.group(0)!;
+      }
+      final trailingPunctuation = rawEcho.substring(echo.length);
+      final boundary = match.group(0)!.substring(0, boundaryLength);
+      final authorizationConnector =
+          preserveAuthorizationConnector ? ' as' : '';
+      final redactedEcho = lineBrokenCarefulActionEcho
+          ? '${echo.substring(0, prefix.length)} [redacted]'
+          : '[redacted]';
+      return '$boundary$redactedEcho$authorizationConnector$trailingPunctuation';
+    });
+    if (prefix.length < 8) {
+      final lineBreakContinuation =
+          _legacyOcrLineBreakContinuationAfterOpenMaskPrefix(
+        prefix,
+        text: sanitized,
+      );
+      final embeddedPrefix = RegExp(
+        '(^|[^\\p{L}\\p{M}\\p{N}])'
+        '([\\p{L}\\p{M}\\p{N}._/+~-]*'
+        '${_legacyOcrOpenMaskPrefixPattern(prefix)}$lineBreakContinuation'
+        '[\\p{L}\\p{M}\\p{N}._/+~-]+)',
+        unicode: true,
+        caseSensitive: false,
+      );
+      sanitized = sanitized.replaceAllMapped(embeddedPrefix, (match) {
+        final rawEcho = match.group(2)!;
+        final echo = rawEcho.replaceFirst(
+          RegExp(r'''[.,!?;:)}\]"'“”‘’`/*=+_~—-]+$'''),
+          '',
+        );
+        if (!_legacyOcrHasEmbeddedShortMaskCredential(
+          echo,
+          prefix,
+          text: sanitized,
+          match: match,
+        )) {
+          return match.group(0)!;
+        }
+        final trailingPunctuation = rawEcho.substring(echo.length);
+        return '${match.group(1)}[redacted]$trailingPunctuation';
+      });
+    }
+  }
+  return sanitized;
+}
+
+bool _legacyOcrHasOrdinaryNaturalPromptContext(
+  String text,
+  Match match,
+  String naturalWord, {
+  required bool hasCredentialUseContext,
+  required bool isNaturalWordContinuation,
+}) {
+  final before = text.substring(0, match.start).trimRight();
+  final after = text.substring(match.end).trimLeft();
+  final politeNaturalVerbPrompt = naturalWord.endsWith('ize') &&
+      RegExp(r'\bplease$', caseSensitive: false).hasMatch(before) &&
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  final naturalImperativePrompt = const {
+        'recognize',
+        'interpret',
+        'calculate',
+        'categorize',
+        'enumerate',
+        'determine',
+        'highlight',
+        'summarize',
+        'translate',
+        'transcribe',
+        'understand',
+      }.contains(naturalWord) &&
+      before.isEmpty &&
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  final readDocumentationCarefullyPrompt = naturalWord == 'documentation' &&
+      RegExp(
+        r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(r'^carefully\b', caseSensitive: false).hasMatch(after);
+  final naturalReadFromOcrSourcePrompt = isNaturalWordContinuation &&
+      RegExp(
+        r'\b(?:please\s+)?read(?:\s+(?:the|this|that|these|those|a|an))?$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      _legacyOcrNaturalSourcePhrasePattern.hasMatch(after);
+  const credentialProcessWords = {
+    'authentication',
+    'authorization',
+    'credentialing',
+    'tokenization',
+    'tokenizing',
+  };
+  final naturalCredentialProcessSentenceWord = isNaturalWordContinuation &&
+      (credentialProcessWords.contains(naturalWord) ||
+          (naturalWord.endsWith('s') &&
+              credentialProcessWords.contains(
+                naturalWord.substring(0, naturalWord.length - 1),
+              )));
+  final bareNaturalProcessPromptVerbPattern = const {
+    'authentication',
+    'authorization'
+  }.contains(naturalWord)
+      ? r'\b(?:please\s+)?(?:read|explain|describe|summarize|review|discuss|outline|understand)\s*$'
+      : r'\b(?:please\s+)?(?:explain|describe|summarize|review|discuss|outline|understand)\s*$';
+  final naturalCredentialProcessInstructionPrompt =
+      naturalCredentialProcessSentenceWord &&
+          ((RegExp(
+                    r'\b(?:please\s+)?(?:read|explain|summarize|describe|review|examine|include|provide|extract|identify|recognize|transcribe|translate|interpret|analyze|count|find|inspect|process|show|tell|check|look|scan|ocr|decode|calculate|categorize|enumerate|determine|highlight|understand)\s+(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)$',
+                    caseSensitive: false,
+                  ).hasMatch(before) &&
+                  RegExp(
+                    r"^[\p{L}][\p{L}\p{M}\p{N}_'-]*\b",
+                    unicode: true,
+                    caseSensitive: false,
+                  ).hasMatch(after)) ||
+              (RegExp(
+                    bareNaturalProcessPromptVerbPattern,
+                    caseSensitive: false,
+                  ).hasMatch(before) &&
+                  RegExp(
+                    r'^(?:methods?|process(?:es)?|flows?|guides?|messages?|tables?|diagrams?|protocols?|systems?|settings?|mechanisms?|principles|overview|instructions?|documentation)\b',
+                    caseSensitive: false,
+                  ).hasMatch(after)));
+  final readHandwritingInstructionPrompt =
+      const {'handwriting', 'handwritten'}.contains(naturalWord) &&
+          RegExp(
+            r"\b(?:please\s+)?(?:read|review|examine|inspect|identify|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|explain|process|show|tell|check|look|scan|ocr|decode|calculate|categorize|enumerate|determine|highlight)(?:\s+[\p{L}\p{M}\p{N}_'’-]+)*$",
+            unicode: true,
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          RegExp(
+            r'^(?:[\p{L}][\p{L}\p{M}\p{N}_-]*\b|[.!?]|$)',
+            unicode: true,
+            caseSensitive: false,
+          ).hasMatch(after);
+  final readNaturalNounInstructionPrompt = isNaturalWordContinuation &&
+      (!_legacyOcrIsCredentialWord(naturalWord) ||
+          naturalCredentialProcessSentenceWord) &&
+      RegExp(
+        r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(
+        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide)\b',
+        caseSensitive: false,
+      ).hasMatch(after);
+  final naturalNounInstructionPrompt = RegExp(
+        r'\b(?:please\s+)?(?:describe|review|examine|include|provide|extract|read\s+about|use)(?:\s+(?:the|this|that|these|those|a|an))?$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      (after.isEmpty ||
+          RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after));
+  final naturalDefinitionQuestion = isNaturalWordContinuation &&
+      RegExp(r'\bwhat does$', caseSensitive: false).hasMatch(before) &&
+      RegExp(r'^mean\b', caseSensitive: false).hasMatch(after);
+  final naturalNounSentence = (!_legacyOcrIsCredentialWord(naturalWord) ||
+          naturalCredentialProcessSentenceWord) &&
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an)$',
+        caseSensitive: false,
+      ).hasMatch(before) &&
+      RegExp(r'^[a-z]+\b', caseSensitive: false).hasMatch(after);
+  return !hasCredentialUseContext &&
+      (politeNaturalVerbPrompt ||
+          readDocumentationCarefullyPrompt ||
+          naturalReadFromOcrSourcePrompt ||
+          naturalCredentialProcessInstructionPrompt ||
+          readHandwritingInstructionPrompt ||
+          readNaturalNounInstructionPrompt ||
+          naturalImperativePrompt ||
+          naturalNounInstructionPrompt ||
+          naturalDefinitionQuestion ||
+          naturalNounSentence);
+}
+
+String _legacyOcrRedactNaturalWordCredentialEchoes(
+  String text,
+  Iterable<String> credentialValues,
+) {
+  var sanitized = text;
+  for (final value in credentialValues) {
+    final ellipsis = RegExp(r'\.\.\.|…').firstMatch(value);
+    if (ellipsis == null || value.substring(ellipsis.end).isNotEmpty) continue;
+    final prefix =
+        value.substring(0, ellipsis.start).trim().split(RegExp(r'\s+')).last;
+    if (prefix.isEmpty) continue;
+    final prefixPattern = prefix.split('').map(RegExp.escape).join(r'\u0000*');
+    final extendedPrefix = RegExp('(^|[^a-zA-Z0-9])($prefixPattern)(\\S+)');
+    sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
+      final rawSuffix = match.group(3)!;
+      final suffix = rawSuffix.replaceFirst(
+        RegExp(r'''[.,!?;:)\]}"'“”‘’`/*=+_~-]+$'''),
+        '',
+      );
+      final naturalSuffix = suffix.replaceAll('\u0000', '');
+      final naturalWord = '$prefix$naturalSuffix'
+          .replaceAll(RegExp(r'[^a-zA-Z]'), '')
+          .toLowerCase();
+      final isCredentialWord = _legacyOcrIsCredentialWord(naturalWord);
+      final before = sanitized.substring(0, match.start).trimRight();
+      final after = sanitized.substring(match.end).trimLeft();
+      final credentialNounForRequest = isCredentialWord &&
+          RegExp(
+            r'\b(?:use|send|provide|enter|supply)$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          RegExp(
+            r'^for (?:the )?request\b',
+            caseSensitive: false,
+          ).hasMatch(after);
+      final hasCredentialUseContext = _legacyOcrHasCredentialUseContext(
+            sanitized,
+            match,
+            prefix,
+            naturalSuffix,
+          ) ||
+          credentialNounForRequest ||
+          (RegExp(r'\buse$', caseSensitive: false).hasMatch(before) &&
+              RegExp(
+                r'^for (?:the )?request\b',
+                caseSensitive: false,
+              ).hasMatch(after));
+      final secretaryWord = const {
+        'secretary',
+        'secretaries',
+      }.contains(naturalWord);
+      final ordinaryNaturalPromptContext =
+          _legacyOcrHasOrdinaryNaturalPromptContext(
+        sanitized,
+        match,
+        naturalWord,
+        hasCredentialUseContext: hasCredentialUseContext,
+        isNaturalWordContinuation: _legacyOcrHasNaturalWordContinuation(
+          prefix,
+          naturalSuffix,
+        ),
+      );
+      final credentialWordEcho = isCredentialWord &&
+          (!secretaryWord || hasCredentialUseContext) &&
+          !ordinaryNaturalPromptContext;
+      final ordinaryNounInflection = RegExp(
+            r"^(?:s|['’]s|s['’])$",
+            caseSensitive: false,
+          ).hasMatch(naturalSuffix) &&
+          !isCredentialWord &&
+          !hasCredentialUseContext;
+      final naturalWordEcho = (prefix.length >= 8 ||
+              _legacyOcrCanRedactShortNaturalWordEcho(naturalWord)) &&
+          _legacyOcrHasNaturalWordContinuation(prefix, naturalSuffix) &&
+          !ordinaryNounInflection &&
+          !ordinaryNaturalPromptContext;
+      if (!credentialWordEcho && !naturalWordEcho) {
+        return match.group(0)!;
+      }
+      final trailingPunctuation = rawSuffix.substring(suffix.length);
+      return '${match.group(1)}[redacted]$trailingPunctuation';
+    });
+  }
+  return sanitized;
 }
 
 Map<String, dynamic>? _unavailableRetryDataFromLegacyRequest(
@@ -1576,8 +3157,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           for (final task in proposed)
             if (removedIds.contains(task.id)) task.id,
         };
-        final excludedPersistedTaskIds =
-            removedIds.difference(retainedAddedTaskIds);
+        final excludedPersistedTaskIds = removedIds.difference(
+          retainedAddedTaskIds,
+        );
         if (!await _writeSnapshot(
           proposed,
           preserveSkippedEntries: _taskSnapshotIncomplete,
