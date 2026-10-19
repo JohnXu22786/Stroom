@@ -58,6 +58,35 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_empty_gold_is_rejected_for_nonblank_fixture_but_blank_is_valid(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "english",
+                    "gold_text": " \n ",
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        with self.assertRaisesRegex(EvaluationError, "gold_text must not be empty"):
+            evaluate_predictions(
+                manifest,
+                predictions(
+                    [{"fixture_id": "english", "text": "hallucination"}]
+                ),
+            )
+
+        blank_report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {"id": "blank", "gold_text": "", "categories": ["blank"]}
+                ]
+            },
+            predictions([{"fixture_id": "blank", "text": ""}]),
+        )
+        self.assertEqual(blank_report["metrics"]["page_omission_rate"]["value"], 0)
+
     def test_cli_reports_invalid_utf8_prediction_without_traceback(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

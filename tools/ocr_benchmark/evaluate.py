@@ -204,6 +204,8 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         if len(set(normalized_anchors)) != len(normalized_anchors):
             raise EvaluationError(f"{fixture_id}: reading_order anchors must be unique")
         normalized_gold = normalize_text(fixture["gold_text"])
+        if not normalized_gold and "blank" not in categories:
+            raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
                 f"{fixture_id}: every reading_order anchor must occur in gold_text"
