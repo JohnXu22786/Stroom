@@ -10,7 +10,8 @@ Future<void> _selectCategory(WidgetTester tester, String category) async {
   await tester.pumpAndSettle();
   final panel = find.byType(AlertDialog);
   final item = find.descendant(of: panel, matching: find.text(category));
-  final list = find.descendant(of: panel, matching: find.byType(Scrollable)).last;
+  final list =
+      find.descendant(of: panel, matching: find.byType(Scrollable)).last;
   await tester.scrollUntilVisible(item, 80, scrollable: list);
   await tester.pumpAndSettle();
   await tester.tap(item.last);
@@ -39,7 +40,8 @@ Future<void> _pumpKeyboard(WidgetTester tester, List<String> commands,
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('common arithmetic stays in one column and long categories split evenly',
+  testWidgets(
+      'common arithmetic stays in one column and long categories split evenly',
       (tester) async {
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
@@ -53,7 +55,8 @@ void main() {
     final operatorRects = arithmetic.map(tester.getRect).toList();
     expect(operatorRects.map((rect) => rect.left).toSet(), hasLength(1));
     for (var index = 1; index < operatorRects.length; index++) {
-      expect(operatorRects[index].top, greaterThan(operatorRects[index - 1].top));
+      expect(
+          operatorRects[index].top, greaterThan(operatorRects[index - 1].top));
     }
     final fraction = tester.getRect(find.byTooltip('分数：选区放入分子'));
     final equals = tester.getRect(find.byTooltip('等于'));
@@ -77,8 +80,7 @@ void main() {
   testWidgets('category order is merged, draggable, selected, and persisted',
       (tester) async {
     SharedPreferences.setMockInitialValues({
-      'math_keyboard_category_order_v1':
-          ['函数', 'missing-category', '常用', '函数'],
+      'math_keyboard_category_order_v1': ['函数', 'missing-category', '常用', '函数'],
     });
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
@@ -97,7 +99,8 @@ void main() {
     expect(dialogRect.center.dx, closeTo(screenCenter.dx, 1));
     expect(dialogRect.center.dy, closeTo(screenCenter.dy, 1));
     expect(
-      tester.widget<ListTile>(find.byKey(const ValueKey('category-row-常用')))
+      tester
+          .widget<ListTile>(find.byKey(const ValueKey('category-row-常用')))
           .selected,
       isTrue,
     );
@@ -108,7 +111,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     final preferences = await SharedPreferences.getInstance();
-    final savedOrder = preferences.getStringList('math_keyboard_category_order_v1')!;
+    final savedOrder =
+        preferences.getStringList('math_keyboard_category_order_v1')!;
     expect(savedOrder, hasLength(14));
     expect(savedOrder.toSet(), hasLength(14));
     expect(savedOrder, isNot(contains('missing-category')));
@@ -151,7 +155,8 @@ void main() {
     await tester.pumpAndSettle();
     final panel = find.byType(AlertDialog);
     final selectedRow = find.byKey(const ValueKey('category-row-常用'));
-    final list = find.descendant(of: panel, matching: find.byType(Scrollable)).last;
+    final list =
+        find.descendant(of: panel, matching: find.byType(Scrollable)).last;
     await tester.scrollUntilVisible(selectedRow, 80, scrollable: list);
     await tester.drag(
       find.byKey(const ValueKey('category-order-handle-常用')),
@@ -159,10 +164,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final chip = find.ancestor(
-      of: find.text('常用').first,
-      matching: find.byType(ChoiceChip),
-    ).first;
+    final chip = find
+        .ancestor(
+          of: find.text('常用').first,
+          matching: find.byType(ChoiceChip),
+        )
+        .first;
     final chipRect = tester.getRect(chip);
     final keyboard = tester.getRect(find.byType(MathKeyboard));
     expect(chipRect.left, greaterThanOrEqualTo(keyboard.left));
@@ -170,7 +177,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('category order dialog keeps its actions reachable on short screens',
+  testWidgets(
+      'category order dialog keeps its actions reachable on short screens',
       (tester) async {
     tester.view.physicalSize = const Size(320, 260);
     tester.view.devicePixelRatio = 1;
@@ -209,7 +217,8 @@ void main() {
     ]);
   });
 
-  testWidgets('inverse keys use a-prefix names and insert parser-compatible LaTeX',
+  testWidgets(
+      'inverse keys use a-prefix names and insert parser-compatible LaTeX',
       (tester) async {
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
@@ -217,8 +226,8 @@ void main() {
 
     expect(
       {
-        for (final input in mathUnaryInputs.where(
-            (input) => ['asin', 'acos', 'atan'].contains(input.name)))
+        for (final input in mathUnaryInputs
+            .where((input) => ['asin', 'acos', 'atan'].contains(input.name)))
           input.name: input.label,
       },
       {

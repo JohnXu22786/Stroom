@@ -43,8 +43,7 @@ class _MathKeyboardState extends State<MathKeyboard> {
     for (final category in _groups.keys) category: GlobalKey(),
   };
 
-  static const _categoryOrderPreferenceKey =
-      'math_keyboard_category_order_v1';
+  static const _categoryOrderPreferenceKey = 'math_keyboard_category_order_v1';
 
   @override
   void initState() {
@@ -363,7 +362,10 @@ class _MathKeyboardState extends State<MathKeyboard> {
             final input = compact
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [...heading, _keyArea(keys, pageCount, keysPerPage)],
+                    children: [
+                      ...heading,
+                      _keyArea(keys, pageCount, keysPerPage)
+                    ],
                   )
                 : _keyArea(keys, pageCount, keysPerPage);
             return Column(
@@ -426,7 +428,8 @@ class _MathKeyboardState extends State<MathKeyboard> {
                                   ? (row * 3 + col < keysPerPage &&
                                           _page * keysPerPage + row * 3 + col <
                                               keys.length
-                                      ? keys[_page * keysPerPage + row * 3 + col]
+                                      ? keys[
+                                          _page * keysPerPage + row * 3 + col]
                                       : null)
                                   : _MathKey(
                                       _numbers[row * 3 + col - 3],
