@@ -3107,6 +3107,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       unawaited(removeTasksPersisted([taskId]));
       return;
     }
+    if (!state.any((task) => task.id == taskId) &&
+        _pendingTaskRemovalReconciliations.containsKey(taskId)) {
+      // The in-flight removal owns reconciliation for the persisted task.
+      // A duplicate request must not replace its rollback token.
+      return;
+    }
     final removalToken = _recordPendingRestoreTaskRemoval(taskId);
     _pendingTaskRemovalReconciliations[taskId] = removalToken;
     if (_restoreBarrier != null) {
@@ -3116,6 +3122,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _pendingRestoreTaskRemovalOwnershipIds.add(taskId);
     }
     _cancellations.remove(taskId)?.cancel();
+    final originalSnapshot = List<BackgroundTask>.of(state);
     final removedTasks = state.where((task) => task.id == taskId).toList();
     for (final task in removedTasks) {
       _queueTaskCleanupAfterRemoval(taskId, task);
@@ -3127,7 +3134,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final references = OcrRetryStorage.referencesFromSnapshot(
         removed!.retryData,
       );
-      persistence = _persistOcrTaskRemoval(taskId, references);
+      persistence = _persistOcrTaskRemoval(
+        taskId,
+        references,
+        removedTask: removed!,
+        removalToken: removalToken,
+        originalSnapshot: originalSnapshot,
+      );
     } else {
       persistence = _persistTasks(
         excludedPersistedTaskIds: {taskId},
@@ -3264,8 +3277,39 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
-  Future<bool> _persistOcrTaskRemoval(String taskId, Set<String> references) {
+  Future<bool> _persistOcrTaskRemoval(
+    String taskId,
+    Set<String> references, {
+    required BackgroundTask removedTask,
+    required Object removalToken,
+    required List<BackgroundTask> originalSnapshot,
+  }) {
     if (debugDisablePersistence) return Future<bool>.value(true);
+    final dirOverride = debugStorageDirectoryOverride;
+    Future<bool> finish(bool saved) async {
+      if (saved) {
+        await _deleteUnreferencedOcrCache(references);
+        await _cleanupOrphanedOcrCache();
+      } else {
+        final restored = _restoreOcrTaskAfterFailedRemoval(
+          removedTask,
+          removalToken: removalToken,
+          originalSnapshot: originalSnapshot,
+        );
+        final snapshot = mounted ? state : _disposedSnapshot;
+        if (restored && snapshot != null) {
+          await _writeSnapshotNow(
+            snapshot,
+            dirOverride,
+            taskSnapshotEpoch: _taskSnapshotEpoch,
+            preserveSkippedEntries: _taskSnapshotIncomplete,
+            retryOnceOnRemovalWriteFailure: true,
+          );
+        }
+      }
+      return saved;
+    }
+
     final barrier = _removalBarrier;
     if (barrier == null) {
       final write = _writeSnapshot(
@@ -3273,39 +3317,99 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         excludedPersistedTaskIds: {taskId},
         retryOnceOnRemovalWriteFailure: true,
       );
-      final persistence = write.then((saved) async {
-        if (saved) {
-          await _deleteUnreferencedOcrCache(references);
-          await _cleanupOrphanedOcrCache();
-        }
-        return saved;
-      });
+      final persistence = write.then(finish);
       _pendingWrite = persistence.then<void>((_) {});
       return persistence;
     }
 
     final previous = _pendingWrite ?? Future<void>.value();
-    final dirOverride = debugStorageDirectoryOverride;
+    final taskSnapshotEpoch = _taskSnapshotEpoch;
     final deferred = previous.then((_) async {
       await barrier.future;
       final snapshot = mounted ? state : _disposedSnapshot;
-      if (snapshot == null) return false;
+      if (snapshot == null) return finish(false);
       final saved = await _writeSnapshotNow(
         snapshot,
         dirOverride,
+        taskSnapshotEpoch: taskSnapshotEpoch,
         excludedPersistedTaskIds: {taskId},
         retryOnceOnRemovalWriteFailure: true,
         preserveSkippedEntries: _taskSnapshotIncomplete,
       );
-      if (saved) {
-        await _deleteUnreferencedOcrCache(references);
-        await _cleanupOrphanedOcrCache();
-      }
-      return saved;
+      return finish(saved);
     });
     _pendingWrite = deferred.then<void>((_) {});
     if (!mounted) _disposedPersistence = _pendingWrite;
     return deferred;
+  }
+
+  bool _restoreOcrTaskAfterFailedRemoval(
+    BackgroundTask task, {
+    required Object removalToken,
+    required List<BackgroundTask> originalSnapshot,
+  }) {
+    final taskId = task.id;
+    if (!identical(_pendingTaskRemovalReconciliations[taskId], removalToken)) {
+      return false;
+    }
+    final snapshot = mounted ? state : _disposedSnapshot;
+    if (snapshot == null) return false;
+
+    var restoredTask = false;
+    if (!snapshot.any((current) => current.id == taskId)) {
+      final restored = List<BackgroundTask>.of(snapshot);
+      final removedIndex = originalSnapshot.indexWhere(
+        (original) =>
+            original.id == taskId && original.hasSameGenerationAs(task),
+      );
+      int? restoreIndex;
+      for (var index = removedIndex + 1;
+          index >= 0 && index < originalSnapshot.length;
+          index++) {
+        final olderTask = originalSnapshot[index];
+        final currentIndex = restored.indexWhere(
+          (current) =>
+              current.id == olderTask.id &&
+              current.hasSameGenerationAs(olderTask),
+        );
+        if (currentIndex >= 0) {
+          restoreIndex = currentIndex;
+          break;
+        }
+      }
+      if (restoreIndex == null) {
+        for (var index = removedIndex - 1; index >= 0; index--) {
+          final newerTask = originalSnapshot[index];
+          final currentIndex = restored.indexWhere(
+            (current) =>
+                current.id == newerTask.id &&
+                current.hasSameGenerationAs(newerTask),
+          );
+          if (currentIndex >= 0) {
+            restoreIndex = currentIndex + 1;
+            break;
+          }
+        }
+      }
+      // Tasks added while the removal was pending are newer and belong ahead
+      // of the restored generation when no original neighbor survives.
+      restored.insert(restoreIndex ?? restored.length, task);
+      _taskSnapshotEpoch++;
+      restoredTask = true;
+      if (mounted) {
+        state = restored;
+        _syncIosContinuedTask();
+      } else {
+        _disposedSnapshot = restored;
+      }
+    }
+    if (identical(_pendingRestoreTaskRemovals[taskId], removalToken)) {
+      _pendingRestoreTaskRemovals.remove(taskId);
+    }
+    if (identical(_pendingTaskRemovalReconciliations[taskId], removalToken)) {
+      _pendingTaskRemovalReconciliations.remove(taskId);
+    }
+    return restoredTask;
   }
 
   /// Update the retry data for a task (used to set retry data after
@@ -3495,6 +3599,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// 写入链：保证多次 _persistTasks 按调用顺序落盘，避免并发写入
   /// 交错导致旧快照覆盖新快照（步骤更新非常频繁，竞态窗口真实存在）。
   Future<void>? _pendingWrite;
+  // Writes queued before a failed optimistic removal must serialize the
+  // restored state, rather than replay their stale taskless snapshots.
+  int _taskSnapshotEpoch = 0;
   Completer<void>? _removalBarrier;
   Completer<void>? _restoreBarrier;
   Future<bool>? _activeRestore;
@@ -3545,6 +3652,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     bool retryOnceOnRemovalWriteFailure = false,
   }) {
     if (debugDisablePersistence) return Future<bool>.value(true);
+    final taskSnapshotEpoch = _taskSnapshotEpoch;
     final preserveCurrentSkippedEntries =
         preserveSkippedEntries || _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
@@ -3563,6 +3671,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         return _writeSnapshotNow(
           snapshot,
           dirOverride,
+          taskSnapshotEpoch: taskSnapshotEpoch,
           preserveSkippedEntries: restoreBarrier != null
               ? _taskSnapshotIncomplete
               : preserveCurrentSkippedEntries,
@@ -3613,11 +3722,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     // 才真正执行，若此时再解析目录，测试 teardown 已重置覆盖值，
     // 残留写入会落到共享的正式目录（跨测试污染）。
     final dirOverride = debugStorageDirectoryOverride;
+    final taskSnapshotEpoch = _taskSnapshotEpoch;
     // 串行化写入：每次写入排在上一次写入完成之后。
     final write = (_pendingWrite ?? Future<void>.value()).then((_) {
       return _writeSnapshotNow(
         snapshot,
         dirOverride,
+        taskSnapshotEpoch: taskSnapshotEpoch,
         preserveSkippedEntries: preserveSkippedEntries,
         excludedPersistedTaskIds: excludedPersistedTaskIds,
         retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
@@ -3630,6 +3741,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<bool> _writeSnapshotNow(
     List<BackgroundTask> snapshot,
     String? dirOverride, {
+    required int taskSnapshotEpoch,
     bool preserveSkippedEntries = false,
     Set<String> excludedPersistedTaskIds = const <String>{},
     bool retryOnceOnRemovalWriteFailure = false,
@@ -3645,8 +3757,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final taskRemovalTokens = Map<String, Object>.of(
       _pendingTaskRemovalReconciliations,
     );
-    var currentSnapshot =
-        snapshot.where((task) => !excludedTaskIds.contains(task.id)).toList();
+    final sourceSnapshot = taskSnapshotEpoch == _taskSnapshotEpoch
+        ? snapshot
+        : mounted
+            ? state
+            : _disposedSnapshot;
+    if (sourceSnapshot == null) return false;
+    var currentSnapshot = sourceSnapshot
+        .where((task) => !excludedTaskIds.contains(task.id))
+        .toList();
     var preserveCurrentSkippedEntries = preserveSkippedEntries;
 
     if (_restoreBarrier != null) {
@@ -3663,7 +3782,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final generationBeforeLoad = _restoreGeneration;
       final persistedTasks = await _loadPreRestorePersistedTasks(dirOverride);
       if (generationBeforeLoad != _restoreGeneration ||
-          _restoreBarrier != null) {
+          _restoreBarrier != null ||
+          taskSnapshotEpoch != _taskSnapshotEpoch) {
         await _waitForRestoreBarrier();
         final latestSnapshot = mounted ? state : _disposedSnapshot;
         if (latestSnapshot == null) return false;
@@ -3728,6 +3848,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return _writeSnapshotNow(
         latestSnapshot,
         dirOverride,
+        taskSnapshotEpoch: taskSnapshotEpoch,
         preserveSkippedEntries: preserveCurrentSkippedEntries,
         excludedPersistedTaskIds: retryExcludedTaskIds,
       );
