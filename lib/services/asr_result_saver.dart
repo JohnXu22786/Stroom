@@ -59,6 +59,42 @@ class AsrResultSaver {
     final hash = computeTextHash(bytes);
     return TextManifest.withSaveLock(hash, () async {
       _checkActive();
+      final existing = (await _loadRecordsUncached()).where(
+        (record) =>
+            record.hash == hash &&
+            record.format == format &&
+            record.folder == folder &&
+            record.name == title,
+      );
+      if (existing.isNotEmpty) {
+        final fileName = existing.first.storageFileName;
+        var publishedPath = await TextManifest.readFilePath(fileName);
+        String? publishedText;
+        try {
+          publishedText = await TextManifest.readText(fileName);
+        } on FormatException {
+          // A corrupt existing file can be repaired from this task's verified
+          // transcript just like a missing or mismatched file.
+        }
+        if (publishedPath == null || publishedText != text) {
+          await _writeText(fileName, text, beforeCommit: _checkActive);
+          publishedPath = await TextManifest.readFilePath(fileName);
+        }
+        publishedText = await TextManifest.readText(fileName);
+        if (publishedPath == null || publishedText != text) {
+          throw StateError('ASR文本文件写入未确认');
+        }
+        _checkActive();
+        notifier.updateStep(taskId, 4, completed: true);
+        notifier.completeTask(taskId, downloadedFilePath: publishedPath);
+        try {
+          onSaved();
+        } catch (error) {
+          debugPrint('[AsrResultSaver] Saved result refresh failed: $error');
+        }
+        return publishedPath;
+      }
+
       final now = DateTime.now();
       final record = TextRecord(
         name: title,
@@ -123,7 +159,8 @@ class AsrResultSaver {
         );
         records = await _loadRecordsUncached();
       }
-      if (!existed && !records.any((item) => item.hash == hash)) {
+      if (!existed &&
+          !records.any((item) => item.storageFileName == fileName)) {
         await TextManifest.deleteFile(fileName);
       }
     } catch (error) {
