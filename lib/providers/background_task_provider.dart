@@ -2234,12 +2234,34 @@ Map<String, dynamic>? _unavailableRetryDataFromLegacyRequest(
   );
 }
 
+bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
+  final snapshot = OcrRetrySnapshot.fromMap(retryData);
+  final supportedVersion = snapshot.isLegacy ||
+      snapshot.version == 1 ||
+      snapshot.version == 2 ||
+      snapshot.version == OcrRetrySnapshot.currentVersion;
+  // Every persisted OCR retry format includes an image-entry list, even when
+  // its entries are placeholders for images that must be selected again.
+  // Keep partially parseable snapshots on the migration path to preserve
+  // their valid images.
+  return supportedVersion &&
+      !snapshot.hasUnknownFields &&
+      retryData['images'] is List &&
+      (!snapshot.hasInvalidImages || snapshot.images.isNotEmpty);
+}
+
 Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final taskId = map['id'] as String;
   final rawRetryData = map['retryData'];
+  Map<String, dynamic>? malformedRetryData;
   if (rawRetryData is Map) {
     try {
-      return Map<String, dynamic>.from(rawRetryData);
+      final retryData = Map<String, dynamic>.from(rawRetryData);
+      if (map['type'] != BackgroundTaskType.ocr.name ||
+          _retryDataHasSupportedOcrSchema(retryData)) {
+        return retryData;
+      }
+      malformedRetryData = retryData;
     } catch (_) {
       // Fall through to a safe unavailable snapshot instead of dropping task.
     }
@@ -2250,6 +2272,7 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final request =
       rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
   return _unavailableRetryDataFromLegacyRequest(taskId, request) ??
+      malformedRetryData ??
       (rawRetryData == null
           ? null
           : OcrRetryStorage.unavailableSnapshotForCount(
