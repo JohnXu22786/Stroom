@@ -40,8 +40,7 @@ Future<void> _pumpKeyboard(WidgetTester tester, List<String> commands,
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets(
-      'common first page swaps the operator and function columns',
+  testWidgets('common first page swaps the operator and function columns',
       (tester) async {
     final commands = <String>[];
     await _pumpKeyboard(tester, commands);
