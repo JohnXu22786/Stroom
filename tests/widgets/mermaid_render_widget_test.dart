@@ -22,6 +22,7 @@ import 'package:stroom/utils/mermaid_web_url_stub.dart'
     if (dart.library.html) 'package:stroom/utils/mermaid_web_url_web.dart'
     as platform;
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -4275,6 +4276,98 @@ void main() {
   });
 
   group('MermaidRenderWidget - source code mode (test-only)', () {
+    testWidgets(
+      'expanded web source fills a loose-height wide split panel',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: MermaidRenderWidget(
+                        mermaidCode: 'graph TD',
+                        expand: true,
+                        testOnlyShowSourceCode: true,
+                      ),
+                    ),
+                    Expanded(child: SizedBox.shrink()),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final previewSize = tester.getSize(find.byType(MermaidRenderWidget));
+        final sourceSize = tester.getSize(find.byType(CodeBlockSourceView));
+        expect(
+          previewSize.height,
+          greaterThan(700),
+          reason: 'test preview should have room for the short source block',
+        );
+        expect(
+          sourceSize.height,
+          previewSize.height,
+          reason:
+              'expanded source (${sourceSize.height}) should fill the preview panel (${previewSize.height})',
+        );
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets('expanded web source still fills a tight-height preview',
+        (tester) async {
+      tester.view.physicalSize = const Size(600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: MermaidRenderWidget(
+                      mermaidCode: 'graph TD',
+                      expand: true,
+                      testOnlyShowSourceCode: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final previewSize = tester.getSize(find.byType(MermaidRenderWidget));
+      final sourceSize = tester.getSize(find.byType(CodeBlockSourceView));
+      expect(
+        previewSize.height,
+        greaterThan(700),
+        reason: 'test preview should have room for the short source block',
+      );
+      expect(
+        sourceSize.height,
+        previewSize.height,
+        reason:
+            'expanded source (${sourceSize.height}) should fill the preview panel (${previewSize.height})',
+      );
+    }, skip: !kIsWeb);
+
     testWidgets('shows source code view with code text', (tester) async {
       const mermaidCode = 'graph TD\nA-->B';
       const widget = MermaidRenderWidget(
