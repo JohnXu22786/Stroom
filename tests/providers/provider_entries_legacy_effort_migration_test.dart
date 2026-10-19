@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 
 /// Behavior tests for the legacy effort-param data migration:
 /// reasoning params saved before the isEffortParam flag existed are
@@ -70,7 +71,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         providerEntriesProvider.overrideWith(
-          (ref) => ProviderEntriesNotifier(),
+          (ref) => ProviderEntriesNotifier(
+            credentialStore: _MemoryCredentialStore(),
+          ),
         ),
       ],
     );
@@ -138,7 +141,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -165,7 +170,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -202,7 +209,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -226,7 +235,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -253,7 +264,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -280,7 +293,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -308,7 +323,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -331,7 +348,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -394,7 +413,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _MemoryCredentialStore(),
+            ),
           ),
         ],
       );
@@ -410,4 +431,21 @@ void main() {
       container.dispose();
     });
   });
+}
+
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String value) async {
+    values[reference] = value;
+  }
 }

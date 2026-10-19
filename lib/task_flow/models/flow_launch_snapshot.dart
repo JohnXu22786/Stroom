@@ -1077,7 +1077,7 @@ class FlowLaunchSnapshot {
                         ...Map<String, dynamic>.from(
                           _resolvedCredentials(
                                 snapshotConfigFor(config),
-                                config.toMap(),
+                                config.toCredentialMigrationMap(),
                               )
                               as Map,
                         ),

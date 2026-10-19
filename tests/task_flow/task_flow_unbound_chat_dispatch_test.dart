@@ -17,6 +17,7 @@ import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_launch_snapshot.dart';
@@ -83,6 +84,23 @@ class _FailingMessages extends ConversationsNotifier {
       throw StateError('message preparation failed');
     }
     super.state = conversations;
+  }
+}
+
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String value) async {
+    values[reference] = value;
   }
 }
 
@@ -156,13 +174,17 @@ void main() {
     });
     manager = _InspectingManager();
     scheduler = TaskFlowScheduler(coreCount: 4, rssBytes: () => 0);
+    final providerEntries = ProviderEntriesNotifier(
+      credentialStore: _MemoryCredentialStore(),
+    );
     container = ProviderContainer(overrides: [
+      providerEntriesProvider.overrideWith((ref) => providerEntries),
       chatStreamManagerProvider.overrideWithValue(manager),
       taskFlowSchedulerProvider.overrideWithValue(scheduler),
       if (failMessageSave)
         conversationsProvider.overrideWith((ref) => _FailingMessages(ref)),
     ]);
-    await container.read(providerEntriesProvider.notifier).ready;
+    await providerEntries.load();
   }
 
   Future<String> saveQueued(ProviderEntriesState providers,
@@ -385,5 +407,26 @@ void main() {
 
     expect(service?.modelConfig?.id, 'model-B');
     expect(manager.adapter.modelConfig?.id, 'model-B');
+  });
+
+  test('Task Flow snapshots restore credentials from migrated secure refs',
+      () async {
+    final providers = _providers();
+    await prepare(providers);
+    final migrated = container.read(providerEntriesProvider);
+    final snapshot = FlowLaunchSnapshot.capture(
+      TaskFlowDefinition(blocks: [TaskFlowBlock(typeKey: BlockType.chat)]),
+      migrated,
+      [],
+      selectedChatModel: _referenceA,
+    );
+
+    final resolved = snapshot.resolveProviders(migrated);
+    final config = resolved.entries
+        .expand((entry) => entry.configs)
+        .firstWhere((config) => config.id == 'config-A');
+
+    expect(config.credentialRef, isNotNull);
+    expect(config.key, 'old-key');
   });
 }

@@ -2313,7 +2313,7 @@ void main() {
       expect(body['requestType'], 'agent');
       expect(body['project'], 'antigravity-project');
       expect(body['request']['contents'], isNotEmpty);
-      expect(body['request']['sessionId'], isNotEmpty);
+      expect(body['request']['sessionId'], '-3238736544897475342');
       expect(body['requestId'], startsWith('agent-'));
     });
 

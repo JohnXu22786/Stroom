@@ -12,6 +12,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
+import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/services/llm_connector_http_client.dart';
+import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_routing_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
@@ -291,6 +297,23 @@ void main() {
           ));
         },
       ));
+    final preferences = _MemoryLlmPreferences();
+    final accountService = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryLlmCredentialStore(),
+    );
+    final routingRuntime = LlmChatRoutingRuntime(
+      accountService: accountService,
+      routingService: LlmRoutingService(
+        accountService: accountService,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: LlmConnectorHttpClient(
+        accountService: accountService,
+        dio: dio,
+      ),
+    );
 
     await expectLater(
       executeOcrBlock(
@@ -303,6 +326,7 @@ void main() {
         bgNotifier: background,
         providerEntries: providers,
         ocrDio: dio,
+        routingRuntime: Future.value(routingRuntime),
       ),
       throwsA(isA<BlockExecutionException>()),
     );
@@ -1059,4 +1083,37 @@ void main() {
         computeTextHash(Uint8List.fromList(utf8.encode('late result')));
     expect(await WebFileStore.exists('texts/$hash.txt'), isFalse);
   });
+}
+
+class _MemoryLlmPreferences implements LlmAccountPreferences {
+  final values = <String, String>{};
+
+  @override
+  Future<String?> getString(String key) async => values[key];
+
+  @override
+  Future<bool> remove(String key) async => values.remove(key) != null;
+
+  @override
+  Future<bool> setString(String key, String value) async {
+    values[key] = value;
+    return true;
+  }
+}
+
+class _MemoryLlmCredentialStore implements LlmCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String value) async {
+    values[reference] = value;
+  }
 }

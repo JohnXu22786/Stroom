@@ -2597,16 +2597,16 @@ class LlmNativeRequestBuilder {
         final text = (parts.first as Map)['text'];
         if (text is! String || text.isEmpty) continue;
         final digest = crypto.sha256.convert(utf8.encode(text)).bytes;
-        var value = 0;
+        var value = BigInt.zero;
         for (var index = 0; index < 8; index++) {
-          value = (value << 8) | digest[index];
+          value = (value << 8) | BigInt.from(digest[index]);
         }
-        value &= 0x7fffffffffffffff;
+        value &= (BigInt.one << 63) - BigInt.one;
         return '-$value';
       }
     }
     final random = const Uuid().v4().replaceAll('-', '').substring(0, 15);
-    return '-${int.parse(random, radix: 16)}';
+    return '-${BigInt.parse(random, radix: 16)}';
   }
 
   static String? _projectIdFromCredential(String? credential) {

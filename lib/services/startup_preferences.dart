@@ -3,7 +3,10 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shared_preferences_android/shared_preferences_android.dart';
+
+import 'startup_preferences_android_stub.dart'
+    if (dart.library.io) 'startup_preferences_android.dart'
+    as startup_preferences_android;
 
 import 'startup_preferences_io_stub.dart'
     if (dart.library.io) 'startup_preferences_io.dart'
@@ -32,13 +35,6 @@ class StartupPreferences {
   // SharedPreferences' legacy API stores keys with this prefix. Async reads
   // address the platform store directly, so they must include it themselves.
   static const _legacyKeyPrefix = 'flutter.';
-  static const _androidOptions = SharedPreferencesAsyncAndroidOptions(
-    backend: SharedPreferencesAndroidBackendLibrary.SharedPreferences,
-    originalSharedPreferencesOptions: AndroidSharedPreferencesStoreOptions(
-      fileName: 'FlutterSharedPreferences',
-    ),
-  );
-
   static bool get _usesJsonFileBackend =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.linux ||
@@ -59,7 +55,7 @@ class StartupPreferences {
 
   static SharedPreferencesAsync _asyncPreferences() =>
       defaultTargetPlatform == TargetPlatform.android
-          ? SharedPreferencesAsync(options: _androidOptions)
+          ? startup_preferences_android.createAndroidPreferences()
           : SharedPreferencesAsync();
 
   // Web retains its existing localStorage namespace. The browser only offers
