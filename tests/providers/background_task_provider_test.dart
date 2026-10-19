@@ -20,6 +20,11 @@ import 'package:stroom/utils/web_file_store.dart';
 File _tasksFileIn(String dirPath) =>
     File(p.join(dirPath, 'background', 'tasks.json'));
 
+String _redactOpenReadCarefullyPrompt(String prompt) => prompt.replaceFirst(
+      RegExp(r'\bread\s+carefully\b', caseSensitive: false),
+      'read [redacted]',
+    );
+
 enum _StartupAddTiming {
   afterRestoreReadStarts,
   queuedBeforeRestore,
@@ -1545,6 +1550,569 @@ void main() {
         expect(persisted, contains('Read the receipt using [redacted]'));
         expect(migratedInstruction, isNot(contains(apiKey)));
         expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a mixed-case key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readQmXvPs';
+        const instruction =
+            'Please read the code xreadQmXvPs from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-mixed-case-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please read the code [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains('Please read the code [redacted] from the receipt.'),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readqwtyps';
+        const instruction =
+            'Please extract the printed value xreadqwtyps from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-lowercase-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a title-case key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readQwerty';
+        const instruction =
+            'Please extract the printed value xreadQwerty from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-title-case-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a short title-case key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readQwrty';
+        const instruction =
+            'Please extract the printed value xreadQwrty from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-short-title-case-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a short mixed-case key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readQwrtY';
+        const instruction =
+            'Please extract the printed value xreadQwrtY from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-short-mixed-case-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a short lowercase key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readqwrty';
+        const instruction =
+            'Please extract the printed value xreadqwrty from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-short-lowercase-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a short keyboard-pattern key embedded after a short natural prefix',
+      () {
+        const apiKey = 'readasdfg';
+        const instruction =
+            'Please extract the printed value xreadasdfg from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-keyboard-pattern-key',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase value embedded after a short natural prefix',
+      () {
+        const apiKey = 'readlamnpo';
+        const instruction =
+            'Please extract the printed value xreadlamnpo from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-lowercase-value',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please extract the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please extract the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase value read after a short natural prefix',
+      () {
+        const apiKey = 'readlamnpo';
+        const instruction =
+            'Please read the printed value xreadlamnpo from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-read-value',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please read the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please read the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase value recorded after a short natural prefix',
+      () {
+        const apiKey = 'readlamnpo';
+        const instruction =
+            'Please record the printed value xreadlamnpo from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-record-value',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please record the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please record the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase value located after a short natural prefix',
+      () {
+        const apiKey = 'readlamnpo';
+        const instruction =
+            'Please locate the printed value xreadlamnpo from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-embedded-short-natural-prefix-locate-value',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(
+          migratedInstruction,
+          'Please locate the printed value [redacted] from the receipt.',
+        );
+        expect(
+          persisted,
+          contains(
+            'Please locate the printed value [redacted] from the receipt.',
+          ),
+        );
+        expect(migratedInstruction, isNot(contains(apiKey)));
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a natural word after a labeled value verb',
+      () {
+        const instruction =
+            'Please extract the printed value unreadable from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-read-mask-natural-word-value',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, instruction);
+        expect(persisted, contains(instruction));
       },
     );
 
@@ -4150,6 +4718,189 @@ void main() {
           expect(migratedInstruction, isNot(contains(apiKey)));
           expect(persisted, isNot(contains(instruction)));
         }
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a high-entropy open-mask echo split after its prefix',
+      () {
+        const apiKey = 'QwrtyPSDF89';
+        const instruction = 'Please transcribe QwrtyPSDF\n89 from the receipt.';
+        const sanitizedInstruction =
+            'Please transcribe [redacted] from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-high-entropy-prefix-newline-split',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer QwrtyPSDF…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a numeric opaque prefix echo split after its prefix',
+      () {
+        const apiKey = 'Qwrty12345';
+        const instruction =
+            'Use Qwrty123\n45 as the authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-numeric-opaque-prefix-newline-split',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer Qwrty123…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a mixed alphanumeric prefix echo split after its prefix',
+      () {
+        const apiKey = 'N8s3Vf4k9Q';
+        const instruction =
+            'Use N8s3Vf4k\n9Q as the authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-alphanumeric-opaque-prefix-newline-split',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer N8s3Vf4k…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a lowercase numeric prefix used as authorization',
+      () {
+        const apiKey = 'test1234abcd';
+        const instruction =
+            'Use test1234\nabcd as the authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-lowercase-numeric-authorization-newline-split',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer test1234…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
       },
     );
 
@@ -7553,6 +8304,144 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves use action for OIDC authorization targets',
+      () {
+        const apiKey = 'opaque-user-as';
+        const instruction =
+            'Use opaque-user-\nas the OIDC authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the OIDC authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-connector-use-oidc-authorization',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves use action for secret authorization targets',
+      () {
+        const apiKey = 'opaque-user-as';
+        const instruction =
+            'Use opaque-user-\nas the secret authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the secret authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-connector-use-secret-authorization',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves use action for OpenID Connect authorization targets',
+      () {
+        const apiKey = 'opaque-user-as';
+        const instruction =
+            'Use opaque-user-as as the OpenID Connect authorization value to process the receipt.';
+        const sanitizedInstruction =
+            'Use [redacted] as the OpenID Connect authorization value to process the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-connector-use-openid-connect-authorization',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedInstruction,
+        );
+        expect(
+          serializedRetryData['instructionContent'],
+          sanitizedInstruction,
+        );
+        expect(persisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves use action for OAuth2 authorization targets',
       () {
         const apiKey = 'opaque-user-as';
@@ -10061,6 +10950,1449 @@ void main() {
           prompt,
         );
         expect(persisted, contains(prompt));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a terminal line-broken read key',
+      () {
+        const prompt = 'Please read\ncarefully.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-natural-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+        final compactInstruction =
+            migratedInstruction.replaceAll(RegExp(r'\s+'), '');
+        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
+
+        expect(migratedInstruction, 'Please read [redacted].');
+        expect(persisted, contains(jsonEncode('Please read [redacted].')));
+        expect(compactInstruction, isNot(contains('readcarefully')));
+        expect(compactPersisted, isNot(contains('readcarefully')));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a receipt',
+      () {
+        const prompt = 'Please read\ncarefully from the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-natural-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a follow-up action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then summarize the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-source-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a compare action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then compare the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-compare-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a verify action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then verify the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-verify-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a locate action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then locate the date.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-locate-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a write action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then write down the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-write-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a list action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then list the items.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-list-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an answer action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then answer the question.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-answer-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a record action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then record the invoice number.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-record-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an output action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then output the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-output-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a report action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then report the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-report-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a note action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then note the invoice number.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-note-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a copy action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then copy the invoice number.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-copy-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a state action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then state the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-state-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a provide action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then provide the invoice total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-provide-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before an add action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then add the line items.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-add-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a return action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then return the date.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-return-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a respond action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then respond with the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-respond-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a give action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then give me the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-give-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a compute action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then compute the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-compute-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a sum action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then sum the line items.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-sum-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt before a subtract action',
+      () {
+        const prompt =
+            'Please read\ncarefully from the receipt, then subtract the discount from the subtotal.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-subtract-follow-up-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from an invoice',
+      () {
+        const prompt =
+            'Please read\ncarefully from the invoice, then summarize the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-invoice-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a line-broken read key from a screenshot prompt',
+      () {
+        const prompt = 'Please read\ncarefully from the screenshot.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-screenshot-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final instruction =
+            OcrRetrySnapshot.fromMap(task.retryData!).instructionContent!;
+        final compactInstruction = instruction.replaceAll(RegExp(r'\s+'), '');
+        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
+
+        expect(instruction, contains('from the screenshot'));
+        expect(compactInstruction, isNot(contains('readcarefully')));
+        expect(persisted, contains('from the screenshot'));
+        expect(compactPersisted, isNot(contains('readcarefully')));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a menu',
+      () {
+        const prompt = 'Please read\ncarefully from the menu.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-menu-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a chart',
+      () {
+        const prompt = 'Please read\ncarefully from the chart.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-chart-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a demonstrative OCR-source prompt',
+      () {
+        const prompt = 'Please read\ncarefully from this receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-demonstrative-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a table',
+      () {
+        const prompt = 'Please read\ncarefully from the table.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-table-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a possessive OCR-source prompt',
+      () {
+        const prompt = 'Please read\ncarefully from my receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-possessive-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a scan',
+      () {
+        const prompt = 'Please read\ncarefully from the scan.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-scan-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes a multiword OCR-source prompt',
+      () {
+        const prompt =
+            'Please read\ncarefully from the attached image of the receipt.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-multiword-source-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes an authorization-letter source prompt',
+      () {
+        const prompt = 'Please read\ncarefully from the authorization letter.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-authorization-letter-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes an authorization-documentation source prompt',
+      () {
+        const prompt =
+            'Please read\ncarefully from the authorization documentation.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-authorization-documentation',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration sanitizes an API-key request-form source prompt',
+      () {
+        const prompt = 'Please read\ncarefully from the API key request form.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-api-key-request-form',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          _redactOpenReadCarefullyPrompt(prompt),
+        );
+        expect(persisted,
+            contains(jsonEncode(_redactOpenReadCarefullyPrompt(prompt))));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a read-carefully key before a trailing action',
+      () {
+        const prompt = 'Please read\ncarefully, then summarize the total.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-read-mask-trailing-action-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+
+        const sanitizedPrompt =
+            'Please read [redacted], then summarize the total.';
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          sanitizedPrompt,
+        );
+        expect(persisted, contains(jsonEncode(sanitizedPrompt)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a terminal line-broken review key',
+      () {
+        const prompt = 'Please review\ncarefully.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-open-ended-review-mask-natural-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer review…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+        final compactInstruction =
+            migratedInstruction.replaceAll(RegExp(r'\s+'), '');
+        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
+
+        expect(migratedInstruction, 'Please review [redacted].');
+        expect(persisted, contains(jsonEncode('Please review [redacted].')));
+        expect(compactInstruction, isNot(contains('reviewcarefully')));
+        expect(compactPersisted, isNot(contains('reviewcarefully')));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves natural long words split by a line break',
+      () {
+        const prompt = 'Please read the countervailing\narguments in the note.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-natural-long-word-line-break-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer countervailing…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          prompt,
+        );
+        expect(serializedRetryData['instructionContent'], prompt);
+        expect(persisted, contains(jsonEncode(prompt)));
       },
     );
 
