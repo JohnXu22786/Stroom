@@ -146,6 +146,8 @@ enum Object3DType {
   curve,
 }
 
+const double maxSolidEdgeWidth = 6;
+
 enum Line3DKind { segment, line, ray }
 
 /// A 3D object in the scene.
@@ -202,6 +204,8 @@ class Object3D {
   // Visual properties
   final int color;
   final double opacity;
+  final double edgeWidth;
+  final bool showEdges;
   final String? label;
   final bool transformOrigin;
   final bool visible;
@@ -229,6 +233,8 @@ class Object3D {
     Vector3D? vector,
     this.color = 0xFFAAAAAA,
     this.opacity = 1.0,
+    this.edgeWidth = 1.5,
+    this.showEdges = true,
     this.label,
     this.transformOrigin = false,
     this.visible = true,
@@ -253,6 +259,8 @@ class Object3D {
     String? label,
     int? color,
     double? opacity,
+    double? edgeWidth,
+    bool? showEdges,
     bool? visible,
   }) =>
       Object3D._(
@@ -275,6 +283,10 @@ class Object3D {
         vector: _vector,
         color: color ?? this.color,
         opacity: opacity ?? this.opacity,
+        edgeWidth: edgeWidth == null
+            ? this.edgeWidth
+            : edgeWidth.clamp(0, maxSolidEdgeWidth).toDouble(),
+        showEdges: showEdges ?? this.showEdges,
         label: label ?? this.label,
         transformOrigin: transformOrigin,
         visible: visible ?? this.visible,
@@ -324,6 +336,8 @@ class Object3D {
     List<Vector3D>? normals,
     int color,
     double opacity,
+    double edgeWidth,
+    bool showEdges,
     String? label,
   }) = _Object3DSurface;
 
@@ -340,6 +354,8 @@ class Object3D {
     required List<int> indices,
     int color,
     double opacity,
+    double edgeWidth,
+    bool showEdges,
     String? label,
   }) = _Object3DPolyhedron;
 
@@ -440,6 +456,8 @@ class _Object3DSurface extends Object3D {
     List<Vector3D>? normals,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
+    double edgeWidth = 1.5,
+    bool showEdges = true,
     String? label,
   }) : super._(
           type: Object3DType.surface,
@@ -448,6 +466,8 @@ class _Object3DSurface extends Object3D {
           normals: normals,
           color: color,
           opacity: opacity,
+          edgeWidth: edgeWidth,
+          showEdges: showEdges,
           label: label,
         );
 }
@@ -475,6 +495,8 @@ class _Object3DPolyhedron extends Object3D {
     required List<int> indices,
     int color = 0xFFAAAAAA,
     double opacity = 1.0,
+    double edgeWidth = 1.5,
+    bool showEdges = true,
     String? label,
   }) : super._(
           type: Object3DType.polyhedron,
@@ -482,6 +504,8 @@ class _Object3DPolyhedron extends Object3D {
           indices: indices,
           color: color,
           opacity: opacity,
+          edgeWidth: edgeWidth,
+          showEdges: showEdges,
           label: label,
         );
 }

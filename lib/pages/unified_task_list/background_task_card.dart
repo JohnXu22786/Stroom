@@ -655,7 +655,12 @@ class _BackgroundTaskCardState extends ConsumerState<BackgroundTaskCard> {
       case BackgroundTaskType.asr:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => AsrPage(retryData: task.retryData)),
+          MaterialPageRoute(
+            builder: (_) => AsrPage(
+              retryData: task.retryData,
+              retryTaskId: task.id,
+            ),
+          ),
         );
         break;
       case BackgroundTaskType.audioSeparation:

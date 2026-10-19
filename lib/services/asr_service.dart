@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../providers/chat_api_provider.dart';
@@ -27,6 +28,47 @@ const _asrSupportedFormats = {
   'wav',
   'webm',
 };
+
+/// Stable identity for a complete chunk layout, shared with retry scheduling
+/// when a legacy checkpoint is migrated to this plan.
+String fingerprintAsrChunkPlan(
+  List<({double startSeconds, double endSeconds})> chunks,
+) {
+  final encodedPlan = jsonEncode([
+    for (var index = 0; index < chunks.length; index++)
+      [index, chunks[index].startSeconds, chunks[index].endSeconds],
+  ]);
+  return sha256.convert(utf8.encode(encodedPlan)).toString();
+}
+
+bool _matchesCompleteLegacyChunkPlan(
+  Iterable<AsrChunkResult> priorChunks,
+  List<({double startSeconds, double endSeconds})> expectedPlan,
+) {
+  final chunks = priorChunks.toList();
+  if (chunks.length != expectedPlan.length) return false;
+  final byIndex = <int, AsrChunkResult>{};
+  for (final chunk in chunks) {
+    if (chunk.planFingerprint != null ||
+        chunk.totalChunks != expectedPlan.length ||
+        chunk.index < 0 ||
+        chunk.index >= expectedPlan.length ||
+        byIndex.containsKey(chunk.index)) {
+      return false;
+    }
+    byIndex[chunk.index] = chunk;
+  }
+  for (var index = 0; index < expectedPlan.length; index++) {
+    final chunk = byIndex[index];
+    final expected = expectedPlan[index];
+    if (chunk == null ||
+        chunk.startSeconds != expected.startSeconds ||
+        chunk.endSeconds != expected.endSeconds) {
+      return false;
+    }
+  }
+  return true;
+}
 
 // ============================================================================
 // Audio Upload Method
@@ -202,6 +244,19 @@ class AsrTranscriptSegment {
     this.endSeconds,
     required this.text,
   });
+
+  Map<String, dynamic> toMap() => {
+        if (startSeconds != null) 'startSeconds': startSeconds,
+        if (endSeconds != null) 'endSeconds': endSeconds,
+        'text': text,
+      };
+
+  factory AsrTranscriptSegment.fromMap(Map<String, dynamic> map) =>
+      AsrTranscriptSegment(
+        startSeconds: (map['startSeconds'] as num?)?.toDouble(),
+        endSeconds: (map['endSeconds'] as num?)?.toDouble(),
+        text: map['text'] as String? ?? '',
+      );
 }
 
 class AsrResult {
@@ -255,39 +310,180 @@ class AsrRequestProgress {
 }
 
 typedef AsrProgressCallback = void Function(AsrRequestProgress progress);
+typedef AsrChunkResultCallback = Future<void> Function(AsrChunkResult result);
+typedef _AsrRequestFailureCallback = Future<void> Function(
+    AsrChunkStatus status, Object error);
 
-enum AsrChunkStatus { succeeded, failed }
+class _AsrChunkCallbackException implements Exception {
+  const _AsrChunkCallbackException(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => '$cause';
+}
+
+bool _isInvalidHttpClientEndpointArgumentError(DioException error) {
+  // IOHttpClientAdapter wraps HttpClient.openUrl failures for invalid
+  // endpoints as unknown Dio errors before an HTTP request can be dispatched.
+  if (error.type != DioExceptionType.unknown ||
+      error.response != null ||
+      error.error is! ArgumentError) {
+    return false;
+  }
+
+  final uri = error.requestOptions.uri;
+  return (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.host.isEmpty ||
+      (uri.hasPort && (uri.port < 1 || uri.port > 65535));
+}
+
+bool _isUncertainHttpStatus(int? statusCode) =>
+    statusCode == 408 || (statusCode != null && statusCode >= 500);
+
+void _throwIfResponseOutcomeUncertain(Response<dynamic> response) {
+  final statusCode = response.statusCode;
+  if (!_isUncertainHttpStatus(statusCode)) return;
+
+  throw DioException(
+    requestOptions: response.requestOptions,
+    response: response,
+    type: DioExceptionType.badResponse,
+    message: 'HTTP $statusCode response leaves transcription outcome uncertain',
+  );
+}
+
+bool _isOutcomeUncertain(DioException error) {
+  final statusCode = error.response?.statusCode;
+  if (statusCode != null) {
+    if ((statusCode >= 200 && statusCode < 300) ||
+        _isUncertainHttpStatus(statusCode)) {
+      // A successful response whose body failed during transport/decoding, or
+      // a timeout/server error, can follow provider acceptance of the POST.
+      return true;
+    }
+  }
+  final cause = error.error;
+  final causeDescription = cause?.toString().toLowerCase() ?? '';
+  final isSocketConnectionError =
+      error.type == DioExceptionType.connectionError &&
+          causeDescription.contains('socketexception');
+  final connectionCouldNotReachProvider = isSocketConnectionError &&
+      [
+        'connection refused',
+        'failed host lookup',
+        'no address associated with hostname',
+        'network is unreachable',
+        'no route to host',
+      ].any(causeDescription.contains);
+  return error.response == null &&
+      error.type != DioExceptionType.connectionTimeout &&
+      error.type != DioExceptionType.badCertificate &&
+      !connectionCouldNotReachProvider &&
+      !_isInvalidHttpClientEndpointArgumentError(error) &&
+      error.error is! FormatException;
+}
+
+enum AsrChunkStatus { succeeded, failed, uncertain }
 
 /// The outcome for one non-overlapping audio chunk.
 class AsrChunkResult {
   final int index;
   final double startSeconds;
   final double endSeconds;
+  final int? totalChunks;
+  final String? planFingerprint;
   final AsrChunkStatus status;
   final String? text;
+  final String? subtitle;
   final String? error;
+  final List<AsrTranscriptSegment>? segments;
+  final List<AsrTranscriptSegment>? words;
 
   const AsrChunkResult({
     required this.index,
     required this.startSeconds,
     required this.endSeconds,
     required this.status,
+    this.totalChunks,
+    this.planFingerprint,
     this.text,
+    this.subtitle,
     this.error,
+    this.segments,
+    this.words,
   });
+
+  /// Retry persistence omits provider error text, which may contain request
+  /// data, while retaining successful transcript text and timing offsets.
+  Map<String, dynamic> toMap() => {
+        'index': index,
+        'startSeconds': startSeconds,
+        'endSeconds': endSeconds,
+        if (totalChunks != null) 'totalChunks': totalChunks,
+        if (planFingerprint != null) 'planFingerprint': planFingerprint,
+        'status': status.name,
+        if (text != null) 'text': text,
+        if (subtitle != null) 'subtitle': subtitle,
+        if (segments != null)
+          'segments': segments!.map((segment) => segment.toMap()).toList(),
+        if (words != null) 'words': words!.map((word) => word.toMap()).toList(),
+      };
+
+  factory AsrChunkResult.fromMap(Map<String, dynamic> map) {
+    final status = AsrChunkStatus.values.firstWhere(
+      (value) => value.name == map['status'],
+      // An unknown persisted status may encode a provider outcome that must
+      // not be replayed. Treat it as unresolved until a newer reader knows
+      // how to interpret it.
+      orElse: () => AsrChunkStatus.uncertain,
+    );
+    final text = map['text'];
+    List<AsrTranscriptSegment>? readSegments(String key) {
+      final values = map[key];
+      if (values is! List) return null;
+      return [
+        for (final value in values)
+          if (value is Map)
+            AsrTranscriptSegment.fromMap(Map<String, dynamic>.from(value)),
+      ];
+    }
+
+    return AsrChunkResult(
+      index: (map['index'] as num?)?.toInt() ?? -1,
+      startSeconds: (map['startSeconds'] as num?)?.toDouble() ?? 0,
+      endSeconds: (map['endSeconds'] as num?)?.toDouble() ?? 0,
+      totalChunks: (map['totalChunks'] as num?)?.toInt(),
+      planFingerprint: map['planFingerprint'] is String
+          ? map['planFingerprint'] as String
+          : null,
+      status: status,
+      text: text is String ? text : null,
+      subtitle: map['subtitle'] is String ? map['subtitle'] as String : null,
+      error: map['error'] as String?,
+      segments: readSegments('segments'),
+      words: readSegments('words'),
+    );
+  }
 }
 
 /// A chunked transcription that could not produce a complete transcript.
 class AsrChunkedTranscriptionException implements Exception {
   final List<AsrChunkResult> chunks;
+  final List<AsrChunkResult> recoveryChunks;
+  final Object? cause;
 
-  AsrChunkedTranscriptionException(Iterable<AsrChunkResult> chunks)
-      : chunks = List.unmodifiable(chunks);
+  AsrChunkedTranscriptionException(
+    Iterable<AsrChunkResult> chunks, {
+    Iterable<AsrChunkResult>? recoveryChunks,
+    this.cause,
+  })  : chunks = List.unmodifiable(chunks),
+        recoveryChunks = List.unmodifiable(recoveryChunks ?? chunks);
 
   bool get isPartial =>
-      chunks.any((chunk) => chunk.status == AsrChunkStatus.succeeded);
+      recoveryChunks.any((chunk) => chunk.status == AsrChunkStatus.succeeded);
 
-  String get partialText => chunks
+  String get partialText => recoveryChunks
       .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
       .map((chunk) => chunk.text ?? '')
       .where((text) => text.isNotEmpty)
@@ -295,20 +491,54 @@ class AsrChunkedTranscriptionException implements Exception {
 
   @override
   String toString() {
-    final succeededCount = chunks
+    var totalChunkCount = recoveryChunks.length;
+    for (final chunk in recoveryChunks) {
+      final plannedCount = chunk.totalChunks;
+      if (plannedCount != null) {
+        totalChunkCount = plannedCount;
+        break;
+      }
+    }
+    final succeededCount = recoveryChunks
         .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
         .length;
-    final details = chunks.map((chunk) {
-      final state = chunk.status == AsrChunkStatus.succeeded
-          ? '成功: ${chunk.text ?? ''}'
-          : '失败: ${chunk.error}';
+    final details = recoveryChunks.map((chunk) {
+      final state = switch (chunk.status) {
+        AsrChunkStatus.succeeded => '成功: ${chunk.text ?? ''}',
+        AsrChunkStatus.failed => '失败: ${chunk.error}',
+        AsrChunkStatus.uncertain => '结果不确定: ${chunk.error}',
+      };
       return '片段 ${chunk.index + 1} (${chunk.startSeconds.toStringAsFixed(3)}–${chunk.endSeconds.toStringAsFixed(3)}s) $state';
     }).join('; ');
     final summary = succeededCount == 0
-        ? '切块转写全部失败（${chunks.length} 个片段均未成功）'
-        : '切块转写不完整（$succeededCount/${chunks.length} 个片段成功）';
-    return '$summary: $details';
+        ? '切块转写全部失败（$totalChunkCount 个片段均未成功）'
+        : '切块转写不完整（$succeededCount/$totalChunkCount 个片段成功）';
+    final checkpointFailure = cause == null ? '' : '; 保存切块状态失败: $cause';
+    final uncertainOutcome = recoveryChunks.any(
+      (chunk) => chunk.status == AsrChunkStatus.uncertain,
+    );
+    final recoveryGuidance =
+        uncertainOutcome ? '; 请求结果不确定，已停止重试以避免重复提交。请重新选择音频后新建任务。' : '';
+    return '$summary: $details$checkpointFailure$recoveryGuidance';
   }
+}
+
+class _AsrProviderErrorResponseException implements Exception {
+  const _AsrProviderErrorResponseException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class _AsrPreDispatchException implements Exception {
+  const _AsrPreDispatchException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class _AsrUploadSizeLimitException implements Exception {
@@ -409,6 +639,17 @@ class AsrService {
   /// Dio receive timeout, exposed for diagnostic and testing.
   Duration? get receiveTimeout => _dio.options.receiveTimeout;
 
+  void _failClosedOnUncertainPriorChunks(
+    List<AsrChunkResult> priorChunks,
+  ) {
+    final uncertain = priorChunks
+        .where((chunk) => chunk.status == AsrChunkStatus.uncertain)
+        .toList();
+    if (uncertain.isNotEmpty) {
+      throw AsrChunkedTranscriptionException(priorChunks);
+    }
+  }
+
   /// Transcribe audio bytes into text.
   ///
   /// Supports [AudioUploadMethod.multipart] (default) and [AudioUploadMethod.base64Json].
@@ -421,6 +662,9 @@ class AsrService {
     String audioFormat = 'wav',
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
+    List<AsrChunkResult> priorChunks = const [],
+    AsrChunkResultCallback? onChunkResult,
+    AsrChunkResultCallback? onChunkAttempt,
   }) async {
     await AppLogService.info(
       'AsrService',
@@ -432,6 +676,7 @@ class AsrService {
     if (audioBytes.isEmpty) {
       throw Exception('音频数据为空');
     }
+    _failClosedOnUncertainPriorChunks(priorChunks);
 
     final detectedFormat = detectAudioFormat(audioBytes);
     final fmt = normalizeAsrUploadFormat(
@@ -520,14 +765,19 @@ class AsrService {
         config.uploadMethod,
       );
       if (_fitsUploadBudget(encodedAudioBytes, requestBodyBytes)) {
-        return _sendViaMethod(
+        return _transcribeSingleRequest(
           encodedAudioBytes,
           encodedFormat,
           config.uploadMethod,
+          sourceAudioBytes: processedAudioBytes,
+          sourceAudioFormat: fmt,
           sourceAudioBytesLength: sourceAudioBytesLength,
           processedAudioBytesLength: processedAudioBytes.length,
           cancelToken: cancelToken,
           onProgress: onProgress,
+          priorChunks: priorChunks,
+          onChunkResult: onChunkResult,
+          onChunkAttempt: onChunkAttempt,
         );
       }
     } else {
@@ -584,16 +834,29 @@ class AsrService {
             // NOTE: must await, not `return` — a bare `return future` would
             // deliver the error to the caller without entering this catch,
             // aborting the whole fallback chain.
-            return await _sendViaBase64(
+            return await _transcribeSingleRequest(
               processedAudioBytes,
               fmt,
+              specificMethod,
+              sourceAudioBytes: processedAudioBytes,
+              sourceAudioFormat: fmt,
               sourceAudioBytesLength: sourceAudioBytesLength,
               processedAudioBytesLength: processedAudioBytes.length,
               cancelToken: cancelToken,
               onProgress: onProgress,
+              priorChunks: priorChunks,
+              onChunkResult: onChunkResult,
+              onChunkAttempt: onChunkAttempt,
             );
           } catch (e) {
             if (e is DioException && CancelToken.isCancel(e)) rethrow;
+            if (e is AsrChunkedTranscriptionException &&
+                (e.cause is _AsrChunkCallbackException ||
+                    e.recoveryChunks.any(
+                      (chunk) => chunk.status != AsrChunkStatus.failed,
+                    ))) {
+              rethrow;
+            }
             specificFallbackFailure = e;
             await AppLogService.warning(
               'AsrService',
@@ -632,14 +895,19 @@ class AsrService {
         // Try the complete encoded file first. If it remains too large, split
         // the preserved PCM WAV and encode each PCM chunk independently.
         if (_fitsUploadBudget(encodedAudioBytes, requestBodyBytes)) {
-          return await _sendViaMethod(
+          return await _transcribeSingleRequest(
             encodedAudioBytes,
             encodedFormat,
             config.uploadMethod,
+            sourceAudioBytes: processedAudioBytes,
+            sourceAudioFormat: fmt,
             sourceAudioBytesLength: sourceAudioBytesLength,
             processedAudioBytesLength: processedAudioBytes.length,
             cancelToken: cancelToken,
             onProgress: onProgress,
+            priorChunks: priorChunks,
+            onChunkResult: onChunkResult,
+            onChunkAttempt: onChunkAttempt,
           );
         }
 
@@ -655,6 +923,9 @@ class AsrService {
               sourceAudioBytesLength: sourceAudioBytesLength,
               cancelToken: cancelToken,
               onProgress: onProgress,
+              priorChunks: priorChunks,
+              onChunkResult: onChunkResult,
+              onChunkAttempt: onChunkAttempt,
             );
           } on FormatException catch (e) {
             // Malformed/unparseable WAV — fall through to the rejection below.
@@ -890,23 +1161,177 @@ class AsrService {
     );
   }
 
-  /// Send via base64 JSON method.
-  Future<AsrResult> _sendViaBase64(
+  Future<AsrResult> _transcribeSingleRequest(
     Uint8List bytes,
-    String fmt, {
-    int? sourceAudioBytesLength,
-    int? processedAudioBytesLength,
+    String fmt,
+    AudioUploadMethod method, {
+    required Uint8List sourceAudioBytes,
+    required String sourceAudioFormat,
+    required int sourceAudioBytesLength,
+    required int processedAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
+    List<AsrChunkResult> priorChunks = const [],
+    AsrChunkResultCallback? onChunkResult,
+    AsrChunkResultCallback? onChunkAttempt,
   }) async {
-    return _sendViaMethod(
-      bytes,
-      fmt,
-      AudioUploadMethod.base64Json,
-      sourceAudioBytesLength: sourceAudioBytesLength,
-      processedAudioBytesLength: processedAudioBytesLength,
-      cancelToken: cancelToken,
-      onProgress: onProgress,
+    var durationSeconds = 0.0;
+    if (normalizeAudioFormat(sourceAudioFormat) == 'wav') {
+      try {
+        durationSeconds = parseWavHeader(sourceAudioBytes).durationSeconds;
+      } on Object {
+        // Non-WAV caller data may still be labeled WAV by legacy callers.
+      }
+    }
+    final planFingerprint = fingerprintAsrChunkPlan([
+      (startSeconds: 0, endSeconds: durationSeconds),
+    ]);
+
+    final matchingPrior = priorChunks.where(
+      (chunk) =>
+          (chunk.planFingerprint == planFingerprint ||
+              (chunk.planFingerprint == null && priorChunks.length == 1)) &&
+          chunk.index == 0 &&
+          chunk.totalChunks == 1 &&
+          chunk.startSeconds == 0 &&
+          chunk.endSeconds == durationSeconds,
+    );
+    if (matchingPrior.length == 1) {
+      final cached = matchingPrior.single;
+      if (cached.status == AsrChunkStatus.uncertain) {
+        throw AsrChunkedTranscriptionException([cached]);
+      }
+      if (cached.status == AsrChunkStatus.succeeded && cached.text != null) {
+        final isSubtitleFormat =
+            _responseFormat == 'srt' || _responseFormat == 'vtt';
+        final cachedSubtitle = isSubtitleFormat ? cached.subtitle : null;
+        final cachedOutputFormat = isSubtitleFormat && cachedSubtitle != null
+            ? _responseFormat
+            : 'txt';
+        onProgress?.call(
+          const AsrRequestProgress(
+            phase: AsrRequestPhase.chunkCompleted,
+            chunkIndex: 1,
+            chunkCount: 1,
+          ),
+        );
+        return AsrResult(
+          text: cached.text!,
+          subtitle: cachedSubtitle,
+          outputFormat: cachedOutputFormat,
+          segments: cached.segments,
+          words: cached.words,
+          chunks: [cached],
+        );
+      }
+    }
+
+    AsrChunkResult createChunk(AsrChunkStatus status, {Object? error}) =>
+        AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: durationSeconds,
+          totalChunks: 1,
+          planFingerprint: planFingerprint,
+          status: status,
+          error: error?.toString(),
+        );
+
+    List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
+          for (final prior in priorChunks)
+            if (prior.index != chunk.index &&
+                prior.planFingerprint == planFingerprint &&
+                prior.totalChunks == 1)
+              prior,
+          chunk,
+        ]..sort((left, right) => left.index.compareTo(right.index));
+
+    Future<void> reportChunk(AsrChunkResult chunk) async {
+      try {
+        await onChunkResult?.call(chunk);
+      } catch (error) {
+        final recovered = planWith(chunk);
+        throw AsrChunkedTranscriptionException(
+          recovered,
+          recoveryChunks: recovered,
+          cause: _AsrChunkCallbackException(error),
+        );
+      }
+    }
+
+    final attempt = createChunk(AsrChunkStatus.uncertain);
+    try {
+      await onChunkAttempt?.call(attempt);
+    } catch (error) {
+      throw AsrChunkedTranscriptionException(
+        priorChunks,
+        cause: _AsrChunkCallbackException(error),
+      );
+    }
+
+    AsrChunkResult? reportedFailure;
+    Future<void> reportFailure(AsrChunkStatus status, Object error) async {
+      final failure = createChunk(status, error: error);
+      reportedFailure = failure;
+      await reportChunk(failure);
+    }
+
+    late final AsrResult result;
+    try {
+      result = await _sendViaMethod(
+        bytes,
+        fmt,
+        method,
+        sourceAudioBytesLength: sourceAudioBytesLength,
+        processedAudioBytesLength: processedAudioBytesLength,
+        cancelToken: cancelToken,
+        onProgress: onProgress,
+        onRequestFailure: reportFailure,
+      );
+    } on AsrChunkedTranscriptionException {
+      rethrow;
+    } on Object catch (error) {
+      if (error is DioException && CancelToken.isCancel(error)) rethrow;
+      final failure = reportedFailure;
+      if (failure == null) {
+        await reportFailure(AsrChunkStatus.failed, error);
+      }
+      final recovered = planWith(reportedFailure!);
+      throw AsrChunkedTranscriptionException(
+        recovered,
+        recoveryChunks: recovered,
+        cause: error,
+      );
+    }
+
+    final completed = AsrChunkResult(
+      index: 0,
+      startSeconds: 0,
+      endSeconds: durationSeconds,
+      totalChunks: 1,
+      planFingerprint: planFingerprint,
+      status: AsrChunkStatus.succeeded,
+      text: result.text,
+      subtitle: result.subtitle,
+      segments: result.segments,
+      words: result.words,
+    );
+    await reportChunk(completed);
+    onProgress?.call(
+      const AsrRequestProgress(
+        phase: AsrRequestPhase.chunkCompleted,
+        chunkIndex: 1,
+        chunkCount: 1,
+      ),
+    );
+    return AsrResult(
+      text: result.text,
+      processingTimeMs: result.processingTimeMs,
+      subtitle: result.subtitle,
+      outputFormat: result.outputFormat,
+      segments: result.segments,
+      words: result.words,
+      chunks: [completed],
     );
   }
 
@@ -919,6 +1344,7 @@ class AsrService {
     int? processedAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
+    _AsrRequestFailureCallback? onRequestFailure,
   }) async {
     final stopwatch = Stopwatch()..start();
     final mimeTypeString = getMimeType(fmt);
@@ -931,8 +1357,9 @@ class AsrService {
       jsonCustomParamNames: jsonCustomParamNames,
     );
 
+    Response? response;
     try {
-      final response = await _sendTranscriptionRequest(
+      response = await _sendTranscriptionRequest(
         sharedParams: sharedParams,
         audioBytes: bytes,
         fileName: fileName,
@@ -947,6 +1374,7 @@ class AsrService {
 
       stopwatch.stop();
       _captureResponseDiagnostics(response);
+      _throwIfResponseOutcomeUncertain(response);
       final parsed = _parseResponse(response.data);
 
       await AppLogService.info(
@@ -964,7 +1392,25 @@ class AsrService {
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
       if (CancelToken.isCancel(e)) rethrow;
+      await onRequestFailure?.call(
+        _isOutcomeUncertain(e)
+            ? AsrChunkStatus.uncertain
+            : AsrChunkStatus.failed,
+        e,
+      );
       throwWrappedDioException(e);
+    } on Exception catch (e) {
+      await onRequestFailure?.call(
+        e is _AsrPreDispatchException ||
+                (response != null && e is _AsrProviderErrorResponseException)
+            ? AsrChunkStatus.failed
+            : AsrChunkStatus.uncertain,
+        e,
+      );
+      rethrow;
+    } on Object catch (e) {
+      await onRequestFailure?.call(AsrChunkStatus.uncertain, e);
+      rethrow;
     }
   }
 
@@ -977,9 +1423,10 @@ class AsrService {
     String audioUrl, {
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
+    List<AsrChunkResult> priorChunks = const [],
+    AsrChunkResultCallback? onChunkAttempt,
+    AsrChunkResultCallback? onChunkResult,
   }) async {
-    await AppLogService.info('AsrService', '开始转写 (URL): $audioUrl');
-
     if (config.host.isEmpty) {
       throw Exception('API 地址未配置');
     }
@@ -990,6 +1437,76 @@ class AsrService {
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
       throw Exception('无效的音频链接，必须以 http:// 或 https:// 开头');
     }
+    _failClosedOnUncertainPriorChunks(priorChunks);
+
+    AsrChunkResult createChunk(AsrChunkStatus status, {Object? error}) =>
+        AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: 0,
+          totalChunks: 1,
+          status: status,
+          error: error?.toString(),
+        );
+
+    List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
+          for (final prior in priorChunks)
+            if (prior.index != chunk.index) prior,
+          chunk,
+        ]..sort((left, right) => left.index.compareTo(right.index));
+
+    Future<void> reportChunk(AsrChunkResult chunk) async {
+      try {
+        await onChunkResult?.call(chunk);
+      } catch (error) {
+        final recovered = planWith(chunk);
+        throw AsrChunkedTranscriptionException(
+          recovered,
+          recoveryChunks: recovered,
+          cause: _AsrChunkCallbackException(error),
+        );
+      }
+    }
+
+    final matchingPrior = priorChunks.where(
+      (chunk) =>
+          chunk.index == 0 &&
+          chunk.totalChunks == 1 &&
+          chunk.startSeconds.abs() < 0.001 &&
+          chunk.endSeconds.abs() < 0.001 &&
+          chunk.planFingerprint == null,
+    );
+    if (matchingPrior.length == 1) {
+      final cached = matchingPrior.single;
+      if (cached.status == AsrChunkStatus.uncertain) {
+        throw AsrChunkedTranscriptionException([cached]);
+      }
+      if (cached.status == AsrChunkStatus.succeeded && cached.text != null) {
+        final isSubtitleFormat =
+            _responseFormat == 'srt' || _responseFormat == 'vtt';
+        final cachedSubtitle = isSubtitleFormat ? cached.subtitle : null;
+        final cachedOutputFormat = isSubtitleFormat && cachedSubtitle != null
+            ? _responseFormat
+            : 'txt';
+        onProgress?.call(
+          const AsrRequestProgress(
+            phase: AsrRequestPhase.chunkCompleted,
+            chunkIndex: 1,
+            chunkCount: 1,
+          ),
+        );
+        return AsrResult(
+          text: cached.text!,
+          subtitle: cachedSubtitle,
+          outputFormat: cachedOutputFormat,
+          segments: cached.segments,
+          words: cached.words,
+          chunks: [cached],
+        );
+      }
+    }
+
+    await AppLogService.info('AsrService', '开始转写 (URL): $audioUrl');
 
     final stopwatch = Stopwatch()..start();
     final sharedParams = _buildSharedParams();
@@ -1007,8 +1524,19 @@ class AsrService {
     lastResponseStatusCode = null;
     lastResponseHeaders = null;
 
+    final attempt = createChunk(AsrChunkStatus.uncertain);
     try {
-      final response = await _dio.post(
+      await onChunkAttempt?.call(attempt);
+    } catch (error) {
+      throw AsrChunkedTranscriptionException(
+        priorChunks,
+        cause: _AsrChunkCallbackException(error),
+      );
+    }
+
+    late final Response<dynamic> response;
+    try {
+      response = await _dio.post(
         config.transcribeUrl,
         data: requestBody,
         options: Options(
@@ -1022,31 +1550,82 @@ class AsrService {
         onReceiveProgress: (received, total) =>
             _reportReceiveProgress(onProgress, received, total),
       );
-
-      stopwatch.stop();
-      onProgress?.call(
-        const AsrRequestProgress(phase: AsrRequestPhase.responseReceived),
-      );
-      _captureResponseDiagnostics(response);
-      final parsed = _parseResponse(response.data);
-
-      await AppLogService.info(
-        'AsrService',
-        '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
-      );
-      return AsrResult(
-        text: parsed.text,
-        processingTimeMs: stopwatch.elapsedMilliseconds,
-        subtitle: parsed.subtitle,
-        outputFormat: parsed.outputFormat,
-        segments: parsed.segments,
-        words: parsed.words,
-      );
     } on DioException catch (e) {
       _captureDioExceptionDiagnostics(e);
       if (CancelToken.isCancel(e)) rethrow;
+      final failure = createChunk(
+        _isOutcomeUncertain(e)
+            ? AsrChunkStatus.uncertain
+            : AsrChunkStatus.failed,
+        error: e.message ?? e.toString(),
+      );
+      await reportChunk(failure);
+      if (failure.status == AsrChunkStatus.uncertain) {
+        throw AsrChunkedTranscriptionException([failure]);
+      }
       throwWrappedDioException(e);
+    } on Object catch (e) {
+      final failure = createChunk(AsrChunkStatus.uncertain, error: e);
+      await reportChunk(failure);
+      throw AsrChunkedTranscriptionException([failure]);
     }
+
+    stopwatch.stop();
+    onProgress?.call(
+      const AsrRequestProgress(phase: AsrRequestPhase.responseReceived),
+    );
+    _captureResponseDiagnostics(response);
+
+    late final AsrResult parsed;
+    try {
+      _throwIfResponseOutcomeUncertain(response);
+      parsed = _parseResponse(response.data);
+    } on Object catch (e) {
+      final failure = createChunk(
+        e is _AsrProviderErrorResponseException
+            ? AsrChunkStatus.failed
+            : AsrChunkStatus.uncertain,
+        error: e,
+      );
+      await reportChunk(failure);
+      if (failure.status == AsrChunkStatus.uncertain) {
+        throw AsrChunkedTranscriptionException([failure]);
+      }
+      rethrow;
+    }
+
+    await AppLogService.info(
+      'AsrService',
+      '转写完成 (URL): ${stopwatch.elapsedMilliseconds}ms, 文本长度=${parsed.text.length}',
+    );
+    final completed = AsrChunkResult(
+      index: 0,
+      startSeconds: 0,
+      endSeconds: 0,
+      totalChunks: 1,
+      status: AsrChunkStatus.succeeded,
+      text: parsed.text,
+      subtitle: parsed.subtitle,
+      segments: parsed.segments,
+      words: parsed.words,
+    );
+    await reportChunk(completed);
+    onProgress?.call(
+      const AsrRequestProgress(
+        phase: AsrRequestPhase.chunkCompleted,
+        chunkIndex: 1,
+        chunkCount: 1,
+      ),
+    );
+    return AsrResult(
+      text: parsed.text,
+      processingTimeMs: stopwatch.elapsedMilliseconds,
+      subtitle: parsed.subtitle,
+      outputFormat: parsed.outputFormat,
+      segments: parsed.segments,
+      words: parsed.words,
+      chunks: [completed],
+    );
   }
 
   // ── Internal ─────────────────────────────────────────────────────
@@ -1137,6 +1716,9 @@ class AsrService {
     required int sourceAudioBytesLength,
     CancelToken? cancelToken,
     AsrProgressCallback? onProgress,
+    List<AsrChunkResult> priorChunks = const [],
+    AsrChunkResultCallback? onChunkResult,
+    AsrChunkResultCallback? onChunkAttempt,
   }) async {
     // Map chunking config string to enum
     final chunkMethod = switch (config.chunking) {
@@ -1265,6 +1847,23 @@ class AsrService {
       prepareWithinBudget(chunk, 0);
     }
 
+    final planBounds = <({double startSeconds, double endSeconds})>[];
+    var plannedOffsetSeconds = 0.0;
+    for (final chunk in preparedChunks) {
+      final durationSeconds = parseWavHeader(chunk.sourcePcm).durationSeconds;
+      final endSeconds = plannedOffsetSeconds + durationSeconds;
+      planBounds.add((
+        startSeconds: plannedOffsetSeconds,
+        endSeconds: endSeconds,
+      ));
+      plannedOffsetSeconds = endSeconds;
+    }
+    final planFingerprint = fingerprintAsrChunkPlan(planBounds);
+    final completeLegacyPlanMatches = _matchesCompleteLegacyChunkPlan(
+      priorChunks,
+      planBounds,
+    );
+
     await AppLogService.info(
       'AsrService',
       '切块完成: ${preparedChunks.length} 个片段 '
@@ -1272,23 +1871,104 @@ class AsrService {
     );
 
     final chunkResults = <AsrChunkResult>[];
+
+    Future<void> reportChunk(AsrChunkResult chunk) async {
+      try {
+        await onChunkResult?.call(chunk);
+      } catch (error) {
+        throw AsrChunkedTranscriptionException(chunkResults, cause: error);
+      }
+    }
+
     final texts = <String>[];
     var previousChunkText = '';
     final segments = <AsrTranscriptSegment>[];
     final words = <AsrTranscriptSegment>[];
-    var chunkOffsetSeconds = 0.0;
     final jsonCustomParamNames = <String>{};
     final sharedParams = _buildSharedParams(
       jsonCustomParamNames: jsonCustomParamNames,
     );
 
+    void appendChunkOutput(AsrChunkResult result, double chunkOffset) {
+      final text = result.text ?? '';
+      if (text.isNotEmpty) texts.add(text);
+      for (final segment in result.segments ?? const []) {
+        segments.add(
+          AsrTranscriptSegment(
+            startSeconds: segment.startSeconds == null
+                ? null
+                : segment.startSeconds! + chunkOffset,
+            endSeconds: segment.endSeconds == null
+                ? null
+                : segment.endSeconds! + chunkOffset,
+            text: segment.text,
+          ),
+        );
+      }
+      for (final word in result.words ?? const []) {
+        words.add(
+          AsrTranscriptSegment(
+            startSeconds: word.startSeconds == null
+                ? null
+                : word.startSeconds! + chunkOffset,
+            endSeconds:
+                word.endSeconds == null ? null : word.endSeconds! + chunkOffset,
+            text: word.text,
+          ),
+        );
+      }
+    }
+
     for (int i = 0; i < preparedChunks.length; i++) {
       final chunk = preparedChunks[i];
       final sourceChunk = chunk.sourcePcm;
-      final chunkOffset = chunkOffsetSeconds;
-      final chunkDurationSeconds = parseWavHeader(sourceChunk).durationSeconds;
-      final chunkEndSeconds = chunkOffset + chunkDurationSeconds;
-      chunkOffsetSeconds = chunkEndSeconds;
+      final chunkOffset = planBounds[i].startSeconds;
+      final chunkEndSeconds = planBounds[i].endSeconds;
+
+      final uncertain = priorChunks.where(
+        (candidate) =>
+            (candidate.planFingerprint == planFingerprint ||
+                (candidate.planFingerprint == null &&
+                    completeLegacyPlanMatches)) &&
+            candidate.index == i &&
+            candidate.status == AsrChunkStatus.uncertain &&
+            candidate.totalChunks == preparedChunks.length &&
+            (candidate.startSeconds - chunkOffset).abs() < 0.001 &&
+            (candidate.endSeconds - chunkEndSeconds).abs() < 0.001,
+      );
+      if (uncertain.isNotEmpty) {
+        throw AsrChunkedTranscriptionException([
+          ...chunkResults,
+          ...uncertain,
+        ]);
+      }
+
+      final previous = priorChunks.where(
+        (candidate) =>
+            (candidate.planFingerprint == planFingerprint ||
+                (candidate.planFingerprint == null &&
+                    completeLegacyPlanMatches)) &&
+            candidate.index == i &&
+            candidate.status == AsrChunkStatus.succeeded &&
+            candidate.text != null &&
+            candidate.totalChunks == preparedChunks.length &&
+            (candidate.startSeconds - chunkOffset).abs() < 0.001 &&
+            (candidate.endSeconds - chunkEndSeconds).abs() < 0.001,
+      );
+      if (previous.length == 1) {
+        final cached = previous.single;
+        chunkResults.add(cached);
+        previousChunkText = cached.text ?? '';
+        appendChunkOutput(cached, chunkOffset);
+        onProgress?.call(
+          AsrRequestProgress(
+            phase: AsrRequestPhase.chunkCompleted,
+            chunkIndex: i + 1,
+            chunkCount: preparedChunks.length,
+          ),
+        );
+        continue;
+      }
 
       // ── Prompt carrying: pass previous chunk's text as prompt ──
       var chunkParams = Map<String, dynamic>.from(sharedParams);
@@ -1331,6 +2011,21 @@ class AsrService {
       final mimeType = mimeTypeString.contains('/')
           ? DioMediaType.parse(mimeTypeString)
           : null;
+      final attempt = AsrChunkResult(
+        index: i,
+        startSeconds: chunkOffset,
+        endSeconds: chunkEndSeconds,
+        totalChunks: preparedChunks.length,
+        planFingerprint: planFingerprint,
+        status: AsrChunkStatus.uncertain,
+      );
+      try {
+        await onChunkAttempt?.call(attempt);
+      } catch (error) {
+        throw AsrChunkedTranscriptionException(chunkResults, cause: error);
+      }
+      AsrChunkResult? completedChunk;
+      var responseReceived = false;
       try {
         final response = await _sendTranscriptionRequest(
           sharedParams: chunkParams,
@@ -1345,59 +2040,24 @@ class AsrService {
           chunkIndex: i + 1,
           chunkCount: preparedChunks.length,
         );
+        responseReceived = true;
         _captureResponseDiagnostics(response);
+        _throwIfResponseOutcomeUncertain(response);
         final result = _parseResponse(response.data, allowEmptyText: true);
         final chunkText = result.text.trim().isEmpty ? '' : result.text;
         previousChunkText = chunkText;
-        chunkResults.add(
-          AsrChunkResult(
-            index: i,
-            startSeconds: chunkOffset,
-            endSeconds: chunkEndSeconds,
-            status: AsrChunkStatus.succeeded,
-            text: chunkText,
-          ),
+        completedChunk = AsrChunkResult(
+          index: i,
+          startSeconds: chunkOffset,
+          endSeconds: chunkEndSeconds,
+          totalChunks: preparedChunks.length,
+          planFingerprint: planFingerprint,
+          status: AsrChunkStatus.succeeded,
+          text: chunkText,
+          segments: result.segments,
+          words: result.words,
         );
-        onProgress?.call(
-          AsrRequestProgress(
-            phase: AsrRequestPhase.chunkCompleted,
-            chunkIndex: i + 1,
-            chunkCount: preparedChunks.length,
-          ),
-        );
-        if (chunkText.isNotEmpty) {
-          texts.add(chunkText);
-        }
-        for (final segment in result.segments ?? const []) {
-          segments.add(
-            AsrTranscriptSegment(
-              startSeconds: segment.startSeconds == null
-                  ? null
-                  : segment.startSeconds! + chunkOffset,
-              endSeconds: segment.endSeconds == null
-                  ? null
-                  : segment.endSeconds! + chunkOffset,
-              text: segment.text,
-            ),
-          );
-        }
-        for (final word in result.words ?? const []) {
-          words.add(
-            AsrTranscriptSegment(
-              startSeconds: word.startSeconds == null
-                  ? null
-                  : word.startSeconds! + chunkOffset,
-              endSeconds: word.endSeconds == null
-                  ? null
-                  : word.endSeconds! + chunkOffset,
-              text: word.text,
-            ),
-          );
-        }
-        await AppLogService.info(
-          'AsrService',
-          '切块 $i/${preparedChunks.length} 转写完成',
-        );
+        chunkResults.add(completedChunk);
       } on DioException catch (e) {
         if (CancelToken.isCancel(e)) rethrow;
         previousChunkText = '';
@@ -1406,29 +2066,79 @@ class AsrService {
           'AsrService',
           '切块 $i/${preparedChunks.length} 转写失败: $e',
         );
-        chunkResults.add(
-          AsrChunkResult(
-            index: i,
-            startSeconds: chunkOffset,
-            endSeconds: chunkEndSeconds,
-            status: AsrChunkStatus.failed,
-            error: e.message ?? e.toString(),
-          ),
+        final failedChunk = AsrChunkResult(
+          index: i,
+          startSeconds: chunkOffset,
+          endSeconds: chunkEndSeconds,
+          totalChunks: preparedChunks.length,
+          planFingerprint: planFingerprint,
+          status: _isOutcomeUncertain(e)
+              ? AsrChunkStatus.uncertain
+              : AsrChunkStatus.failed,
+          error: e.message ?? e.toString(),
         );
+        chunkResults.add(failedChunk);
+        await reportChunk(failedChunk);
+        if (failedChunk.status == AsrChunkStatus.uncertain) {
+          throw AsrChunkedTranscriptionException(chunkResults);
+        }
       } on Exception catch (e) {
         previousChunkText = '';
         await AppLogService.warning(
           'AsrService',
           '切块 $i/${preparedChunks.length} 转写失败: $e',
         );
-        chunkResults.add(
-          AsrChunkResult(
-            index: i,
-            startSeconds: chunkOffset,
-            endSeconds: chunkEndSeconds,
-            status: AsrChunkStatus.failed,
-            error: e.toString(),
+        final publicStatus =
+            responseReceived ? AsrChunkStatus.failed : AsrChunkStatus.uncertain;
+        final recoveryStatus =
+            responseReceived && e is! _AsrProviderErrorResponseException
+                ? AsrChunkStatus.uncertain
+                : publicStatus;
+        final failedChunk = AsrChunkResult(
+          index: i,
+          startSeconds: chunkOffset,
+          endSeconds: chunkEndSeconds,
+          totalChunks: preparedChunks.length,
+          planFingerprint: planFingerprint,
+          status: publicStatus,
+          error: e.toString(),
+        );
+        chunkResults.add(failedChunk);
+        final recoveryChunk = recoveryStatus == publicStatus
+            ? failedChunk
+            : AsrChunkResult(
+                index: i,
+                startSeconds: chunkOffset,
+                endSeconds: chunkEndSeconds,
+                totalChunks: preparedChunks.length,
+                planFingerprint: planFingerprint,
+                status: recoveryStatus,
+                error: e.toString(),
+              );
+        await reportChunk(recoveryChunk);
+        if (recoveryStatus == AsrChunkStatus.uncertain) {
+          throw AsrChunkedTranscriptionException(
+            chunkResults,
+            recoveryChunks: [
+              for (final chunk in chunkResults)
+                if (chunk.index == i) recoveryChunk else chunk,
+            ],
+          );
+        }
+      }
+      if (completedChunk != null) {
+        await reportChunk(completedChunk);
+        onProgress?.call(
+          AsrRequestProgress(
+            phase: AsrRequestPhase.chunkCompleted,
+            chunkIndex: i + 1,
+            chunkCount: preparedChunks.length,
           ),
+        );
+        appendChunkOutput(completedChunk, chunkOffset);
+        await AppLogService.info(
+          'AsrService',
+          '切块 $i/${preparedChunks.length} 转写完成',
         );
       }
     }
@@ -1437,7 +2147,7 @@ class AsrService {
     // are concatenated directly. Overlap dedup would be wrong here: for
     // non-overlapping audio it can remove legitimate repeated text at
     // chunk boundaries.
-    if (chunkResults.any((chunk) => chunk.status == AsrChunkStatus.failed)) {
+    if (chunkResults.any((chunk) => chunk.status != AsrChunkStatus.succeeded)) {
       throw AsrChunkedTranscriptionException(chunkResults);
     }
 
@@ -1610,7 +2320,9 @@ class AsrService {
 
       case AudioUploadMethod.url:
         // Should not be reached — use transcribeFromUrl for URL method.
-        throw Exception('URL 上传方式请使用 transcribeFromUrl() 方法，而不是 transcribe()');
+        throw const _AsrPreDispatchException(
+          'URL 上传方式请使用 transcribeFromUrl() 方法，而不是 transcribe()',
+        );
     }
   }
 
@@ -1793,7 +2505,7 @@ class AsrService {
     if (response['error'] != null) {
       final error = response['error'];
       final detail = error is Map ? error['message'] ?? error : error;
-      throw Exception('音频转写 API 返回错误: $detail');
+      throw _AsrProviderErrorResponseException('音频转写 API 返回错误: $detail');
     }
 
     final text = response['text'];

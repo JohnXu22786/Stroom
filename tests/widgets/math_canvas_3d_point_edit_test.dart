@@ -1,9 +1,102 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/math_3d_object.dart';
 import 'package:stroom/models/math_3d_scene.dart';
 import 'package:stroom/widgets/math_canvas_3d.dart';
+
+Future<void> _expectPlanarArrowsFollowAxes(
+  WidgetTester tester, {
+  required Camera3D camera,
+  required ProjectionType projectionType,
+  required Point3D point,
+}) async {
+  const size = Size(800, 600);
+  final projection = projectionType == ProjectionType.parallel
+      ? Projection3D.parallel(
+          width: size.width,
+          height: size.height,
+          scale: camera.distance * 0.6,
+        )
+      : Projection3D.perspective(
+          width: size.width,
+          height: size.height,
+          fov: 60,
+        );
+  final center = worldToScreen(point, camera, projection);
+  final origin = Offset(center.x, center.y);
+  final sampleDistance =
+      projectionType == ProjectionType.perspective ? 0.01 : 1.0;
+
+  Offset axisOffset(Vector3D axis) {
+    final screenPoint = worldToScreen(
+      point + axis * sampleDistance,
+      camera,
+      projection,
+    );
+    final projectedAxis = Offset(
+      screenPoint.x - center.x,
+      screenPoint.y - center.y,
+    );
+    return projectedAxis / projectedAxis.distance * 28;
+  }
+
+  final xAxis = axisOffset(Vector3D.unitX);
+  final yAxis = axisOffset(Vector3D.unitY);
+  final painter = MathCanvas3DPainter(
+    cameraTarget: camera.target,
+    cameraDistance: camera.distance,
+    cameraTheta: camera.theta,
+    cameraPhi: camera.phi,
+    projectionType: projectionType,
+    showAxes: false,
+    showPlane: false,
+    showGrid: false,
+    showLabels: false,
+    selectedPoint: Object3D.point(point),
+    pointDragMode: PointDragMode.plane,
+  );
+  final pixels = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    painter.paint(ui.Canvas(recorder), size);
+    final image = await recorder.endRecording().toImage(
+          size.width.toInt(),
+          size.height.toInt(),
+        );
+    final bytes = (await image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    ))!
+        .buffer
+        .asUint8List();
+    image.dispose();
+
+    final result = <Offset>[];
+    for (var y = 0; y < size.height; y++) {
+      for (var x = 0; x < size.width; x++) {
+        final index = (y * size.width.toInt() + x) * 4;
+        final red = bytes[index];
+        final green = bytes[index + 1];
+        final blue = bytes[index + 2];
+        if (red > 100 && green < 140 && blue > 100) {
+          result.add(Offset(x.toDouble(), y.toDouble()));
+        }
+      }
+    }
+    return result;
+  });
+
+  expect(pixels, isNotNull);
+  for (final direction in [xAxis, -xAxis, yAxis, -yAxis]) {
+    final expectedArrowPoint = origin + direction * (20 / 28);
+    expect(
+      pixels!.any((pixel) => (pixel - expectedArrowPoint).distance < 2),
+      isTrue,
+      reason: 'Expected an arrow along projected direction $direction',
+    );
+  }
+}
 
 void main() {
   Future<MathCanvas3DState> setup(WidgetTester tester) async {
@@ -46,6 +139,92 @@ void main() {
     expect(state.objects.last.point.z, 0);
     expect(state.selectedPoint, same(state.objects.last));
     expect(state.pointDragMode, PointDragMode.height);
+  });
+
+  testWidgets(
+      'moving a source point updates its solid and deleting it preserves the solid',
+      (tester) async {
+    final state = await setup(tester);
+    const first = Point3D(-2, 0, 0);
+    const second = Point3D(-1, 0, 0);
+    state.setObjects([
+      const Object3D.point(first, label: 'A'),
+      const Object3D.point(second, label: 'B'),
+    ]);
+    state.setTool(ConstructionTool.tetrahedron);
+    await tester.pump();
+
+    await tester.tapAt(screen(state, first));
+    await tester.pump();
+    await tester.tapAt(screen(state, second));
+    await tester.pump();
+
+    final initialSolid = state.objects.last;
+    expect(initialSolid.type, Object3DType.polyhedron);
+    expect(initialSolid.vertices[0], first);
+    expect(initialSolid.vertices[1], second);
+
+    state.setTool(ConstructionTool.move);
+    await tester.pump();
+    await tester.dragFrom(screen(state, first), const Offset(-45, 24));
+    await tester.pump();
+
+    final movedPoint = state.objects[0].point;
+    final movedSolid = state.objects.last;
+    expect(movedPoint.distanceTo(first), greaterThan(0.1));
+    expect(movedSolid.vertices[0], movedPoint);
+    expect(movedSolid.vertices[2].distanceTo(initialSolid.vertices[2]),
+        greaterThan(0.1));
+
+    state.setTool(ConstructionTool.deleteObject);
+    await tester.pump();
+    await tester.tapAt(screen(state, movedPoint));
+    await tester.pump();
+
+    expect(state.objects, hasLength(2));
+    expect(
+      state.objects.any(
+        (object) =>
+            object.type == Object3DType.point && object.point == movedPoint,
+      ),
+      isFalse,
+    );
+    final preservedSolid = state.objects.singleWhere(
+      (object) => object.type == Object3DType.polyhedron,
+    );
+    expect(preservedSolid.vertices, movedSolid.vertices);
+  });
+
+  testWidgets('a snapped solid vertex can begin a later construction',
+      (tester) async {
+    final state = await setup(tester);
+    const vertex = Point3D(-2, 0, 0);
+    state.setObjects([
+      Object3D.polyhedron(
+        vertices: const [
+          vertex,
+          Point3D(-1, 0, 0),
+          Point3D(-2, 1, 0),
+          Point3D(-2, 0, 1),
+        ],
+        indices: const [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3],
+      ),
+    ]);
+    state.setTool(ConstructionTool.segment);
+    await tester.pump();
+
+    await tester.tapAt(screen(state, vertex));
+    await tester.pump();
+    expect(state.constructionState!.points, [vertex]);
+
+    const endpoint = Point3D(2, 2, 0);
+    await tester.tapAt(screen(state, endpoint));
+    await tester.pump();
+
+    final segment = state.objects.singleWhere(
+      (object) => object.type == Object3DType.line,
+    );
+    expect([segment.pointA, segment.pointB], contains(vertex));
   });
 
   testWidgets('visible points beyond the parallel camera remain editable',
@@ -193,6 +372,27 @@ void main() {
     await pointer.cancel();
     await tester.pump();
     expect(state.objects, [initial]);
+  });
+
+  testWidgets(
+      'planar drag arrows follow projected axes in parallel and perspective views',
+      (tester) async {
+    await _expectPlanarArrowsFollowAxes(
+      tester,
+      camera: const Camera3D(theta: 0.9, phi: 0.8),
+      projectionType: ProjectionType.parallel,
+      point: Point3D.origin,
+    );
+
+    const camera = Camera3D(theta: 0.9, phi: 0.8);
+    final forward = (camera.target - camera.position).normalized();
+    final point = camera.position + forward * 0.2;
+    await _expectPlanarArrowsFollowAxes(
+      tester,
+      camera: camera,
+      projectionType: ProjectionType.perspective,
+      point: point,
+    );
   });
 
   testWidgets('two fingers navigate without moving or creating a point',

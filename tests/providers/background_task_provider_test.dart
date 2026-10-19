@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
+import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
 import 'package:stroom/services/ocr_retry_storage.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -192,6 +193,8 @@ void main() {
       BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
       BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = null;
       BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+      // ignore: invalid_use_of_visible_for_testing_member
+      BackgroundTaskNotifier.debugBeforeLegacyAsrRetryMigration = null;
       // iOS 常驻任务桥接默认关闭（测试机非 iOS）。
       IosContinuedTaskService.debugForceSupported = false;
     });
@@ -203,6 +206,8 @@ void main() {
       BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
       BackgroundTaskNotifier.debugBeforeTaskSnapshotRead = null;
       BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+      // ignore: invalid_use_of_visible_for_testing_member
+      BackgroundTaskNotifier.debugBeforeLegacyAsrRetryMigration = null;
       OcrRetryStorage.debugBeforeCacheWrite = null;
       IosContinuedTaskService.debugForceSupported = false;
       try {
@@ -351,6 +356,116 @@ void main() {
 
       expect(notifier.state.length, 2);
       expect(notifier.state.every((t) => t.id != id2), isTrue);
+    });
+
+    test(
+      'removeTask keeps retry data when task removal cannot be persisted',
+      () async {
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+        await notifier.pendingPersistence;
+        final persistedFile = _tasksFileIn(testDir.path);
+        expect(await _readFileIfExists(persistedFile), contains(id));
+
+        final blockedRoot = File(p.join(testDir.path, 'blocked-root'));
+        await blockedRoot.writeAsString('not a directory');
+        BackgroundTaskNotifier.debugStorageDirectoryOverride = blockedRoot.path;
+        var cleanupCalls = 0;
+        notifier.registerTaskCleanup(id, () async {
+          cleanupCalls++;
+        });
+
+        notifier.removeTask(id);
+        await notifier.pendingPersistence;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        expect(notifier.state.where((task) => task.id == id), isEmpty);
+        expect(cleanupCalls, 0);
+        expect(await _readFileIfExists(persistedFile), contains(id));
+        notifier.dispose();
+      },
+    );
+
+    test(
+      'later successful task write runs cleanup for a persisted removal',
+      () async {
+        final notifier = BackgroundTaskNotifier();
+        final id = notifier.addTask(type: BackgroundTaskType.asr, title: 'ASR');
+        await notifier.pendingPersistence;
+        final persistedFile = _tasksFileIn(testDir.path);
+        final blockedRoot = File(p.join(testDir.path, 'blocked-root'));
+        await blockedRoot.writeAsString('not a directory');
+        var cleanupCalls = 0;
+        final cleanupCalled = Completer<void>();
+        notifier.registerTaskCleanup(id, () async {
+          cleanupCalls++;
+          if (!cleanupCalled.isCompleted) cleanupCalled.complete();
+        });
+
+        BackgroundTaskNotifier.debugStorageDirectoryOverride = blockedRoot.path;
+        notifier.removeTask(id);
+        await notifier.pendingPersistence;
+        expect(cleanupCalls, 0);
+        expect(await _readFileIfExists(persistedFile), contains(id));
+
+        BackgroundTaskNotifier.debugStorageDirectoryOverride = testDir.path;
+        notifier.addTask(
+          type: BackgroundTaskType.asr,
+          title: 'next task write',
+          taskId: 'task-after-failed-removal',
+        );
+        await notifier.pendingPersistence;
+        await cleanupCalled.future.timeout(const Duration(seconds: 1));
+
+        expect(cleanupCalls, 1);
+        final saved = await _readFileIfExists(persistedFile);
+        expect(saved, isNot(contains(id)));
+        expect(saved, contains('task-after-failed-removal'));
+        notifier.dispose();
+        await notifier.pendingPersistence;
+      },
+    );
+
+    test('task cleanup stays bound to the removed task generation', () async {
+      final notifier = BackgroundTaskNotifier();
+      const taskId = 'same-id-retry-cleanup';
+      notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'original',
+        taskId: taskId,
+      );
+      await notifier.pendingPersistence;
+      final original = notifier.taskById(taskId)!;
+      var originalCleanupCalls = 0;
+      var replacementCleanupCalls = 0;
+      notifier.registerTaskCleanup(
+        taskId,
+        () async => originalCleanupCalls++,
+        taskGeneration: original,
+      );
+
+      final removal = notifier.removeTasksPersisted([taskId]);
+      notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'replacement',
+        taskId: taskId,
+      );
+      final replacement = notifier.taskById(taskId)!;
+      notifier.registerTaskCleanup(
+        taskId,
+        () async => replacementCleanupCalls++,
+        taskGeneration: replacement,
+      );
+
+      expect(await removal, isTrue);
+      await notifier.pendingPersistence;
+
+      expect(
+          notifier.taskById(taskId)!.hasSameGenerationAs(replacement), isTrue);
+      expect(originalCleanupCalls, 1);
+      expect(replacementCleanupCalls, 0);
+      notifier.dispose();
+      await notifier.pendingPersistence;
     });
 
     test('addTask returns unique IDs for each task', () {
@@ -12683,6 +12798,19 @@ void main() {
       },
     );
 
+    test('clearRetryData explicitly removes stored retry data', () async {
+      final notifier = BackgroundTaskNotifier();
+      final id = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'ASR任务',
+        retryData: <String, dynamic>{'version': 2},
+      );
+
+      expect(await notifier.clearRetryData(id), isTrue);
+
+      expect(notifier.state.single.retryData, isNull);
+    });
+
     test('setRetryData on non-existent task does nothing', () {
       final notifier = BackgroundTaskNotifier();
 
@@ -13295,6 +13423,167 @@ void main() {
         } finally {
           restarted.dispose();
           await restarted.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore does not preserve legacy ASR data URI payloads',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final encodedAudio = base64Encode(List<int>.filled(64, 0x5a));
+        final skippedAsrRow = <String, dynamic>{
+          // Missing id keeps this corrupt legacy row on the skipped path.
+          'type': 'asr',
+          'title': 'Skipped ASR data URI',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {
+            'metadata': 'data:audio/wav;base64,$encodedAudio',
+          },
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-asr-sibling-next-to-data-uri',
+          type: BackgroundTaskType.asr,
+          title: 'Valid ASR task',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        await file.writeAsString(jsonEncode([skippedAsrRow, validSibling]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+            notifier.taskById('valid-asr-sibling-next-to-data-uri'),
+            isNotNull,
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Task after partial restore',
+            taskId: 'task-after-partial-asr-data-uri',
+          );
+          await notifier.pendingPersistence;
+
+          final persisted = await file.readAsString();
+          expect(persisted, isNot(contains(encodedAudio)));
+          expect(persisted, isNot(contains('data:audio/wav;base64')));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore does not preserve line-wrapped legacy ASR bytes',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final inlineAudio = base64Encode(
+          List<int>.generate(96, (index) => (index * 17 + 3) % 256),
+        );
+        final wrappedAudio = RegExp('.{1,24}')
+            .allMatches(inlineAudio)
+            .map((match) => match.group(0)!)
+            .join('\n');
+        final skippedAsrRow = <String, dynamic>{
+          // Missing id keeps this corrupt legacy row on the skipped path.
+          'type': 'asr',
+          'title': 'Skipped ASR wrapped bytes',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {'bytes': wrappedAudio},
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-asr-sibling-next-to-wrapped-bytes',
+          type: BackgroundTaskType.asr,
+          title: 'Valid ASR task',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        await file.writeAsString(jsonEncode([skippedAsrRow, validSibling]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+            notifier.taskById('valid-asr-sibling-next-to-wrapped-bytes'),
+            isNotNull,
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Task after partial restore',
+            taskId: 'task-after-partial-asr-wrapped-bytes',
+          );
+          await notifier.pendingPersistence;
+
+          final persisted = await file.readAsString();
+          expect(persisted, isNot(contains(inlineAudio)));
+          for (final chunk in RegExp('.{1,24}')
+              .allMatches(inlineAudio)
+              .map((match) => match.group(0)!)) {
+            expect(persisted, isNot(contains(chunk)));
+          }
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore does not preserve credentials in skipped ASR URLs',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        const credentialedUrl = 'https://alice:opaque-pass@host/audio.wav';
+        final skippedAsrRow = <String, dynamic>{
+          // Missing id keeps this corrupt legacy row on the skipped path.
+          'type': 'asr',
+          'title': 'Skipped ASR URL credentials',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {
+            'metadata': {'sourceUrl': credentialedUrl},
+          },
+        };
+        final validSibling = BackgroundTask(
+          id: 'valid-asr-sibling-next-to-url-credentials',
+          type: BackgroundTaskType.asr,
+          title: 'Valid ASR task',
+          status: TaskStatus.completed,
+          createdAt: DateTime(2025, 1, 2),
+        ).toMap();
+        await file.writeAsString(jsonEncode([skippedAsrRow, validSibling]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+            notifier.taskById('valid-asr-sibling-next-to-url-credentials'),
+            isNotNull,
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Task after partial restore',
+            taskId: 'task-after-partial-asr-url-credentials',
+          );
+          await notifier.pendingPersistence;
+
+          final persisted = await file.readAsString();
+          expect(persisted, isNot(contains('alice:opaque-pass@')));
+          expect(persisted, isNot(contains(credentialedUrl)));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
         }
       },
     );
@@ -14297,6 +14586,3037 @@ void main() {
         }
       },
     );
+
+    test(
+      'partial restore never rewrites records that may own retry audio',
+      () async {
+        const audioId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final original = jsonEncode([
+          {
+            'id': 'valid-asr-task',
+            'type': 'asr',
+            'title': 'retry task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'audioReference': {'id': audioId},
+            },
+          },
+          'corrupt task entry',
+        ]);
+        await file.writeAsString(original);
+        final audioFile = File(
+          p.join(testDir.path, 'background', 'asr_retry', '$audioId.audio'),
+        )..createSync(recursive: true);
+        await audioFile.writeAsBytes([1, 2, 3]);
+
+        final firstRestore = BackgroundTaskNotifier();
+        expect(await firstRestore.restoreFromPersistence(), isFalse);
+        expect(firstRestore.retryAudioCleanupSafe, isFalse);
+        await firstRestore.pendingPersistence;
+        expect(await file.readAsString(), original);
+
+        final secondRestore = BackgroundTaskNotifier();
+        expect(await secondRestore.restoreFromPersistence(), isFalse);
+        await secondRestore.pendingPersistence;
+
+        expect(await file.readAsString(), original);
+        expect(await audioFile.exists(), isTrue);
+      },
+    );
+
+    test(
+      'pre-restore snapshot writes preserve unrestored ownership markers',
+      () async {
+        const audioId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            BackgroundTask(
+              id: 'pre-restore-known-task',
+              type: BackgroundTaskType.ocr,
+              title: 'Known task',
+              status: TaskStatus.waiting,
+              createdAt: DateTime.utc(2026),
+            ).toMap(),
+            {
+              '_unrestoredTaskRecord': true,
+              'retryAudioOwnershipKnown': false,
+              'retryAudioIds': [audioId],
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        final secondStartup = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Added before restore',
+            startImmediately: false,
+            taskId: 'pre-restore-added-task',
+          );
+          await notifier.pendingPersistence;
+
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persisted.whereType<Map>().any(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isTrue,
+          );
+
+          expect(await secondStartup.restoreFromPersistence(), isFalse);
+          expect(secondStartup.retryAudioCleanupSafe, isFalse);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          secondStartup.dispose();
+          await secondStartup.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'versioned ASR persistence sanitizes task-level diagnostics',
+      () async {
+        const apiKey = 'sk-versioned-asr-task-level-secret-123456';
+        const audioId = 'cccccccccccccccccccccccccccccccc';
+        const audioSha256 =
+            '0000000000000000000000000000000000000000000000000000000000000000';
+        final audioReference = AsrAudioReference(
+          id: audioId,
+          name: 'source.wav',
+          format: 'wav',
+          byteLength: 0,
+          sha256: audioSha256,
+          requiresSourceReselection: true,
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'versioned-asr-with-task-level-secret',
+              'type': 'asr',
+              'title': 'ASR task with diagnostics',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'error': 'Transcription failed: Bearer $apiKey',
+              'steps': [
+                {
+                  'label': 'Transcribe',
+                  'status': 'failed',
+                  'error': 'Authorization: Bearer $apiKey',
+                },
+              ],
+              'rawRequest': {
+                'headers': {'Authorization': 'Bearer $apiKey'},
+                'body': {'api_key': apiKey},
+              },
+              'rawResponse': {
+                'data': {'message': 'Bearer $apiKey'},
+              },
+              'retryData': {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': audioReference.toMap(),
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final asrRow = (jsonDecode(serialized) as List)
+              .whereType<Map>()
+              .singleWhere(
+                  (row) => row['id'] == 'versioned-asr-with-task-level-secret');
+          expect(asrRow['rawRequest'], isNull);
+          expect(asrRow['rawResponse'], isNull);
+          expect(asrRow['error'], isNot(contains(apiKey)));
+          final steps = asrRow['steps'] as List;
+          expect(steps.single['error'], isNot(contains(apiKey)));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'unsafe in-memory legacy ASR retry data cannot overwrite the task snapshot',
+      () async {
+        const apiKey = 'legacy-asr-api-key-should-not-reach-disk';
+        final encodedAudio = base64Encode(List<int>.filled(64, 0x5a));
+        final notifier = BackgroundTaskNotifier();
+        try {
+          final taskId = notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Existing ASR task',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+          final file = _tasksFileIn(testDir.path);
+          final originalSnapshot = await file.readAsString();
+
+          notifier.setRetryData(taskId, {
+            'audios': [
+              {'bytes': encodedAudio, 'format': 'wav'},
+            ],
+            'apiKey': apiKey,
+          });
+          await notifier.pendingPersistence;
+
+          expect(await file.readAsString(), originalSnapshot);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'unsafe legacy retry data is omitted without blocking safe task snapshots',
+      () async {
+        const apiKey = 'legacy-asr-api-key-should-not-reach-disk';
+        final encodedAudio = base64Encode(List<int>.filled(64, 0x5a));
+        final notifier = BackgroundTaskNotifier();
+        try {
+          final taskId = notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'In-memory legacy task',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+          notifier.setRetryData(taskId, {
+            'audios': [
+              {'bytes': encodedAudio, 'format': 'wav'},
+            ],
+            'apiKey': apiKey,
+          });
+          await notifier.pendingPersistence;
+
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Safe snapshot trigger',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await _tasksFileIn(testDir.path).readAsString();
+          expect(serialized, isNot(contains(encodedAudio)));
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = (jsonDecode(serialized) as List).cast<Map>();
+          expect(rows, hasLength(2));
+          final persistedAsr = rows.singleWhere((row) => row['id'] == taskId);
+          expect(persistedAsr, isNot(contains('retryData')));
+          expect(
+            notifier.taskById(taskId)!.retryData!['apiKey'],
+            apiKey,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'skipped legacy ASR rows do not preserve credential-named values',
+      () async {
+        const opaqueCredential = 'opaque123value';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            for (final field in [
+              'key',
+              'apiKeys',
+              'privateKey',
+              'clientSecret',
+              'accessToken',
+              'bearer',
+              'auth',
+              'API Key',
+            ])
+              {
+                'type': 'asr',
+                'title': 'Malformed legacy ASR row',
+                'status': 'failed',
+                'createdAt': DateTime.utc(2026).toIso8601String(),
+                field: opaqueCredential,
+              },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-credential-filter-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(opaqueCredential)));
+          expect(serialized, contains('legacy-credential-filter-write'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'skipped legacy ASR rows do not preserve numeric credential values',
+      () async {
+        const numericCredential = 172839;
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'API Key': numericCredential,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-numeric-credential-filter-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(numericCredential.toString())));
+          expect(
+              serialized, contains('legacy-numeric-credential-filter-write'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restore retires rejected ASR row ownership after sanitization is durable',
+      () async {
+        const apiKey = 'opaque-startup-asr-key-789';
+        const audioId = 'abababababababababababababababab';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'valid-task-next-to-rejected-asr',
+              'type': 'ocr',
+              'title': 'Valid task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+            },
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': audioId,
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'd' * 64,
+                },
+                'API Key': apiKey,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(
+              notifier.taskById('valid-task-next-to-rejected-asr'), isNotNull);
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          expect(
+            (jsonDecode(serialized) as List).whereType<Map>().where(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isEmpty,
+          );
+          expect(notifier.retryAudioReferencedIds, isNot(contains(audioId)));
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restore retires rejected ASR ownership when no task rows parse',
+      () async {
+        const apiKey = 'opaque-empty-startup-asr-key-456';
+        const audioId = 'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': audioId,
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'd' * 64,
+                },
+                'API Key': apiKey,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          expect(
+            rows.whereType<Map>().where(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isEmpty,
+          );
+          expect(notifier.retryAudioReferencedIds, isEmpty);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restore scrubs credentials from parsed ASR rows with invalid versioned audio',
+      () async {
+        const apiKey = 'opaque-parsed-asr-key-812';
+        const taskId = 'parsed-asr-invalid-audio-reference';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'ASR retry with invalid reference',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'API Key': apiKey,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          expect(asrRow.containsKey('retryData'), isFalse);
+          expect(
+            rows.whereType<Map>().where(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isEmpty,
+          );
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restore drops invalid v2 ownership before future writes',
+      () async {
+        const taskId = 'parsed-asr-invalid-safe-reference';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'ASR retry with structurally invalid reference',
+              'status': 'running',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'broken-id',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'e' * 64,
+                },
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.taskById(taskId)?.status, TaskStatus.failed);
+          await notifier.pendingPersistence;
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Task added after invalid retry restore',
+            startImmediately: false,
+            taskId: 'task-after-invalid-asr-reference',
+          );
+          await notifier.pendingPersistence;
+
+          final rows = jsonDecode(await file.readAsString()) as List;
+          final restoredRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          expect(restoredRow.containsKey('retryData'), isFalse);
+          expect(restoredRow['status'], TaskStatus.failed.name);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) => row['id'] == 'task-after-invalid-asr-reference',
+                ),
+            isTrue,
+            reason: 'invalid retry metadata must not block later task writes',
+          );
+          expect(
+            rows.whereType<Map>().where(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isEmpty,
+          );
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'restore scrubs credentials nested in an invalid versioned audio reference',
+      () async {
+        const apiKey = 'opaque-nested-reference-asr-key-614';
+        const taskId = 'parsed-asr-invalid-reference-with-key';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'ASR retry with invalid reference',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'invalid-audio-id',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'e' * 64,
+                  'API Key': apiKey,
+                },
+              },
+            },
+            {'id': 'future-task', 'type': 'future-task', 'title': 'Unknown'},
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          expect(asrRow.containsKey('retryData'), isFalse);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['_unrestoredTaskRecord'] == true &&
+                      row['retryAudioOwnershipKnown'] == false,
+                ),
+            isTrue,
+          );
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore scrubs credentials from parsed ASR rows with valid audio',
+      () async {
+        const apiKey = 'opaque-partial-parsed-asr-key-913';
+        const taskId = 'parsed-asr-valid-audio-reference';
+        const audioId = 'efefefefefefefefefefefefefefefef';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'ASR retry with valid reference',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': audioId,
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'e' * 64,
+                },
+                'API Key': apiKey,
+              },
+            },
+            {'id': 'future-task', 'type': 'future-task', 'title': 'Unknown'},
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          final audioReference =
+              ((asrRow['retryData'] as Map)['audioReference'] as Map);
+          expect(audioReference['id'], audioId);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) => row['_unrestoredTaskRecord'] == true,
+                ),
+            isTrue,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore scrubs credentials from parsed ASR request diagnostics',
+      () async {
+        const apiKey = 'opaque-asr-request-diagnostic-key-417';
+        const taskId = 'parsed-asr-request-diagnostic-key';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'ASR task with request diagnostics',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'rawRequest': {
+                'headers': {'Authorization': 'Bearer $apiKey'},
+              },
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'abababababababababababababababab',
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'e' * 64,
+                },
+              },
+            },
+            {'id': 'future-task', 'type': 'future-task', 'title': 'Unknown'},
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          expect(asrRow.containsKey('rawRequest'), isFalse);
+          expect(
+            (asrRow['retryData'] as Map)['audioReference']['id'],
+            'abababababababababababababababab',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'partial restore normalizes credentials out of unrestored task markers',
+      () async {
+        const apiKey = 'opaque-unrestored-marker-key-608';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              '_unrestoredTaskRecord': true,
+              'retryAudioOwnershipKnown': false,
+              'retryAudioIds': <String>[],
+              'apiKey': apiKey,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final marker = (jsonDecode(serialized) as List).single as Map;
+          expect(marker.keys, contains('_unrestoredTaskRecord'));
+          expect(marker.containsKey('apiKey'), isFalse);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'safe skipped legacy ASR rows preserve Base64-alphabet titles',
+      () async {
+        const title = 'pending-transcription-1';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': title,
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-safe-title-preservation',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, contains(title));
+          expect(serialized, contains('legacy-safe-title-preservation'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'skipped legacy ASR rows do not preserve short audio payloads',
+      () async {
+        const payload = 'YQ==';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {'audio': payload},
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-short-audio-filter-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(payload)));
+          expect(serialized, contains('legacy-short-audio-filter-write'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'skipped legacy ASR rows do not preserve short Base64 metadata',
+      () async {
+        final payload = base64Encode(List<int>.filled(16, 0x5a));
+        expect(payload.length, lessThan(32));
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {'metadata': payload},
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-short-base64-filter-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(payload)));
+          expect(serialized, contains('legacy-short-base64-filter-write'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'skipped legacy ASR rows do not preserve line-wrapped Base64 metadata',
+      () async {
+        final payload = base64Encode(List<int>.filled(65, 0x5a));
+        final wrappedPayload = payload
+            .split('')
+            .asMap()
+            .entries
+            .fold<StringBuffer>(StringBuffer(), (buffer, entry) {
+          buffer.write(entry.value);
+          if ((entry.key + 1) % 16 == 0) buffer.write('\n');
+          return buffer;
+        }).toString();
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'type': 'asr',
+              'title': 'Malformed legacy ASR row',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'metadata': wrappedPayload,
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'legacy-base64-filter-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          final persistedRows = jsonDecode(serialized) as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) {
+              final metadata = row['metadata'];
+              return metadata is String &&
+                  metadata.replaceAll(RegExp(r'\s+'), '') == payload;
+            }),
+            isFalse,
+          );
+          expect(serialized, contains('legacy-base64-filter-write'));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'unknown ASR checkpoint statuses become uncertain before later snapshots',
+      () async {
+        const apiKey = 'opaque-unknown-status-asr-key';
+        const audioId = 'dddddddddddddddddddddddddddddddd';
+        const audioSha256 =
+            '0000000000000000000000000000000000000000000000000000000000000000';
+        final audioReference = AsrAudioReference(
+          id: audioId,
+          name: 'source.wav',
+          format: 'wav',
+          byteLength: 0,
+          sha256: audioSha256,
+          requiresSourceReselection: true,
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'versioned-asr-with-unknown-chunk-status',
+              'type': 'asr',
+              'title': 'Versioned ASR task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'rawRequest': {
+                'headers': {'Authorization': 'Bearer $apiKey'},
+              },
+              'retryData': {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': audioReference.toMap(),
+                'chunks': [
+                  {
+                    'index': 0,
+                    'startSeconds': 0,
+                    'endSeconds': 1,
+                    'status': 'future-status',
+                    'text': 'must be retried',
+                  },
+                ],
+                'apiKey': apiKey,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'unknown-status-snapshot-write',
+          );
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          final rows = jsonDecode(serialized) as List;
+          expect(
+            rows.whereType<Map>().any(
+                  (row) => row['id'] == 'unknown-status-snapshot-write',
+                ),
+            isTrue,
+          );
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == 'versioned-asr-with-unknown-chunk-status',
+              );
+          final retryData = asrRow['retryData'] as Map;
+          expect(retryData.containsKey('apiKey'), isFalse);
+          expect(
+            ((retryData['chunks'] as List).single as Map)['status'],
+            'uncertain',
+            reason: 'unknown provider outcomes must remain non-retryable',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'legacy ASR rows migrate when an unrelated malformed row is skipped',
+      () async {
+        WebFileStore.enableTestMode();
+        const apiKey = 'opaque-mixed-restore-legacy-asr-key-432';
+        const taskId = 'legacy-asr-next-to-malformed-ocr';
+        final audioBytes = Uint8List.fromList(List<int>.generate(48, (i) => i));
+        final encodedAudio = base64Encode(audioBytes);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'malformed-unrelated-ocr',
+              'type': 'ocr',
+              'title': 'Malformed unrelated OCR task',
+              'status': 'not-a-task-status',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+            },
+            {
+              'id': taskId,
+              'type': 'asr',
+              'title': 'Legacy ASR beside malformed OCR',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'rawRequest': {
+                'headers': {'Authorization': 'Bearer $apiKey'},
+              },
+              'retryData': {
+                'audios': [
+                  {
+                    'bytes': encodedAudio,
+                    'name': 'legacy.wav',
+                    'format': 'wav'
+                  },
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          var serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          expect(serialized, isNot(contains(encodedAudio)));
+          var rows = jsonDecode(serialized) as List;
+          final asrRow = rows.whereType<Map>().singleWhere(
+                (row) => row['id'] == taskId,
+              );
+          expect(asrRow['rawRequest'], isNull);
+          final retryData = asrRow['retryData'] as Map;
+          expect(retryData['version'], 2);
+          final references = retryData['audioReferences'] as List;
+          final reference = AsrAudioReference.fromMap(
+            Map<String, dynamic>.from(
+              (references.single as Map)['audioReference'] as Map,
+            ),
+          );
+          expect(await AsrRetryAudioStore().load(reference), audioBytes);
+          expect(
+            rows.whereType<Map>().any(
+                  (row) => row['id'] == 'malformed-unrelated-ocr',
+                ),
+            isTrue,
+            reason: 'the unrelated malformed row must remain preserved',
+          );
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Task added after partial migration',
+            startImmediately: false,
+            taskId: 'task-added-after-partial-legacy-migration',
+          );
+          await notifier.pendingPersistence;
+          serialized = await file.readAsString();
+          rows = jsonDecode(serialized) as List;
+          expect(
+            rows.whereType<Map>().any(
+                  (row) =>
+                      row['id'] == 'task-added-after-partial-legacy-migration',
+                ),
+            isTrue,
+          );
+          expect(serialized, isNot(contains(apiKey)));
+          expect(serialized, isNot(contains(encodedAudio)));
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'restoring legacy ASR audio migrates bytes and drops legacy diagnostics',
+      () async {
+        WebFileStore.enableTestMode();
+        const apiKey = 'opaque-legacy-asr-diagnostic-key-123';
+        final audioBytes = Uint8List(48);
+        final encodedAudio = base64Encode(audioBytes);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'legacy-asr-inline-audio',
+              'type': 'asr',
+              'title': 'legacy ASR task',
+              'status': 'running',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'error': 'request failed with $apiKey',
+              'rawRequest': {
+                'headers': {'Authorization': 'Bearer $apiKey'},
+              },
+              'rawResponse': {
+                'data': {'message': apiKey},
+              },
+              'retryData': {
+                'audios': [
+                  {
+                    'bytes': encodedAudio,
+                    'name': 'legacy.wav',
+                    'format': 'wav',
+                  },
+                ],
+                'modelIndex': 0,
+                'saveFolder': 'transcripts',
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(encodedAudio)));
+          expect(serialized, isNot(contains(apiKey)));
+          final row = (jsonDecode(serialized) as List).single as Map;
+          expect(row['rawRequest'], isNull);
+          expect(row['rawResponse'], isNull);
+          expect(row['error'], '应用重启，已中断');
+          final retryData = row['retryData'] as Map;
+          expect(retryData['version'], 2);
+          expect(retryData.containsKey('modelReference'), isFalse);
+          expect(retryData.containsKey('audios'), isFalse);
+          final references = retryData['audioReferences'] as List;
+          final reference = AsrAudioReference.fromMap(
+            Map<String, dynamic>.from(
+              (references.single as Map)['audioReference'] as Map,
+            ),
+          );
+          expect(
+            await AsrRetryAudioStore().load(reference),
+            orderedEquals(audioBytes),
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'versionless ASR audio references survive retry-data migration',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final audioBytes = Uint8List.fromList(List<int>.generate(48, (i) => i));
+        final reference = await store.save(
+          audioBytes,
+          name: 'already-stored.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'versionless-asr-reference',
+              'type': 'asr',
+              'title': 'Versionless ASR reference',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'audioReferences': [
+                  {
+                    'audioReference': reference.toMap(),
+                    'chunks': const <dynamic>[],
+                  },
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          final retryData =
+              notifier.taskById('versionless-asr-reference')!.retryData!;
+          expect(retryData['version'], 2);
+          final migratedReferences = retryData['audioReferences'] as List;
+          final migratedReference = AsrAudioReference.fromMap(
+            Map<String, dynamic>.from(
+              (migratedReferences.single as Map)['audioReference'] as Map,
+            ),
+          );
+          expect(migratedReference.id, reference.id);
+          expect(await store.load(migratedReference), audioBytes);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'versionless ASR references with unknown chunk statuses stay owned',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final audioBytes = Uint8List.fromList(List<int>.generate(48, (i) => i));
+        final reference = await store.save(
+          audioBytes,
+          name: 'versionless-unknown-status.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'versionless-asr-unknown-chunk-status',
+              'type': 'asr',
+              'title': 'Versionless ASR reference with unknown chunk status',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'audioReferences': [
+                  {
+                    'audioReference': reference.toMap(),
+                    'chunks': [
+                      {
+                        'index': 0,
+                        'startSeconds': 0,
+                        'endSeconds': 1,
+                        'status': 'future-status',
+                        'text': 'must remain unresolved',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          final migratedRetryData = notifier
+              .taskById('versionless-asr-unknown-chunk-status')!
+              .retryData!;
+          expect(migratedRetryData['version'], 2);
+          final migratedReferences =
+              migratedRetryData['audioReferences'] as List;
+          final migratedEntry = migratedReferences.single as Map;
+          final migratedReference = AsrAudioReference.fromMap(
+            Map<String, dynamic>.from(migratedEntry['audioReference'] as Map),
+          );
+          expect(migratedReference.id, reference.id);
+          expect(
+            ((migratedEntry['chunks'] as List).single as Map)['status'],
+            'uncertain',
+          );
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+          expect(await store.load(migratedReference), audioBytes);
+
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'failed later ASR migration retains references in the loaded snapshot',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final audioBytes = Uint8List.fromList(List<int>.generate(48, (i) => i));
+        final reference = await store.save(
+          audioBytes,
+          name: 'legacy-asr-rollback.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+
+        const failedTaskId = 'legacy-asr-later-migration-failure';
+        final originalContent = jsonEncode([
+          {
+            'id': 'legacy-asr-existing-reference',
+            'type': 'asr',
+            'title': 'Legacy ASR task with an existing audio reference',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'audioReferences': [
+                {
+                  'audioReference': reference.toMap(),
+                  'chunks': const <dynamic>[],
+                },
+              ],
+            },
+          },
+          {
+            'id': failedTaskId,
+            'type': 'asr',
+            'title': 'Later legacy ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {'audios': const <dynamic>[]},
+          },
+        ]);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(originalContent);
+
+        // ignore: invalid_use_of_visible_for_testing_member
+        BackgroundTaskNotifier.debugBeforeLegacyAsrRetryMigration =
+            (taskId) async {
+          if (taskId == failedTaskId) {
+            throw StateError('simulated later legacy ASR migration failure');
+          }
+        };
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          await notifier.pendingPersistence;
+
+          expect(await file.readAsString(), originalContent);
+          expect(
+            await store.load(reference),
+            audioBytes,
+            reason:
+                'rollback must retain audio still named by the authoritative snapshot',
+          );
+        } finally {
+          // ignore: invalid_use_of_visible_for_testing_member
+          BackgroundTaskNotifier.debugBeforeLegacyAsrRetryMigration = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'legacy ASR audio with missing bytes migrates to a non-playable reselection marker',
+      () async {
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'legacy-asr-missing-audio',
+              'type': 'asr',
+              'title': 'legacy ASR task with missing audio',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'audios': [
+                  {'bytes': '%%%not-base64%%%', 'format': 'wav'},
+                ],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          final persisted = jsonDecode(await file.readAsString()) as List;
+          final retryData = ((persisted.single as Map)['retryData'] as Map);
+          expect(retryData['version'], 2);
+          expect(retryData.containsKey('audios'), isFalse);
+          final audioReference = Map<String, dynamic>.from(
+            ((retryData['audioReferences'] as List).single
+                as Map)['audioReference'] as Map,
+          );
+          expect(audioReference['byteLength'], 0);
+          expect(audioReference['requiresSourceReselection'], isTrue);
+          final reference = AsrAudioReference.fromMap(audioReference);
+          await expectLater(
+            AsrRetryAudioStore().load(reference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+          await expectLater(
+            AsrRetryAudioStore().deleteIfUnreferenced(reference, const {}),
+            completes,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'versioned ASR restore removes unrecognized retry fields',
+      () async {
+        const apiKey = 'opaque-versioned-asr-extra-key-123';
+        const filenameSecret = 'opaqueSecret98765';
+        final inlineAudio = base64Encode(Uint8List(48));
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'versioned-asr-with-extra-fields',
+              'type': 'asr',
+              'title': 'versioned ASR task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': 'a' * 32,
+                  'name': 'api_key-$filenameSecret.wav',
+                  'format': 'wav',
+                  'byteLength': 48,
+                  'sha256': 'b' * 64,
+                },
+                'modelReference': {
+                  'configId': 'provider',
+                  'modelId': 'whisper-1',
+                },
+                'configSnapshot': {
+                  'host': 'https://api.example.test',
+                  'model': 'whisper-1',
+                  'typeConfig': {'apiKey': apiKey},
+                },
+                'chunks': const <dynamic>[],
+                'saveFolder': 'transcripts',
+                'apiKey': apiKey,
+                'audios': [
+                  {'bytes': inlineAudio, 'format': 'wav'},
+                ],
+              },
+            },
+            {
+              'id': 'versioned-multi-asr-with-extra-fields',
+              'type': 'asr',
+              'title': 'versioned multi-audio task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'type': 'asr',
+                'version': 2,
+                'audioReferences': [
+                  {
+                    'audioReference': {
+                      'version': 1,
+                      'id': 'c' * 32,
+                      'name': 'second.wav',
+                      'format': 'wav',
+                      'byteLength': 48,
+                      'sha256': 'd' * 64,
+                    },
+                    'chunks': [
+                      {
+                        'index': 0,
+                        'startSeconds': 0,
+                        'endSeconds': 1,
+                        'status': 'succeeded',
+                        'text': 'recognized words',
+                        'apiKey': apiKey,
+                      },
+                    ],
+                    'apiKey': apiKey,
+                    'audio': inlineAudio,
+                  },
+                ],
+                'modelReference': {
+                  'configId': 'provider',
+                  'modelId': 'whisper-1',
+                },
+                'apiKey': apiKey,
+                'audio': inlineAudio,
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          final serialized = await file.readAsString();
+          expect(serialized, isNot(contains(apiKey)));
+          expect(serialized, isNot(contains(filenameSecret)));
+          expect(serialized, isNot(contains(inlineAudio)));
+          final rows = jsonDecode(serialized) as List;
+          expect(rows, hasLength(2));
+          final retryData = (rows.first as Map)['retryData'] as Map;
+          expect(retryData.containsKey('apiKey'), isFalse);
+          expect(retryData.containsKey('audios'), isFalse);
+          expect(
+            (retryData['configSnapshot'] as Map).containsKey('typeConfig'),
+            isTrue,
+          );
+          expect(
+            ((retryData['configSnapshot'] as Map)['typeConfig'] as Map)
+                .containsKey('apiKey'),
+            isFalse,
+          );
+          final audioReference = retryData['audioReference'] as Map;
+          expect(audioReference['name'], 'audio.wav');
+
+          final multiAudioRetryData = (rows.last as Map)['retryData'] as Map;
+          expect(multiAudioRetryData.containsKey('apiKey'), isFalse);
+          expect(multiAudioRetryData.containsKey('audio'), isFalse);
+          final references = multiAudioRetryData['audioReferences'] as List;
+          final reference = references.single as Map;
+          expect(reference.keys.toSet(), {'audioReference', 'chunks'});
+          expect(
+            ((reference['chunks'] as List).single as Map).containsKey(
+              'apiKey',
+            ),
+            isFalse,
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+        }
+      },
+    );
+
+    test(
+      'later writes retain cleanup safety after a partial restore',
+      () async {
+        const audioId = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'valid-task',
+              'type': 'ocr',
+              'title': 'valid task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+            },
+            {
+              'id': 'skipped-asr-task',
+              'type': 'unknown-asr-type',
+              'title': 'unrestored retry task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'version': 2,
+                'audioReference': {
+                  'version': 1,
+                  'id': audioId,
+                  'name': 'retry.wav',
+                  'format': 'wav',
+                  'byteLength': 3,
+                  'sha256': 'd' * 64,
+                },
+                'apiKey': 'opaque-skipped-task-key',
+              },
+            },
+          ]),
+        );
+
+        final firstRestore = BackgroundTaskNotifier();
+        expect(await firstRestore.restoreFromPersistence(), isFalse);
+        expect(firstRestore.retryAudioCleanupSafe, isTrue);
+        firstRestore.completeTask('valid-task');
+        await firstRestore.pendingPersistence;
+
+        final persistedRows =
+            jsonDecode(await file.readAsString()) as List<dynamic>;
+        final marker = persistedRows.singleWhere(
+          (row) => row is Map && row['_unrestoredTaskRecord'] == true,
+        ) as Map;
+        expect(marker['retryAudioOwnershipKnown'], isTrue);
+        expect(marker['retryAudioIds'], [audioId]);
+        expect(
+          await file.readAsString(),
+          isNot(contains('opaque-skipped-task-key')),
+        );
+
+        final secondRestore = BackgroundTaskNotifier();
+        expect(await secondRestore.restoreFromPersistence(), isFalse);
+        expect(secondRestore.retryAudioCleanupSafe, isTrue);
+        expect(secondRestore.retryAudioReferencedIds, {audioId});
+        await secondRestore.pendingPersistence;
+      },
+    );
+
+    test('recoverable retry references keep unrelated pruning safe', () async {
+      const audioId = 'cccccccccccccccccccccccccccccccc';
+      final file = _tasksFileIn(testDir.path);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        jsonEncode([
+          {
+            'id': 'future-asr-task',
+            'type': 'future-asr-type',
+            'title': 'unrecognized task type',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'version': 2,
+              'audioReference': {
+                'version': 1,
+                'id': audioId,
+                'name': 'retry.wav',
+                'format': 'wav',
+                'byteLength': 3,
+                'sha256': 'd' * 64,
+              },
+            },
+          },
+        ]),
+      );
+
+      final notifier = BackgroundTaskNotifier();
+
+      expect(await notifier.restoreFromPersistence(), isFalse);
+      expect(notifier.retryAudioCleanupSafe, isTrue);
+      expect(notifier.retryAudioReferencedIds, {audioId});
+    });
+
+    test(
+      'pre-restore partial snapshots keep parsed ASR audio safe from pruning',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'pre-restore-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final validTask = BackgroundTask(
+          id: 'pre-restore-asr-owner',
+          type: BackgroundTaskType.asr,
+          title: 'Persisted retry owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final safelySkippedLegacyRow = <String, dynamic>{
+          // Missing id makes this legacy ASR row unreadable as a task.
+          'type': 'asr',
+          'title': 'Safe skipped legacy row',
+          'status': 'failed',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'steps': <dynamic>[],
+          'retryData': {'inputPath': '/recordings/legacy.wav'},
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([validTask.toMap(), safelySkippedLegacyRow]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          notifier.addTask(
+            type: BackgroundTaskType.ocr,
+            title: 'Trigger a pre-restore snapshot',
+            startImmediately: false,
+            taskId: 'pre-restore-prune-trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(
+            notifier.retryAudioCleanupSafe,
+            isFalse,
+            reason:
+                'pruning stays disabled until pre-restore cached tasks are published',
+          );
+          if (notifier.retryAudioCleanupSafe) {
+            expect(
+              notifier.retryAudioReferencedIds,
+              contains(reference.id),
+              reason:
+                  'a cached persisted task must remain an audio owner before restore publishes it',
+            );
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason: 'pre-restore pruning must not delete persisted retry audio',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'corrupt ASR rows with top-level audio refs disable startup pruning',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              // Missing id makes this row take the skipped-entry recovery path.
+              'type': 'asr',
+              'title': 'corrupt ASR task',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'steps': [],
+              'audioReference': reference.toMap(),
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'valid ASR rows with top-level audio refs disable startup pruning',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'valid-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalSnapshot = jsonEncode([
+          {
+            'id': 'valid-top-level-audio-task',
+            'type': 'asr',
+            'title': 'valid ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'steps': [],
+            'audioReference': reference.toMap(),
+          },
+        ]);
+        await file.writeAsString(originalSnapshot);
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          final restored = await notifier.restoreFromPersistence();
+          final cleanupSafe = notifier.retryAudioCleanupSafe;
+          if (cleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+
+          expect(restored, isFalse);
+          expect(cleanupSafe, isFalse);
+          expect(await file.readAsString(), originalSnapshot);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'top-level retry audio ownership stays unsafe after snapshot sanitation',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([12, 13, 14]),
+          name: 'malformed-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'malformed-retry-owner',
+              'type': 'asr',
+              'title': 'Malformed retry owner',
+              'status': 'failed',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': 'malformed',
+              'audioPath': '/retry-cache/${reference.id}.audio',
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger a successful sanitized snapshot',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          final cleanupSafe = notifier.retryAudioCleanupSafe;
+          if (cleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(
+            cleanupSafe,
+            isFalse,
+            reason:
+                'an unrecoverable top-level audio path cannot retire its ownership marker',
+          );
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason:
+                'a sanitized snapshot must not permit pruning unknown retry audio',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'failed task removal keeps retry audio referenced until removal persists',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([7, 8, 9]),
+          name: 'owned-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'failed-remove-still-owns-retry-audio';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Retry audio owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated task removal write failure');
+        };
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+
+          notifier.removeTask(taskId);
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById(taskId), isNull);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+          );
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'disposing during a removal write preserves retry audio ownership',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([7, 8, 10]),
+          name: 'dispose-pending-remove.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'dispose-pending-remove-still-owns-audio';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Retry audio owner during dispose',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final notifier = BackgroundTaskNotifier();
+        final writeStarted = Completer<void>();
+        final resumeWrite = Completer<void>();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            if (writeStarted.isCompleted) return;
+            writeStarted.complete();
+            await resumeWrite.future;
+          };
+          notifier.removeTask(taskId);
+          await writeStarted.future;
+
+          notifier.dispose();
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason:
+                'the blocked removal has not removed the persisted owner row',
+          );
+
+          resumeWrite.complete();
+          await notifier.pendingPersistence;
+        } finally {
+          if (!resumeWrite.isCompleted) resumeWrite.complete();
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'completed persisted tasks keep retry audio referenced until removal persists',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([1, 3, 5]),
+          name: 'completed-owned-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'completed-remove-still-owns-retry-audio';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Completed task with retry audio',
+          status: TaskStatus.completed,
+          createdAt: DateTime.utc(2026),
+          completedAt: DateTime.utc(2026, 1, 2),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated completed task removal write failure');
+        };
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+
+          notifier.removeTask(taskId);
+          await notifier.pendingPersistence;
+
+          expect(notifier.taskById(taskId), isNull);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(
+            notifier.retryAudioReferencedIds,
+            contains(reference.id),
+            reason: 'the still-persisted completed task owns its retry audio',
+          );
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+          );
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'completed legacy retry references stay protected until snapshot persists',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([2, 4, 6]),
+          name: 'completed-legacy-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'completed-legacy-retry-owner';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Completed legacy task with retry audio',
+          status: TaskStatus.completed,
+          createdAt: DateTime.utc(2026),
+          completedAt: DateTime.utc(2026, 1, 2),
+          // A versionless reference record is accepted as legacy ownership.
+          retryData: {
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated legacy cleanup snapshot write failure');
+        };
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['id'] == taskId &&
+                      (row['retryData'] as Map?)?['audioReferences'] is List,
+                ),
+            isTrue,
+            reason: 'the failed rewrite leaves the legacy reference on disk',
+          );
+
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason: 'pruning must retain audio still named by the old snapshot',
+          );
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'completed legacy retry references stay protected while snapshot write is blocked',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([2, 4, 6]),
+          name: 'completed-legacy-retry-blocked.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'completed-legacy-retry-blocked-owner';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Completed legacy task with retry audio',
+          status: TaskStatus.completed,
+          createdAt: DateTime.utc(2026),
+          completedAt: DateTime.utc(2026, 1, 2),
+          retryData: {
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final snapshotWriteStarted = Completer<void>();
+        final resumeSnapshotWrite = Completer<void>();
+        // ignore: invalid_use_of_visible_for_testing_member
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          if (snapshotWriteStarted.isCompleted) return;
+          snapshotWriteStarted.complete();
+          await resumeSnapshotWrite.future;
+        };
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? restore;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotWriteStarted.future;
+
+          expect(notifier.taskById(taskId)?.retryData, isNull);
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason:
+                'a prune during snapshot rewrite must retain audio still named by the on-disk row',
+          );
+
+          resumeSnapshotWrite.complete();
+          expect(await restore, isTrue);
+        } finally {
+          if (!resumeSnapshotWrite.isCompleted) resumeSnapshotWrite.complete();
+          // ignore: invalid_use_of_visible_for_testing_member
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'task removal during restore keeps retry audio referenced after write failure',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'restoring-retry.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'restore-remove-still-owns-retry-audio';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Retry audio owner during restore',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final snapshotRead = Completer<void>();
+        final resumeRestore = Completer<void>();
+        BackgroundTaskNotifier.debugAfterTaskSnapshotRead = () async {
+          if (snapshotRead.isCompleted) return;
+          snapshotRead.complete();
+          await resumeRestore.future;
+        };
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated task removal write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? restore;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotRead.future;
+
+          // The task exists in the captured snapshot but is not in state yet.
+          notifier.removeTask(taskId);
+          expect(notifier.taskById(taskId), isNull);
+
+          resumeRestore.complete();
+          expect(await restore, isTrue);
+          await notifier.pendingPersistence;
+
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any((row) => row['id'] == taskId),
+            isTrue,
+            reason:
+                'the failed deletion leaves the previously saved row on disk',
+          );
+          expect(
+            notifier.retryAudioReferencedIds,
+            contains(reference.id),
+            reason: 'the persisted row still owns its retry audio',
+          );
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          if (!resumeRestore.isCompleted) resumeRestore.complete();
+          BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (restore != null) await restore;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'same-ID re-add during restore keeps old generation audio referenced',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final oldReference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'old-generation.wav',
+          format: 'wav',
+        );
+        final replacementReference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'replacement-generation.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(oldReference);
+        await store.releaseProtection(replacementReference);
+        const taskId = 'restore-remove-readd-still-owns-retry-audio';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Old retry audio owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': oldReference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final snapshotRead = Completer<void>();
+        final resumeRestore = Completer<void>();
+        BackgroundTaskNotifier.debugAfterTaskSnapshotRead = () async {
+          if (snapshotRead.isCompleted) return;
+          snapshotRead.complete();
+          await resumeRestore.future;
+        };
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated task removal write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? restore;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotRead.future;
+
+          // A same-ID generation can already be in state when a remove/re-add
+          // races the disk restore. The captured disk row still owns its old
+          // retry audio even though that row will be skipped during merge.
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Preexisting replacement generation',
+            startImmediately: false,
+            taskId: taskId,
+            retryData: {
+              'version': 2,
+              'audioReferences': [
+                {
+                  'audioReference': replacementReference.toMap(),
+                  'chunks': <dynamic>[],
+                },
+              ],
+            },
+          );
+
+          notifier.removeTask(taskId);
+          expect(notifier.taskById(taskId), isNull);
+          expect(
+            notifier.addTask(
+              type: BackgroundTaskType.asr,
+              title: 'Replacement retry audio owner',
+              startImmediately: false,
+              taskId: taskId,
+              retryData: {
+                'version': 2,
+                'audioReferences': [
+                  {
+                    'audioReference': replacementReference.toMap(),
+                    'chunks': <dynamic>[],
+                  },
+                ],
+              },
+            ),
+            taskId,
+          );
+
+          resumeRestore.complete();
+          expect(await restore, isTrue);
+          await notifier.pendingPersistence;
+
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(
+            notifier.retryAudioReferencedIds,
+            containsAll([oldReference.id, replacementReference.id]),
+            reason:
+                'the old on-disk generation and same-ID replacement both own audio until deletion persists',
+          );
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(oldReference), isNotNull);
+        } finally {
+          if (!resumeRestore.isCompleted) resumeRestore.complete();
+          BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (restore != null) await restore;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'same-ID restore replacement retains old audio after snapshot write failure',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final oldReference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'old-snapshot-generation.wav',
+          format: 'wav',
+        );
+        final replacementReference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'replacement-snapshot-generation.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(oldReference);
+        await store.releaseProtection(replacementReference);
+        const taskId = 'restore-duplicate-id-write-failure';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Persisted retry audio owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': oldReference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final snapshotRead = Completer<void>();
+        final resumeRestore = Completer<void>();
+        // ignore: invalid_use_of_visible_for_testing_member
+        BackgroundTaskNotifier.debugAfterTaskSnapshotRead = () async {
+          if (snapshotRead.isCompleted) return;
+          snapshotRead.complete();
+          await resumeRestore.future;
+        };
+        // ignore: invalid_use_of_visible_for_testing_member
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated same-ID replacement write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? restore;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotRead.future;
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Preexisting same-ID replacement',
+            startImmediately: false,
+            taskId: taskId,
+            retryData: {
+              'version': 2,
+              'audioReferences': [
+                {
+                  'audioReference': replacementReference.toMap(),
+                  'chunks': <dynamic>[],
+                },
+              ],
+            },
+          );
+
+          resumeRestore.complete();
+          expect(await restore, isTrue);
+          await notifier.pendingPersistence;
+
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+          expect(
+            notifier.retryAudioReferencedIds,
+            contains(oldReference.id),
+            reason:
+                'the old on-disk generation remains authoritative until its replacement is durable',
+          );
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(await store.load(oldReference), isNotNull);
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().single['id'],
+            taskId,
+            reason:
+                'the failed replacement leaves the original task row on disk',
+          );
+        } finally {
+          if (!resumeRestore.isCompleted) resumeRestore.complete();
+          // ignore: invalid_use_of_visible_for_testing_member
+          BackgroundTaskNotifier.debugAfterTaskSnapshotRead = null;
+          // ignore: invalid_use_of_visible_for_testing_member
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (restore != null) await restore;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'pruning waits for sanitized v2 retry ownership to become durable',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final recognizedReference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'recognized.wav',
+          format: 'wav',
+        );
+        final pathReference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'legacy-path.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(recognizedReference);
+        await store.releaseProtection(pathReference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalSnapshot = jsonEncode([
+          {
+            'id': 'v2-path-owner-before-sanitize',
+            'type': 'asr',
+            'title': 'Versioned ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'type': 'asr',
+              'version': 2,
+              'audioReference': recognizedReference.toMap(),
+              'legacyAudioPath': '/retry-cache/${pathReference.id}.audio',
+              'chunks': <dynamic>[],
+            },
+          },
+        ]);
+        await file.writeAsString(originalSnapshot);
+
+        final snapshotWriteStarted = Completer<void>();
+        final resumeSnapshotWrite = Completer<void>();
+        // ignore: invalid_use_of_visible_for_testing_member
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          if (!snapshotWriteStarted.isCompleted) {
+            snapshotWriteStarted.complete();
+          }
+          await resumeSnapshotWrite.future;
+          throw StateError('simulated sanitized snapshot write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        Future<bool>? restore;
+        try {
+          restore = notifier.restoreFromPersistence();
+          await snapshotWriteStarted.future;
+
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+
+          resumeSnapshotWrite.complete();
+          expect(await restore, isTrue);
+          await notifier.pendingPersistence;
+          expect(await file.readAsString(), originalSnapshot);
+          expect(await store.load(pathReference), isNotNull);
+        } finally {
+          if (!resumeSnapshotWrite.isCompleted) resumeSnapshotWrite.complete();
+          // ignore: invalid_use_of_visible_for_testing_member
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          if (restore != null) await restore;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'unknown v2 retry audio references remain protected after failed sanitization',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final recognizedReference = await store.save(
+          Uint8List.fromList([1, 3, 5]),
+          name: 'recognized.wav',
+          format: 'wav',
+        );
+        final unrecognizedReference = await store.save(
+          Uint8List.fromList([2, 4, 6]),
+          name: 'unrecognized.wav',
+          format: 'wav',
+        );
+        final pathReference = await store.save(
+          Uint8List.fromList([7, 8, 9]),
+          name: 'path-owned.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(recognizedReference);
+        await store.releaseProtection(unrecognizedReference);
+        await store.releaseProtection(pathReference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalSnapshot = jsonEncode([
+          {
+            'id': 'v2-with-unrecognized-audio-reference',
+            'type': 'asr',
+            'title': 'Versioned ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'type': 'asr',
+              'version': 2,
+              'audioReference': recognizedReference.toMap(),
+              'legacyAudioReference': unrecognizedReference.toMap(),
+              'legacyAudioPath': '/retry-cache/${pathReference.id}.audio',
+              'chunks': <dynamic>[],
+            },
+          },
+        ]);
+        await file.writeAsString(originalSnapshot);
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated sanitized snapshot write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+
+          expect(await file.readAsString(), originalSnapshot);
+          expect(await store.load(unrecognizedReference), isNotNull);
+          expect(await store.load(pathReference), isNotNull);
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'snapshot recovery trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(
+            notifier.retryAudioCleanupSafe,
+            isTrue,
+            reason: 'a durable sanitized snapshot resolves the unsafe row',
+          );
+          final sanitizedSnapshot = await file.readAsString();
+          expect(sanitizedSnapshot, isNot(contains('legacyAudioPath')));
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(recognizedReference), isNotNull);
+          await expectLater(
+            store.load(unrecognizedReference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+          await expectLater(
+            store.load(pathReference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'unrecognized retry cache paths remain protected until sanitation is durable',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final recognizedReference = await store.save(
+          Uint8List.fromList([1, 3, 5]),
+          name: 'recognized.wav',
+          format: 'wav',
+        );
+        final cachePathReference = await store.save(
+          Uint8List.fromList([2, 4, 6]),
+          name: 'legacy-path.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(recognizedReference);
+        await store.releaseProtection(cachePathReference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalSnapshot = jsonEncode([
+          {
+            'id': 'v2-with-unrecognized-cache-path',
+            'type': 'asr',
+            'title': 'Versioned ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'type': 'asr',
+              'version': 2,
+              'audioReference': recognizedReference.toMap(),
+              'cachePath': '/retry-cache/${cachePathReference.id}.audio',
+              'chunks': <dynamic>[],
+            },
+          },
+        ]);
+        await file.writeAsString(originalSnapshot);
+        BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+          throw StateError('simulated sanitized snapshot write failure');
+        };
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(await file.readAsString(), originalSnapshot);
+          expect(await store.load(cachePathReference), isNotNull);
+
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'snapshot recovery trigger',
+          );
+          await notifier.pendingPersistence;
+
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          final sanitizedSnapshot = await file.readAsString();
+          expect(sanitizedSnapshot, isNot(contains('cachePath')));
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(recognizedReference), isNotNull);
+          await expectLater(
+            store.load(cachePathReference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'malformed ASR rows release ownership after durable sanitization',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final recognizedReference = await store.save(
+          Uint8List.fromList([1, 3, 5]),
+          name: 'recognized.wav',
+          format: 'wav',
+        );
+        final unrecognizedReference = await store.save(
+          Uint8List.fromList([2, 4, 6]),
+          name: 'unrecognized.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(recognizedReference);
+        await store.releaseProtection(unrecognizedReference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'malformed-v2-with-unrecognized-audio-reference',
+              'type': 'asr',
+              'title': 'Malformed versioned ASR task',
+              'status': 'not-a-task-status',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'type': 'asr',
+                'version': 2,
+                'audioReference': recognizedReference.toMap(),
+                'legacyAudioReference': unrecognizedReference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(notifier.retryAudioReferencedIds, isEmpty);
+
+          await store.prune(() => notifier.retryAudioReferencedIds);
+
+          await expectLater(
+            store.load(recognizedReference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+          await expectLater(
+            store.load(unrecognizedReference),
+            throwsA(isA<AsrRetryAudioUnavailableException>()),
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'preserved malformed ASR cache paths keep retry audio protected',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([7, 8, 9]),
+          name: 'legacy-cache-path.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'bad-asr',
+              'type': 'asr',
+              'title': 'Legacy cache path ASR task',
+              'status': 'invalid',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': {
+                'cachePath': '/retry-cache/${reference.id}.audio',
+              },
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isTrue);
+          expect(
+            await file.readAsString(),
+            contains('/retry-cache/${reference.id}.audio'),
+          );
+          expect(
+            notifier.retryAudioReferencedIds,
+            contains(reference.id),
+          );
+
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'unrecognized top-level ASR cache paths keep pruning disabled',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([3, 4, 5]),
+          name: 'top-level-cache-path.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        final originalSnapshot = jsonEncode([
+          {
+            'id': 'top-level-cache-path-owner',
+            'type': 'asr',
+            'title': 'Top-level cache path ASR task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'path': '/retry-cache/${reference.id}.audio',
+          },
+        ]);
+        await file.writeAsString(originalSnapshot);
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          final cleanupSafe = notifier.retryAudioCleanupSafe;
+          if (cleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+
+          expect(await file.readAsString(), originalSnapshot);
+          expect(await store.load(reference), isNotNull);
+          expect(
+            cleanupSafe,
+            isFalse,
+            reason:
+                'an unknown top-level audio path keeps its owner unresolved',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test('unknown retry-data versions disable retry audio cleanup', () async {
+      const audioId = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+      const futureAudioId = 'ffffffffffffffffffffffffffffffff';
+      final file = _tasksFileIn(testDir.path);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        jsonEncode([
+          {
+            'id': 'valid-task',
+            'type': 'ocr',
+            'title': 'valid task',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+          },
+          {
+            'id': 'future-asr-task',
+            'type': 'future-asr-type',
+            'title': 'unrecognized task type',
+            'status': 'failed',
+            'createdAt': DateTime.utc(2026).toIso8601String(),
+            'retryData': {
+              'version': 3,
+              'audioReference': {
+                'version': 1,
+                'id': audioId,
+                'name': 'retry.wav',
+                'format': 'wav',
+                'byteLength': 3,
+                'sha256': 'd' * 64,
+              },
+              'futureAudioReferences': [futureAudioId],
+            },
+          },
+        ]),
+      );
+      final audioFile = File(
+        p.join(testDir.path, 'background', 'asr_retry', '$audioId.audio'),
+      )..createSync(recursive: true);
+      await audioFile.writeAsBytes([1, 2, 3]);
+      final futureAudioFile = File(
+        p.join(testDir.path, 'background', 'asr_retry', '$futureAudioId.audio'),
+      )..createSync(recursive: true);
+      await futureAudioFile.writeAsBytes([4, 5, 6]);
+
+      final notifier = BackgroundTaskNotifier();
+
+      expect(await notifier.restoreFromPersistence(), isFalse);
+      expect(notifier.retryAudioCleanupSafe, isFalse);
+      notifier.completeTask('valid-task');
+      await notifier.pendingPersistence;
+
+      final persistedRows = jsonDecode(await file.readAsString()) as List;
+      final marker = persistedRows.singleWhere(
+        (row) => row is Map && row['_unrestoredTaskRecord'] == true,
+      ) as Map;
+      expect(marker['retryAudioOwnershipKnown'], isFalse);
+      expect(await audioFile.exists(), isTrue);
+      expect(await futureAudioFile.exists(), isTrue);
+    });
 
     test(
       'back-to-back OCR removals preserve cache while deletion retry fails',
@@ -15760,6 +19080,331 @@ void main() {
 
           notifier.dispose();
         });
+      },
+    );
+
+    test(
+      'failed retry data replacement keeps persisted retry audio referenced',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final persistedReference = await store.save(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'persisted-owner.wav',
+          format: 'wav',
+        );
+        final replacementReference = await store.save(
+          Uint8List.fromList([4, 5, 6]),
+          name: 'replacement-owner.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(persistedReference);
+        await store.releaseProtection(replacementReference);
+        const taskId = 'failed-retry-data-replacement-owner';
+        Map<String, dynamic> retryData(AsrAudioReference reference) => {
+              'version': 2,
+              'audioReferences': [
+                {
+                  'audioReference': reference.toMap(),
+                  'chunks': <dynamic>[],
+                },
+              ],
+            };
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Persisted retry audio owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: retryData(persistedReference),
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            throw StateError('simulated retry-data replacement failure');
+          };
+
+          final restoredTask = notifier.taskById(taskId)!;
+          expect(
+            await notifier.setRetryDataAndWaitForGeneration(
+              taskId,
+              restoredTask,
+              retryData(replacementReference),
+            ),
+            isFalse,
+          );
+
+          expect(
+            notifier.retryAudioReferencedIds,
+            contains(persistedReference.id),
+            reason: 'the failed snapshot leaves the original task row on disk',
+          );
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(persistedReference), isNotNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'failed retry data clear keeps persisted retry audio referenced',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([7, 8, 9]),
+          name: 'persisted-clear-owner.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        const taskId = 'failed-retry-data-clear-owner';
+        final task = BackgroundTask(
+          id: taskId,
+          type: BackgroundTaskType.asr,
+          title: 'Persisted retry audio owner',
+          status: TaskStatus.failed,
+          createdAt: DateTime.utc(2026),
+          retryData: {
+            'version': 2,
+            'audioReferences': [
+              {
+                'audioReference': reference.toMap(),
+                'chunks': <dynamic>[],
+              },
+            ],
+          },
+        );
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([task.toMap()]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isTrue);
+          await notifier.pendingPersistence;
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+            throw StateError('simulated retry-data clear failure');
+          };
+
+          expect(
+            await notifier.clearRetryDataForGeneration(
+              taskId,
+              notifier.taskById(taskId)!,
+            ),
+            isFalse,
+          );
+
+          expect(notifier.retryAudioReferencedIds, contains(reference.id));
+          await store.prune(() => notifier.retryAudioReferencedIds);
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'scalar ASR retry paths keep audio ownership unresolved after a snapshot',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([12, 13, 14]),
+          name: 'scalar-retry-path-owner.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'scalar-retry-path-owner',
+              'type': BackgroundTaskType.asr.name,
+              'title': 'Scalar retry path owner',
+              'status': TaskStatus.failed.name,
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': '/cache/${reference.id}.audio',
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger snapshot after scalar retry restore',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason: 'the unrecognized retry path still owns the audio file',
+          );
+          expect(
+            notifier.retryAudioCleanupSafe,
+            isFalse,
+            reason: 'unknown scalar retry ownership must not be retired',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'malformed skipped ASR scalar retry paths keep cleanup disabled after a snapshot',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([21, 22, 23]),
+          name: 'malformed-scalar-retry-owner.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode([
+            {
+              'id': 'dddddddddddddddddddddddddddddddd',
+              'type': BackgroundTaskType.asr.name,
+              'title': 'Malformed scalar retry owner',
+              'status': 'not a task status',
+              'createdAt': DateTime.utc(2026).toIso8601String(),
+              'retryData': '/cache/${reference.id}.audio',
+            },
+          ]),
+        );
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger snapshot after malformed scalar retry restore',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          final persistedRows = jsonDecode(await file.readAsString()) as List;
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) =>
+                      row['title'] ==
+                      'Trigger snapshot after malformed scalar retry restore',
+                ),
+            isTrue,
+            reason: 'the partial snapshot must complete before cleanup changes',
+          );
+          expect(
+            persistedRows.whereType<Map>().any(
+                  (row) => row['retryData'] == '/cache/${reference.id}.audio',
+                ),
+            isTrue,
+            reason: 'the malformed row is preserved in the rewritten snapshot',
+          );
+
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(
+            await store.load(reference),
+            isNotNull,
+            reason: 'the skipped malformed row still owns the audio file',
+          );
+          expect(
+            notifier.retryAudioCleanupSafe,
+            isFalse,
+            reason: 'unknown scalar retry ownership must remain unresolved',
+          );
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
+      'preserved skipped ASR audio rows keep cleanup disabled after a snapshot',
+      () async {
+        WebFileStore.enableTestMode();
+        final store = AsrRetryAudioStore();
+        final reference = await store.save(
+          Uint8List.fromList([9, 10, 11]),
+          name: 'skipped-row-owner.wav',
+          format: 'wav',
+        );
+        await store.releaseProtection(reference);
+        final skippedRow = <String, dynamic>{
+          'id': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'type': 'asr',
+          'title': 'Malformed legacy audio owner',
+          'status': 'not a status',
+          'createdAt': DateTime.utc(2026).toIso8601String(),
+          'audioReference': '/recordings/${reference.id}.wav',
+        };
+        final file = _tasksFileIn(testDir.path);
+        await file.parent.create(recursive: true);
+        await file.writeAsString(jsonEncode([skippedRow]));
+
+        final notifier = BackgroundTaskNotifier();
+        try {
+          expect(await notifier.restoreFromPersistence(), isFalse);
+          expect(notifier.retryAudioCleanupSafe, isFalse);
+
+          notifier.addTask(
+            type: BackgroundTaskType.asr,
+            title: 'Trigger safe partial snapshot',
+            startImmediately: false,
+          );
+          await notifier.pendingPersistence;
+
+          expect(
+            await file.readAsString(),
+            contains('/recordings/${reference.id}.wav'),
+          );
+          expect(
+            notifier.retryAudioCleanupSafe,
+            isFalse,
+            reason: 'the preserved row still owns audio outside retryData',
+          );
+          if (notifier.retryAudioCleanupSafe) {
+            await store.prune(() => notifier.retryAudioReferencedIds);
+          }
+          expect(await store.load(reference), isNotNull);
+        } finally {
+          notifier.dispose();
+          await notifier.pendingPersistence;
+          WebFileStore.disableTestMode();
+        }
       },
     );
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_riverpod/legacy.dart';
@@ -12,11 +13,279 @@ import '../models/ocr_batch_execution.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/ios_continued_task_service.dart';
+import '../services/asr_retry_storage.dart';
 import '../services/ocr_retry_storage.dart';
 import '../pages/ocr/ocr_retry_snapshot.dart';
 import '../utils/atomic_file.dart';
 import '../utils/ocr_diagnostics.dart';
 import 'task_provider.dart';
+
+const _unrestoredTaskRecordMarker = {'_unrestoredTaskRecord': true};
+
+Map<String, dynamic> _unrestoredTaskRecord({
+  required bool retryAudioOwnershipKnown,
+  Set<String> retryAudioIds = const {},
+  bool retireAfterSnapshot = false,
+}) =>
+    {
+      '_unrestoredTaskRecord': true,
+      'retryAudioOwnershipKnown': retryAudioOwnershipKnown,
+      if (retryAudioIds.isNotEmpty)
+        'retryAudioIds': retryAudioIds.toList()..sort(),
+      if (retireAfterSnapshot) 'retireAfterSnapshot': true,
+    };
+
+bool _canRetireAsrOwnershipAfterSnapshot(Map? task, Object? retryData) {
+  if (task?['type'] != BackgroundTaskType.asr.name) return false;
+  if (_hasAudioOwnershipOutsideRetryData(task)) return false;
+  if (retryData == null) return true;
+  if (retryData is! Map) return false;
+  final version = retryData['version'];
+  return version == null || (version is int && version <= 2);
+}
+
+bool _hasAudioOwnershipOutsideRetryData(Object? record) {
+  if (record is! Map) return false;
+
+  final retryAudioPathPattern = RegExp(
+    r'(?:^|[/\\])[a-f0-9]{32}\.audio(?:$|[?#])',
+    caseSensitive: false,
+  );
+
+  bool containsAudioField(Object? value) {
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final key = entry.key;
+        if (key is String &&
+            RegExp(r'audio', caseSensitive: false).hasMatch(key)) {
+          return true;
+        }
+        if (containsAudioField(entry.value)) return true;
+      }
+    } else if (value is List) {
+      return value.any(containsAudioField);
+    } else if (value is String) {
+      return retryAudioPathPattern.hasMatch(value);
+    }
+    return false;
+  }
+
+  final fieldsOutsideRetryData = Map.fromEntries(
+    record.entries.where((entry) => entry.key != 'retryData'),
+  );
+  return containsAudioField(fieldsOutsideRetryData);
+}
+
+bool _hasUntrackedSkippedAsrAudioOwnership(Iterable<dynamic> entries) =>
+    entries.any(
+      (entry) =>
+          entry is Map &&
+          entry['type'] == BackgroundTaskType.asr.name &&
+          _recoverRetryAudioIds(entry) == null,
+    );
+
+Set<String>? _recoverRetryAudioIds(Object? record) {
+  if (record == null || record is String || record is num || record is bool) {
+    return <String>{};
+  }
+  if (record is! Map) return null;
+  if (_hasAudioOwnershipOutsideRetryData(record)) return null;
+  final retryData = record['retryData'];
+  if (retryData == null) return <String>{};
+  if (retryData is! Map) return null;
+  final retryDataMap = Map<String, dynamic>.from(retryData);
+  final recognizedIds =
+      AsrRetryAudioStore.recoverableReferencedIds(retryDataMap);
+  if (recognizedIds == null) return null;
+  return {...recognizedIds, ..._unrecognizedRetryAudioIds(retryDataMap)};
+}
+
+Set<String> _unrecognizedRetryAudioIds(Map<String, dynamic>? retryData) {
+  final ids = <String>{};
+  void collectIds(Object? value) {
+    if (value is String) {
+      if (RegExp(r'^[a-f0-9]{32}$').hasMatch(value)) {
+        ids.add(value);
+      } else if (value.contains('/') || value.contains(r'\')) {
+        ids.addAll(
+          RegExp(r'[a-f0-9]{32}').allMatches(value).map((match) => match[0]!),
+        );
+      }
+    } else if (value is Map) {
+      for (final nested in value.values) {
+        collectIds(nested);
+      }
+    } else if (value is List) {
+      for (final nested in value) {
+        collectIds(nested);
+      }
+    }
+  }
+
+  void scan(Object? value) {
+    if (value is Map) {
+      for (final entry in value.entries) {
+        if (entry.key is String &&
+            RegExp(r'audio', caseSensitive: false).hasMatch(entry.key)) {
+          collectIds(entry.value);
+        } else if (entry.value is String &&
+            RegExp(
+              r'(?:^|[/\\])[a-f0-9]{32}\.audio(?:$|[?#])',
+              caseSensitive: false,
+            ).hasMatch(entry.value as String)) {
+          // Unknown metadata can name a retry file without an audio-specific
+          // key. Keep the referenced ID until that field is durably removed.
+          collectIds(entry.value);
+        } else {
+          scan(entry.value);
+        }
+      }
+    } else if (value is List) {
+      for (final nested in value) {
+        scan(nested);
+      }
+    }
+  }
+
+  scan(retryData);
+  ids.removeAll(AsrRetryAudioStore.referencedIds(retryData));
+  return ids;
+}
+
+bool _canSafelyPreserveLegacyAsrRetryData(Object? value, [String? field]) {
+  final normalizedField = (field ?? '')
+      .replaceAllMapped(
+        RegExp(r'([a-z0-9])([A-Z])'),
+        (match) => '${match[1]}-${match[2]}',
+      )
+      .replaceAllMapped(
+        RegExp(r'([A-Z])([A-Z][a-z])'),
+        (match) => '${match[1]}-${match[2]}',
+      )
+      .replaceAll(RegExp(r'\s+'), '-')
+      .toLowerCase();
+  if (RegExp(
+    r'(?:^|[-_.])(?:api[-_.]?keys?|private[-_.]?keys?|keys?|tokens?|bearers?|secrets?|passwords?|authorizations?|auth(?:entication)?s?|credentials?)(?:$|[-_.])',
+  ).hasMatch(normalizedField)) {
+    return false;
+  }
+  if (value == null || value is num || value is bool) return true;
+  final isAudioReferenceContainer = normalizedField == 'audio-reference' ||
+      normalizedField == 'audio-references';
+  if ((!isAudioReferenceContainer && normalizedField.contains('audio')) ||
+      normalizedField.contains('byte') ||
+      normalizedField.contains('base64') ||
+      normalizedField.contains('payload')) {
+    return false;
+  }
+  if (value is String) {
+    final trimmed = value.trim();
+    if (OcrDiagnosticSnapshot.containsCredential(trimmed)) return false;
+    if (RegExp(
+      r'data:[^\s,]*;base64,',
+      caseSensitive: false,
+    ).hasMatch(trimmed)) {
+      return false;
+    }
+    final uri = Uri.tryParse(trimmed);
+    final looksLikeUrl = uri != null &&
+        (uri.hasAuthority ||
+            uri.scheme.toLowerCase() == 'http' ||
+            uri.scheme.toLowerCase() == 'https');
+    if (looksLikeUrl &&
+        AsrRetryConfigSnapshot.urlContainsCredentials(trimmed)) {
+      return false;
+    }
+    if (RegExp(
+          r'(?:api[_-]?key|token|secret|password|authorization|bearer)\s*[:=]',
+          caseSensitive: false,
+        ).hasMatch(trimmed) ||
+        RegExp(
+          r'(?:[?&]|^)(?:api[_-]?key|token|secret|password|authorization)=',
+          caseSensitive: false,
+        ).hasMatch(trimmed)) {
+      return false;
+    }
+    final isTaskId = normalizedField == 'id' || normalizedField == 'uuid';
+    final isHash = normalizedField == 'sha256' ||
+        normalizedField == 'checksum' ||
+        normalizedField == 'digest';
+    final isKnownIdentifier = isTaskId &&
+            RegExp(
+              r'^(?:[a-f0-9]{32}|[a-f0-9-]{36})$',
+              caseSensitive: false,
+            ).hasMatch(trimmed) ||
+        isHash &&
+            RegExp(r'^[a-f0-9]{64}$', caseSensitive: false).hasMatch(trimmed);
+    final isUserVisibleTitle = normalizedField == 'title';
+    // A user-visible title may legitimately use only Base64url characters;
+    // encoded-value detection applies to generic metadata fields instead.
+    if (!isKnownIdentifier &&
+        !isUserVisibleTitle &&
+        trimmed.length >= 16 &&
+        RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(trimmed)) {
+      return false;
+    }
+    if (_looksLikeLineWrappedBase64(trimmed)) return false;
+    return true;
+  }
+  if (value is List) {
+    if (normalizedField.contains('byte') ||
+        (!isAudioReferenceContainer && normalizedField.contains('audio')) ||
+        normalizedField.contains('base64') ||
+        normalizedField.contains('payload')) {
+      return false;
+    }
+    return value.every((item) => _canSafelyPreserveLegacyAsrRetryData(item));
+  }
+  if (value is Map) {
+    for (final entry in value.entries) {
+      if (entry.key is! String ||
+          !_canSafelyPreserveLegacyAsrRetryData(
+            entry.value,
+            entry.key as String,
+          )) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+bool _looksLikeLineWrappedBase64(String value) {
+  final lines =
+      value.split(RegExp(r'\r\n|\n|\r')).map((line) => line.trim()).toList();
+  if (lines.length < 2 ||
+      lines.any(
+        (line) =>
+            line.isEmpty || !RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(line),
+      ) ||
+      lines.take(lines.length - 1).any((line) => line.length % 4 != 0)) {
+    return false;
+  }
+  final encoded = lines.join();
+  if (encoded.length < 32 ||
+      !RegExp(r'^[A-Za-z0-9+/_=-]+$').hasMatch(encoded)) {
+    return false;
+  }
+  try {
+    return base64.decode(base64.normalize(encoded)).length >= 24;
+  } on FormatException {
+    return false;
+  }
+}
+
+bool _canSafelyPreserveSkippedAsrEntry(Map entry) {
+  final retryData = entry['retryData'];
+  if (retryData is Map &&
+      (retryData.containsKey('version') ||
+          retryData.containsKey('audioReference') ||
+          retryData.containsKey('audioReferences'))) {
+    return false;
+  }
+  return _canSafelyPreserveLegacyAsrRetryData(entry);
+}
 
 // ============================================================================
 // Background Task Type
@@ -2002,15 +2271,92 @@ class _TaskCancellationRegistration {
   _TaskCancellationRegistration(this.cancel);
 }
 
+class _TaskCleanupRegistration {
+  final Future<void> Function() cleanup;
+
+  _TaskCleanupRegistration(this.cleanup);
+}
+
 class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   final _uuid = const Uuid();
   final Map<String, _TaskCancellationRegistration> _cancellations = {};
+  final Map<String, Map<Object, List<_TaskCleanupRegistration>>> _taskCleanups =
+      {};
+  bool _retryAudioCleanupSafe = false;
+  final Set<String> _pendingCompletedLegacyAsrRetryAudioIds = <String>{};
+  final Set<String> _pendingSanitizedAsrRetryAudioIds = <String>{};
+  // The last durable task snapshot remains authoritative until another write
+  // replaces it, even when live retryData has already changed.
+  final Set<String> _persistedRetryAudioIds = <String>{};
+  List<dynamic> _unrestoredTaskRecords = [];
+
+  /// Whether retry audio references are complete enough to authorize pruning.
+  bool get retryAudioCleanupSafe => _retryAudioCleanupSafe;
+
+  /// Any task with retry data retains its audio ownership, including completed
+  /// ASR tasks whose source snapshot has not yet cleared that retry data.
+  Set<String> get retryAudioReferencedIds {
+    final ids = <String>{};
+    void addTaskReferences(BackgroundTask task) {
+      ids.addAll(AsrRetryAudioStore.referencedIds(task.retryData));
+    }
+
+    final currentTasks =
+        mounted ? state : _disposedSnapshot ?? const <BackgroundTask>[];
+    for (final task in currentTasks) {
+      addTaskReferences(task);
+    }
+    ids.addAll(_pendingCompletedLegacyAsrRetryAudioIds);
+    ids.addAll(_pendingSanitizedAsrRetryAudioIds);
+    ids.addAll(_pendingReplacedRestoreAsrRetryAudioIds);
+    ids.addAll(_persistedRetryAudioIds);
+    for (final removedTasks in _pendingTaskRemovalCleanupTasks.values) {
+      for (final task in removedTasks) {
+        addTaskReferences(task);
+      }
+    }
+    for (final record in _unrestoredTaskRecords) {
+      if (record is! Map || record['retryAudioOwnershipKnown'] != true) {
+        continue;
+      }
+      final retryAudioIds = record['retryAudioIds'];
+      if (retryAudioIds is List) ids.addAll(retryAudioIds.whereType<String>());
+    }
+    return ids;
+  }
+
+  Set<String> _retryAudioIdsInSnapshot(
+    Iterable<BackgroundTask> tasks,
+    Iterable<dynamic> preservedEntries,
+  ) {
+    final ids = <String>{};
+    for (final task in tasks) {
+      ids.addAll(AsrRetryAudioStore.referencedIds(task.retryData));
+    }
+    for (final entry in preservedEntries) {
+      if (entry is! Map) continue;
+      if (entry['retryAudioOwnershipKnown'] == true) {
+        final retryAudioIds = entry['retryAudioIds'];
+        if (retryAudioIds is List) {
+          ids.addAll(retryAudioIds.whereType<String>());
+        }
+      } else if (entry['type'] == BackgroundTaskType.asr.name) {
+        final recoveredIds = _recoverRetryAudioIds(entry);
+        if (recoveredIds != null) {
+          ids.addAll(recoveredIds);
+        }
+      }
+    }
+    return ids;
+  }
 
   /// Returns a live task by ID, or null after removal or notifier disposal.
   BackgroundTask? taskById(String taskId) {
     if (!mounted) return null;
     return state.where((task) => task.id == taskId).firstOrNull;
   }
+
+  List<BackgroundTask> get tasks => List.unmodifiable(state);
 
   /// Only live owned operations register callbacks; restored records do not.
   void registerCancellation(String taskId, void Function() cancel) {
@@ -2043,6 +2389,117 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   void unregisterCancellationForGeneration(String taskId, Object owner) {
     if (identical(_cancellations[taskId]?.owner, owner)) {
       _cancellations.remove(taskId);
+    }
+  }
+
+  void registerTaskCleanup(
+    String taskId,
+    Future<void> Function() cleanup, {
+    BackgroundTask? taskGeneration,
+  }) {
+    final current = taskById(taskId);
+    final generation = taskGeneration ?? current;
+    if (!mounted ||
+        current == null ||
+        generation == null ||
+        !current.hasSameGenerationAs(generation)) {
+      return;
+    }
+    final token = BackgroundTask._generationTokenFor(generation);
+    _taskCleanups
+        .putIfAbsent(taskId, () => {})
+        .putIfAbsent(token, () => <_TaskCleanupRegistration>[])
+        .add(_TaskCleanupRegistration(cleanup));
+  }
+
+  void unregisterTaskCleanup(
+    String taskId, {
+    BackgroundTask? taskGeneration,
+  }) {
+    if (taskGeneration == null) {
+      _taskCleanups.remove(taskId);
+      return;
+    }
+    final registrations = _taskCleanups[taskId];
+    registrations?.remove(BackgroundTask._generationTokenFor(taskGeneration));
+    if (registrations?.isEmpty ?? false) _taskCleanups.remove(taskId);
+  }
+
+  Future<void> _runTaskCleanup(
+    String taskId,
+    BackgroundTask taskGeneration,
+  ) async {
+    final registrations = _taskCleanups[taskId]
+        ?.remove(BackgroundTask._generationTokenFor(taskGeneration));
+    if (registrations == null) return;
+    if (_taskCleanups[taskId]?.isEmpty ?? false) _taskCleanups.remove(taskId);
+    for (final registration in registrations) {
+      try {
+        await registration.cleanup();
+      } catch (error) {
+        debugPrint('[BackgroundTaskNotifier] Task cleanup failed: $error');
+      }
+    }
+  }
+
+  Future<void> _runTaskCleanupAfterPersistence(
+    String taskId,
+    Future<bool> persistence,
+    BackgroundTask taskGeneration,
+  ) async {
+    try {
+      if (!await persistence) {
+        debugPrint(
+          '[BackgroundTaskNotifier] Skipping task cleanup because removal persistence failed: $taskId',
+        );
+        return;
+      }
+      await _runTaskCleanup(taskId, taskGeneration);
+    } catch (error) {
+      debugPrint(
+        '[BackgroundTaskNotifier] Could not confirm task removal persistence: $error',
+      );
+    }
+  }
+
+  void _queueTaskCleanupAfterRemoval(
+    String taskId,
+    BackgroundTask taskGeneration,
+  ) {
+    final cleanupTasks = _pendingTaskRemovalCleanupTasks.putIfAbsent(
+      taskId,
+      () => <BackgroundTask>[],
+    );
+    if (!cleanupTasks.any((task) => task.hasSameGenerationAs(taskGeneration))) {
+      cleanupTasks.add(taskGeneration);
+    }
+  }
+
+  void _runTaskCleanupsAfterSnapshotPersisted(
+    List<BackgroundTask> persistedTasks,
+  ) {
+    final cleanupTasks = <(String, BackgroundTask)>[];
+    for (final entry in _pendingTaskRemovalCleanupTasks.entries.toList()) {
+      final remaining = <BackgroundTask>[];
+      for (final removedTask in entry.value) {
+        final generationWasPersisted = persistedTasks.any(
+          (task) =>
+              task.id == entry.key && task.hasSameGenerationAs(removedTask),
+        );
+        if (generationWasPersisted) {
+          remaining.add(removedTask);
+        } else {
+          cleanupTasks.add((entry.key, removedTask));
+        }
+      }
+      if (remaining.isEmpty) {
+        _pendingTaskRemovalCleanupTasks.remove(entry.key);
+      } else {
+        _pendingTaskRemovalCleanupTasks[entry.key] = remaining;
+      }
+    }
+    for (final (taskId, task) in cleanupTasks) {
+      unawaited(_runTaskCleanup(taskId, task));
     }
   }
 
@@ -2083,6 +2540,11 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   @visibleForTesting
   static String? debugStorageDirectoryOverride;
 
+  /// Widget tests can keep task state in memory while filesystem futures are
+  /// exercised separately by persistence-focused tests.
+  @visibleForTesting
+  static bool debugDisablePersistence = false;
+
   @visibleForTesting
   static Future<void> Function()? debugBeforeOcrCacheCleanup;
 
@@ -2098,6 +2560,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   @visibleForTesting
   static Future<void> Function()? debugAfterTaskSnapshotRead;
 
+  @visibleForTesting
+  static Future<void> Function(String taskId)?
+      debugBeforeLegacyAsrRetryMigration;
+
   BackgroundTaskNotifier() : super([]);
 
   @override
@@ -2106,6 +2572,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       registration.cancel();
     }
     _cancellations.clear();
+    _taskCleanups.clear();
+    _pendingRestoreTaskRemovalOwnershipIds.clear();
     _disposedSnapshot = List.of(state);
     _iosSyncTimer?.cancel();
     _iosSyncTimer = null;
@@ -2161,6 +2629,25 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// canceled while it was waiting.
   bool startTaskIfWaiting(String taskId) {
     final index = state.indexWhere((task) => task.id == taskId);
+    if (index == -1 || state[index].status != TaskStatus.waiting) return false;
+    final tasks = [...state];
+    tasks[index] = tasks[index].copyWith(
+      status: TaskStatus.running,
+      statusChangedAt: DateTime.now(),
+    );
+    state = tasks;
+    _persistTasks();
+    _syncIosContinuedTask();
+    return true;
+  }
+
+  bool startTaskIfWaitingForGeneration(
+    String taskId,
+    BackgroundTask taskGeneration,
+  ) {
+    final index = state.indexWhere(
+      (task) => task.id == taskId && task.hasSameGenerationAs(taskGeneration),
+    );
     if (index == -1 || state[index].status != TaskStatus.waiting) return false;
     final tasks = [...state];
     tasks[index] = tasks[index].copyWith(
@@ -2351,21 +2838,37 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
     final removalToken = _recordPendingRestoreTaskRemoval(taskId);
     _pendingTaskRemovalReconciliations[taskId] = removalToken;
+    if (_restoreBarrier != null) {
+      // Even when a different generation with this ID is in state, the
+      // in-flight snapshot may still contain an older disk generation whose
+      // retry audio remains owned until its removal is durable.
+      _pendingRestoreTaskRemovalOwnershipIds.add(taskId);
+    }
     _cancellations.remove(taskId)?.cancel();
-    final removed = state.where((task) => task.id == taskId).firstOrNull;
+    final removedTasks = state.where((task) => task.id == taskId).toList();
+    for (final task in removedTasks) {
+      _queueTaskCleanupAfterRemoval(taskId, task);
+    }
+    final removed = removedTasks.firstOrNull;
     state = state.where((t) => t.id != taskId).toList();
+    final Future<bool> persistence;
     if (removed?.type == BackgroundTaskType.ocr && removed?.retryData != null) {
       final references = OcrRetryStorage.referencesFromSnapshot(
         removed!.retryData,
       );
-      _persistOcrTaskRemoval(taskId, references);
+      persistence = _persistOcrTaskRemoval(taskId, references);
     } else {
-      _persistTasks(
+      persistence = _persistTasks(
         excludedPersistedTaskIds: {taskId},
         retryOnceOnRemovalWriteFailure: true,
       );
     }
     _syncIosContinuedTask();
+    for (final task in removedTasks) {
+      unawaited(
+        _runTaskCleanupAfterPersistence(taskId, persistence, task),
+      );
+    }
   }
 
   /// Save removals before publishing them; absent IDs also retry disk cleanup.
@@ -2398,6 +2901,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
           return addedTaskGenerations[task.id]?.contains(generation) ?? false;
         }
 
+        final tasksToCleanup = removedTasks
+            .where((task) => !isNotRemovedTaskGeneration(task))
+            .toList();
         final proposed = state.where(isNotRemovedTaskGeneration).toList();
         final retainedAddedTaskIds = {
           for (final task in proposed)
@@ -2442,6 +2948,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               _disposedSnapshot?.where(isNotRemovedTaskGeneration).toList();
         }
         await _deleteUnreferencedOcrCache(cacheCandidates);
+        for (final task in tasksToCleanup) {
+          await _runTaskCleanup(task.id, task);
+        }
         return true;
       } finally {
         _removalBarrier = null;
@@ -2484,7 +2993,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     }
   }
 
-  Future<void> _persistOcrTaskRemoval(String taskId, Set<String> references) {
+  Future<bool> _persistOcrTaskRemoval(String taskId, Set<String> references) {
+    if (debugDisablePersistence) return Future<bool>.value(true);
     final barrier = _removalBarrier;
     if (barrier == null) {
       final write = _writeSnapshot(
@@ -2492,12 +3002,15 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         excludedPersistedTaskIds: {taskId},
         retryOnceOnRemovalWriteFailure: true,
       );
-      return _pendingWrite = write.then<void>((saved) async {
+      final persistence = write.then((saved) async {
         if (saved) {
           await _deleteUnreferencedOcrCache(references);
           await _cleanupOrphanedOcrCache();
         }
+        return saved;
       });
+      _pendingWrite = persistence.then<void>((_) {});
+      return persistence;
     }
 
     final previous = _pendingWrite ?? Future<void>.value();
@@ -2505,20 +3018,22 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final deferred = previous.then((_) async {
       await barrier.future;
       final snapshot = mounted ? state : _disposedSnapshot;
-      if (snapshot == null) return;
+      if (snapshot == null) return false;
       final saved = await _writeSnapshotNow(
         snapshot,
         dirOverride,
         excludedPersistedTaskIds: {taskId},
         retryOnceOnRemovalWriteFailure: true,
+        preserveSkippedEntries: _taskSnapshotIncomplete,
       );
       if (saved) {
         await _deleteUnreferencedOcrCache(references);
         await _cleanupOrphanedOcrCache();
       }
+      return saved;
     });
-    _pendingWrite = deferred;
-    if (!mounted) _disposedPersistence = deferred;
+    _pendingWrite = deferred.then<void>((_) {});
+    if (!mounted) _disposedPersistence = _pendingWrite;
     return deferred;
   }
 
@@ -2530,6 +3045,56 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return t.copyWith(retryData: retryData);
     }).toList();
     _persistTasks();
+  }
+
+  Future<bool> setRetryDataAndWait(
+    String taskId,
+    Map<String, dynamic>? retryData,
+  ) {
+    state = state.map((task) {
+      if (task.id != taskId) return task;
+      return task.copyWith(retryData: retryData);
+    }).toList();
+    return _persistTasks();
+  }
+
+  Future<bool> setRetryDataAndWaitForGeneration(
+    String taskId,
+    BackgroundTask taskGeneration,
+    Map<String, dynamic>? retryData,
+  ) {
+    var updated = false;
+    state = state.map((task) {
+      if (task.id != taskId || !task.hasSameGenerationAs(taskGeneration)) {
+        return task;
+      }
+      updated = true;
+      return task.copyWith(retryData: retryData);
+    }).toList();
+    return updated ? _persistTasks() : Future<bool>.value(false);
+  }
+
+  Future<bool> clearRetryData(String taskId) {
+    state = state.map((task) {
+      if (task.id != taskId) return task;
+      return task.copyWith(clearRetryData: true);
+    }).toList();
+    return _persistTasks();
+  }
+
+  Future<bool> clearRetryDataForGeneration(
+    String taskId,
+    BackgroundTask taskGeneration,
+  ) {
+    var updated = false;
+    state = state.map((task) {
+      if (task.id != taskId || !task.hasSameGenerationAs(taskGeneration)) {
+        return task;
+      }
+      updated = true;
+      return task.copyWith(clearRetryData: true);
+    }).toList();
+    return updated ? _persistTasks() : Future<bool>.value(false);
   }
 
   void _updateTask(
@@ -2661,10 +3226,21 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   Future<void>? _pendingWrite;
   Completer<void>? _removalBarrier;
   Completer<void>? _restoreBarrier;
+  Future<bool>? _activeRestore;
   int _restoreGeneration = 0;
   final Map<String, Object> _pendingRestoreTaskRemovals = <String, Object>{};
   final Map<String, Object> _pendingTaskRemovalReconciliations =
       <String, Object>{};
+  // Preserve retry audio from a persisted task shadowed by an in-memory task
+  // with the same ID until the replacement snapshot is durably written.
+  final Set<String> _pendingReplacedRestoreAsrRetryAudioIds = <String>{};
+  // A same-ID re-add clears removal tokens so the new task can be persisted,
+  // but an in-flight restore may still have read an older disk generation.
+  final Set<String> _pendingRestoreTaskRemovalOwnershipIds = <String>{};
+  // Keep cleanup bound to the removed generation until a snapshot confirms it
+  // is absent, even when the original removal write fails.
+  final Map<String, List<BackgroundTask>> _pendingTaskRemovalCleanupTasks =
+      <String, List<BackgroundTask>>{};
   final List<Map<String, Set<Object>>> _activeBatchRemovalAddedGenerations = [];
   Future<List<BackgroundTask>?>? _preRestorePersistedTasks;
   List<BackgroundTask>? _disposedSnapshot;
@@ -2697,6 +3273,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     Set<String> excludedPersistedTaskIds = const <String>{},
     bool retryOnceOnRemovalWriteFailure = false,
   }) {
+    if (debugDisablePersistence) return Future<bool>.value(true);
     final preserveCurrentSkippedEntries =
         preserveSkippedEntries || _taskSnapshotIncomplete;
     final barrier = _removalBarrier;
@@ -2729,13 +3306,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!mounted) {
       final snapshot = _disposedSnapshot;
       if (snapshot == null) return Future<bool>.value(false);
+      final disposedPersistence = _disposedPersistence;
+      if (disposedPersistence != null) {
+        return disposedPersistence.then((_) => false);
+      }
       final write = _writeSnapshot(
         snapshot,
         preserveSkippedEntries: preserveCurrentSkippedEntries,
         excludedPersistedTaskIds: excludedPersistedTaskIds,
         retryOnceOnRemovalWriteFailure: retryOnceOnRemovalWriteFailure,
       );
-      _disposedPersistence ??= write.then<void>((_) {});
+      _disposedPersistence = write.then<void>((_) {});
       return write;
     }
     return _writeSnapshot(
@@ -2839,19 +3420,28 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     final skippedEntries = canPreserveSkippedEntries
         ? List<dynamic>.unmodifiable(_skippedTaskEntries)
         : const <dynamic>[];
-
+    final retireUnrestoredRecords = _restoreGeneration > 0;
+    final unrestoredRecords = List<dynamic>.unmodifiable(
+      _unrestoredTaskRecords.where(
+        (record) =>
+            !retireUnrestoredRecords ||
+            record is! Map ||
+            record['retireAfterSnapshot'] != true,
+      ),
+    );
+    final preservedEntries = [...skippedEntries, ...unrestoredRecords];
     final saved = _hasCacheMigrations(currentSnapshot)
         ? await OcrRetryStorage.withCacheMaintenanceLock(
             () => _writePreparedSnapshot(
               currentSnapshot,
               dirOverride,
-              preservedEntries: skippedEntries,
+              preservedEntries: preservedEntries,
             ),
           )
         : await _writePreparedSnapshot(
             currentSnapshot,
             dirOverride,
-            preservedEntries: skippedEntries,
+            preservedEntries: preservedEntries,
           );
     // Retry a failed removal once from current state to retain a same-ID task
     // added while the first snapshot write was pending.
@@ -2872,6 +3462,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }
     if (saved) {
+      _persistedRetryAudioIds
+        ..clear()
+        ..addAll(_retryAudioIdsInSnapshot(currentSnapshot, preservedEntries));
+      _pendingCompletedLegacyAsrRetryAudioIds.clear();
+      _pendingSanitizedAsrRetryAudioIds.clear();
+      _pendingReplacedRestoreAsrRetryAudioIds.clear();
+      if (retireUnrestoredRecords) {
+        _unrestoredTaskRecords.removeWhere(
+          (record) => record is Map && record['retireAfterSnapshot'] == true,
+        );
+        _retryAudioCleanupSafe = _pendingCompletedLegacyAsrRetryAudioIds
+                .isEmpty &&
+            !_hasUntrackedSkippedAsrAudioOwnership(_skippedTaskEntries) &&
+            _unrestoredTaskRecords.every(
+              (record) =>
+                  record is Map && record['retryAudioOwnershipKnown'] == true,
+            );
+      }
       final reconciledTaskIds = <String>{};
       for (final entry in taskRemovalTokens.entries) {
         if (identical(
@@ -2897,6 +3505,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         _clearPendingRestoreTaskRemovals(pendingRemovalTokens);
       }
       await _removePersistedTasksFromPreRestoreCache(excludedTaskIds);
+      _runTaskCleanupsAfterSnapshotPersisted(currentSnapshot);
     }
     return saved;
   }
@@ -2934,6 +3543,13 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       _taskSnapshotIncomplete = true;
       _taskSnapshotCanPreserveSkippedEntries = true;
       _skippedTaskEntries = loaded.skippedEntries;
+      if (_restoreGeneration == 0) {
+        // Parsed tasks are only cached here; retryAudioReferencedIds cannot
+        // see them until restore publishes them into state. Keep pruning
+        // disabled until the restore path recomputes ownership.
+        _retryAudioCleanupSafe = false;
+      }
+      _unrestoredTaskRecords = loaded.unrestoredRecords;
     }
     final tasks = loaded.tasks;
     _preRestorePersistedTasks = Future<List<BackgroundTask>?>.value(tasks);
@@ -2945,7 +3561,9 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     String? dirOverride, {
     List<dynamic> preservedEntries = const [],
   }) async {
-    final prepared = await _prepareOcrRetriesForPersistence(snapshot);
+    final preparedAsr = _prepareAsrRetriesForPersistence(snapshot);
+    if (preparedAsr == null) return false;
+    final prepared = await _prepareOcrRetriesForPersistence(preparedAsr);
     if (prepared == null) return false;
     _publishPreparedRetrySnapshots(snapshot, prepared);
     final data = <dynamic>[
@@ -2953,6 +3571,86 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       ...preservedEntries,
     ];
     return _writeSnapshotData(data, dirOverride);
+  }
+
+  List<BackgroundTask>? _prepareAsrRetriesForPersistence(
+    List<BackgroundTask> snapshot,
+  ) {
+    final prepared = List<BackgroundTask>.of(snapshot);
+    for (var index = 0; index < prepared.length; index++) {
+      final task = prepared[index];
+      if (task.type != BackgroundTaskType.asr) continue;
+      // ASR transport diagnostics may contain provider credentials or audio
+      // payloads. Keep them available to the current UI session, but do not
+      // write raw request/response bodies into the task snapshot.
+      final safeError = task.error == null
+          ? null
+          : AsrRetryConfigSnapshot.sanitizeDiagnosticText(task.error!);
+      final safeSteps = [
+        for (final step in task.steps)
+          BgTaskStep(
+            label: step.label,
+            status: step.status,
+            error: step.error == null
+                ? null
+                : AsrRetryConfigSnapshot.sanitizeDiagnosticText(step.error!),
+          ),
+      ];
+      final diagnosticsChanged = task.rawRequest != null ||
+          task.rawResponse != null ||
+          safeError != task.error ||
+          List.generate(task.steps.length, (i) => i).any(
+            (i) => safeSteps[i].error != task.steps[i].error,
+          );
+      var preparedTask = task;
+      if (diagnosticsChanged) {
+        preparedTask = task.copyWith(
+          error: safeError,
+          steps: safeSteps,
+          clearRawRequest: true,
+          clearRawResponse: true,
+        );
+      }
+      if (task.retryData == null) {
+        prepared[index] = preparedTask;
+        continue;
+      }
+      // Legacy rows are migrated by restore and scheduler preparation, which
+      // own the correct storage adapter and know when all input bytes are
+      // durable. A direct in-memory legacy value has not gone through that
+      // migration, so omit it from this snapshot while leaving it available
+      // to the scheduler for migration.
+      if (!task.retryData!.containsKey('version')) {
+        if (!_canSafelyPreserveLegacyAsrRetryData(task.retryData)) {
+          debugPrint(
+            '[BackgroundTaskNotifier] Omitting unsafe legacy ASR retry data from snapshot for ${task.id}',
+          );
+          prepared[index] = preparedTask.copyWith(clearRetryData: true);
+          continue;
+        }
+        prepared[index] = preparedTask;
+        continue;
+      }
+      final retryData = AsrRetryAudioStore.sanitizeVersionedRetryData(
+        task.retryData,
+        allowUnknownChunkStatuses: true,
+      );
+      if (retryData == null) {
+        debugPrint(
+          '[BackgroundTaskNotifier] Refusing unsafe ASR retry data for ${task.id}',
+        );
+        return null;
+      }
+      try {
+        if (jsonEncode(retryData) != jsonEncode(task.retryData)) {
+          preparedTask = preparedTask.copyWith(retryData: retryData);
+        }
+      } on Object {
+        return null;
+      }
+      prepared[index] = preparedTask;
+    }
+    return prepared;
   }
 
   bool _canSafelyPreserveSkippedEntries(List<BackgroundTask> snapshot) {
@@ -2986,6 +3684,10 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         }
       }
       final entryType = entry['type'];
+      if (entryType == BackgroundTaskType.asr.name) {
+        if (!_canSafelyPreserveSkippedAsrEntry(entry)) return false;
+        continue;
+      }
       if (entryType != BackgroundTaskType.ocr.name) {
         if (BackgroundTaskType.values.any((type) => type.name == entryType)) {
           continue;
@@ -3014,9 +3716,17 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
 
   bool _canSafelySerializeKnownTasks(List<BackgroundTask> snapshot) {
     for (final task in snapshot) {
-      if (task.type != BackgroundTaskType.ocr || task.retryData == null) {
+      if (task.retryData == null) continue;
+      if (task.type == BackgroundTaskType.asr) {
+        if (!task.retryData!.containsKey('version') ||
+            !AsrRetryAudioStore.hasValidVersionedReferences(task.retryData) ||
+            AsrRetryAudioStore.recoverableReferencedIds(task.retryData) ==
+                null) {
+          return false;
+        }
         continue;
       }
+      if (task.type != BackgroundTaskType.ocr) continue;
       try {
         final retrySnapshot = OcrRetrySnapshot.fromMap(task.retryData!);
         if (retrySnapshot.version != OcrRetrySnapshot.currentVersion ||
@@ -3159,7 +3869,8 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       final before = original[index];
       final after = prepared[index];
       if (before.id != after.id ||
-          identical(before.retryData, after.retryData)) {
+          identical(before.retryData, after.retryData) ||
+          (before.retryData != null && after.retryData == null)) {
         continue;
       }
       changed[before.id] = after;
@@ -3208,12 +3919,206 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     await AtomicFile.writeString(file, data);
   }
 
+  Future<({BackgroundTask task, List<AsrAudioReference> references})>
+      _migrateLegacyAsrRetryData(BackgroundTask task) async {
+    final retryData = task.retryData!;
+    if (task.status == TaskStatus.completed) {
+      return (
+        task: task.copyWith(
+          clearRetryData: true,
+          clearRawRequest: true,
+          clearRawResponse: true,
+          clearError: true,
+          steps: [
+            for (final step in task.steps)
+              BgTaskStep(label: step.label, status: step.status),
+          ],
+        ),
+        references: const <AsrAudioReference>[],
+      );
+    }
+    final versionedReferences = AsrRetryAudioStore.sanitizeVersionedRetryData({
+      ...retryData,
+      'type': 'asr',
+      'version': 2,
+    }, allowUnknownChunkStatuses: true);
+    if (versionedReferences != null &&
+        (versionedReferences.containsKey('audioReference') ||
+            versionedReferences.containsKey('audioReferences'))) {
+      final preservedReferences = <AsrAudioReference>[];
+      final singleReference = versionedReferences['audioReference'];
+      if (singleReference is Map) {
+        preservedReferences.add(
+          AsrAudioReference.fromMap(
+            Map<String, dynamic>.from(singleReference),
+          ),
+        );
+      }
+      final multipleReferences = versionedReferences['audioReferences'];
+      if (multipleReferences is List) {
+        for (final entry in multipleReferences) {
+          if (entry is Map && entry['audioReference'] is Map) {
+            preservedReferences.add(
+              AsrAudioReference.fromMap(
+                Map<String, dynamic>.from(entry['audioReference'] as Map),
+              ),
+            );
+          }
+        }
+      }
+      return (
+        task: task.copyWith(
+          retryData: versionedReferences,
+          clearRawRequest: true,
+          clearRawResponse: true,
+          clearError: true,
+          steps: [
+            for (final step in task.steps)
+              BgTaskStep(label: step.label, status: step.status),
+          ],
+        ),
+        references: preservedReferences,
+      );
+    }
+
+    final audioEntries = retryData['audios'];
+    final store = AsrRetryAudioStore();
+    final references = <AsrAudioReference>[];
+
+    AsrAudioReference missingSource(int index) => AsrAudioReference(
+          id: const Uuid().v4().replaceAll('-', '').toLowerCase(),
+          name: 'audio-${index + 1}.bin',
+          format: 'bin',
+          byteLength: 0,
+          sha256: List.filled(64, '0').join(),
+          requiresSourceReselection: true,
+        );
+
+    try {
+      if (audioEntries is List) {
+        for (var index = 0; index < audioEntries.length; index++) {
+          final entry = audioEntries[index];
+          if (entry is! Map) {
+            references.add(missingSource(index));
+            continue;
+          }
+
+          final url = entry['url'];
+          if (url is String && url.trim().isNotEmpty) {
+            final rawUrl = url.trim();
+            final safeUrl = AsrRetryConfigSnapshot.sanitizeDiagnosticUrl(
+              rawUrl,
+            );
+            references.add(
+              AsrAudioReference(
+                id: const Uuid().v4().replaceAll('-', '').toLowerCase(),
+                name: safeUrl,
+                format: 'url',
+                byteLength: 0,
+                sha256: List.filled(64, '0').join(),
+                url: safeUrl,
+                requiresSourceReselection: safeUrl.isEmpty ||
+                    safeUrl != rawUrl ||
+                    AsrRetryConfigSnapshot.urlContainsCredentials(rawUrl),
+              ),
+            );
+            continue;
+          }
+
+          final encodedBytes = entry['bytes'];
+          Uint8List? bytes;
+          if (encodedBytes is String) {
+            try {
+              final decoded = base64Decode(encodedBytes);
+              if (decoded.isNotEmpty) bytes = Uint8List.fromList(decoded);
+            } on FormatException {
+              // Malformed legacy audio is retained only as a reselection cue.
+            }
+          }
+          if (bytes == null) {
+            references.add(missingSource(index));
+            continue;
+          }
+
+          const safeFormats = {
+            'aac',
+            'flac',
+            'm4a',
+            'mp3',
+            'mp4',
+            'ogg',
+            'opus',
+            'pcm',
+            'wav',
+            'webm',
+          };
+          final rawFormat = entry['format'];
+          final format = rawFormat is String &&
+                  safeFormats.contains(rawFormat.trim().toLowerCase())
+              ? rawFormat.trim().toLowerCase()
+              : 'bin';
+          references.add(
+            await store.save(
+              bytes,
+              name: 'audio-${index + 1}.$format',
+              format: format,
+            ),
+          );
+        }
+      }
+
+      if (references.isEmpty) references.add(missingSource(0));
+      final migratedRetryData = <String, dynamic>{
+        'type': 'asr',
+        'version': 2,
+        'audioReferences': [
+          for (final reference in references)
+            {'audioReference': reference.toMap(), 'chunks': const <dynamic>[]},
+        ],
+      };
+      final rawSaveFolder = retryData['saveFolder'];
+      if (rawSaveFolder is String && rawSaveFolder.trim().isNotEmpty) {
+        final safeSaveFolder = AsrRetryConfigSnapshot.sanitizeDiagnosticText(
+          rawSaveFolder,
+        );
+        if (safeSaveFolder == rawSaveFolder.trim() &&
+            safeSaveFolder.length <= 512) {
+          migratedRetryData['saveFolder'] = safeSaveFolder;
+        }
+      }
+
+      return (
+        task: task.copyWith(
+          retryData: migratedRetryData,
+          clearRawRequest: true,
+          clearRawResponse: true,
+          clearError: true,
+          steps: [
+            for (final step in task.steps)
+              BgTaskStep(label: step.label, status: step.status),
+          ],
+        ),
+        references: references,
+      );
+    } catch (_) {
+      for (final reference in references) {
+        await store.releaseProtection(reference);
+        await store.deleteIfUnreferenced(reference, const <String>{});
+      }
+      rethrow;
+    }
+  }
+
   Future<
       ({
         List<BackgroundTask> tasks,
         bool isComplete,
+        bool isCompleteExceptLegacyAsr,
         bool isReadable,
         List<dynamic> skippedEntries,
+        bool cleanupSafe,
+        List<dynamic> unrestoredRecords,
+        bool hasUnsafeSkippedAsrData,
       })> _loadPersistedTasks({
     String? dirOverride,
     bool waitForDebugRead = true,
@@ -3224,8 +4129,12 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         return (
           tasks: <BackgroundTask>[],
           isComplete: true,
+          isCompleteExceptLegacyAsr: true,
           isReadable: true,
           skippedEntries: <dynamic>[],
+          cleanupSafe: true,
+          unrestoredRecords: <dynamic>[],
+          hasUnsafeSkippedAsrData: false,
         );
       }
       if (waitForDebugRead) await debugBeforeTaskSnapshotRead?.call();
@@ -3235,24 +4144,245 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
         return (
           tasks: <BackgroundTask>[],
           isComplete: false,
+          isCompleteExceptLegacyAsr: false,
           isReadable: false,
           skippedEntries: <dynamic>[],
+          cleanupSafe: false,
+          unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
+          hasUnsafeSkippedAsrData: false,
         );
       }
-      final list = jsonDecode(content) as List;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(content);
+      } on FormatException catch (e) {
+        debugPrint('[BackgroundTaskNotifier] Failed to decode task list: $e');
+        return (
+          tasks: <BackgroundTask>[],
+          isComplete: false,
+          isCompleteExceptLegacyAsr: false,
+          isReadable: false,
+          skippedEntries: <dynamic>[],
+          cleanupSafe: false,
+          unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
+          hasUnsafeSkippedAsrData: false,
+        );
+      }
+      if (decoded is! List) {
+        return (
+          tasks: <BackgroundTask>[],
+          isComplete: false,
+          isCompleteExceptLegacyAsr: false,
+          isReadable: false,
+          skippedEntries: <dynamic>[],
+          cleanupSafe: false,
+          unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
+          hasUnsafeSkippedAsrData: false,
+        );
+      }
+      final list = decoded;
       final tasks = <BackgroundTask>[];
       final skippedEntries = <dynamic>[];
+      final unrestoredRecords = <dynamic>[];
       var isComplete = true;
+      var isCompleteExceptLegacyAsr = true;
+      var cleanupSafe = true;
+      var hasUnsafeSkippedAsrData = false;
       for (final m in list) {
-        try {
-          tasks.add(
-            BackgroundTask.fromMap(Map<String, dynamic>.from(m as Map)),
+        if (m is Map && m['_unrestoredTaskRecord'] == true) {
+          isComplete = false;
+          isCompleteExceptLegacyAsr = false;
+          final ownershipKnown = m['retryAudioOwnershipKnown'] == true;
+          final retireAfterSnapshot = m['retireAfterSnapshot'] == true;
+          final rawIds = m['retryAudioIds'];
+          final retryAudioIds = <String>{};
+          const markerKeys = {
+            '_unrestoredTaskRecord',
+            'retryAudioOwnershipKnown',
+            'retryAudioIds',
+            'retireAfterSnapshot',
+          };
+          final hasUnsafeMarkerFields = m.entries.any(
+            (entry) =>
+                !markerKeys.contains(entry.key) &&
+                !_canSafelyPreserveLegacyAsrRetryData({
+                  entry.key: entry.value,
+                }),
           );
+          if (hasUnsafeMarkerFields) hasUnsafeSkippedAsrData = true;
+          var markerValid = m.keys.every(
+                (key) => key is String && markerKeys.contains(key),
+              ) &&
+              (rawIds == null || rawIds is List) &&
+              (m['retireAfterSnapshot'] == null ||
+                  m['retireAfterSnapshot'] is bool);
+          if (rawIds is List) {
+            for (final id in rawIds) {
+              if (id is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
+                markerValid = false;
+                break;
+              }
+              retryAudioIds.add(id);
+            }
+          }
+          if (!markerValid || !ownershipKnown) cleanupSafe = false;
+          unrestoredRecords.add(
+            _unrestoredTaskRecord(
+              retryAudioOwnershipKnown: markerValid && ownershipKnown,
+              retryAudioIds: markerValid ? retryAudioIds : const {},
+              retireAfterSnapshot: markerValid && retireAfterSnapshot,
+            ),
+          );
+          continue;
+        }
+        final rawMap = m is Map ? m : null;
+        final rawRetryData = rawMap?['retryData'];
+        final hasAsrReferenceShape = rawRetryData is Map &&
+            (rawRetryData.containsKey('audioReference') ||
+                rawRetryData.containsKey('audioReferences'));
+        final isAsrRecord = rawMap?['type'] == BackgroundTaskType.asr.name ||
+            hasAsrReferenceShape;
+        final isKnownNonAsrRecord = !isAsrRecord &&
+            BackgroundTaskType.values.any(
+              (type) => type.name == rawMap?['type'],
+            );
+        try {
+          if (rawMap == null) {
+            throw const FormatException('Task row is not an object');
+          }
+          var task = BackgroundTask.fromMap(
+            Map<String, dynamic>.from(rawMap),
+          );
+          if (task.type == BackgroundTaskType.asr) {
+            final rawSteps = rawMap['steps'];
+            final hasUnsafeParsedTaskDiagnostics = [
+              rawMap['rawRequest'],
+              rawMap['rawResponse'],
+              rawMap['error'],
+              if (rawSteps is List)
+                for (final step in rawSteps)
+                  if (step is Map) step['error'],
+            ].any((value) =>
+                value != null && !_canSafelyPreserveLegacyAsrRetryData(value));
+            final hasUnsafeVersionedRetryMetadata = rawRetryData is Map &&
+                rawRetryData.containsKey('version') &&
+                !_canSafelyPreserveLegacyAsrRetryData(rawRetryData);
+            if (hasUnsafeParsedTaskDiagnostics ||
+                hasUnsafeVersionedRetryMetadata) {
+              // Parsed ASR rows need to trigger partial-snapshot sanitation
+              // when diagnostics or versioned retry data contain credentials.
+              hasUnsafeSkippedAsrData = true;
+            }
+            if (_hasAudioOwnershipOutsideRetryData(rawMap)) {
+              // The task model cannot restore audio references outside its
+              // versioned retryData shape. Keep the snapshot incomplete and
+              // carry unknown ownership forward before any audio pruning.
+              isComplete = false;
+              isCompleteExceptLegacyAsr = false;
+              cleanupSafe = false;
+              unrestoredRecords.add(
+                _unrestoredTaskRecord(
+                  retryAudioOwnershipKnown: false,
+                  retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
+                    rawMap,
+                    rawRetryData,
+                  ),
+                ),
+              );
+            }
+            if (rawRetryData != null && rawRetryData is! Map) {
+              // The model parser drops malformed non-map ASR retry data. The
+              // raw row may still own audio, so keep restoration incomplete
+              // and carry unknown ownership forward before any cache pruning.
+              isComplete = false;
+              isCompleteExceptLegacyAsr = false;
+              cleanupSafe = false;
+              unrestoredRecords.add(
+                _unrestoredTaskRecord(
+                  retryAudioOwnershipKnown: false,
+                  retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
+                    rawMap,
+                    rawRetryData,
+                  ),
+                ),
+              );
+            } else {
+              final retryAudioIds = AsrRetryAudioStore.recoverableReferencedIds(
+                task.retryData,
+              );
+              if (retryAudioIds == null) cleanupSafe = false;
+            }
+            if (task.retryData != null &&
+                !task.retryData!.containsKey('version')) {
+              isComplete = false;
+            } else if (!AsrRetryAudioStore.hasValidVersionedReferences(
+              task.retryData,
+            )) {
+              isComplete = false;
+              isCompleteExceptLegacyAsr = false;
+              // A parsed task with invalid versioned references cannot be
+              // safely reserialized, even when its metadata contains no
+              // obvious credential or inline payload. Drop unusable retry
+              // data and retain unknown ownership until that snapshot is
+              // durably rewritten.
+              hasUnsafeSkippedAsrData = true;
+              cleanupSafe = false;
+              unrestoredRecords.add(
+                _unrestoredTaskRecord(
+                  retryAudioOwnershipKnown: false,
+                  retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
+                    rawMap,
+                    rawRetryData,
+                  ),
+                ),
+              );
+              task = task.copyWith(clearRetryData: true);
+            }
+          }
+          tasks.add(task);
         } catch (e) {
           // 单个损坏条目不应导致整个恢复失败：跳过并继续，
           // 保证其余有效任务仍能恢复。
           isComplete = false;
-          skippedEntries.add(m);
+          isCompleteExceptLegacyAsr = false;
+          if (isAsrRecord) {
+            if (rawMap != null &&
+                !_canSafelyPreserveLegacyAsrRetryData(rawMap)) {
+              hasUnsafeSkippedAsrData = true;
+            }
+            final retryAudioIds = _recoverRetryAudioIds(rawMap);
+            if (retryAudioIds == null) cleanupSafe = false;
+            final hasExplicitVersion =
+                rawRetryData is Map && rawRetryData.containsKey('version');
+            if (rawMap?['type'] == BackgroundTaskType.asr.name &&
+                !hasAsrReferenceShape &&
+                !hasExplicitVersion &&
+                _canSafelyPreserveSkippedAsrEntry(rawMap!)) {
+              // Preserve safe legacy metadata (for example an input path) as
+              // current main does, while rejecting keys and inline audio.
+              skippedEntries.add(m);
+            } else {
+              // Keep only validated retry ownership; raw versioned/future rows
+              // may contain secrets or Base64 and are never rewritten.
+              unrestoredRecords.add(
+                _unrestoredTaskRecord(
+                  retryAudioOwnershipKnown: retryAudioIds != null,
+                  retryAudioIds: retryAudioIds ?? const {},
+                  retireAfterSnapshot: _canRetireAsrOwnershipAfterSnapshot(
+                    rawMap,
+                    rawRetryData,
+                  ),
+                ),
+              );
+            }
+          } else if (isKnownNonAsrRecord) {
+            skippedEntries.add(m);
+          } else {
+            cleanupSafe = false;
+            unrestoredRecords.add(
+              _unrestoredTaskRecord(retryAudioOwnershipKnown: false),
+            );
+          }
           debugPrint(
             '[BackgroundTaskNotifier] Skipping corrupt task entry: $e',
           );
@@ -3261,16 +4391,24 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       return (
         tasks: tasks,
         isComplete: isComplete,
+        isCompleteExceptLegacyAsr: isCompleteExceptLegacyAsr,
         isReadable: true,
         skippedEntries: skippedEntries,
+        cleanupSafe: cleanupSafe,
+        unrestoredRecords: unrestoredRecords,
+        hasUnsafeSkippedAsrData: hasUnsafeSkippedAsrData,
       );
     } catch (e) {
       debugPrint('[BackgroundTaskNotifier] Failed to load persisted tasks: $e');
       return (
         tasks: <BackgroundTask>[],
         isComplete: false,
+        isCompleteExceptLegacyAsr: false,
         isReadable: false,
         skippedEntries: <dynamic>[],
+        cleanupSafe: false,
+        unrestoredRecords: <dynamic>[_unrestoredTaskRecordMarker],
+        hasUnsafeSkippedAsrData: false,
       );
     }
   }
@@ -3291,41 +4429,141 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   /// Restore persisted tasks on startup.
   /// Running tasks are marked as failed since they can't be resumed.
   /// Waiting tasks are kept as waiting (they haven't started yet).
-  Future<void> restoreFromPersistence() async {
-    final activeRestore = _restoreBarrier;
-    if (activeRestore != null) {
-      await activeRestore.future;
-      await pendingPersistence;
-      return;
+  Future<bool> restoreFromPersistence() {
+    final activeRestore = _activeRestore;
+    if (activeRestore != null) return activeRestore;
+    final activeBarrier = _restoreBarrier;
+    if (activeBarrier != null) {
+      return activeBarrier.future.then((_) async {
+        await pendingPersistence;
+        return !_taskSnapshotIncomplete;
+      });
     }
     final restoreBarrier = Completer<void>();
     _restoreGeneration++;
     _restoreBarrier = restoreBarrier;
-    try {
-      await _restorePersistedTasks(restoreBarrier);
-    } finally {
+    late final Future<bool> restore;
+    restore = _restorePersistedTasks(restoreBarrier).whenComplete(() {
       _completeRestoreBarrier(restoreBarrier);
-    }
+      if (identical(_activeRestore, restore)) _activeRestore = null;
+    });
+    _activeRestore = restore;
+    return restore;
   }
 
-  Future<void> _restorePersistedTasks(Completer<void> restoreBarrier) async {
+  Future<bool> _restorePersistedTasks(Completer<void> restoreBarrier) async {
     final loaded = await _loadPersistedTasks();
-    _taskSnapshotIncomplete = !loaded.isComplete;
+    _persistedRetryAudioIds
+      ..clear()
+      ..addAll(
+        _retryAudioIdsInSnapshot(
+          loaded.tasks,
+          [...loaded.skippedEntries, ...loaded.unrestoredRecords],
+        ),
+      );
+    for (final task in loaded.tasks) {
+      if (task.type == BackgroundTaskType.asr) {
+        _pendingSanitizedAsrRetryAudioIds.addAll(
+          _unrecognizedRetryAudioIds(task.retryData),
+        );
+      }
+    }
+    var snapshotComplete = loaded.isComplete;
+    var cleanupSafe = loaded.cleanupSafe;
+    var tasks = loaded.tasks;
+    final migratedAsrReferences = <AsrAudioReference>[];
+    var discardedCompletedAsrAudioReferences = false;
+    final hasLegacyAsrRetryData = loaded.tasks.any(
+      (task) =>
+          task.type == BackgroundTaskType.asr &&
+          task.retryData != null &&
+          !task.retryData!.containsKey('version'),
+    );
+    if (!loaded.isComplete && loaded.isReadable && hasLegacyAsrRetryData) {
+      tasks = List<BackgroundTask>.of(tasks);
+      try {
+        for (var index = 0; index < tasks.length; index++) {
+          final task = tasks[index];
+          if (task.type != BackgroundTaskType.asr ||
+              task.retryData == null ||
+              task.retryData!.containsKey('version')) {
+            continue;
+          }
+          final recoverableAudioIds =
+              AsrRetryAudioStore.recoverableReferencedIds(task.retryData);
+          if (task.status == TaskStatus.completed &&
+              (recoverableAudioIds?.isNotEmpty ?? false)) {
+            // The migration clears completed retry data in memory. Until that
+            // sanitized snapshot is durable, the old on-disk row still owns
+            // any references it named.
+            discardedCompletedAsrAudioReferences = true;
+            _pendingCompletedLegacyAsrRetryAudioIds.addAll(
+              recoverableAudioIds!,
+            );
+          }
+          await debugBeforeLegacyAsrRetryMigration?.call(task.id);
+          final migration = await _migrateLegacyAsrRetryData(task);
+          tasks[index] = migration.task;
+          migratedAsrReferences.addAll(migration.references);
+        }
+        if (loaded.isCompleteExceptLegacyAsr) snapshotComplete = true;
+      } catch (error) {
+        final store = AsrRetryAudioStore();
+        for (final reference in migratedAsrReferences) {
+          await store.releaseProtection(reference);
+          await store.deleteIfUnreferenced(reference, _persistedRetryAudioIds);
+        }
+        migratedAsrReferences.clear();
+        tasks = loaded.tasks;
+        cleanupSafe = false;
+        debugPrint(
+          '[BackgroundTaskNotifier] Failed to migrate legacy ASR retry data: $error',
+        );
+      }
+    }
+
+    final pendingRemovalIds = <String>{
+      ..._pendingRestoreTaskRemovals.keys,
+      ..._pendingTaskRemovalReconciliations.keys,
+      ..._pendingRestoreTaskRemovalOwnershipIds,
+    };
+    for (final task in tasks) {
+      if (pendingRemovalIds.contains(task.id)) {
+        // removeTask may run after the disk snapshot is read but before its
+        // task enters state; retain that loaded generation until deletion is
+        // durably saved so its retry audio remains owned meanwhile.
+        _queueTaskCleanupAfterRemoval(task.id, task);
+      }
+    }
+    final canScrubRejectedPartialSnapshot = !snapshotComplete &&
+        loaded.isReadable &&
+        loaded.hasUnsafeSkippedAsrData &&
+        _pendingRestoreTaskRemovals.isEmpty &&
+        _pendingTaskRemovalReconciliations.isEmpty &&
+        _pendingRestoreTaskRemovalOwnershipIds.isEmpty &&
+        _pendingTaskRemovalCleanupTasks.isEmpty &&
+        _activeBatchRemovalAddedGenerations.isEmpty;
+    _pendingRestoreTaskRemovalOwnershipIds.clear();
+
+    _taskSnapshotIncomplete = !snapshotComplete;
     _taskSnapshotCanPreserveSkippedEntries =
-        loaded.isReadable && !loaded.isComplete;
+        loaded.isReadable && !snapshotComplete;
     _skippedTaskEntries = loaded.skippedEntries;
-    final tasks = loaded.tasks;
-    if (!loaded.isComplete) {
-      // A partial snapshot cannot prove a pending deletion was saved; keep
-      // parsed tasks visible, matching removeTask's partial-write behavior.
+    _retryAudioCleanupSafe =
+        cleanupSafe && !discardedCompletedAsrAudioReferences;
+    _unrestoredTaskRecords = loaded.unrestoredRecords;
+    if (!snapshotComplete && !canScrubRejectedPartialSnapshot) {
+      // Preserve the established partial-restore behavior during removals or
+      // when rejected rows do not require security sanitation.
       _pendingRestoreTaskRemovals.clear();
     }
-    if (tasks.isEmpty) {
-      if (loaded.isComplete) {
+    if (tasks.isEmpty &&
+        (snapshotComplete || !canScrubRejectedPartialSnapshot)) {
+      if (snapshotComplete) {
         _pendingRestoreTaskRemovals.clear();
         await _cleanupOrphanedOcrCache();
       }
-      return;
+      return snapshotComplete;
     }
     final restored = <BackgroundTask>[];
     for (var task in tasks) {
@@ -3333,7 +4571,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       // sanitation: a later deletion may be refused, leaving the old snapshot
       // on disk. Keep each parsed task's retry data unchanged until the full
       // task file can be durably rewritten.
-      if (loaded.isComplete &&
+      if (snapshotComplete &&
           task.type == BackgroundTaskType.ocr &&
           task.retryData != null) {
         OcrRetrySnapshot? parsedSnapshot;
@@ -3368,6 +4606,21 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
       );
     }
     final pendingRemovals = Map<String, Object>.of(_pendingRestoreTaskRemovals);
+    final removalOwnershipIdsNow = <String>{
+      ..._pendingRestoreTaskRemovals.keys,
+      ..._pendingTaskRemovalReconciliations.keys,
+      ..._pendingRestoreTaskRemovalOwnershipIds,
+      ..._pendingTaskRemovalCleanupTasks.keys,
+    };
+    for (final task in restored) {
+      if (!removalOwnershipIdsNow.contains(task.id) &&
+          task.type == BackgroundTaskType.asr &&
+          state.any((current) => current.id == task.id)) {
+        _pendingReplacedRestoreAsrRetryAudioIds.addAll(
+          AsrRetryAudioStore.referencedIds(task.retryData),
+        );
+      }
+    }
     // Merge with existing state (in case tasks were added before restore completes)
     state = [
       for (final t in restored)
@@ -3379,20 +4632,40 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
     if (!restoreBarrier.isCompleted) restoreBarrier.complete();
     // 将"运行中 → 已中断"的状态回写到磁盘，
     // 使持久化文件与内存状态保持一致（否则下次启动会重复标记）。
-    // A partial parse cannot safely replace the authoritative file: skipped
-    // entries may still own retry-cache references.
-    final snapshotSaved = loaded.isComplete && await _persistTasks();
+    // Rejected ASR rows are scrubbed on restore only if no task removal is in
+    // flight and the remaining skipped rows have safe ownership markers.
+    final canPersistPartialSnapshot = snapshotComplete ||
+        (canScrubRejectedPartialSnapshot &&
+            _canSafelyPreserveSkippedEntries(restored));
+    final snapshotSaved = canPersistPartialSnapshot && await _persistTasks();
+    if (!snapshotComplete && !snapshotSaved) {
+      // A failed or unsafe partial write cannot prove a pending deletion was
+      // saved; retain parsed tasks for the next complete snapshot.
+      _pendingRestoreTaskRemovals.clear();
+    }
     if (snapshotSaved) {
       _clearPendingRestoreTaskRemovals(pendingRemovals);
     }
+    final store = AsrRetryAudioStore();
+    for (final reference in migratedAsrReferences) {
+      await store.releaseProtection(reference);
+    }
+    if (!snapshotSaved &&
+        (loaded.hasUnsafeSkippedAsrData ||
+            migratedAsrReferences.isNotEmpty ||
+            discardedCompletedAsrAudioReferences ||
+            _pendingReplacedRestoreAsrRetryAudioIds.isNotEmpty)) {
+      _retryAudioCleanupSafe = false;
+    }
     // 恢复后没有运行中的任务（进程已重启），结束 iOS 常驻任务保护。
     _syncIosContinuedTask();
-    if (loaded.isComplete && snapshotSaved) {
+    if (snapshotComplete && snapshotSaved) {
       await _cleanupOrphanedOcrCache();
     }
     debugPrint(
       '[BackgroundTaskNotifier] Restored ${tasks.length} tasks from persistence',
     );
+    return snapshotComplete;
   }
 
   void _completeRestoreBarrier(Completer<void> barrier) {

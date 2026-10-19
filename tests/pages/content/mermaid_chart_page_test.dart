@@ -30,6 +30,7 @@ Widget _buildTestApp({
   bool initialShowPreview = false,
   VoidCallback? testOnlyBeforeChartFolderNameLock,
   Future<void> Function(String name)? testOnlyAfterChartNameAllocation,
+  Future<void> Function()? testOnlyBeforeChartRecordUpdate,
 }) {
   return ProviderScope(
     child: MaterialApp(
@@ -39,6 +40,7 @@ Widget _buildTestApp({
         initialShowPreview: initialShowPreview,
         testOnlyBeforeChartFolderNameLock: testOnlyBeforeChartFolderNameLock,
         testOnlyAfterChartNameAllocation: testOnlyAfterChartNameAllocation,
+        testOnlyBeforeChartRecordUpdate: testOnlyBeforeChartRecordUpdate,
       ),
       localizationsDelegates: [
         DefaultMaterialLocalizations.delegate,
@@ -1029,14 +1031,10 @@ void main() {
       'failed chart update removes unreferenced content and '
       'preserves the original',
       (tester) async {
+        final contentWriteComplete = Completer<void>();
+        final releaseUpdate = Completer<void>();
         addTearDown(() {
-          ManifestDatabase.beforeWebDataReadForTesting = null;
-        });
-        final updateReadStarted = Completer<void>();
-        final releaseUpdateRead = Completer<void>();
-        addTearDown(() {
-          ManifestDatabase.beforeWebDataReadForTesting = null;
-          if (!releaseUpdateRead.isCompleted) releaseUpdateRead.complete();
+          if (!releaseUpdate.isCompleted) releaseUpdate.complete();
         });
         const originalContent = 'graph TD\n  A-->B';
         const editedContent = 'graph TD\n  A-->C';
@@ -1065,17 +1063,10 @@ void main() {
             initialCode: originalContent,
             existingRecord: originalRecord,
             initialShowPreview: false,
-            testOnlyAfterChartNameAllocation: (_) async {
-              // The chart-page reservation now reads the manifest before it
-              // writes the edited content. Invalidate again after that read
-              // so this failure still occurs during record update.
-              ManifestDatabase.invalidateWebDataCacheForTesting();
-              ManifestDatabase.beforeWebDataReadForTesting = () async {
-                ManifestDatabase.beforeWebDataReadForTesting = null;
-                updateReadStarted.complete();
-                await releaseUpdateRead.future;
-                throw StateError('simulated update failure');
-              };
+            testOnlyBeforeChartRecordUpdate: () async {
+              contentWriteComplete.complete();
+              await releaseUpdate.future;
+              throw StateError('simulated update failure');
             },
           ),
         );
@@ -1090,18 +1081,16 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
 
-        ManifestDatabase.invalidateWebDataCacheForTesting();
-
         await tester.tap(find.text('确定'));
         await tester.pump();
-        await updateReadStarted.future.timeout(const Duration(seconds: 5));
+        await contentWriteComplete.future.timeout(const Duration(seconds: 5));
         try {
           expect(
             await TextManifest.readText('$editedHash.txt'),
             editedContent,
           );
         } finally {
-          if (!releaseUpdateRead.isCompleted) releaseUpdateRead.complete();
+          if (!releaseUpdate.isCompleted) releaseUpdate.complete();
         }
 
         await tester.pump();
