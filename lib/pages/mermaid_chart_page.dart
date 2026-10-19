@@ -353,14 +353,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final folders = await TextManifest.getAllFolders();
       if (!mounted) return;
 
-      // Keep this snapshot after folder lookup so edits made while it loads
-      // remain included in the save.
-      final content = _codeController.text;
-      if (content.trim().isEmpty) {
-        _showEmptyChartError();
-        return;
-      }
-
       // Local controller - will be garbage collected after _saveChart completes.
       // Not explicitly disposed because the dialog's dismiss animation still
       // references it after showDialog returns.
@@ -395,6 +387,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       }
 
       setState(() => _isSaving = true);
+
+      // Freeze editing and snapshot only after the user confirms the save.
+      // The following lock waits must not let newer editor text be lost when
+      // this page closes after publishing the snapshot.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final content = _codeController.text;
+      if (content.trim().isEmpty) {
+        _showEmptyChartError();
+        return;
+      }
 
       final typeLabel = MermaidTemplates.getAllTypes()
           .firstWhere((t) => t.id == _selectedTypeId)
@@ -625,7 +628,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           ),
                         ),
                         avatar: Icon(type.icon, size: 16),
-                        onSelected: (_) => _selectDiagramType(type.id),
+                        onSelected: _isSaving
+                            ? null
+                            : (_) => _selectDiagramType(type.id),
                         showCheckmark: false,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -657,45 +662,48 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           label,
                           style: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () {
-                          if (_selectedTypeId == 'gantt' && label == '添加依赖任务') {
-                            _insertGanttDependencyTask();
-                          } else {
-                            if (_selectedTypeId == 'requirement' &&
-                                (label == '添加关联' || label == '添加验证')) {
-                              final currentSnippet =
-                                  MermaidTemplates.getSnippets(
-                                'requirement',
-                                code: _codeController.text,
-                              )
-                                      .firstWhere(
-                                        (item) => item.$1 == label,
-                                        orElse: () => (label, ''),
-                                      )
-                                      .$2;
-                              if (currentSnippet.isNotEmpty) {
-                                _insertSnippet(currentSnippet);
-                              }
-                            } else {
-                              final snippetToInsert =
-                                  _selectedTypeId == 'gitGraph' &&
-                                          label == '合并分支'
-                                      ? MermaidTemplates.getSnippets(
-                                          'gitGraph',
-                                          code: _codeController.text,
-                                        )
-                                          .firstWhere(
-                                            (item) => item.$1 == label,
-                                            orElse: () => (label, ''),
-                                          )
-                                          .$2
-                                      : snippet;
-                              if (snippetToInsert.isNotEmpty) {
-                                _insertSnippet(snippetToInsert);
-                              }
-                            }
-                          }
-                        },
+                        onPressed: _isSaving
+                            ? null
+                            : () {
+                                if (_selectedTypeId == 'gantt' &&
+                                    label == '添加依赖任务') {
+                                  _insertGanttDependencyTask();
+                                } else {
+                                  if (_selectedTypeId == 'requirement' &&
+                                      (label == '添加关联' || label == '添加验证')) {
+                                    final currentSnippet =
+                                        MermaidTemplates.getSnippets(
+                                      'requirement',
+                                      code: _codeController.text,
+                                    )
+                                            .firstWhere(
+                                              (item) => item.$1 == label,
+                                              orElse: () => (label, ''),
+                                            )
+                                            .$2;
+                                    if (currentSnippet.isNotEmpty) {
+                                      _insertSnippet(currentSnippet);
+                                    }
+                                  } else {
+                                    final snippetToInsert =
+                                        _selectedTypeId == 'gitGraph' &&
+                                                label == '合并分支'
+                                            ? MermaidTemplates.getSnippets(
+                                                'gitGraph',
+                                                code: _codeController.text,
+                                              )
+                                                .firstWhere(
+                                                  (item) => item.$1 == label,
+                                                  orElse: () => (label, ''),
+                                                )
+                                                .$2
+                                            : snippet;
+                                    if (snippetToInsert.isNotEmpty) {
+                                      _insertSnippet(snippetToInsert);
+                                    }
+                                  }
+                                }
+                              },
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
@@ -893,6 +901,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
             child: TextField(
               controller: _codeController,
+              enabled: !_isSaving,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -925,6 +934,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       padding: const EdgeInsets.all(12),
       child: TextField(
         controller: _codeController,
+        enabled: !_isSaving,
         decoration: InputDecoration(
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),

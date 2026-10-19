@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -855,6 +856,80 @@ void main() {
           await TextManifest.readText(savedRecord.storagePath),
           editedContent,
         );
+      },
+    );
+
+    testWidgets(
+      'save preserves editor content while waiting for the folder name lock',
+      (tester) async {
+        const initialContent = 'graph TD\n  A-->BeforeLock';
+        const editedContent = 'graph TD\n  A-->DuringLock';
+        final lockHeld = Completer<void>();
+        final releaseLock = Completer<void>();
+        final saveReachedLock = Completer<void>();
+        addTearDown(() {
+          if (!releaseLock.isCompleted) releaseLock.complete();
+        });
+
+        final heldLock = MermaidFolderNameLock.withLock('', () async {
+          lockHeld.complete();
+          await releaseLock.future;
+        });
+        await lockHeld.future;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: initialContent,
+            initialShowPreview: false,
+            testOnlyBeforeChartFolderNameLock: () => saveReachedLock.complete(),
+          ),
+        );
+        await tester.pump();
+        final editor = find.byType(TextField).first;
+        final editorController = tester.widget<TextField>(editor).controller!;
+        await tester.enterText(editor, initialContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedLock.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The real folder lock is still held, so the save cannot publish yet.
+        // If the editor remains enabled, reproduce the user's late edit.
+        final field = tester.widget<TextField>(editor);
+        final editorCanChange = (field.enabled ?? true) && !field.readOnly;
+        if (editorCanChange) {
+          await tester.enterText(editor, editedContent);
+          await tester.pump();
+        }
+        final finalEditorContent = editorController.text;
+
+        releaseLock.complete();
+        await heldLock;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(finalEditorContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          finalEditorContent,
+        );
+        expect(find.byType(MermaidChartPage), findsNothing);
       },
     );
 
