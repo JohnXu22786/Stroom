@@ -152,7 +152,11 @@ void main() {
         name: 'OCR模型',
         modelId: 'qwen-vl-ocr',
         customParams: [
-          CustomParam(paramName: 'enabled', type: 'boolean', defaultValue: 'yes'),
+          CustomParam(
+            paramName: 'enabled',
+            type: 'boolean',
+            defaultValue: 'yes',
+          ),
         ],
       );
 
