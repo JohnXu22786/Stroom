@@ -673,9 +673,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                       (label == '添加关联' || label == '添加验证')) {
                                     final currentSnippet =
                                         MermaidTemplates.getSnippets(
-                                              'requirement',
-                                              code: _codeController.text,
-                                            )
+                                      'requirement',
+                                      code: _codeController.text,
+                                    )
                                             .firstWhere(
                                               (item) => item.$1 == label,
                                               orElse: () => (label, ''),
@@ -687,17 +687,17 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                                   } else {
                                     final snippetToInsert =
                                         _selectedTypeId == 'gitGraph' &&
-                                            label == '合并分支'
-                                        ? MermaidTemplates.getSnippets(
+                                                label == '合并分支'
+                                            ? MermaidTemplates.getSnippets(
                                                 'gitGraph',
                                                 code: _codeController.text,
                                               )
-                                              .firstWhere(
-                                                (item) => item.$1 == label,
-                                                orElse: () => (label, ''),
-                                              )
-                                              .$2
-                                        : snippet;
+                                                .firstWhere(
+                                                  (item) => item.$1 == label,
+                                                  orElse: () => (label, ''),
+                                                )
+                                                .$2
+                                            : snippet;
                                     if (snippetToInsert.isNotEmpty) {
                                       _insertSnippet(snippetToInsert);
                                     }
