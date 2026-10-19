@@ -2058,6 +2058,32 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
+    def test_latex_indexed_roots_match_unicode_root_symbols(self):
+        for fixture_id, formula, prediction in (
+            ("cube-root", "∛(x+1)", r"$\sqrt[3]{x+1}$"),
+            ("fourth-root", "∜x", r"$\sqrt[4]{x}$"),
+        ):
+            with self.subTest(fixture_id=fixture_id):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": fixture_id,
+                            "gold_text": formula,
+                            "formula_text": formula,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [{"fixture_id": fixture_id, "text": prediction}]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+                self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
     def test_nested_square_root_fraction_is_scored_against_its_display_text(self):
         manifest = {
             "fixtures": [
