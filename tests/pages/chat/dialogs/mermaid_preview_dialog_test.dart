@@ -13,6 +13,28 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'uses the placeholder for empty and whitespace-only web source',
+    (tester) async {
+      for (final code in ['', ' \n\t ']) {
+        final preview = await _openPreviewWithCreatedWebView(
+          tester,
+          mermaidCode: code,
+        );
+
+        expect(
+          preview.webView.params.initialData?.data,
+          contains('No Mermaid code to preview'),
+        );
+        expect(preview.webView.controller.loadedUrls, isEmpty);
+        expect(preview.webView.controller.storedSources, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+    skip: !kIsWeb,
+  );
+
+  testWidgets(
     'shows an error if the WebView never creates after it is eligible to mount',
     (tester) async {
       final delayedAsset = Completer<ByteData>();

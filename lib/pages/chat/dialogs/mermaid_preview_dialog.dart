@@ -172,7 +172,7 @@ class _MermaidPreviewDialogContentState
   /// itself from the same asset directory, so no CDN request is made.
   Future<void> _loadCode() async {
     final ctrl = _webViewController;
-    if (ctrl == null) return;
+    if (ctrl == null || widget.mermaidCode.trim().isEmpty) return;
     String? preparedSourceKey;
     try {
       final url = await MermaidRenderWidget.prepareWebAssetUrl(
@@ -427,6 +427,7 @@ class _MermaidPreviewDialogContentState
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isEmptyCode = widget.mermaidCode.trim().isEmpty;
     final showControls =
         (!_isLoading || widget.showControlsBeforeWebViewReadyForTesting) &&
             !_hasError;
@@ -457,12 +458,19 @@ class _MermaidPreviewDialogContentState
                   javaScriptEnabled: true,
                   transparentBackground: true,
                 ),
-                // On web the initial page is loaded via loadUrl (the
-                // bundled asset template, same origin) — a data: URL
-                // cannot carry the bundled mermaid.js (Chromium truncates
-                // data: URLs at ~1MB) nor reach same-origin assets.
+                // Non-empty web diagrams load through the bundled asset
+                // template (same origin) — a data: URL cannot carry
+                // mermaid.js (Chromium truncates data: URLs at ~1MB) nor
+                // reach same-origin assets. Empty previews use the static
+                // placeholder HTML directly.
                 initialData: kIsWeb
-                    ? null
+                    ? (isEmptyCode
+                        ? InAppWebViewInitialData(
+                            data: _emptyPlaceholderHtml,
+                            mimeType: 'text/html',
+                            encoding: 'utf8',
+                          )
+                        : null)
                     : InAppWebViewInitialData(
                         data: _buildHtml(),
                         mimeType: 'text/html',
@@ -492,7 +500,7 @@ class _MermaidPreviewDialogContentState
                   // reports an error only if navigation never settles.
                   if (kIsWeb) {
                     _isLoading = false;
-                    _loadCode();
+                    if (!isEmptyCode) _loadCode();
                   }
                   // Register the JS→Flutter message bridge. The web platform
                   // of flutter_inappwebview does not implement
