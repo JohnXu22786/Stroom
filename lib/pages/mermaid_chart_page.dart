@@ -385,6 +385,16 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         return;
       }
 
+      final baseName = existingRecord == null && userFileName.endsWith('.mmd')
+          ? userFileName.substring(0, userFileName.length - '.mmd'.length)
+          : userFileName;
+      if (baseName.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        return;
+      }
+
       setState(() => _isSaving = true);
 
       // Freeze editing and snapshot only after the user confirms the save.
@@ -407,9 +417,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final baseName = existingRecord == null && userFileName.endsWith('.mmd')
-          ? userFileName.substring(0, userFileName.length - '.mmd'.length)
-          : userFileName;
       final saveName =
           existingRecord == null ? '$baseName-$typeLabel' : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();

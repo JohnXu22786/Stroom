@@ -1510,6 +1510,42 @@ void main() {
       },
     );
 
+    testWidgets('new chart filename containing only mmd suffix is rejected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->B',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, '.mmd');
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('文件名不能为空'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        isEmpty,
+      );
+    });
+
     testWidgets('save with empty filename shows error, does not save', (
       tester,
     ) async {
