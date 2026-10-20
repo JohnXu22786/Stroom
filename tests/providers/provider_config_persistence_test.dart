@@ -97,5 +97,34 @@ void main() {
         isTrue,
       );
     });
+
+    test('does not overwrite provider settings changed after load', () async {
+      const initialEntries =
+          '[{"id":"original-tts","type":"tts","name":"Original TTS","configs":[]}]';
+      const externalEntries =
+          '[{"id":"external-tts","type":"tts","name":"External TTS","configs":[]}]';
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': initialEntries,
+      });
+
+      final notifier = ProviderEntriesNotifier();
+      addTearDown(notifier.dispose);
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('provider_entries', externalEntries);
+
+      await expectLater(
+        notifier.addFirst(
+          ProviderEntry(
+            id: 'stale-added-tts',
+            type: 'tts',
+            name: 'Stale added TTS',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(prefs.getString('provider_entries'), externalEntries);
+    });
   });
 }

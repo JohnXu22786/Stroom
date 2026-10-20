@@ -11,17 +11,14 @@ import 'data_migration_isolate_stub.dart'
     if (dart.library.io) 'data_migration_isolate_io.dart'
     as data_migration_isolate;
 import 'startup_data_validation_unavailable.dart';
-import 'startup_preferences.dart';
 import 'storage_service.dart';
 
 /// Startup-only migration. Runtime model selection never reads legacy indices.
 class ProviderModelMigration {
-  static Future<void> migrateSettings([
-    StartupMigrationPreferences? prefs,
-  ]) async {
-    prefs ??= await StartupMigrationPreferences.load();
-    final encoded = await prefs.getString('provider_entries');
-    if (encoded == null || encoded.isEmpty) return;
+  /// Prepares stable IDs without persisting them. Credential migration uses
+  /// this form so an unavailable secure store cannot partially rewrite the
+  /// legacy provider settings before the full migration commits.
+  static Future<String> migrateSettingsContent(String encoded) async {
     final Map<String, Object?> migrated;
     if (kIsWeb) {
       migrated = await json_parser.migrateProviderModelSettingsWeb(encoded);
@@ -44,17 +41,14 @@ class ProviderModelMigration {
         StateError('Invalid provider model migration result.'),
       );
     }
-    if (migrated['changed'] != true) return;
+    if (migrated['changed'] != true) return encoded;
     final updated = migrated['payload'];
     if (updated is! String) {
       throw StartupDataValidationUnavailable.isolate(
         StateError('Missing migrated provider model settings.'),
       );
     }
-    if (!await prefs.setString('provider_entries', updated) ||
-        await prefs.getString('provider_entries') != updated) {
-      throw StateError('无法保存供应商与模型身份');
-    }
+    return updated;
   }
 
   static Map<String, Object?> _migrateSettingsSync(String encoded) {

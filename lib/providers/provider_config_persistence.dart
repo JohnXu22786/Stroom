@@ -467,6 +467,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
         return;
       }
+      if (providerEntriesBeforeMigration != _loadedProviderEntriesSourceJson) {
+        _reloadBeforeNextMutation = true;
+        throw StateError('Provider settings changed since they were loaded.');
+      }
       final groupsJson =
           jsonEncode(state.mcpGroups.map((group) => group.toMap()).toList());
       if (!_jsonPreferenceEquals(
@@ -495,7 +499,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         await LlmAccountMigrationService(
           preferences: _SharedPreferencesLlmAccountPreferences(prefs),
           credentialStore: _credentialStore,
-        ).migrate(sourceProviderEntriesJson: migrationInput);
+        ).migrate(
+          sourceProviderEntriesJson: migrationInput,
+          expectedStoredProviderEntriesJson: providerEntriesBeforeMigration,
+          checkExpectedStoredProviderEntriesJson: true,
+        );
       } on LlmAccountMigrationException {
         _reloadBeforeNextMutation = true;
         debugPrint(
@@ -548,6 +556,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (!entriesSaved || !entriesVerified || !groupsVerified) {
         throw StateError('Failed to persist provider configuration.');
       } else {
+        _loadedProviderEntriesSourceJson = prefs.getString('provider_entries');
         _reloadBeforeNextMutation = false;
       }
     } catch (_) {

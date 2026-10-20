@@ -1573,6 +1573,58 @@ void main() {
       },
     );
 
+    test(
+      'does not apply staged model IDs after provider settings change',
+      () async {
+        const originalSource = '[{"type":"llm"}]';
+        const replacementSource = '[{"id":"new-source","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': replacementSource,
+        });
+        final credentials = _MemoryCredentialStore();
+
+        await expectLater(
+          _service(preferences, credentials).migrate(
+            sourceProviderEntriesJson: originalSource,
+            expectedStoredProviderEntriesJson: originalSource,
+          ),
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
+    test(
+      'rejects a provider source added while migration waits for its transaction',
+      () async {
+        const migrationSource = '[{"id":"stale","type":"tts"}]';
+        const replacementSource = '[{"id":"external","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences();
+        final credentials = _MemoryCredentialStore();
+        final lease =
+            await LlmAccountMigrationService.acquireCredentialTransaction();
+
+        final migration = _service(preferences, credentials).migrate(
+          sourceProviderEntriesJson: migrationSource,
+          expectedStoredProviderEntriesJson: null,
+          checkExpectedStoredProviderEntriesJson: true,
+        );
+        preferences.values['provider_entries'] = replacementSource;
+        lease.release();
+
+        await expectLater(
+          migration,
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
     test('secure-store failure keeps legacy credentials and safe diagnostics',
         () async {
       final source = _legacyProviderEntries();
@@ -1607,7 +1659,15 @@ void main() {
         isNull,
       );
       expect(logs.join('\n').contains(_secret), isFalse);
-      expect(notifier.state.isLoaded, isFalse);
+      expect(notifier.state.isLoaded, isTrue);
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'llm-entry')
+            .configs
+            .first
+            .key,
+        _secret,
+      );
 
       credentials.failAllWrites = false;
       await notifier.load();

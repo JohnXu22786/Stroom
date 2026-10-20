@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import '../models/llm_account.dart';
@@ -33,7 +34,7 @@ class LlmAccountMigrationReport {
 }
 
 class LlmCredentialTransactionLease {
-  final Completer<void> _release;
+  final void Function() _release;
   var _released = false;
 
   LlmCredentialTransactionLease(this._release);
@@ -41,7 +42,7 @@ class LlmCredentialTransactionLease {
   void release() {
     if (_released) return;
     _released = true;
-    _release.complete();
+    _release();
   }
 }
 
@@ -57,7 +58,8 @@ class LlmAccountMigrationService {
 
   // Migrations and backup restores share this queue so credential writes and
   // rollback cannot interleave across otherwise independent service queues.
-  static Future<void> _credentialTransactionQueue = Future<void>.value();
+  static bool _credentialTransactionActive = false;
+  static final Queue<Completer<void>> _credentialTransactionWaiters = Queue();
 
   final LlmAccountPreferences preferences;
   final LlmCredentialStore credentialStore;
@@ -67,13 +69,28 @@ class LlmAccountMigrationService {
     required this.credentialStore,
   });
 
+  static void _releaseCredentialTransaction() {
+    if (_credentialTransactionWaiters.isEmpty) {
+      _credentialTransactionActive = false;
+      return;
+    }
+    _credentialTransactionWaiters.removeFirst().complete();
+  }
+
   Future<LlmAccountMigrationReport> migrate({
     String? sourceProviderEntriesJson,
+    String? expectedStoredProviderEntriesJson,
+    bool checkExpectedStoredProviderEntriesJson = false,
   }) async {
     final lease = await acquireCredentialTransaction();
     try {
       try {
-        return await _migrate(sourceProviderEntriesJson);
+        return await _migrate(
+          sourceProviderEntriesJson,
+          expectedStoredProviderEntriesJson: expectedStoredProviderEntriesJson,
+          checkExpectedStoredProviderEntriesJson:
+              checkExpectedStoredProviderEntriesJson,
+        );
       } on LlmAccountMigrationException {
         rethrow;
       } catch (_) {
@@ -88,16 +105,28 @@ class LlmAccountMigrationService {
 
   static Future<LlmCredentialTransactionLease>
       acquireCredentialTransaction() async {
-    final predecessor = _credentialTransactionQueue;
-    final release = Completer<void>();
-    _credentialTransactionQueue = release.future;
-    await predecessor;
-    return LlmCredentialTransactionLease(release);
+    if (!_credentialTransactionActive) {
+      _credentialTransactionActive = true;
+    } else {
+      final waiter = Completer<void>.sync();
+      _credentialTransactionWaiters.addLast(waiter);
+      await waiter.future;
+    }
+    return LlmCredentialTransactionLease(_releaseCredentialTransaction);
   }
 
-  Future<LlmAccountMigrationReport> _migrate(String? suppliedSource) async {
+  Future<LlmAccountMigrationReport> _migrate(
+    String? suppliedSource, {
+    String? expectedStoredProviderEntriesJson,
+    bool checkExpectedStoredProviderEntriesJson = false,
+  }) async {
     final marker = await preferences.getString(migrationStateKey);
     final storedSource = await preferences.getString('provider_entries');
+    if ((checkExpectedStoredProviderEntriesJson ||
+            expectedStoredProviderEntriesJson != null) &&
+        storedSource != expectedStoredProviderEntriesJson) {
+      throw const LlmAccountMigrationException();
+    }
     final source = suppliedSource ?? storedSource ?? '[]';
     final preferenceSnapshot = <String, String?>{
       'provider_entries': storedSource,
