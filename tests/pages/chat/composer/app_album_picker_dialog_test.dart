@@ -130,6 +130,106 @@ void main() {
   }
 
   group('AppAlbumPickerDialog pending-read lifecycle', () {
+    testWidgets(
+      'preview and confirmation preserve tap order when reads complete '
+      'in reverse',
+      (tester) async {
+        final png = await tester.runAsync(_createEnginePng);
+        await tester.runAsync(() async {
+          for (final name in ['tap-first', 'tap-second']) {
+            await ImageManifest.writeFile('$name-hash.png', png!);
+            await ImageManifest.addRecord(
+              ImageRecord(
+                id: name,
+                name: name,
+                hash: '$name-hash',
+                format: 'png',
+                createdAt: DateTime.now(),
+                size: png.length,
+                folder: '',
+              ),
+            );
+          }
+        });
+
+        List<MapEntry<String, Uint8List>>? pickerResult;
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    pickerResult = await showAppAlbumPickerDialog(context);
+                  },
+                  child: const Text('Open Album'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open Album'));
+        await tester.pump();
+        await _pumpUntil(
+          tester,
+          () => find.text('tap-first.png').evaluate().isNotEmpty &&
+              find.text('tap-second.png').evaluate().isNotEmpty,
+        );
+
+        final readStarted = {
+          'tap-first-hash.png': Completer<void>(),
+          'tap-second-hash.png': Completer<void>(),
+        };
+        final releaseRead = {
+          'tap-first-hash.png': Completer<void>(),
+          'tap-second-hash.png': Completer<void>(),
+        };
+        beforeAppAlbumPickerReadForTesting = (fileName) async {
+          readStarted[fileName]!.complete();
+          await releaseRead[fileName]!.future;
+        };
+
+        await tester.tap(find.text('tap-first.png'));
+        await tester.pump();
+        await tester.tap(find.text('tap-second.png'));
+        await tester.pump();
+        expect(
+          readStarted.values.every((started) => started.isCompleted),
+          isTrue,
+        );
+
+        releaseRead['tap-second-hash.png']!.complete();
+        await _pumpUntil(
+          tester,
+          () => find.byType(AlbumPreviewChip).evaluate().length == 1,
+        );
+        expect(
+          tester
+              .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+              .fileName,
+          'tap-second.png',
+        );
+
+        releaseRead['tap-first-hash.png']!.complete();
+        await _pumpUntil(
+          tester,
+          () => find.byType(AlbumPreviewChip).evaluate().length == 2,
+        );
+        expect(
+          tester
+              .widgetList<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+              .map((chip) => chip.fileName),
+          ['tap-first.png', 'tap-second.png'],
+        );
+
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await _pumpUntil(tester, () => pickerResult != null);
+        expect(
+          pickerResult!.map((entry) => entry.key),
+          ['tap-first.png', 'tap-second.png'],
+        );
+      },
+    );
+
     testWidgets('confirm waits for a pending selection and returns its image', (
       tester,
     ) async {

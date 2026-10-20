@@ -48,6 +48,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  final List<String> _selectionOrder = [];
   final Map<String, Object> _pendingSelections = {};
   final Map<String, Future<void>> _pendingReads = {};
   Completer<void> _pendingSelectionChanged = Completer<void>();
@@ -133,6 +134,15 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   int get _selectionCount => _selectedItems.length + _pendingSelections.length;
 
+  List<MapEntry<String, MapEntry<String, Uint8List>>>
+      get _orderedSelectedItems {
+    return [
+      for (final key in _selectionOrder)
+        if (_selectedItems.containsKey(key))
+          MapEntry(key, _selectedItems[key]!),
+    ];
+  }
+
   void _notifyPendingSelectionChanged() {
     final changed = _pendingSelectionChanged;
     _pendingSelectionChanged = Completer<void>();
@@ -142,20 +152,27 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   Future<void> _toggleSelection(ImageRecord record) async {
     final key = record.id;
     if (_selectedItems.containsKey(key)) {
-      setState(() => _selectedItems.remove(key));
+      setState(() {
+        _selectedItems.remove(key);
+        _selectionOrder.remove(key);
+      });
       return;
     }
     if (_pendingSelections.containsKey(key)) {
       setState(() {
         _pendingSelections.remove(key);
         _pendingReads.remove(key);
+        _selectionOrder.remove(key);
       });
       _notifyPendingSelectionChanged();
       return;
     }
 
     final token = Object();
-    setState(() => _pendingSelections[key] = token);
+    setState(() {
+      _pendingSelections[key] = token;
+      _selectionOrder.add(key);
+    });
     _notifyPendingSelectionChanged();
     final read = _readSelection(record, token);
     _pendingReads[key] = read;
@@ -184,6 +201,8 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           '${record.name}.${record.format}',
           data!,
         );
+      } else {
+        _selectionOrder.remove(record.id);
       }
     });
     _notifyPendingSelectionChanged();
@@ -198,6 +217,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     _cleanupTempFiles();
     setState(() {
       _selectedItems.clear();
+      _selectionOrder.clear();
       _pendingSelections.clear();
       _pendingReads.clear();
     });
@@ -215,7 +235,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
       if (!mounted || _isClosing) return;
     }
     if (!mounted || _isClosing) return;
-    Navigator.of(context).pop(_selectedItems.values.toList());
+    Navigator.of(context).pop(
+      _orderedSelectedItems.map((entry) => entry.value).toList(),
+    );
   }
 
   @override
@@ -524,7 +546,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   // ====================================================================
 
   Widget _buildPreviewBar(ColorScheme cs) {
-    final items = _selectedItems.entries.toList();
+    final items = _orderedSelectedItems;
 
     return Container(
       key: const Key('album_picker_preview_bar'),
@@ -562,7 +584,10 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   fileName: entry.key,
                   bytes: entry.value,
                   onRemove: () {
-                    setState(() => _selectedItems.remove(mapEntry.key));
+                    setState(() {
+                      _selectedItems.remove(mapEntry.key);
+                      _selectionOrder.remove(mapEntry.key);
+                    });
                   },
                   onTap: () =>
                       _onPreviewChipTap(mapEntry.key, entry.key, entry.value),
