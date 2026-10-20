@@ -1119,8 +1119,8 @@ void main() {
             .firstWhere((record) => record.id == original.id);
         expect(fromDb.format, 'srt');
         expect(fromDb.storageFileName, original.storageFileName);
-        expect(await TextManifest.readText('hash_fmt_missing_source.txt'),
-            isNull);
+        expect(
+            await TextManifest.readText('hash_fmt_missing_source.txt'), isNull);
       },
     );
 
