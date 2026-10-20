@@ -102,14 +102,11 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         final content = oldStoragePath == newStoragePath
             ? null
             : await TextManifest.readFile(oldStoragePath);
-        if (oldStoragePath != newStoragePath && content == null) {
-          await loadRecords();
-          throw Exception('无法读取原文件内容，格式转换未完成');
-        }
         // The record and content may change while the source bytes are read.
-        // The lock helper includes the current record hash and retries if it
-        // changes while locks are being acquired; use that current snapshot
-        // and reread its file when it differs from the initial snapshot.
+        // A missing initial read may also be stale if a concurrent save has
+        // already repointed the record and removed its old file. The lock
+        // helper includes the current hash and retries if it changes while
+        // locks are being acquired, so validate and reread under those locks.
         var sourceReadFailed = false;
         await TextManifest.withRecordSaveLocks(r.id, r.hash, () async {
           final currentRecords = await TextManifest.loadRecordsUncached();
@@ -130,7 +127,8 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
           var currentContent = content;
           if (currentStoragePath == currentNewStoragePath) {
             currentContent = null;
-          } else if (currentStoragePath != oldStoragePath ||
+          } else if (currentContent == null ||
+              currentStoragePath != oldStoragePath ||
               current.hash != r.hash) {
             currentContent = await TextManifest.readFile(currentStoragePath);
           }
