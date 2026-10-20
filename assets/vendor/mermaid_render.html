@@ -559,7 +559,7 @@
     // cached in CacheStorage (origin-wide, survives between iframes) so
     // only the FIRST diagram pays that cost. Any cache failure falls back
     // to the plain gz path.
-    function loadLibrary() {
+    function loadLibrary(skipCache) {
       function fromGz() {
         return fetch('mermaid.min.js.gz').then(function(resp) {
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -581,11 +581,17 @@
           return jsBlob;
         });
       }
-      if (!window.caches) return fromGz();
+      if (skipCache || !window.caches) {
+        return fromGz().then(function(blob) {
+          return {blob: blob, cached: false};
+        });
+      }
       return caches.open(LIB_CACHE_NAME).then(function(cache) {
         return cache.match(LIB_CACHE_KEY);
       }).then(function(hit) {
-        return hit ? hit.blob() : null;
+        return hit ? hit.blob().then(function(blob) {
+          return {blob: blob, cached: true};
+        }) : null;
       }).catch(function() {
         // CacheStorage unavailable or errored (including a corrupt cache
         // entry): fall back to the plain gz path. A gz-path failure must
@@ -593,7 +599,9 @@
         // propagates to the caller, which then uses the raw file.
         return null;
       }).then(function(blob) {
-        return blob || fromGz();
+        return blob || fromGz().then(function(jsBlob) {
+          return {blob: jsBlob, cached: false};
+        });
       });
     }
 
@@ -633,7 +641,7 @@
       }
     }
 
-    function runScriptUrl(url) {
+    function runScriptUrl(url, onError) {
       var script = document.createElement('script');
       script.async = true;
       script.onload = function() {
@@ -642,6 +650,10 @@
       };
       script.onerror = function() {
         if (libraryLoadTimedOut) return;
+        if (onError) {
+          onError();
+          return;
+        }
         clearLibraryLoadTimer();
         var hint = document.getElementById('loading-hint');
         if (hint) hint.style.display = 'none';
@@ -683,9 +695,23 @@
         reportError('Mermaid 资源加载超时');
       }, 15000);
       try {
-        loadLibrary().then(function(jsBlob) {
+        loadLibrary().then(function(library) {
           if (libraryLoadTimedOut) return;
-          runScriptUrl(URL.createObjectURL(jsBlob));
+          runScriptUrl(URL.createObjectURL(library.blob), function() {
+            if (!library.cached) {
+              runScriptUrl('mermaid.min.js');
+              return;
+            }
+            loadLibrary(true).then(function(fallbackLibrary) {
+              if (libraryLoadTimedOut) return;
+              runScriptUrl(URL.createObjectURL(fallbackLibrary.blob), function() {
+                runScriptUrl('mermaid.min.js');
+              });
+            }).catch(function() {
+              if (libraryLoadTimedOut) return;
+              runScriptUrl('mermaid.min.js');
+            });
+          });
         }).catch(function(err) {
           if (libraryLoadTimedOut) return;
           // DecompressionStream unavailable or the gz asset missing:
