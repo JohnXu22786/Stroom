@@ -167,10 +167,49 @@ class _MermaidPreviewDialogContentState
   Future<void> _loadCode() async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
-    await ctrl.loadUrl(
-        urlRequest: URLRequest(
-            url: WebUri(
-                MermaidRenderWidget.buildWebAssetUrl(widget.mermaidCode))));
+    String? preparedSourceKey;
+    try {
+      final url = await MermaidRenderWidget.prepareWebAssetUrl(
+        widget.mermaidCode,
+        (key, source) async {
+          preparedSourceKey = key;
+          await ctrl.evaluateJavascript(
+            source:
+                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+          );
+        },
+      );
+      preparedSourceKey ??= Uri.parse(url).queryParameters['sourceKey'];
+      await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey!);
+      }
+      debugPrint('[MermaidPreviewDialog] Failed to prepare web source: $error');
+      if (mounted) {
+        _readyFallbackTimer?.cancel();
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _webNavigationTimedOut = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _removeStoredWebSource(
+    InAppWebViewController ctrl,
+    String sourceKey,
+  ) async {
+    try {
+      await ctrl.evaluateJavascript(
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+      );
+    } catch (error) {
+      debugPrint(
+        '[MermaidPreviewDialog] Failed to remove stored web source: $error',
+      );
+    }
   }
 
   /// Changes the zoom by [delta] at the center of the preview, based on the
@@ -454,6 +493,13 @@ class _MermaidPreviewDialogContentState
                 },
                 onReceivedError: (controller, request, error) {
                   if (request.isForMainFrame == false) return;
+                  if (kIsWeb) {
+                    final sourceKey = Uri.tryParse(request.url.toString())
+                        ?.queryParameters['sourceKey'];
+                    if (sourceKey != null) {
+                      unawaited(_removeStoredWebSource(controller, sourceKey));
+                    }
+                  }
                   _readyFallbackTimer?.cancel();
                   _zoomReadinessRetryTimer?.cancel();
                   _zoomReadinessRetryTimer = null;

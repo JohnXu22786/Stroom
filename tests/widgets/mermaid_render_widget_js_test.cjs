@@ -41,6 +41,12 @@ const reportErrorTargets = [
   ['web', webTemplateSource],
 ];
 
+test('web renderer resolves large Mermaid source from session storage', () => {
+  assert.match(webTemplateSource, /params\.get\('sourceKey'\)/);
+  assert.match(webTemplateSource, /window\.sessionStorage\.getItem/);
+  assert.match(webTemplateSource, /window\.sessionStorage\.removeItem/);
+});
+
 const generationScopedResourceErrorListener = dartSource.match(
   /skeleton\.replaceFirst\(\s*'\/\*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER\*\/',\s*'''([\s\S]*?)''',\s*\);/,
 );

@@ -540,7 +540,7 @@
     // this template or the bundled library changes: the version keys the
     // CacheStorage entry, so a stale version would keep serving the
     // previous library.
-    var TEMPLATE_VERSION = 'v17';
+    var TEMPLATE_VERSION = 'v18';
     var LIB_CACHE_NAME = 'mermaid-render-' + TEMPLATE_VERSION;
     var LIB_CACHE_KEY = 'mermaid-lib-' + TEMPLATE_VERSION;
     var libraryLoadTimer = null;
@@ -655,7 +655,21 @@
       var hint = document.getElementById('loading-hint');
       var codeEl = document.getElementById('mermaid-code');
       var params = new URLSearchParams(window.location.search);
+      var sourceKey = params.get('sourceKey');
       var code = params.get('code');
+      if (sourceKey != null) {
+        try {
+          code = window.sessionStorage.getItem(sourceKey);
+          window.sessionStorage.removeItem(sourceKey);
+        } catch (error) {
+          code = null;
+        }
+        if (code == null) {
+          if (hint) hint.style.display = 'none';
+          reportError('Mermaid source unavailable');
+          return;
+        }
+      }
       if (code == null || code.length === 0) {
         codeEl.textContent = '(空 Mermaid 代码)';
         if (hint) hint.style.display = 'none';
