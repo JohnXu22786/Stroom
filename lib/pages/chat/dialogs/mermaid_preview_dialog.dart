@@ -134,7 +134,9 @@ class _MermaidPreviewDialogContentState
       } else if (kIsWeb && !_hasError) {
         debugPrint('[MermaidPreviewDialog] web navigation did not settle '
             'within 3s');
-        _timedOutSourceCleanup = _cleanupPendingWebSource();
+        _timedOutSourceCleanup = _pendingWebSourceKey == null
+            ? null
+            : _cleanupPendingWebSource();
         setState(() {
           _isLoading = false;
           _hasError = true;
@@ -528,32 +530,39 @@ class _MermaidPreviewDialogContentState
                         '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
                   }
                 },
-                onLoadStop: (ctrl, url) async {
+                onLoadStop: (ctrl, url) {
                   final sourceKey = Uri.tryParse(url?.toString() ?? '')
                       ?.queryParameters['sourceKey'];
                   if (sourceKey != null) {
                     _clearPendingWebSource(sourceKey);
                   }
-                  final sourceWasAbandoned =
-                      await (_timedOutSourceCleanup ?? Future.value(false));
-                  if (!mounted) return;
-                  _readyFallbackTimer?.cancel();
-                  _zoomReadinessRetryTimer?.cancel();
-                  _zoomReadinessRetryTimer = null;
-                  _canApplyZoomDeltasAfterFit = true;
-                  unawaited(_flushPendingZoomDeltas(ctrl));
-                  setState(() {
-                    _isLoading = false;
-                    if (kIsWeb &&
-                        _webNavigationTimedOut &&
-                        !sourceWasAbandoned) {
-                      _hasError = false;
-                      _webNavigationTimedOut = false;
-                    }
-                    if (sourceWasAbandoned) {
-                      _hasError = true;
-                    }
-                  });
+                  void finishLoadStop(bool sourceWasAbandoned) {
+                    if (!mounted) return;
+                    _readyFallbackTimer?.cancel();
+                    _zoomReadinessRetryTimer?.cancel();
+                    _zoomReadinessRetryTimer = null;
+                    _canApplyZoomDeltasAfterFit = true;
+                    unawaited(_flushPendingZoomDeltas(ctrl));
+                    setState(() {
+                      _isLoading = false;
+                      if (kIsWeb &&
+                          _webNavigationTimedOut &&
+                          !sourceWasAbandoned) {
+                        _hasError = false;
+                        _webNavigationTimedOut = false;
+                      }
+                      if (sourceWasAbandoned) {
+                        _hasError = true;
+                      }
+                    });
+                  }
+
+                  final sourceCleanup = _timedOutSourceCleanup;
+                  if (sourceCleanup == null) {
+                    finishLoadStop(false);
+                  } else {
+                    unawaited(sourceCleanup.then<void>(finishLoadStop));
+                  }
                 },
                 onReceivedError: (controller, request, error) {
                   if (request.isForMainFrame == false) return;

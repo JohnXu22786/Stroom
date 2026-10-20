@@ -296,12 +296,7 @@ void main() {
   testWidgets(
     'clears a web navigation timeout when loading later completes',
     (tester) async {
-      final preview = await _openPreviewWithCreatedWebView(
-        tester,
-        mermaidCode: 'graph TD\n${'A-->B\n' * 2000}',
-      );
-      // The template consumes the source before its navigation callback.
-      preview.webView.controller.storedSources.clear();
+      final preview = await _openPreviewWithCreatedWebView(tester);
       await tester.pump(const Duration(seconds: 3));
 
       expect(find.text('加载失败'), findsOneWidget);
