@@ -932,9 +932,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                   context: context,
                   builder: (_) => OcrInstructionManageDialog(
                     onInstructionDeleted: (deletedIndex) {
-                      if (mounted &&
-                          deletedIndex == _selectedInstructionIndex) {
+                      if (!mounted) return;
+                      if (deletedIndex == _selectedInstructionIndex) {
                         setState(() => _selectedInstructionIndex = -1);
+                      } else if (deletedIndex < _selectedInstructionIndex) {
+                        setState(() => _selectedInstructionIndex--);
                       }
                     },
                   ),

@@ -2811,6 +2811,41 @@ void main() {
       }
     });
 
+    testWidgets(
+      'deleting an earlier instruction preserves the selected prompt',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        const instructions = [
+          OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+          OcrInstruction(name: '表格提取', content: '提取表格内容'),
+          OcrInstruction(name: '备注提取', content: '提取备注内容'),
+          OcrInstruction(name: '日期提取', content: '提取日期内容'),
+        ];
+        await tester.pumpWidget(
+          _buildTestApp(entries: [entry], ocrInstructions: instructions),
+        );
+        await tester.pumpAndSettle();
+
+        // Select the third instruction, then delete the first. Its former
+        // index remains valid after deletion but now points at another prompt.
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('备注提取').last);
+        await tester.pumpAndSettle();
+        expect(find.text('备注提取'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('删除指令').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('备注提取'), findsOneWidget);
+        expect(find.text('日期提取'), findsWidgets);
+      },
+    );
+
     testWidgets('save is disabled while the instruction content is blank', (
       tester,
     ) async {
