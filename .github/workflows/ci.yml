@@ -3,11 +3,11 @@ name: CI Checks
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
-  # Let each pull request event finish its complete CI run, including metadata edits.
+  # Let each pull request CI run finish independently.
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
   cancel-in-progress: false
 
