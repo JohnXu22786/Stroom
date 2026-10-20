@@ -2842,6 +2842,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('备注提取'), findsOneWidget);
+        await tester.tap(find.text('备注提取'));
+        await tester.pumpAndSettle();
         expect(find.text('日期提取'), findsWidgets);
       },
     );
