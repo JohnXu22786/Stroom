@@ -164,6 +164,10 @@ class TextManifest {
   static Future<void>? _pendingRecordMutation;
   static final Object _recordMutationZoneKey = Object();
 
+  @visibleForTesting
+  static Future<Uint8List?> Function(String fileName)?
+      readFileOverrideForTesting;
+
   /// Serialize file and record mutations by content hash so a deletion cannot
   /// remove text while OCR is publishing a new reference to it.
   static Future<T> withSaveLock<T>(
@@ -459,6 +463,8 @@ class TextManifest {
   static Future<String> writeFile(String fileName, Uint8List data) =>
       _ops.writeFile(fileName, data);
   static Future<Uint8List?> readFile(String fileName) async {
+    final readOverride = readFileOverrideForTesting;
+    if (readOverride != null) return readOverride(fileName);
     final bytes = await _ops.readFile(fileName);
     if (bytes != null ||
         (!fileName.endsWith('.srt') && !fileName.endsWith('.vtt'))) {

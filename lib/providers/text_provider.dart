@@ -102,6 +102,10 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         final content = oldStoragePath == newStoragePath
             ? null
             : await TextManifest.readFile(oldStoragePath);
+        if (oldStoragePath != newStoragePath && content == null) {
+          await loadRecords();
+          return;
+        }
         // The loaded record may be stale; guard file conversion and metadata
         // publication with both the current and destination hashes.
         await TextManifest.withRecordSaveLocks(r.id, updated.hash, () async {
