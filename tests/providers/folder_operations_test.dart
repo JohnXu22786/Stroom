@@ -1061,6 +1061,69 @@ void main() {
       },
     );
 
+    testWidgets(
+      'format rename keeps the original record when reading content fails',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_read_error',
+          name: 'diagram',
+          hash: 'hash_fmt_read_error',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 20,
+        );
+        const content = 'graph TD\n  A-->B';
+        await TextManifest.writeText(original.storageFileName, content);
+        await TextManifest.addRecord(original);
+
+        TextManifest.readFileOverrideForTesting = (_) async => null;
+        try {
+          await notifier.renameRecord(
+            original.id,
+            'diagram',
+            format: 'mmd',
+          );
+        } finally {
+          TextManifest.readFileOverrideForTesting = null;
+        }
+
+        final fromDb = (await TextManifest.loadRecords())
+            .firstWhere((record) => record.id == original.id);
+        expect(fromDb.format, 'srt');
+        expect(fromDb.storageFileName, original.storageFileName);
+        expect(await TextManifest.readText(original.storageFileName), content);
+        expect(await TextManifest.readText('hash_fmt_read_error.txt'), isNull);
+      },
+    );
+
+    testWidgets(
+      'format rename keeps the original format when source is missing',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_missing_source',
+          name: 'diagram',
+          hash: 'hash_fmt_missing_source',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 0,
+        );
+        await TextManifest.addRecord(original);
+
+        await notifier.renameRecord(original.id, 'diagram', format: 'mmd');
+
+        final fromDb = (await TextManifest.loadRecords())
+            .firstWhere((record) => record.id == original.id);
+        expect(fromDb.format, 'srt');
+        expect(fromDb.storageFileName, original.storageFileName);
+        expect(
+            await TextManifest.readText('hash_fmt_missing_source.txt'), isNull);
+      },
+    );
+
     testWidgets('renameRecord with a new name and format updates both',
         (WidgetTester t) async {
       final notifier = TextRecordsNotifier();
