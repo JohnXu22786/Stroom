@@ -419,21 +419,54 @@ class MermaidRenderWidget extends StatefulWidget {
 
   /// Web-only: builds the full template URL for [code]. The ?v= query
   /// forces a fresh template fetch (a stale browser/iframe cache of the
-  /// old template would otherwise keep failing after an app update), and
-  /// the code travels as its own &code= parameter — both must share one
-  /// query string, or URLSearchParams cannot find the code and the
-  /// template renders the empty-code placeholder.
+  /// old template would otherwise keep failing after an app update).
+  /// Small sources travel in the query string; large sources use same-origin
+  /// session storage so chart data does not grow the navigation URL.
   ///
   /// Bump ?v= whenever assets/vendor/mermaid_render.html changes (and keep
   /// the template's TEMPLATE_VERSION in sync: it keys the decompressed
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
-  static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=17';
+  static const _webCodeQueryEncodedLimit = 1500;
+  static int _webSourceStorageGeneration = 0;
+
+  static String buildWebAssetUrl(String code, {String? sourceKey}) {
+    final base = '$webAssetTemplateUrl?v=18';
     final trimmed = code.trim();
-    return trimmed.isEmpty
-        ? base
-        : '$base&code=${Uri.encodeQueryComponent(trimmed)}';
+    if (trimmed.isEmpty) return base;
+
+    final encodedCode = Uri.encodeQueryComponent(trimmed);
+    if (encodedCode.length > _webCodeQueryEncodedLimit) {
+      if (sourceKey != null && sourceKey.isNotEmpty) {
+        return '$base&sourceKey=${Uri.encodeQueryComponent(sourceKey)}';
+      }
+      throw ArgumentError.value(
+        code,
+        'code',
+        'Large Mermaid sources must be prepared for web storage first.',
+      );
+    }
+    return '$base&code=$encodedCode';
+  }
+
+  /// Stores long source outside the navigation URL, then returns a template
+  /// URL that reads it from session storage. [storeSource] runs in the
+  /// web view's same-origin browsing context.
+  static Future<String> prepareWebAssetUrl(
+    String code,
+    Future<void> Function(String key, String source) storeSource,
+  ) async {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty ||
+        Uri.encodeQueryComponent(trimmed).length <=
+            _webCodeQueryEncodedLimit) {
+      return buildWebAssetUrl(trimmed);
+    }
+
+    final storageKey =
+        'mermaid-${DateTime.now().microsecondsSinceEpoch}-${++_webSourceStorageGeneration}';
+    await storeSource(storageKey, trimmed);
+    return buildWebAssetUrl(trimmed, sourceKey: storageKey);
   }
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
@@ -1359,7 +1392,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _loadMermaidCode() {
-    _mermaidDocumentGeneration++;
+    final generation = ++_mermaidDocumentGeneration;
     _hasLoadedPage = false;
     _canApplyZoomCommands = false;
     _hasReceivedNativeTransform = false;
@@ -1381,25 +1414,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (ctrl == null) return;
 
     if (kIsWeb) {
-      // Web: load the bundled asset template (same origin, no CDN request)
-      // with the code as a query parameter. A data: URL cannot be used
+      // Web: load the bundled asset template (same origin, no CDN request).
+      // Large sources use session storage to keep the navigation URL small.
+      // A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
       // The iframe manages its own initial loading state; retained-view
       // retries arm a Flutter fallback separately in [_retry].
-      final baseUrl = MermaidRenderWidget.buildWebAssetUrl(code);
-      final isTrackedRetry =
-          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
-      final url = isTrackedRetry
-          ? '$baseUrl&attempt=${++_webRetryGeneration}'
-          : _webLoadUrl != null
-              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
-              : baseUrl;
-      _webLoadUrl = _resolveWebUrl(url);
-      if (isTrackedRetry) {
-        _webRetryUrl = _webLoadUrl;
-      }
-      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+      unawaited(_loadWebMermaidCode(ctrl, code, generation));
       return;
     }
 
@@ -1438,6 +1460,69 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       encoding: 'utf8',
       baseUrl: nativeLoadBaseUrl,
     );
+  }
+
+  Future<void> _loadWebMermaidCode(
+    InAppWebViewController ctrl,
+    String code,
+    int generation,
+  ) async {
+    String? preparedSourceKey;
+    try {
+      final baseUrl = await MermaidRenderWidget.prepareWebAssetUrl(
+        code,
+        (key, source) async {
+          await ctrl.evaluateJavascript(
+            source:
+                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+          );
+        },
+      );
+      preparedSourceKey = Uri.parse(baseUrl).queryParameters['sourceKey'];
+      if (!mounted || generation != _mermaidDocumentGeneration) {
+        if (preparedSourceKey != null) {
+          await _removeStoredWebSource(ctrl, preparedSourceKey);
+          preparedSourceKey = null;
+        }
+        return;
+      }
+
+      final isTrackedRetry =
+          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
+      final url = isTrackedRetry
+          ? '$baseUrl&attempt=${++_webRetryGeneration}'
+          : _webLoadUrl != null
+              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
+              : baseUrl;
+      _webLoadUrl = _resolveWebUrl(url);
+      if (isTrackedRetry) {
+        _webRetryUrl = _webLoadUrl;
+      }
+      await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey);
+      }
+      if (!mounted || generation != _mermaidDocumentGeneration) return;
+      debugPrint('[MermaidRenderWidget] Failed to prepare web source: $error');
+      setState(() => _errorMessage = '图表代码加载失败，请重试');
+    }
+  }
+
+  Future<void> _removeStoredWebSource(
+    InAppWebViewController ctrl,
+    String sourceKey,
+  ) async {
+    try {
+      await ctrl.evaluateJavascript(
+        source:
+            'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+      );
+    } catch (error) {
+      debugPrint(
+        '[MermaidRenderWidget] Failed to remove stored web source: $error',
+      );
+    }
   }
 
   void _retry() {
@@ -2393,6 +2478,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                   if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
                       (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
                     return;
+                  }
+                  final sourceKey =
+                      Uri.tryParse(requestUrl)?.queryParameters['sourceKey'];
+                  if (sourceKey != null) {
+                    unawaited(_removeStoredWebSource(controller, sourceKey));
                   }
                 }
                 // WebView creation ends the Flutter loading overlay before

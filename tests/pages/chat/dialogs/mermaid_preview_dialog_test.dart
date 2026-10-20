@@ -109,6 +109,44 @@ void main() {
   );
 
   testWidgets(
+    'removes large source storage after asynchronous navigation failure',
+    (tester) async {
+      final code = 'graph TD\n${'A-->B\n' * 2000}';
+      final preview = await _openPreviewWithCreatedWebView(
+        tester,
+        mermaidCode: code,
+      );
+      await tester.pump();
+
+      final url = preview.webView.controller.loadedUrls.single;
+      preview.webView.params.onReceivedError!(
+        preview.controller,
+        WebResourceRequest(url: url, isForMainFrame: true),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'document request failed',
+        ),
+      );
+      await tester.pump();
+
+      final setScript = preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript =
+          preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    skip: !kIsWeb,
+  );
+
+  testWidgets(
     'cancels the web navigation fallback when loading completes',
     (tester) async {
       final preview = await _openPreviewWithCreatedWebView(tester);
@@ -172,8 +210,9 @@ void main() {
 }
 
 Future<_CreatedWebPreviewHarness> _openPreviewWithCreatedWebView(
-  WidgetTester tester,
-) async {
+  WidgetTester tester, {
+  String mermaidCode = 'graph TD\nA-->B',
+}) async {
   final previousPlatform = InAppWebViewPlatform.instance;
   final platform = _CreatedWebViewPlatform();
   InAppWebViewPlatform.instance = platform;
@@ -188,7 +227,7 @@ Future<_CreatedWebPreviewHarness> _openPreviewWithCreatedWebView(
         builder: (context) => ElevatedButton(
           onPressed: () => showMermaidPreviewDialog(
             context: context,
-            mermaidCode: 'graph TD\nA-->B',
+            mermaidCode: mermaidCode,
           ),
           child: const Text('Open preview'),
         ),
@@ -245,6 +284,9 @@ class _CreatedWebView extends PlatformInAppWebViewWidget {
 }
 
 class _CreatedWebViewController extends PlatformInAppWebViewController {
+  final evaluatedScripts = <String>[];
+  final loadedUrls = <WebUri>[];
+
   _CreatedWebViewController()
       : super.implementation(
             const PlatformInAppWebViewControllerCreationParams(id: 0));
@@ -254,7 +296,18 @@ class _CreatedWebViewController extends PlatformInAppWebViewController {
     required URLRequest urlRequest,
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
-  }) async {}
+  }) async {
+    final url = urlRequest.url;
+    if (url != null) loadedUrls.add(url);
+  }
+
+  @override
+  Future<dynamic> evaluateJavascript({
+    required String source,
+    ContentWorld? contentWorld,
+  }) async {
+    evaluatedScripts.add(source);
+  }
 
   @override
   void addJavaScriptHandler({
