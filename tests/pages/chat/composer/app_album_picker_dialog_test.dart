@@ -171,7 +171,8 @@ void main() {
         await tester.pump();
         await _pumpUntil(
           tester,
-          () => find.text('tap-first.png').evaluate().isNotEmpty &&
+          () =>
+              find.text('tap-first.png').evaluate().isNotEmpty &&
               find.text('tap-second.png').evaluate().isNotEmpty,
         );
 
