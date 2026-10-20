@@ -134,9 +134,8 @@ class _MermaidPreviewDialogContentState
       } else if (kIsWeb && !_hasError) {
         debugPrint('[MermaidPreviewDialog] web navigation did not settle '
             'within 3s');
-        _timedOutSourceCleanup = _pendingWebSourceKey == null
-            ? null
-            : _cleanupPendingWebSource();
+        _timedOutSourceCleanup =
+            _pendingWebSourceKey == null ? null : _cleanupPendingWebSource();
         setState(() {
           _isLoading = false;
           _hasError = true;
