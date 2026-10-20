@@ -1597,7 +1597,7 @@ const webReportError = webTemplateSource.match(
 );
 assert.ok(webReportError, 'Could not find the web reportError function');
 
-function createWebLibraryLoaderHarness(fetch) {
+function createWebLibraryLoaderHarness(fetch, {cacheHit} = {}) {
   const timers = new Map();
   const scripts = [];
   const bridgeCalls = [];
@@ -1605,6 +1605,13 @@ function createWebLibraryLoaderHarness(fetch) {
   let nextTimerId = 0;
   const loadingHint = {style: {display: 'block'}};
   const codeElement = {textContent: ''};
+  let renderCount = 0;
+  const cacheStorage = {
+    open: async () => ({
+      match: async () => ({blob: async () => cacheHit}),
+      put: async () => {},
+    }),
+  };
   const viewport = {
     children: [],
     set textContent(value) {
@@ -1618,6 +1625,10 @@ function createWebLibraryLoaderHarness(fetch) {
   const context = {
     window: {
       location: {search: '?code=graph%20TD'},
+      ...(cacheHit ? {
+        caches: cacheStorage,
+        fitToViewport: () => {},
+      } : {}),
       flutter_inappwebview: {
         callHandler: (...args) => bridgeCalls.push(args),
       },
@@ -1640,6 +1651,26 @@ function createWebLibraryLoaderHarness(fetch) {
     },
     fetch,
     URLSearchParams,
+    URL: {
+      createObjectURL: (blob) => `blob:${blob.name}`,
+    },
+    ...(cacheHit ? {
+      caches: cacheStorage,
+      Response: class {
+        constructor(blob) {
+          this.blobValue = blob;
+        }
+
+        blob() {
+          return Promise.resolve(this.blobValue);
+        }
+      },
+      DecompressionStream: class {},
+      mermaid: {
+        initialize() {},
+        run: async () => { renderCount++; },
+      },
+    } : {}),
     setTimeout: (callback, delay) => {
       const id = ++nextTimerId;
       timers.set(id, {callback, delay});
@@ -1659,6 +1690,7 @@ function createWebLibraryLoaderHarness(fetch) {
     loadingHint,
     scripts,
     timers,
+    get renderCount() { return renderCount; },
   };
 }
 
@@ -1715,6 +1747,66 @@ test('stalled raw-library fallback reports a bounded library-load error', async 
   assert.deepEqual(harness.bridgeCalls, [
     ['onMermaidError', 'Mermaid 资源加载超时'],
   ]);
+});
+
+test('a failed cached Mermaid script reloads gzip and renders', async () => {
+  const cachedBlob = {name: 'cached'};
+  const refreshedBlob = {
+    name: 'refreshed',
+    stream: () => ({pipeThrough: () => ({name: 'refreshed'})}),
+  };
+  let fetchCount = 0;
+  const harness = createWebLibraryLoaderHarness(() => {
+    fetchCount++;
+    return Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(refreshedBlob),
+    });
+  }, {cacheHit: cachedBlob});
+  await flushLoaderPromises();
+
+  assert.equal(harness.scripts.length, 1);
+  assert.equal(harness.scripts[0].src, 'blob:cached');
+  harness.scripts[0].onerror();
+  await flushLoaderPromises();
+
+  assert.equal(fetchCount, 1);
+  assert.equal(harness.scripts.length, 2);
+  assert.equal(harness.scripts[1].src, 'blob:refreshed');
+  harness.scripts[1].onload();
+  await flushLoaderPromises();
+
+  assert.equal(harness.renderCount, 1);
+  assert.equal(harness.loadingHint.style.display, 'none');
+});
+
+test('a failed refreshed gzip script falls back to raw once', async () => {
+  const cachedBlob = {name: 'cached'};
+  const refreshedBlob = {
+    name: 'refreshed',
+    stream: () => ({pipeThrough: () => ({name: 'refreshed'})}),
+  };
+  let fetchCount = 0;
+  const harness = createWebLibraryLoaderHarness(() => {
+    fetchCount++;
+    return Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(refreshedBlob),
+    });
+  }, {cacheHit: cachedBlob});
+  await flushLoaderPromises();
+  harness.scripts[0].onerror();
+  await flushLoaderPromises();
+  harness.scripts[1].onerror();
+
+  assert.equal(fetchCount, 1);
+  assert.equal(harness.scripts.length, 3);
+  assert.equal(harness.scripts[2].src, 'mermaid.min.js');
+  harness.scripts[2].onerror();
+
+  assert.equal(harness.scripts.length, 3);
+  assert.equal(harness.errorElements[0].textContent,
+    'Mermaid 资源加载失败: mermaid.min.js');
 });
 
 for (const [templateName, templateSource] of mouseGestureTargets) {
