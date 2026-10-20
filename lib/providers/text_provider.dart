@@ -104,7 +104,7 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
             : await TextManifest.readFile(oldStoragePath);
         if (oldStoragePath != newStoragePath && content == null) {
           await loadRecords();
-          return;
+          throw Exception('无法读取原文件内容，格式转换未完成');
         }
         // The loaded record may be stale; guard file conversion and metadata
         // publication with both the current and destination hashes.
