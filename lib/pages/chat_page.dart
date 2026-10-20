@@ -285,6 +285,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// gate for the next growth. Reset when the list is replaced (conversation
   /// switch, view clear) — the extent belongs to the previous list.
   double? _lastFollowContentExtent;
+
+  /// True when content grew and its follow has not landed yet. If the growth
+  /// arrives during a non-user scroll animation, later metrics only report
+  /// pixels, so this flag carries the consumed request to the idle frame.
+  bool _pendingContentGrowthFollow = false;
+
+  /// Ensures pending growth checks run at most once per frame while a scroll
+  /// animation is active.
+  bool _contentGrowthFollowRetryScheduled = false;
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
