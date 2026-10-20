@@ -2473,14 +2473,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
                 if (kIsWeb && request.isForMainFrame == true) {
                   final requestUrl = _resolveWebUrl(request.url.toString());
-                  if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
-                      (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
-                    return;
-                  }
                   final sourceKey =
                       Uri.tryParse(requestUrl)?.queryParameters['sourceKey'];
                   if (sourceKey != null) {
                     unawaited(_removeStoredWebSource(controller, sourceKey));
+                  }
+                  if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
+                      (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
+                    return;
                   }
                 }
                 // WebView creation ends the Flutter loading overlay before
