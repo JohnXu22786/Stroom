@@ -147,6 +147,37 @@ void main() {
   );
 
   testWidgets(
+    'shows an error and cleans up when large-source storage fails',
+    (tester) async {
+      final preview = await _openPreviewWithCreatedWebView(
+        tester,
+        mermaidCode: 'graph TD\n${'A-->B\n' * 2000}',
+        evaluateJavascriptError: StateError('storage failed'),
+      );
+
+      expect(find.text('加载失败'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(preview.webView.controller.loadedUrls, isEmpty);
+      expect(tester.takeException(), isNull);
+
+      final setScript = preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript =
+          preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    skip: !kIsWeb,
+  );
+
+  testWidgets(
     'cancels the web navigation fallback when loading completes',
     (tester) async {
       final preview = await _openPreviewWithCreatedWebView(tester);
@@ -212,6 +243,7 @@ void main() {
 Future<_CreatedWebPreviewHarness> _openPreviewWithCreatedWebView(
   WidgetTester tester, {
   String mermaidCode = 'graph TD\nA-->B',
+  Object? evaluateJavascriptError,
 }) async {
   final previousPlatform = InAppWebViewPlatform.instance;
   final platform = _CreatedWebViewPlatform();
@@ -242,6 +274,7 @@ Future<_CreatedWebPreviewHarness> _openPreviewWithCreatedWebView(
   final controller = webView.controllerFromPlatform<InAppWebViewController>(
     webView.controller,
   );
+  webView.controller.evaluateJavascriptError = evaluateJavascriptError;
   webView.params.onWebViewCreated!(controller);
   webView.created = true;
   await tester.pump();
@@ -286,6 +319,7 @@ class _CreatedWebView extends PlatformInAppWebViewWidget {
 class _CreatedWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
   final loadedUrls = <WebUri>[];
+  Object? evaluateJavascriptError;
 
   _CreatedWebViewController()
       : super.implementation(
@@ -307,6 +341,9 @@ class _CreatedWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    final error = evaluateJavascriptError;
+    evaluateJavascriptError = null;
+    if (error != null) throw error;
   }
 
   @override

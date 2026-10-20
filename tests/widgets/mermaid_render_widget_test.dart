@@ -218,6 +218,73 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     }, skip: !kIsWeb);
 
+    testWidgets('late error from superseded navigation removes its key',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      String diagram(String node) {
+        return 'graph TD\n${'$node-->B\n' * 2000}';
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('A')),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      await tester.pump();
+      final staleUrl = webView.controller.loadedUrls.single;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('C')),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final currentUrl = webView.controller.loadedUrls.last;
+      final staleKey =
+          Uri.parse(staleUrl.toString()).queryParameters['sourceKey'];
+      expect(Uri.parse(currentUrl.toString()).queryParameters['sourceKey'],
+          isNot(staleKey));
+
+      webView.params.onReceivedError!(
+        controller,
+        WebResourceRequest(url: staleUrl, isForMainFrame: true),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'stale document request failed',
+        ),
+      );
+      await tester.pump();
+
+      final removeScripts = webView.controller.evaluatedScripts
+          .where((script) =>
+              script.startsWith('window.sessionStorage.removeItem('))
+          .toList();
+      final removedKeys = removeScripts
+          .map((script) => RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1))
+          .toList();
+      expect(removedKeys, contains(staleKey));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
     testWidgets(
       'inline toolbar intercepts the iframe without blocking diagram gestures',
       (tester) async {

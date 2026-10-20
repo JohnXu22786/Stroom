@@ -167,23 +167,33 @@ class _MermaidPreviewDialogContentState
   Future<void> _loadCode() async {
     final ctrl = _webViewController;
     if (ctrl == null) return;
-    final url = await MermaidRenderWidget.prepareWebAssetUrl(
-      widget.mermaidCode,
-      (key, source) async {
-        await ctrl.evaluateJavascript(
-          source:
-              'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
-        );
-      },
-    );
-    final sourceKey = Uri.parse(url).queryParameters['sourceKey'];
+    String? preparedSourceKey;
     try {
+      final url = await MermaidRenderWidget.prepareWebAssetUrl(
+        widget.mermaidCode,
+        (key, source) async {
+          preparedSourceKey = key;
+          await ctrl.evaluateJavascript(
+            source:
+                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+          );
+        },
+      );
+      preparedSourceKey ??= Uri.parse(url).queryParameters['sourceKey'];
       await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-    } catch (_) {
-      if (sourceKey != null) {
-        await _removeStoredWebSource(ctrl, sourceKey);
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey!);
       }
-      rethrow;
+      debugPrint('[MermaidPreviewDialog] Failed to prepare web source: $error');
+      if (mounted) {
+        _readyFallbackTimer?.cancel();
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _webNavigationTimedOut = false;
+        });
+      }
     }
   }
 
