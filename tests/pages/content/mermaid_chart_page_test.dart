@@ -115,6 +115,33 @@ Widget _buildSavedChartNavigationTestApp({
   );
 }
 
+Widget _buildNewChartNavigationTestApp() {
+  return ProviderScope(
+    child: MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const MermaidChartPage(
+                    initialShowPreview: false,
+                  ),
+                ),
+              ),
+              child: const Text('Open new chart'),
+            ),
+          ),
+        ),
+      ),
+      localizationsDelegates: [
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+    ),
+  );
+}
+
 Future<TextRecord> _addSavedMermaidChart(String content) async {
   final bytes = Uint8List.fromList(utf8.encode(content));
   final record = TextRecord(
@@ -150,6 +177,119 @@ void main() {
   });
 
   group('MermaidChartPage', () {
+    testWidgets('new-chart app-bar back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('new-chart system back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await _simulateSystemBack(tester);
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('unmodified new chart still pops without confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('saving a new chart exits without discard confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->Saved',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('已保存到文本储存区:'), findsOneWidget);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        hasLength(1),
+      );
+    });
+
     testWidgets('app-bar back can stay editing or discard the draft', (
       tester,
     ) async {

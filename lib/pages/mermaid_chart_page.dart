@@ -134,7 +134,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     _codeController.addListener(_onCodeChanged);
   }
 
-  bool get _hasUnsavedChanges => widget.existingRecord != null && _isCodeDirty;
+  bool get _hasUnsavedChanges => _isCodeDirty;
 
   /// 从 Mermaid 代码中检测图表类型
   ///
@@ -191,8 +191,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   void _onCodeChanged() {
     final detectedTypeId = _detectTypeFromCode(_codeController.text);
-    final hasUnsavedChanges =
-        widget.existingRecord != null && _codeController.text != _originalCode;
+    final hasUnsavedChanges = _codeController.text != _originalCode;
     if (detectedTypeId != _selectedTypeId ||
         hasUnsavedChanges != _isCodeDirty) {
       setState(() {
