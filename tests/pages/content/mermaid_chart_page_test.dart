@@ -1004,6 +1004,73 @@ void main() {
     );
 
     testWidgets(
+      'system back cannot discard a chart while its save is committing',
+      (tester) async {
+        const originalContent = 'graph TD\n  A-->Original';
+        const capturedContent = 'graph TD\n  A-->Captured';
+        final record = await _addSavedMermaidChart(originalContent);
+        final saveReachedPublication = Completer<void>();
+        final releaseSave = Completer<void>();
+        addTearDown(() {
+          if (!releaseSave.isCompleted) releaseSave.complete();
+        });
+
+        await tester.pumpWidget(
+          _buildSavedChartNavigationTestApp(
+            record: record,
+            content: originalContent,
+            testOnlyAfterChartNameAllocation: (_) async {
+              saveReachedPublication.complete();
+              await releaseSave.future;
+            },
+          ),
+        );
+        await tester.tap(find.text('Open saved chart'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, capturedContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedPublication.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The save has captured the editor content and is paused before it
+        // updates the existing record. A back action must not offer discard.
+        // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('放弃修改？'), findsNothing);
+        expect(find.byType(MermaidChartPage), findsOneWidget);
+        expect(
+          await TextManifest.readText(record.storagePath),
+          originalContent,
+        );
+
+        releaseSave.complete();
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).single;
+        expect(savedRecord.id, record.id);
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(capturedContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          capturedContent,
+        );
+        expect(find.text('Open saved chart'), findsOneWidget);
+        expect(find.byType(MermaidChartPage), findsNothing);
+      },
+    );
+
+    testWidgets(
       'save preserves editor content while waiting for the folder name lock',
       (tester) async {
         const initialContent = 'graph TD\n  A-->BeforeLock';
