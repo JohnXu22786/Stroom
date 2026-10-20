@@ -725,9 +725,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       ),
     );
     return PopScope(
-      canPop: !_hasUnsavedChanges,
+      canPop: !_isSaving && !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop || !_hasUnsavedChanges) return;
+        // Once the user confirms a save, let its transaction finish instead
+        // of offering to discard the same captured content while it commits.
+        if (didPop || _isSaving || !_hasUnsavedChanges) return;
 
         final discard = await showDialog<bool>(
           context: context,
