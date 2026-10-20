@@ -44,21 +44,31 @@ extension _ChatPageUiExt on _ChatPageState {
     if (notification is ScrollStartNotification) {
       if (notification.dragDetails != null) {
         _userIsDragging = true;
+        // A drag takes control away from a content-growth follow that was
+        // waiting for a programmatic animation to settle.
+        _pendingContentGrowthFollow = false;
       } else {
         _userIsDragging = false;
       }
     } else if (notification is ScrollEndNotification) {
       _userIsDragging = false;
-    } else if (notification is UserScrollNotification &&
-        notification.direction == ScrollDirection.forward &&
-        notification.metrics.pixels <= 4.0 &&
-        !_hasMoreMessages &&
-        !_isLoadingMore) {
-      // 用户在顶部继续向下拖动（滚向顶部方向，像素不再变化时
-      // _onChatScroll 收不到回调）且没有更早的历史消息：
-      // 提示"没有更多内容了"。metrics 判定防止在列表中部滚动时
-      // 过早置位（提示会瞬间把内容下推 ~40px）。
-      _markNoMoreMessagesReached();
+    } else if (notification is UserScrollNotification) {
+      if (notification.direction != ScrollDirection.idle) {
+        // Wheel and other user scrolls do not carry dragDetails on the
+        // ScrollStartNotification. They still take control from a pending
+        // follow, which was retained across a programmatic animation.
+        _pendingContentGrowthFollow = false;
+      }
+      if (notification.direction == ScrollDirection.forward &&
+          notification.metrics.pixels <= 4.0 &&
+          !_hasMoreMessages &&
+          !_isLoadingMore) {
+        // 用户在顶部继续向下拖动（滚向顶部方向，像素不再变化时
+        // _onChatScroll 收不到回调）且没有更早的历史消息：
+        // 提示"没有更多内容了"。metrics 判定防止在列表中部滚动时
+        // 过早置位（提示会瞬间把内容下推 ~40px）。
+        _markNoMoreMessagesReached();
+      }
     }
     return false;
   }
@@ -105,11 +115,10 @@ extension _ChatPageUiExt on _ChatPageState {
   ///
   /// The cases are told apart by the CONTENT extent (maxScrollExtent +
   /// viewportDimension — the list's total content height): cases 1 and 2
-  /// strictly grow it, case 3 leaves it unchanged. Scrolling states are
-  /// additionally ignored — a drag or ballistic animation means the user
-  /// (or the chat library's own insert-follow / keyboard scrolls, which
-  /// target the bottom themselves) is steering the list; a short landing
-  /// from those self-corrects on the next content growth.
+  /// strictly grow it, case 3 leaves it unchanged. User drags and
+  /// keyboard-session scrolls are ignored because they steer the list
+  /// themselves. A non-user animation can consume the growth notification;
+  /// that case retains a pending follow and retries after the activity ends.
   ///
   /// (The keyboard-dismiss restore used to run an animation guarded by a
   /// "restoring" flag here; the per-frame keyboard pinning that introduced
@@ -121,8 +130,8 @@ extension _ChatPageUiExt on _ChatPageState {
   /// landing on a shorter list, an estimate correction down) re-arms the
   /// gate instead of permanently suppressing the follow — while the strict
   /// growth comparison keeps pixels-only and viewport-only notifications
-  /// inert. Updating before the state checks also means a growth consumed
-  /// by a bail cannot re-fire on a later pixels-only notification.
+  /// inert. Since a later pixels-only notification cannot rediscover growth
+  /// consumed during an animation, that case uses the pending retry above.
   ///
   /// The jump runs in a post-frame callback so it targets the final
   /// post-layout extent and coalesces to at most one jump per frame. Within
@@ -143,15 +152,38 @@ extension _ChatPageUiExt on _ChatPageState {
     final previous = _lastFollowContentExtent;
     _lastFollowContentExtent = contentExtent;
     if (previous != null && contentExtent <= previous) return;
-    if (!_autoScrollEnabled) return;
-    if (_userIsDragging) return;
-    if (pos.isScrollingNotifier.value) return;
+    if (!_autoScrollEnabled || _userIsDragging) {
+      _pendingContentGrowthFollow = false;
+      return;
+    }
+    _pendingContentGrowthFollow = true;
+    _scheduleContentGrowthFollowRetry();
+  }
+
+  /// Retries a consumed content-growth follow once the current non-user
+  /// scroll activity settles. While scrolling, each metrics notification
+  /// updates [_lastFollowContentExtent], so relying on another extent
+  /// increase would lose the original follow request.
+  void _scheduleContentGrowthFollowRetry() {
+    if (!mounted || _contentGrowthFollowRetryScheduled) return;
+    _contentGrowthFollowRetryScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_autoScrollEnabled || _userIsDragging) return;
-      if (_pendingInitialScrollAdjustment) return;
-      if (!_chatScrollController.hasClients) return;
+      _contentGrowthFollowRetryScheduled = false;
+      if (!mounted || !_pendingContentGrowthFollow) return;
+      if (_pendingInitialScrollAdjustment ||
+          _keyboardFollowUpPending ||
+          !_autoScrollEnabled ||
+          _userIsDragging ||
+          !_chatScrollController.hasClients) {
+        _pendingContentGrowthFollow = false;
+        return;
+      }
       final pos = _chatScrollController.position;
-      if (pos.isScrollingNotifier.value) return;
+      if (pos.isScrollingNotifier.value) {
+        _scheduleContentGrowthFollowRetry();
+        return;
+      }
+      _pendingContentGrowthFollow = false;
       final target = pos.maxScrollExtent;
       if ((pos.pixels - target).abs() < 1) return;
       _chatScrollController.jumpTo(target);
@@ -201,6 +233,15 @@ extension _ChatPageUiExt on _ChatPageState {
         });
       }
     } else {
+      // Content growth can move the old animation target outside the
+      // at-bottom window before the deferred follow runs. Keep the auto
+      // scroll intent captured by that growth until the non-user activity
+      // settles; drag and wheel notifications clear the pending request.
+      if (_pendingContentGrowthFollow &&
+          _chatScrollController.position.isScrollingNotifier.value &&
+          !_userIsDragging) {
+        return;
+      }
       // Scrolled up — disable auto-scroll.
       if (_autoScrollEnabled) {
         setState(() => _autoScrollEnabled = false);
