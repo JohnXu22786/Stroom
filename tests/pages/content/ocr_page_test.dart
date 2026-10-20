@@ -2167,9 +2167,11 @@ void main() {
             },
             testRetrySnapshotCacher: ({required taskId, required snapshot}) {
               cachedSnapshot = snapshot;
-              return OcrRetryStorage.unavailableSnapshot(
-                taskId: taskId,
-                snapshot: snapshot,
+              return Future.value(
+                OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ),
               );
             },
             testOcrServiceFactory: (config) {
