@@ -47,8 +47,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       final webView = platform.webView!;
-      final controller =
-          webView.controllerFromPlatform<InAppWebViewController>(
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
         webView.controller,
       );
       webView.params.onWebViewCreated!(controller);
@@ -83,8 +82,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       final webView = platform.webView!;
-      final controller =
-          webView.controllerFromPlatform<InAppWebViewController>(
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
         webView.controller,
       );
       webView.controller.loadUrlError = StateError('navigation failed');
@@ -123,8 +121,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       final webView = platform.webView!;
-      final controller =
-          webView.controllerFromPlatform<InAppWebViewController>(
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
         webView.controller,
       );
       webView.params.onWebViewCreated!(controller);
@@ -178,8 +175,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       final webView = platform.webView!;
-      final controller =
-          webView.controllerFromPlatform<InAppWebViewController>(
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
         webView.controller,
       );
       final evaluationGate = Completer<void>();
@@ -197,7 +193,8 @@ void main() {
       await tester.pump();
 
       final setScripts = webView.controller.evaluatedScripts
-          .where((script) => script.startsWith('window.sessionStorage.setItem('))
+          .where(
+              (script) => script.startsWith('window.sessionStorage.setItem('))
           .toList();
       final removeScripts = webView.controller.evaluatedScripts
           .where((script) =>
@@ -209,6 +206,7 @@ void main() {
       String sourceKeyIn(String script) {
         return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
       }
+
       final staleKey = sourceKeyIn(setScripts.first);
       final currentKey = sourceKeyIn(setScripts.last);
       expect(sourceKeyIn(removeScripts.single), staleKey);

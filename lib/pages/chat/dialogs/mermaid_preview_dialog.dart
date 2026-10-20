@@ -193,8 +193,7 @@ class _MermaidPreviewDialogContentState
   ) async {
     try {
       await ctrl.evaluateJavascript(
-        source:
-            'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
       );
     } catch (error) {
       debugPrint(

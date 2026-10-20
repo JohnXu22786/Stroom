@@ -458,8 +458,7 @@ class MermaidRenderWidget extends StatefulWidget {
   ) async {
     final trimmed = code.trim();
     if (trimmed.isEmpty ||
-        Uri.encodeQueryComponent(trimmed).length <=
-            _webCodeQueryEncodedLimit) {
+        Uri.encodeQueryComponent(trimmed).length <= _webCodeQueryEncodedLimit) {
       return buildWebAssetUrl(trimmed);
     }
 
@@ -1515,8 +1514,7 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   ) async {
     try {
       await ctrl.evaluateJavascript(
-        source:
-            'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
       );
     } catch (error) {
       debugPrint(
