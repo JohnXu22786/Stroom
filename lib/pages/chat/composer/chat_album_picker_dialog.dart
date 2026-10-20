@@ -304,11 +304,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed:
-                      _confirmingSelection ? null : _confirmSelection,
+                  onPressed: _confirmingSelection ? null : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
-                  label: Text(
-                      hasSelection ? '确定 ($_selectionCount)' : '确定'),
+                  label: Text(hasSelection ? '确定 ($_selectionCount)' : '确定'),
                 ),
               ),
             ),

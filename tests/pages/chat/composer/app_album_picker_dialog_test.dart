@@ -63,13 +63,11 @@ void main() {
   });
 
   Future<
-    ({
-      Completer<void> readStarted,
-      Completer<void> releaseRead,
-      List<MapEntry<String, Uint8List>>? Function() result,
-    })
-  >
-  openPickerWithBlockedRead(WidgetTester tester) async {
+      ({
+        Completer<void> readStarted,
+        Completer<void> releaseRead,
+        List<MapEntry<String, Uint8List>>? Function() result,
+      })> openPickerWithBlockedRead(WidgetTester tester) async {
     final png = await tester.runAsync(_createEnginePng);
     await tester.runAsync(() async {
       await ImageManifest.writeFile('pending-read.png', png!);
