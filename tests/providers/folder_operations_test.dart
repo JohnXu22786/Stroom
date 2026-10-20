@@ -1080,10 +1080,13 @@ void main() {
 
         TextManifest.readFileOverrideForTesting = (_) async => null;
         try {
-          await notifier.renameRecord(
-            original.id,
-            'diagram',
-            format: 'mmd',
+          await expectLater(
+            notifier.renameRecord(
+              original.id,
+              'diagram',
+              format: 'mmd',
+            ),
+            throwsA(isA<Exception>()),
           );
         } finally {
           TextManifest.readFileOverrideForTesting = null;
@@ -1113,7 +1116,10 @@ void main() {
         );
         await TextManifest.addRecord(original);
 
-        await notifier.renameRecord(original.id, 'diagram', format: 'mmd');
+        await expectLater(
+          notifier.renameRecord(original.id, 'diagram', format: 'mmd'),
+          throwsA(isA<Exception>()),
+        );
 
         final fromDb = (await TextManifest.loadRecords())
             .firstWhere((record) => record.id == original.id);
