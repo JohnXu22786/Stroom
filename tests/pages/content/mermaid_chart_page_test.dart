@@ -1047,7 +1047,10 @@ void main() {
         await tester.pump();
         expect(find.text('放弃修改？'), findsNothing);
         expect(find.byType(MermaidChartPage), findsOneWidget);
-        expect(await TextManifest.readText(record.storagePath), originalContent);
+        expect(
+          await TextManifest.readText(record.storagePath),
+          originalContent,
+        );
 
         releaseSave.complete();
         await tester.pumpAndSettle();
