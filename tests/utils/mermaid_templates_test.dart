@@ -136,6 +136,23 @@ void main() {
         matches(RegExp(r'^  里程碑 :milestone, \d{4}/\d{2}/\d{2}, 0d$')),
       );
     });
+
+    test('task and milestone snippets preserve ordinal day tokens', () {
+      const code = '''gantt
+  dateFormat  Do MMM YYYY''';
+      final snippets = MermaidTemplates.getSnippets('gantt', code: code);
+      final taskSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加任务').$2;
+      final milestoneSnippet =
+          snippets.singleWhere((snippet) => snippet.$1 == '添加里程碑').$2;
+      const ordinalDate = r'\d{1,2}(?:st|nd|rd|th) [A-Z][a-z]{2} \d{4}';
+
+      expect(taskSnippet, matches(RegExp('^  新任务 :$ordinalDate, 7d\$')));
+      expect(
+        milestoneSnippet,
+        matches(RegExp('^  里程碑 :milestone, $ordinalDate, 0d\$')),
+      );
+    });
   });
 
   group('MermaidTemplates - GitGraph snippets', () {

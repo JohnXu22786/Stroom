@@ -683,6 +683,10 @@ void main() {
           textField.controller?.text,
           contains('后续任务 :after dependencyTask1, 5d'),
         );
+        expect(
+          textField.controller?.text,
+          isNot(contains('依赖基准任务 :')),
+        );
       },
     );
 
