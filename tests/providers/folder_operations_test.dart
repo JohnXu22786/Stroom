@@ -1120,6 +1120,57 @@ void main() {
     );
 
     testWidgets(
+      'format rename retries when initial source read misses a concurrent save',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_initial_read_miss',
+          name: 'diagram',
+          hash: 'hash_fmt_initial_read_miss',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 11,
+        );
+        const latestContent = 'latest edit';
+        await TextManifest.writeText(original.storageFileName, 'old content');
+        await TextManifest.addRecord(original);
+
+        TextManifest.readFileOverrideForTesting = (_) async {
+          TextManifest.readFileOverrideForTesting = null;
+          await TextManifest.updateTextRecord(
+            TextRecord(
+              id: original.id,
+              name: original.name,
+              hash: 'hash_fmt_initial_read_miss_latest',
+              format: original.format,
+              createdAt: original.createdAt,
+              size: latestContent.length,
+            ),
+            latestContent,
+          );
+          await TextManifest.deleteFileIfUnreferenced(
+            original.hash,
+            original.storageFileName,
+          );
+          return null;
+        };
+
+        await notifier.renameRecord(original.id, 'diagram', format: 'mmd');
+
+        final converted = (await TextManifest.loadRecords())
+            .singleWhere((record) => record.id == original.id);
+        expect(converted.format, 'mmd');
+        expect(converted.hash, 'hash_fmt_initial_read_miss_latest');
+        expect(
+          await TextManifest.readText(converted.storageFileName),
+          latestContent,
+        );
+        expect(await TextManifest.readText(original.storageFileName), isNull);
+      },
+    );
+
+    testWidgets(
       'format rename keeps the original record when reading content fails',
       (WidgetTester t) async {
         final notifier = TextRecordsNotifier();
