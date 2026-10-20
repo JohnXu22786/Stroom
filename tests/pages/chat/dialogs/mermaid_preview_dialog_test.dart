@@ -134,14 +134,87 @@ void main() {
       );
       final removeScript =
           preview.webView.controller.evaluatedScripts.singleWhere(
-        (script) => script.startsWith('window.sessionStorage.removeItem('),
+        (script) => script.contains('window.sessionStorage.removeItem('),
       );
       String sourceKeyIn(String script) {
-        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+        return RegExp(r'"(mermaid-[^"]+)"').firstMatch(script)!.group(1)!;
       }
 
       expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      expect(
+        preview.webView.controller.storedSources,
+        isNot(contains(sourceKeyIn(setScript))),
+      );
       await tester.pumpWidget(const SizedBox.shrink());
+    },
+    skip: !kIsWeb,
+  );
+
+  testWidgets(
+    'removes large source storage when web navigation times out',
+    (tester) async {
+      final preview = await _openPreviewWithCreatedWebView(
+        tester,
+        mermaidCode: 'graph TD\n${'A-->B\n' * 2000}',
+      );
+      await tester.pump(const Duration(seconds: 3));
+
+      final setScript = preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript =
+          preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.contains('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'"(mermaid-[^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      expect(
+        preview.webView.controller.storedSources,
+        isNot(contains(sourceKeyIn(setScript))),
+      );
+      expect(find.text('加载失败'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      preview.webView.params.onLoadStop!(
+        preview.controller,
+        preview.webView.controller.loadedUrls.single,
+      );
+      await tester.pump();
+      expect(find.text('加载失败'), findsOneWidget,
+          reason: 'a late load must not hide that its source was abandoned');
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+    skip: !kIsWeb,
+  );
+
+  testWidgets(
+    'removes unconsumed large source storage when the dialog is disposed',
+    (tester) async {
+      final preview = await _openPreviewWithCreatedWebView(
+        tester,
+        mermaidCode: 'graph TD\n${'A-->B\n' * 2000}',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+
+      final setScript = preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript =
+          preview.webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.contains('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'"(mermaid-[^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      expect(
+        preview.webView.controller.storedSources,
+        isNot(contains(sourceKeyIn(setScript))),
+      );
+      expect(tester.takeException(), isNull);
     },
     skip: !kIsWeb,
   );
@@ -165,10 +238,10 @@ void main() {
       );
       final removeScript =
           preview.webView.controller.evaluatedScripts.singleWhere(
-        (script) => script.startsWith('window.sessionStorage.removeItem('),
+        (script) => script.contains('window.sessionStorage.removeItem('),
       );
       String sourceKeyIn(String script) {
-        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+        return RegExp(r'"(mermaid-[^"]+)"').firstMatch(script)!.group(1)!;
       }
 
       expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
@@ -223,7 +296,12 @@ void main() {
   testWidgets(
     'clears a web navigation timeout when loading later completes',
     (tester) async {
-      final preview = await _openPreviewWithCreatedWebView(tester);
+      final preview = await _openPreviewWithCreatedWebView(
+        tester,
+        mermaidCode: 'graph TD\n${'A-->B\n' * 2000}',
+      );
+      // The template consumes the source before its navigation callback.
+      preview.webView.controller.storedSources.clear();
       await tester.pump(const Duration(seconds: 3));
 
       expect(find.text('加载失败'), findsOneWidget);
@@ -319,6 +397,7 @@ class _CreatedWebView extends PlatformInAppWebViewWidget {
 class _CreatedWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
   final loadedUrls = <WebUri>[];
+  final storedSources = <String, String>{};
   Object? evaluateJavascriptError;
 
   _CreatedWebViewController()
@@ -344,6 +423,27 @@ class _CreatedWebViewController extends PlatformInAppWebViewController {
     final error = evaluateJavascriptError;
     evaluateJavascriptError = null;
     if (error != null) throw error;
+    final setMatch = RegExp(
+      r'^window\.sessionStorage\.setItem\(("[^"]+"), (.+)\);$',
+    ).firstMatch(source);
+    if (setMatch != null) {
+      storedSources[jsonDecode(setMatch.group(1)!) as String] =
+          jsonDecode(setMatch.group(2)!) as String;
+      return;
+    }
+    final cleanupKey = RegExp(r'const key = ("[^"]+");').firstMatch(source);
+    if (cleanupKey != null && source.contains('sessionStorage.removeItem')) {
+      final key = jsonDecode(cleanupKey.group(1)!) as String;
+      final wasPending = storedSources.containsKey(key);
+      storedSources.remove(key);
+      return wasPending;
+    }
+    final removeMatch = RegExp(
+      r'^window\.sessionStorage\.removeItem\(("[^"]+")\);$',
+    ).firstMatch(source);
+    if (removeMatch != null) {
+      storedSources.remove(jsonDecode(removeMatch.group(1)!) as String);
+    }
   }
 
   @override

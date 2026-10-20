@@ -74,6 +74,9 @@ class _MermaidPreviewDialogContentState
   /// native platforms end their loading overlay as before.
   Timer? _readyFallbackTimer;
   Timer? _zoomReadinessRetryTimer;
+  String? _pendingWebSourceKey;
+  InAppWebViewController? _pendingWebSourceController;
+  Future<bool>? _timedOutSourceCleanup;
 
   @override
   void initState() {
@@ -110,6 +113,7 @@ class _MermaidPreviewDialogContentState
   void dispose() {
     _readyFallbackTimer?.cancel();
     _zoomReadinessRetryTimer?.cancel();
+    _cleanupPendingWebSourceWithoutWaiting();
     _webViewController = null;
     super.dispose();
   }
@@ -130,6 +134,7 @@ class _MermaidPreviewDialogContentState
       } else if (kIsWeb && !_hasError) {
         debugPrint('[MermaidPreviewDialog] web navigation did not settle '
             'within 3s');
+        _timedOutSourceCleanup = _cleanupPendingWebSource();
         setState(() {
           _isLoading = false;
           _hasError = true;
@@ -173,6 +178,8 @@ class _MermaidPreviewDialogContentState
         widget.mermaidCode,
         (key, source) async {
           preparedSourceKey = key;
+          _pendingWebSourceKey = key;
+          _pendingWebSourceController = ctrl;
           await ctrl.evaluateJavascript(
             source:
                 'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
@@ -180,10 +187,21 @@ class _MermaidPreviewDialogContentState
         },
       );
       preparedSourceKey ??= Uri.parse(url).queryParameters['sourceKey'];
+      final sourceKey = preparedSourceKey;
+      if (!mounted ||
+          ctrl != _webViewController ||
+          (sourceKey != null && _webNavigationTimedOut)) {
+        if (sourceKey != null) {
+          await _removeStoredWebSource(ctrl, sourceKey);
+          _clearPendingWebSource(sourceKey);
+        }
+        return;
+      }
       await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
     } catch (error) {
       if (preparedSourceKey != null) {
         await _removeStoredWebSource(ctrl, preparedSourceKey!);
+        _clearPendingWebSource(preparedSourceKey!);
       }
       debugPrint('[MermaidPreviewDialog] Failed to prepare web source: $error');
       if (mounted) {
@@ -210,6 +228,41 @@ class _MermaidPreviewDialogContentState
         '[MermaidPreviewDialog] Failed to remove stored web source: $error',
       );
     }
+  }
+
+  Future<bool> _cleanupPendingWebSource() async {
+    final sourceKey = _pendingWebSourceKey;
+    final controller = _pendingWebSourceController;
+    if (sourceKey == null || controller == null) return false;
+    _clearPendingWebSource(sourceKey);
+    try {
+      final result = await controller.evaluateJavascript(
+        source: '(() => { '
+            'const key = ${jsonEncode(sourceKey)}; '
+            'const wasPending = window.sessionStorage.getItem(key) !== null; '
+            'window.sessionStorage.removeItem(key); '
+            'return wasPending; '
+            '})()',
+      );
+      return result == true || result == 'true';
+    } catch (error) {
+      debugPrint(
+        '[MermaidPreviewDialog] Failed to remove stored web source: $error',
+      );
+      // If cleanup could not be verified, keep a late load from appearing
+      // successful when its source may have been removed.
+      return true;
+    }
+  }
+
+  void _cleanupPendingWebSourceWithoutWaiting() {
+    unawaited(_cleanupPendingWebSource().then<void>((_) {}));
+  }
+
+  void _clearPendingWebSource(String sourceKey) {
+    if (_pendingWebSourceKey != sourceKey) return;
+    _pendingWebSourceKey = null;
+    _pendingWebSourceController = null;
   }
 
   /// Changes the zoom by [delta] at the center of the preview, based on the
@@ -475,29 +528,42 @@ class _MermaidPreviewDialogContentState
                         '[MermaidPreviewDialog] JS handler bridge unavailable: $e');
                   }
                 },
-                onLoadStop: (ctrl, url) {
+                onLoadStop: (ctrl, url) async {
+                  final sourceKey = Uri.tryParse(url?.toString() ?? '')
+                      ?.queryParameters['sourceKey'];
+                  if (sourceKey != null) {
+                    _clearPendingWebSource(sourceKey);
+                  }
+                  final sourceWasAbandoned =
+                      await (_timedOutSourceCleanup ?? Future.value(false));
+                  if (!mounted) return;
                   _readyFallbackTimer?.cancel();
                   _zoomReadinessRetryTimer?.cancel();
                   _zoomReadinessRetryTimer = null;
                   _canApplyZoomDeltasAfterFit = true;
                   unawaited(_flushPendingZoomDeltas(ctrl));
-                  if (mounted) {
-                    setState(() {
-                      _isLoading = false;
-                      if (kIsWeb && _webNavigationTimedOut) {
-                        _hasError = false;
-                        _webNavigationTimedOut = false;
-                      }
-                    });
-                  }
+                  setState(() {
+                    _isLoading = false;
+                    if (kIsWeb &&
+                        _webNavigationTimedOut &&
+                        !sourceWasAbandoned) {
+                      _hasError = false;
+                      _webNavigationTimedOut = false;
+                    }
+                    if (sourceWasAbandoned) {
+                      _hasError = true;
+                    }
+                  });
                 },
                 onReceivedError: (controller, request, error) {
                   if (request.isForMainFrame == false) return;
                   if (kIsWeb) {
                     final sourceKey = Uri.tryParse(request.url.toString())
                         ?.queryParameters['sourceKey'];
-                    if (sourceKey != null) {
-                      unawaited(_removeStoredWebSource(controller, sourceKey));
+                    if (sourceKey != null &&
+                        sourceKey == _pendingWebSourceKey &&
+                        controller == _pendingWebSourceController) {
+                      _cleanupPendingWebSourceWithoutWaiting();
                     }
                   }
                   _readyFallbackTimer?.cancel();
