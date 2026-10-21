@@ -9,12 +9,12 @@ const mathUnaryInputs = <MathInputTemplate>[
   MathInputTemplate('sin', r'\sin', r'\sin\left(#0\right)'),
   MathInputTemplate('cos', r'\cos', r'\cos\left(#0\right)'),
   MathInputTemplate('tan', r'\tan', r'\tan\left(#0\right)'),
+  MathInputTemplate('asin', r'\operatorname{asin}', r'\arcsin\left(#0\right)'),
+  MathInputTemplate('acos', r'\operatorname{acos}', r'\arccos\left(#0\right)'),
+  MathInputTemplate('atan', r'\operatorname{atan}', r'\arctan\left(#0\right)'),
   MathInputTemplate('cot', r'\cot', r'\cot\left(#0\right)'),
   MathInputTemplate('sec', r'\sec', r'\sec\left(#0\right)'),
   MathInputTemplate('csc', r'\csc', r'\csc\left(#0\right)'),
-  MathInputTemplate('asin', r'\arcsin', r'\arcsin\left(#0\right)'),
-  MathInputTemplate('acos', r'\arccos', r'\arccos\left(#0\right)'),
-  MathInputTemplate('atan', r'\arctan', r'\arctan\left(#0\right)'),
   MathInputTemplate('sinh', r'\sinh', r'\sinh\left(#0\right)'),
   MathInputTemplate('cosh', r'\cosh', r'\cosh\left(#0\right)'),
   MathInputTemplate('tanh', r'\tanh', r'\tanh\left(#0\right)'),
@@ -65,9 +65,6 @@ const mathExponentialInputs = <MathInputTemplate>[
   MathInputTemplate('power', r'x^a', r'#@^{#?}'),
   MathInputTemplate('power2', r'2^x', r'2^{#0}'),
   MathInputTemplate('power10', r'10^x', r'10^{#0}'),
-  MathInputTemplate('reciprocal', r'\frac{1}{x}', r'\frac{1}{#0}'),
-  MathInputTemplate('negativePower', r'x^{-a}', r'#@^{-{#?}}'),
-  MathInputTemplate('scientific', r'x\cdot10^a', r'#@\cdot10^{#?}'),
 ];
 
 const mathGreekLowerNames = [
