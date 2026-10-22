@@ -1,19 +1,45 @@
-# stroom
+# Stroom
 
-A new Flutter project.
+**面向在校学生的 AI 学习工作台：整理学习资料、理解内容、制作复习材料，并把常用任务串成流程。**
 
-## Getting Started
+Stroom 正在持续开发中。核心功能和使用流程还在完善，界面与功能范围可能随版本变化。本文介绍当前版本已提供的功能方向和下载方式。
 
-This project is a starting point for a Flutter application.
+## 用 Stroom 做什么
 
-A few resources to get you started if this is your first Flutter project:
+学习时，资料可能来自讲义图片、网页、文档、语音和视频。Stroom 把 AI 对话、资料处理、复习工具和任务流放在同一个应用里，帮助你从收集资料继续到理解和复习。
 
-For OCR setup, troubleshooting, and current limitations, see the [OCR guide](docs/ocr-guide.md).
+例如，你可以从一张讲义图片开始，用 OCR 提取文字，再在 AI 对话中围绕内容提问，并把重点整理成 Anki 闪卡。每个步骤也可以单独使用。
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## 当前功能
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- **AI 对话**：配置模型服务，与 AI 讨论问题和学习资料。
+- **资料整理**：管理应用内文件和媒体，下载网页资源；OCR 可从图片中提取文字。
+- **语音与媒体工具**：语音识别、语音合成和音频分离。
+- **复习与表达**：制作 Anki 闪卡，使用数学绘图和图表工具辅助理解、表达想法。
+- **任务流**：把受支持的功能块组成可复用的流程，并查看任务执行记录。
+
+部分功能需要先配置相应的模型服务或参数。OCR 的设置、使用说明和已知限制见 [OCR 使用指南](docs/ocr-guide.md)。
+
+## 下载 Stroom v0.5.0
+
+前往 [v0.5.0 Release 页面](https://github.com/JohnXu22786/Stroom/releases/tag/v0.5.0) 下载对应平台的文件：
+
+| 平台 | Release 产物 |
+| --- | --- |
+| Windows x64 | 安装程序 |
+| macOS Apple Silicon (arm64) | ZIP |
+| macOS Intel (x64) | ZIP |
+| Linux x64 | ZIP |
+| Web | Web 构建 ZIP |
+| Android | APK |
+| iOS | 未签名 IPA，需要自行完成签名后安装 |
+
+## 开始使用
+
+1. 从 Release 页面下载适合你设备的版本。
+2. 首次使用 AI 对话或依赖模型的功能前，在设置中配置模型服务和模型。
+3. 从对话、OCR、Anki 或任务流等功能开始，按自己的学习方式组合使用。
+
+## 项目状态
+
+Stroom 仍在开发中。现有功能可以体验，但完整的学生学习工作流尚未全部完成；功能、稳定性和操作方式会继续迭代。使用前请查看对应版本的 [Release 说明](https://github.com/JohnXu22786/Stroom/releases)，问题和建议可以提交到 [GitHub Issues](https://github.com/JohnXu22786/Stroom/issues)。
