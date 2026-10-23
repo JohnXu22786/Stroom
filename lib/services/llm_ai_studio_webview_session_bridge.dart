@@ -282,78 +282,86 @@ final class LlmAiStudioInAppWebViewDriver extends LlmAiStudioWebViewDriver {
     stream.onCancel = () =>
         abort(const LlmAiStudioWebViewRequestCancelled(), fromConsumer: true);
 
-    controller.addJavaScriptHandler(
-      handlerName: handlerName,
-      callback: (args) async {
-        if (_disposed || finished || args.length < 2 || args[0] != requestId) {
+    try {
+      controller.addJavaScriptHandler(
+        handlerName: handlerName,
+        callback: (args) async {
+          if (_disposed ||
+              finished ||
+              args.length < 2 ||
+              args[0] != requestId) {
+            return false;
+          }
+          if (!await _isOnAiStudioPage()) return false;
+          final type = args[1];
+          if (type == 'network_error') {
+            fail(const LlmAiStudioWebViewNetworkException());
+            return true;
+          }
+          if (type == 'cancelled') {
+            fail(const LlmAiStudioWebViewRequestCancelled());
+            return true;
+          }
+          if (type == 'complete' && args.length >= 5) {
+            final status = _statusCode(args[2]);
+            if (status == null) {
+              fail(const LlmAiStudioWebViewBridgeException());
+              return true;
+            }
+            final contentType = args[3] is String ? args[3] as String : '';
+            final body = status >= 200 && status < 300 && args[4] is String
+                ? Uint8List.fromList(utf8.encode(args[4] as String))
+                : null;
+            if (!response.isCompleted) {
+              response.complete(
+                LlmAiStudioWebViewResponse(
+                  statusCode: status,
+                  headers: _responseHeaders(contentType),
+                  body: body,
+                ),
+              );
+            }
+            cleanup();
+            return true;
+          }
+          if (type == 'start' && args.length >= 4) {
+            final status = _statusCode(args[2]);
+            if (status == null) {
+              fail(const LlmAiStudioWebViewBridgeException());
+              return true;
+            }
+            final contentType = args[3] is String ? args[3] as String : '';
+            if (!response.isCompleted) {
+              response.complete(
+                LlmAiStudioWebViewResponse(
+                  statusCode: status,
+                  headers: _responseHeaders(contentType),
+                  stream: stream.stream,
+                ),
+              );
+            }
+            if (status < 200 || status >= 300) cleanup();
+            return true;
+          }
+          if (type == 'chunk' && args.length >= 3) {
+            final chunk = args[2];
+            if (chunk is String && !stream.isClosed) {
+              stream.add(utf8.encode(chunk));
+            }
+            return true;
+          }
+          if (type == 'end') {
+            cleanup();
+            return true;
+          }
           return false;
-        }
-        if (!await _isOnAiStudioPage()) return false;
-        final type = args[1];
-        if (type == 'network_error') {
-          fail(const LlmAiStudioWebViewNetworkException());
-          return true;
-        }
-        if (type == 'cancelled') {
-          fail(const LlmAiStudioWebViewRequestCancelled());
-          return true;
-        }
-        if (type == 'complete' && args.length >= 5) {
-          final status = _statusCode(args[2]);
-          if (status == null) {
-            fail(const LlmAiStudioWebViewBridgeException());
-            return true;
-          }
-          final contentType = args[3] is String ? args[3] as String : '';
-          final body = status >= 200 && status < 300 && args[4] is String
-              ? Uint8List.fromList(utf8.encode(args[4] as String))
-              : null;
-          if (!response.isCompleted) {
-            response.complete(
-              LlmAiStudioWebViewResponse(
-                statusCode: status,
-                headers: _responseHeaders(contentType),
-                body: body,
-              ),
-            );
-          }
-          cleanup();
-          return true;
-        }
-        if (type == 'start' && args.length >= 4) {
-          final status = _statusCode(args[2]);
-          if (status == null) {
-            fail(const LlmAiStudioWebViewBridgeException());
-            return true;
-          }
-          final contentType = args[3] is String ? args[3] as String : '';
-          if (!response.isCompleted) {
-            response.complete(
-              LlmAiStudioWebViewResponse(
-                statusCode: status,
-                headers: _responseHeaders(contentType),
-                stream: stream.stream,
-              ),
-            );
-          }
-          if (status < 200 || status >= 300) cleanup();
-          return true;
-        }
-        if (type == 'chunk' && args.length >= 3) {
-          final chunk = args[2];
-          if (chunk is String && !stream.isClosed) {
-            stream.add(utf8.encode(chunk));
-          }
-          return true;
-        }
-        if (type == 'end') {
-          cleanup();
-          return true;
-        }
-        return false;
-      },
-    );
-    handlerRegistered = true;
+        },
+      );
+      handlerRegistered = true;
+    } catch (_) {
+      fail(const LlmAiStudioWebViewBridgeException());
+      return await response.future;
+    }
 
     void onCancelled(DioException _) {
       unawaited(abort(const LlmAiStudioWebViewRequestCancelled()));

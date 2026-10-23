@@ -223,6 +223,31 @@ void main() {
           jsonEncode(snapshot), isNot(contains('private-google-api-session')));
     });
 
+    test(
+      'backup still captures platform cookies when saved snapshot is malformed',
+      () async {
+        BrowserCookieService.disableTestMode();
+        WebFileStore.enableTestMode();
+        addTearDown(WebFileStore.disableTestMode);
+        await WebFileStore.write(
+          '/browser_cookies.json',
+          Uint8List.fromList(utf8.encode('{malformed')),
+        );
+        await BrowserCookieService.setRetentionMode(true);
+        final fake = _FakeCookiePlatform()
+          ..allCookies = [
+            Cookie(name: 'theme', value: 'dark', domain: 'example.test'),
+          ];
+        BrowserCookieService.cookiePlatform = fake;
+
+        final snapshot = await BrowserCookieService.snapshotCookiesForBackup();
+
+        expect(fake.getAllCookiesCalls, 1);
+        expect(snapshot, hasLength(1));
+        expect(snapshot!.single['name'], 'theme');
+      },
+    );
+
     test('retention files omit Google login and API cookies', () async {
       final fake = _FakeCookiePlatform()
         ..allCookies = [

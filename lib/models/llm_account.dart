@@ -1,3 +1,5 @@
+import '../utils/credential_field_sanitizer.dart';
+
 /// Persisted, connector-neutral account and model-group data.
 ///
 /// These types describe configuration and observations only. They do not
@@ -284,21 +286,23 @@ class LlmAccount {
   })  : policy = policy ?? LlmRoutingPolicy(),
         usageByWindow = Map.unmodifiable(usageByWindow ?? const {});
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'connectorType': connectorType,
-        'authType': authType,
-        'displayName': displayName,
-        'status': status.name,
-        if (credentialRef != null) 'credentialRef': credentialRef,
-        'endpointConfig': endpointConfig,
-        'models': models.map((model) => model.toMap()).toList(),
-        'policy': policy.toMap(),
-        'usageByWindow': {
-          for (final entry in usageByWindow.entries)
-            entry.key.name: entry.value.toMap(),
-        },
-      };
+  Map<String, dynamic> toMap() => Map<String, dynamic>.from(
+        sanitizeCredentialFields({
+          'id': id,
+          'connectorType': connectorType,
+          'authType': authType,
+          'displayName': displayName,
+          'status': status.name,
+          if (credentialRef != null) 'credentialRef': credentialRef,
+          'endpointConfig': endpointConfig,
+          'models': models.map((model) => model.toMap()).toList(),
+          'policy': policy.toMap(),
+          'usageByWindow': {
+            for (final entry in usageByWindow.entries)
+              entry.key.name: entry.value.toMap(),
+          },
+        }) as Map,
+      );
 
   factory LlmAccount.fromMap(Map<String, dynamic> map) {
     final rawModels = map['models'];

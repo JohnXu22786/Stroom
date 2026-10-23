@@ -227,6 +227,8 @@ class LlmConnectorObservation {
 /// Credentials are committed to secure storage before ordinary preferences are
 /// updated. Mutations share the M1 transaction lease with migration and backup.
 class LlmAccountConnectorService {
+  static const _maxModelDiscoveryPages = 100;
+
   final LlmAccountPreferences preferences;
   final LlmCredentialStore credentialStore;
   final Dio _dio;
@@ -339,7 +341,11 @@ class LlmAccountConnectorService {
 
   /// Refreshes an OAuth credential using the provider's pinned refresh flow.
   /// Returns false for connectors that do not advertise token refresh.
-  Future<bool> refreshCredential(LlmAccount suppliedAccount) async {
+  Future<bool> refreshCredential(
+    LlmAccount suppliedAccount, {
+    CancelToken? cancelToken,
+  }) async {
+    if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
     suppliedAccount = _canonicalAccount(suppliedAccount);
     final account = await getAccount(suppliedAccount.id);
     if (account == null ||
@@ -360,10 +366,10 @@ class LlmAccountConnectorService {
 
     if (account.connectorType == 'vertex' &&
         account.authType == 'service_account') {
-      return _refreshVertexServiceAccount(account, bundle);
+      return _refreshVertexServiceAccount(account, bundle, cancelToken);
     }
     if (account.connectorType == 'meta' && account.authType == 'oauth') {
-      return _refreshMetaDca(account, bundle);
+      return _refreshMetaDca(account, bundle, cancelToken);
     }
     if (account.authType != 'oauth') return false;
 
@@ -384,7 +390,9 @@ class LlmAccountConnectorService {
           contentType: spec.contentType,
           responseType: ResponseType.json,
         ),
+        cancelToken: cancelToken,
       );
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       final tokenResponse = _asJsonMap(response.data);
       final accessToken = _firstString(tokenResponse, const [
         'access_token',
@@ -412,6 +420,9 @@ class LlmAccountConnectorService {
       }
       await saveAccount(account, secret: jsonEncode(updated));
       return true;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
     } catch (_) {
       throw const LlmAccountConnectorException();
     }
@@ -421,8 +432,10 @@ class LlmAccountConnectorService {
   /// native generation endpoint. Project identity is safe account metadata;
   /// the OAuth credential remains in secure storage.
   Future<LlmAccount> ensureAntigravityProjectId(
-    LlmAccount suppliedAccount,
-  ) async {
+    LlmAccount suppliedAccount, {
+    CancelToken? cancelToken,
+  }) async {
+    if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
     final account = await getAccount(suppliedAccount.id);
     if (account == null ||
         account.connectorType != suppliedAccount.connectorType) {
@@ -439,6 +452,7 @@ class LlmAccountConnectorService {
     if (reference == null) throw const LlmAccountConnectorException();
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
         var rawCredential = await _readSecureValue(reference);
         if (rawCredential == null || rawCredential.trim().isEmpty) {
           throw const LlmAccountConnectorException();
@@ -451,7 +465,10 @@ class LlmAccountConnectorService {
             rawCredential,
           );
         } on LlmAccountConnectorException {
-          if (attempt == 0 && await refreshCredential(account)) continue;
+          if (attempt == 0 &&
+              await refreshCredential(account, cancelToken: cancelToken)) {
+            continue;
+          }
           rethrow;
         }
         final expiryValue = bundle['expires_at'] ?? bundle['expired'];
@@ -468,7 +485,7 @@ class LlmAccountConnectorService {
               DateTime.now().toUtc().add(const Duration(seconds: 30)),
             );
         if (attempt == 0 && isExpiring) {
-          if (!await refreshCredential(account)) {
+          if (!await refreshCredential(account, cancelToken: cancelToken)) {
             throw const LlmAccountConnectorException();
           }
           continue;
@@ -491,9 +508,12 @@ class LlmAccountConnectorService {
             responseType: ResponseType.json,
             validateStatus: (status) => status != null,
           ),
+          cancelToken: cancelToken,
         );
         final status = response.statusCode ?? 0;
-        if (status == 401 && attempt == 0 && await refreshCredential(account)) {
+        if (status == 401 &&
+            attempt == 0 &&
+            await refreshCredential(account, cancelToken: cancelToken)) {
           continue;
         }
         if (status < 200 || status >= 300) {
@@ -501,6 +521,7 @@ class LlmAccountConnectorService {
         }
         final projectId = _antigravityProjectId(_asJsonMap(response.data));
         if (projectId == null) throw const LlmAccountConnectorException();
+        if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
 
         final endpointConfig = Map<String, dynamic>.from(account.endpointConfig)
           ..['projectId'] = projectId;
@@ -518,6 +539,9 @@ class LlmAccountConnectorService {
         );
         return saveAccount(updated);
       }
+      throw const LlmAccountConnectorException();
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
       throw const LlmAccountConnectorException();
     } catch (_) {
       throw const LlmAccountConnectorException();
@@ -538,6 +562,7 @@ class LlmAccountConnectorService {
   Future<bool> _refreshMetaDca(
     LlmAccount account,
     Map<String, dynamic> bundle,
+    CancelToken? cancelToken,
   ) async {
     var dcaToken = _firstString(bundle, const ['dca_token', 'dcaToken']);
     final accessToken = _firstString(bundle, const [
@@ -562,6 +587,7 @@ class LlmAccountConnectorService {
           contentType: Headers.jsonContentType,
           responseType: ResponseType.json,
         ),
+        cancelToken: cancelToken,
       );
       final minted = _asJsonMap(response.data);
       final apiKey = _firstString(minted, const ['api_key', 'apiKey']);
@@ -571,8 +597,12 @@ class LlmAccountConnectorService {
         ..['api_key'] = apiKey
         ..['access_token'] = apiKey
         ..['dca_token'] = dcaToken;
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       await saveAccount(account, secret: jsonEncode(updated));
       return true;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
     } catch (_) {
       throw const LlmAccountConnectorException();
     }
@@ -581,6 +611,7 @@ class LlmAccountConnectorService {
   Future<bool> _refreshVertexServiceAccount(
     LlmAccount account,
     Map<String, dynamic> bundle,
+    CancelToken? cancelToken,
   ) async {
     try {
       final serviceAccount = _serviceAccountCredential(bundle);
@@ -610,6 +641,7 @@ class LlmAccountConnectorService {
           contentType: 'application/x-www-form-urlencoded',
           responseType: ResponseType.json,
         ),
+        cancelToken: cancelToken,
       );
       final tokenResponse = _asJsonMap(response.data);
       final accessToken = _firstString(tokenResponse, const ['access_token']);
@@ -624,8 +656,12 @@ class LlmAccountConnectorService {
             .add(Duration(seconds: expiresIn))
             .toIso8601String();
       }
+      if (cancelToken?.isCancelled ?? false) throw cancelToken!.cancelError!;
       await saveAccount(account, secret: jsonEncode(updated));
       return true;
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
     } catch (_) {
       throw const LlmAccountConnectorException();
     }
@@ -805,44 +841,67 @@ class LlmAccountConnectorService {
     }
 
     try {
-      final response = await _dio.getUri<Object?>(
-        uri,
-        options: Options(headers: headers),
-      );
-      final data = _asJsonMap(response.data);
-      final rawModels = data?['data'] ?? data?['models'];
-      if (rawModels is! List) return const [];
       final models = <LlmUpstreamModel>[];
-      for (final raw in rawModels) {
-        if (raw is! Map) continue;
-        final map = Map<String, dynamic>.from(raw);
-        final rawId = map['id'] ?? map['name'];
-        if (rawId is! String || rawId.trim().isEmpty) continue;
-        final modelId = rawId.trim().replaceFirst(RegExp(r'^models/'), '');
-        final methods = map['supportedGenerationMethods'];
-        if (isGemini &&
-            methods is List &&
-            !methods.contains('generateContent') &&
-            !methods.contains('streamGenerateContent')) {
-          continue;
+      final seenPageTokens = <String>{};
+      String? pageToken;
+      var pageCount = 0;
+      do {
+        if (++pageCount > _maxModelDiscoveryPages) {
+          throw const LlmAccountConnectorException();
         }
-        models.add(
-          LlmUpstreamModel(
-            id: '${account.id}:remote:${models.length}',
-            upstreamModelId: modelId,
-            displayName: (map['displayName'] ?? map['display_name']) is String
-                ? (map['displayName'] ?? map['display_name']) as String
-                : modelId,
-            capabilities: {
-              if (methods is List)
-                'supportedGenerationMethods': List<String>.from(
-                  methods.whereType<String>(),
-                ),
-            },
-            config: const {'catalogSource': 'upstream_models_endpoint'},
-          ),
+        final pageUri = pageToken == null
+            ? uri
+            : uri.replace(
+                queryParameters: {
+                  ...uri.queryParameters,
+                  'pageToken': pageToken,
+                },
+              );
+        final response = await _dio.getUri<Object?>(
+          pageUri,
+          options: Options(headers: headers),
         );
-      }
+        final data = _asJsonMap(response.data);
+        final rawModels = data?['data'] ?? data?['models'];
+        if (rawModels is! List) break;
+        for (final raw in rawModels) {
+          if (raw is! Map) continue;
+          final map = Map<String, dynamic>.from(raw);
+          final rawId = map['id'] ?? map['name'];
+          if (rawId is! String || rawId.trim().isEmpty) continue;
+          final modelId = rawId.trim().replaceFirst(RegExp(r'^models/'), '');
+          final methods = map['supportedGenerationMethods'];
+          if (isGemini &&
+              methods is List &&
+              !methods.contains('generateContent') &&
+              !methods.contains('streamGenerateContent')) {
+            continue;
+          }
+          models.add(
+            LlmUpstreamModel(
+              id: '${account.id}:remote:${models.length}',
+              upstreamModelId: modelId,
+              displayName: (map['displayName'] ?? map['display_name']) is String
+                  ? (map['displayName'] ?? map['display_name']) as String
+                  : modelId,
+              capabilities: {
+                if (methods is List)
+                  'supportedGenerationMethods': List<String>.from(
+                    methods.whereType<String>(),
+                  ),
+              },
+              config: const {'catalogSource': 'upstream_models_endpoint'},
+            ),
+          );
+        }
+        final nextPageToken = data?['nextPageToken'];
+        pageToken = nextPageToken is String && nextPageToken.isNotEmpty
+            ? nextPageToken
+            : null;
+        if (pageToken != null && !seenPageTokens.add(pageToken)) {
+          throw const LlmAccountConnectorException();
+        }
+      } while (pageToken != null);
       return List.unmodifiable(models);
     } catch (_) {
       throw const LlmAccountConnectorException();

@@ -58,6 +58,9 @@ class LlmConnectorHttpClient {
     String? nativeFormat,
     CancelToken? cancelToken,
   }) async {
+    if (cancelToken?.isCancelled ?? false) {
+      throw const LlmConnectorRequestCancelled();
+    }
     if (modelId.trim().isEmpty) {
       throw const LlmConnectorHttpException();
     }
@@ -71,7 +74,13 @@ class LlmConnectorHttpClient {
       try {
         storedAccount = await accountService.ensureAntigravityProjectId(
           storedAccount,
+          cancelToken: cancelToken,
         );
+      } on DioException catch (error) {
+        if (CancelToken.isCancel(error)) {
+          throw const LlmConnectorRequestCancelled();
+        }
+        throw const LlmConnectorHttpException();
       } catch (_) {
         throw const LlmConnectorHttpException();
       }
@@ -166,7 +175,17 @@ class LlmConnectorHttpClient {
           _needsInitialCredentialRefresh(storedAccount, credential)) {
         didPrepareCredential = true;
         try {
-          if (await accountService.refreshCredential(storedAccount)) continue;
+          if (await accountService.refreshCredential(
+            storedAccount,
+            cancelToken: cancelToken,
+          )) {
+            continue;
+          }
+        } on DioException catch (error) {
+          if (CancelToken.isCancel(error)) {
+            throw const LlmConnectorRequestCancelled();
+          }
+          throw const LlmConnectorHttpException();
         } catch (_) {
           throw const LlmConnectorHttpException();
         }
@@ -184,6 +203,12 @@ class LlmConnectorHttpClient {
       } catch (_) {
         throw const LlmConnectorHttpException();
       }
+      final requestCancelToken = CancelToken();
+      if (cancelToken != null) {
+        unawaited(
+          cancelToken.whenCancel.then(requestCancelToken.cancel),
+        );
+      }
       try {
         final response = await _dio.requestUri<Object?>(
           prepared.uri,
@@ -194,23 +219,33 @@ class LlmConnectorHttpClient {
             responseType: stream ? ResponseType.stream : ResponseType.bytes,
             validateStatus: (status) => status != null,
           ),
-          cancelToken: cancelToken,
+          cancelToken: requestCancelToken,
         );
         final status = response.statusCode ?? 0;
         if (status == 401 && !didRetry && _canRefresh(storedAccount)) {
           if (stream && response.data is ResponseBody) {
-            await (response.data as ResponseBody).stream.drain<void>();
+            requestCancelToken.cancel('Discarding unauthorized response body.');
           }
           didRetry = true;
           try {
-            if (await accountService.refreshCredential(storedAccount)) continue;
+            if (await accountService.refreshCredential(
+              storedAccount,
+              cancelToken: cancelToken,
+            )) {
+              continue;
+            }
+          } on DioException catch (error) {
+            if (CancelToken.isCancel(error)) {
+              throw const LlmConnectorRequestCancelled();
+            }
+            throw const LlmConnectorHttpException(statusCode: 401);
           } catch (_) {
             throw const LlmConnectorHttpException(statusCode: 401);
           }
         }
         if (status < 200 || status >= 300) {
           if (stream && response.data is ResponseBody) {
-            await (response.data as ResponseBody).stream.drain<void>();
+            requestCancelToken.cancel('Discarding error response body.');
           }
           throw LlmConnectorHttpException(statusCode: status);
         }
@@ -229,6 +264,7 @@ class LlmConnectorHttpClient {
             source,
             headerObservation,
             completed,
+            requestCancelToken: requestCancelToken,
           );
           return LlmConnectorResponse(
             statusCode: status,
@@ -283,11 +319,11 @@ class LlmConnectorHttpClient {
   }
 
   static Stream<List<int>> _observeResponseStream(
-    String connectorType,
-    Stream<List<int>> source,
-    LlmConnectorObservation initialObservation,
-    Completer<LlmConnectorObservation> completed,
-  ) async* {
+      String connectorType,
+      Stream<List<int>> source,
+      LlmConnectorObservation initialObservation,
+      Completer<LlmConnectorObservation> completed,
+      {CancelToken? requestCancelToken}) async* {
     var observation = initialObservation;
     var partialLine = '';
     final dataLines = <String>[];
@@ -400,6 +436,7 @@ class LlmConnectorHttpClient {
     } catch (_) {
       throw const LlmConnectorHttpException();
     } finally {
+      requestCancelToken?.cancel('Response stream closed.');
       if (!completed.isCompleted) completed.complete(observation);
     }
   }

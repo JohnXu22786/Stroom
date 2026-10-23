@@ -17,6 +17,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('LLM account domain serialization', () {
+    test('ordinary account serialization recursively redacts credentials', () {
+      const secret = 'nested-account-token-secret';
+      final account = LlmAccount(
+        id: 'account-1',
+        connectorType: 'anthropic',
+        authType: 'api_key',
+        displayName: 'Anthropic personal',
+        credentialRef: 'stroom.llm.credential.account-1',
+        endpointConfig: const {
+          'auth': {
+            'token': secret,
+            'credentialRef': 'stroom.llm.credential.account-1',
+          },
+        },
+      );
+
+      final serialized = jsonEncode(account.toMap());
+
+      expect(serialized, isNot(contains(secret)));
+      expect(serialized, contains('credentialRef'));
+      expect(serialized, contains('stroom.llm.credential.account-1'));
+    });
+
     test('round-trips account policy and explicit quota knowledge', () {
       final account = LlmAccount(
         id: 'account-1',
@@ -333,12 +356,235 @@ void main() {
         'name': 'Legacy LLM',
         'key': _secret,
         'configs': [
-          {'id': 'legacy-config', 'providerName': 'Legacy provider'},
+          {
+            'id': 'legacy-config',
+            'providerName': 'Legacy provider',
+            'key': 'sk_legacy_config_serialization_secret',
+          },
         ],
       });
 
-      expect(entry.toMap().containsKey('key'), isFalse);
-      expect(entry.toCredentialMigrationMap()['key'], _secret);
+      final ordinary = entry.toMap();
+      expect(ordinary.containsKey('key'), isFalse);
+      expect((ordinary['configs'] as List).single['key'], isNull);
+
+      final migration = entry.toCredentialMigrationMap();
+      expect(migration['key'], _secret);
+      expect(
+        (migration['configs'] as List).single['key'],
+        'sk_legacy_config_serialization_secret',
+      );
+    });
+
+    test('preserves a display name when the repeated legacy config has none',
+        () async {
+      const accountId = 'account-with-saved-display-name';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {'id': accountId, 'providerName': '', 'models': []}
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': source,
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {'id': accountId, 'displayName': 'Saved account name', 'models': []}
+          ]
+        })
+      });
+
+      await _service(preferences, _MemoryCredentialStore()).migrate();
+
+      expect(
+          _records(preferences
+                  .values[LlmAccountMigrationService.accountsPreferenceKey]!)
+              .single['displayName'],
+          'Saved account name');
+    });
+
+    test(
+        'maps empty upstream IDs from names and avoids generated ID collisions',
+        () async {
+      const accountId = 'account-model-id-collision';
+      const explicitLocalId = '$accountId:0';
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'llm-entry',
+            'type': 'llm',
+            'configs': [
+              {
+                'id': accountId,
+                'models': [
+                  {'modelId': '', 'name': 'name-fallback'},
+                  {
+                    'id': explicitLocalId,
+                    'modelId': 'explicit-upstream-id',
+                    'name': 'Explicit model'
+                  }
+                ]
+              }
+            ]
+          }
+        ])
+      });
+
+      await _service(preferences, _MemoryCredentialStore()).migrate();
+
+      final models = _records(preferences
+              .values[LlmAccountMigrationService.accountsPreferenceKey]!)
+          .single['models'] as List;
+      final first = models[0] as Map;
+      final second = models[1] as Map;
+      expect(first['upstreamModelId'], 'name-fallback');
+      expect(first['id'], isNot(explicitLocalId));
+      expect(second['id'], explicitLocalId);
+      expect(first['id'], isNot(second['id']));
+    });
+
+    test('rejects a model with no stable upstream identity before writes',
+        () async {
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {
+              'id': 'account-without-model-identity',
+              'models': [
+                {'modelId': '', 'name': ''}
+              ]
+            }
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore();
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('rejects a stored secret embedded in a caller-supplied account ID',
+        () async {
+      const secret = 'sk_account_id_stored_secret_6402';
+      const accountId = 'account-sk_account_id_stored_secret_6402';
+      const reference = 'stored-secret-reference';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {'id': accountId, 'credentialRef': reference, 'models': []}
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore()..values[reference] = secret;
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('rejects a stored secret embedded in an orphan account ID', () async {
+      const secret = 'sk_orphan_account_id_stored_secret_7315';
+      const accountId = 'orphan-sk_orphan_account_id_stored_secret_7315';
+      const reference = 'orphan-stored-secret-reference';
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': '[]',
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {'id': accountId, 'credentialRef': reference, 'models': []}
+          ]
+        })
+      });
+      final credentials = _MemoryCredentialStore()..values[reference] = secret;
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], '[]');
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('accepts legacy opaque and nested-encoded percent account references',
+        () async {
+      const accountId = 'tenant%foo';
+      final references = [
+        'stroom.llm.credential.${Uri.encodeComponent(accountId)}',
+        'stroom.llm.credential.$accountId',
+        'stroom.llm.credential.${Uri.encodeComponent(Uri.encodeComponent(accountId))}'
+      ];
+
+      for (var index = 0; index < references.length; index++) {
+        final reference = references[index];
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': jsonEncode([
+            {
+              'id': 'llm-entry',
+              'type': 'llm',
+              'configs': [
+                {
+                  'id': accountId,
+                  'credentialRef': reference,
+                  'key': 'sk_percent_reference_secret_$index',
+                  'models': []
+                }
+              ]
+            }
+          ])
+        });
+        final credentials = _MemoryCredentialStore();
+
+        await _service(preferences, credentials).migrate();
+
+        expect(credentials.values[reference],
+            'sk_percent_reference_secret_$index');
+      }
+    });
+
+    test('rejects malformed generated references before writing credentials',
+        () async {
+      const accountId = 'tenant%foo';
+      final reference = 'stroom.llm.credential.not%xx';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {
+              'id': accountId,
+              'credentialRef': reference,
+              'key': _secret,
+              'models': []
+            }
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore();
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
     });
 
     test(
@@ -1573,6 +1819,58 @@ void main() {
       },
     );
 
+    test(
+      'does not apply staged model IDs after provider settings change',
+      () async {
+        const originalSource = '[{"type":"llm"}]';
+        const replacementSource = '[{"id":"new-source","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': replacementSource,
+        });
+        final credentials = _MemoryCredentialStore();
+
+        await expectLater(
+          _service(preferences, credentials).migrate(
+            sourceProviderEntriesJson: originalSource,
+            expectedStoredProviderEntriesJson: originalSource,
+          ),
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
+    test(
+      'rejects a provider source added while migration waits for its transaction',
+      () async {
+        const migrationSource = '[{"id":"stale","type":"tts"}]';
+        const replacementSource = '[{"id":"external","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences();
+        final credentials = _MemoryCredentialStore();
+        final lease =
+            await LlmAccountMigrationService.acquireCredentialTransaction();
+
+        final migration = _service(preferences, credentials).migrate(
+          sourceProviderEntriesJson: migrationSource,
+          expectedStoredProviderEntriesJson: null,
+          checkExpectedStoredProviderEntriesJson: true,
+        );
+        preferences.values['provider_entries'] = replacementSource;
+        lease.release();
+
+        await expectLater(
+          migration,
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
     test('secure-store failure keeps legacy credentials and safe diagnostics',
         () async {
       final source = _legacyProviderEntries();
@@ -1607,7 +1905,15 @@ void main() {
         isNull,
       );
       expect(logs.join('\n').contains(_secret), isFalse);
-      expect(notifier.state.isLoaded, isFalse);
+      expect(notifier.state.isLoaded, isTrue);
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'llm-entry')
+            .configs
+            .first
+            .key,
+        _secret,
+      );
 
       credentials.failAllWrites = false;
       await notifier.load();

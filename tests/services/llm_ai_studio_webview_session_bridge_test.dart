@@ -114,6 +114,30 @@ void main() {
     },
   );
 
+  test('unsupported JavaScript handler bridge reports session unavailable',
+      () async {
+    final controller = _FakeInAppWebViewController()
+      ..handlerRegistrationUnavailable = true;
+    final webViewDriver = LlmAiStudioInAppWebViewDriver(controller);
+    final request = LlmPreparedNativeRequest(
+      uri: Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent',
+      ),
+      method: 'POST',
+      headers: const {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: const {'contents': []},
+    );
+
+    await expectLater(
+      webViewDriver.execute(request, requestId: 'unsupported-handler'),
+      throwsA(isA<LlmAiStudioWebViewBridgeException>()),
+    );
+    expect(controller.arguments, isEmpty);
+  });
+
   test(
     'production WebView driver rejects non-GenerateContent paths directly',
     () async {
@@ -469,6 +493,7 @@ class _FakeInAppWebViewController extends Fake
   bool pauseStreamAfterStart = false;
   String? errorType;
   bool opaqueRedirect = false;
+  bool handlerRegistrationUnavailable = false;
   int responseStatusCode = 200;
   String responseContentType = 'application/json';
   Completer<CallAsyncJavaScriptResult?>? pendingCallResult;
@@ -494,6 +519,7 @@ class _FakeInAppWebViewController extends Fake
     required String handlerName,
     required JavaScriptHandlerCallback callback,
   }) {
+    if (handlerRegistrationUnavailable) throw UnimplementedError();
     this.handlerName = handlerName;
     this.callback = callback;
   }

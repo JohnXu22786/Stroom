@@ -607,6 +607,75 @@ void main() {
   // 7. ProviderConfigItem - provider-level params
   // =================================================================
   group('ProviderConfigItem - provider-level params', () {
+    test(
+        'ordinary serialization redacts legacy keys but migration input keeps them',
+        () {
+      final item = ProviderConfigItem(
+        providerName: 'Legacy provider',
+        key: 'legacy-secret',
+      );
+
+      expect(item.toMap().containsKey('key'), isFalse);
+      expect(item.toCredentialMigrationMap()['key'], 'legacy-secret');
+    });
+
+    test('ordinary provider serialization redacts unknown legacy tokens', () {
+      const secret = 'legacy-token-secret';
+      final item = ProviderConfigItem.fromMap({
+        'id': 'config-with-legacy-token',
+        'providerName': 'Legacy provider',
+        'key': 'legacy-api-key',
+        'token': secret,
+      });
+      final entry = ProviderEntry(
+        id: 'llm-with-legacy-token',
+        type: 'llm',
+        name: 'Legacy LLM',
+        configs: [item],
+      );
+      final saved = entry.toMap();
+      final migrationInput = entry.toCredentialMigrationMap();
+
+      expect(jsonEncode(saved), isNot(contains(secret)));
+      expect((saved['configs'] as List).single, isNot(contains('token')));
+      expect(jsonEncode(migrationInput), isNot(contains(secret)));
+      expect(
+        ((migrationInput['configs'] as List).single as Map)['key'],
+        'legacy-api-key',
+      );
+    });
+
+    test('ordinary config serialization recursively redacts credentials', () {
+      const secret = 'nested-provider-token-secret';
+      final item = ProviderConfigItem(
+        providerName: 'Nested provider',
+        typeConfig: const {
+          'auth': {
+            'apiKey': secret,
+            'credentialRef': 'stroom.llm.credential.account-1',
+          },
+        },
+        legacyFields: const {
+          'futureAuth': {'token': secret},
+        },
+      );
+
+      final serialized = jsonEncode(item.toMap());
+      final entrySerialized = jsonEncode(
+        ProviderEntry(
+          id: 'nested-provider-entry',
+          type: 'llm',
+          name: 'Nested provider',
+          configs: [item],
+        ).toMap(),
+      );
+
+      expect(serialized, isNot(contains(secret)));
+      expect(entrySerialized, isNot(contains(secret)));
+      expect(serialized, contains('credentialRef'));
+      expect(serialized, contains('stroom.llm.credential.account-1'));
+    });
+
     test('ProviderConfigItem toMap/fromMap preserves provider-level params',
         () {
       final item = ProviderConfigItem(

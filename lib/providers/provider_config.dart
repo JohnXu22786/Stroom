@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -246,6 +247,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   bool _providerEntriesSourceUnreadable = false;
   bool _reloadBeforeNextMutation = false;
   bool _lastLoadSucceeded = false;
+  int _providerEntriesSourceConflictGeneration = 0;
+  final Map<String, String> _conflictedEntryUpdateFingerprints = {};
+  String? _loadedProviderEntriesSourceJson;
 
   ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
       : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
@@ -257,6 +261,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> load() async {
     _lastLoadSucceeded = false;
     _providerEntriesSourceUnreadable = false;
+    _loadedProviderEntriesSourceJson = null;
     var mcpGroups = builtinMcpProviderGroups;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -275,31 +280,74 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final json = prefs.getString('provider_entries');
       if (json != null && json.isNotEmpty) {
         final List<dynamic> rawList;
+        var credentialMigrationUnavailable = false;
+        var sourceForLoad = json;
+        String? providerEntriesJsonForLoad = json;
         try {
           jsonDecode(json) as List;
-          // Covers old settings imported after startup as well: persist IDs
-          // before publishing models to selectors or task flows.
-          await ProviderModelMigration.migrateSettings();
+          // Stage stable IDs so a later secure-storage failure cannot leave
+          // provider_entries partly migrated before credentials are safe.
+          final modelMigratedJson =
+              await ProviderModelMigration.migrateSettingsContent(json);
+          sourceForLoad = modelMigratedJson;
           try {
             await LlmAccountMigrationService(
               preferences: _SharedPreferencesLlmAccountPreferences(prefs),
               credentialStore: _credentialStore,
-            ).migrate();
-          } on LlmAccountMigrationException {
-            // Keep serving the original config in memory. The migration
-            // service leaves provider_entries untouched until secure writes
-            // and account/group validation succeed; later saves retry it.
-            _reloadBeforeNextMutation = true;
-            state = ProviderEntriesState(
-              isLoaded: false,
-              mcpGroups: mcpGroups,
+            ).migrate(
+              sourceProviderEntriesJson: modelMigratedJson,
+              expectedStoredProviderEntriesJson: json,
             );
+          } on LlmAccountMigrationException {
+            _reloadBeforeNextMutation = true;
             debugPrint(
               'Secure credential migration is unavailable; legacy LLM settings are preserved.',
             );
-            return;
+            final currentSource = prefs.getString('provider_entries');
+            if (currentSource == null || currentSource.isEmpty) {
+              state = ProviderEntriesState(
+                isLoaded: false,
+                mcpGroups: mcpGroups,
+              );
+              return;
+            }
+            if (currentSource != json) {
+              try {
+                sourceForLoad =
+                    await ProviderModelMigration.migrateSettingsContent(
+                  currentSource,
+                );
+              } catch (_) {
+                state = ProviderEntriesState(
+                  isLoaded: false,
+                  mcpGroups: mcpGroups,
+                );
+                return;
+              }
+            }
+            providerEntriesJsonForLoad = currentSource;
+            if (!_canServeLegacyProviderEntries(sourceForLoad, prefs)) {
+              state = ProviderEntriesState(
+                isLoaded: false,
+                mcpGroups: mcpGroups,
+              );
+              return;
+            }
+            // The legacy source is still authoritative and has no secure
+            // references to hydrate. Keep it readable for settings and
+            // existing model selectors, but do not let a later edit persist
+            // it until secure migration can be retried successfully.
+            credentialMigrationUnavailable = true;
           }
-          rawList = jsonDecode(prefs.getString('provider_entries')!) as List;
+          if (credentialMigrationUnavailable) {
+            rawList = jsonDecode(sourceForLoad) as List;
+          } else {
+            providerEntriesJsonForLoad = prefs.getString('provider_entries');
+            if (providerEntriesJsonForLoad == null) {
+              throw StateError('Provider settings disappeared during load.');
+            }
+            rawList = jsonDecode(providerEntriesJsonForLoad) as List;
+          }
         } catch (_) {
           _providerEntriesSourceUnreadable = true;
           // 结构性损坏（非法 JSON）：备份原始数据再回退默认预置，
@@ -406,19 +454,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           }
         }
 
+        _loadedProviderEntriesSourceJson = providerEntriesJsonForLoad;
         state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
-        _reloadBeforeNextMutation = false;
+        _reloadBeforeNextMutation = credentialMigrationUnavailable;
         if (entriesChanged ||
             groupAssignmentsChanged ||
             prefs.getString('mcp_provider_groups') !=
                 jsonEncode(mcpGroups.map((group) => group.toMap()).toList())) {
-          await _persist();
+          if (!credentialMigrationUnavailable) await _persist();
         }
         _lastLoadSucceeded = !_reloadBeforeNextMutation;
         return;
       }
+      _loadedProviderEntriesSourceJson = json;
     } catch (_) {
-      debugPrint('Failed to load provider entries.');
       _providerEntriesSourceUnreadable = true;
       _reloadBeforeNextMutation = true;
       state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
@@ -470,6 +519,43 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           rethrow;
         }
       }
+    }
+  }
+
+  bool _canServeLegacyProviderEntries(
+    String json,
+    SharedPreferences preferences,
+  ) {
+    if (preferences.getString(
+              LlmAccountMigrationService.accountsPreferenceKey,
+            ) !=
+            null ||
+        preferences.getString(
+              LlmAccountMigrationService.modelGroupsPreferenceKey,
+            ) !=
+            null ||
+        preferences.getString(LlmAccountMigrationService.migrationStateKey) !=
+            null) {
+      return false;
+    }
+
+    try {
+      final rawEntries = jsonDecode(json);
+      if (rawEntries is! List) return false;
+      for (final rawEntry in rawEntries) {
+        if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
+        if (rawEntry['credentialRef'] != null) return false;
+        final rawConfigs = rawEntry['configs'];
+        if (rawConfigs is! List) return false;
+        for (final rawConfig in rawConfigs) {
+          if (rawConfig is! Map || rawConfig['credentialRef'] != null) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -554,13 +640,44 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     bool requirePersistence = false,
   }) async {
     await _reloadBeforeMutationIfNeeded();
-    await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
-        mcpGroups: state.mcpGroups,
-      ),
-    );
+    final updateFingerprint = _entryUpdateFingerprint(updated);
+    final conflictedFingerprint = _conflictedEntryUpdateFingerprints[id];
+    if (conflictedFingerprint != null &&
+        conflictedFingerprint == updateFingerprint) {
+      // A whole-entry object that already failed against a concurrent update
+      // must not be retried after the notifier reloads newer settings.
+      throw StateError(
+        'Provider settings changed before this update; reload and try again.',
+      );
+    }
+    _conflictedEntryUpdateFingerprints.remove(id);
+    final index = state.entries.indexWhere((entry) => entry.id == id);
+    if (index < 0) {
+      if (requirePersistence) {
+        throw StateError(
+          'Provider entry was removed before it could be saved.',
+        );
+      }
+      return;
+    }
+    final entries = List<ProviderEntry>.from(state.entries);
+    entries[index] = updated;
+    final conflictGeneration = _providerEntriesSourceConflictGeneration;
+    try {
+      await _setStateAndPersist(
+        ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+      );
+    } catch (_) {
+      if (_providerEntriesSourceConflictGeneration != conflictGeneration) {
+        _conflictedEntryUpdateFingerprints[id] = updateFingerprint;
+      }
+      rethrow;
+    }
   }
+
+  String _entryUpdateFingerprint(ProviderEntry entry) => sha256
+      .convert(utf8.encode(jsonEncode(entry.toCredentialMigrationMap())))
+      .toString();
 
   /// 删除条目
   Future<void> remove(String id) async {
