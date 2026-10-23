@@ -164,6 +164,15 @@ class BrowserCookieService {
   /// implemented, the persisted store is cleared and navigation remains usable.
   static Future<bool> prepareForBrowserPageLoad() {
     return _serializeRetentionOperation(() async {
+      try {
+        await _removeGoogleSessionCookiesFromFile();
+      } catch (_) {
+        // A bad saved snapshot must not prevent the requested browser page
+        // from loading. Restoration below is already best-effort.
+        debugPrint(
+          'BrowserCookieService.prepareForBrowserPageLoad could not scrub the saved cookie snapshot.',
+        );
+      }
       final retentionEnabled = await getRetentionMode();
       final backupRestorePending = await hasBackupRestorePending();
       if (retentionEnabled || backupRestorePending) {
@@ -341,12 +350,19 @@ class BrowserCookieService {
       final result = await _collectPlatformCookies();
       // If enumeration was impossible (e.g. no visited domains recorded on
       // a platform without getAllCookies), don't overwrite the existing file.
-      if (result.cookies == null) return;
-      final collected = result.cookies!.map(_cookieToMap).toList();
+      if (result.cookies == null) {
+        await _removeGoogleSessionCookiesFromFile();
+        return;
+      }
+      final collected = _withoutGoogleSessionCookies(
+        result.cookies!.map(_cookieToMap).toList(),
+      );
       if (result.complete) {
         await _writeCookiesFile(collected);
       } else {
-        final fileCookies = await _readCookiesFile();
+        final fileCookies = _withoutGoogleSessionCookies(
+          await _readCookiesFile(),
+        );
         fileCookies.removeWhere(
           (cookie) =>
               _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts),
@@ -367,18 +383,31 @@ class BrowserCookieService {
     return _serializeRetentionOperation(() async {
       final retentionEnabled = await getRetentionMode();
       try {
+        try {
+          await _removeGoogleSessionCookiesFromFile();
+        } catch (e) {
+          debugPrint(
+            'BrowserCookieService.snapshotCookiesForBackup could not scrub the saved cookie snapshot: $e',
+          );
+        }
         final result = await _collectPlatformCookies();
         if (result.cookies == null) {
           if (!retentionEnabled) return null;
-          final persistedCookies = await _readCookiesFile();
+          final persistedCookies = _withoutGoogleSessionCookies(
+            await _readCookiesFileForBackup(),
+          );
           return persistedCookies.isEmpty ? null : persistedCookies;
         }
 
-        final currentCookies = result.cookies!.map(_cookieToMap).toList();
+        final currentCookies = _withoutGoogleSessionCookies(
+          result.cookies!.map(_cookieToMap).toList(),
+        );
         if (result.complete) return currentCookies;
         if (!retentionEnabled) return currentCookies;
 
-        final persistedCookies = await _readCookiesFile();
+        final persistedCookies = _withoutGoogleSessionCookies(
+          await _readCookiesFileForBackup(),
+        );
         persistedCookies.removeWhere(
           (cookie) =>
               _rootPathCookieAppliesToAnyHost(cookie, result.queriedHosts),
@@ -389,6 +418,17 @@ class BrowserCookieService {
         return null;
       }
     });
+  }
+
+  static Future<List<Map<String, dynamic>>> _readCookiesFileForBackup() async {
+    try {
+      return await _readCookiesFile();
+    } catch (e) {
+      debugPrint(
+        'BrowserCookieService.snapshotCookiesForBackup could not read the saved cookie snapshot: $e',
+      );
+      return [];
+    }
   }
 
   /// Restores cookies from the local JSON file to the platform CookieManager.
@@ -437,9 +477,10 @@ class BrowserCookieService {
     bool rollbackOnFailure = false,
   }) async {
     if (!force && !await getRetentionMode()) return true;
+    final safeCookies = _withoutGoogleSessionCookies(cookies);
     if (rollbackOnFailure) {
       try {
-        validateCookieSnapshotForRestore(cookies);
+        validateCookieSnapshotForRestore(safeCookies);
       } catch (e) {
         debugPrint(
           'BrowserCookieService.restoreCookiesFromSnapshot invalid snapshot: $e',
@@ -448,14 +489,14 @@ class BrowserCookieService {
       }
     }
     final rollbackState = rollbackOnFailure
-        ? await _captureCookieRestoreRollbackState(cookies)
+        ? await _captureCookieRestoreRollbackState(safeCookies)
         : null;
     if (rollbackOnFailure && rollbackState == null) return false;
 
     final attemptedCookies = <_CookieRestoreRollbackEntry>[];
     var allCookiesRestored = true;
-    for (var index = 0; index < cookies.length; index++) {
-      final cookieMap = cookies[index];
+    for (var index = 0; index < safeCookies.length; index++) {
+      final cookieMap = safeCookies[index];
       try {
         final name = cookieMap['name'];
         final domain = cookieMap['domain'];
@@ -722,12 +763,19 @@ class BrowserCookieService {
 
     if (platformComplete) {
       // Authoritative snapshot — show it as-is (even when empty, so cookies
-      // deleted on the platform do not resurface from the file).
-      return _groupAndSort(platformCookies);
+      // deleted on the platform do not resurface from the file). Google
+      // session cookies stay in the platform WebView store and are hidden
+      // from the browser data settings page.
+      return _groupAndSort(_withoutGoogleSessionCookies(platformCookies));
     }
     // Partial or failed platform data: merge file + platform (platform wins
     // on conflicts).
-    return _groupAndSort(_mergeCookies(fileCookies, platformCookies));
+    return _groupAndSort(
+      _mergeCookies(
+        _withoutGoogleSessionCookies(fileCookies),
+        _withoutGoogleSessionCookies(platformCookies),
+      ),
+    );
   }
 
   /// Enumerates cookies for every visited host and visited URL path (in
@@ -1104,6 +1152,43 @@ class BrowserCookieService {
     return cookie.toJson();
   }
 
+  static const _googleSessionCookieDomains = <String>[
+    'google.com',
+    'googleapis.com',
+    'googleusercontent.com',
+  ];
+
+  /// Google login and AI Studio API cookies remain in the platform WebView
+  /// store and must never enter Stroom's cookie snapshot files or backups.
+  static bool _isGoogleSessionCookie(Map<String, dynamic> cookie) {
+    final rawDomain = cookie['domain'];
+    if (rawDomain is! String) return false;
+    final domain =
+        rawDomain.toLowerCase().trim().replaceFirst(RegExp(r'^\.'), '');
+    if (domain.isEmpty) return false;
+    if (_googleSessionCookieDomains.any(
+      (suffix) => domain == suffix || domain.endsWith('.$suffix'),
+    )) {
+      return true;
+    }
+    return RegExp(r'(^|\.)google\.[a-z]{2,3}(\.[a-z]{2})?$').hasMatch(domain);
+  }
+
+  static List<Map<String, dynamic>> _withoutGoogleSessionCookies(
+    List<Map<String, dynamic>> cookies,
+  ) =>
+      cookies.where((cookie) => !_isGoogleSessionCookie(cookie)).toList();
+
+  /// Scrubs pre-existing Google session cookies when the browser starts and
+  /// before any snapshot or backup is written.
+  static Future<void> _removeGoogleSessionCookiesFromFile() async {
+    final cookies = await _readCookiesFile();
+    final safeCookies = _withoutGoogleSessionCookies(cookies);
+    if (safeCookies.length != cookies.length) {
+      await _writeCookiesFile(safeCookies);
+    }
+  }
+
   /// Groups a flat cookie list by domain (alphabetically sorted).
   static Map<String, List<Map<String, dynamic>>> _groupAndSort(
     List<Map<String, dynamic>> cookies,
@@ -1152,7 +1237,10 @@ class BrowserCookieService {
     List<Map<String, dynamic>> existing,
     List<Map<String, dynamic>> imported,
   ) =>
-      _mergeCookies(existing, imported);
+      _mergeCookies(
+        _withoutGoogleSessionCookies(existing),
+        _withoutGoogleSessionCookies(imported),
+      );
 
   /// Writes cookies atomically (temp file + rename) so a crash mid-write
   /// cannot corrupt the persisted store. The temp file gets a unique suffix
