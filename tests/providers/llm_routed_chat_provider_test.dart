@@ -521,6 +521,74 @@ void main() {
     }
   });
 
+  test('cancelling chat stream stops its request without a caller token',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'cancel-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Cancel account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'cancel-model',
+            upstreamModelId: 'gpt-cancel',
+            displayName: 'Cancel model',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'cancel-group',
+        displayName: 'Cancel group',
+        members: [
+          LlmModelGroupMember(
+            accountId: 'cancel-account',
+            localModelId: 'cancel-model',
+            upstreamModelId: 'gpt-cancel',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: const Stream<List<int>>.empty(),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'cancel-group',
+      localModelId: 'cancel-model',
+      endpointType: 'openai',
+    );
+
+    final subscription = provider.chatStream(const [
+      {'role': 'user', 'content': 'hello'},
+    ]).listen((_) {});
+    await connector.requestStarted.future;
+    await subscription.cancel();
+
+    expect(connector.lastCancelToken, isNotNull);
+    expect(connector.lastCancelToken!.isCancelled, isTrue);
+  });
+
   test(
     'chat falls back after a connection error before request dispatch',
     () async {
@@ -1532,6 +1600,8 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
   final LlmConnectorHttpException? firstRequestError;
   Map<String, dynamic>? requestBody;
   final requestedAccountIds = <String>[];
+  final requestStarted = Completer<void>();
+  CancelToken? lastCancelToken;
 
   @override
   Future<LlmConnectorResponse> request({
@@ -1548,6 +1618,8 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     Duration? receiveTimeout,
   }) async {
     requestedAccountIds.add(account.id);
+    lastCancelToken = cancelToken;
+    if (!requestStarted.isCompleted) requestStarted.complete();
     requestBody = Map<String, dynamic>.from(body! as Map);
     if (failFirstRequestBeforeSend && requestedAccountIds.length == 1) {
       throw const LlmConnectorHttpException(code: 'connection_error');

@@ -643,24 +643,24 @@ class LlmConnectorHttpClient {
     }
 
     Object? decodedBody;
-    if (discardBody) {
-      onErrorBodyLimitReached?.call();
-    } else
-      try {
+    try {
+      if (discardBody) {
+        onErrorBodyLimitReached?.call();
+      } else {
         decodedBody = await _readFailureBody(
           body,
-          onLimitReached: onErrorBodyLimitReached,
         );
-      } on DioException catch (error) {
-        if (CancelToken.isCancel(error)) {
-          throw const LlmConnectorRequestCancelled();
-        }
-        // Status and allowlisted headers still classify the request if the
-        // upstream error body is malformed or its stream fails while draining.
-      } catch (_) {
-        // Status and allowlisted headers still classify the request if the
-        // upstream error body is malformed or its stream fails while draining.
       }
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) {
+        throw const LlmConnectorRequestCancelled();
+      }
+      // Status and allowlisted headers still classify the request if the
+      // upstream error body is malformed or its stream fails while draining.
+    } catch (_) {
+      // Status and allowlisted headers still classify the request if the
+      // upstream error body is malformed or its stream fails while draining.
+    }
 
     return LlmConnectorHttpException(
       statusCode: statusCode,
@@ -670,29 +670,22 @@ class LlmConnectorHttpClient {
   }
 
   static Future<Object?> _readFailureBody(
-    Object? body, {
-    void Function()? onLimitReached,
-  }) async {
+    Object? body,
+  ) async {
     if (body is ResponseBody) {
       return _decodeResponseBody(
-        await _readBoundedFailureStream(
-          body.stream,
-          onLimitReached: onLimitReached,
-        ),
+        await _readBoundedFailureStream(body.stream),
       );
     }
     if (body is Stream<List<int>>) {
-      return _decodeResponseBody(
-        await _readBoundedFailureStream(body, onLimitReached: onLimitReached),
-      );
+      return _decodeResponseBody(await _readBoundedFailureStream(body));
     }
     return _decodeResponseBody(body);
   }
 
   static Future<Uint8List> _readBoundedFailureStream(
-    Stream<List<int>> stream, {
-    void Function()? onLimitReached,
-  }) async {
+    Stream<List<int>> stream,
+  ) async {
     const maxErrorBodyBytes = 32768;
     final bytes = BytesBuilder(copy: false);
     var retained = 0;
@@ -706,7 +699,6 @@ class LlmConnectorHttpClient {
         bytes.add(take == chunk.length ? chunk : chunk.sublist(0, take));
         retained += take;
         if (retained >= maxErrorBodyBytes) {
-          onLimitReached?.call();
           break;
         }
       }

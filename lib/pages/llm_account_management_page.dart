@@ -11,14 +11,14 @@ class LlmAccountManagementPage extends StatefulWidget {
   final LlmAccountConnectorService? accountService;
   final Future<void> Function()? onConfigurationChanged;
   final Future<void> Function(LlmAccount account)? onAccountSaved;
-  final Future<void> Function(LlmAccount account)? beforeAccountDelete;
+  final Future<void> Function(LlmAccount account)? onAccountDeleted;
 
   const LlmAccountManagementPage({
     super.key,
     this.accountService,
     this.onConfigurationChanged,
     this.onAccountSaved,
-    this.beforeAccountDelete,
+    this.onAccountDeleted,
   });
 
   @override
@@ -161,13 +161,18 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     );
     if (!confirmed || !mounted) return;
     try {
-      await widget.beforeAccountDelete?.call(account);
       final service = await _serviceFuture;
       await service.deleteAccount(account.id);
-      await _reload();
     } catch (_) {
-      _showError('账号删除失败。');
+      if (mounted) _showError('账号删除失败。');
+      return;
     }
+    try {
+      await widget.onAccountDeleted?.call(account);
+    } catch (_) {
+      if (mounted) _showError('账号已删除，但旧配置清理失败。');
+    }
+    if (mounted) await _reload();
   }
 
   Future<void> _addGroup(List<LlmAccount> accounts) async {
@@ -651,9 +656,13 @@ class _ModelGroupCard extends StatelessWidget {
       for (final account in accounts) account.id: account.displayName,
     };
     final diagnostic = LlmChatRouteDiagnostics.latestForGroup(group.id);
-    final preservesLegacyIdentity = group.members.any(
-      (member) => _preservesStableGroupIdentity(group, member),
-    );
+    final preservesLegacyIdentity = group.members.asMap().entries.any(
+          (entry) => _preservesStableGroupIdentity(
+            group,
+            members: group.members,
+            index: entry.key,
+          ),
+        );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1328,7 +1337,8 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
     final member = _members[index];
     final preservesLegacyIdentity = _preservesStableGroupIdentity(
       widget.group,
-      member,
+      members: _members,
+      index: index,
     );
     final account = widget.accounts
         .where((item) => item.id == member.accountId)
@@ -1412,17 +1422,21 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
   }
 }
 
-bool _preservesStableGroupIdentity(
-  LlmModelGroup group,
-  LlmModelGroupMember member,
-) {
-  final localModelId = member.localModelId;
-  if (localModelId == null) return false;
-  if (group.id == stableLlmModelGroupId(member.accountId, localModelId)) {
-    return true;
-  }
-  return group.legacyModelId != null &&
-      stableLlmModelGroupLocalModelId(group.id) == localModelId;
+bool _preservesStableGroupIdentity(LlmModelGroup group,
+    {required List<LlmModelGroupMember> members, required int index}) {
+  final exactAnchor = members.indexWhere((member) {
+    final localModelId = member.localModelId;
+    return localModelId != null &&
+        group.id == stableLlmModelGroupId(member.accountId, localModelId);
+  });
+  if (exactAnchor >= 0) return index == exactAnchor;
+
+  final legacyLocalModelId = stableLlmModelGroupLocalModelId(group.id);
+  if (group.legacyModelId == null || legacyLocalModelId == null) return false;
+  final legacyAnchor = members.indexWhere(
+    (member) => member.localModelId == legacyLocalModelId,
+  );
+  return index == legacyAnchor;
 }
 
 class _AddModelGroupMemberDialog extends StatefulWidget {

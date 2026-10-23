@@ -893,6 +893,38 @@ void main() {
     },
   );
 
+  test('launch snapshot rejects an ambiguous requested assistant model', () {
+    final first = _providers('llm', 'first');
+    final second = _providers('llm', 'second');
+    final firstConfig = first.entries.single.configs.single;
+    final secondConfig = second.entries.single.configs.single;
+    firstConfig.models.single.modelId = 'api';
+    secondConfig.models.single.modelId = 'api';
+    final providers = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'llm',
+          type: 'llm',
+          name: 'P',
+          configs: [firstConfig, secondConfig],
+        ),
+      ],
+    );
+    final assistant = Assistant(
+      id: 'assistant',
+      name: 'A',
+      prompt: 'P',
+      defaultModelId: 'api',
+      defaultProviderName: 'P',
+      defaultModelName: 'M | P',
+    );
+
+    expect(
+      () => FlowLaunchSnapshot.capture(flow, providers, [assistant]),
+      throwsStateError,
+    );
+  });
+
   test('launch snapshot keeps the chat adapter selected model', () async {
     final providers = ProviderEntriesState(
       entries: [
@@ -1018,6 +1050,50 @@ void main() {
       expect(
         (snapshot.toMap()['chatModels'] as List).single['modelId'],
         'named',
+      );
+    },
+  );
+
+  test(
+    'selected chat model fills an assistant that only has a provider name',
+    () {
+      final providers = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'llm',
+            type: 'llm',
+            name: 'P',
+            configs: [
+              ProviderConfigItem(
+                id: 'config',
+                providerName: 'Current provider',
+                host: 'https://example.invalid',
+                key: 'test-key',
+                models: [
+                  ModelConfig(id: 'selected', name: 'Selected', modelId: 'api'),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final assistant = Assistant(
+        id: 'assistant',
+        name: 'Legacy',
+        prompt: 'P',
+        defaultProviderName: 'Removed provider',
+      );
+
+      final snapshot = FlowLaunchSnapshot.capture(
+        flow,
+        providers,
+        [assistant],
+        selectedChatModel: {'configId': 'config', 'modelId': 'selected'},
+      );
+
+      expect(
+        (snapshot.toMap()['chatModels'] as List).single['modelId'],
+        'selected',
       );
     },
   );

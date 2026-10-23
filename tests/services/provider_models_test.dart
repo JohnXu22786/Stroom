@@ -136,6 +136,86 @@ void main() {
     },
   );
 
+  test(
+    'legacy chat selector remains when its stable group lacks streaming',
+    () {
+      const accountId = 'legacy-non-streaming-account';
+      const localModelId = 'legacy-non-streaming-model';
+      final account = LlmAccount(
+        id: accountId,
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Legacy provider',
+        models: const [
+          LlmUpstreamModel(
+            id: localModelId,
+            upstreamModelId: 'legacy-upstream-model',
+            displayName: 'Legacy model',
+          ),
+        ],
+      );
+      final legacyConfig = ProviderConfigItem(
+        id: accountId,
+        providerName: account.displayName,
+        host: 'https://legacy.example.test/v1',
+        key: 'legacy-secret',
+        models: [
+          ModelConfig(
+            id: localModelId,
+            name: 'Legacy model',
+            modelId: 'legacy-upstream-model',
+          ),
+        ],
+      );
+      final groupConfig = buildLlmModelGroupProviderConfigs(
+        accounts: [account],
+        groups: [
+          LlmModelGroup(
+            id: stableLlmModelGroupId(accountId, localModelId),
+            displayName: 'Legacy model',
+            members: const [
+              LlmModelGroupMember(
+                accountId: accountId,
+                localModelId: localModelId,
+                upstreamModelId: 'legacy-upstream-model',
+              ),
+            ],
+          ),
+        ],
+      ).single;
+      final state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'llm',
+            type: 'llm',
+            name: 'LLM',
+            configs: [legacyConfig, groupConfig],
+          ),
+        ],
+      );
+
+      final selectors = flattenProviderModels(state, 'llm');
+
+      expect(
+          groupConfig.models.single.legacyFields['stroomLlmModelCapabilities'],
+          {
+            'vision': false,
+            'streaming': false,
+          });
+      expect(
+        selectors.any(
+          (option) =>
+              option.config.id == accountId && option.model.id == localModelId,
+        ),
+        isTrue,
+      );
+      expect(
+        selectors.any((option) => option.config.id == groupConfig.id),
+        isFalse,
+      );
+    },
+  );
+
   test('legacy selectors remain when their stable group lost the alias', () {
     const accountId = 'legacy-alias-account';
     const removedLocalModelId = 'removed-anchor-model';

@@ -4,11 +4,14 @@
 //
 // No naming conflicts between sources for this file.
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/mcp.dart';
 import 'package:stroom/models/tool_call.dart';
+import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
@@ -116,6 +119,19 @@ void main() {
   });
 
   group('ChatAdapter model selection', () {
+    test('legacy models keep their direct provider with routing available', () {
+      final runtime = Completer<LlmChatRoutingRuntime>().future;
+      final runtimeAdapter = ChatAdapter(routingRuntime: runtime);
+      addTearDown(runtimeAdapter.dispose);
+
+      runtimeAdapter.configure(entriesState);
+
+      expect(
+        runtimeAdapter.getOrCreateService('legacy')!.provider,
+        isNot(isA<LlmRoutedChatProvider>()),
+      );
+    });
+
     test('configure sets adapter to first config, first model (0,0)', () {
       adapter.configure(entriesState);
 
@@ -1931,6 +1947,11 @@ void main() {
                       id: localModelId,
                       name: modelName,
                       modelId: upstreamModelId,
+                      legacyFields: {
+                        kLlmModelCapabilitiesConfigField: {
+                          'streaming': true,
+                        },
+                      },
                     ),
                   ],
                   legacyFields: {kLlmModelGroupConfigField: groupId},

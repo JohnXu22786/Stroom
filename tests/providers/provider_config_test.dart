@@ -360,6 +360,46 @@ void main() {
       expect(state.isLoaded, isTrue);
       expect(state.entries.any((entry) => entry.id == 'builtin_llm'), isTrue);
       expect(state.entries.any((entry) => entry.id == 'builtin_ocr'), isTrue);
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
+    });
+
+    test('provider edits preserve unavailable model-group catalog state',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final entry = ProviderEntry(
+        id: 'legacy-llm',
+        type: 'llm',
+        name: 'LLM供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Legacy OpenAI',
+            host: 'https://legacy.example.test/v1',
+          ),
+        ],
+      );
+      final notifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [entry],
+          llmModelGroupCatalogUnavailable: true,
+        );
+      final container = ProviderContainer(
+        overrides: [providerEntriesProvider.overrideWith((ref) => notifier)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(providerEntriesProvider.notifier).update(
+            entry.id,
+            ProviderEntry(
+              id: entry.id,
+              type: entry.type,
+              name: 'Edited LLM供应商',
+              configs: entry.configs,
+            ),
+          );
+
+      final state = container.read(providerEntriesProvider);
+      expect(state.entries.single.name, 'Edited LLM供应商');
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
     });
 
     test('default entries include ASR when no saved data', () async {

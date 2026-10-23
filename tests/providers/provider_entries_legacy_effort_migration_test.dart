@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_model_group_provider.dart';
+import 'package:stroom/utils/provider_models.dart';
 
 /// Behavior tests for the legacy effort-param data migration:
 /// reasoning params saved before the isEffortParam flag existed are
@@ -436,6 +438,7 @@ void main() {
         await notifier.load();
 
         expect(notifier.state.isLoaded, isTrue);
+        expect(notifier.state.llmCredentialMigrationUnavailable, isTrue);
         final llmAfterUnavailableLoad =
             notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
         final configIdBeforeRetry = llmAfterUnavailableLoad.configs.single.id;
@@ -489,13 +492,24 @@ void main() {
         expect(notifier.state.isLoaded, isTrue);
         final llmAfterRetry =
             notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
-        expect(llmAfterRetry.configs.single.id, configIdBeforeRetry,
+        final sourceConfig = llmAfterRetry.configs
+            .where((config) => !isLlmModelGroupProviderConfig(config))
+            .single;
+        expect(sourceConfig.id, configIdBeforeRetry,
+            reason:
+                'a model selector may save a reference while migration is unavailable');
+        expect(sourceConfig.models.single.id, modelIdBeforeRetry,
             reason:
                 'a model selector may save a reference while migration is unavailable');
         expect(
-            llmAfterRetry.configs.single.models.single.id, modelIdBeforeRetry,
-            reason:
-                'a model selector may save a reference while migration is unavailable');
+          flattenProviderModels(notifier.state, 'llm').any(
+            (model) =>
+                model.config.id == configIdBeforeRetry &&
+                model.model.id == modelIdBeforeRetry,
+          ),
+          isTrue,
+          reason: 'the legacy model remains selectable after secure migration',
+        );
         expect(
           prefs.getString('provider_entries'),
           isNot(contains('"key":"k"')),

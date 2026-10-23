@@ -49,8 +49,21 @@ class LlmChatRoutingRuntime {
 
   /// Returns the process-wide platform runtime so independent task services
   /// share routing state such as the round-robin cursor.
-  static Future<LlmChatRoutingRuntime> sharedPlatform() =>
-      _sharedPlatformRuntime ??= createPlatform();
+  static Future<LlmChatRoutingRuntime> sharedPlatform() {
+    final existing = _sharedPlatformRuntime;
+    if (existing != null) return existing;
+
+    late final Future<LlmChatRoutingRuntime> sharedRuntime;
+    sharedRuntime =
+        createPlatform().catchError((Object error, StackTrace stackTrace) {
+      if (identical(_sharedPlatformRuntime, sharedRuntime)) {
+        _sharedPlatformRuntime = null;
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    });
+    _sharedPlatformRuntime = sharedRuntime;
+    return sharedRuntime;
+  }
 
   Future<LlmModelGroup> resolveGroupForModelReference({
     required String accountId,

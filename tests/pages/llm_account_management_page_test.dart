@@ -12,6 +12,48 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  testWidgets('failed account deletion does not run legacy config cleanup', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'delete-failure-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Delete failure account',
+      ),
+    );
+    var cleanupCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          accountService: service,
+          onAccountDeleted: (_) async {
+            cleanupCalled = true;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(cleanupCalled, isFalse);
+    expect((await service.listAccounts()).single.id, 'delete-failure-account');
+    expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
   testWidgets('shows unknown quota and connection readiness as unknown', (
     tester,
   ) async {
@@ -308,6 +350,19 @@ void main() {
         const ValueKey('local_alias_replacement-account_0'),
       );
       expect(tester.widget<TextFormField>(replacementAlias).enabled, isFalse);
+
+      await tester.tap(find.text('添加成员').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加').last);
+      await tester.pumpAndSettle();
+
+      final duplicateAlias = find.byKey(
+        const ValueKey('local_alias_replacement-account_1'),
+      );
+      expect(tester.widget<TextFormField>(duplicateAlias).enabled, isTrue);
+      await tester.tap(find.byTooltip('移除成员'));
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('保存').last);
       await tester.pumpAndSettle();
 
@@ -1084,6 +1139,7 @@ void main() {
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};
+  bool failNextSet = false;
 
   @override
   Future<String?> getString(String key) async => values[key];
@@ -1093,6 +1149,10 @@ class _MemoryPreferences implements LlmAccountPreferences {
 
   @override
   Future<bool> setString(String key, String value) async {
+    if (failNextSet) {
+      failNextSet = false;
+      throw StateError('transient preference write failure');
+    }
     values[key] = value;
     return true;
   }

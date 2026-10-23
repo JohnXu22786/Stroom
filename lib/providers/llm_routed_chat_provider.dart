@@ -148,11 +148,12 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     CancelToken? cancelToken,
     String? system,
   }) {
+    final requestCancelToken = cancelToken ?? CancelToken();
     late final StreamController<AIStreamEvent> controller;
     controller = StreamController<AIStreamEvent>(
       onCancel: () {
-        if (cancelToken != null && !cancelToken.isCancelled) {
-          cancelToken.cancel('Chat stream cancelled');
+        if (!requestCancelToken.isCancelled) {
+          requestCancelToken.cancel('Chat stream cancelled');
         }
       },
     );
@@ -168,8 +169,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           },
           supportedConnectorTypes: _supportedConnectorTypes,
           request: (candidate, progress) async {
-            if (cancelToken?.isCancelled == true) {
-              throw cancelToken!.cancelError!;
+            if (requestCancelToken.isCancelled) {
+              throw requestCancelToken.cancelError!;
             }
             final body = _buildBody(
               messages,
@@ -188,7 +189,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 modelId: candidate.upstreamModelId,
                 body: body,
                 stream: true,
-                cancelToken: cancelToken,
+                cancelToken: requestCancelToken,
                 onRequestSent: progress.markRequestSent,
               );
               _lastResponseStatusCode = response.statusCode;

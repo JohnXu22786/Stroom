@@ -754,7 +754,7 @@ class ChatAdapter {
     String endpointType,
   ) {
     final routingRuntime = _routingRuntime;
-    if (routingRuntime != null) {
+    if (routingRuntime != null && isLlmModelGroupProviderConfig(config)) {
       return LlmRoutedChatProvider(
         runtime: routingRuntime,
         groupId: llmModelGroupIdForConfig(config) ??

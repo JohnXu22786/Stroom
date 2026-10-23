@@ -911,12 +911,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         body: const Center(child: Text('供应商未找到')),
       );
     }
-    if (entry.type == 'llm') {
+    if (entry.type == 'llm' &&
+        !entriesState.llmCredentialMigrationUnavailable &&
+        !entriesState.llmModelGroupCatalogUnavailable) {
       return LlmAccountManagementPage(
         onConfigurationChanged: () =>
             ref.read(providerEntriesProvider.notifier).load(),
         onAccountSaved: _syncLegacyLlmAccountConfig,
-        beforeAccountDelete: _removeLegacyLlmAccountConfig,
+        onAccountDeleted: _removeLegacyLlmAccountConfig,
       );
     }
     if (entry.type == 'mcp') {

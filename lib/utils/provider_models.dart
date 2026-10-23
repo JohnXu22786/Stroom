@@ -24,7 +24,20 @@ List<ProviderModel> flattenProviderModels(
           (groupConfig) =>
               isLlmModelGroupProviderConfig(groupConfig) &&
               llmModelGroupIdForConfig(groupConfig) == expectedGroupId &&
-              groupConfig.models.any((groupModel) => groupModel.id == model.id),
+              groupConfig.models.any(
+                (groupModel) =>
+                    groupModel.id == model.id &&
+                    (type != 'llm' ||
+                        llmModelConfigSupportsCapability(
+                          groupModel,
+                          'streaming',
+                        )) &&
+                    (type != 'ocr' ||
+                        llmModelConfigSupportsCapability(
+                          groupModel,
+                          'vision',
+                        )),
+              ),
         );
   }
 

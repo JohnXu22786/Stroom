@@ -689,8 +689,7 @@ class FlowLaunchSnapshot {
         final hasRequestedId = requestedId != null && requestedId.isNotEmpty;
         final savedProviderName = assistant.defaultProviderName?.trim();
         final hasLegacyModelReference = !hasRequestedId &&
-            (savedProviderName?.isNotEmpty == true ||
-                assistant.defaultModelName?.trim().isNotEmpty == true);
+            assistant.defaultModelName?.trim().isNotEmpty == true;
         // Custom-group member IDs encode the group ID, so a stale provider
         // label after a group rename must not hide the same stable member.
         final stableGroupReference = llmModelGroupMemberReferenceForModelId(
@@ -739,9 +738,7 @@ class FlowLaunchSnapshot {
                 .where(
                   (s) =>
                       s.config.id == selectedChatModel['configId'] &&
-                      s.model.id == selectedChatModel['modelId'] &&
-                      (!constrainToDefaultProvider ||
-                          s.config.providerName == savedProviderName),
+                      s.model.id == selectedChatModel['modelId'],
                 )
                 .firstOrNull;
         final identityCandidates = stableGroupReference != null
@@ -757,13 +754,15 @@ class FlowLaunchSnapshot {
                 ? byProvider
                 : byId;
         final selected = hasRequestedId
-            ? uniqueMatch(
-                identityCandidates,
-                displayName: hasBoundId ? boundId : assistant.defaultModelName,
-              )
+            ? hasBoundId
+                ? identityCandidates.firstOrNull
+                : uniqueMatch(
+                    identityCandidates,
+                    displayName: assistant.defaultModelName,
+                  )
             : uniqueMatch(byName, displayName: assistant.defaultModelName) ??
                 (hasLegacyModelReference ? null : bySelectedIdentity);
-        if (selected == null && hasLegacyModelReference) {
+        if (selected == null && (hasRequestedId || hasLegacyModelReference)) {
           throw StateError('助手保存的模型引用已删除或供应商配置不可用，请重新选择模型');
         }
         if (selected == null &&

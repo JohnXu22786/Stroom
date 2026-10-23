@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
@@ -9,9 +10,15 @@ import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
   test(
-    'platform routing runtime is shared across independent OCR services',
+    'platform routing runtime retries initialization after a transient failure',
     () async {
       SharedPreferences.setMockInitialValues({});
+      SharedPreferencesStorePlatform.instance = _FailOncePreferencesStore();
+
+      await expectLater(
+        LlmChatRoutingRuntime.sharedPlatform(),
+        throwsA(isA<StateError>()),
+      );
 
       final first = await LlmChatRoutingRuntime.sharedPlatform();
       final second = await LlmChatRoutingRuntime.sharedPlatform();
@@ -576,6 +583,21 @@ void main() {
       expect(diagnostic?.decisions.single.reason, 'request_invalidRequest');
     },
   );
+}
+
+class _FailOncePreferencesStore extends InMemorySharedPreferencesStore {
+  _FailOncePreferencesStore() : super.empty();
+
+  bool _shouldFail = true;
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    if (_shouldFail) {
+      _shouldFail = false;
+      throw StateError('transient preferences failure');
+    }
+    return super.getAll();
+  }
 }
 
 LlmAccountConnectorService _accountService(_MemoryPreferences preferences) =>
