@@ -3,7 +3,8 @@ import 'dart:io' show exit, Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, TargetPlatform;
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 
 import 'app_restart.dart';
@@ -17,6 +18,7 @@ import '../services/data_migration_service.dart';
 import '../services/data_safety_manager.dart';
 import '../services/startup_data_validation_unavailable.dart';
 import '../services/startup_preferences.dart';
+import '../widgets/update_dialog.dart';
 
 // ====================================================================
 // StartupApp — 应用启动入口
@@ -736,18 +738,68 @@ class _ErrorCatcher extends StatefulWidget {
 ///
 /// 只读页面：提供「导出数据」（全量导出到用户选择的位置，只读操作）
 /// 与「退出应用」，绝不提供任何写入入口，防止破坏被保护的数据。
-class _DataSafetyBlockPage extends StatefulWidget {
+class _DataSafetyBlockPage extends ConsumerStatefulWidget {
   final String message;
   final VoidCallback? onExit;
 
   const _DataSafetyBlockPage({required this.message, this.onExit});
 
   @override
-  State<_DataSafetyBlockPage> createState() => _DataSafetyBlockPageState();
+  ConsumerState<_DataSafetyBlockPage> createState() =>
+      _DataSafetyBlockPageState();
 }
 
-class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
+class _DataSafetyBlockPageState extends ConsumerState<_DataSafetyBlockPage> {
   bool _exporting = false;
+
+  Future<void> _checkForUpdate() async {
+    final snackBar = ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('正在检查更新...'),
+          ],
+        ),
+        duration: Duration(days: 1),
+      ),
+    );
+
+    await ref.read(updateProvider.notifier).checkForUpdate();
+    if (!mounted) return;
+    final state = ref.read(updateProvider);
+    snackBar.close();
+
+    if (state.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.error!),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else if (state.updateAvailable) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) => const UpdateDialog(),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已是最新版本'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
 
   Future<void> _exportData() async {
     if (_exporting) return;
@@ -802,9 +854,14 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
                       ),
                 ),
                 const SizedBox(height: 28),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
+                    if (!kIsWeb) ...[
+                      _buildUpdateButton(),
+                    ],
                     OutlinedButton.icon(
                       onPressed: _exporting ? null : _exportData,
                       icon: _exporting
@@ -816,7 +873,6 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
                           : const Icon(Icons.save_alt),
                       label: const Text('导出数据'),
                     ),
-                    const SizedBox(width: 12),
                     FilledButton.icon(
                       onPressed: widget.onExit ?? () => SystemNavigator.pop(),
                       icon: const Icon(Icons.exit_to_app),
@@ -829,6 +885,21 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildUpdateButton() {
+    final isChecking = ref.watch(updateProvider).isChecking;
+    return OutlinedButton.icon(
+      onPressed: isChecking ? null : _checkForUpdate,
+      icon: isChecking
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.update),
+      label: const Text('更新应用'),
     );
   }
 }
