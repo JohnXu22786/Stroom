@@ -192,7 +192,11 @@ class _StartupAppState extends State<StartupApp>
       if (repairResult.skippedDueToFreeze || repairResult.frozen) {
         final status = await DataSafetyManager.loadStatus();
         if (!mounted) return;
-        final desc = (status.failedMigration != null)
+        final desc = repairResult.statusUnreadable || status.isUnreadable
+            ? '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n'
+                '为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。'
+                '请先使用「导出数据」保存数据文件，然后退出应用并修复状态标记后重试。'
+            : (status.failedMigration != null)
             ? '数据格式迁移失败（${status.failedMigration}）。\n\n'
                 '为保护数据未做任何改动。请回退到旧版本应用，'
                 '或等待修复版本发布后再升级。'
@@ -239,8 +243,12 @@ class _StartupAppState extends State<StartupApp>
       // 这里必须复查：冻结 → 显示阻断页，拒绝进入主应用。
       final postMigrationStatus = await DataSafetyManager.loadStatus();
       if (!mounted) return;
-      if (postMigrationStatus.isFrozen) {
-        final desc = (postMigrationStatus.failedMigration != null)
+      if (postMigrationStatus.isFrozen || postMigrationStatus.isUnreadable) {
+        final desc = postMigrationStatus.isUnreadable
+            ? '无法确认数据安全状态（状态标记无法读取或格式无效）。\n\n'
+                '应用已停止继续启动。请先使用「导出数据」保存数据文件，'
+                '然后退出应用并修复状态标记后重试。'
+            : (postMigrationStatus.failedMigration != null)
             ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
                 '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
                 '或等待修复版本发布后再升级。'

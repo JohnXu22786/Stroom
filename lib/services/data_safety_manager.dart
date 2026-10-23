@@ -25,6 +25,9 @@ enum DataSafetyState {
   /// 冻结：自动修复全部失败，或迁移失败 —— 拒绝进入应用，
   /// 防止写入进一步破坏数据（版本感知，见 [DataSafetyStatus.frozenByVersion]）。
   frozen,
+
+  /// 状态文件存在但不可读或无效；为保护数据，拒绝继续启动。
+  unreadable,
 }
 
 /// 持久化的数据安全状态（`<AppStorage>/.data_safety.json`）。
@@ -56,9 +59,11 @@ class DataSafetyStatus {
   });
 
   static const normal = DataSafetyStatus(state: DataSafetyState.normal);
+  static const unreadable = DataSafetyStatus(state: DataSafetyState.unreadable);
 
   bool get isFrozen => state == DataSafetyState.frozen;
   bool get isRepairing => state == DataSafetyState.repairing;
+  bool get isUnreadable => state == DataSafetyState.unreadable;
 
   Map<String, dynamic> toJson() => {
         'state': state.name,
@@ -69,17 +74,47 @@ class DataSafetyStatus {
         'updatedAt': (updatedAt ?? DateTime.now()).toIso8601String(),
       };
 
-  static DataSafetyStatus fromJson(Map<String, dynamic> json) =>
-      DataSafetyStatus(
-        state: DataSafetyState.values.firstWhere(
-          (s) => s.name == json['state'],
-          orElse: () => DataSafetyState.normal,
-        ),
-        frozenByVersion: json['frozenByVersion'] as String?,
-        failedMigration: json['failedMigration'] as String?,
-        targetFormatVersion: (json['targetFormatVersion'] as num?)?.toInt(),
-        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
-      );
+  static DataSafetyStatus fromJson(Map<String, dynamic> json) {
+    final stateName = json['state'];
+    if (stateName is! String) {
+      throw const FormatException('数据安全状态缺少有效 state');
+    }
+    final matchingStates = DataSafetyState.values
+        .where((state) => state.name == stateName && !state.isUnreadable);
+    if (matchingStates.isEmpty) {
+      throw FormatException('无效的数据安全状态: $stateName');
+    }
+
+    final frozenByVersion = json['frozenByVersion'];
+    final failedMigration = json['failedMigration'];
+    final targetFormatVersion = json['targetFormatVersion'];
+    final updatedAtValue = json['updatedAt'];
+    if (frozenByVersion != null && frozenByVersion is! String ||
+        failedMigration != null && failedMigration is! String ||
+        targetFormatVersion != null && targetFormatVersion is! num ||
+        updatedAtValue != null && updatedAtValue is! String) {
+      throw const FormatException('数据安全状态字段格式无效');
+    }
+    if (matchingStates.single == DataSafetyState.frozen &&
+        (frozenByVersion == null ||
+            (frozenByVersion as String).trim().isEmpty)) {
+      throw const FormatException('冻结状态缺少有效的冻结版本');
+    }
+    final updatedAt = updatedAtValue == null
+        ? null
+        : DateTime.tryParse(updatedAtValue as String);
+    if (updatedAtValue != null && updatedAt == null) {
+      throw const FormatException('数据安全状态更新时间无效');
+    }
+
+    return DataSafetyStatus(
+      state: matchingStates.single,
+      frozenByVersion: frozenByVersion as String?,
+      failedMigration: failedMigration as String?,
+      targetFormatVersion: (targetFormatVersion as num?)?.toInt(),
+      updatedAt: updatedAt,
+    );
+  }
 }
 
 /// 启动自愈检查结果。
@@ -96,11 +131,15 @@ class RepairResult {
   /// 因冻结状态未运行检查（冻结由相同构建触发，需用户回退/升级）。
   final bool skippedDueToFreeze;
 
+  /// 状态文件存在但无法读取/校验，因此启动检查被拒绝。
+  final bool statusUnreadable;
+
   const RepairResult({
     this.corruptionFound = false,
     this.repaired = false,
     this.frozen = false,
     this.skippedDueToFreeze = false,
+    this.statusUnreadable = false,
   });
 }
 
@@ -131,17 +170,24 @@ class DataSafetyManager {
   }
 
   static Future<DataSafetyStatus> loadStatus() async {
+    // Web has no dart:io-backed safety marker; it cannot contain a persisted
+    // marker to inspect, so preserve its existing normal startup behavior.
+    if (kIsWeb) return DataSafetyStatus.normal;
     try {
       final file = await _stateFile();
       if (!await file.exists()) return DataSafetyStatus.normal;
       final raw = await file.readAsString();
-      if (raw.trim().isEmpty) return DataSafetyStatus.normal;
+      if (raw.trim().isEmpty) {
+        throw const FormatException('数据安全状态文件为空');
+      }
       final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) return DataSafetyStatus.normal;
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('数据安全状态必须是 JSON 对象');
+      }
       return DataSafetyStatus.fromJson(decoded);
     } catch (e) {
-      debugPrint('[DataSafetyManager] 读取状态失败（按正常处理）: $e');
-      return DataSafetyStatus.normal;
+      debugPrint('[DataSafetyManager] 读取状态失败（拒绝启动）: $e');
+      return DataSafetyStatus.unreadable;
     }
   }
 
@@ -186,6 +232,15 @@ class DataSafetyManager {
   /// 启动时调用：处理冻结 → 校验 → 损坏则回滚修复。
   static Future<RepairResult> checkAndRepair() async {
     final status = await loadStatus();
+
+    if (status.isUnreadable) {
+      debugPrint('[DataSafetyManager] 安全状态未知，跳过修复与完整性检查');
+      return const RepairResult(
+        frozen: true,
+        skippedDueToFreeze: true,
+        statusUnreadable: true,
+      );
+    }
 
     // ---- 冻结处理（版本感知）----
     if (status.isFrozen) {
