@@ -755,8 +755,11 @@ class _DataSafetyBlockPageState extends State<_DataSafetyBlockPage> {
     try {
       // 双平台统一路径：原生走 FilePicker 保存；Web 走内存构建 +
       // 浏览器下载（exportBackup 内部处理）。
-      await BackupService.exportBackup(context, selection: BackupSelection.all);
-      if (!mounted) return;
+      final exported = await BackupService.exportBackup(
+        context,
+        selection: BackupSelection.all,
+      );
+      if (!mounted || !exported) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('数据导出完成')),
       );

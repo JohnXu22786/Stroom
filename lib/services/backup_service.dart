@@ -4770,6 +4770,9 @@ class BackupService {
 
   /// 导出备份：弹出保存文件对话框，创建 zip。
   ///
+  /// Returns `true` only after the backup was saved; cancellation or failure
+  /// returns `false`.
+  ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
   ///
@@ -4780,7 +4783,7 @@ class BackupService {
   ///   TransactionTooLargeException），iOS/桌面 dart:io 直接复制。
   /// - 桌面：先让用户选择保存位置（`saveFile` 不传 bytes 只返回路径），
   ///   再流式写入该路径。
-  static Future<void> exportBackup(
+  static Future<bool> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
@@ -4831,7 +4834,7 @@ class BackupService {
         if (outputPath == null) {
           // 用户取消保存
           await AppLogService.info('BackupService', 'exportBackup: 用户取消');
-          return;
+          return false;
         }
         var destinationPath = outputPath;
         if (await File(destinationPath).exists()) {
@@ -4859,11 +4862,13 @@ class BackupService {
         savedLocation = destinationPath;
       }
 
-      if (savedLocation != null && context.mounted) {
+      if (savedLocation == null) return false;
+      if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
+      return true;
     } catch (e) {
       await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
@@ -4871,6 +4876,7 @@ class BackupService {
           SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
         );
       }
+      return false;
     }
   }
 
