@@ -27,7 +27,10 @@ dependencies:
   # TTS Functionality Dependencies
   dio: ^5.10.0
   shared_preferences: ^2.5.5
-  shared_preferences_android: ^2.4.0
+  # Keep the plugin on its pre-JNI Android implementation while the app
+  # supports Flutter versions before 3.44; 2.5.0/2.5.1 lose JNI methods under
+  # release R8 shrinking (fixed in 2.5.2, which requires Flutter 3.44+).
+  shared_preferences_android: ">=2.4.25 <2.5.0"
   file_picker: ^11.0.2
   permission_handler: ^12.0.3
   just_audio: ^0.10.6
