@@ -844,6 +844,94 @@ void main() {
       expect(models.single.displayName, 'Gemini 3.1 Pro');
     });
 
+    test('follows Gemini model discovery pagination tokens', () async {
+      final requestedUris = <Uri>[];
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestedUris.add(options.uri);
+          final page = options.uri.queryParameters['pageToken'];
+          return ResponseBody.fromString(
+            jsonEncode(
+              page == null
+                  ? {
+                      'models': [
+                        {
+                          'name': 'models/gemini-3.1-pro',
+                          'supportedGenerationMethods': ['generateContent'],
+                        },
+                      ],
+                      'nextPageToken': 'next-page-token',
+                    }
+                  : {
+                      'models': [
+                        {
+                          'name': 'models/gemini-3.1-flash',
+                          'supportedGenerationMethods': ['generateContent'],
+                        },
+                      ],
+                    },
+            ),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final service = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await service.saveAccount(
+        _account('gemini-paginated-discovery', 'gemini'),
+        secret: 'gemini-private-key',
+      );
+
+      final models = await service.discoverModels(account, refreshRemote: true);
+
+      expect(requestedUris, hasLength(2));
+      expect(requestedUris.first.queryParameters, isEmpty);
+      expect(
+        requestedUris.last.queryParameters['pageToken'],
+        'next-page-token',
+      );
+      expect(
+        models.map((model) => model.upstreamModelId),
+        ['gemini-3.1-pro', 'gemini-3.1-flash'],
+      );
+    });
+
+    test('bounds Gemini model discovery when every page returns a new token',
+        () async {
+      var requestCount = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          requestCount++;
+          return ResponseBody.fromString(
+            jsonEncode({'models': [], 'nextPageToken': 'page-$requestCount'}),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final discoveryService = LlmAccountConnectorService(
+        preferences: preferences,
+        credentialStore: credentials,
+        dio: dio,
+      );
+      final account = await discoveryService.saveAccount(
+        _account('gemini-unbounded-discovery', 'gemini'),
+        secret: 'gemini-private-key',
+      );
+
+      await expectLater(
+        discoveryService.discoverModels(account, refreshRemote: true),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+      expect(requestCount, 100);
+    });
+
     test(
       'rejects unapproved Gemini model discovery hosts before key use',
       () async {
@@ -2013,6 +2101,55 @@ void main() {
       },
     );
 
+    test('cancellation skips Antigravity project discovery', () async {
+      var projectLookups = 0;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.path.endsWith(':loadCodeAssist')) projectLookups++;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'cloudaicompanionProject': {'id': 'resolved-project'},
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account(
+          'antigravity-project-cancelled',
+          'antigravity',
+          authType: 'oauth',
+        ),
+        secret: jsonEncode({'access_token': 'antigravity-token'}),
+      );
+      final cancelToken = CancelToken()..cancel('caller cancelled');
+
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {
+            'request': {'contents': []}
+          },
+          cancelToken: cancelToken,
+        ),
+        throwsA(isA<LlmConnectorRequestCancelled>()),
+      );
+
+      expect(projectLookups, 0);
+      expect(
+        (await accounts.getAccount(account.id))?.endpointConfig['projectId'],
+        isNull,
+      );
+    });
+
     test('does not use non-map JSON as an Antigravity project token', () async {
       var requestsSent = 0;
       final dio = Dio()
@@ -2878,6 +3015,63 @@ void main() {
       },
     );
 
+    test('cancels an in-flight OAuth refresh without persisting new tokens',
+        () async {
+      final refreshStarted = Completer<void>();
+      final finishRefresh = Completer<void>();
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          if (options.uri.host == 'auth.openai.com') {
+            refreshStarted.complete();
+            await finishRefresh.future;
+            return ResponseBody.fromString(
+              jsonEncode({'access_token': 'rotated-access-token'}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          }
+          return ResponseBody.fromString('{}', 200);
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+        dio: dio,
+      );
+      final account = await accounts.saveAccount(
+        _account('codex-refresh-cancel', 'codex', authType: 'oauth'),
+        secret: jsonEncode({
+          'access_token': 'expired-access-token',
+          'refresh_token': 'old-refresh-token',
+          'expires_at': DateTime.utc(2000).toIso8601String(),
+        }),
+      );
+      final cancelToken = CancelToken();
+      final request = LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'gpt-5.5',
+        body: const {'model': 'gpt-5.5', 'input': []},
+        cancelToken: cancelToken,
+      );
+
+      await refreshStarted.future;
+      cancelToken.cancel('caller cancelled');
+      finishRefresh.complete();
+
+      await expectLater(
+        request,
+        throwsA(isA<LlmConnectorRequestCancelled>()),
+      );
+      final storedCredential = jsonDecode(
+        (await accounts.readCredential(account.id))!,
+      );
+      expect(storedCredential['access_token'], 'expired-access-token');
+    });
+
     test('does not expose upstream error text or credentials', () async {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter(
@@ -2916,6 +3110,58 @@ void main() {
         expect(error.statusCode, 500);
         expect(error.toString(), isNot(contains('private token')));
         expect(error.toString(), isNot(contains('custom-private-api-key')));
+      }
+    });
+
+    test('cancels unread error response streams before reporting failure',
+        () async {
+      var responseStreamCancelled = false;
+      final source = StreamController<Uint8List>(
+        onCancel: () => responseStreamCancelled = true,
+      );
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter(
+          (options) async => ResponseBody(
+            source.stream,
+            500,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          ),
+        );
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        LlmAccount(
+          id: 'compat-stream-error',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Private endpoint',
+          endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
+        ),
+        secret: 'custom-private-api-key',
+      );
+      final request = LlmConnectorHttpClient(
+        accountService: accounts,
+        dio: dio,
+      ).request(
+        account: account,
+        modelId: 'private-model',
+        body: const {'model': 'private-model', 'messages': []},
+        stream: true,
+      );
+
+      try {
+        await expectLater(
+          request.timeout(const Duration(milliseconds: 100)),
+          throwsA(isA<LlmConnectorHttpException>()),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(responseStreamCancelled, isTrue);
+      } finally {
+        await source.close();
       }
     });
   });
@@ -3218,6 +3464,44 @@ void main() {
       },
     );
 
+    test('ignores Devin reset timestamps outside the supported date range',
+        () async {
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          return ResponseBody.fromBytes(
+            _devinQuotaResponse(
+              daily: 91,
+              weekly: 47,
+              dailyReset: 8640000000001,
+            ),
+            200,
+            headers: const {
+              'content-type': ['application/proto'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('devin-invalid-reset', 'devin', authType: 'session_token'),
+        secret: 'devin-session-token',
+      );
+
+      final observation = await LlmConnectorQuotaService(
+        accountService: accounts,
+        dio: dio,
+      ).observeAccountQuota(account);
+
+      expect(observation.quotaSignals['dailyRemainingPercent']?.value, 91);
+      expect(
+        observation.quotaSignals['dailyRemainingPercent']?.resetAt,
+        isNull,
+      );
+      expect(observation.quotaSignals['weeklyRemainingPercent']?.value, 47);
+    });
+
     test('rejects negative Devin remaining quota percentages', () async {
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -3366,12 +3650,25 @@ void main() {
   });
 }
 
-Uint8List _devinQuotaResponse({required int daily, required int weekly}) {
+Uint8List _devinQuotaResponse({
+  required int daily,
+  required int weekly,
+  int? dailyReset,
+  int? weeklyReset,
+}) {
   final plan = <int>[];
   _appendTag(plan, 14, 0);
   _appendVarint(plan, daily);
   _appendTag(plan, 15, 0);
   _appendVarint(plan, weekly);
+  if (dailyReset != null) {
+    _appendTag(plan, 17, 0);
+    _appendVarint(plan, dailyReset);
+  }
+  if (weeklyReset != null) {
+    _appendTag(plan, 18, 0);
+    _appendVarint(plan, weeklyReset);
+  }
   final user = <int>[];
   _appendBytesField(user, 13, plan);
   final response = <int>[];

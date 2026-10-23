@@ -326,9 +326,17 @@ Map<String, Object?> _prepareLegacyChatConfigsSync(String raw) {
       final context = model['maxTokens'] ?? model['context'];
       if (context != null) typeConfig['context'] = context;
       final modelId = model['modelId'];
+      final modelName = model['name'];
+      final stableModelId = modelId is String && modelId.trim().isNotEmpty
+          ? modelId
+          : (modelName is String && modelName.trim().isNotEmpty
+              ? modelName
+              : '');
       return <String, dynamic>{
-        'name': modelId is String ? modelId : '',
-        'modelId': modelId is String ? modelId : '',
+        'name': modelName is String && modelName.trim().isNotEmpty
+            ? modelName
+            : stableModelId,
+        'modelId': stableModelId,
         'supportStream': model['supportStream'] is bool
             ? model['supportStream'] as bool
             : true,
@@ -491,12 +499,16 @@ bool _sameLegacyProviderConfig(
   }
   List<String>? modelIds(Object? value) {
     if (value is! List) return null;
+    if (value.isEmpty) return null;
     final result = <String>[];
     for (final item in value) {
       if (item is! Map) return null;
-      final id = item['modelId'] is String
-          ? item['modelId'] as String
-          : (item['name'] is String ? item['name'] as String : '');
+      final modelId = item['modelId'];
+      final name = item['name'];
+      final id = modelId is String && modelId.trim().isNotEmpty
+          ? modelId
+          : (name is String && name.trim().isNotEmpty ? name : '');
+      if (id.isEmpty) return null;
       result.add(id);
     }
     return result;
