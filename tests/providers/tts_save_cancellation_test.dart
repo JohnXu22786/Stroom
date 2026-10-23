@@ -164,7 +164,8 @@ void main() {
 
     notifier.resumeTask('restart-resume');
     await waitForStatus('restart-resume', TaskStatus.completed);
-    expect(container.read(taskListProvider).single.providerConfig.key, 'test-key');
+    expect(
+        container.read(taskListProvider).single.providerConfig.key, 'test-key');
   });
 
   test('retry after restart rehydrates the provider credential', () async {
@@ -190,7 +191,8 @@ void main() {
 
     notifier.retryTask('restart-retry');
     await waitForStatus('restart-retry', TaskStatus.completed);
-    expect(container.read(taskListProvider).single.providerConfig.key, 'test-key');
+    expect(
+        container.read(taskListProvider).single.providerConfig.key, 'test-key');
   });
 
   for (final persisted in [false, true]) {

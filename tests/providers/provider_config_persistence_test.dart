@@ -13,7 +13,8 @@ void main() {
   });
 
   group('ProviderEntriesNotifier.load - corrupt data handling', () {
-    test('non-array provider_entries is quarantined before migration '
+    test(
+        'non-array provider_entries is quarantined before migration '
         'overwrite', () async {
       // 回归：chat_configs 存在时 _migrateOldChatConfigs 会重写
       // provider_entries —— 现有数据损坏（非数组）必须先隔离再覆盖，
@@ -219,8 +220,8 @@ void main() {
         final savedEntries =
             jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
         final savedTts = savedEntries.whereType<Map>().singleWhere(
-          (entry) => entry['id'] == originalTts.id,
-        );
+              (entry) => entry['id'] == originalTts.id,
+            );
         expect(savedTts['name'], 'Newer external TTS edit');
         expect(
           (savedTts['configs'] as List).single['id'],

@@ -20,9 +20,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (json == null || json.isEmpty) return;
 
       // 兜底：使用 whereType 安全过滤非 Map 条目，避免 `.cast<>()` 或 `as Map` 闪退
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -74,9 +73,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final json = prefs.getString('provider_entries');
       if (json == null || json.isEmpty) return;
 
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -560,8 +558,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         prefs.getString('provider_entries'),
         json,
       );
-      final entriesSaved =
-          entriesAlreadySaved ||
+      final entriesSaved = entriesAlreadySaved ||
           await prefs.setString('provider_entries', json);
       final entriesVerified = _jsonPreferenceEquals(
         prefs.getString('provider_entries'),

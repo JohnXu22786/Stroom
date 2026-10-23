@@ -66,9 +66,8 @@ class _ProviderConfigDetailPageState
     final config = _config;
     if (config == null) return models;
 
-    final names = models
-        .map((m) => _modelDisplayName(m, config.providerName))
-        .toList();
+    final names =
+        models.map((m) => _modelDisplayName(m, config.providerName)).toList();
     final orderedNames = applySavedOrder(names, _savedModelOrder);
     // 按名字逐个配对回模型对象（处理重名：每个名字按出现顺序消费）
     final remaining = List<ModelConfig>.of(models);
@@ -104,14 +103,15 @@ class _ProviderConfigDetailPageState
   ProviderEntry _entryWithConfigs(
     ProviderEntry entry,
     List<ProviderConfigItem> configs,
-  ) => ProviderEntry(
-    id: entry.id,
-    type: entry.type,
-    name: entry.name,
-    configs: configs,
-    enabled: entry.enabled,
-    legacyFields: entry.legacyFields,
-  );
+  ) =>
+      ProviderEntry(
+        id: entry.id,
+        type: entry.type,
+        name: entry.name,
+        configs: configs,
+        enabled: entry.enabled,
+        legacyFields: entry.legacyFields,
+      );
 
   void _showSaveFailure() {
     if (!mounted) return;
@@ -272,8 +272,7 @@ class _ProviderConfigDetailPageState
     if (entry == null) return;
     final selectedConfigId = _isExistingConfig ? _config?.id : null;
 
-    final style =
-        ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
 
     switch (style) {
@@ -394,8 +393,7 @@ class _ProviderConfigDetailPageState
     if (entry == null) return;
     final editingConfigId = _isExistingConfig ? _config?.id : null;
 
-    final style =
-        ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
+    final style = ProviderTypeRegistry.get(entry.type)?.modelConfigStyle ??
         ModelConfigStyle.tts;
 
     switch (style) {
@@ -656,9 +654,8 @@ class _ProviderConfigDetailPageState
 
     // 计算新的全局顺序：以全部 LLM 模型的当前合并顺序为基准
     final entriesState = ref.read(providerEntriesProvider);
-    final llmEntry = entriesState.entries
-        .where((e) => e.type == 'llm')
-        .firstOrNull;
+    final llmEntry =
+        entriesState.entries.where((e) => e.type == 'llm').firstOrNull;
     final allNames = <String>[];
     if (llmEntry != null) {
       for (final c in llmEntry.configs) {
@@ -765,8 +762,8 @@ class _ProviderConfigDetailPageState
     final entryName = _entry?.name ?? '';
     final title = _isExistingConfig
         ? (_providerNameController.text.isNotEmpty
-              ? _providerNameController.text
-              : '编辑配置')
+            ? _providerNameController.text
+            : '编辑配置')
         : '新建$entryName配置';
 
     final models = _displayModels;
@@ -886,9 +883,8 @@ class _ProviderConfigDetailPageState
     final displayModels = _displayModels;
     final model = displayModels[displayIndex];
     final config = _config;
-    final storageIndex = config != null
-        ? config.models.indexOf(model)
-        : displayIndex;
+    final storageIndex =
+        config != null ? config.models.indexOf(model) : displayIndex;
     final reorderable = _enableModelReorder;
 
     return ListTile(

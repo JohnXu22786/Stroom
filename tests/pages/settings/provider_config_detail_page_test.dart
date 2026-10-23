@@ -98,7 +98,7 @@ class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
 class ProviderEntriesNotifierFailingSaveFake
     extends ProviderEntriesNotifierFake {
   ProviderEntriesNotifierFailingSaveFake({List<ProviderEntry>? entries})
-    : super(entries: entries);
+      : super(entries: entries);
 
   @override
   Future<void> update(
@@ -126,19 +126,19 @@ extension on WidgetTester {
     final entries = entry != null
         ? [entry]
         : models.isNotEmpty ||
-              legacyFields.isNotEmpty ||
-              configLegacyFields.isNotEmpty
-        ? [
-            _createTestEntry(
-              type: entryType,
-              name: entryName,
-              models: models,
-              credentialRef: credentialRef,
-              legacyFields: legacyFields,
-              configLegacyFields: configLegacyFields,
-            ),
-          ]
-        : null;
+                legacyFields.isNotEmpty ||
+                configLegacyFields.isNotEmpty
+            ? [
+                _createTestEntry(
+                  type: entryType,
+                  name: entryName,
+                  models: models,
+                  credentialRef: credentialRef,
+                  legacyFields: legacyFields,
+                  configLegacyFields: configLegacyFields,
+                ),
+              ]
+            : null;
     return pumpWidget(
       ProviderScope(
         overrides: [
@@ -286,12 +286,10 @@ void main() {
         context,
         listen: false,
       ).read(providerEntriesProvider).entries;
-      final notifier =
-          ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(providerEntriesProvider.notifier)
-              as ProviderEntriesNotifierFake;
+      final notifier = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
       expect(notifier.lastUpdateRequiredPersistence, isTrue);
       expect(
         entries.single.legacyFields['futureProviderSetting'],
@@ -330,12 +328,10 @@ void main() {
         context,
         listen: false,
       ).read(providerEntriesProvider).entries;
-      final notifier =
-          ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(providerEntriesProvider.notifier)
-              as ProviderEntriesNotifierFake;
+      final notifier = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
       expect(notifier.lastUpdateRequiredPersistence, isTrue);
       expect(
         entries.single.legacyFields['futureProviderSetting'],
@@ -354,12 +350,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final context = tester.element(find.byType(ProviderConfigDetailPage));
-        final notifier =
-            ProviderScope.containerOf(
-                  context,
-                  listen: false,
-                ).read(providerEntriesProvider.notifier)
-                as ProviderEntriesNotifierFake;
+        final notifier = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
         await tester.tap(find.text('添加'));
         await tester.pumpAndSettle();
 
@@ -391,12 +385,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final context = tester.element(find.byType(ProviderConfigDetailPage));
-        final notifier =
-            ProviderScope.containerOf(
-                  context,
-                  listen: false,
-                ).read(providerEntriesProvider.notifier)
-                as ProviderEntriesNotifierFake;
+        final notifier = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
         await tester.tap(find.text('Existing model'));
         await tester.pumpAndSettle();
 
@@ -425,12 +417,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final context = tester.element(find.byType(ProviderConfigDetailPage));
-        final notifier =
-            ProviderScope.containerOf(
-                  context,
-                  listen: false,
-                ).read(providerEntriesProvider.notifier)
-                as ProviderEntriesNotifierFake;
+        final notifier = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
         await tester.tap(find.byIcon(Icons.delete).first);
         await tester.pumpAndSettle();
         notifier.removeEntryForTest('test_entry_id');
@@ -483,12 +473,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final context = tester.element(find.byType(ProviderConfigDetailPage));
-        final notifier =
-            ProviderScope.containerOf(
-                  context,
-                  listen: false,
-                ).read(providerEntriesProvider.notifier)
-                as ProviderEntriesNotifierFake;
+        final notifier = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
         await tester.tap(find.text('Selected model'));
         await tester.pumpAndSettle();
 
@@ -538,12 +526,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final context = tester.element(find.byType(ProviderConfigDetailPage));
-        final notifier =
-            ProviderScope.containerOf(
-                  context,
-                  listen: false,
-                ).read(providerEntriesProvider.notifier)
-                as ProviderEntriesNotifierFake;
+        final notifier = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
         await tester.tap(find.text('添加'));
         await tester.pumpAndSettle();
 
@@ -576,7 +562,8 @@ void main() {
       expect(find.byType(TextField), findsNWidgets(3));
     });
 
-    testWidgets('saving a new config stays on the model list page instead of '
+    testWidgets(
+        'saving a new config stays on the model list page instead of '
         'popping back to the provider list', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
@@ -614,7 +601,8 @@ void main() {
       expect(state.entries.single.configs.first.key, 'new-key');
     });
 
-    testWidgets('models added after saving a new config are persisted into the '
+    testWidgets(
+        'models added after saving a new config are persisted into the '
         'newly created config (not dropped or routed to the old config)', (
       tester,
     ) async {
@@ -769,7 +757,8 @@ void main() {
       expect(find.text('voice-1'), findsOneWidget);
     });
 
-    testWidgets('dragging a model updates the combined order, keeping other '
+    testWidgets(
+        'dragging a model updates the combined order, keeping other '
         'providers in place', (tester) async {
       SharedPreferences.setMockInitialValues({
         'model_order': [
@@ -879,12 +868,10 @@ void main() {
         context,
         listen: false,
       ).read(providerEntriesProvider).entries;
-      final notifier =
-          ProviderScope.containerOf(
-                context,
-                listen: false,
-              ).read(providerEntriesProvider.notifier)
-              as ProviderEntriesNotifierFake;
+      final notifier = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider.notifier) as ProviderEntriesNotifierFake;
       expect(notifier.lastUpdateRequiredPersistence, isTrue);
       expect(
         entries.single.legacyFields['futureProviderSetting'],
