@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 
 /// Behavior tests for the legacy effort-param data migration:
 /// reasoning params saved before the isEffortParam flag existed are
@@ -165,7 +167,11 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifier(),
+            (ref) => ProviderEntriesNotifier(
+              credentialStore: _UnavailableThenAvailableCredentialStore(
+                available: true,
+              ),
+            ),
           ),
         ],
       );
@@ -409,5 +415,118 @@ void main() {
           reason: 'effort migration only applies to llm entries');
       container.dispose();
     });
+
+    test(
+      'keeps legacy settings readable and retries after secure migration fails',
+      () async {
+        final entries = (jsonDecode(
+          providerEntriesJson(modelReasoningParams: []),
+        ) as List)
+            .cast<Map<String, dynamic>>();
+        final llmEntry = entries.single;
+        final config =
+            (llmEntry.remove('configs') as List).single as Map<String, dynamic>;
+        llmEntry.addAll(config);
+        final json = jsonEncode(entries);
+        SharedPreferences.setMockInitialValues({'provider_entries': json});
+        final credentials = _UnavailableThenAvailableCredentialStore();
+        final notifier = ProviderEntriesNotifier(credentialStore: credentials);
+        addTearDown(notifier.dispose);
+
+        await notifier.load();
+
+        expect(notifier.state.isLoaded, isTrue);
+        final llmAfterUnavailableLoad =
+            notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
+        final configIdBeforeRetry = llmAfterUnavailableLoad.configs.single.id;
+        final modelIdBeforeRetry =
+            llmAfterUnavailableLoad.configs.single.models.single.id;
+        expect(
+          notifier.state.entries.map((entry) => entry.type),
+          containsAll(['llm', 'tts', 'asr', 'mcp']),
+        );
+        expect(
+          notifier.state.entries
+              .singleWhere((entry) => entry.type == 'llm')
+              .configs
+              .single
+              .models
+              .single
+              .modelId,
+          'model-a',
+        );
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('provider_entries'), json);
+        expect(
+          prefs.getString(LlmAccountMigrationService.accountsPreferenceKey),
+          isNull,
+        );
+        expect(
+          prefs.getString(LlmAccountMigrationService.modelGroupsPreferenceKey),
+          isNull,
+        );
+        expect(
+          prefs.getString(LlmAccountMigrationService.migrationStateKey),
+          isNull,
+        );
+
+        final tts = notifier.state.entries.singleWhere(
+          (entry) => entry.type == 'tts',
+        );
+        await expectLater(
+          notifier.update(
+            tts.id,
+            ProviderEntry(id: tts.id, type: tts.type, name: 'Changed TTS'),
+          ),
+          throwsA(isA<StateError>()),
+        );
+        expect(prefs.getString('provider_entries'), json);
+
+        credentials.available = true;
+        await notifier.load();
+
+        expect(notifier.state.isLoaded, isTrue);
+        final llmAfterRetry =
+            notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
+        expect(llmAfterRetry.configs.single.id, configIdBeforeRetry,
+            reason:
+                'a model selector may save a reference while migration is unavailable');
+        expect(
+            llmAfterRetry.configs.single.models.single.id, modelIdBeforeRetry,
+            reason:
+                'a model selector may save a reference while migration is unavailable');
+        expect(
+          prefs.getString('provider_entries'),
+          isNot(contains('"key":"k"')),
+        );
+        expect(credentials.values.values, contains('k'));
+        expect(
+          prefs.getString(LlmAccountMigrationService.migrationStateKey),
+          contains('complete'),
+        );
+      },
+    );
   });
+}
+
+class _UnavailableThenAvailableCredentialStore implements LlmCredentialStore {
+  final Map<String, String> values = {};
+  bool available;
+
+  _UnavailableThenAvailableCredentialStore({this.available = false});
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    if (!available) throw const LlmCredentialStoreException();
+    values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
 }

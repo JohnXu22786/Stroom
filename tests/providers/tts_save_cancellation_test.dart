@@ -25,6 +25,12 @@ class _Documents extends PathProviderPlatform {
   Future<String> getApplicationDocumentsPath() async => path;
 }
 
+class _ProviderEntries extends ProviderEntriesNotifier {
+  void setEntries(List<ProviderEntry> entries) {
+    state = ProviderEntriesState(entries: entries);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -47,11 +53,27 @@ void main() {
     AppStorage.resetCache();
 
     providerConfig = ProviderConfigItem(
+      id: 'tts-config',
       providerName: 'test',
       host: 'https://example.invalid/speech',
       key: 'test-key',
     );
-    container = ProviderContainer();
+    container = ProviderContainer(
+      overrides: [
+        providerEntriesProvider.overrideWith((ref) {
+          final notifier = _ProviderEntries();
+          notifier.setEntries([
+            ProviderEntry(
+              id: 'tts-entry',
+              type: 'tts',
+              name: 'TTS供应商',
+              configs: [providerConfig],
+            ),
+          ]);
+          return notifier;
+        }),
+      ],
+    );
     notifier = container.read(taskListProvider.notifier);
     notifier.debugSynthesize = (_, __, ___) async => audio;
   });
@@ -117,6 +139,60 @@ void main() {
     expect(await FileManifest.readFile('$hash.wav'), isNull);
     expect(await FileManifest.readFile('$hash.txt'), isNull);
     expect(container.read(taskListProvider).single.status, TaskStatus.paused);
+  });
+
+  test('resume after restart rehydrates the provider credential', () async {
+    final pausedTask = SynthesisTask(
+      id: 'restart-resume',
+      title: 'Restart resume',
+      text: 'Resume this speech',
+      status: TaskStatus.paused,
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final persistedProvider =
+        Map<String, dynamic>.from(pausedTask.toMap()['providerConfig'] as Map);
+    expect(persistedProvider.containsKey('key'), isFalse);
+
+    final tasksDirectory = Directory('${directory.path}/synthesis');
+    await tasksDirectory.create(recursive: true);
+    await File('${tasksDirectory.path}/tasks.json')
+        .writeAsString(jsonEncode([pausedTask.toMap()]));
+
+    await notifier.restoreFromPersistence();
+    expect(container.read(taskListProvider).single.providerConfig.key, isEmpty);
+
+    notifier.resumeTask('restart-resume');
+    await waitForStatus('restart-resume', TaskStatus.completed);
+    expect(
+        container.read(taskListProvider).single.providerConfig.key, 'test-key');
+  });
+
+  test('retry after restart rehydrates the provider credential', () async {
+    final failedTask = SynthesisTask(
+      id: 'restart-retry',
+      title: 'Restart retry',
+      text: 'Retry this speech',
+      status: TaskStatus.failed,
+      providerConfig: providerConfig,
+      modelConfig: modelConfig,
+    );
+    final persistedProvider =
+        Map<String, dynamic>.from(failedTask.toMap()['providerConfig'] as Map);
+    expect(persistedProvider.containsKey('key'), isFalse);
+
+    final tasksDirectory = Directory('${directory.path}/synthesis');
+    await tasksDirectory.create(recursive: true);
+    await File('${tasksDirectory.path}/tasks.json')
+        .writeAsString(jsonEncode([failedTask.toMap()]));
+
+    await notifier.restoreFromPersistence();
+    expect(container.read(taskListProvider).single.providerConfig.key, isEmpty);
+
+    notifier.retryTask('restart-retry');
+    await waitForStatus('restart-retry', TaskStatus.completed);
+    expect(
+        container.read(taskListProvider).single.providerConfig.key, 'test-key');
   });
 
   for (final persisted in [false, true]) {

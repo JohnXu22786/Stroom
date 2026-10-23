@@ -17,6 +17,10 @@ import 'package:stroom/providers/context_management_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/theme_provider.dart';
 import 'package:stroom/providers/update_provider.dart';
+import 'package:stroom/services/llm_credential_store.dart';
+
+ProviderEntriesNotifier? _providerEntriesNotifier;
+bool _providerEntriesLoadFinished = false;
 
 /// Builds the SettingsPage test app without notification override.
 /// Used by ASR / OCR / license groups.
@@ -25,15 +29,48 @@ Widget _buildSettingsTestApp() {
     overrides: [
       themeProvider.overrideWith((ref) => ThemeNotifier()),
       providerEntriesProvider.overrideWith((ref) {
-        final notifier = ProviderEntriesNotifier();
+        final notifier = ProviderEntriesNotifier(
+          credentialStore: _TestLlmCredentialStore(),
+        );
+        _providerEntriesNotifier = notifier;
         // load() is normally called in the provider factory, so we call it here too.
-        notifier.load();
+        _providerEntriesLoadFinished = false;
+        notifier.load().whenComplete(() => _providerEntriesLoadFinished = true);
         return notifier;
       }),
       updateProvider.overrideWith((ref) => UpdateNotifier()),
     ],
     child: const MaterialApp(home: SettingsPage()),
   );
+}
+
+class _TestLlmCredentialStore implements LlmCredentialStore {
+  final Map<String, String> _values = {};
+
+  @override
+  Future<String?> read(String reference) async => _values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    _values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    _values.remove(reference);
+  }
+}
+
+Future<void> _pumpSettingsTestApp(WidgetTester tester) async {
+  await tester.pumpWidget(_buildSettingsTestApp());
+  for (var attempt = 0;
+      attempt < 1000 && !_providerEntriesLoadFinished;
+      attempt++) {
+    await tester.pump(const Duration(milliseconds: 10));
+  }
+  expect(_providerEntriesLoadFinished, isTrue);
+  expect(_providerEntriesNotifier?.state.isLoaded, isTrue);
+  await tester.pumpAndSettle();
 }
 
 /// 构建只包含 TTS、LLM 和 OCR 的已保存数据（模拟旧版本用户升级，无 ASR）
@@ -130,8 +167,7 @@ void main() {
           'provider_entries': _savedDataWithoutAsr(),
         });
 
-        await tester.pumpWidget(_buildSettingsTestApp());
-        await tester.pumpAndSettle();
+        await _pumpSettingsTestApp(tester);
 
         // ASR should be migrated in and displayed
         expect(find.text('TTS供应商'), findsOneWidget);
@@ -160,8 +196,7 @@ void main() {
         'provider_entries': _savedDataWithoutOcr(),
       });
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
 
       // OCR should be migrated in and displayed
       expect(find.text('TTS供应商'), findsOneWidget);
@@ -195,8 +230,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
 
       await openCompactionPanel(tester);
 
@@ -231,8 +265,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
       await openCompactionPanel(tester);
 
       // 预置一个开启的模型独立设置（带可见的 token 输入框）
@@ -311,8 +344,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
       await openCompactionPanel(tester);
 
       final percentField = find.byKey(const Key('global-percent-field'));
@@ -342,8 +374,7 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
       await openCompactionPanel(tester);
 
       final percentField = find.byKey(const Key('global-percent-field'));
@@ -377,8 +408,7 @@ void main() {
         'provider_entries': _llmEntryWithModels(),
       });
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
       await openCompactionPanel(tester);
 
       // 开启 Model A 的独立设置
@@ -446,8 +476,7 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
 
       // The whole about header card is tappable — tapping the app name
       // text (not just the logo icon) must open the dialog.
@@ -480,8 +509,7 @@ void main() {
 
       SharedPreferences.setMockInitialValues({});
 
-      await tester.pumpWidget(_buildSettingsTestApp());
-      await tester.pumpAndSettle();
+      await _pumpSettingsTestApp(tester);
 
       await tester.ensureVisible(find.byIcon(Icons.auto_awesome));
       await tester.pumpAndSettle();

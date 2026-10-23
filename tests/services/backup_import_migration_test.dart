@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/storage_service.dart';
 
@@ -101,7 +102,10 @@ void main() {
       SharedPreferences.setMockInitialValues({});
 
       // Restore — migration happens INSIDE restoreFromBytesForTest
-      await BackupService.restoreFromBytesForTest(backupBytes);
+      await BackupService.restoreFromBytesForTest(
+        backupBytes,
+        credentialStore: _BackupImportCredentialStore(),
+      );
 
       // ===============================================================
       // Verify data is already migrated (without explicit migrate call)
@@ -460,4 +464,21 @@ void main() {
       expect(entries[0]['id'], equals('test_llm'));
     });
   });
+}
+
+class _BackupImportCredentialStore implements LlmCredentialStore {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
 }

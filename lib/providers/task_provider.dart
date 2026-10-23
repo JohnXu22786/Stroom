@@ -336,7 +336,13 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     state = newState;
     _persistTasks();
 
-    _executeTask(updated);
+    if (providerConfig == null) {
+      // Persisted task configs redact credentials. Rehydrate the original
+      // config after provider settings load when no replacement was selected.
+      unawaited(_executeWithCurrentProviderConfig(taskId));
+    } else {
+      _executeTask(updated);
+    }
   }
 
   /// 重试失败的任务
@@ -361,8 +367,61 @@ class TaskListNotifier extends StateNotifier<List<SynthesisTask>> {
     // 确保 SynthesisConfig 使用当前模型的 voice ID，而非过期的 voice name
     _syncVoiceFromModelConfig(updated.modelConfig);
 
-    // 执行
+    // Task persistence redacts provider credentials. Resolve the live TTS
+    // config after provider settings finish loading so restored tasks do not
+    // retry with an empty key.
+    unawaited(_executeWithCurrentProviderConfig(taskId));
+  }
+
+  Future<void> _executeWithCurrentProviderConfig(String taskId) async {
+    try {
+      await ref.read(providerEntriesProvider.notifier).ready;
+    } catch (error) {
+      _failRunningTask(taskId, '无法加载语音供应商配置：$error');
+      return;
+    }
+
+    if (!mounted) return;
+    final index = state.indexWhere(
+      (task) => task.id == taskId && task.status == TaskStatus.running,
+    );
+    if (index == -1) return;
+
+    final task = state[index];
+    final matchingConfigs = ref
+        .read(providerEntriesProvider)
+        .entries
+        .where((entry) => entry.type == 'tts')
+        .expand((entry) => entry.configs)
+        .where((config) => config.id == task.providerConfig.id)
+        .toList();
+    if (matchingConfigs.length != 1) {
+      _failRunningTask(taskId, '无法找到任务使用的语音供应商配置');
+      return;
+    }
+
+    final updated = task.copyWith(providerConfig: matchingConfigs.single);
+    final newState = [...state];
+    newState[index] = updated;
+    state = newState;
+    _persistTasks();
     _executeTask(updated);
+  }
+
+  void _failRunningTask(String taskId, String error) {
+    if (!mounted) return;
+    final index = state.indexWhere(
+      (task) => task.id == taskId && task.status == TaskStatus.running,
+    );
+    if (index == -1) return;
+    final newState = [...state];
+    newState[index] = state[index].copyWith(
+      status: TaskStatus.failed,
+      error: error,
+      completedAt: DateTime.now(),
+    );
+    state = newState;
+    _persistTasks();
   }
 
   /// 从模型配置中同步 voice ID 到 SynthesisConfig（防止过期的 voice name 被发送）

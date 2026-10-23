@@ -628,6 +628,20 @@ class FlowLaunchSnapshot {
     return hydrated;
   }
 
+  static Map<String, dynamic> _currentProviderConfig(
+    ProviderConfigItem config,
+  ) {
+    final current = config.toMap(
+      includeKey: true,
+      redactCredentialFields: false,
+    );
+    // The resolved provider state is transient. Keep both legacy inline keys
+    // and secure-reference-backed keys available to the live run without
+    // adding either to the persisted launch snapshot.
+    current['key'] = config.key;
+    return current;
+  }
+
   factory FlowLaunchSnapshot.capture(TaskFlowDefinition flow,
       ProviderEntriesState providers, List<Assistant> assistants,
       {Map<String, dynamic> synthesisDefaults = const {},
@@ -841,7 +855,7 @@ class FlowLaunchSnapshot {
                     ...config.toMap(),
                     ...Map<String, dynamic>.from(_resolvedCredentials(
                         configs.firstWhere((s) => s['id'] == config.id),
-                        config.toMap()) as Map),
+                        _currentProviderConfig(config)) as Map),
                     'models': [
                       for (final model in config.models)
                         if (references.contains((config.id, model.id)))

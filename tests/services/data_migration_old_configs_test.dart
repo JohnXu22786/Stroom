@@ -138,5 +138,360 @@ void main() {
           (models.first as Map<String, dynamic>)['typeConfig'] as Map;
       expect(typeConfig['context'], 4000);
     });
+
+    test('merges safe credential metadata into an exact existing config',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'existing-llm',
+            'type': 'llm',
+            'name': 'Existing providers',
+            'configs': [
+              {
+                'id': 'existing-config',
+                'providerName': 'Exact provider',
+                'host': 'https://api.example.test',
+                'key': '',
+                'models': [
+                  {'name': 'Exact model', 'modelId': 'model-id'},
+                ],
+              },
+            ],
+          },
+        ]),
+        'chat_configs': jsonEncode([
+          {
+            'providerName': 'Exact provider',
+            'host': 'https://api.example.test',
+            'key': '',
+            'credentialRef': 'safe-credential-reference',
+            'publicKey': 'safe-public-key-metadata',
+            'models': [
+              {'modelId': 'model-id'},
+            ],
+          },
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final entries = jsonDecode(prefs.getString('provider_entries')!) as List;
+      final config =
+          (((entries.single as Map)['configs'] as List).single as Map);
+      expect(config['credentialRef'], 'safe-credential-reference');
+      expect(config['publicKey'], 'safe-public-key-metadata');
+      expect(prefs.getString('chat_configs'), isNull);
+    });
+
+    test('rejects conflicting credential metadata without deleting source',
+        () async {
+      final existing = jsonEncode([
+        {
+          'id': 'existing-llm',
+          'type': 'llm',
+          'name': 'Existing providers',
+          'configs': [
+            {
+              'id': 'existing-config',
+              'providerName': 'Exact provider',
+              'host': 'https://api.example.test',
+              'key': '',
+              'credentialRef': 'existing-reference',
+              'models': [
+                {'name': 'Exact model', 'modelId': 'model-id'},
+              ],
+            },
+          ],
+        },
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Exact provider',
+          'host': 'https://api.example.test',
+          'key': '',
+          'credentialRef': 'conflicting-reference',
+          'models': [
+            {'modelId': 'model-id'},
+          ],
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': existing,
+        'chat_configs': legacy,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await expectLater(
+        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(prefs.getString('provider_entries'), existing);
+      expect(prefs.getString('chat_configs'), legacy);
+    });
+
+    test(
+        'rejects legacy inline keys for a config with a secure credential reference',
+        () async {
+      final existing = jsonEncode([
+        {
+          'id': 'existing-llm',
+          'type': 'llm',
+          'name': 'Existing providers',
+          'configs': [
+            {
+              'id': 'existing-config',
+              'providerName': 'Referenced provider',
+              'host': 'https://referenced.example.test',
+              'key': '',
+              'credentialRef': 'existing-reference',
+              'models': [
+                {'name': 'Model', 'modelId': 'model-id'},
+              ],
+            },
+          ],
+        },
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Referenced provider',
+          'host': 'https://referenced.example.test',
+          'key': 'sk_legacy_config_must_not_rotate_reference',
+          'models': [
+            {'modelId': 'model-id'},
+          ],
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': existing,
+        'chat_configs': legacy,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await expectLater(
+        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(prefs.getString('provider_entries'), existing);
+      expect(prefs.getString('chat_configs'), legacy);
+    });
+
+    test('rejects conflicting duplicate legacy configs without an LLM entry',
+        () async {
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Duplicate provider',
+          'host': 'https://duplicate.example.test',
+          'key': 'sk_first_duplicate_legacy_key',
+          'models': [
+            {'modelId': 'same-model'},
+          ],
+        },
+        {
+          'providerName': 'Duplicate provider',
+          'host': 'https://duplicate.example.test',
+          'key': 'sk_second_duplicate_legacy_key',
+          'models': [
+            {'modelId': 'same-model'},
+          ],
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'chat_configs': legacy});
+      final prefs = await SharedPreferences.getInstance();
+
+      await expectLater(
+        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(prefs.getString('provider_entries'), isNull);
+      expect(prefs.getString('chat_configs'), legacy);
+    });
+
+    test('uses a model name when the legacy model ID is empty', () async {
+      final existing = jsonEncode([
+        {
+          'id': 'existing-llm',
+          'type': 'llm',
+          'name': 'Existing providers',
+          'configs': [
+            {
+              'providerName': 'Same provider',
+              'host': 'https://same.example.test',
+              'key': 'sk_existing_model_a',
+              'models': [
+                {'modelId': '', 'name': 'Model A'}
+              ]
+            }
+          ]
+        }
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Same provider',
+          'host': 'https://same.example.test',
+          'key': 'sk_incoming_model_b',
+          'models': [
+            {'modelId': '', 'name': 'Model B'}
+          ]
+        }
+      ]);
+      SharedPreferences.setMockInitialValues(
+          {'provider_entries': existing, 'chat_configs': legacy});
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final configs =
+          ((jsonDecode(prefs.getString('provider_entries')!) as List).single
+              as Map)['configs'] as List;
+      expect(configs, hasLength(2));
+      final firstModel = ((configs[0] as Map)['models'] as List).single as Map;
+      final secondModel = ((configs[1] as Map)['models'] as List).single as Map;
+      expect(firstModel['modelId'], '');
+      expect(firstModel['name'], 'Model A');
+      expect(secondModel['modelId'], 'Model B');
+      expect(secondModel['name'], 'Model B');
+    });
+
+    test('does not identity-match legacy configs without stable model IDs',
+        () async {
+      final existing = jsonEncode([
+        {
+          'id': 'existing-llm',
+          'type': 'llm',
+          'name': 'Existing providers',
+          'configs': [
+            {
+              'providerName': 'Same provider',
+              'host': 'https://same.example.test',
+              'key': 'sk_existing_unidentified_model',
+              'models': [
+                {'modelId': '', 'name': ''}
+              ]
+            }
+          ]
+        }
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Same provider',
+          'host': 'https://same.example.test',
+          'key': 'sk_incoming_unidentified_model',
+          'models': [
+            {'modelId': '', 'name': ''}
+          ]
+        }
+      ]);
+      SharedPreferences.setMockInitialValues(
+          {'provider_entries': existing, 'chat_configs': legacy});
+      final prefs = await SharedPreferences.getInstance();
+
+      await DataMigrationOldConfigs.migrateOldChatConfigs(prefs);
+
+      final configs =
+          ((jsonDecode(prefs.getString('provider_entries')!) as List).single
+              as Map)['configs'] as List;
+      expect(configs, hasLength(2));
+    });
+
+    test('checks every legacy LLM entry before appending a merged config',
+        () async {
+      final existing = jsonEncode([
+        {
+          'id': 'first-llm',
+          'type': 'llm',
+          'name': 'First LLM entry',
+          'configs': [
+            {
+              'providerName': 'Unrelated provider',
+              'host': 'https://unrelated.example.test',
+              'key': 'sk_unrelated_existing_key',
+              'models': [
+                {'modelId': 'unrelated-model'}
+              ]
+            }
+          ]
+        },
+        {
+          'id': 'second-llm',
+          'type': 'llm',
+          'name': 'Second LLM entry',
+          'configs': [
+            {
+              'providerName': 'Matching provider',
+              'host': 'https://matching.example.test',
+              'key': 'sk_existing_matching_key',
+              'models': [
+                {'modelId': 'matching-model'}
+              ]
+            }
+          ]
+        }
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Matching provider',
+          'host': 'https://matching.example.test',
+          'key': 'sk_conflicting_matching_key',
+          'models': [
+            {'modelId': 'matching-model'}
+          ]
+        }
+      ]);
+      SharedPreferences.setMockInitialValues(
+          {'provider_entries': existing, 'chat_configs': legacy});
+      final prefs = await SharedPreferences.getInstance();
+
+      await expectLater(DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
+          throwsA(isA<Exception>()));
+
+      expect(prefs.getString('provider_entries'), existing);
+      expect(prefs.getString('chat_configs'), legacy);
+    });
+
+    test(
+        'preserves top-level LLM config when chat configs cannot be merged safely',
+        () async {
+      final existing = jsonEncode([
+        {
+          'id': 'existing-legacy-llm',
+          'type': 'llm',
+          'name': 'Existing providers',
+          'providerName': 'Existing top-level provider',
+          'host': 'https://existing-top-level.example.test',
+          'key': 'sk_existing_top_level_provider_key',
+          'models': [
+            {'modelId': 'existing-model'},
+          ],
+        },
+      ]);
+      final legacy = jsonEncode([
+        {
+          'providerName': 'Incoming provider',
+          'host': 'https://incoming.example.test',
+          'key': 'sk_incoming_legacy_provider_key',
+          'models': [
+            {'modelId': 'incoming-model'},
+          ],
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': existing,
+        'chat_configs': legacy,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await expectLater(
+        DataMigrationOldConfigs.migrateOldChatConfigs(prefs),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(prefs.getString('provider_entries'), existing);
+      expect(prefs.getString('chat_configs'), legacy);
+    });
   });
 }
