@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:uuid/uuid.dart';
 
 import '../utils/atomic_file.dart';
 import '../utils/web_file_store.dart';
@@ -63,8 +62,12 @@ class ProviderModelMigration {
     }
 
     final configs = <Map>[];
-    final models = <Map>[];
-    for (final entry in decoded.whereType<Map>()) {
+    final configIdFallbacks = <String>[];
+    final modelsByConfig = <List<Map>>[];
+    final modelIdFallbackPrefixes = <String>[];
+    for (var entryIndex = 0; entryIndex < decoded.length; entryIndex++) {
+      final entry = decoded[entryIndex];
+      if (entry is! Map) continue;
       // Before configs[] existed, a provider entry held a single config.
       // Normalize that shape before assigning IDs, so loading it cannot create
       // a fresh identity on every restart.
@@ -91,17 +94,36 @@ class ProviderModelMigration {
           entry.remove(field);
         }
       }
-      for (final config
-          in (entry['configs'] is List ? entry['configs'] as List : const [])
-              .whereType<Map>()) {
+      final rawConfigs =
+          entry['configs'] is List ? entry['configs'] as List : const [];
+      for (var configIndex = 0;
+          configIndex < rawConfigs.length;
+          configIndex++) {
+        final config = rawConfigs[configIndex];
+        if (config is! Map) continue;
         configs.add(config);
-        models.addAll(
+        configIdFallbacks.add('config_legacy_${entryIndex}_$configIndex');
+        modelIdFallbackPrefixes
+            .add('model_legacy_${entryIndex}_${configIndex}_');
+        final models =
             (config['models'] is List ? config['models'] as List : const [])
-                .whereType<Map>());
+                .whereType<Map>()
+                .toList();
+        modelsByConfig.add(models);
       }
     }
-    final configIdsChanged = _assignIds(configs, 'config');
-    final modelIdsChanged = _assignIds(models, 'model');
+    final configIdsChanged = _assignIds(configs, configIdFallbacks);
+    var modelIdsChanged = false;
+    for (var configIndex = 0;
+        configIndex < modelsByConfig.length;
+        configIndex++) {
+      final models = modelsByConfig[configIndex];
+      final idFallbacks = [
+        for (var modelIndex = 0; modelIndex < models.length; modelIndex++)
+          '${modelIdFallbackPrefixes[configIndex]}$modelIndex',
+      ];
+      modelIdsChanged = _assignIds(models, idFallbacks) || modelIdsChanged;
+    }
     final updated = jsonEncode(decoded);
     final changed = configIdsChanged || modelIdsChanged || updated != encoded;
     if (!changed) return {'status': 'ok', 'changed': false};
@@ -120,19 +142,29 @@ class ProviderModelMigration {
     }
   }
 
-  static bool _assignIds(List<Map> items, String prefix) {
+  static bool _assignIds(List<Map> items, List<String> fallbackIds) {
     final counts = <String, int>{};
     for (final item in items) {
       final id = item['id'];
       if (id is String && id.isNotEmpty) counts[id] = (counts[id] ?? 0) + 1;
     }
+    final reservedIds = counts.keys.toSet();
     var changed = false;
-    for (final item in items) {
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
       final id = item['id'];
       // Duplicate IDs are all replaced: retaining the first would silently
       // redirect an existing reference to an arbitrary duplicate.
       if (id is! String || id.isEmpty || counts[id] != 1) {
-        item['id'] = '${prefix}_${const Uuid().v4()}';
+        final fallbackId = fallbackIds[index];
+        var replacement = fallbackId;
+        var suffix = 0;
+        while (reservedIds.contains(replacement)) {
+          suffix++;
+          replacement = '${fallbackId}_$suffix';
+        }
+        item['id'] = replacement;
+        reservedIds.add(replacement);
         changed = true;
       }
     }

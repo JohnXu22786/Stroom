@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -246,6 +247,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   bool _providerEntriesSourceUnreadable = false;
   bool _reloadBeforeNextMutation = false;
   bool _lastLoadSucceeded = false;
+  int _providerEntriesSourceConflictGeneration = 0;
+  final Map<String, String> _conflictedEntryUpdateFingerprints = {};
   String? _loadedProviderEntriesSourceJson;
 
   ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
@@ -312,7 +315,8 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
               try {
                 sourceForLoad =
                     await ProviderModelMigration.migrateSettingsContent(
-                        currentSource);
+                  currentSource,
+                );
               } catch (_) {
                 state = ProviderEntriesState(
                   isLoaded: false,
@@ -322,10 +326,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
               }
             }
             providerEntriesJsonForLoad = currentSource;
-            if (!_canServeLegacyProviderEntries(
-              sourceForLoad,
-              prefs,
-            )) {
+            if (!_canServeLegacyProviderEntries(sourceForLoad, prefs)) {
               state = ProviderEntriesState(
                 isLoaded: false,
                 mcpGroups: mcpGroups,
@@ -467,7 +468,6 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       }
       _loadedProviderEntriesSourceJson = json;
     } catch (_) {
-      debugPrint('Failed to load provider entries.');
       _providerEntriesSourceUnreadable = true;
       _reloadBeforeNextMutation = true;
       state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
@@ -526,11 +526,13 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     String json,
     SharedPreferences preferences,
   ) {
-    if (preferences
-                .getString(LlmAccountMigrationService.accountsPreferenceKey) !=
+    if (preferences.getString(
+              LlmAccountMigrationService.accountsPreferenceKey,
+            ) !=
             null ||
         preferences.getString(
-                LlmAccountMigrationService.modelGroupsPreferenceKey) !=
+              LlmAccountMigrationService.modelGroupsPreferenceKey,
+            ) !=
             null ||
         preferences.getString(LlmAccountMigrationService.migrationStateKey) !=
             null) {
@@ -638,13 +640,44 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     bool requirePersistence = false,
   }) async {
     await _reloadBeforeMutationIfNeeded();
-    await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
-        mcpGroups: state.mcpGroups,
-      ),
-    );
+    final updateFingerprint = _entryUpdateFingerprint(updated);
+    final conflictedFingerprint = _conflictedEntryUpdateFingerprints[id];
+    if (conflictedFingerprint != null &&
+        conflictedFingerprint == updateFingerprint) {
+      // A whole-entry object that already failed against a concurrent update
+      // must not be retried after the notifier reloads newer settings.
+      throw StateError(
+        'Provider settings changed before this update; reload and try again.',
+      );
+    }
+    _conflictedEntryUpdateFingerprints.remove(id);
+    final index = state.entries.indexWhere((entry) => entry.id == id);
+    if (index < 0) {
+      if (requirePersistence) {
+        throw StateError(
+          'Provider entry was removed before it could be saved.',
+        );
+      }
+      return;
+    }
+    final entries = List<ProviderEntry>.from(state.entries);
+    entries[index] = updated;
+    final conflictGeneration = _providerEntriesSourceConflictGeneration;
+    try {
+      await _setStateAndPersist(
+        ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+      );
+    } catch (_) {
+      if (_providerEntriesSourceConflictGeneration != conflictGeneration) {
+        _conflictedEntryUpdateFingerprints[id] = updateFingerprint;
+      }
+      rethrow;
+    }
   }
+
+  String _entryUpdateFingerprint(ProviderEntry entry) => sha256
+      .convert(utf8.encode(jsonEncode(entry.toCredentialMigrationMap())))
+      .toString();
 
   /// 删除条目
   Future<void> remove(String id) async {

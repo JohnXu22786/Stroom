@@ -1,5 +1,7 @@
 import 'package:uuid/uuid.dart';
 
+import '../utils/credential_field_sanitizer.dart';
+
 // ============================================================================
 // 参数类型枚举
 // ============================================================================
@@ -725,26 +727,53 @@ class ProviderConfigItem {
         reasoningParams = reasoningParams ?? [],
         legacyFields = Map<String, dynamic>.from(legacyFields ?? const {});
 
-  Map<String, dynamic> toMap() => {
-        ...legacyFields,
-        'id': id,
-        'providerName': providerName,
-        if (groupId != null) 'groupId': groupId,
-        'host': host,
-        if (credentialRef == null) 'key': key,
-        if (credentialRef != null) 'credentialRef': credentialRef,
-        'models': models.map((m) => m.toMap()).toList(),
-        'typeConfig': typeConfig,
-        'customParams': customParams.map((p) => p.toMap()).toList(),
-        'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
-        'endpointType': endpointType,
-      };
+  Map<String, dynamic> toMap({
+    bool includeKey = false,
+    bool redactCredentialFields = true,
+  }) {
+    final serialized = <String, dynamic>{
+      ..._legacyFieldsForPersistence(
+        redactCredentialFields: redactCredentialFields,
+      ),
+      'id': id,
+      'providerName': providerName,
+      if (groupId != null) 'groupId': groupId,
+      'host': host,
+      if (credentialRef != null) 'credentialRef': credentialRef,
+      'models': models.map((m) => m.toMap()).toList(),
+      'typeConfig': typeConfig,
+      'customParams': customParams.map((p) => p.toMap()).toList(),
+      'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
+      'endpointType': endpointType,
+    };
+    final sanitized = redactCredentialFields
+        ? Map<String, dynamic>.from(
+            sanitizeCredentialFields(serialized) as Map,
+          )
+        : serialized;
+    if (includeKey && credentialRef == null) sanitized['key'] = key;
+    return sanitized;
+  }
+
+  Map<String, dynamic> _legacyFieldsForPersistence({
+    required bool redactCredentialFields,
+  }) {
+    if (!redactCredentialFields) return legacyFields;
+    return Map<String, dynamic>.from(
+      sanitizeCredentialFields(legacyFields) as Map,
+    );
+  }
 
   /// Transient serialization used only as migration input. Callers must never
   /// persist or export this map directly; it contains the in-memory key so a
   /// rotated value can be copied to secure storage before preferences change.
-  Map<String, dynamic> toCredentialMigrationMap() => {
-        ...legacyFields,
+  Map<String, dynamic> toCredentialMigrationMap({
+    bool preserveUnknownCredentialFields = false,
+  }) =>
+      {
+        ..._legacyFieldsForCredentialMigration(
+          preserveUnknownCredentialFields: preserveUnknownCredentialFields,
+        ),
         'id': id,
         'providerName': providerName,
         if (groupId != null) 'groupId': groupId,
@@ -757,6 +786,16 @@ class ProviderConfigItem {
         'reasoningParams': reasoningParams.map((p) => p.toMap()).toList(),
         'endpointType': endpointType,
       };
+
+  Map<String, dynamic> _legacyFieldsForCredentialMigration({
+    required bool preserveUnknownCredentialFields,
+  }) {
+    if (preserveUnknownCredentialFields) return legacyFields;
+    return Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where(
+          (entry) => entry.key == 'key' || !isCredentialFieldName(entry.key)),
+    );
+  }
 
   factory ProviderConfigItem.fromMap(Map<String, dynamic> map) =>
       ProviderConfigItem(
@@ -855,24 +894,44 @@ class ProviderEntry {
         'id': id,
         'type': type,
         'name': name,
-        'configs': configs.map((c) => c.toMap()).toList(),
+        'configs': configs
+            .map((c) => c.toMap(
+                  includeKey: type != 'llm',
+                  redactCredentialFields: type == 'llm',
+                ))
+            .toList(),
         'enabled': enabled,
       };
 
   Map<String, dynamic> _legacyFieldsForPersistence() {
-    if (type != 'llm' || !legacyFields.containsKey('key')) {
-      return legacyFields;
-    }
-    return Map<String, dynamic>.from(legacyFields)..remove('key');
+    if (type != 'llm') return legacyFields;
+    final fields = Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where((entry) => !isCredentialFieldName(entry.key)),
+    );
+    return Map<String, dynamic>.from(
+      sanitizeCredentialFields(fields) as Map,
+    );
+  }
+
+  Map<String, dynamic> _legacyFieldsForCredentialMigration() {
+    if (type != 'llm') return legacyFields;
+    return Map<String, dynamic>.fromEntries(
+      legacyFields.entries.where(
+          (entry) => entry.key == 'key' || !isCredentialFieldName(entry.key)),
+    );
   }
 
   /// Transient serializer for the migration boundary; never use for exports.
   Map<String, dynamic> toCredentialMigrationMap() => {
-        ...legacyFields,
+        ..._legacyFieldsForCredentialMigration(),
         'id': id,
         'type': type,
         'name': name,
-        'configs': configs.map((c) => c.toCredentialMigrationMap()).toList(),
+        'configs': configs
+            .map((config) => config.toCredentialMigrationMap(
+                  preserveUnknownCredentialFields: type != 'llm',
+                ))
+            .toList(),
         'enabled': enabled,
       };
 

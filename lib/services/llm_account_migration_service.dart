@@ -161,7 +161,7 @@ class LlmAccountMigrationService {
     var groupsCreated = 0;
     final seenAccountIds = <String>{};
     final credentialSnapshot =
-        await _preflightCredentialReferences(entries, accountsById);
+        await _preflightCredentialReferences(entries, accountsById, groupsById);
     final migrationWrites = <String, String>{};
     final migrationCredentialWrites = <String, String>{};
 
@@ -247,11 +247,14 @@ class LlmAccountMigrationService {
           final modelMappings = _mapModels(accountId, config);
           final oldAccountFields = Map<String, dynamic>.from(oldAccount)
             ..remove('credentialRef');
-          final endpointConfig = Map<String, dynamic>.from(config)
+          final endpointConfigFields = Map<String, dynamic>.from(config)
             ..remove('id')
             ..remove('key')
             ..remove('credentialRef')
             ..remove('models');
+          final endpointConfig = Map<String, dynamic>.from(
+            sanitizeCredentialFields(endpointConfigFields) as Map,
+          );
           final account = <String, dynamic>{
             ...oldAccountFields,
             'id': accountId,
@@ -263,9 +266,12 @@ class LlmAccountMigrationService {
             'authType': config['authType'] is String
                 ? config['authType']
                 : (credentialRef == null ? 'none' : 'api_key'),
-            'displayName': config['providerName'] is String
-                ? config['providerName']
-                : (config['name'] is String ? config['name'] : accountId),
+            'displayName': _firstNonEmptyString([
+                  config['providerName'],
+                  config['name'],
+                  oldAccount['displayName']
+                ]) ??
+                accountId,
             'status': oldAccount['status'] ?? LlmAccountStatus.unknown.name,
             'endpointConfig': endpointConfig,
             'models': modelMappings,
@@ -275,8 +281,11 @@ class LlmAccountMigrationService {
           if (credentialRef != null) {
             account['credentialRef'] = credentialRef;
           }
-          if (!_jsonEqual(oldAccount, account)) {
-            accountsById[accountId] = account;
+          final safeAccount = Map<String, dynamic>.from(
+            sanitizeCredentialFields(account) as Map,
+          );
+          if (!_jsonEqual(oldAccount, safeAccount)) {
+            accountsById[accountId] = safeAccount;
             accountsChanged = true;
           }
           accountsMigrated++;
@@ -379,7 +388,16 @@ class LlmAccountMigrationService {
         requireCredentialPresence: true,
       );
 
-      final sanitizedSource = jsonEncode(entries);
+      final sanitizedEntries = entries.map((entryValue) {
+        if (entryValue is! Map || entryValue['type'] != 'llm') {
+          return entryValue;
+        }
+        final sanitized = Map<String, dynamic>.from(
+          sanitizeCredentialFields(entryValue) as Map,
+        );
+        return sanitized;
+      }).toList();
+      final sanitizedSource = jsonEncode(sanitizedEntries);
       final persistedSource = await preferences.getString('provider_entries');
       if (sanitizedSource != source || persistedSource != sanitizedSource) {
         await _writeAndVerify(
@@ -491,9 +509,9 @@ class LlmAccountMigrationService {
   }
 
   Future<Map<String, String?>> _preflightCredentialReferences(
-    List<dynamic> entries,
-    Map<String, Map<String, dynamic>> accounts,
-  ) async {
+      List<dynamic> entries,
+      Map<String, Map<String, dynamic>> accounts,
+      Map<String, Map<String, dynamic>> groups) async {
     final usages = <String, List<({String? key, bool hasKey})>>{};
     final seenAccountIds = <String>{};
     for (final entryValue in entries) {
@@ -569,6 +587,10 @@ class LlmAccountMigrationService {
         if (rawReference is String && rawReference.trim().isEmpty) {
           throw const LlmAccountMigrationException();
         }
+        if (rawReference is String &&
+            !isValidGeneratedCredentialReference(rawReference, accountId)) {
+          throw const LlmAccountMigrationException();
+        }
         config.remove('key');
         if (containsCredentialValue(config)) {
           throw const LlmAccountMigrationException();
@@ -591,15 +613,22 @@ class LlmAccountMigrationService {
       if (reference is! String || reference.trim().isEmpty) {
         throw const LlmAccountMigrationException();
       }
+      if (!isValidGeneratedCredentialReference(reference, entry.key)) {
+        throw const LlmAccountMigrationException();
+      }
       usages.putIfAbsent(reference, () => []).add((key: null, hasKey: false));
     }
 
     final snapshots = <String, String?>{};
+    final knownCredentials = collectCredentialValues(entries);
     for (final entry in usages.entries) {
       final reference = entry.key;
       final usage = entry.value;
       final existing = await credentialStore.read(reference);
       snapshots[reference] = existing;
+      if (existing != null && existing.trim().isNotEmpty) {
+        knownCredentials.add(existing);
+      }
       final inlineValues =
           usage.where((item) => item.hasKey).map((item) => item.key!).toSet();
       if (inlineValues.length > 1) {
@@ -613,6 +642,33 @@ class LlmAccountMigrationService {
       } else if (hasKeylessUse && inlineValues.isEmpty && existing == null) {
         throw const LlmAccountMigrationException();
       }
+    }
+
+    bool leaksCredential(Object? value) {
+      if (value is Map) {
+        for (final entry in value.entries) {
+          final field = entry.key;
+          if (field is String &&
+              isCredentialIdentifierFieldName(field) &&
+              entry.value is String &&
+              containsCredentialValueInIdentifier(
+                  entry.value as String, knownCredentials)) {
+            return true;
+          }
+          if (leaksCredential(entry.value)) return true;
+        }
+      } else if (value is List) {
+        return value.any(leaksCredential);
+      }
+      return false;
+    }
+
+    if (leaksCredential(entries) ||
+        leaksCredential(accounts.values.toList()) ||
+        leaksCredential(groups.values.toList()) ||
+        knownCredentials.any((secret) =>
+            accounts.keys.any((accountId) => accountId.contains(secret)))) {
+      throw const LlmAccountMigrationException();
     }
     return snapshots;
   }
@@ -759,25 +815,48 @@ class LlmAccountMigrationService {
     if (rawModels == null) return const [];
     if (rawModels is! List) throw const LlmAccountMigrationException();
     final models = <Map<String, dynamic>>[];
+    final explicitIds = <String>{};
+    for (final rawValue in rawModels) {
+      if (rawValue is! Map) throw const LlmAccountMigrationException();
+      final rawId = rawValue['id'];
+      if (rawId is String && rawId.isNotEmpty && !explicitIds.add(rawId)) {
+        throw const LlmAccountMigrationException();
+      }
+    }
+    final assignedIds = <String>{};
     for (var index = 0; index < rawModels.length; index++) {
       final rawValue = rawModels[index];
       if (rawValue is! Map) throw const LlmAccountMigrationException();
       final raw = Map<String, dynamic>.from(rawValue);
-      final localId = raw['id'] is String && (raw['id'] as String).isNotEmpty
+      var localId = raw['id'] is String && (raw['id'] as String).isNotEmpty
           ? raw['id'] as String
           : '$accountId:$index';
-      final modelId = raw['modelId'] is String
-          ? raw['modelId'] as String
-          : (raw['name'] is String ? raw['name'] as String : '');
+      if (raw['id'] is! String || (raw['id'] as String).isEmpty) {
+        var suffix = 0;
+        while (explicitIds.contains(localId) || assignedIds.contains(localId)) {
+          suffix++;
+          localId = '$accountId:$index:$suffix';
+        }
+      }
+      if (!assignedIds.add(localId)) {
+        throw const LlmAccountMigrationException();
+      }
+      final rawModelId = raw['modelId'];
+      final rawName = raw['name'];
+      final modelId = rawModelId is String && rawModelId.trim().isNotEmpty
+          ? rawModelId
+          : (rawName is String && rawName.trim().isNotEmpty ? rawName : '');
+      if (modelId.isEmpty) throw const LlmAccountMigrationException();
       final capabilities = <String, dynamic>{
         if (raw['supportStream'] is bool) 'streaming': raw['supportStream'],
         if (raw['supportInstruction'] is bool)
-          'instruction': raw['supportInstruction'],
+          'instruction': raw['supportInstruction']
       };
       models.add({
         'id': localId,
         'upstreamModelId': modelId,
-        'displayName': raw['name'] is String ? raw['name'] : modelId,
+        'displayName':
+            rawName is String && rawName.trim().isNotEmpty ? rawName : modelId,
         'capabilities': capabilities,
         // Keep the full legacy model record so later request adapters can
         // continue to read any existing per-model fields.
@@ -827,6 +906,13 @@ class LlmAccountMigrationService {
 
   String _credentialReference(String accountId) =>
       'stroom.llm.credential.${Uri.encodeComponent(accountId)}';
+
+  String? _firstNonEmptyString(List<Object?> values) {
+    for (final value in values) {
+      if (value is String && value.trim().isNotEmpty) return value;
+    }
+    return null;
+  }
 
   String _modelGroupId(String accountId, String localModelId) {
     final encodedAccountId = Uri.encodeComponent(accountId);

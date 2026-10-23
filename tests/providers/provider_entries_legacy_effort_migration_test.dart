@@ -436,6 +436,11 @@ void main() {
         await notifier.load();
 
         expect(notifier.state.isLoaded, isTrue);
+        final llmAfterUnavailableLoad =
+            notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
+        final configIdBeforeRetry = llmAfterUnavailableLoad.configs.single.id;
+        final modelIdBeforeRetry =
+            llmAfterUnavailableLoad.configs.single.models.single.id;
         expect(
           notifier.state.entries.map((entry) => entry.type),
           containsAll(['llm', 'tts', 'asr', 'mcp']),
@@ -482,6 +487,15 @@ void main() {
         await notifier.load();
 
         expect(notifier.state.isLoaded, isTrue);
+        final llmAfterRetry =
+            notifier.state.entries.singleWhere((entry) => entry.type == 'llm');
+        expect(llmAfterRetry.configs.single.id, configIdBeforeRetry,
+            reason:
+                'a model selector may save a reference while migration is unavailable');
+        expect(
+            llmAfterRetry.configs.single.models.single.id, modelIdBeforeRetry,
+            reason:
+                'a model selector may save a reference while migration is unavailable');
         expect(
           prefs.getString('provider_entries'),
           isNot(contains('"key":"k"')),

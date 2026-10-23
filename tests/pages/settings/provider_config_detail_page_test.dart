@@ -19,17 +19,23 @@ ProviderEntry _createTestEntry({
   List<ModelConfig> models = const [],
   String type = 'llm',
   String name = 'LLM供应商',
+  String? credentialRef,
+  Map<String, dynamic> legacyFields = const {},
+  Map<String, dynamic> configLegacyFields = const {},
 }) {
   return ProviderEntry(
     id: 'test_entry_id',
     type: type,
     name: name,
+    legacyFields: legacyFields,
     configs: [
       ProviderConfigItem(
         providerName: providerName,
         host: host,
         key: key,
+        credentialRef: credentialRef,
         models: models,
+        legacyFields: configLegacyFields,
       ),
     ],
   );
@@ -37,6 +43,8 @@ ProviderEntry _createTestEntry({
 
 /// Fake notifier that immediately provides test data
 class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
+  bool lastUpdateRequiredPersistence = false;
+
   ProviderEntriesNotifierFake({
     String type = 'llm',
     String name = 'LLM供应商',
@@ -47,15 +55,58 @@ class ProviderEntriesNotifierFake extends ProviderEntriesNotifier {
     );
   }
 
+  void removeEntryForTest(String id) {
+    state = ProviderEntriesState(
+      entries: state.entries.where((entry) => entry.id != id).toList(),
+    );
+  }
+
+  void removeConfigForTest(String entryId, String configId) {
+    state = ProviderEntriesState(
+      entries: [
+        for (final entry in state.entries)
+          if (entry.id == entryId)
+            ProviderEntry(
+              id: entry.id,
+              type: entry.type,
+              name: entry.name,
+              enabled: entry.enabled,
+              legacyFields: entry.legacyFields,
+              configs: entry.configs
+                  .where((config) => config.id != configId)
+                  .toList(),
+            )
+          else
+            entry,
+      ],
+    );
+  }
+
   @override
   Future<void> update(
     String id,
     ProviderEntry updated, {
     bool requirePersistence = false,
   }) async {
+    lastUpdateRequiredPersistence = requirePersistence;
     state = ProviderEntriesState(
       entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
     );
+  }
+}
+
+class ProviderEntriesNotifierFailingSaveFake
+    extends ProviderEntriesNotifierFake {
+  ProviderEntriesNotifierFailingSaveFake({List<ProviderEntry>? entries})
+    : super(entries: entries);
+
+  @override
+  Future<void> update(
+    String id,
+    ProviderEntry updated, {
+    bool requirePersistence = false,
+  }) async {
+    throw StateError('Provider settings were removed before the save.');
   }
 }
 
@@ -66,24 +117,39 @@ extension on WidgetTester {
     String entryType = 'llm',
     String entryName = 'LLM供应商',
     List<ModelConfig> models = const [],
+    ProviderEntry? entry,
+    bool failUpdate = false,
+    String? credentialRef,
+    Map<String, dynamic> legacyFields = const {},
+    Map<String, dynamic> configLegacyFields = const {},
   }) {
+    final entries = entry != null
+        ? [entry]
+        : models.isNotEmpty ||
+              legacyFields.isNotEmpty ||
+              configLegacyFields.isNotEmpty
+        ? [
+            _createTestEntry(
+              type: entryType,
+              name: entryName,
+              models: models,
+              credentialRef: credentialRef,
+              legacyFields: legacyFields,
+              configLegacyFields: configLegacyFields,
+            ),
+          ]
+        : null;
     return pumpWidget(
       ProviderScope(
         overrides: [
           providerEntriesProvider.overrideWith(
-            (ref) => ProviderEntriesNotifierFake(
-              type: entryType,
-              name: entryName,
-              entries: models.isNotEmpty
-                  ? [
-                      _createTestEntry(
-                        type: entryType,
-                        name: entryName,
-                        models: models,
-                      ),
-                    ]
-                  : null,
-            ),
+            (ref) => failUpdate
+                ? ProviderEntriesNotifierFailingSaveFake(entries: entries)
+                : ProviderEntriesNotifierFake(
+                    type: entryType,
+                    name: entryName,
+                    entries: entries,
+                  ),
           ),
         ],
         child: MaterialApp(
@@ -129,6 +195,374 @@ void main() {
       // Model list section visible
       expect(find.text('模型列表'), findsOneWidget);
     });
+
+    testWidgets('keeps provider details unchanged when a required save fails', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(failUpdate: true);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('编辑供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Unsaved provider');
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'https://unsaved.example.test',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TestProvider'), findsWidgets);
+      expect(find.text('Unsaved provider'), findsNothing);
+      expect(find.textContaining('保存失败'), findsOneWidget);
+    });
+
+    testWidgets('preserves unknown provider fields when saving settings', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(
+        legacyFields: const {'futureProviderSetting': 'preserve-me'},
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('编辑供应商设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(ProviderConfigDetailPage));
+      final entries = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider).entries;
+      expect(
+        entries.single.legacyFields['futureProviderSetting'],
+        'preserve-me',
+      );
+    });
+
+    testWidgets(
+      'preserves config credential reference and metadata when saving settings',
+      (tester) async {
+        await tester.pumpDetailPage(
+          credentialRef: 'credential/stable-reference',
+          configLegacyFields: const {'futureConfigSetting': 'preserve-me'},
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('编辑供应商设置'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final savedConfig = ProviderScope.containerOf(
+          context,
+          listen: false,
+        ).read(providerEntriesProvider).entries.single.configs.single;
+        expect(savedConfig.credentialRef, 'credential/stable-reference');
+        expect(savedConfig.legacyFields['futureConfigSetting'], 'preserve-me');
+      },
+    );
+
+    testWidgets('preserves unknown provider fields when adding a model', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(
+        legacyFields: const {'futureProviderSetting': 'preserve-me'},
+        configLegacyFields: const {'futureConfigSetting': 'config-preserve-me'},
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('添加'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1), 'added-model-id');
+      await tester.enterText(find.byType(TextField).at(2), '4096');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(ProviderConfigDetailPage));
+      final entries = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider).entries;
+      final notifier =
+          ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(providerEntriesProvider.notifier)
+              as ProviderEntriesNotifierFake;
+      expect(notifier.lastUpdateRequiredPersistence, isTrue);
+      expect(
+        entries.single.legacyFields['futureProviderSetting'],
+        'preserve-me',
+      );
+      expect(
+        entries.single.configs.single.legacyFields['futureConfigSetting'],
+        'config-preserve-me',
+      );
+    });
+
+    testWidgets('preserves unknown provider fields when editing a model', (
+      tester,
+    ) async {
+      await tester.pumpDetailPage(
+        models: [
+          ModelConfig(
+            name: 'Existing model',
+            modelId: 'existing-model-id',
+            typeConfig: const {'context': 4096},
+          ),
+        ],
+        legacyFields: const {'futureProviderSetting': 'preserve-me'},
+        configLegacyFields: const {'futureConfigSetting': 'config-preserve-me'},
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Existing model'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(1), 'edited-model-id');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final context = tester.element(find.byType(ProviderConfigDetailPage));
+      final entries = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider).entries;
+      final notifier =
+          ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(providerEntriesProvider.notifier)
+              as ProviderEntriesNotifierFake;
+      expect(notifier.lastUpdateRequiredPersistence, isTrue);
+      expect(
+        entries.single.legacyFields['futureProviderSetting'],
+        'preserve-me',
+      );
+      expect(
+        entries.single.configs.single.legacyFields['futureConfigSetting'],
+        'config-preserve-me',
+      );
+    });
+
+    testWidgets(
+      'reports failure if the entry is removed while adding a model',
+      (tester) async {
+        await tester.pumpDetailPage();
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final notifier =
+            ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(providerEntriesProvider.notifier)
+                as ProviderEntriesNotifierFake;
+        await tester.tap(find.text('添加'));
+        await tester.pumpAndSettle();
+
+        notifier.removeEntryForTest('test_entry_id');
+        await tester.pump();
+
+        await tester.enterText(find.byType(TextField).at(1), 'added-model-id');
+        await tester.enterText(find.byType(TextField).at(2), '4096');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('保存失败'), findsOneWidget);
+        expect(notifier.state.entries, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'reports failure if the config is removed while editing a model',
+      (tester) async {
+        await tester.pumpDetailPage(
+          models: [
+            ModelConfig(
+              name: 'Existing model',
+              modelId: 'existing-model-id',
+              typeConfig: const {'context': 4096},
+            ),
+          ],
+        );
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final notifier =
+            ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(providerEntriesProvider.notifier)
+                as ProviderEntriesNotifierFake;
+        await tester.tap(find.text('Existing model'));
+        await tester.pumpAndSettle();
+
+        notifier.removeConfigForTest(
+          'test_entry_id',
+          notifier.state.entries.single.configs.single.id,
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).at(1), 'edited-model-id');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(notifier.state.entries.single.configs, isEmpty);
+        expect(find.textContaining('保存失败'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'reports failure if the entry is removed before model deletion',
+      (tester) async {
+        await tester.pumpDetailPage(
+          models: [
+            ModelConfig(name: 'Existing model', modelId: 'existing-model-id'),
+          ],
+        );
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final notifier =
+            ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(providerEntriesProvider.notifier)
+                as ProviderEntriesNotifierFake;
+        await tester.tap(find.byIcon(Icons.delete).first);
+        await tester.pumpAndSettle();
+        notifier.removeEntryForTest('test_entry_id');
+        await tester.pump();
+        await tester.tap(find.text('删除').last);
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('保存失败'), findsOneWidget);
+        expect(notifier.state.entries, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'does not save an edited model into another config after selected config removal',
+      (tester) async {
+        final selectedConfig = ProviderConfigItem(
+          id: 'selected-config',
+          providerName: 'SelectedProvider',
+          host: 'https://selected.example.com',
+          key: 'selected-key',
+          models: [
+            ModelConfig(
+              name: 'Selected model',
+              modelId: 'selected-model-id',
+              typeConfig: const {'context': 4096},
+            ),
+          ],
+        );
+        final otherConfig = ProviderConfigItem(
+          id: 'other-config',
+          providerName: 'OtherProvider',
+          host: 'https://other.example.com',
+          key: 'other-key',
+          models: [
+            ModelConfig(
+              name: 'Other model',
+              modelId: 'other-model-id',
+              typeConfig: const {'context': 4096},
+            ),
+          ],
+        );
+        await tester.pumpDetailPage(
+          entry: ProviderEntry(
+            id: 'test_entry_id',
+            type: 'llm',
+            name: 'LLM供应商',
+            configs: [selectedConfig, otherConfig],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final notifier =
+            ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(providerEntriesProvider.notifier)
+                as ProviderEntriesNotifierFake;
+        await tester.tap(find.text('Selected model'));
+        await tester.pumpAndSettle();
+
+        notifier.removeConfigForTest('test_entry_id', 'selected-config');
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).at(1), 'edited-model-id');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final remainingConfig = notifier.state.entries.single.configs.single;
+        expect(remainingConfig.id, 'other-config');
+        expect(remainingConfig.models.single.modelId, 'other-model-id');
+        expect(find.textContaining('保存失败'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'does not save an added model into another config after selected config removal',
+      (tester) async {
+        final selectedConfig = ProviderConfigItem(
+          id: 'selected-config',
+          providerName: 'SelectedProvider',
+          host: 'https://selected.example.com',
+          key: 'selected-key',
+        );
+        final otherConfig = ProviderConfigItem(
+          id: 'other-config',
+          providerName: 'OtherProvider',
+          host: 'https://other.example.com',
+          key: 'other-key',
+          models: [
+            ModelConfig(
+              name: 'Other model',
+              modelId: 'other-model-id',
+              typeConfig: const {'context': 4096},
+            ),
+          ],
+        );
+        await tester.pumpDetailPage(
+          entry: ProviderEntry(
+            id: 'test_entry_id',
+            type: 'llm',
+            name: 'LLM供应商',
+            configs: [selectedConfig, otherConfig],
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final context = tester.element(find.byType(ProviderConfigDetailPage));
+        final notifier =
+            ProviderScope.containerOf(
+                  context,
+                  listen: false,
+                ).read(providerEntriesProvider.notifier)
+                as ProviderEntriesNotifierFake;
+        await tester.tap(find.text('添加'));
+        await tester.pumpAndSettle();
+
+        notifier.removeConfigForTest('test_entry_id', 'selected-config');
+        await tester.pump();
+        await tester.enterText(find.byType(TextField).at(1), 'added-model-id');
+        await tester.enterText(find.byType(TextField).at(2), '4096');
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        final remainingConfig = notifier.state.entries.single.configs.single;
+        expect(remainingConfig.id, 'other-config');
+        expect(
+          remainingConfig.models.map((model) => model.modelId),
+          ['other-model-id'],
+        );
+        expect(find.textContaining('保存失败'), findsOneWidget);
+      },
+    );
   });
 
   group('New config creation', () {
@@ -142,8 +576,7 @@ void main() {
       expect(find.byType(TextField), findsNWidgets(3));
     });
 
-    testWidgets(
-        'saving a new config stays on the model list page instead of '
+    testWidgets('saving a new config stays on the model list page instead of '
         'popping back to the provider list', (tester) async {
       await tester.pumpDetailPage(configIndex: -1);
       await tester.pumpAndSettle();
@@ -181,8 +614,7 @@ void main() {
       expect(state.entries.single.configs.first.key, 'new-key');
     });
 
-    testWidgets(
-        'models added after saving a new config are persisted into the '
+    testWidgets('models added after saving a new config are persisted into the '
         'newly created config (not dropped or routed to the old config)', (
       tester,
     ) async {
@@ -303,8 +735,9 @@ void main() {
   });
 
   group('LLM model drag-sort sync with chat order', () {
-    testWidgets('llm model list is reorderable and follows the saved order',
-        (tester) async {
+    testWidgets('llm model list is reorderable and follows the saved order', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });
@@ -322,8 +755,9 @@ void main() {
       expect(modelTileTitles(tester), ['model-2', 'model-1']);
     });
 
-    testWidgets('non-llm pages keep the plain non-reorderable model list',
-        (tester) async {
+    testWidgets('non-llm pages keep the plain non-reorderable model list', (
+      tester,
+    ) async {
       await tester.pumpDetailPage(
         entryType: 'tts',
         entryName: 'TTS供应商',
@@ -335,8 +769,7 @@ void main() {
       expect(find.text('voice-1'), findsOneWidget);
     });
 
-    testWidgets(
-        'dragging a model updates the combined order, keeping other '
+    testWidgets('dragging a model updates the combined order, keeping other '
         'providers in place', (tester) async {
       SharedPreferences.setMockInitialValues({
         'model_order': [
@@ -412,8 +845,9 @@ void main() {
       ]);
     });
 
-    testWidgets('delete after reorder removes the right stored model',
-        (tester) async {
+    testWidgets('delete after reorder removes the right stored model', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         'model_order': ['model-2 | TestProvider', 'model-1 | TestProvider'],
       });
@@ -422,6 +856,8 @@ void main() {
           ModelConfig(name: 'model-1', modelId: 'id-1'),
           ModelConfig(name: 'model-2', modelId: 'id-2'),
         ],
+        legacyFields: const {'futureProviderSetting': 'preserve-me'},
+        configLegacyFields: const {'futureConfigSetting': 'config-preserve-me'},
       );
       await tester.pumpAndSettle();
 
@@ -437,6 +873,27 @@ void main() {
 
       // 若映射错误（删掉 model-1），剩余显示会是 model-2
       expect(modelTileTitles(tester), ['model-1']);
+
+      final context = tester.element(find.byType(ProviderConfigDetailPage));
+      final entries = ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(providerEntriesProvider).entries;
+      final notifier =
+          ProviderScope.containerOf(
+                context,
+                listen: false,
+              ).read(providerEntriesProvider.notifier)
+              as ProviderEntriesNotifierFake;
+      expect(notifier.lastUpdateRequiredPersistence, isTrue);
+      expect(
+        entries.single.legacyFields['futureProviderSetting'],
+        'preserve-me',
+      );
+      expect(
+        entries.single.configs.single.legacyFields['futureConfigSetting'],
+        'config-preserve-me',
+      );
     });
   });
 }
