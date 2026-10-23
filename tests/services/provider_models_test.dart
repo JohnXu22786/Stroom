@@ -136,6 +136,77 @@ void main() {
     },
   );
 
+  test('legacy selectors remain when their stable group lost the alias', () {
+    const accountId = 'legacy-alias-account';
+    const removedLocalModelId = 'removed-anchor-model';
+    const remainingLocalModelId = 'remaining-alias-model';
+    final account = LlmAccount(
+      id: accountId,
+      connectorType: 'openai-compatibility',
+      authType: 'api_key',
+      displayName: 'Legacy provider',
+      models: const [
+        LlmUpstreamModel(
+          id: remainingLocalModelId,
+          upstreamModelId: 'remaining-upstream-model',
+          displayName: 'Remaining model',
+          capabilities: {'streaming': true},
+        ),
+      ],
+    );
+    final legacyConfig = ProviderConfigItem(
+      id: accountId,
+      providerName: 'Legacy provider',
+      host: 'https://legacy.example.test/v1',
+      key: 'legacy-secret',
+      models: [
+        ModelConfig(
+          id: removedLocalModelId,
+          name: 'Removed model',
+          modelId: 'removed-upstream-model',
+        ),
+      ],
+    );
+    final staleAnchorGroup = LlmModelGroup(
+      id: stableLlmModelGroupId(accountId, removedLocalModelId),
+      displayName: 'Legacy group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: accountId,
+          localModelId: remainingLocalModelId,
+          upstreamModelId: 'remaining-upstream-model',
+        ),
+      ],
+    );
+    final state = ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'llm',
+          type: 'llm',
+          name: 'LLM',
+          configs: [
+            legacyConfig,
+            ...buildLlmModelGroupProviderConfigs(
+              accounts: [account],
+              groups: [staleAnchorGroup],
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final selected = flattenProviderModels(state, 'llm');
+
+    expect(
+      selected.any(
+        (option) =>
+            option.config.id == accountId &&
+            option.model.id == removedLocalModelId,
+      ),
+      isTrue,
+    );
+  });
+
   test(
     'OCR selector exposes groups with at least one vision capable member',
     () {
@@ -369,9 +440,8 @@ void main() {
                 id: 'local-model',
                 upstreamModelId: '$accountId-model',
                 displayName: accountId,
-                capabilities: streaming == null
-                    ? const {}
-                    : {'streaming': streaming},
+                capabilities:
+                    streaming == null ? const {} : {'streaming': streaming},
               ),
             ],
           ),

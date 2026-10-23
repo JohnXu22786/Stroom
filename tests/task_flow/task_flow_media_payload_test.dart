@@ -497,8 +497,7 @@ void main() {
           expect(
             jsonDecode(prefs.getString('conversations') ?? '[]'),
             isEmpty,
-            reason:
-                'failed flow chat must be removed on disk before its '
+            reason: 'failed flow chat must be removed on disk before its '
                 'attachment copy is deleted',
           );
           expect(
@@ -514,11 +513,8 @@ void main() {
           );
         } else {
           expect(await result, 'Summary');
-          final saved = container
-              .read(conversationsProvider)
-              .single
-              .messages
-              .first;
+          final saved =
+              container.read(conversationsProvider).single.messages.first;
           expect(saved.attachments.single.fileType, 'audio');
           expect(
             await AttachmentStorage.readFile(

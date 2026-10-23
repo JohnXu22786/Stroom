@@ -62,20 +62,26 @@ List<ProviderConfigItem> markUnsupportedLegacyLlmConfigs(
       )
       .map((account) => account.id)
       .toSet();
-  return configs
-      .map((config) {
-        if (isLlmModelGroupProviderConfig(config) ||
-            !unsupportedIds.contains(config.id) ||
-            config.legacyFields[kLlmChatAdapterUnsupportedSelectorField] ==
-                true) {
-          return config;
-        }
-        return ProviderConfigItem.fromMap({
-          ...config.toMap(),
-          kLlmChatAdapterUnsupportedSelectorField: true,
-        });
-      })
-      .toList(growable: false);
+  return configs.map((config) {
+    if (isLlmModelGroupProviderConfig(config)) {
+      return config;
+    }
+    if (unsupportedIds.contains(config.id)) {
+      if (config.legacyFields[kLlmChatAdapterUnsupportedSelectorField] ==
+          true) {
+        return config;
+      }
+      final marked = config.copy();
+      marked.legacyFields[kLlmChatAdapterUnsupportedSelectorField] = true;
+      return marked;
+    }
+    if (config.legacyFields[kLlmChatAdapterUnsupportedSelectorField] != true) {
+      return config;
+    }
+    final restored = config.copy();
+    restored.legacyFields.remove(kLlmChatAdapterUnsupportedSelectorField);
+    return restored;
+  }).toList(growable: false);
 }
 
 bool isUnsupportedLegacyLlmSelectorConfig(ProviderConfigItem config) =>
@@ -93,13 +99,14 @@ Future<void> ensureLegacyOcrProviderConfigGroups({
     for (final model in previousConfig?.models ?? const <ModelConfig>[])
       model.id.trim(): model,
   };
+  final synchronizedLocalModelIds = <String>{};
   for (final model in config.models) {
     final localModelId = model.id.trim();
-    final upstreamModelId = model.modelId.trim().isEmpty
-        ? localModelId
-        : model.modelId.trim();
+    final upstreamModelId =
+        model.modelId.trim().isEmpty ? localModelId : model.modelId.trim();
     final previousModel = previousModels[localModelId];
     if (localModelId.isEmpty || upstreamModelId.isEmpty) continue;
+    synchronizedLocalModelIds.add(localModelId);
     await runtime.ensureLegacyOcrModelGroup(
       accountId: accountId,
       groupId: llmOcrModelGroupIdForConfig(config.id, localModelId),
@@ -112,12 +119,15 @@ Future<void> ensureLegacyOcrProviderConfigGroups({
           previousConfig != null && previousConfig.host != config.host,
       synchronizeCredential:
           previousConfig != null && previousConfig.key != config.key,
-      synchronizeModel:
-          previousModel != null &&
+      synchronizeModel: previousModel != null &&
           (previousModel.modelId != model.modelId ||
               previousModel.name != model.name),
     );
   }
+  await runtime.synchronizeLegacyOcrModelSet(
+    accountId: accountId,
+    localModelIds: synchronizedLocalModelIds,
+  );
 }
 
 bool llmModelConfigSupportsCapability(ModelConfig model, String capability) {
@@ -175,10 +185,11 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       // existing `(providerName, modelId)` conversation identity intact when
       // that model is now backed by a multi-account group.
       final preferred = members.cast<LlmModelGroupMember?>().firstWhere(
-        (member) =>
-            stableLlmModelGroupId(member!.accountId, localModelId) == group.id,
-        orElse: () => null,
-      );
+            (member) =>
+                stableLlmModelGroupId(member!.accountId, localModelId) ==
+                group.id,
+            orElse: () => null,
+          );
       final orderedMembers = [
         if (preferred != null) preferred,
         ...members.where((member) => member != preferred),
@@ -204,11 +215,9 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       }
 
       final legacyLocalModelId = stableLlmModelGroupLocalModelId(group.id);
-      final isStableGroupAnchor =
-          group.id ==
+      final isStableGroupAnchor = group.id ==
           stableLlmModelGroupId(representativeAccount.id, localModelId);
-      final keepsLegacyIdentity =
-          isStableGroupAnchor ||
+      final keepsLegacyIdentity = isStableGroupAnchor ||
           (group.legacyProviderName != null &&
               legacyLocalModelId == localModelId);
       final supportsVision = members.any((member) {
@@ -237,8 +246,8 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
         ..['name'] = keepsLegacyIdentity
             ? group.displayName
             : representativeModel.displayName.isNotEmpty
-            ? representativeModel.displayName
-            : group.displayName
+                ? representativeModel.displayName
+                : group.displayName
         ..['modelId'] = keepsLegacyIdentity
             ? group.legacyModelId ?? representativeModel.upstreamModelId
             : _modelGroupMemberReference(group.id, localModelId)
@@ -249,8 +258,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       final model = ModelConfig.fromMap(rawModel);
       model.endpointType = representativeEndpointType;
       models.add(model);
-      providerName ??=
-          group.legacyProviderName ??
+      providerName ??= group.legacyProviderName ??
           (keepsLegacyIdentity
               ? representativeAccount.displayName
               : group.displayName);

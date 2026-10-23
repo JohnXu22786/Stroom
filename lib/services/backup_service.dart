@@ -261,8 +261,10 @@ class BackupSelection {
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
   static const _audioDraftsDirectory = 'audio_drafts';
-  static final _audioRecordingDraftFileName =
-      RegExp(r'^recording_\d+\.m4a$', caseSensitive: false);
+  static final _audioRecordingDraftFileName = RegExp(
+    r'^recording_\d+\.m4a$',
+    caseSensitive: false,
+  );
   static const _catCatchRuntimeSubdirectories = [
     'downloads',
     '.progress',
@@ -487,9 +489,10 @@ class BackupService {
           }
         }
 
-        final values = await StartupPreferences.getValues(
-          {...chatKeys, ...settingsKeys},
-        );
+        final values = await StartupPreferences.getValues({
+          ...chatKeys,
+          ...settingsKeys,
+        });
         final encoded = _isBackupFlutterTest
             ? _encodeBackupPreferenceGroups(values, chatKeys, settingsKeys)
             : await Isolate.run(
@@ -523,10 +526,10 @@ class BackupService {
               chatData[key] = prefs.get(key);
             }
           } else if (selection.settings) {
-            final value = _safeBackupPreferenceValue(key, prefs.get(key));
-            if (value != null) settingsData[key] = value;
+            settingsData[key] = prefs.get(key);
           }
         }
+        _sanitizeBackupSettings(settingsData);
         if (selection.chatRecordsAndAttachments) {
           jsonFiles['chat_data.json'] = jsonEncode(chatData);
         }
@@ -893,10 +896,7 @@ class BackupService {
             ? await Isolate.run(() => jsonEncode(mediaManifest))
             : jsonEncode(mediaManifest);
 
-    final plannedArchivePaths = {
-      ...jsonFiles.keys,
-      ...memoryFiles.keys,
-    };
+    final plannedArchivePaths = {...jsonFiles.keys, ...memoryFiles.keys};
     diskFiles.removeWhere((entry) => !plannedArchivePaths.add(entry.first));
     final manifest = Map<String, dynamic>.from(
       jsonDecode(jsonFiles['manifest.json']!) as Map,
@@ -1040,8 +1040,9 @@ class BackupService {
         final name = p.basename(entity.path);
         final existingPath = pathsByName[name];
         if (existingPath == null ||
-            (await entity.lastModified())
-                .isAfter(await File(existingPath).lastModified())) {
+            (await entity.lastModified()).isAfter(
+              await File(existingPath).lastModified(),
+            )) {
           pathsByName[name] = entity.path;
         }
       }
@@ -1143,9 +1144,7 @@ class BackupService {
         return _isAudioRecordingDraft(relativePath);
       }
       if (category == DataParts.tasks && prefix.startsWith('catcatch/')) {
-        return _isCatCatchMediaPath(
-          archivePath.substring('catcatch/'.length),
-        );
+        return _isCatCatchMediaPath(archivePath.substring('catcatch/'.length));
       }
       return true;
     }
@@ -1218,9 +1217,7 @@ class BackupService {
     return inventories;
   }
 
-  static Map<String, int> _plannedFileSizes(
-    Map<String, String> jsonFiles,
-  ) {
+  static Map<String, int> _plannedFileSizes(Map<String, String> jsonFiles) {
     final expectedSizes = <String, int>{};
     final manifestJson = jsonFiles['manifest.json'];
     if (manifestJson != null) {
@@ -1260,12 +1257,7 @@ class BackupService {
     final inventories = _newFileInventories(selection);
     for (final file in archive.files) {
       if (file.isFile) {
-        _addFileInventoryEntry(
-          inventories,
-          selection,
-          file.name,
-          file.size,
-        );
+        _addFileInventoryEntry(inventories, selection, file.name, file.size);
       }
     }
     _sortFileInventories(inventories);
@@ -1499,10 +1491,7 @@ class BackupService {
       }
       if (archivePrefix == 'attachments') {
         for (final key in await WebFileStore.keysWithPrefix('temp_edited/')) {
-          await addStoredFile(
-            'attachments/${p.posix.basename(key)}',
-            key,
-          );
+          await addStoredFile('attachments/${p.posix.basename(key)}', key);
         }
       }
       return;
@@ -1595,22 +1584,20 @@ class BackupService {
     }
     if (value is List) {
       return value
-          .map((child) => _mapPortableTaskPaths(
-                child,
-                appDir: appDir,
-                restoring: restoring,
-              ))
+          .map(
+            (child) => _mapPortableTaskPaths(
+              child,
+              appDir: appDir,
+              restoring: restoring,
+            ),
+          )
           .toList();
     }
     if (value is Map) {
       return value.map(
         (key, child) => MapEntry(
           key,
-          _mapPortableTaskPaths(
-            child,
-            appDir: appDir,
-            restoring: restoring,
-          ),
+          _mapPortableTaskPaths(child, appDir: appDir, restoring: restoring),
         ),
       );
     }
@@ -1631,9 +1618,7 @@ class BackupService {
       'task_flows/executions.json',
     ]) {
       if (!taskFilesToRestore.contains(relativePath)) continue;
-      final file = File(
-        p.joinAll([appDir, ...relativePath.split('/')]),
-      );
+      final file = File(p.joinAll([appDir, ...relativePath.split('/')]));
       if (!await file.exists()) continue;
       try {
         final decoded = jsonDecode(await file.readAsString());
@@ -1877,11 +1862,11 @@ class BackupService {
           }
         } else {
           if (selection.settings) {
-            final value = _safeBackupPreferenceValue(key, prefs.get(key));
-            if (value != null) settingsData[key] = value;
+            settingsData[key] = prefs.get(key);
           }
         }
       }
+      _sanitizeBackupSettings(settingsData);
     }
 
     if (selection.chatRecordsAndAttachments) {
@@ -2264,9 +2249,7 @@ class BackupService {
       try {
         await BrowserProfileService.prepareForRestore();
       } catch (e) {
-        throw DataManagementPreflightException(
-          '请先重启应用，完成上一次内置浏览器数据操作后再导入：$e',
-        );
+        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再导入：$e');
       }
     }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
@@ -2459,10 +2442,7 @@ class BackupService {
         selectedPreferences,
         credentialStore: restoreCredentialStore,
       );
-      _validateZipEntryChecksumsBeforeRestore(
-        reader,
-        restoreSelection,
-      );
+      _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
       await _preflightBrowserCookieMerge(
         restoreSelection,
         metadata.browserCookiesData,
@@ -2913,9 +2893,7 @@ class BackupService {
           );
     if (!skipMissingCategories && declaredSelection != null) {
       final missingDeclaredCategories = selection.selectedLabels
-          .where(
-            (label) => !declaredSelection.selectedLabels.contains(label),
-          )
+          .where((label) => !declaredSelection.selectedLabels.contains(label))
           .toList();
       if (missingDeclaredCategories.isNotEmpty) {
         throw BackupValidationException(
@@ -3017,9 +2995,7 @@ class BackupService {
             jsonDecode(utf8.decode(browserCookiesData)),
           );
         } catch (e) {
-          throw BackupValidationException(
-            '无效的备份文件：内置浏览器 Cookies 数据损坏 ($e)',
-          );
+          throw BackupValidationException('无效的备份文件：内置浏览器 Cookies 数据损坏 ($e)');
         }
       }
     }
@@ -3153,8 +3129,9 @@ class BackupService {
 
   static bool _isCatCatchMediaPath(String relativePath) =>
       relativePath.startsWith('completed/') ||
-      _catCatchRuntimeSubdirectories
-          .any((directory) => relativePath.startsWith('$directory/'));
+      _catCatchRuntimeSubdirectories.any(
+        (directory) => relativePath.startsWith('$directory/'),
+      );
 
   static void _validateArchiveEntryChecksums(
     Archive archive,
@@ -3163,10 +3140,7 @@ class BackupService {
   ) {
     for (final file in archive) {
       if (!file.isFile ||
-          !_shouldValidateArchiveEntryChecksum(
-            file.name,
-            selection,
-          )) {
+          !_shouldValidateArchiveEntryChecksum(file.name, selection)) {
         continue;
       }
       final expected = file.crc32;
@@ -3186,10 +3160,7 @@ class BackupService {
     BackupSelection selection,
   ) {
     for (final entry in reader.entries) {
-      if (!_shouldValidateArchiveEntryChecksum(
-        entry.name,
-        selection,
-      )) {
+      if (!_shouldValidateArchiveEntryChecksum(entry.name, selection)) {
         continue;
       }
       try {
@@ -3506,9 +3477,11 @@ class BackupService {
     required Set<String> archiveEntries,
   }) {
     final entries = archiveEntries
-        .map((entry) => entry.startsWith('files/')
-            ? entry.substring('files/'.length)
-            : entry)
+        .map(
+          (entry) => entry.startsWith('files/')
+              ? entry.substring('files/'.length)
+              : entry,
+        )
         .toSet();
     var allPresent = true;
 
@@ -3984,8 +3957,9 @@ class BackupService {
         archivePath = archivePath.substring('files/'.length);
       }
       if (selection.tasks && archivePath.startsWith('task_flow_attachments/')) {
-        final relativePath =
-            archivePath.substring('task_flow_attachments/'.length);
+        final relativePath = archivePath.substring(
+          'task_flow_attachments/'.length,
+        );
         if (_isSafeRelativeArchivePath(relativePath)) {
           archivedAttachmentKeys.add('attachments/$relativePath');
           sourcePaths.add(rawArchivePath);
@@ -4116,10 +4090,7 @@ class BackupService {
     if (!selection.browserCookies || cookieData == null) return;
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
-      final previousFileData = await readBackupFile(
-        '',
-        'browser_cookies.json',
-      );
+      final previousFileData = await readBackupFile('', 'browser_cookies.json');
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
@@ -4140,11 +4111,7 @@ class BackupService {
             ),
           ),
         );
-        await writeBackupFile(
-          '',
-          'browser_cookies.json',
-          cookieDataToWrite,
-        );
+        await writeBackupFile('', 'browser_cookies.json', cookieDataToWrite);
         await BrowserCookieService.markBackupRestorePending();
         if (!WebFileStore.isTestMode &&
             !await BrowserCookieService.restoreCookiesFromFileChecked(
@@ -4236,7 +4203,7 @@ class BackupService {
     if (decoded is! List) return;
 
     final configs = <Map>[];
-    final models = <Map>[];
+    final modelsByConfig = <List<Map>>[];
     var changed = false;
     const configFields = [
       'providerName',
@@ -4282,6 +4249,7 @@ class BackupService {
           configs.add(config);
           final rawModels = config['models'];
           if (rawModels is! List) continue;
+          final configModels = <Map>[];
           for (var modelIndex = 0;
               modelIndex < rawModels.length;
               modelIndex++) {
@@ -4289,8 +4257,9 @@ class BackupService {
             if (rawModel is! Map) continue;
             final model = Map<String, dynamic>.from(rawModel);
             rawModels[modelIndex] = model;
-            models.add(model);
+            configModels.add(model);
           }
+          modelsByConfig.add(configModels);
         }
       }
       decoded[entryIndex] = entry;
@@ -4316,7 +4285,9 @@ class BackupService {
     }
 
     changed = assignIds(configs, 'config') || changed;
-    changed = assignIds(models, 'model') || changed;
+    for (final models in modelsByConfig) {
+      changed = assignIds(models, 'model') || changed;
+    }
     if (changed) selectedPreferences['provider_entries'] = jsonEncode(decoded);
   }
 
@@ -4350,18 +4321,19 @@ class BackupService {
         }
       }
 
-      String configIdentity(Map<String, dynamic> config) {
+      String? configIdentity(Map<String, dynamic> config) {
         final rawModels = config['models'];
         final modelIds = <String>[];
-        if (rawModels is List) {
-          for (final rawModel in rawModels) {
-            final model = rawModel as Map;
-            modelIds.add(
-              model['modelId'] is String
-                  ? model['modelId'] as String
-                  : (model['name'] is String ? model['name'] as String : ''),
-            );
-          }
+        if (rawModels is! List || rawModels.isEmpty) return null;
+        for (final rawModel in rawModels) {
+          if (rawModel is! Map) return null;
+          final modelId = rawModel['modelId'];
+          final name = rawModel['name'];
+          final stableId = modelId is String && modelId.trim().isNotEmpty
+              ? modelId
+              : (name is String && name.trim().isNotEmpty ? name : '');
+          if (stableId.isEmpty) return null;
+          modelIds.add(stableId);
         }
         return jsonEncode([
           config['providerName'] is String ? config['providerName'] : '',
@@ -4370,18 +4342,18 @@ class BackupService {
         ]);
       }
 
-      String legacyCredentialReference(Map<String, dynamic> config) {
-        final identity = configIdentity(config);
+      String legacyCredentialReference(String? identity) {
+        if (identity == null) {
+          return 'stroom.llm.credential.legacy_backup_${const Uuid().v4()}';
+        }
         final digest = sha256.convert(utf8.encode(identity));
         return 'stroom.llm.credential.legacy_backup.$digest';
       }
 
-      final referencesByAccountId = <String, String>{
-        ...accountReferenceById,
-      };
+      final referencesByAccountId = <String, String>{...accountReferenceById};
       final referencesByIdentity = <String, Set<String>>{};
       void rememberReference(
-        String identity,
+        String? identity,
         String reference, {
         String? accountId,
       }) {
@@ -4392,12 +4364,15 @@ class BackupService {
           }
           referencesByAccountId[accountId] = reference;
         }
-        referencesByIdentity
-            .putIfAbsent(identity, () => <String>{})
-            .add(reference);
+        if (identity != null) {
+          referencesByIdentity
+              .putIfAbsent(identity, () => <String>{})
+              .add(reference);
+        }
       }
 
-      String? uniqueIdentityReference(String identity) {
+      String? uniqueIdentityReference(String? identity) {
+        if (identity == null) return null;
         final references = referencesByIdentity[identity];
         if (references == null || references.isEmpty) return null;
         if (references.length != 1) {
@@ -4550,7 +4525,7 @@ class BackupService {
                 existingReference ??
                 (id is String
                     ? 'stroom.llm.credential.${Uri.encodeComponent(id)}'
-                    : legacyCredentialReference(config));
+                    : legacyCredentialReference(identity));
             if (reference is! String || reference.isEmpty) {
               throw const FormatException('Invalid legacy restore reference.');
             }
@@ -4590,12 +4565,14 @@ class BackupService {
           selectedPreferences,
         );
         if (providerEntriesChanged) {
-          sanitizedPreferences['provider_entries'] =
-              jsonEncode(restoredProviderEntries);
+          sanitizedPreferences['provider_entries'] = jsonEncode(
+            restoredProviderEntries,
+          );
         }
         if (legacyConfigsChanged) {
-          sanitizedPreferences['chat_configs'] =
-              jsonEncode(restoredLegacyConfigs);
+          sanitizedPreferences['chat_configs'] = jsonEncode(
+            restoredLegacyConfigs,
+          );
         }
         await _validateRestoredCredentialSettings(
           sanitizedPreferences,
@@ -4645,20 +4622,14 @@ class BackupService {
           }
         }
         if (!rollbackComplete) {
-          throw const BackupValidationException(
-            '备份中的 LLM 凭据无法回滚。请保留原备份并重试恢复。',
-          );
+          throw const BackupValidationException('备份中的 LLM 凭据无法回滚。请保留原备份并重试恢复。');
         }
-        throw const BackupValidationException(
-          '备份中的 LLM 凭据无法安全存储。未更改本机数据。',
-        );
+        throw const BackupValidationException('备份中的 LLM 凭据无法安全存储。未更改本机数据。');
       }
     } on BackupValidationException {
       rethrow;
     } catch (_) {
-      throw const BackupValidationException(
-        '备份中的 LLM 设置无效或无法安全存储。未更改本机数据。',
-      );
+      throw const BackupValidationException('备份中的 LLM 设置无效或无法安全存储。未更改本机数据。');
     } finally {
       if (!transactionOwnsQueue) lease.release();
     }
@@ -4672,7 +4643,9 @@ class BackupService {
       if (selectedPreferences.values.any((value) => value == null)) {
         throw const FormatException('Null selected preference value.');
       }
-      final credentialUsages = <String, List<String?>>{};
+      final credentialUsages =
+          <String, List<({String? accountId, String? key})>>{};
+      final accountLinkedReferences = <String, Set<String>>{};
       final accountReferenceById = <String, String>{};
       final providerAccountIds = <String>{};
       final providerConfigUsagesById =
@@ -4680,8 +4653,13 @@ class BackupService {
       final providerConfigUsagesByIdentity = <String,
           List<({String key, String? reference, String? publicKey})>>{};
 
-      String configIdentity(
-          Map<String, dynamic> config, List<String> modelIds) {
+      String? configIdentity(
+        Map<String, dynamic> config,
+        List<String> modelIds,
+      ) {
+        if (modelIds.isEmpty || modelIds.any((id) => id.trim().isEmpty)) {
+          return null;
+        }
         return jsonEncode([
           config['providerName'] is String ? config['providerName'] : '',
           config['host'] is String ? config['host'] : '',
@@ -4704,8 +4682,9 @@ class BackupService {
               left.publicKey != right.publicKey);
 
       ({String key, String? reference, String? publicKey})?
-          matchingProviderConfig(String? accountId, String identity) {
+          matchingProviderConfig(String? accountId, String? identity) {
         if (accountId != null) return providerConfigUsagesById[accountId];
+        if (identity == null) return null;
         final candidates = providerConfigUsagesByIdentity[identity];
         if (candidates == null || candidates.isEmpty) return null;
         final first = candidates.first;
@@ -4741,6 +4720,10 @@ class BackupService {
             final reference = account['credentialRef'];
             if (reference != null &&
                 (reference is! String || reference.trim().isEmpty)) {
+              throw const FormatException('Invalid credential reference.');
+            }
+            if (reference is String &&
+                !isValidGeneratedCredentialReference(reference, id)) {
               throw const FormatException('Invalid credential reference.');
             }
             final models = account['models'];
@@ -4804,7 +4787,9 @@ class BackupService {
           }
           if (rawEntry['type'] != 'llm') {
             final type = rawEntry['type'];
-            if ((type == 'mcp' || !_backupKnownProviderTypes.contains(type)) &&
+            if ((type == 'mcp' ||
+                    type == 'builtin' ||
+                    !_backupKnownProviderTypes.contains(type)) &&
                 containsCredentialValue(rawEntry)) {
               throw const FormatException('Unsupported provider credential.');
             }
@@ -4869,6 +4854,19 @@ class BackupService {
               throw const FormatException('Conflicting credential references.');
             }
             final effectiveReference = reference ?? accountReference;
+            if (accountReference is String &&
+                effectiveReference == accountReference) {
+              accountLinkedReferences
+                  .putIfAbsent(accountId, () => <String>{})
+                  .add(accountReference);
+            }
+            if (effectiveReference is String &&
+                !isValidGeneratedCredentialReference(
+                  effectiveReference,
+                  accountId,
+                )) {
+              throw const FormatException('Invalid credential reference.');
+            }
             final models = config['models'];
             if (models != null && models is! List) {
               throw const FormatException('Invalid provider models.');
@@ -4880,12 +4878,12 @@ class BackupService {
             if (models is List) {
               for (final rawModel in models) {
                 final model = rawModel as Map;
+                final modelId = model['modelId'];
+                final name = model['name'];
                 modelIds.add(
-                  model['modelId'] is String
-                      ? model['modelId'] as String
-                      : (model['name'] is String
-                          ? model['name'] as String
-                          : ''),
+                  modelId is String && modelId.trim().isNotEmpty
+                      ? modelId
+                      : (name is String && name.trim().isNotEmpty ? name : ''),
                 );
               }
             }
@@ -4901,23 +4899,29 @@ class BackupService {
               publicKey: publicKey as String?,
             );
             providerConfigUsagesById[accountId] = current;
-            providerConfigUsagesByIdentity
-                .putIfAbsent(
+            if (identity != null) {
+              providerConfigUsagesByIdentity
+                  .putIfAbsent(
                     identity,
                     () => <({
-                          String key,
-                          String? reference,
-                          String? publicKey
-                        })>[])
-                .add(current);
+                      String key,
+                      String? reference,
+                      String? publicKey
+                    })>[],
+                  )
+                  .add(current);
+            }
             config.remove('key');
             if (containsCredentialValue(config)) {
               throw const FormatException('Unsupported nested credential.');
             }
             if (effectiveReference is String) {
               credentialUsages
-                  .putIfAbsent(effectiveReference, () => <String?>[])
-                  .add(key.isEmpty ? null : key);
+                  .putIfAbsent(
+                effectiveReference,
+                () => <({String? accountId, String? key})>[],
+              )
+                  .add((accountId: accountId, key: key.isEmpty ? null : key));
             }
           }
         }
@@ -4926,8 +4930,11 @@ class BackupService {
       for (final accountReference in accountReferenceById.entries) {
         if (providerAccountIds.contains(accountReference.key)) continue;
         credentialUsages
-            .putIfAbsent(accountReference.value, () => <String?>[])
-            .add(null);
+            .putIfAbsent(
+          accountReference.value,
+          () => <({String? accountId, String? key})>[],
+        )
+            .add((accountId: accountReference.key, key: null));
       }
 
       final legacyConfigs = selectedPreferences['chat_configs'];
@@ -4941,7 +4948,8 @@ class BackupService {
         }
         final seen =
             <String, ({String key, String? reference, String? publicKey})>{};
-        for (final rawConfig in decoded) {
+        for (var legacyIndex = 0; legacyIndex < decoded.length; legacyIndex++) {
+          final rawConfig = decoded[legacyIndex];
           if (rawConfig is! Map) {
             throw const FormatException('Invalid legacy chat config.');
           }
@@ -4964,6 +4972,11 @@ class BackupService {
                   (publicKey is! String || publicKey.trim().isEmpty)) {
             throw const FormatException('Invalid legacy metadata.');
           }
+          if (accountId != null &&
+              reference is String &&
+              !isValidGeneratedCredentialReference(reference, accountId)) {
+            throw const FormatException('Invalid legacy credential reference.');
+          }
           final models = config['models'];
           if (models != null && models is! List) {
             throw const FormatException('Invalid legacy models.');
@@ -4974,11 +4987,12 @@ class BackupService {
               if (rawModel is! Map) {
                 throw const FormatException('Invalid legacy models.');
               }
-              final modelId = rawModel['modelId'] is String
-                  ? rawModel['modelId'] as String
-                  : (rawModel['name'] is String
-                      ? rawModel['name'] as String
-                      : '');
+              final rawModelId = rawModel['modelId'];
+              final name = rawModel['name'];
+              final modelId =
+                  rawModelId is String && rawModelId.trim().isNotEmpty
+                      ? rawModelId
+                      : (name is String && name.trim().isNotEmpty ? name : '');
               modelIds.add(modelId);
             }
           }
@@ -4999,8 +5013,11 @@ class BackupService {
           }
           final effectiveReference =
               current.reference ?? providerConfig?.reference;
-          final correlationKey =
-              accountId == null ? 'identity:$identity' : 'account:$accountId';
+          final correlationKey = accountId != null
+              ? 'account:$accountId'
+              : identity != null
+                  ? 'identity:$identity'
+                  : 'anonymous:$legacyIndex';
           final previous = seen[correlationKey];
           if (previous != null &&
               ((previous.key.isNotEmpty &&
@@ -5026,35 +5043,82 @@ class BackupService {
                   publicKey: previous.publicKey ?? current.publicKey,
                 );
         }
-        for (final usage in seen.values) {
+        for (final usageEntry in seen.entries) {
+          final usage = usageEntry.value;
           if (usage.reference == null) continue;
+          final accountId = usageEntry.key.startsWith('account:')
+              ? usageEntry.key.substring('account:'.length)
+              : null;
           credentialUsages
-              .putIfAbsent(usage.reference!, () => <String?>[])
-              .add(usage.key.isEmpty ? null : usage.key);
+              .putIfAbsent(
+            usage.reference!,
+            () => <({String? accountId, String? key})>[],
+          )
+              .add((
+            accountId: accountId,
+            key: usage.key.isEmpty ? null : usage.key,
+          ));
         }
       }
 
       final secureStore = credentialStore ?? PlatformLlmCredentialStore();
+      final credentialValues = collectCredentialValues(selectedPreferences);
       for (final usage in credentialUsages.entries) {
         final existing = await secureStore.read(usage.key);
-        final keys = usage.value.whereType<String>().toSet();
+        if (existing != null && existing.trim().isNotEmpty) {
+          credentialValues.add(existing);
+        }
+        final keys =
+            usage.value.map((use) => use.key).whereType<String>().toSet();
         if (keys.length > 1) {
           throw const FormatException('Conflicting credential references.');
         }
-        final hasKeylessUse = usage.value.any((value) => value == null);
+        final keylessUses =
+            usage.value.where((use) => use.key == null).toList();
+        final hasKeylessUse = keylessUses.isNotEmpty;
         if (hasKeylessUse && keys.isNotEmpty && existing != keys.single) {
           throw const FormatException('Conflicting credential references.');
         }
-        if (hasKeylessUse && keys.isEmpty && existing == null) {
+        if (hasKeylessUse &&
+            keys.isEmpty &&
+            existing == null &&
+            keylessUses.any(
+              (use) =>
+                  use.accountId == null ||
+                  accountLinkedReferences[use.accountId]?.contains(usage.key) !=
+                      true,
+            )) {
           throw const FormatException('Missing secure credential.');
         }
+      }
+      bool leaksCredentialInIdentifier(Object? value) {
+        if (value is Map) {
+          for (final entry in value.entries) {
+            final name = entry.key;
+            if (name is String &&
+                isCredentialIdentifierFieldName(name) &&
+                entry.value is String &&
+                containsCredentialValueInIdentifier(
+                  entry.value as String,
+                  credentialValues,
+                )) {
+              return true;
+            }
+            if (leaksCredentialInIdentifier(entry.value)) return true;
+          }
+        } else if (value is List) {
+          return value.any(leaksCredentialInIdentifier);
+        }
+        return false;
+      }
+
+      if (leaksCredentialInIdentifier(selectedPreferences)) {
+        throw const FormatException('Credential value in an identifier.');
       }
     } on BackupValidationException {
       rethrow;
     } catch (_) {
-      throw const BackupValidationException(
-        '备份中的 LLM 设置无效或存在歧义。未更改本机数据。',
-      );
+      throw const BackupValidationException('备份中的 LLM 设置无效或存在歧义。未更改本机数据。');
     }
   }
 
@@ -5515,14 +5579,16 @@ class BackupService {
             : await startupPrefs!.remove(key);
         if (!removed) {
           throw StateError(
-              'Failed to remove preference during restore rollback.');
+            'Failed to remove preference during restore rollback.',
+          );
         }
       }
       for (final entry in previousValues.entries) {
         final previousValue = entry.value;
         if (previousValue == null) {
           throw StateError(
-              'Unsupported preference value during restore rollback.');
+            'Unsupported preference value during restore rollback.',
+          );
         }
         final saved = await _writePreferenceValue(
           entry.key,
@@ -5532,7 +5598,8 @@ class BackupService {
         );
         if (saved != true) {
           throw StateError(
-              'Failed to restore a preference after backup failure.');
+            'Failed to restore a preference after backup failure.',
+          );
         }
       }
 
@@ -5546,7 +5613,9 @@ class BackupService {
         if (wasPresent != isPresent ||
             (wasPresent &&
                 !_samePreferenceValue(
-                    previousValues[key], restoredValues[key]))) {
+                  previousValues[key],
+                  restoredValues[key],
+                ))) {
           throw StateError('Preference rollback verification failed.');
         }
       }
@@ -5672,11 +5741,9 @@ class BackupService {
     }
 
     String fileNameFor(int seconds) {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
-          .toIso8601String()
-          .split('.')
-          .first
-          .replaceAll(':', '-');
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(
+        seconds * 1000,
+      ).toIso8601String().split('.').first.replaceAll(':', '-');
       return 'backup_$timestamp.zip';
     }
 
@@ -5783,8 +5850,9 @@ class BackupService {
       }
 
       if (savedLocation != null && context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
     } catch (e) {
@@ -5878,9 +5946,7 @@ class BackupService {
       try {
         await BrowserProfileService.prepareForRestore();
       } catch (e) {
-        throw DataManagementPreflightException(
-          '请先重启应用，完成上一次内置浏览器数据操作后再清除：$e',
-        );
+        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再清除：$e');
       }
     }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
@@ -6131,9 +6197,7 @@ class BackupService {
         continue;
       }
       if (!_isSafeRelativeArchivePath(relativePath)) {
-        throw const DataManagementPreflightException(
-          '任务流包含无效附件路径，已取消备份。',
-        );
+        throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
       final file = File(
         p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
@@ -6422,8 +6486,11 @@ class BackupService {
             ...taskFlowAttachmentKeys,
           }.map(_comparableAttachmentPath).toSet();
           final taskOnlyAttachments = oldTaskAttachments
-              .where((key) => !protectedAttachments
-                  .contains(_comparableAttachmentPath(key)))
+              .where(
+                (key) => !protectedAttachments.contains(
+                  _comparableAttachmentPath(key),
+                ),
+              )
               .toSet();
           if (!await _deleteAttachmentKeys(taskOnlyAttachments)) {
             deleteFailed = true;
@@ -6586,18 +6653,36 @@ Map<String, String> _encodeBackupPreferenceGroups(
     for (final key in settingsKeys)
       if (values.containsKey(key)) key: values[key],
   };
-  for (final key in settingsData.keys.toList()) {
-    final value = _safeBackupPreferenceValue(key, settingsData[key]);
-    if (value == null) {
-      settingsData.remove(key);
-    } else {
-      settingsData[key] = value;
-    }
-  }
+  _sanitizeBackupSettings(settingsData);
   return {
     'chat_data': jsonEncode(chatData),
     'settings': jsonEncode(settingsData),
   };
+}
+
+void _sanitizeBackupSettings(Map<String, dynamic> settings) {
+  final credentialValues = <String>{};
+  for (final value in settings.values) {
+    try {
+      final decoded =
+          value is String ? jsonDecode(value) : jsonDecode(jsonEncode(value));
+      credentialValues.addAll(collectCredentialValues(decoded));
+    } catch (_) {
+      // Malformed known preferences are omitted by the per-key sanitizer.
+    }
+  }
+  for (final key in settings.keys.toList()) {
+    final safeValue = _safeBackupPreferenceValue(
+      key,
+      settings[key],
+      knownCredentials: credentialValues,
+    );
+    if (safeValue == null) {
+      settings.remove(key);
+    } else {
+      settings[key] = safeValue;
+    }
+  }
 }
 
 /// Exports preserve the legacy source on-device when secure storage is
@@ -6613,12 +6698,65 @@ const _backupKnownProviderTypes = {
   'builtin',
 };
 
-Object? _safeBackupPreferenceValue(String key, Object? value) {
+Object? _safeBackupPreferenceValue(
+  String key,
+  Object? value, {
+  Set<String> knownCredentials = const {},
+}) {
+  bool unsafeIdentifiers(Object? decoded) {
+    final credentialValues = <String>{
+      ...knownCredentials,
+      ...collectCredentialValues(decoded),
+    };
+    bool visit(Object? current) {
+      if (current is Map) {
+        for (final entry in current.entries) {
+          final name = entry.key;
+          if (name is String &&
+              isCredentialIdentifierFieldName(name) &&
+              entry.value is String &&
+              containsCredentialValueInIdentifier(
+                entry.value as String,
+                credentialValues,
+              )) {
+            return true;
+          }
+          if (visit(entry.value)) return true;
+        }
+      } else if (current is List) {
+        return current.any(visit);
+      }
+      return false;
+    }
+
+    return visit(decoded);
+  }
+
+  Object? sanitizeBuiltinCredentialContainers(Object? value) {
+    if (value is Map) {
+      final result = <Object?, Object?>{};
+      for (final entry in value.entries) {
+        final name = entry.key;
+        if (name is String &&
+            normalizeCredentialFieldName(name) == 'credentials') {
+          continue;
+        }
+        result[name] = sanitizeBuiltinCredentialContainers(entry.value);
+      }
+      return result;
+    }
+    if (value is List) {
+      return value.map(sanitizeBuiltinCredentialContainers).toList();
+    }
+    return value;
+  }
+
   if (key == 'chat_configs') {
     if (value is! String) return null;
     try {
       final decoded = jsonDecode(value);
       if (decoded is! List) return null;
+      if (unsafeIdentifiers(decoded)) return null;
       return jsonEncode(sanitizeCredentialFields(decoded));
     } catch (_) {
       return null;
@@ -6630,6 +6768,7 @@ Object? _safeBackupPreferenceValue(String key, Object? value) {
     try {
       final decoded = jsonDecode(value);
       if (decoded is! Map || decoded['items'] is! List) return null;
+      if (unsafeIdentifiers(decoded)) return null;
       return jsonEncode(sanitizeCredentialFields(decoded));
     } catch (_) {
       return null;
@@ -6640,12 +6779,15 @@ Object? _safeBackupPreferenceValue(String key, Object? value) {
   try {
     final decoded = jsonDecode(value);
     if (decoded is! List) return null;
+    if (unsafeIdentifiers(decoded)) return null;
     for (var index = 0; index < decoded.length; index++) {
       final entry = decoded[index];
       if (entry is! Map) return null;
       if (entry['type'] != 'llm') {
-        if (entry['type'] == 'mcp') {
-          decoded[index] = sanitizeCredentialFields(entry);
+        if (entry['type'] == 'mcp' || entry['type'] == 'builtin') {
+          decoded[index] = entry['type'] == 'builtin'
+              ? sanitizeBuiltinCredentialContainers(entry)
+              : sanitizeCredentialFields(entry);
           continue;
         }
         if (!_backupKnownProviderTypes.contains(entry['type'])) {

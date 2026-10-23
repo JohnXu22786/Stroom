@@ -78,6 +78,76 @@ void main() {
     );
 
     test(
+      'skips unsupported ChatAdapter group members when no protocol set is given',
+      () async {
+        final preferences = _MemoryPreferences();
+        final accountService = _accountService(preferences);
+        await accountService.saveAccount(
+          _account('supported-account', 'local-model', 'gpt-4o'),
+        );
+        await accountService.saveAccount(
+          LlmAccount(
+            id: 'unsupported-account',
+            connectorType: 'codex',
+            authType: 'api_key',
+            displayName: 'Codex',
+            status: LlmAccountStatus.ready,
+            models: const [
+              LlmUpstreamModel(
+                id: 'local-model',
+                upstreamModelId: 'gpt-5-codex',
+                displayName: 'GPT-5 Codex',
+              ),
+            ],
+          ),
+          secret: 'codex-key',
+        );
+        const groupId = 'mixed-protocol-group';
+        await accountService.saveModelGroup(
+          LlmModelGroup(
+            id: groupId,
+            displayName: 'Mixed protocol group',
+            members: const [
+              LlmModelGroupMember(
+                accountId: 'unsupported-account',
+                localModelId: 'local-model',
+                upstreamModelId: 'gpt-5-codex',
+                priorityTier: 0,
+              ),
+              LlmModelGroupMember(
+                accountId: 'supported-account',
+                localModelId: 'local-model',
+                upstreamModelId: 'gpt-4o',
+                priorityTier: 1,
+              ),
+            ],
+          ),
+        );
+        final runtime = LlmChatRoutingRuntime(
+          accountService: accountService,
+          routingService: LlmRoutingService(
+            accountService: accountService,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+        );
+
+        final result = await runtime.executeForGroupId<String>(
+          groupId: groupId,
+          localModelId: 'local-model',
+          request: (candidate, progress) async => candidate.account.id,
+        );
+
+        expect(result.value, 'supported-account');
+        expect(result.candidate.account.id, 'supported-account');
+        expect(
+          result.decisions.map((decision) => decision.reason),
+          contains('connector_protocol_incompatible'),
+        );
+      },
+    );
+
+    test(
       'routes generated stable IDs with encoded parts and over 128 chars',
       () async {
         final preferences = _MemoryPreferences();
@@ -239,6 +309,17 @@ void main() {
         apiKey: 'source-key',
       );
 
+      await accountService.recordQuotaObservation(
+        accountId: accountId,
+        remainingQuota: const LlmMetricObservation.reported(
+          3,
+          unit: 'requests',
+        ),
+        quotaSignals: const {
+          'requests': LlmMetricObservation.reported(3, unit: 'requests'),
+        },
+      );
+
       await runtime.ensureLegacyOcrModelGroup(
         accountId: accountId,
         groupId: groupId,
@@ -259,6 +340,9 @@ void main() {
         'https://edited-source.example.test/ocr/complete',
       );
       expect(savedAccount.authType, 'api_key');
+      expect(savedAccount.remainingQuota.isKnown, isFalse);
+      expect(savedAccount.quotaSignals, isEmpty);
+      expect(savedAccount.usageByWindow, isEmpty);
       expect(savedAccount.models.single.upstreamModelId, 'edited-source-model');
       expect(savedGroup.members.single.upstreamModelId, 'edited-source-model');
       expect(
@@ -523,17 +607,18 @@ LlmModelGroup _group(
   String accountId,
   String localModelId, [
   String upstreamModelId = 'gpt-4o',
-]) => LlmModelGroup(
-  id: id,
-  displayName: id,
-  members: [
-    LlmModelGroupMember(
-      accountId: accountId,
-      localModelId: localModelId,
-      upstreamModelId: upstreamModelId,
-    ),
-  ],
-);
+]) =>
+    LlmModelGroup(
+      id: id,
+      displayName: id,
+      members: [
+        LlmModelGroupMember(
+          accountId: accountId,
+          localModelId: localModelId,
+          upstreamModelId: upstreamModelId,
+        ),
+      ],
+    );
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};

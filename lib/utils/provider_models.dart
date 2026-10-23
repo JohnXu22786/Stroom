@@ -23,7 +23,8 @@ List<ProviderModel> flattenProviderModels(
         .any(
           (groupConfig) =>
               isLlmModelGroupProviderConfig(groupConfig) &&
-              llmModelGroupIdForConfig(groupConfig) == expectedGroupId,
+              llmModelGroupIdForConfig(groupConfig) == expectedGroupId &&
+              groupConfig.models.any((groupModel) => groupModel.id == model.id),
         );
   }
 
@@ -70,9 +71,9 @@ List<ProviderModel> flattenProviderModels(
 
 /// A flow stores only these two opaque IDs, never connection credentials.
 Map<String, String> providerModelReference(ProviderModel selected) => {
-  'configId': selected.config.id,
-  'modelId': selected.model.id,
-};
+      'configId': selected.config.id,
+      'modelId': selected.model.id,
+    };
 
 /// Missing/ambiguous references must be reselected, never resolved by position.
 ProviderModel? resolveProviderModel(
@@ -82,21 +83,19 @@ ProviderModel? resolveProviderModel(
 ) {
   if (reference is! Map ||
       reference['configId'] is! String ||
-      reference['modelId'] is! String)
-    return null;
+      reference['modelId'] is! String) return null;
   // Keep resolving old references from provider_entries even when a matching
   // model-group row now supplies the selector option.
-  final matches =
-      flattenProviderModels(
-        state,
-        type,
-        includeShadowedLegacyModels: true,
-        includeUnavailableGroupModels: true,
-      ).where(
-        (entry) =>
-            entry.config.id == reference['configId'] &&
-            entry.model.id == reference['modelId'],
-      );
+  final matches = flattenProviderModels(
+    state,
+    type,
+    includeShadowedLegacyModels: true,
+    includeUnavailableGroupModels: true,
+  ).where(
+    (entry) =>
+        entry.config.id == reference['configId'] &&
+        entry.model.id == reference['modelId'],
+  );
   final exactMatches = matches.toList(growable: false);
   if (exactMatches.length == 1) return exactMatches.single;
   if (exactMatches.isNotEmpty || !{'llm', 'ocr'}.contains(type)) return null;

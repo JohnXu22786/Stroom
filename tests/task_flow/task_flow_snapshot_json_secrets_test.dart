@@ -19,57 +19,63 @@ void main() {
   ProviderEntriesState modelProviders(
     String secret,
     String tuning,
-  ) => ProviderEntriesState(
-    entries: [
-      ProviderEntry(
-        id: 'entry',
-        type: 'tts',
-        name: 'TTS',
-        configs: [
-          ProviderConfigItem(
-            id: 'config',
-            providerName: 'TTS',
-            host: 'https://example.com',
-            key: 'live-key',
-            typeConfig: {
-              'headers': jsonEncode({
-                'Authorization': 'Bearer $secret',
-                'temperature': tuning,
-              }),
-            },
-            models: [
-              ModelConfig(
-                id: 'model',
-                name: 'Voice',
-                modelId: 'voice-api',
+  ) =>
+      ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            id: 'entry',
+            type: 'tts',
+            name: 'TTS',
+            configs: [
+              ProviderConfigItem(
+                id: 'config',
+                providerName: 'TTS',
+                host: 'https://example.com',
+                key: 'live-key',
                 typeConfig: {
                   'headers': jsonEncode({
                     'Authorization': 'Bearer $secret',
                     'temperature': tuning,
                   }),
                 },
-                customParams: [
-                  CustomParam(
-                    paramName: 'headers',
-                    type: 'json',
-                    defaultValue: jsonEncode({
-                      'Authorization': 'Bearer $secret',
-                      'temperature': tuning,
-                    }),
-                    options: [
-                      jsonEncode({'X-API-Key': secret, 'temperature': tuning}),
+                models: [
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Voice',
+                    modelId: 'voice-api',
+                    typeConfig: {
+                      'headers': jsonEncode({
+                        'Authorization': 'Bearer $secret',
+                        'temperature': tuning,
+                      }),
+                    },
+                    customParams: [
+                      CustomParam(
+                        paramName: 'headers',
+                        type: 'json',
+                        defaultValue: jsonEncode({
+                          'Authorization': 'Bearer $secret',
+                          'temperature': tuning,
+                        }),
+                        options: [
+                          jsonEncode(
+                              {'X-API-Key': secret, 'temperature': tuning}),
+                        ],
+                        optionOrder: [
+                          jsonEncode(
+                              {'X-API-Key': secret, 'temperature': tuning}),
+                        ],
+                      ),
                     ],
-                    optionOrder: [
-                      jsonEncode({'X-API-Key': secret, 'temperature': tuning}),
-                    ],
-                  ),
-                ],
-                reasoningParams: [
-                  ReasoningParam(
-                    paramName: 'reasoning',
-                    type: 'json',
-                    options: [
-                      jsonEncode({'Authorization': secret, 'effort': tuning}),
+                    reasoningParams: [
+                      ReasoningParam(
+                        paramName: 'reasoning',
+                        type: 'json',
+                        options: [
+                          jsonEncode(
+                              {'Authorization': secret, 'effort': tuning}),
+                        ],
+                      ),
                     ],
                   ),
                 ],
@@ -77,9 +83,7 @@ void main() {
             ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 
   final flow = TaskFlowDefinition(
     blocks: [
@@ -201,21 +205,22 @@ void main() {
 
   test('assistant fragment callbacks hydrate string and JSON values', () {
     Assistant callbacks(String url, String tuning) => Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Help',
-      settings: AssistantSettings(
-        customParameters: [
-          CustomParameter(name: 'callback', type: 'string', value: url),
-          CustomParameter(
-            name: 'request',
-            type: 'json',
-            value: jsonEncode({'callback': url, 'tuning': tuning}),
+          id: 'assistant',
+          name: 'Assistant',
+          prompt: 'Help',
+          settings: AssistantSettings(
+            customParameters: [
+              CustomParameter(name: 'callback', type: 'string', value: url),
+              CustomParameter(
+                name: 'request',
+                type: 'json',
+                value: jsonEncode({'callback': url, 'tuning': tuning}),
+              ),
+              CustomParameter(
+                  name: 'note', type: 'string', value: fragmentNote),
+            ],
           ),
-          CustomParameter(name: 'note', type: 'string', value: fragmentNote),
-        ],
-      ),
-    );
+        );
     final chatFlow = TaskFlowDefinition(
       blocks: [
         TaskFlowBlock(
@@ -237,11 +242,8 @@ void main() {
     final restored = FlowLaunchSnapshot.fromMap(snapshot.toMap());
 
     void verify(Assistant live, String expectedCallback) {
-      final params = restored
-          .resolveAssistants([live])
-          .single
-          .settings
-          .customParameters;
+      final params =
+          restored.resolveAssistants([live]).single.settings.customParameters;
       expect(
         params.singleWhere((param) => param.name == 'callback').value,
         expectedCallback,
@@ -317,7 +319,7 @@ void main() {
         final config = resolved.entries.single.configs.single;
         final headers = encoded
             ? (jsonDecode(config.typeConfig['routing'] as String)
-                  as Map)['headers']
+                as Map)['headers']
             : config.typeConfig['headers'];
         expect(jsonDecode(headers as String), {
           'Authorization': 'fresh-header-secret',
@@ -369,9 +371,9 @@ void main() {
             queryParameters: version == 'fresh'
                 ? Map.fromEntries(
                     query.entries.toList().reversed.map(
-                      (entry) =>
-                          MapEntry(entry.key, entry.value.reversed.toList()),
-                    ),
+                          (entry) => MapEntry(
+                              entry.key, entry.value.reversed.toList()),
+                        ),
                   )
                 : query,
           )
@@ -452,13 +454,11 @@ void main() {
         ]) {
           verifyUrl(value);
         }
-        final request =
-            jsonDecode(
-                  resolved.model.customParams
-                      .singleWhere((param) => param.paramName == 'request')
-                      .defaultValue,
-                )
-                as Map;
+        final request = jsonDecode(
+          resolved.model.customParams
+              .singleWhere((param) => param.paramName == 'request')
+              .defaultValue,
+        ) as Map;
         verifyUrl(request['callback'] as String);
         expect(request['region'], 'old');
       },
@@ -479,21 +479,20 @@ void main() {
 
           ProviderEntriesState options(String version) {
             final providers = modelProviders('json-secret', '0.5');
-            final ids = version == 'fresh'
-                ? ['second', 'first']
-                : ['first', 'second'];
+            final ids =
+                version == 'fresh' ? ['second', 'first'] : ['first', 'second'];
             providers.entries.single.configs.single.models.single.customParams
                 .add(
-                  CustomParam(
-                    paramName: 'endpoints',
-                    type: encoded ? 'json' : 'string',
-                    defaultValue: option('first', version),
-                    options: [for (final id in ids) option(id, version)],
-                    optionOrder: [
-                      for (final id in ids.reversed) option(id, version),
-                    ],
-                  ),
-                );
+              CustomParam(
+                paramName: 'endpoints',
+                type: encoded ? 'json' : 'string',
+                defaultValue: option('first', version),
+                options: [for (final id in ids) option(id, version)],
+                optionOrder: [
+                  for (final id in ids.reversed) option(id, version),
+                ],
+              ),
+            );
             return providers;
           }
 
@@ -507,13 +506,15 @@ void main() {
             snapshot.resolveProviders(options('fresh')),
             'tts',
             flow.blocks.single.params['modelRef'],
-          )!.model.customParams.last;
+          )!
+              .model
+              .customParams
+              .last;
 
           void verifyOption(String value, String id) {
             final url = encoded
                 ? (jsonDecode((jsonDecode(value) as Map)['routing'] as String)
-                          as Map)['url']
-                      as String
+                    as Map)['url'] as String
                 : value;
             final launch = Uri.parse(optionUrl(id, 'old'));
             final expected = launch.replace(
@@ -548,26 +549,24 @@ void main() {
           final urls = [optionUrl('first', 'old'), optionUrl('first', 'fresh')];
           providers.entries.single.configs.single.models.single.customParams
               .add(
-                CustomParam(
-                  paramName: 'endpoints',
-                  type: 'string',
-                  options: [
-                    for (final url in urls)
-                      if (rotate)
-                        Uri.parse(url)
-                            .replace(
-                              queryParameters: {
-                                ...Uri.parse(url).queryParametersAll,
-                                for (var i = 0; i < keys.length; i++)
-                                  keys[i]: ['rotated-$i'],
-                              },
-                            )
-                            .toString()
-                      else
-                        url,
-                  ],
-                ),
-              );
+            CustomParam(
+              paramName: 'endpoints',
+              type: 'string',
+              options: [
+                for (final url in urls)
+                  if (rotate)
+                    Uri.parse(url).replace(
+                      queryParameters: {
+                        ...Uri.parse(url).queryParametersAll,
+                        for (var i = 0; i < keys.length; i++)
+                          keys[i]: ['rotated-$i'],
+                      },
+                    ).toString()
+                  else
+                    url,
+              ],
+            ),
+          );
           return providers;
         }
 
@@ -643,14 +642,12 @@ void main() {
         FlowLaunchSnapshot.capture(
           flow,
           endpointProviders(
-            launch
-                .replace(
-                  queryParameters: {
-                    for (final entry in launch.queryParameters.entries)
-                      if (!keys.contains(entry.key)) entry.key: entry.value,
-                  },
-                )
-                .toString(),
+            launch.replace(
+              queryParameters: {
+                for (final entry in launch.queryParameters.entries)
+                  if (!keys.contains(entry.key)) entry.key: entry.value,
+              },
+            ).toString(),
           ),
           [],
         ).toMap(),
@@ -660,14 +657,12 @@ void main() {
       expect(
         () => snapshot.resolveProviders(
           endpointProviders(
-            live
-                .replace(
-                  queryParameters: {
-                    ...live.queryParameters,
-                    expiresKey: '1800',
-                  },
-                )
-                .toString(),
+            live.replace(
+              queryParameters: {
+                ...live.queryParameters,
+                expiresKey: '1800',
+              },
+            ).toString(),
           ),
         ),
         signingInputsChanged,
@@ -734,7 +729,8 @@ void main() {
     },
   );
 
-  test('launch endpoint stays frozen while URL and JSON credentials are fresh', () {
+  test('launch endpoint stays frozen while URL and JSON credentials are fresh',
+      () {
     ProviderEntriesState withEndpoint(
       String host,
       String secret,
@@ -791,7 +787,8 @@ void main() {
       restored.resolveProviders(live),
       'tts',
       flow.blocks.single.params['modelRef'],
-    )!.config;
+    )!
+        .config;
     final endpoint = Uri.parse(config.host);
     expect(endpoint.host, 'launch.example');
     expect(endpoint.path, '/v1');
@@ -899,15 +896,15 @@ void main() {
     const oldUrl = 'https://old-user:old-pass@launch.example/v1?token=old';
     const liveUrl = 'https://new-user:new-pass@edited.example/v2?token=fresh';
     Assistant withEndpoint(String url) => Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Help',
-      settings: AssistantSettings(
-        customParameters: [
-          CustomParameter(name: 'endpoint', type: 'string', value: url),
-        ],
-      ),
-    );
+          id: 'assistant',
+          name: 'Assistant',
+          prompt: 'Help',
+          settings: AssistantSettings(
+            customParameters: [
+              CustomParameter(name: 'endpoint', type: 'string', value: url),
+            ],
+          ),
+        );
     final chatFlow = TaskFlowDefinition(
       blocks: [
         TaskFlowBlock(
@@ -1049,7 +1046,8 @@ void main() {
       resolved,
       'tts',
       flow.blocks.single.params['modelRef'],
-    )!.config;
+    )!
+        .config;
     expect(jsonDecode(config.typeConfig['routing'] as String), [
       {'id': 'a', 'temperature': '0.3', 'Authorization': 'fresh-a'},
       {'id': 'b', 'temperature': '0.7', 'Authorization': 'fresh-b'},
@@ -1116,11 +1114,11 @@ void main() {
       ],
     );
     Assistant scalarAssistant(List<CustomParameter> parameters) => Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Frozen prompt',
-      settings: AssistantSettings(customParameters: parameters),
-    );
+          id: 'assistant',
+          name: 'Assistant',
+          prompt: 'Frozen prompt',
+          settings: AssistantSettings(customParameters: parameters),
+        );
 
     for (final depth in [1, 2]) {
       test(
@@ -1140,9 +1138,8 @@ void main() {
                 'tuning': version == 'old' ? '0.5' : '0.9',
               });
             }
-            final ids = version == 'old'
-                ? ['first', 'second']
-                : ['second', 'first'];
+            final ids =
+                version == 'old' ? ['first', 'second'] : ['second', 'first'];
             model.customParams.add(
               CustomParam(
                 paramName: 'callback',
@@ -1202,20 +1199,20 @@ void main() {
 
       test('assistant quoted URLs redact and hydrate at depth $depth', () {
         Assistant assistant(String version) => scalarAssistant([
-          CustomParameter(
-            name: 'callback',
-            type: 'json',
-            value: encodeScalar(scalarUrl('first', version), depth),
-          ),
-          CustomParameter(
-            name: 'routing',
-            type: 'json',
-            value: jsonEncode({
-              'callback': encodeScalar(scalarUrl('first', version), depth),
-              'tuning': version == 'old' ? '0.5' : '0.9',
-            }),
-          ),
-        ]);
+              CustomParameter(
+                name: 'callback',
+                type: 'json',
+                value: encodeScalar(scalarUrl('first', version), depth),
+              ),
+              CustomParameter(
+                name: 'routing',
+                type: 'json',
+                value: jsonEncode({
+                  'callback': encodeScalar(scalarUrl('first', version), depth),
+                  'tuning': version == 'old' ? '0.5' : '0.9',
+                }),
+              ),
+            ]);
         final snapshot = FlowLaunchSnapshot.fromMap(
           FlowLaunchSnapshot.capture(chatFlow, const ProviderEntriesState(), [
             assistant('old'),
@@ -1294,13 +1291,13 @@ void main() {
           }
         }
         Assistant assistant(bool edited) => scalarAssistant([
-          for (var i = 0; i < oldValues.length; i++)
-            CustomParameter(
-              name: 'scalar-$i',
-              type: 'json',
-              value: edited ? '42' : oldValues[i],
-            ),
-        ]);
+              for (var i = 0; i < oldValues.length; i++)
+                CustomParameter(
+                  name: 'scalar-$i',
+                  type: 'json',
+                  value: edited ? '42' : oldValues[i],
+                ),
+            ]);
         final assistantSnapshot = FlowLaunchSnapshot.capture(
           chatFlow,
           const ProviderEntriesState(),
@@ -1337,20 +1334,20 @@ void main() {
           if (value != null) {
             providers.entries.single.configs.single.models.single.customParams
                 .add(
-                  CustomParam(
-                    paramName: 'callback',
-                    type: 'json',
-                    defaultValue: value,
-                  ),
-                );
+              CustomParam(
+                paramName: 'callback',
+                type: 'json',
+                defaultValue: value,
+              ),
+            );
           }
           return providers;
         }
 
         Assistant assistant(String? value) => scalarAssistant([
-          if (value != null)
-            CustomParameter(name: 'callback', type: 'json', value: value),
-        ]);
+              if (value != null)
+                CustomParameter(name: 'callback', type: 'json', value: value),
+            ]);
         final launchValue = jsonEncode(scalarUrl('first', 'old'));
         final snapshot = FlowLaunchSnapshot.fromMap(
           FlowLaunchSnapshot.capture(flow, providers(launchValue), []).toMap(),
@@ -1381,31 +1378,13 @@ void main() {
 
   test('malformed JSON parameter fails closed and uses the live value', () {
     final old = modelProviders('old-secret', '0.5');
-    old
-            .entries
-            .single
-            .configs
-            .single
-            .models
-            .single
-            .customParams
-            .single
-            .defaultValue =
-        '{"Authorization":"old-secret"';
+    old.entries.single.configs.single.models.single.customParams.single
+        .defaultValue = '{"Authorization":"old-secret"';
     final snapshot = FlowLaunchSnapshot.capture(flow, old, []);
     expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
     final live = modelProviders('fresh-secret', '0.9');
-    live
-            .entries
-            .single
-            .configs
-            .single
-            .models
-            .single
-            .customParams
-            .single
-            .defaultValue =
-        '{"Authorization":"fresh-secret"';
+    live.entries.single.configs.single.models.single.customParams.single
+        .defaultValue = '{"Authorization":"fresh-secret"';
     final hydrated = resolveProviderModel(
       FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(live),
       'tts',
@@ -1463,7 +1442,8 @@ void main() {
         FlowLaunchSnapshot.fromMap(snapshot.toMap()).resolveProviders(live),
         'tts',
         flow.blocks.single.params['modelRef'],
-      )!.model;
+      )!
+          .model;
       expect(model.customParams.first.defaultValue, 'fresh-secret');
       expect(model.customParams.first.options, ['fresh-secret']);
       expect(model.customParams.first.optionOrder, ['fresh-secret']);
@@ -1477,15 +1457,15 @@ void main() {
     'bare invalid assistant JSON value is hydrated from the live assistant',
     () {
       Assistant withValue(String value) => Assistant(
-        id: 'assistant',
-        name: 'Assistant',
-        prompt: '{"Authorization":"prompt-literal"}',
-        settings: AssistantSettings(
-          customParameters: [
-            CustomParameter(name: 'headers', type: 'json', value: value),
-          ],
-        ),
-      );
+            id: 'assistant',
+            name: 'Assistant',
+            prompt: '{"Authorization":"prompt-literal"}',
+            settings: AssistantSettings(
+              customParameters: [
+                CustomParameter(name: 'headers', type: 'json', value: value),
+              ],
+            ),
+          );
       final chatFlow = TaskFlowDefinition(
         blocks: [
           TaskFlowBlock(
@@ -1512,27 +1492,27 @@ void main() {
   );
 
   Assistant assistant(String secret, String tuning) => Assistant(
-    id: 'assistant',
-    name: 'Assistant',
-    prompt: '{"Authorization":"prompt-literal"}',
-    settings: AssistantSettings(
-      customParameters: [
-        CustomParameter(
-          name: 'headers',
-          type: 'json',
-          value: jsonEncode({
-            'Authorization': 'Bearer $secret',
-            'temperature': tuning,
-          }),
+        id: 'assistant',
+        name: 'Assistant',
+        prompt: '{"Authorization":"prompt-literal"}',
+        settings: AssistantSettings(
+          customParameters: [
+            CustomParameter(
+              name: 'headers',
+              type: 'json',
+              value: jsonEncode({
+                'Authorization': 'Bearer $secret',
+                'temperature': tuning,
+              }),
+            ),
+            CustomParameter(
+              name: 'note',
+              type: 'string',
+              value: '{"Authorization":"plain-text-literal"}',
+            ),
+          ],
         ),
-        CustomParameter(
-          name: 'note',
-          type: 'string',
-          value: '{"Authorization":"plain-text-literal"}',
-        ),
-      ],
-    ),
-  );
+      );
 
   test(
     'assistant JSON value hydrates without rewriting prompt or plain text',
@@ -1596,15 +1576,15 @@ void main() {
 
   test('assistant Cookie parameter uses the current matching identity', () {
     Assistant withCookie(String cookie) => Assistant(
-      id: 'assistant',
-      name: 'Assistant',
-      prompt: 'Frozen prompt',
-      settings: AssistantSettings(
-        customParameters: [
-          CustomParameter(name: 'Cookie', type: 'string', value: cookie),
-        ],
-      ),
-    );
+          id: 'assistant',
+          name: 'Assistant',
+          prompt: 'Frozen prompt',
+          settings: AssistantSettings(
+            customParameters: [
+              CustomParameter(name: 'Cookie', type: 'string', value: cookie),
+            ],
+          ),
+        );
     final chatFlow = TaskFlowDefinition(
       blocks: [
         TaskFlowBlock(
@@ -1752,6 +1732,9 @@ void main() {
                     id: localModelId,
                     name: 'Legacy chat model',
                     modelId: 'old-upstream-model',
+                    legacyFields: {
+                      kLlmModelCapabilitiesConfigField: {'streaming': true},
+                    },
                   ),
                 ],
                 legacyFields: {kLlmModelGroupConfigField: groupId},
@@ -1874,6 +1857,107 @@ void main() {
     expect(selectedAfterRemoval?.model.id, localModelId);
   });
 
+  test('Task Flow OCR rejects an exact group model without vision capability',
+      () {
+    const localModelId = 'text-only-group-model';
+    final groupId = llmOcrModelGroupIdForConfig(
+      'legacy-ocr-provider',
+      localModelId,
+    );
+    final reference = {'configId': groupId, 'modelId': localModelId};
+    ProviderEntriesState providers(bool supportsVision) => ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'account-backed-llm',
+              type: 'llm',
+              name: 'Account backed LLM',
+              configs: [
+                ProviderConfigItem(
+                  id: groupId,
+                  providerName: 'Text only account',
+                  models: [
+                    ModelConfig(
+                      id: localModelId,
+                      name: 'Text only model',
+                      modelId: 'text-only-upstream',
+                      legacyFields: {
+                        kLlmModelCapabilitiesConfigField: {
+                          'chat': true,
+                          'vision': supportsVision,
+                        },
+                      },
+                    ),
+                  ],
+                  legacyFields: {kLlmModelGroupConfigField: groupId},
+                ),
+              ],
+            ),
+          ],
+        );
+    final flow = TaskFlowDefinition(
+      blocks: [
+        TaskFlowBlock(typeKey: BlockType.ocr, params: {'modelRef': reference}),
+      ],
+    );
+    final snapshot = FlowLaunchSnapshot.capture(flow, providers(true), []);
+
+    expect(
+      () => snapshot.resolveProviders(providers(false)),
+      throwsStateError,
+    );
+  });
+
+  test('Task Flow chat rejects an exact group model without streaming support',
+      () {
+    const groupId = 'streaming-group';
+    const localModelId = 'chat-model';
+    ProviderEntriesState providers(bool supportsStreaming) =>
+        ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'account-backed-llm',
+              type: 'llm',
+              name: 'Account backed LLM',
+              configs: [
+                ProviderConfigItem(
+                  id: groupId,
+                  providerName: 'Streaming account',
+                  models: [
+                    ModelConfig(
+                      id: localModelId,
+                      name: 'Chat model',
+                      modelId: 'upstream-chat-model',
+                      legacyFields: {
+                        kLlmModelCapabilitiesConfigField: {
+                          'streaming': supportsStreaming,
+                        },
+                      },
+                    ),
+                  ],
+                  legacyFields: {kLlmModelGroupConfigField: groupId},
+                ),
+              ],
+            ),
+          ],
+        );
+    final flow = TaskFlowDefinition(
+      blocks: [
+        TaskFlowBlock(typeKey: BlockType.chat, params: {'assistantId': ''}),
+      ],
+    );
+    final snapshot = FlowLaunchSnapshot.capture(
+      flow,
+      providers(true),
+      [],
+      selectedChatModel: {'configId': groupId, 'modelId': localModelId},
+    );
+
+    expect(
+      () => snapshot.resolveProviders(providers(false)),
+      throwsStateError,
+    );
+  });
+
   test(
     'Task Flow OCR source removal follows eager legacy group migration',
     () async {
@@ -1986,19 +2070,20 @@ void main() {
         String accountId,
         String localModelId,
         String displayName,
-      ) => LlmModelGroup(
-        id: id,
-        displayName: displayName,
-        legacyModelId: upstreamModelId,
-        legacyProviderName: providerName,
-        members: [
-          LlmModelGroupMember(
-            accountId: accountId,
-            localModelId: localModelId,
-            upstreamModelId: upstreamModelId,
-          ),
-        ],
-      );
+      ) =>
+          LlmModelGroup(
+            id: id,
+            displayName: displayName,
+            legacyModelId: upstreamModelId,
+            legacyProviderName: providerName,
+            members: [
+              LlmModelGroupMember(
+                accountId: accountId,
+                localModelId: localModelId,
+                upstreamModelId: upstreamModelId,
+              ),
+            ],
+          );
 
       final providers = ProviderEntriesState(
         entries: [

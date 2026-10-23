@@ -160,7 +160,8 @@ void main() {
       expect(models[3].modelIndex, equals(1));
     });
 
-    test('configure resets adapter to (0,0) after selectModel - '
+    test(
+        'configure resets adapter to (0,0) after selectModel - '
         'this reproduces the bug: configure destroys saved selection', () {
       // Given: user selects model at config 1, model 0 (Claude 3)
       adapter.configure(entriesState);
@@ -195,7 +196,8 @@ void main() {
       },
     );
 
-    test('reasoningParams returns params from currently selected model, '
+    test(
+        'reasoningParams returns params from currently selected model, '
         'not from model 0 when configure reset it', () {
       // Given: user selected Claude 3 (config 1, model 0)
       adapter.configure(entriesState);
@@ -305,7 +307,8 @@ void main() {
         },
       );
 
-      test('model display name at display index 0 identifies the correct model '
+      test(
+          'model display name at display index 0 identifies the correct model '
           'when display order differs from flat order', () {
         // Simulate a reordered display list (user drag-reordered models):
         final displayNames = [
@@ -333,7 +336,8 @@ void main() {
         expect(models[flatIdx].modelIndex, equals(0));
       });
 
-      test('selectModel with configIndex/modelIndex works regardless of '
+      test(
+          'selectModel with configIndex/modelIndex works regardless of '
           'display order', () {
         adapter.configure(entriesState);
 
@@ -344,7 +348,8 @@ void main() {
         expect(adapter.reasoningParams[0].paramName, equals('thinking'));
       });
 
-      test('BUG REPRO: using saved display index on flat models list '
+      test(
+          'BUG REPRO: using saved display index on flat models list '
           'picks wrong model when display order != flat order', () {
         adapter.configure(entriesState);
 
@@ -405,7 +410,8 @@ void main() {
         },
       );
 
-      test('FIX: reasoning params match adapter model after correct restore', () {
+      test('FIX: reasoning params match adapter model after correct restore',
+          () {
         // Full fix simulation:
         // 1. configure resets adapter to (0,0) - GPT-4o
         // 2. Restore should select Claude 3 (display index 0 in reordered list)
@@ -493,7 +499,8 @@ void main() {
       adapter.dispose();
     });
 
-    test('McpServerConfig.fromProviderConfig creates SSE config '
+    test(
+        'McpServerConfig.fromProviderConfig creates SSE config '
         'from built-in typeConfig', () {
       // Simulate a built-in SSE MCP provider's typeConfig
       final typeConfig = <String, dynamic>{
@@ -515,7 +522,8 @@ void main() {
       expect(config.isVendor, isTrue);
     });
 
-    test('McpServerConfig.fromProviderConfig creates SSE config '
+    test(
+        'McpServerConfig.fromProviderConfig creates SSE config '
         'from user-added typeConfig', () {
       // Simulate a user-added SSE MCP provider's typeConfig
       final typeConfig = <String, dynamic>{
@@ -535,7 +543,8 @@ void main() {
       expect(config.isVendor, isFalse);
     });
 
-    test('McpServerConfig.fromProviderConfig returns null '
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
         'for empty typeConfig', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'Empty',
@@ -545,7 +554,8 @@ void main() {
       expect(config, isNull);
     });
 
-    test('McpServerConfig.fromProviderConfig returns null '
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
         'for null typeConfig', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'Null',
@@ -555,7 +565,8 @@ void main() {
       expect(config, isNull);
     });
 
-    test('McpServerConfig.fromProviderConfig returns null '
+    test(
+        'McpServerConfig.fromProviderConfig returns null '
         'for typeConfig without transport field', () {
       final config = McpServerConfig.fromProviderConfig(
         providerName: 'No transport',
@@ -623,7 +634,8 @@ void main() {
       expect(config.args, contains('-y'));
     });
 
-    test('fromProviderConfig returns SSE config for unknown transport '
+    test(
+        'fromProviderConfig returns SSE config for unknown transport '
         '(fromValue fallback)', () {
       // Transport 'http' is not in McpTransportType, so fromValue
       // falls back to SSE. HTTP tools are caught by isHttpTool check
@@ -692,7 +704,8 @@ void main() {
       adapter.dispose();
     });
 
-    test('initializeMcpServers is no-op when MCP entry is missing '
+    test(
+        'initializeMcpServers is no-op when MCP entry is missing '
         '(simulates async load not yet completed)', () async {
       // Empty entries — no MCP entry
       final emptyState = ProviderEntriesState(entries: []);
@@ -792,7 +805,8 @@ void main() {
       expect(result, contains('Brave Search API Key 未配置'));
     });
 
-    test('initializeMcpServers with an empty entries state does not prevent '
+    test(
+        'initializeMcpServers with an empty entries state does not prevent '
         'later discovery with the real state', () async {
       // Simulates _initialize running before ProviderEntriesNotifier.load()
       // completes (the snapshot is empty), then the provider-change listener
@@ -807,13 +821,13 @@ void main() {
       expect(
         adapter.mcpToolDefinitions,
         isNotEmpty,
-        reason:
-            'MCP tools must be discovered once the real entries state '
+        reason: 'MCP tools must be discovered once the real entries state '
             'arrives, even if an earlier call saw empty entries',
       );
     });
 
-    test('initializeMcpServers re-discovers tools after the cache is cleared '
+    test(
+        'initializeMcpServers re-discovers tools after the cache is cleared '
         '(hash match must not skip an empty cache)', () async {
       final state = _vendorState();
       await adapter.initializeMcpServers(state);
@@ -834,13 +848,13 @@ void main() {
       expect(
         adapter.mcpToolDefinitions,
         isNotEmpty,
-        reason:
-            'an unchanged config hash must not skip discovery when the '
+        reason: 'an unchanged config hash must not skip discovery when the '
             'cached tool list is empty',
       );
     });
 
-    test('initializeMcpServers publishes nothing when MCP master switch is off '
+    test(
+        'initializeMcpServers publishes nothing when MCP master switch is off '
         '(ProviderEntry.enabled=false), and re-discovers after switching back '
         'on', () async {
       // sanity: enabled state discovers tools
@@ -875,7 +889,8 @@ void main() {
       );
     });
 
-    test('concurrent initializeMcpServers calls with the same state are '
+    test(
+        'concurrent initializeMcpServers calls with the same state are '
         'serialized and both complete with tools', () async {
       // Simulates page _initialize and the provider-change listener firing
       // at the same time with the same entries state. Without the in-flight
@@ -894,7 +909,8 @@ void main() {
       );
     });
 
-    test('initializeBuiltinTools can be called repeatedly without side effects'
+    test(
+        'initializeBuiltinTools can be called repeatedly without side effects'
         '(simulates repeated provider change listener firing)', () {
       // First call with empty state (simulating load not yet completed)
       final emptyState = ProviderEntriesState(entries: []);
@@ -968,7 +984,8 @@ void main() {
       adapter.dispose();
     });
 
-    test('initializeMcpServers creates placeholder tool definitions for '
+    test(
+        'initializeMcpServers creates placeholder tool definitions for '
         'vendor SSE providers whose servers are unreachable', () async {
       // Configs with isVendor=true, isHttpTool=false, transport=sse
       // These simulate the 5 built-in MCP (SSE) providers.
@@ -1125,10 +1142,8 @@ void main() {
         ),
       );
 
-      var names = adapter
-          .getAllToolDefinitions()
-          .map((tool) => tool.name)
-          .toSet();
+      var names =
+          adapter.getAllToolDefinitions().map((tool) => tool.name).toSet();
       expect(
         names.intersection(searchToolNames),
         isEmpty,
@@ -1217,7 +1232,8 @@ void main() {
       },
     );
 
-    test('placeholder tools are published synchronously without any network '
+    test(
+        'placeholder tools are published synchronously without any network '
         'attempt (built-in remote SSE MCPs are visible immediately)', () async {
       // 进入对话页面不发起任何连接：initializeMcpServers 只同步发布
       // 占位工具定义，mcpToolDefinitions 在调用返回后立即可见。
@@ -1227,8 +1243,7 @@ void main() {
       expect(
         adapter.mcpToolDefinitions,
         isNotEmpty,
-        reason:
-            'placeholders must be visible synchronously — no network '
+        reason: 'placeholders must be visible synchronously — no network '
             'attempt happens on page entry (lazy MCP)',
       );
       expect(
@@ -1240,7 +1255,8 @@ void main() {
       expect(adapter.mcpToolDefinitions, isNotEmpty);
     });
 
-    test('user-added (non-vendor) MCP servers also get placeholder tools — '
+    test(
+        'user-added (non-vendor) MCP servers also get placeholder tools — '
         'no vendor/description distinction', () async {
       // A user-added stdio server without isVendor and without a description
       // must still appear in the tool list ("只要是 MCP 就都要显示").
@@ -1279,8 +1295,7 @@ void main() {
       expect(
         names,
         contains('my_files_mcp'),
-        reason:
-            'user-added stdio MCP server must get a placeholder tool '
+        reason: 'user-added stdio MCP server must get a placeholder tool '
             'even without isVendor/description',
       );
       final placeholder = adapter.mcpToolDefinitions.firstWhere(
@@ -1289,8 +1304,7 @@ void main() {
       expect(
         placeholder.description,
         isNotEmpty,
-        reason:
-            'placeholder falls back to a generic description so the '
+        reason: 'placeholder falls back to a generic description so the '
             'tool list entry is meaningful',
       );
     });
@@ -1333,14 +1347,14 @@ void main() {
         expect(
           names,
           contains('exa_mcp'),
-          reason:
-              'a vendor server without a description must still appear '
+          reason: 'a vendor server without a description must still appear '
               'in the tool list',
         );
       },
     );
 
-    test('initializeMcpServers with no MCP configs clears previously cached '
+    test(
+        'initializeMcpServers with no MCP configs clears previously cached '
         'tools', () async {
       await adapter.initializeMcpServers(_vendorState());
       expect(adapter.mcpToolDefinitions, isNotEmpty);
@@ -1361,8 +1375,7 @@ void main() {
       expect(
         adapter.mcpToolDefinitions,
         isEmpty,
-        reason:
-            'tools from a removed MCP config must not leak into the '
+        reason: 'tools from a removed MCP config must not leak into the '
             'tool list',
       );
     });
@@ -1382,8 +1395,7 @@ void main() {
         expect(
           identical(firstDefs.first, secondDefs.first),
           isTrue,
-          reason:
-              'same-config re-entry must be a no-op (no re-publish, no '
+          reason: 'same-config re-entry must be a no-op (no re-publish, no '
               'client recreation) — connections happen only on tool calls',
         );
       },
@@ -1449,8 +1461,7 @@ void main() {
         expect(
           identical(secondClient, firstClient),
           isFalse,
-          reason:
-              'a config change must recreate the client so on-demand '
+          reason: 'a config change must recreate the client so on-demand '
               'execution uses the new URL/command',
         );
         expect(secondClient!.config.url, 'https://mcp.new-host.com/mcp');
@@ -1474,7 +1485,8 @@ void main() {
   // ====================================================================
 
   group('Auto-enable all available tools when no saved preferences', () {
-    test('resolver returns the full set of available tool names when conv has '
+    test(
+        'resolver returns the full set of available tool names when conv has '
         'no saved enabledMcpToolNames (new conversation)', () {
       // Simulate the discovery result.
       final allTools = <ToolDefinition>[
@@ -1505,8 +1517,7 @@ void main() {
       expect(
         resolved,
         equals({'brave_web_search', 'tavily_search', 'exa_search'}),
-        reason:
-            'New conversation with no saved preferences should default '
+        reason: 'New conversation with no saved preferences should default '
             'to all available tools enabled so built-in MCPs are visible.',
       );
     });
@@ -1547,7 +1558,8 @@ void main() {
       },
     );
 
-    test('resolver returns empty set when user explicitly toggled every tool '
+    test(
+        'resolver returns empty set when user explicitly toggled every tool '
         'off (explicit-empty must be preserved)', () {
       // Regression test: a user who has explicitly toggled every tool off
       // must NOT have them all re-enabled on the next load. This is the
@@ -1574,8 +1586,7 @@ void main() {
       expect(
         resolved,
         isEmpty,
-        reason:
-            'When the user has explicitly cleared all toggles, the '
+        reason: 'When the user has explicitly cleared all toggles, the '
             'resolver must return an empty set, not silently re-enable '
             'every tool.',
       );
@@ -1590,7 +1601,8 @@ void main() {
       expect(resolved, isEmpty);
     });
 
-    test('resolver auto-enables newly discovered tools when conv has no '
+    test(
+        'resolver auto-enables newly discovered tools when conv has no '
         'explicit prefs', () {
       // Simulate the MCP-after-initial-load scenario:
       // 1. Initial load: only HTTP tools are known
@@ -1619,13 +1631,13 @@ void main() {
       expect(
         resolved,
         equals({'exa_mcp', 'tavily_mcp'}),
-        reason:
-            'Newly discovered MCP tools should be auto-enabled when '
+        reason: 'Newly discovered MCP tools should be auto-enabled when '
             'the conversation has no explicit saved preferences.',
       );
     });
 
-    test('resolver does NOT auto-enable newly discovered tools when conv has '
+    test(
+        'resolver does NOT auto-enable newly discovered tools when conv has '
         'explicit prefs', () {
       // Simulate the MCP-after-initial-load scenario for a conversation
       // where the user has already touched the tool toggles. Newly
@@ -1657,8 +1669,7 @@ void main() {
       expect(
         resolved,
         equals({'brave_web_search'}),
-        reason:
-            'When user has explicit prefs, newly discovered MCP tools '
+        reason: 'When user has explicit prefs, newly discovered MCP tools '
             'should NOT be auto-enabled — they must be explicitly toggled.',
       );
     });
@@ -2205,9 +2216,12 @@ void main() {
         ],
       );
       final models = availableLlmModels(partialState);
-      expect(models.map((m) => m.displayName), [
-        'GPT-4o | OpenAI',
-      ], reason: '空配置的模型不可用，不应出现在可选列表中');
+      expect(
+          models.map((m) => m.displayName),
+          [
+            'GPT-4o | OpenAI',
+          ],
+          reason: '空配置的模型不可用，不应出现在可选列表中');
     });
   });
 
@@ -2255,7 +2269,8 @@ void main() {
       adapter.cancelService('conv-assistant');
     });
 
-    test('assistant with a display-name default model (no modelId set) '
+    test(
+        'assistant with a display-name default model (no modelId set) '
         'resolves — the chat block honors the assistant editor\'s '
         'configured default model', () {
       // The assistant editor stores the default model as its DISPLAY name
@@ -2282,7 +2297,8 @@ void main() {
       adapter.cancelService('conv-displayname');
     });
 
-    test('assistant with an ABSOLUTE default model identity (modelId + '
+    test(
+        'assistant with an ABSOLUTE default model identity (modelId + '
         'providerName) resolves even when the display name went stale '
         'after a rename', () {
       // 编辑助手对话框现在同时保存显示名与绝对身份（供应商 + 模型ID）。
@@ -2310,7 +2326,8 @@ void main() {
       adapter.cancelService('conv-absid');
     });
 
-    test('service with an unresolvable configured assistant model does not '
+    test(
+        'service with an unresolvable configured assistant model does not '
         'fall back to the global model', () async {
       final svc = adapter.getOrCreateService(
         'conv-fallback',
@@ -2365,7 +2382,8 @@ void main() {
       adapter.cancelService('flow_conv_b');
     });
 
-    test('assistant with a resolvable model works in a FRESH session '
+    test(
+        'assistant with a resolvable model works in a FRESH session '
         '(no global configure yet)', () {
       // The adapter has NOT been configured (no chat page opened this
       // session): the assistant's bound model must still resolve.
@@ -2378,8 +2396,7 @@ void main() {
       expect(
         svc,
         isNotNull,
-        reason:
-            'a resolvable assistant must not depend on the global '
+        reason: 'a resolvable assistant must not depend on the global '
             'cache (fresh session)',
       );
       expect(svc!.assistantPrompt, '你是测试助手');
@@ -2391,7 +2408,8 @@ void main() {
       fresh.cancelService('flow_conv_fresh');
     });
 
-    test('assistant with an unresolvable model on a fresh adapter returns '
+    test(
+        'assistant with an unresolvable model on a fresh adapter returns '
         'null (fallback guard preserved)', () {
       final fresh = ChatAdapter();
       final svc = fresh.getOrCreateService(
@@ -2402,8 +2420,7 @@ void main() {
       expect(
         svc,
         isNull,
-        reason:
-            'without a global cache AND an unresolvable assistant '
+        reason: 'without a global cache AND an unresolvable assistant '
             'model there is nothing to build the service from',
       );
     });
@@ -2461,14 +2478,14 @@ void main() {
           availableModels: available,
         ),
         isNull,
-        reason:
-            'a stale per-conversation model must fall back to the '
+        reason: 'a stale per-conversation model must fall back to the '
             'assistant default / first model, not crash or select the '
             'wrong model',
       );
     });
 
-    test('resolves by absolute (providerName, modelId) when the display '
+    test(
+        'resolves by absolute (providerName, modelId) when the display '
         'name went stale after a rename', () {
       // The user renamed the model in the provider config: the stored
       // display name no longer matches, but the absolute identity
@@ -2495,7 +2512,8 @@ void main() {
       );
     });
 
-    test('returns null when both the absolute id and the display name are '
+    test(
+        'returns null when both the absolute id and the display name are '
         'unresolvable (model deleted)', () {
       expect(
         perConversationModelToRestore(
@@ -2508,7 +2526,8 @@ void main() {
       );
     });
 
-    test('exact (providerName, modelId) match wins over the same modelId '
+    test(
+        'exact (providerName, modelId) match wins over the same modelId '
         'in another provider', () {
       const twoProviders = [
         AvailableModel(

@@ -81,18 +81,19 @@ class OcrConfig {
     String? routingDisplayName,
     Map<String, dynamic>? typeConfig,
     List<CustomParam>? customParams,
-  }) => OcrConfig(
-    model: model ?? this.model,
-    apiKey: apiKey ?? this.apiKey,
-    host: host ?? this.host,
-    systemPrompt: systemPrompt ?? this.systemPrompt,
-    routingGroupId: routingGroupId ?? this.routingGroupId,
-    routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
-    routingAccountId: routingAccountId ?? this.routingAccountId,
-    routingDisplayName: routingDisplayName ?? this.routingDisplayName,
-    typeConfig: typeConfig ?? this.typeConfig,
-    customParams: customParams ?? this.customParams,
-  );
+  }) =>
+      OcrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        systemPrompt: systemPrompt ?? this.systemPrompt,
+        routingGroupId: routingGroupId ?? this.routingGroupId,
+        routingLocalModelId: routingLocalModelId ?? this.routingLocalModelId,
+        routingAccountId: routingAccountId ?? this.routingAccountId,
+        routingDisplayName: routingDisplayName ?? this.routingDisplayName,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
+      );
 }
 
 // ============================================================================
@@ -170,25 +171,24 @@ class OcrService {
     Duration? sendTimeout,
     Duration? receiveTimeout,
     Future<LlmChatRoutingRuntime>? routingRuntime,
-  }) : _sendTimeoutOverride = sendTimeout,
-       _routingRuntime = config.routingGroupId == null
-           ? null
-           : routingRuntime ?? LlmChatRoutingRuntime.sharedPlatform(),
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               headers: {
-                 'Content-Type': 'application/json',
-                 if (config.apiKey.isNotEmpty)
-                   'Authorization': 'Bearer ${config.apiKey}',
-                 ...openRouterAppHeaders,
-               },
-               connectTimeout: connectTimeout ?? connectTimeoutDefault,
-               sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
-               receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
-             ),
-           ) {
+  })  : _sendTimeoutOverride = sendTimeout,
+        _routingRuntime = config.routingGroupId == null
+            ? null
+            : routingRuntime ?? LlmChatRoutingRuntime.sharedPlatform(),
+        _dio = dio ??
+            Dio(
+              BaseOptions(
+                headers: {
+                  'Content-Type': 'application/json',
+                  if (config.apiKey.isNotEmpty)
+                    'Authorization': 'Bearer ${config.apiKey}',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: connectTimeout ?? connectTimeoutDefault,
+                sendTimeout: sendTimeout ?? sendTimeoutForBytes(0),
+                receiveTimeout: receiveTimeout ?? receiveTimeoutFallback,
+              ),
+            ) {
     _dio.options.connectTimeout =
         connectTimeout ?? _dio.options.connectTimeout ?? connectTimeoutDefault;
     _dio.options.receiveTimeout =
@@ -436,8 +436,7 @@ class OcrService {
         }
         final routedBody = {...body, 'model': candidate.upstreamModelId};
         lastRequestBody = routedBody;
-        final baseUrl =
-            candidate.account.endpointConfig['baseUrl'] ??
+        final baseUrl = candidate.account.endpointConfig['baseUrl'] ??
             candidate.account.endpointConfig['host'] ??
             candidate.account.endpointConfig['apiBase'];
         lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -456,13 +455,16 @@ class OcrService {
             onRequestSent: progress.markRequestSent,
             connectTimeout:
                 _dio.options.connectTimeout ?? connectTimeoutDefault,
-            sendTimeout:
-                _sendTimeoutOverride ??
+            sendTimeout: _sendTimeoutOverride ??
                 sendTimeoutForBytes(utf8.encode(jsonEncode(routedBody)).length),
             receiveTimeout:
                 _dio.options.receiveTimeout ?? receiveTimeoutFallback,
           );
         } on LlmConnectorHttpException catch (error) {
+          lastResponseStatusCode = error.statusCode;
+          lastResponseHeaders = {
+            for (final entry in error.headers.entries) entry.key: [entry.value],
+          };
           throw LlmRouteRequestException(
             statusCode: error.statusCode,
             code: error.code,
@@ -471,6 +473,7 @@ class OcrService {
         }
         final data = _decodeRoutedResponse(response.body);
         lastResponseStatusCode = response.statusCode;
+        lastResponseHeaders = response.headers;
         lastResponseData = data is Map
             ? Map<String, dynamic>.from(data)
             : <String, dynamic>{'raw': '$data'};
@@ -491,7 +494,7 @@ class OcrService {
         return _OcrResponse(
           statusCode: response.statusCode,
           data: data,
-          headers: const {},
+          headers: response.headers,
         );
       },
     );
@@ -533,9 +536,8 @@ class OcrService {
       response['usage'],
     );
     if (usage == null) return;
-    final observedUnit = reported.isKnown && reported.value != null
-        ? reported.unit
-        : null;
+    final observedUnit =
+        reported.isKnown && reported.value != null ? reported.unit : null;
     final input = usage['inputTokens'];
     final output = usage['outputTokens'];
     if ((input is num || output is num) && observedUnit != 'tokens') {
@@ -560,22 +562,22 @@ class OcrService {
   }
 
   Options _requestOptions(Map<String, dynamic> body) => Options(
-    sendTimeout:
-        _sendTimeoutOverride ??
-        sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
-    receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
-  );
+        sendTimeout: _sendTimeoutOverride ??
+            sendTimeoutForBytes(utf8.encode(jsonEncode(body)).length),
+        receiveTimeout: _dio.options.receiveTimeout ?? receiveTimeoutFallback,
+      );
 
   ProgressCallback _uploadProgress(
     ProgressCallback? progress,
     void Function(OcrRequestStage)? stage,
-  ) => (sent, total) {
-    stage?.call(OcrRequestStage.uploading);
-    progress?.call(sent, total);
-    if (total > 0 && sent >= total) {
-      stage?.call(OcrRequestStage.waiting);
-    }
-  };
+  ) =>
+      (sent, total) {
+        stage?.call(OcrRequestStage.uploading);
+        progress?.call(sent, total);
+        if (total > 0 && sent >= total) {
+          stage?.call(OcrRequestStage.waiting);
+        }
+      };
 
   /// Capture response-level diagnostic fields from a [DioException].
   /// Mirrors the pattern in [OpenAICompatibleChatProvider.chatStream].
@@ -628,12 +630,12 @@ class OcrService {
       final rawValue = param.type == 'json'
           ? param.defaultValue
           : param.options.isNotEmpty
-          ? param.options.first
-          : param.defaultValue.trim().isNotEmpty
-          ? param.defaultValue
-          : param.type == 'boolean'
-          ? 'true'
-          : '';
+              ? param.options.first
+              : param.defaultValue.trim().isNotEmpty
+                  ? param.defaultValue
+                  : param.type == 'boolean'
+                      ? 'true'
+                      : '';
       final value = rawValue.trim();
       if (param.type == 'string' ? rawValue.isEmpty : value.isEmpty) continue;
       if (name == 'model' || name == 'messages') {

@@ -322,6 +322,9 @@ void main() {
     final connector = _FakeConnectorClient(
       accounts,
       failFirstRequestWith429: true,
+      responseHeaders: const {
+        'x-request-id': ['ocr-request-123']
+      },
     );
     final runtime = LlmChatRoutingRuntime(
       accountService: accounts,
@@ -348,6 +351,9 @@ void main() {
     );
 
     expect(result.text, 'recognized');
+    expect(service.lastResponseHeaders, {
+      'x-request-id': ['ocr-request-123'],
+    });
     expect(connector.requests, hasLength(2));
     expect(connector.requests.map((request) => request.account.id).toSet(), {
       'ocr-a',
@@ -447,6 +453,82 @@ void main() {
       );
     },
   );
+
+  test('routed OCR failures preserve response metadata for diagnostics',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'ocr-diagnostic-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'OCR diagnostic account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'ocr-diagnostic-model',
+            upstreamModelId: 'gpt-ocr-diagnostic',
+            displayName: 'OCR diagnostic model',
+            capabilities: {'vision': true},
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'ocr-diagnostic-group',
+        displayName: 'OCR diagnostic group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'ocr-diagnostic-account',
+            localModelId: 'ocr-diagnostic-model',
+            upstreamModelId: 'gpt-ocr-diagnostic',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      firstRequestError: const _HttpExceptionWithHeaders(
+        statusCode: 403,
+        code: 'authentication_error',
+        headers: {'x-request-limit': '0'},
+      ),
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+      connectorClient: connector,
+    );
+    final service = OcrService(
+      config: const OcrConfig(
+        host: '',
+        apiKey: '',
+        model: 'gpt-ocr-diagnostic',
+        routingGroupId: 'ocr-diagnostic-group',
+        routingLocalModelId: 'ocr-diagnostic-model',
+      ),
+      routingRuntime: Future.value(runtime),
+    );
+
+    await expectLater(
+      service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+      throwsA(isA<LlmRoutingUnavailableException>()),
+    );
+
+    expect(service.lastResponseStatusCode, 403);
+    expect(service.lastResponseHeaders, {
+      'x-request-limit': ['0']
+    });
+  });
 
   test('OCR retries a member after a 2xx rate-limit error object', () async {
     final preferences = _MemoryPreferences();
@@ -821,6 +903,84 @@ void main() {
     expect(groupConfigs.single.id, groupId);
   });
 
+  test('legacy OCR source model removal removes its selector entry', () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
+      routingService: LlmRoutingService(
+        accountService: accounts,
+        stateStore: LlmRoutingStateStore(preferences: preferences),
+        concurrency: LlmConcurrencyReservations(),
+      ),
+    );
+    const configId = 'legacy-ocr-remove-model';
+    const retainedModelId = 'retained-vision';
+    const removedModelId = 'removed-vision';
+    final initialConfig = ProviderConfigItem(
+      id: configId,
+      providerName: 'Legacy OCR provider',
+      host: 'https://ocr.example.test/v1',
+      key: 'legacy-key',
+      models: [
+        ModelConfig(
+          id: retainedModelId,
+          name: 'Retained vision model',
+          modelId: 'retained-upstream',
+        ),
+        ModelConfig(
+          id: removedModelId,
+          name: 'Removed vision model',
+          modelId: 'removed-upstream',
+        ),
+      ],
+    );
+    await ensureLegacyOcrProviderConfigGroups(
+      runtime: runtime,
+      config: initialConfig,
+    );
+
+    final updatedConfig = ProviderConfigItem(
+      id: configId,
+      providerName: initialConfig.providerName,
+      host: initialConfig.host,
+      key: initialConfig.key,
+      models: [
+        ModelConfig(
+          id: retainedModelId,
+          name: 'Retained vision model',
+          modelId: 'retained-upstream',
+        ),
+      ],
+    );
+    await ensureLegacyOcrProviderConfigGroups(
+      runtime: runtime,
+      config: updatedConfig,
+      previousConfig: initialConfig,
+    );
+
+    final account = (await accounts.getAccount(
+      llmOcrAccountIdForConfig(configId),
+    ))!;
+    final groupConfigs = buildLlmModelGroupProviderConfigs(
+      accounts: [account],
+      groups: await accounts.listModelGroups(),
+    );
+    expect(account.models.map((model) => model.id), [retainedModelId]);
+    expect(
+      groupConfigs.expand((config) => config.models).map((model) => model.id),
+      [retainedModelId],
+    );
+    final removedGroup = (await accounts.listModelGroups()).singleWhere(
+      (group) =>
+          group.id == llmOcrModelGroupIdForConfig(configId, removedModelId),
+    );
+    expect(removedGroup.members, isEmpty);
+  });
+
   test(
     'OCR records response cost when connector observation reports tokens',
     () async {
@@ -924,12 +1084,9 @@ void main() {
         measurements.where((item) => item.unit == 'usd').single.value,
         0.02,
       );
-      final accountsEnvelope =
-          jsonDecode(
-                preferences.values[LlmAccountMigrationService
-                    .accountsPreferenceKey]!,
-              )
-              as Map;
+      final accountsEnvelope = jsonDecode(
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+      ) as Map;
       final savedAccount = Map<String, dynamic>.from(
         (accountsEnvelope['items'] as List).single as Map,
       );
@@ -951,16 +1108,18 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     this.firstRequestError,
     this.responseBody,
     this.responseBodies,
+    this.responseHeaders = const {},
     LlmConnectorObservation? observation,
     this.reportedSendProgress = const [],
-  }) : observation = observation ?? LlmConnectorObservation(),
-       super(accountService: accountService);
+  })  : observation = observation ?? LlmConnectorObservation(),
+        super(accountService: accountService);
 
   final bool failFirstRequestWith429;
   final bool failFirstRequestBeforeSend;
   final LlmConnectorHttpException? firstRequestError;
   final Object? responseBody;
   final List<Object?>? responseBodies;
+  final Map<String, List<String>> responseHeaders;
   final LlmConnectorObservation observation;
   final List<(int, int)> reportedSendProgress;
   final requests = <({LlmAccount account, String modelId, Object? body})>[];
@@ -993,8 +1152,7 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     requestConnectTimeout = connectTimeout;
     requestSendTimeout = sendTimeout;
     requestReceiveTimeout = receiveTimeout;
-    final configuredEndpoint =
-        account.endpointConfig['baseUrl'] ??
+    final configuredEndpoint = account.endpointConfig['baseUrl'] ??
         account.endpointConfig['host'] ??
         account.endpointConfig['apiBase'];
     if (configuredEndpoint is String && configuredEndpoint.trim().isNotEmpty) {
@@ -1025,17 +1183,18 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     }
     final response = responseBodies == null
         ? responseBody ??
-              {
-                'choices': [
-                  {
-                    'finish_reason': 'stop',
-                    'message': {'content': 'recognized'},
-                  },
-                ],
-              }
+            {
+              'choices': [
+                {
+                  'finish_reason': 'stop',
+                  'message': {'content': 'recognized'},
+                },
+              ],
+            }
         : responseBodies![requests.length - 1];
     return LlmConnectorResponse(
       statusCode: 200,
+      headers: responseHeaders,
       body: response,
       observation: observation,
     );

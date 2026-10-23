@@ -97,12 +97,11 @@ class ChatStreamManager {
   }
 
   ChatStreamManager([Ref? ref])
-    : _ref = ref,
-      _adapter = ChatAdapter(
-        routingRuntime: ref == null
-            ? null
-            : LlmChatRoutingRuntime.sharedPlatform(),
-      );
+      : _ref = ref,
+        _adapter = ChatAdapter(
+          routingRuntime:
+              ref == null ? null : LlmChatRoutingRuntime.sharedPlatform(),
+        );
 
   // ── 公开 getter ──
 
@@ -286,8 +285,7 @@ class ChatStreamManager {
     // 阈值基于"工具输出累计"而非模型 context——1M 模型在 100k+
     // 上下文时工具输出也早已超阈值，与 opencode 行为一致。
     // 可在设置页"上下文管理"关闭（opencode compaction.prune）。
-    final ctxSettings =
-        _ref?.read(contextManagementSettingsProvider) ??
+    final ctxSettings = _ref?.read(contextManagementSettingsProvider) ??
         const ContextManagementSettings();
     if (ctxSettings.pruneEnabled) {
       // 压缩边界（对齐 opencode summary break）：有摘要时扫描到
@@ -472,9 +470,8 @@ class ChatStreamManager {
         // 用户仍可看到流中断前的回答内容。
         final errorText = formatChatErrorMessage(e);
         final partial = state.fullReply;
-        state.fullReply = partial.isEmpty
-            ? errorText
-            : '$errorText\n\n---\n$partial';
+        state.fullReply =
+            partial.isEmpty ? errorText : '$errorText\n\n---\n$partial';
         _pushToProvider(
           convId,
           streamingTextSectionsProvider,
@@ -568,16 +565,13 @@ class ChatStreamManager {
       final outputTokens = usage['outputTokens'] as int?;
       // num 安全取值：cost 以 int（JSON 整数值反序列化）出现时
       // 也能累计——单个字段的类型异常不能把整次计量（含 tokens）丢弃。
-      final cost = usage['cost'] is num
-          ? (usage['cost'] as num).toDouble()
-          : 0.0;
+      final cost =
+          usage['cost'] is num ? (usage['cost'] as num).toDouble() : 0.0;
       final hasMetering =
           recordInput && (inputTokens != null || outputTokens != null);
       if (!hasMetering && cost <= 0) return;
       unawaited(
-        ref
-            .read(conversationsProvider.notifier)
-            .updateUsage(
+        ref.read(conversationsProvider.notifier).updateUsage(
               conversationId: convId,
               inputTokens: recordInput ? inputTokens : null,
               outputTokens: recordInput ? outputTokens : null,

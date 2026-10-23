@@ -162,18 +162,16 @@ class OcrPage extends ConsumerStatefulWidget {
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })?
-  testCameraPicker;
+  })? testCameraPicker;
   @visibleForTesting
   final Future<List<XFile>> Function({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })?
-  testGalleryPicker;
+  })? testGalleryPicker;
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
-  testImagePayloadPreparer;
+      testImagePayloadPreparer;
 
   /// Test-only: pre-populate images for widget testing.
   @visibleForTesting
@@ -817,7 +815,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     onChanged: _isProcessing
                         ? null
                         : (value) =>
-                              setState(() => _useOriginalImageQuality = value),
+                            setState(() => _useOriginalImageQuality = value),
                   ),
                 ],
               ),
@@ -879,9 +877,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           final int rowCount = itemCount == 0
               ? 0
               : (itemCount + crossAxisCount - 1) ~/ crossAxisCount;
-          final double totalHeight = rowCount > 0
-              ? rowCount * itemSize + (rowCount - 1) * spacing
-              : 0;
+          final double totalHeight =
+              rowCount > 0 ? rowCount * itemSize + (rowCount - 1) * spacing : 0;
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -1308,9 +1305,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedImages.isEmpty || _isProcessing
-                    ? null
-                    : _startOcr,
+                onPressed:
+                    _selectedImages.isEmpty || _isProcessing ? null : _startOcr,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 18,
@@ -1473,18 +1469,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     try {
       final picker = ImagePicker();
       final mode = _imageImportMode;
-      final file =
-          await (widget.testCameraPicker?.call(
-                maxWidth: mode.maxWidth,
-                maxHeight: mode.maxHeight,
-                imageQuality: mode.imageQuality,
-              ) ??
-              picker.pickImage(
-                source: ImageSource.camera,
-                maxWidth: mode.maxWidth,
-                maxHeight: mode.maxHeight,
-                imageQuality: mode.imageQuality,
-              ));
+      final file = await (widget.testCameraPicker?.call(
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
+          ) ??
+          picker.pickImage(
+            source: ImageSource.camera,
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
+          ));
       if (!mounted || file == null) return;
 
       final bytes = await file.readAsBytes();
@@ -1517,19 +1512,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
       // 桌面端打开文件选择器并定位到系统"图片"目录
-      final files =
-          await (widget.testGalleryPicker?.call(
-                maxWidth: mode.maxWidth,
-                maxHeight: mode.maxHeight,
-                imageQuality: mode.imageQuality,
-              ) ??
-              pickGalleryMedia(
-                GalleryMediaKind.image,
-                context: context,
-                imageQuality: mode.imageQuality,
-                maxWidth: mode.maxWidth,
-                maxHeight: mode.maxHeight,
-              ));
+      final files = await (widget.testGalleryPicker?.call(
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+            imageQuality: mode.imageQuality,
+          ) ??
+          pickGalleryMedia(
+            GalleryMediaKind.image,
+            context: context,
+            imageQuality: mode.imageQuality,
+            maxWidth: mode.maxWidth,
+            maxHeight: mode.maxHeight,
+          ));
       if (!mounted || files.isEmpty) return;
 
       final newImages = <SelectedImage>[];
@@ -1847,9 +1841,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       apiKey: selectedOption.apiKey,
       model: selectedOption.model.modelId,
       typeConfig: Map<String, dynamic>.from(selectedOption.model.typeConfig),
-      customParams: selectedOption.model.customParams
-          .map((p) => p.copy())
-          .toList(),
+      customParams:
+          selectedOption.model.customParams.map((p) => p.copy()).toList(),
       routingGroupId: selectedOption.routingGroupId,
       routingLocalModelId: selectedOption.model.id,
       routingAccountId: selectedOption.routingAccountId,
@@ -1922,8 +1915,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Step 3: Fire-and-forget retryData computation (only needed for retry).
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
-    final instructionContent =
-        _retryInstructionSnapshot ??
+    final instructionContent = _retryInstructionSnapshot ??
         ((_selectedInstructionIndex >= 0 &&
                 _selectedInstructionIndex < instructions.length)
             ? instructions[_selectedInstructionIndex].content

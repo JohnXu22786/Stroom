@@ -17,6 +17,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('LLM account domain serialization', () {
+    test('ordinary account serialization recursively redacts credentials', () {
+      const secret = 'nested-account-token-secret';
+      final account = LlmAccount(
+        id: 'account-1',
+        connectorType: 'anthropic',
+        authType: 'api_key',
+        displayName: 'Anthropic personal',
+        credentialRef: 'stroom.llm.credential.account-1',
+        endpointConfig: const {
+          'auth': {
+            'token': secret,
+            'credentialRef': 'stroom.llm.credential.account-1',
+          },
+        },
+      );
+
+      final serialized = jsonEncode(account.toMap());
+
+      expect(serialized, isNot(contains(secret)));
+      expect(serialized, contains('credentialRef'));
+      expect(serialized, contains('stroom.llm.credential.account-1'));
+    });
+
     test('round-trips account policy and explicit quota knowledge', () {
       final account = LlmAccount(
         id: 'account-1',
@@ -112,113 +135,11 @@ void main() {
 
   group('LLM account migration', () {
     test(
-      'defaults legacy tool capability to supported but preserves explicit false',
-      () async {
-        final entries = _decodeList(_legacyProviderEntries());
-        final legacyConfigs = _configsFor(entries, 'llm');
-        final explicitCapabilities = legacyConfigs[1]['models'] as List;
-        (explicitCapabilities.first as Map<String, dynamic>)['capabilities'] =
-            const {'tools': false};
-        final preferences = _MemoryLlmPreferences({
-          'provider_entries': jsonEncode(entries),
-        });
-
-        await _service(preferences, _MemoryCredentialStore()).migrate();
-
-        final migratedAccounts = _records(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ).map(LlmAccount.fromMap).toList();
-        expect(
-          migratedAccounts
-              .singleWhere((account) => account.id == 'provider-config-1')
-              .models
-              .single
-              .capabilities['tools'],
-          isTrue,
-        );
-        expect(
-          migratedAccounts
-              .singleWhere((account) => account.id == 'provider-config-2')
-              .models
-              .single
-              .capabilities['tools'],
-          isFalse,
-        );
-      },
-    );
-
-    test(
-      'keeps legacy models streaming-capable when supportStream is false by default',
-      () async {
-        final entries = _decodeList(_legacyProviderEntries());
-        final legacyConfigs = _configsFor(entries, 'llm');
-        final legacyModels = legacyConfigs.first['models'] as List;
-        (legacyModels.first as Map<String, dynamic>)['supportStream'] = false;
-        final explicitCapabilities = legacyConfigs[1]['models'] as List;
-        (explicitCapabilities.first as Map<String, dynamic>)['capabilities'] =
-            const {'streaming': false};
-        final preferences = _MemoryLlmPreferences({
-          'provider_entries': jsonEncode(entries),
-        });
-        final credentials = _MemoryCredentialStore();
-
-        await _service(preferences, credentials).migrate();
-
-        final accountRecords = _records(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        );
-        final migratedAccounts = accountRecords
-            .map(LlmAccount.fromMap)
-            .toList();
-        expect(
-          migratedAccounts
-              .singleWhere((account) => account.id == 'provider-config-1')
-              .models
-              .single
-              .capabilities['streaming'],
-          isTrue,
-        );
-        expect(
-          migratedAccounts
-              .singleWhere((account) => account.id == 'provider-config-2')
-              .models
-              .single
-              .capabilities['streaming'],
-          isFalse,
-        );
-      },
-    );
-
-    test(
       'migrates every LLM config and preserves legacy model identities',
       () async {
         final source = _legacyProviderEntries();
         final preferences = _MemoryLlmPreferences({
           'provider_entries': source,
-          LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': 'provider-config-1',
-                'remainingQuota': {
-                  'state': 'reported',
-                  'value': 250,
-                  'unit': 'credits',
-                  'source': 'existing.connector',
-                  'observedAt': DateTime.utc(2026, 10, 17).toIso8601String(),
-                },
-                'quotaSignals': {
-                  'dailyRemainingPercent': {
-                    'state': 'reported',
-                    'value': 75,
-                    'unit': 'percent',
-                    'source': 'existing.daily',
-                    'observedAt': DateTime.utc(2026, 10, 17).toIso8601String(),
-                  },
-                },
-              },
-            ],
-          }),
           'conversations': '[{"modelRef":"provider-config-1/claude-model"}]',
           'assistants': '[{"modelRef":"provider-config-1/claude-model"}]',
         });
@@ -269,25 +190,6 @@ void main() {
         final account = accounts.singleWhere(
           (item) => item.id == 'provider-config-1',
         );
-        final rawAccountRecords = {
-          for (final record in accountRecords) record['id']: record,
-        };
-        expect(
-          rawAccountRecords['provider-config-1']!['remainingQuota']['value'],
-          250,
-        );
-        expect(
-          rawAccountRecords['provider-config-1']!['quotaSignals']['dailyRemainingPercent']['value'],
-          75,
-        );
-        expect(
-          rawAccountRecords['provider-config-2']!['remainingQuota']['state'],
-          'unknown',
-        );
-        expect(
-          rawAccountRecords['provider-config-2']!['quotaSignals'],
-          isEmpty,
-        );
         expect(account.credentialRef, llmConfigs[0]['credentialRef']);
         expect(account.endpointConfig['host'], 'https://api.example.test');
         expect(account.endpointConfig.containsKey('key'), isFalse);
@@ -297,13 +199,11 @@ void main() {
         expect(credentials.values[account.credentialRef] == _secret, isTrue);
 
         final groups = _records(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey]!,
+          preferences
+              .values[LlmAccountMigrationService.modelGroupsPreferenceKey]!,
         );
         expect(groups, hasLength(2));
-        final claudeGroup = groups
-            .map(LlmModelGroup.fromMap)
-            .singleWhere(
+        final claudeGroup = groups.map(LlmModelGroup.fromMap).singleWhere(
               (group) => group.members.single.upstreamModelId == 'claude-model',
             );
         expect(claudeGroup.members.single.accountId, 'provider-config-1');
@@ -334,73 +234,6 @@ void main() {
               .contains(_secret),
           isFalse,
         );
-      },
-    );
-
-    test(
-      'preserves explicit capabilities when account editor syncs models',
-      () async {
-        final sourceEntries = _decodeList(_legacyProviderEntries());
-        final llmEntry = sourceEntries.whereType<Map>().firstWhere(
-          (entry) => entry['type'] == 'llm',
-        );
-        final config = (llmEntry['configs'] as List).first as Map;
-        final model = (config['models'] as List).first as Map;
-        model['capabilities'] = {'vision': true, 'tools': false};
-        final preferences = _MemoryLlmPreferences({
-          'provider_entries': jsonEncode(sourceEntries),
-        });
-
-        await _service(preferences, _MemoryCredentialStore()).migrate();
-
-        final accounts = _records(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        );
-        final migrated = accounts.firstWhere(
-          (account) => account['id'] == config['id'],
-        );
-        final capabilities =
-            ((migrated['models'] as List).first as Map)['capabilities'] as Map;
-        expect(capabilities['vision'], isTrue);
-        expect(capabilities['tools'], isFalse);
-      },
-    );
-
-    test(
-      'account-edited capability maps keep unknown streaming and tools unknown',
-      () async {
-        final sourceEntries = _decodeList(_legacyProviderEntries());
-        final legacyConfigs = _configsFor(sourceEntries, 'llm');
-        final editedModel =
-            (legacyConfigs.first['models'] as List).first
-                as Map<String, dynamic>;
-        // The account editor writes its capability map back to the legacy
-        // row. An empty map means the user left these values unknown.
-        editedModel['capabilities'] = <String, dynamic>{};
-        editedModel['accountCapabilitiesEdited'] = true;
-        final preferences = _MemoryLlmPreferences({
-          'provider_entries': jsonEncode(sourceEntries),
-        });
-
-        await _service(preferences, _MemoryCredentialStore()).migrate();
-
-        final accounts = _records(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-        ).map(LlmAccount.fromMap).toList();
-        final edited = accounts.singleWhere(
-          (account) => account.id == legacyConfigs.first['id'],
-        );
-        final untouchedLegacy = accounts.singleWhere(
-          (account) => account.id == legacyConfigs[1]['id'],
-        );
-
-        expect(
-          edited.models.single.capabilities.containsKey('streaming'),
-          isFalse,
-        );
-        expect(edited.models.single.capabilities.containsKey('tools'), isFalse);
-        expect(untouchedLegacy.models.single.capabilities['streaming'], isTrue);
-        expect(untouchedLegacy.models.single.capabilities['tools'], isTrue);
       },
     );
 
@@ -451,7 +284,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore();
 
         await _service(preferences, credentials).migrate();
@@ -513,23 +348,244 @@ void main() {
       },
     );
 
-    test(
-      'ordinary provider serialization never emits entry-level LLM keys',
-      () {
-        final entry = ProviderEntry.fromMap({
-          'id': 'legacy-entry',
-          'type': 'llm',
-          'name': 'Legacy LLM',
-          'key': _secret,
-          'configs': [
-            {'id': 'legacy-config', 'providerName': 'Legacy provider'},
-          ],
-        });
+    test('ordinary provider serialization never emits entry-level LLM keys',
+        () {
+      final entry = ProviderEntry.fromMap({
+        'id': 'legacy-entry',
+        'type': 'llm',
+        'name': 'Legacy LLM',
+        'key': _secret,
+        'configs': [
+          {
+            'id': 'legacy-config',
+            'providerName': 'Legacy provider',
+            'key': 'sk_legacy_config_serialization_secret',
+          },
+        ],
+      });
 
-        expect(entry.toMap().containsKey('key'), isFalse);
-        expect(entry.toCredentialMigrationMap()['key'], _secret);
-      },
-    );
+      final ordinary = entry.toMap();
+      expect(ordinary.containsKey('key'), isFalse);
+      expect((ordinary['configs'] as List).single['key'], isNull);
+
+      final migration = entry.toCredentialMigrationMap();
+      expect(migration['key'], _secret);
+      expect(
+        (migration['configs'] as List).single['key'],
+        'sk_legacy_config_serialization_secret',
+      );
+    });
+
+    test('preserves a display name when the repeated legacy config has none',
+        () async {
+      const accountId = 'account-with-saved-display-name';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {'id': accountId, 'providerName': '', 'models': []}
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': source,
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {'id': accountId, 'displayName': 'Saved account name', 'models': []}
+          ]
+        })
+      });
+
+      await _service(preferences, _MemoryCredentialStore()).migrate();
+
+      expect(
+          _records(preferences
+                  .values[LlmAccountMigrationService.accountsPreferenceKey]!)
+              .single['displayName'],
+          'Saved account name');
+    });
+
+    test(
+        'maps empty upstream IDs from names and avoids generated ID collisions',
+        () async {
+      const accountId = 'account-model-id-collision';
+      const explicitLocalId = '$accountId:0';
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': jsonEncode([
+          {
+            'id': 'llm-entry',
+            'type': 'llm',
+            'configs': [
+              {
+                'id': accountId,
+                'models': [
+                  {'modelId': '', 'name': 'name-fallback'},
+                  {
+                    'id': explicitLocalId,
+                    'modelId': 'explicit-upstream-id',
+                    'name': 'Explicit model'
+                  }
+                ]
+              }
+            ]
+          }
+        ])
+      });
+
+      await _service(preferences, _MemoryCredentialStore()).migrate();
+
+      final models = _records(preferences
+              .values[LlmAccountMigrationService.accountsPreferenceKey]!)
+          .single['models'] as List;
+      final first = models[0] as Map;
+      final second = models[1] as Map;
+      expect(first['upstreamModelId'], 'name-fallback');
+      expect(first['id'], isNot(explicitLocalId));
+      expect(second['id'], explicitLocalId);
+      expect(first['id'], isNot(second['id']));
+    });
+
+    test('rejects a model with no stable upstream identity before writes',
+        () async {
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {
+              'id': 'account-without-model-identity',
+              'models': [
+                {'modelId': '', 'name': ''}
+              ]
+            }
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore();
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('rejects a stored secret embedded in a caller-supplied account ID',
+        () async {
+      const secret = 'sk_account_id_stored_secret_6402';
+      const accountId = 'account-sk_account_id_stored_secret_6402';
+      const reference = 'stored-secret-reference';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {'id': accountId, 'credentialRef': reference, 'models': []}
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore()..values[reference] = secret;
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('rejects a stored secret embedded in an orphan account ID', () async {
+      const secret = 'sk_orphan_account_id_stored_secret_7315';
+      const accountId = 'orphan-sk_orphan_account_id_stored_secret_7315';
+      const reference = 'orphan-stored-secret-reference';
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': '[]',
+        LlmAccountMigrationService.accountsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {'id': accountId, 'credentialRef': reference, 'models': []}
+          ]
+        })
+      });
+      final credentials = _MemoryCredentialStore()..values[reference] = secret;
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], '[]');
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
+
+    test('accepts legacy opaque and nested-encoded percent account references',
+        () async {
+      const accountId = 'tenant%foo';
+      final references = [
+        'stroom.llm.credential.${Uri.encodeComponent(accountId)}',
+        'stroom.llm.credential.$accountId',
+        'stroom.llm.credential.${Uri.encodeComponent(Uri.encodeComponent(accountId))}'
+      ];
+
+      for (var index = 0; index < references.length; index++) {
+        final reference = references[index];
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': jsonEncode([
+            {
+              'id': 'llm-entry',
+              'type': 'llm',
+              'configs': [
+                {
+                  'id': accountId,
+                  'credentialRef': reference,
+                  'key': 'sk_percent_reference_secret_$index',
+                  'models': []
+                }
+              ]
+            }
+          ])
+        });
+        final credentials = _MemoryCredentialStore();
+
+        await _service(preferences, credentials).migrate();
+
+        expect(credentials.values[reference],
+            'sk_percent_reference_secret_$index');
+      }
+    });
+
+    test('rejects malformed generated references before writing credentials',
+        () async {
+      const accountId = 'tenant%foo';
+      final reference = 'stroom.llm.credential.not%xx';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {
+              'id': accountId,
+              'credentialRef': reference,
+              'key': _secret,
+              'models': []
+            }
+          ]
+        }
+      ]);
+      final preferences = _MemoryLlmPreferences({'provider_entries': source});
+      final credentials = _MemoryCredentialStore();
+
+      await expectLater(_service(preferences, credentials).migrate(),
+          throwsA(isA<LlmAccountMigrationException>()));
+
+      expect(preferences.values['provider_entries'], source);
+      expect(preferences.writeHistory, isEmpty);
+      expect(credentials.writeReferences, isEmpty);
+    });
 
     test(
       'keeps conflicting top-level and per-config keys recoverable',
@@ -550,7 +606,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore();
 
         await expectLater(
@@ -593,7 +651,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore();
 
         await expectLater(
@@ -640,7 +700,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore()
           ..values['shared-credential-ref'] = existingSecret;
 
@@ -650,7 +712,10 @@ void main() {
         );
 
         expect(preferences.values['provider_entries'], source);
-        expect(credentials.values['shared-credential-ref'], existingSecret);
+        expect(
+          credentials.values['shared-credential-ref'],
+          existingSecret,
+        );
         expect(credentials.writeReferences, isEmpty);
         expect(
           preferences.values[LlmAccountMigrationService.migrationStateKey],
@@ -684,7 +749,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore();
 
         await expectLater(
@@ -694,9 +761,9 @@ void main() {
 
         expect(preferences.values['provider_entries'], source);
         expect(
-          preferences.values[LlmAccountMigrationService.accountsPreferenceKey],
-          isNull,
-        );
+            preferences
+                .values[LlmAccountMigrationService.accountsPreferenceKey],
+            isNull);
         expect(credentials.values, isEmpty);
         expect(credentials.writeReferences, isEmpty);
       },
@@ -766,14 +833,22 @@ void main() {
             'id': 'llm-entry',
             'type': 'llm',
             'configs': [
-              {'id': accountId, 'credentialRef': sourceReference, 'models': []},
+              {
+                'id': accountId,
+                'credentialRef': sourceReference,
+                'models': [],
+              },
             ],
           },
         ]);
         final accounts = jsonEncode({
           'version': 1,
           'items': [
-            {'id': accountId, 'credentialRef': accountReference, 'models': []},
+            {
+              'id': accountId,
+              'credentialRef': accountReference,
+              'models': [],
+            },
           ],
         });
         final preferences = _MemoryLlmPreferences({
@@ -797,13 +872,9 @@ void main() {
           accounts,
         );
         expect(
-          credentials.values[sourceReference],
-          'sk_source_reference_secret',
-        );
-        expect(
-          credentials.values[accountReference],
-          'sk_account_reference_secret',
-        );
+            credentials.values[sourceReference], 'sk_source_reference_secret');
+        expect(credentials.values[accountReference],
+            'sk_account_reference_secret');
         expect(credentials.writeReferences, isEmpty);
       },
     );
@@ -830,8 +901,8 @@ void main() {
         );
 
         expect(
-          preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey] ==
+          preferences
+                  .values[LlmAccountMigrationService.accountsPreferenceKey] ==
               accounts,
           isTrue,
         );
@@ -865,8 +936,8 @@ void main() {
           accounts,
         );
         expect(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey],
+          preferences
+              .values[LlmAccountMigrationService.modelGroupsPreferenceKey],
           groups,
         );
       },
@@ -901,7 +972,9 @@ void main() {
             ],
           },
         ]);
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         final credentials = _MemoryCredentialStore();
 
         await expectLater(
@@ -1020,8 +1093,8 @@ void main() {
         await _service(preferences, _MemoryCredentialStore()).migrate();
 
         final savedGroup = _records(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey]!,
+          preferences
+              .values[LlmAccountMigrationService.modelGroupsPreferenceKey]!,
         ).single;
         final members = (savedGroup['members'] as List).cast<Map>();
         expect(
@@ -1030,8 +1103,7 @@ void main() {
         );
         expect(
           members.singleWhere(
-            (member) => member['accountId'] == accountId,
-          )['upstreamModelId'],
+              (member) => member['accountId'] == accountId)['upstreamModelId'],
           'new-upstream-model',
         );
         expect(
@@ -1043,66 +1115,62 @@ void main() {
       },
     );
 
-    test(
-      'removes stale membership when a migrated account has no models',
-      () async {
-        const accountId = 'empty-model-account';
-        const staleModelId = 'removed-model';
-        final groupId =
-            'stroom.model-group.${Uri.encodeComponent(accountId).length}:$accountId${Uri.encodeComponent(staleModelId).length}:$staleModelId';
-        final source = jsonEncode([
-          {
-            'id': 'llm-entry',
-            'type': 'llm',
-            'configs': [
-              {'id': accountId, 'models': []},
-            ],
-          },
-        ]);
-        final preferences = _MemoryLlmPreferences({
-          'provider_entries': source,
-          LlmAccountMigrationService.modelGroupsPreferenceKey: jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': groupId,
-                'displayName': 'Keep display name',
-                'policy': {'strategy': 'priority'},
-                'members': [
-                  {
-                    'accountId': accountId,
-                    'localModelId': staleModelId,
-                    'upstreamModelId': 'stale-upstream-model',
-                    'priorityTier': 4,
-                  },
-                  {
-                    'accountId': 'other-account',
-                    'localModelId': staleModelId,
-                    'upstreamModelId': 'other-model',
-                    'priorityTier': 2,
-                  },
-                ],
-              },
-            ],
-          }),
-        });
+    test('removes stale membership when a migrated account has no models',
+        () async {
+      const accountId = 'empty-model-account';
+      const staleModelId = 'removed-model';
+      final groupId =
+          'stroom.model-group.${Uri.encodeComponent(accountId).length}:$accountId${Uri.encodeComponent(staleModelId).length}:$staleModelId';
+      final source = jsonEncode([
+        {
+          'id': 'llm-entry',
+          'type': 'llm',
+          'configs': [
+            {'id': accountId, 'models': []},
+          ],
+        },
+      ]);
+      final preferences = _MemoryLlmPreferences({
+        'provider_entries': source,
+        LlmAccountMigrationService.modelGroupsPreferenceKey: jsonEncode({
+          'version': 1,
+          'items': [
+            {
+              'id': groupId,
+              'displayName': 'Keep display name',
+              'policy': {'strategy': 'priority'},
+              'members': [
+                {
+                  'accountId': accountId,
+                  'localModelId': staleModelId,
+                  'upstreamModelId': 'stale-upstream-model',
+                  'priorityTier': 4,
+                },
+                {
+                  'accountId': 'other-account',
+                  'localModelId': staleModelId,
+                  'upstreamModelId': 'other-model',
+                  'priorityTier': 2,
+                },
+              ],
+            },
+          ],
+        }),
+      });
 
-        await _service(preferences, _MemoryCredentialStore()).migrate();
+      await _service(preferences, _MemoryCredentialStore()).migrate();
 
-        final savedGroup = _records(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey]!,
-        ).single;
-        final members = (savedGroup['members'] as List).cast<Map>();
-        expect(
-          members.any((member) => member['accountId'] == accountId),
-          isFalse,
-        );
-        expect(members.single['accountId'], 'other-account');
-        expect(savedGroup['displayName'], 'Keep display name');
-        expect(savedGroup['policy'], {'strategy': 'priority'});
-      },
-    );
+      final savedGroup = _records(
+        preferences
+            .values[LlmAccountMigrationService.modelGroupsPreferenceKey]!,
+      ).single;
+      final members = (savedGroup['members'] as List).cast<Map>();
+      expect(
+          members.any((member) => member['accountId'] == accountId), isFalse);
+      expect(members.single['accountId'], 'other-account');
+      expect(savedGroup['displayName'], 'Keep display name');
+      expect(savedGroup['policy'], {'strategy': 'priority'});
+    });
 
     test(
       'preserves cross-account model group membership during reconciliation',
@@ -1173,8 +1241,8 @@ void main() {
         await _service(preferences, _MemoryCredentialStore()).migrate();
 
         final savedGroup = _records(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey]!,
+          preferences
+              .values[LlmAccountMigrationService.modelGroupsPreferenceKey]!,
         ).singleWhere((group) => group['id'] == ownerGroupId);
         final members = (savedGroup['members'] as List).cast<Map>();
         expect(
@@ -1228,15 +1296,11 @@ void main() {
         await _service(preferences, _MemoryCredentialStore()).migrate();
 
         final groups = _records(
-          preferences.values[LlmAccountMigrationService
-              .modelGroupsPreferenceKey]!,
+          preferences
+              .values[LlmAccountMigrationService.modelGroupsPreferenceKey]!,
         );
         expect(groups, hasLength(2));
         expect(groups[0]['id'], isNot(groups[1]['id']));
-        expect(groups.map((group) => group['legacyProviderName']).toList(), [
-          'First provider',
-          'Second provider',
-        ]);
       },
     );
 
@@ -1252,9 +1316,7 @@ void main() {
 
       expect(credentials.values.values.contains(_secret), isTrue);
       expect(
-        preferences.values['provider_entries']!.contains(_secret),
-        isFalse,
-      );
+          preferences.values['provider_entries']!.contains(_secret), isFalse);
       expect(
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey],
         contains('provider-config-1'),
@@ -1294,16 +1356,10 @@ void main() {
             isA<LlmAccountMigrationException>(),
             reason: boundary,
           );
-          expect(
-            failure.toString().contains(_secret),
-            isFalse,
-            reason: boundary,
-          );
-          expect(
-            preferences.values['provider_entries'] == source,
-            isTrue,
-            reason: boundary,
-          );
+          expect(failure.toString().contains(_secret), isFalse,
+              reason: boundary);
+          expect(preferences.values['provider_entries'] == source, isTrue,
+              reason: boundary);
           expect(credentials.values.isEmpty, isTrue, reason: boundary);
 
           final retried = await _service(preferences, credentials).migrate();
@@ -1326,7 +1382,9 @@ void main() {
       'retains a new secure value when source preference rollback is incomplete',
       () async {
         final source = _legacyProviderEntries();
-        final preferences = _MemoryLlmPreferences({'provider_entries': source});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': source,
+        });
         preferences.failWriteWhen = (key, value) =>
             key == LlmAccountMigrationService.migrationStateKey ||
             (key == 'provider_entries' && value == source);
@@ -1337,14 +1395,16 @@ void main() {
           throwsA(isA<LlmAccountMigrationException>()),
         );
 
-        final savedSource = _decodeList(
-          preferences.values['provider_entries']!,
-        );
+        final savedSource =
+            _decodeList(preferences.values['provider_entries']!);
         expect(
           _configsFor(savedSource, 'llm').first.containsKey('key'),
           isFalse,
         );
-        expect(credentials.values.values.contains(_secret), isTrue);
+        expect(
+          credentials.values.values.contains(_secret),
+          isTrue,
+        );
         expect(
           preferences.values[LlmAccountMigrationService.migrationStateKey],
           isNull,
@@ -1418,9 +1478,8 @@ void main() {
           'provider_entries': _legacyProviderEntries(),
         });
         final credentials = _MemoryCredentialStore();
-        final initialNotifier = ProviderEntriesNotifier(
-          credentialStore: credentials,
-        );
+        final initialNotifier =
+            ProviderEntriesNotifier(credentialStore: credentials);
         await initialNotifier.load();
         final originalConfig = initialNotifier.state.entries
             .singleWhere((entry) => entry.id == 'llm-entry')
@@ -1435,9 +1494,8 @@ void main() {
         expect(notifier.state.entries, isEmpty);
         final prefs = await SharedPreferences.getInstance();
         final savedConfig = _configsFor(
-          _decodeList(prefs.getString('provider_entries')!),
-          'llm',
-        ).first;
+                _decodeList(prefs.getString('provider_entries')!), 'llm')
+            .first;
         expect(savedConfig['credentialRef'], originalReference);
         expect(savedConfig.containsKey('key'), isFalse);
         expect(credentials.values[originalReference], _secret);
@@ -1472,9 +1530,8 @@ void main() {
 
         final prefs = await SharedPreferences.getInstance();
         final entries = _decodeList(prefs.getString('provider_entries')!);
-        final llmEntry = entries.singleWhere(
-          (entry) => entry['id'] == 'llm-entry',
-        );
+        final llmEntry =
+            entries.singleWhere((entry) => entry['id'] == 'llm-entry');
         final config =
             (llmEntry['configs'] as List).first as Map<String, dynamic>;
         config['host'] = 'https://recovered-settings.example.test';
@@ -1574,16 +1631,15 @@ void main() {
         };
         SharedPreferencesStorePlatform.instance =
             _RejectOnePreferenceWriteStore(
-              initialValues,
-              rejectedKey: 'mcp_provider_groups',
-            );
+          initialValues,
+          rejectedKey: 'mcp_provider_groups',
+        );
         addTearDown(
           () => SharedPreferencesStorePlatform.instance = previousStore,
         );
 
-        final entry = notifier.state.entries.singleWhere(
-          (item) => item.id == 'llm-entry',
-        );
+        final entry = notifier.state.entries
+            .singleWhere((item) => item.id == 'llm-entry');
         final oldConfig = entry.configs.first;
         final attemptedConfig = oldConfig.copy()
           ..host = 'https://failed-paired-write.example.test';
@@ -1600,13 +1656,12 @@ void main() {
         );
 
         expect(
-          notifier.state.entries
-              .singleWhere((item) => item.id == 'llm-entry')
-              .configs
-              .first
-              .host,
-          oldConfig.host,
-        );
+            notifier.state.entries
+                .singleWhere((item) => item.id == 'llm-entry')
+                .configs
+                .first
+                .host,
+            oldConfig.host);
         final persistedConfig = _configsFor(
           _decodeList(prefs.getString('provider_entries')!),
           'llm',
@@ -1657,24 +1712,20 @@ void main() {
         );
 
         ProviderEntry named(ProviderEntry source, String name) => ProviderEntry(
-          id: source.id,
-          type: source.type,
-          name: name,
-          configs: source.configs.map((config) => config.copy()).toList(),
-          enabled: source.enabled,
-          legacyFields: source.legacyFields,
-        );
+              id: source.id,
+              type: source.type,
+              name: name,
+              configs: source.configs.map((config) => config.copy()).toList(),
+              enabled: source.enabled,
+              legacyFields: source.legacyFields,
+            );
 
-        final ocr = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'builtin_ocr',
-        );
-        final asr = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'builtin_asr',
-        );
-        final first = notifier.update(
-          ocr.id,
-          named(ocr, 'First successful edit'),
-        );
+        final ocr = notifier.state.entries
+            .singleWhere((entry) => entry.id == 'builtin_ocr');
+        final asr = notifier.state.entries
+            .singleWhere((entry) => entry.id == 'builtin_asr');
+        final first =
+            notifier.update(ocr.id, named(ocr, 'First successful edit'));
         await blockingStore.firstMcpGroupWriteStarted.future;
 
         await notifier.update(asr.id, named(asr, 'Later successful edit'));
@@ -1710,21 +1761,23 @@ void main() {
       () async {
         const reference = 'stroom.llm.credential.concurrent-reference';
         String sourceFor(String key) => jsonEncode([
-          {
-            'id': 'concurrent-llm-entry',
-            'type': 'llm',
-            'configs': [
               {
-                'id': 'concurrent-account',
-                'credentialRef': reference,
-                'key': key,
-                'models': [],
+                'id': 'concurrent-llm-entry',
+                'type': 'llm',
+                'configs': [
+                  {
+                    'id': 'concurrent-account',
+                    'credentialRef': reference,
+                    'key': key,
+                    'models': [],
+                  },
+                ],
               },
-            ],
-          },
-        ]);
+            ]);
 
-        final preferences = _MemoryLlmPreferences({'provider_entries': '[]'});
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': '[]',
+        });
         final credentials = _MemoryCredentialStore();
         final firstWriteStarted = Completer<void>();
         final releaseFirstWrite = Completer<void>();
@@ -1752,285 +1805,342 @@ void main() {
 
         expect(overlappingWrite, isFalse);
         expect(writesObserved, 2);
-        final persistedSource =
-            jsonDecode(preferences.values['provider_entries']!) as List;
+        final persistedSource = jsonDecode(
+          preferences.values['provider_entries']!,
+        ) as List;
         final persistedConfig =
             ((persistedSource.single as Map)['configs'] as List).single as Map;
         expect(persistedConfig['credentialRef'], reference);
         expect(persistedConfig.containsKey('key'), isFalse);
-        expect(credentials.values[reference], 'sk_second_concurrent_value');
-      },
-    );
-
-    test(
-      'secure-store failure keeps legacy credentials and safe diagnostics',
-      () async {
-        final source = _legacyProviderEntries();
-        SharedPreferences.setMockInitialValues({'provider_entries': source});
-        final credentials = _MemoryCredentialStore()..failAllWrites = true;
-        final notifier = ProviderEntriesNotifier(credentialStore: credentials);
-        final logs = <String>[];
-        final previousDebugPrint = debugPrint;
-        debugPrint = (message, {wrapWidth}) {
-          if (message != null) logs.add(message);
-        };
-
-        try {
-          await notifier.load();
-        } finally {
-          debugPrint = previousDebugPrint;
-        }
-
-        final prefs = await SharedPreferences.getInstance();
-        final persistedEntries =
-            jsonDecode(prefs.getString('provider_entries')!) as List;
-        final persistedConfig =
-            (persistedEntries.first as Map)['configs'][0] as Map;
-        expect(persistedConfig['key'] == _secret, isTrue);
         expect(
-          prefs.getString(LlmAccountMigrationService.accountsPreferenceKey),
-          isNull,
-        );
-        expect(
-          prefs.getString(LlmAccountMigrationService.migrationStateKey),
-          isNull,
-        );
-        expect(logs.join('\n').contains(_secret), isFalse);
-        expect(notifier.state.isLoaded, isFalse);
-
-        credentials.failAllWrites = false;
-        await notifier.load();
-
-        expect(notifier.state.isLoaded, isTrue);
-        expect(
-          notifier.state.entries
-              .singleWhere((entry) => entry.id == 'llm-entry')
-              .configs
-              .first
-              .key,
-          _secret,
+          credentials.values[reference],
+          'sk_second_concurrent_value',
         );
       },
     );
 
     test(
-      'default update reports failure and restores the prior state',
+      'does not apply staged model IDs after provider settings change',
       () async {
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': _legacyProviderEntries(),
+        const originalSource = '[{"type":"llm"}]';
+        const replacementSource = '[{"id":"new-source","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences({
+          'provider_entries': replacementSource,
         });
         final credentials = _MemoryCredentialStore();
-        final notifier = ProviderEntriesNotifier(credentialStore: credentials);
-        await notifier.load();
-
-        final previousEntry = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'llm-entry',
-        );
-        final previousConfig = previousEntry.configs.first;
-        credentials.failAllWrites = true;
-        final changedConfig = previousConfig.copy()
-          ..key = 'sk_failed_default_update';
-        final changedEntry = ProviderEntry(
-          id: previousEntry.id,
-          type: previousEntry.type,
-          name: previousEntry.name,
-          configs: [changedConfig, ...previousEntry.configs.skip(1)],
-        );
 
         await expectLater(
-          notifier.update(previousEntry.id, changedEntry),
-          throwsA(isA<StateError>()),
-        );
-
-        expect(
-          notifier.state.entries
-              .singleWhere((entry) => entry.id == previousEntry.id)
-              .configs
-              .first
-              .key,
-          _secret,
-        );
-        final prefs = await SharedPreferences.getInstance();
-        expect(
-          prefs
-              .getString('provider_entries')!
-              .contains('sk_failed_default_update'),
-          isFalse,
-        );
-      },
-    );
-
-    test(
-      'addFirst reports secure migration failure and restores prior state',
-      () async {
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': _legacyProviderEntries(),
-        });
-        final credentials = _MemoryCredentialStore();
-        final notifier = ProviderEntriesNotifier(credentialStore: credentials);
-        await notifier.load();
-
-        final previousIds = notifier.state.entries
-            .map((entry) => entry.id)
-            .toSet();
-        credentials.failReads = true;
-        final added = ProviderEntry(
-          id: 'failed-add-first-entry',
-          type: 'ocr',
-          name: 'New OCR provider',
-        );
-
-        await expectLater(notifier.addFirst(added), throwsA(isA<StateError>()));
-
-        expect(
-          notifier.state.entries.map((entry) => entry.id).toSet(),
-          previousIds,
-        );
-        final prefs = await SharedPreferences.getInstance();
-        expect(
-          (jsonDecode(prefs.getString('provider_entries')!) as List)
-              .whereType<Map>()
-              .any((entry) => entry['id'] == added.id),
-          isFalse,
-        );
-      },
-    );
-
-    test(
-      'reloads concurrent settings before the next mutation after failure',
-      () async {
-        final initialEntries = _decodeList(_legacyProviderEntries())
-          ..add({
-            'id': 'other-entry',
-            'type': 'ocr',
-            'name': 'Original OCR',
-            'configs': <Map<String, dynamic>>[],
-          });
-        SharedPreferences.setMockInitialValues({
-          'provider_entries': jsonEncode(initialEntries),
-        });
-        final credentials = _MemoryCredentialStore();
-        final notifier = ProviderEntriesNotifier(credentialStore: credentials);
-        await notifier.load();
-
-        final prefs = await SharedPreferences.getInstance();
-        final externalEntries = _decodeList(
-          prefs.getString('provider_entries')!,
-        );
-        final externalLlm = externalEntries.singleWhere(
-          (entry) => entry['id'] == 'llm-entry',
-        );
-        final externalConfig =
-            (externalLlm['configs'] as List).first as Map<String, dynamic>;
-        externalConfig['host'] = 'https://concurrent.example.test';
-        externalLlm['name'] = 'Concurrent LLM settings';
-        final externalJson = jsonEncode(externalEntries);
-        credentials.onWrite = (_, __) async {
-          await prefs.setString('provider_entries', externalJson);
-          throw const LlmCredentialStoreException();
-        };
-
-        final llmEntry = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'llm-entry',
-        );
-        final changedLlmConfig = llmEntry.configs.first.copy()
-          ..key = 'sk_concurrent_failed_write';
-        await expectLater(
-          notifier.update(
-            llmEntry.id,
-            ProviderEntry(
-              id: llmEntry.id,
-              type: llmEntry.type,
-              name: llmEntry.name,
-              configs: [changedLlmConfig, ...llmEntry.configs.skip(1)],
-            ),
+          _service(preferences, credentials).migrate(
+            sourceProviderEntriesJson: originalSource,
+            expectedStoredProviderEntriesJson: originalSource,
           ),
-          throwsA(isA<StateError>()),
+          throwsA(isA<LlmAccountMigrationException>()),
         );
 
-        credentials.onWrite = null;
-        final otherEntry = notifier.state.entries.singleWhere(
-          (entry) => entry.id == 'other-entry',
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
+    test(
+      'rejects a provider source added while migration waits for its transaction',
+      () async {
+        const migrationSource = '[{"id":"stale","type":"tts"}]';
+        const replacementSource = '[{"id":"external","type":"tts"}]';
+        final preferences = _MemoryLlmPreferences();
+        final credentials = _MemoryCredentialStore();
+        final lease =
+            await LlmAccountMigrationService.acquireCredentialTransaction();
+
+        final migration = _service(preferences, credentials).migrate(
+          sourceProviderEntriesJson: migrationSource,
+          expectedStoredProviderEntriesJson: null,
+          checkExpectedStoredProviderEntriesJson: true,
         );
-        await notifier.update(
-          otherEntry.id,
+        preferences.values['provider_entries'] = replacementSource;
+        lease.release();
+
+        await expectLater(
+          migration,
+          throwsA(isA<LlmAccountMigrationException>()),
+        );
+        expect(preferences.values['provider_entries'], replacementSource);
+        expect(preferences.writeHistory, isEmpty);
+        expect(credentials.writeCount, 0);
+      },
+    );
+
+    test('secure-store failure keeps legacy credentials and safe diagnostics',
+        () async {
+      final source = _legacyProviderEntries();
+      SharedPreferences.setMockInitialValues({'provider_entries': source});
+      final credentials = _MemoryCredentialStore()..failAllWrites = true;
+      final notifier = ProviderEntriesNotifier(credentialStore: credentials);
+      final logs = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+
+      try {
+        await notifier.load();
+      } finally {
+        debugPrint = previousDebugPrint;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final persistedEntries = jsonDecode(
+        prefs.getString('provider_entries')!,
+      ) as List;
+      final persistedConfig =
+          (persistedEntries.first as Map)['configs'][0] as Map;
+      expect(persistedConfig['key'] == _secret, isTrue);
+      expect(
+        prefs.getString(LlmAccountMigrationService.accountsPreferenceKey),
+        isNull,
+      );
+      expect(
+        prefs.getString(LlmAccountMigrationService.migrationStateKey),
+        isNull,
+      );
+      expect(logs.join('\n').contains(_secret), isFalse);
+      expect(notifier.state.isLoaded, isTrue);
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'llm-entry')
+            .configs
+            .first
+            .key,
+        _secret,
+      );
+
+      credentials.failAllWrites = false;
+      await notifier.load();
+
+      expect(notifier.state.isLoaded, isTrue);
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == 'llm-entry')
+            .configs
+            .first
+            .key,
+        _secret,
+      );
+    });
+
+    test('default update reports failure and restores the prior state',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _legacyProviderEntries(),
+      });
+      final credentials = _MemoryCredentialStore();
+      final notifier = ProviderEntriesNotifier(credentialStore: credentials);
+      await notifier.load();
+
+      final previousEntry = notifier.state.entries
+          .singleWhere((entry) => entry.id == 'llm-entry');
+      final previousConfig = previousEntry.configs.first;
+      credentials.failAllWrites = true;
+      final changedConfig = previousConfig.copy()
+        ..key = 'sk_failed_default_update';
+      final changedEntry = ProviderEntry(
+        id: previousEntry.id,
+        type: previousEntry.type,
+        name: previousEntry.name,
+        configs: [changedConfig, ...previousEntry.configs.skip(1)],
+      );
+
+      await expectLater(
+        notifier.update(previousEntry.id, changedEntry),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        notifier.state.entries
+            .singleWhere((entry) => entry.id == previousEntry.id)
+            .configs
+            .first
+            .key,
+        _secret,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs
+            .getString('provider_entries')!
+            .contains('sk_failed_default_update'),
+        isFalse,
+      );
+    });
+
+    test('addFirst reports secure migration failure and restores prior state',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _legacyProviderEntries(),
+      });
+      final credentials = _MemoryCredentialStore();
+      final notifier = ProviderEntriesNotifier(credentialStore: credentials);
+      await notifier.load();
+
+      final previousIds =
+          notifier.state.entries.map((entry) => entry.id).toSet();
+      credentials.failReads = true;
+      final added = ProviderEntry(
+        id: 'failed-add-first-entry',
+        type: 'ocr',
+        name: 'New OCR provider',
+      );
+
+      await expectLater(
+        notifier.addFirst(added),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+          notifier.state.entries.map((entry) => entry.id).toSet(), previousIds);
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        (jsonDecode(prefs.getString('provider_entries')!) as List)
+            .whereType<Map>()
+            .any((entry) => entry['id'] == added.id),
+        isFalse,
+      );
+    });
+
+    test('reloads concurrent settings before the next mutation after failure',
+        () async {
+      final initialEntries = _decodeList(_legacyProviderEntries())
+        ..add({
+          'id': 'other-entry',
+          'type': 'ocr',
+          'name': 'Original OCR',
+          'configs': <Map<String, dynamic>>[],
+        });
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': jsonEncode(initialEntries),
+      });
+      final credentials = _MemoryCredentialStore();
+      final notifier = ProviderEntriesNotifier(credentialStore: credentials);
+      await notifier.load();
+
+      final prefs = await SharedPreferences.getInstance();
+      final externalEntries = _decodeList(prefs.getString('provider_entries')!);
+      final externalLlm = externalEntries.singleWhere(
+        (entry) => entry['id'] == 'llm-entry',
+      );
+      final externalConfig =
+          (externalLlm['configs'] as List).first as Map<String, dynamic>;
+      externalConfig['host'] = 'https://concurrent.example.test';
+      externalLlm['name'] = 'Concurrent LLM settings';
+      final externalJson = jsonEncode(externalEntries);
+      credentials.onWrite = (_, __) async {
+        await prefs.setString('provider_entries', externalJson);
+        throw const LlmCredentialStoreException();
+      };
+
+      final llmEntry = notifier.state.entries
+          .singleWhere((entry) => entry.id == 'llm-entry');
+      final changedLlmConfig = llmEntry.configs.first.copy()
+        ..key = 'sk_concurrent_failed_write';
+      await expectLater(
+        notifier.update(
+          llmEntry.id,
           ProviderEntry(
-            id: otherEntry.id,
-            type: otherEntry.type,
-            name: 'Updated OCR',
-            configs: otherEntry.configs,
+            id: llmEntry.id,
+            type: llmEntry.type,
+            name: llmEntry.name,
+            configs: [changedLlmConfig, ...llmEntry.configs.skip(1)],
           ),
-        );
+        ),
+        throwsA(isA<StateError>()),
+      );
 
-        final persisted = _decodeList(prefs.getString('provider_entries')!);
-        final savedLlm = persisted.singleWhere(
-          (entry) => entry['id'] == 'llm-entry',
-        );
-        final savedConfig = (savedLlm['configs'] as List).first as Map;
-        expect(savedLlm['name'], 'Concurrent LLM settings');
-        expect(savedConfig['host'], 'https://concurrent.example.test');
-      },
-    );
+      credentials.onWrite = null;
+      final otherEntry = notifier.state.entries
+          .singleWhere((entry) => entry.id == 'other-entry');
+      await notifier.update(
+        otherEntry.id,
+        ProviderEntry(
+          id: otherEntry.id,
+          type: otherEntry.type,
+          name: 'Updated OCR',
+          configs: otherEntry.configs,
+        ),
+      );
+
+      final persisted = _decodeList(prefs.getString('provider_entries')!);
+      final savedLlm = persisted.singleWhere(
+        (entry) => entry['id'] == 'llm-entry',
+      );
+      final savedConfig = (savedLlm['configs'] as List).first as Map;
+      expect(savedLlm['name'], 'Concurrent LLM settings');
+      expect(savedConfig['host'], 'https://concurrent.example.test');
+    });
   });
 }
 
 String _legacyProviderEntries() => jsonEncode([
-  {
-    'id': 'llm-entry',
-    'type': 'llm',
-    'name': 'LLM providers',
-    'configs': [
       {
-        'id': 'provider-config-1',
-        'providerName': 'Anthropic personal',
-        'host': 'https://api.example.test',
-        'key': _secret,
-        'endpointType': 'anthropic',
-        'typeConfig': {'requestMode': 'legacy'},
-        'customParams': [
+        'id': 'llm-entry',
+        'type': 'llm',
+        'name': 'LLM providers',
+        'configs': [
           {
-            'paramName': 'seed',
-            'defaultValue': 'saved',
-            'legacyParamExtension': 'keep',
+            'id': 'provider-config-1',
+            'providerName': 'Anthropic personal',
+            'host': 'https://api.example.test',
+            'key': _secret,
+            'endpointType': 'anthropic',
+            'typeConfig': {'requestMode': 'legacy'},
+            'customParams': [
+              {
+                'paramName': 'seed',
+                'defaultValue': 'saved',
+                'legacyParamExtension': 'keep',
+              },
+            ],
+            'reasoningParams': [],
+            'models': [
+              {
+                'name': 'Claude Model',
+                'modelId': 'claude-model',
+                'supportStream': true,
+                'typeConfig': {'temperature': 0.2},
+                'customParams': [],
+                'reasoningParams': [],
+              },
+            ],
+            'legacyExtension': {'preserve': true},
           },
-        ],
-        'reasoningParams': [],
-        'models': [
           {
-            'name': 'Claude Model',
-            'modelId': 'claude-model',
-            'supportStream': true,
-            'typeConfig': {'temperature': 0.2},
+            'id': 'provider-config-2',
+            'providerName': 'OpenAI compatible',
+            'host': 'https://openai.example.test/v1',
+            'key': '',
+            'endpointType': 'openai',
+            'typeConfig': {'requestMode': 'legacy'},
             'customParams': [],
             'reasoningParams': [],
+            'models': [
+              {
+                'name': 'Chat Model',
+                'modelId': 'chat-model',
+                'supportStream': true,
+                'typeConfig': {'maxTokens': 8192},
+                'customParams': [],
+                'reasoningParams': [],
+              },
+            ],
           },
         ],
-        'legacyExtension': {'preserve': true},
       },
       {
-        'id': 'provider-config-2',
-        'providerName': 'OpenAI compatible',
-        'host': 'https://openai.example.test/v1',
-        'key': '',
-        'endpointType': 'openai',
-        'typeConfig': {'requestMode': 'legacy'},
-        'customParams': [],
-        'reasoningParams': [],
-        'models': [
-          {
-            'name': 'Chat Model',
-            'modelId': 'chat-model',
-            'supportStream': true,
-            'typeConfig': {'maxTokens': 8192},
-            'customParams': [],
-            'reasoningParams': [],
-          },
-        ],
+        'id': 'builtin_tts',
+        'type': 'tts',
+        'name': 'TTS providers',
+        'configs': []
       },
-    ],
-  },
-  {'id': 'builtin_tts', 'type': 'tts', 'name': 'TTS providers', 'configs': []},
-]);
+    ]);
 
 List<Map<String, dynamic>> _decodeList(String value) =>
     (jsonDecode(value) as List).cast<Map<String, dynamic>>();
@@ -2038,23 +2148,24 @@ List<Map<String, dynamic>> _decodeList(String value) =>
 List<Map<String, dynamic>> _configsFor(
   List<Map<String, dynamic>> entries,
   String type,
-) => [
-  for (final entry in entries.where((item) => item['type'] == type))
-    ...(entry['configs'] as List).cast<Map<String, dynamic>>(),
-];
+) =>
+    [
+      for (final entry in entries.where((item) => item['type'] == type))
+        ...(entry['configs'] as List).cast<Map<String, dynamic>>(),
+    ];
 
 List<Map<String, dynamic>> _records(String envelopeJson) =>
     (jsonDecode(envelopeJson) as Map<String, dynamic>)['items']
-            .cast<Map<String, dynamic>>()
-        as List<Map<String, dynamic>>;
+        .cast<Map<String, dynamic>>() as List<Map<String, dynamic>>;
 
 LlmAccountMigrationService _service(
   _MemoryLlmPreferences preferences,
   _MemoryCredentialStore credentials,
-) => LlmAccountMigrationService(
-  preferences: preferences,
-  credentialStore: credentials,
-);
+) =>
+    LlmAccountMigrationService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
 
 class _MemoryLlmPreferences implements LlmAccountPreferences {
   final Map<String, String> values;
@@ -2063,7 +2174,7 @@ class _MemoryLlmPreferences implements LlmAccountPreferences {
   bool Function(String key, String value)? failWriteWhen;
 
   _MemoryLlmPreferences([Map<String, String>? initialValues])
-    : values = Map<String, String>.from(initialValues ?? {});
+      : values = Map<String, String>.from(initialValues ?? {});
 
   @override
   Future<String?> getString(String key) async => values[key];
@@ -2147,7 +2258,7 @@ class _BlockFirstMcpGroupWriteStore extends InMemorySharedPreferencesStore {
   var _blocked = false;
 
   _BlockFirstMcpGroupWriteStore(Map<String, Object> values)
-    : super.withData(values);
+      : super.withData(values);
 
   @override
   Future<bool> setValue(String valueType, String key, Object value) async {

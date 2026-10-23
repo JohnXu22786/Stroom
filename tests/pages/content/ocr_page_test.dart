@@ -76,8 +76,7 @@ Widget _buildTestApp({
     double? maxWidth,
     double? maxHeight,
     int? imageQuality,
-  })?
-  testGalleryPicker,
+  })? testGalleryPicker,
 }) {
   return ProviderScope(
     overrides: [
@@ -192,10 +191,10 @@ SelectedImage _createTestImage({int seed = 1}) {
 }
 
 SelectedImage _createValidOcrTestImage() => SelectedImage.fromPayload(
-  payload: prepareOcrImagePayloadSync(
-    img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
-  ),
-);
+      payload: prepareOcrImagePayloadSync(
+        img.encodePng(img.Image(width: 1, height: 1, numChannels: 3)),
+      ),
+    );
 
 Future<void> _storeAppAlbumImage({
   required String name,
@@ -218,19 +217,20 @@ Map<String, dynamic> _createVersionedRetryData({
   required String modelId,
   String? instructionContent,
   String saveFolder = '',
-}) => OcrRetrySnapshot.capture(
-  configId: configId,
-  modelId: modelId,
-  images: [
-    OcrRetryImage(
-      bytes: _createTestPngBytes(),
-      format: 'png',
-      name: 'retry-image.png',
-    ),
-  ],
-  instructionContent: instructionContent,
-  saveFolder: saveFolder,
-).toMap();
+}) =>
+    OcrRetrySnapshot.capture(
+      configId: configId,
+      modelId: modelId,
+      images: [
+        OcrRetryImage(
+          bytes: _createTestPngBytes(),
+          format: 'png',
+          name: 'retry-image.png',
+        ),
+      ],
+      instructionContent: instructionContent,
+      saveFolder: saveFolder,
+    ).toMap();
 
 class _UnreadPickerFile extends XFile {
   int reads = 0;
@@ -1134,7 +1134,8 @@ void main() {
       expect(tc.containsKey('userInstruction'), isFalse);
     });
 
-    test('default selection removes a legacy per-model instruction from the '
+    test(
+        'default selection removes a legacy per-model instruction from the '
         'request copy', () {
       // The request copy inherits the model's stored typeConfig, which may
       // still carry a legacy per-model userInstruction (kept in storage for

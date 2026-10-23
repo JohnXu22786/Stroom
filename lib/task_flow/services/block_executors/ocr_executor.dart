@@ -160,13 +160,11 @@ Future<String> executeOcrBlock({
           model: model.modelId,
           typeConfig: model.typeConfig,
           customParams: model.customParams,
-          routingGroupId:
-              selectedGroupId ??
+          routingGroupId: selectedGroupId ??
               llmOcrModelGroupIdForConfig(config.id, model.id),
           routingLocalModelId: model.id,
-          routingAccountId: isLegacyOcrConfig
-              ? llmOcrAccountIdForConfig(config.id)
-              : null,
+          routingAccountId:
+              isLegacyOcrConfig ? llmOcrAccountIdForConfig(config.id) : null,
           routingDisplayName: '${config.providerName} · ${model.name}',
         ),
         dio: ocrDio,

@@ -28,10 +28,13 @@ class _Documents extends PathProviderPlatform {
 }
 
 class _InputPicker extends FilePickerPlatform {
-  _InputPicker(this.path, {this.pending, this.reportedSize = 6});
-  final String path;
+  _InputPicker(this.path,
+      {this.pending, this.reportedSize = 6, this.onPick, this.readStream});
+  final String? path;
   final Completer<FilePickerResult?>? pending;
   final int reportedSize;
+  final Completer<void>? onPick;
+  final Stream<List<int>>? readStream;
 
   @override
   Future<FilePickerResult?> pickFiles({
@@ -52,9 +55,15 @@ class _InputPicker extends FilePickerPlatform {
     expect(allowMultiple, isTrue);
     expect(withData, isFalse);
     expect(withReadStream, isTrue);
+    if (onPick != null && !onPick!.isCompleted) onPick!.complete();
     if (pending != null) return pending!.future;
     return FilePickerResult([
-      PlatformFile(name: 'notes.pdf', size: reportedSize, path: path),
+      PlatformFile(
+        name: 'notes.pdf',
+        size: reportedSize,
+        path: path,
+        readStream: readStream,
+      ),
     ]);
   }
 }
@@ -267,13 +276,14 @@ void main() {
     testWidgets('oversized document metadata is rejected before copying',
         (tester) async {
       final directory = Directory.systemTemp.createTempSync('flow_file_size_');
-      final source = File('${directory.path}/notes.pdf')
-        ..writeAsStringSync('document');
       final originalPicker = FilePickerPlatform.instance;
       final originalDocuments = PathProviderPlatform.instance;
+      final pickerCalled = Completer<void>();
       FilePickerPlatform.instance = _InputPicker(
-        source.path,
+        null,
         reportedSize: maxAttachmentBytes + 1,
+        onPick: pickerCalled,
+        readStream: Stream<List<int>>.value(List<int>.filled(32, 0)),
       );
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {
@@ -287,11 +297,15 @@ void main() {
         inputType: IOType.file,
       );
 
+      await tester.tap(find.text('选择文件（可多选）'));
+      await tester.pump();
       await tester.runAsync(() async {
-        await tester.tap(find.text('选择文件（可多选）'));
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await pickerCalled.future.timeout(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
       });
-      await tester.pumpAndSettle();
+      // Keep the transient error snackbar visible for the assertion instead
+      // of settling through its auto-dismiss timeout.
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('超过 10 MB'), findsOneWidget);
       expect(_startButtonEnabled(tester), isFalse);
       expect(Directory('${directory.path}/attachments').existsSync(), isFalse);
@@ -412,8 +426,13 @@ void main() {
       handle.closeSync();
       final originalPicker = FilePickerPlatform.instance;
       final originalDocuments = PathProviderPlatform.instance;
+      final pickerCalled = Completer<void>();
       // Picker metadata can be stale; the on-disk file is over the limit.
-      FilePickerPlatform.instance = _InputPicker(source.path, reportedSize: 6);
+      FilePickerPlatform.instance = _InputPicker(
+        source.path,
+        reportedSize: 6,
+        onPick: pickerCalled,
+      );
       PathProviderPlatform.instance = _Documents(directory.path);
       addTearDown(() {
         FilePickerPlatform.instance = originalPicker;
@@ -426,11 +445,29 @@ void main() {
         inputType: IOType.file,
       );
 
-      await tester.runAsync(() async {
-        await tester.tap(find.text('选择文件（可多选）'));
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      });
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择文件（可多选）'));
+      await tester.pump();
+      await tester.runAsync(
+          () => pickerCalled.future.timeout(const Duration(seconds: 2)));
+      var pickerEnabled = false;
+      for (var attempt = 0; attempt < 200; attempt++) {
+        await tester.pump(const Duration(milliseconds: 10));
+        final picker = tester.widget<OutlinedButton>(
+          find.byKey(const Key('taskflow_pick_media_input')),
+        );
+        if (picker.onPressed != null) {
+          pickerEnabled = true;
+          break;
+        }
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      expect(pickerEnabled, isTrue,
+          reason: 'file validation should finish before checking the error');
+      // Keep the transient error snackbar visible instead of settling through
+      // its auto-dismiss timeout.
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('超过 10 MB'), findsOneWidget);
       expect(_startButtonEnabled(tester), isFalse);
       expect(Directory('${directory.path}/attachments').existsSync(), isFalse);

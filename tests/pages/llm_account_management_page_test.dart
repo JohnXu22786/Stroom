@@ -57,12 +57,9 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope =
-        jsonDecode(
-              preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey]!,
-            )
-            as Map;
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -641,12 +638,8 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata =
-        selectorConfig
-                .models
-                .single
-                .legacyFields[kLlmModelCapabilitiesConfigField]
-            as Map;
+    final capabilityMetadata = selectorConfig
+        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 

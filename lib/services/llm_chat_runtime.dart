@@ -30,9 +30,8 @@ class LlmChatRoutingRuntime {
     required this.accountService,
     required this.routingService,
     LlmConnectorHttpClient? connectorClient,
-  }) : connectorClient =
-           connectorClient ??
-           LlmConnectorHttpClient(accountService: accountService);
+  }) : connectorClient = connectorClient ??
+            LlmConnectorHttpClient(accountService: accountService);
 
   static Future<LlmChatRoutingRuntime> createPlatform() async {
     final preferences = _SharedPreferencesLlmAccountPreferences(
@@ -89,8 +88,7 @@ class LlmChatRoutingRuntime {
     required Future<T> Function(
       LlmRouteCandidate candidate,
       LlmRouteProgress progress,
-    )
-    request,
+    ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
@@ -128,8 +126,7 @@ class LlmChatRoutingRuntime {
     required Future<T> Function(
       LlmRouteCandidate candidate,
       LlmRouteProgress progress,
-    )
-    request,
+    ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
@@ -206,14 +203,29 @@ class LlmChatRoutingRuntime {
     );
   }
 
+  Future<void> synchronizeLegacyOcrModelSet({
+    required String accountId,
+    required Set<String> localModelIds,
+  }) async {
+    if (!accountId.startsWith('ocr-') || accountId.length <= 4) {
+      throw LlmRoutingUnavailableException([
+        LlmRouteDecision(subjectId: accountId, reason: 'model_group_missing'),
+      ]);
+    }
+    await accountService.synchronizeLegacyOcrModelSet(
+      accountId: accountId,
+      sourceConfigId: accountId.substring(4),
+      localModelIds: localModelIds,
+    );
+  }
+
   Future<LlmRoutingExecution<T>> _executeGroup<T>({
     required LlmModelGroup group,
     required String localModelId,
     required Future<T> Function(
       LlmRouteCandidate candidate,
       LlmRouteProgress progress,
-    )
-    request,
+    ) request,
     required Set<String> requiredCapabilities,
     required Map<String, num> estimatedUsage,
     required Set<String>? supportedConnectorTypes,
@@ -228,7 +240,18 @@ class LlmChatRoutingRuntime {
     LlmRouteCandidate? lastAttemptedCandidate;
     try {
       var routeGroup = group;
-      if (supportedConnectorTypes != null) {
+      final allowedConnectorTypes = supportedConnectorTypes ??
+          LlmConnectorRegistry.all
+              .where(
+                (connector) =>
+                    LlmConnectorRegistry.chatAdapterEndpointType(
+                      connector.id,
+                    ) !=
+                    null,
+              )
+              .map((connector) => connector.id)
+              .toSet();
+      {
         final accounts = {
           for (final account in await accountService.listAccounts())
             account.id: account,
@@ -240,7 +263,7 @@ class LlmChatRoutingRuntime {
               ? null
               : LlmConnectorRegistry.canonicalId(account.connectorType);
           if (connectorType != null &&
-              !supportedConnectorTypes.contains(connectorType)) {
+              !allowedConnectorTypes.contains(connectorType)) {
             excluded.add(
               LlmRouteDecision(
                 subjectId: member.accountId,
@@ -345,8 +368,8 @@ class LlmChatRouteDiagnostic {
     this.selectedAccountId,
     required Iterable<LlmRouteDecision> decisions,
     DateTime? recordedAt,
-  }) : decisions = List.unmodifiable(decisions),
-       recordedAt = (recordedAt ?? DateTime.now()).toUtc();
+  })  : decisions = List.unmodifiable(decisions),
+        recordedAt = (recordedAt ?? DateTime.now()).toUtc();
 }
 
 class LlmChatRouteDiagnostics {
@@ -373,48 +396,48 @@ class LlmChatRouteDiagnostics {
 }
 
 String llmRouteDecisionLabel(String reason) => switch (reason) {
-  'model_group_missing' => '没有找到此模型的稳定模型组',
-  'model_group_ambiguous' => '此模型同时关联多个模型组',
-  'connector_protocol_incompatible' => '连接器协议不适用于此聊天模型',
-  'connection_unknown' => '连接状态未知',
-  'account_missing' => '账号已删除',
-  'account_id_invalid' => '账号标识无效',
-  'account_unavailable' => '账号已暂停或需要重新认证',
-  'model_mapping_mismatch' => '账号没有映射到所选模型',
-  'model_not_mapped' => '账号中找不到对应的上游模型',
-  'capability_mismatch' => '账号模型不支持此请求所需能力',
-  'fallback_scope' => '回退范围不允许切换到此连接器',
-  'cooldown' => '账号仍在故障冷却期',
-  'concurrency_limit' => '账号或模型组已达到并发上限',
-  'balance_unknown_or_incomparable' => '额度未知或计量单位不可比较',
-  'balance_at_or_below_reserve' => '余额已达到或低于保留线',
-  'usage_unknown' => '使用量未知，无法判断限制',
-  'reserve_balance_unknown' => '剩余额度未知，无法判断保留线',
-  'reserve_unit_unknown_or_incomparable' => '保留线计量单位未知或不可比较',
-  'reserve_total_unknown_or_incomparable' => '额度总量未知或不可比较',
-  'reserve_total_unknown' => '额度总量未知，无法计算保留线',
-  'reserve_usage_estimate_unknown' => '请求用量估算未知，无法判断保留线',
-  'reserve_in_flight_usage_unknown' => '进行中的请求用量未知，无法判断保留线',
-  'reserve_floor_reached' => '剩余额度低于保留线',
-  'usage_ceiling_reached' => '已达到使用上限',
-  'usage_ceiling_total_unknown' => '使用总额未知，无法判断上限',
-  'usage_unit_mismatch' => '使用量计量单位不匹配',
-  'usage_source_mismatch' => '使用量与额度数据来源不匹配',
-  'usage_in_flight_unknown' => '进行中的请求用量未知，无法判断上限',
-  'usage_estimate_unknown' => '请求用量估算未知，无法判断上限',
-  'invalid_window_timezone' => '额度窗口时区配置无效',
-  'reserve_floor' => '剩余额度低于保留线',
-  'usage_ceiling' => '已达到使用上限',
-  'request_authentication' => '上游拒绝了认证',
-  'request_quotaExhausted' => '上游报告额度耗尽',
-  'request_rateLimited' => '上游限流',
-  'request_connection' => '连接上游失败',
-  'request_server' => '上游服务错误',
-  'request_invalidRequest' => '上游拒绝了请求参数',
-  'request_cancelled' => '请求已取消',
-  'request_other' => '上游请求失败',
-  _ => '账号未被选择：$reason',
-};
+      'model_group_missing' => '没有找到此模型的稳定模型组',
+      'model_group_ambiguous' => '此模型同时关联多个模型组',
+      'connector_protocol_incompatible' => '连接器协议不适用于此聊天模型',
+      'connection_unknown' => '连接状态未知',
+      'account_missing' => '账号已删除',
+      'account_id_invalid' => '账号标识无效',
+      'account_unavailable' => '账号已暂停或需要重新认证',
+      'model_mapping_mismatch' => '账号没有映射到所选模型',
+      'model_not_mapped' => '账号中找不到对应的上游模型',
+      'capability_mismatch' => '账号模型不支持此请求所需能力',
+      'fallback_scope' => '回退范围不允许切换到此连接器',
+      'cooldown' => '账号仍在故障冷却期',
+      'concurrency_limit' => '账号或模型组已达到并发上限',
+      'balance_unknown_or_incomparable' => '额度未知或计量单位不可比较',
+      'balance_at_or_below_reserve' => '余额已达到或低于保留线',
+      'usage_unknown' => '使用量未知，无法判断限制',
+      'reserve_balance_unknown' => '剩余额度未知，无法判断保留线',
+      'reserve_unit_unknown_or_incomparable' => '保留线计量单位未知或不可比较',
+      'reserve_total_unknown_or_incomparable' => '额度总量未知或不可比较',
+      'reserve_total_unknown' => '额度总量未知，无法计算保留线',
+      'reserve_usage_estimate_unknown' => '请求用量估算未知，无法判断保留线',
+      'reserve_in_flight_usage_unknown' => '进行中的请求用量未知，无法判断保留线',
+      'reserve_floor_reached' => '剩余额度低于保留线',
+      'usage_ceiling_reached' => '已达到使用上限',
+      'usage_ceiling_total_unknown' => '使用总额未知，无法判断上限',
+      'usage_unit_mismatch' => '使用量计量单位不匹配',
+      'usage_source_mismatch' => '使用量与额度数据来源不匹配',
+      'usage_in_flight_unknown' => '进行中的请求用量未知，无法判断上限',
+      'usage_estimate_unknown' => '请求用量估算未知，无法判断上限',
+      'invalid_window_timezone' => '额度窗口时区配置无效',
+      'reserve_floor' => '剩余额度低于保留线',
+      'usage_ceiling' => '已达到使用上限',
+      'request_authentication' => '上游拒绝了认证',
+      'request_quotaExhausted' => '上游报告额度耗尽',
+      'request_rateLimited' => '上游限流',
+      'request_connection' => '连接上游失败',
+      'request_server' => '上游服务错误',
+      'request_invalidRequest' => '上游拒绝了请求参数',
+      'request_cancelled' => '请求已取消',
+      'request_other' => '上游请求失败',
+      _ => '账号未被选择：$reason',
+    };
 
 class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
   final SharedPreferences _preferences;

@@ -59,6 +59,70 @@ void main() {
   );
 
   test(
+    'legacy rows return to chat selectors after switching to a supported connector',
+    () {
+      final legacyConfig = ProviderConfigItem(
+        id: 'legacy-account',
+        providerName: 'Legacy account',
+        host: 'https://legacy.example.test/v1',
+        key: 'legacy-secret',
+        endpointType: 'openai',
+        legacyFields: {'connectorType': 'codex'},
+        models: [
+          ModelConfig(
+            id: 'legacy-model',
+            name: 'Legacy model',
+            modelId: 'gpt-5-codex',
+          ),
+        ],
+      );
+      final unsupportedAccount = LlmAccount(
+        id: legacyConfig.id,
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Legacy account',
+      );
+      final marked = markUnsupportedLegacyLlmConfigs(
+        [legacyConfig],
+        [unsupportedAccount],
+      ).single;
+      expect(isUnsupportedLegacyLlmSelectorConfig(marked), isTrue);
+
+      final supportedAccount = LlmAccount(
+        id: legacyConfig.id,
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Legacy account',
+      );
+      final restored = markUnsupportedLegacyLlmConfigs(
+        [marked],
+        [supportedAccount],
+      ).single;
+
+      expect(isUnsupportedLegacyLlmSelectorConfig(restored), isFalse);
+      expect(restored.host, legacyConfig.host);
+      expect(restored.key, legacyConfig.key);
+      expect(restored.models, hasLength(1));
+      expect(
+        flattenProviderModels(
+          ProviderEntriesState(
+            entries: [
+              ProviderEntry(
+                id: 'llm-entry',
+                type: 'llm',
+                name: 'LLM',
+                configs: [restored],
+              ),
+            ],
+          ),
+          'llm',
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'removes the legacy OCR source before its migrated account is deleted',
     () {
       const sourceConfigId = 'legacy-ocr-provider';

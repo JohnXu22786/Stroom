@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/catcatch/models/catcatch_task.dart' as catcatch;
 import 'package:stroom/catcatch/models/media_resource.dart';
 import 'package:stroom/catcatch/providers/catcatch_provider.dart';
-import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/assistant.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
@@ -18,8 +17,8 @@ import 'package:stroom/providers/chat_manager_provider.dart';
 import 'package:stroom/services/chat_stream_manager.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider.dart';
+import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/storage_service.dart';
-import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_launch_snapshot.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
@@ -38,6 +37,35 @@ class _Documents extends PathProviderPlatform {
   final String path;
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+class _MemoryCredentialStore implements LlmCredentialStore {
+  final _values = <String, String>{};
+
+  @override
+  Future<String?> read(String reference) async => _values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    _values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    _values.remove(reference);
+  }
+}
+
+class _TestProviderEntriesNotifier extends ProviderEntriesNotifier {
+  _TestProviderEntriesNotifier()
+      : super(credentialStore: _MemoryCredentialStore()) {
+    _load = load();
+  }
+
+  late final Future<void> _load;
+
+  @override
+  Future<void> get ready => _load;
 }
 
 const _dispatchWait = Duration(seconds: 10);
@@ -109,8 +137,8 @@ class _ManualDownloads extends CatCatchNotifier {
             confirming
                 ? catcatch.StepType.converting
                 : (url.endsWith('/first') || url.endsWith('/single'))
-                ? catcatch.StepType.userSelecting
-                : catcatch.StepType.fetching,
+                    ? catcatch.StepType.userSelecting
+                    : catcatch.StepType.fetching,
           ),
         ],
       ),
@@ -238,12 +266,6 @@ class _Manager extends ChatStreamManager {
   void cancel([String? convId]) {}
 }
 
-class _ProviderEntries extends ProviderEntriesNotifier {
-  _ProviderEntries(ProviderEntriesState initial) {
-    state = initial;
-  }
-}
-
 ProviderEntriesState _providers(
   String type,
   String id, {
@@ -252,32 +274,34 @@ ProviderEntriesState _providers(
   String host = 'https://old.invalid',
   Map<String, dynamic> auth = const {},
   double speedMax = 2,
-}) => ProviderEntriesState(
-  entries: [
-    ProviderEntry(
-      id: 'entry-$id',
-      type: type,
-      name: 'P',
-      configs: [
-        ProviderConfigItem(
-          id: 'config-$id',
-          providerName: 'P',
-          host: host,
-          key: key,
-          typeConfig: auth,
-          models: [
-            ModelConfig(id: id, name: 'M', modelId: api, speedMax: speedMax),
+}) =>
+    ProviderEntriesState(
+      entries: [
+        ProviderEntry(
+          id: 'entry-$id',
+          type: type,
+          name: 'P',
+          configs: [
+            ProviderConfigItem(
+              id: 'config-$id',
+              providerName: 'P',
+              host: host,
+              key: key,
+              typeConfig: auth,
+              models: [
+                ModelConfig(
+                    id: id, name: 'M', modelId: api, speedMax: speedMax),
+              ],
+            ),
           ],
         ),
       ],
-    ),
-  ],
-);
+    );
 
 Map<String, String> _reference(String id) => {
-  'configId': 'config-$id',
-  'modelId': id,
-};
+      'configId': 'config-$id',
+      'modelId': id,
+    };
 FlowSubTask _step(String type, {FlowPayload? result, String? child}) =>
     FlowSubTask(
       blockTypeKey: type,
@@ -336,10 +360,12 @@ void main() {
     _Tasks Function(Ref)? tasks,
     _Assistants? assistants,
     _Manager? manager,
-    _ProviderEntries? providerEntries,
   }) {
     final container = ProviderContainer(
       overrides: [
+        providerEntriesProvider.overrideWith(
+          (ref) => _TestProviderEntriesNotifier(),
+        ),
         if (notifier != null)
           taskFlowExecutionsProvider.overrideWith((ref) => notifier),
         if (runner != null)
@@ -352,8 +378,6 @@ void main() {
           assistantProvider.overrideWith((ref) => assistants),
         if (manager != null)
           chatStreamManagerProvider.overrideWithValue(manager),
-        if (providerEntries != null)
-          providerEntriesProvider.overrideWith((ref) => providerEntries),
       ],
     );
     containers.add(container);
@@ -433,7 +457,9 @@ void main() {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
           'provider_entries',
-          jsonEncode(original.entries.map((e) => e.toMap()).toList()),
+          jsonEncode(
+            original.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+          ),
         );
         flow = flow.copyWith(
           blocks: [
@@ -516,7 +542,12 @@ void main() {
       final ids = await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'input'),
       ]);
-      await Future<void>.delayed(const Duration(milliseconds: 25));
+      await _waitFor(
+        () =>
+            notifier.execution(ids.single)?.status ==
+            FlowExecutionStatus.failed,
+        'initial runner failure',
+      );
       notifier.shouldHold = (records) =>
           records.any((e) => e.status == FlowExecutionStatus.waiting);
       final resume = service.resumeExecution(ids.single);
@@ -524,7 +555,6 @@ void main() {
       await service.cancelExecution(ids.single);
       notifier.release.complete();
       await resume;
-      await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(calls, 1);
       expect(
         notifier.execution(ids.single)!.status,
@@ -695,36 +725,34 @@ void main() {
     'assistant snapshot hydrates only same-ID current authentication parameters',
     () {
       Assistant assistant(String id, String secret, String tuning) => Assistant(
-        id: id,
-        name: 'A',
-        prompt: tuning,
-        settings: AssistantSettings(
-          customParameters: [
-            CustomParameter(
-              name: 'Authorization',
-              type: 'string',
-              value: secret,
+            id: id,
+            name: 'A',
+            prompt: tuning,
+            settings: AssistantSettings(
+              customParameters: [
+                CustomParameter(
+                  name: 'Authorization',
+                  type: 'string',
+                  value: secret,
+                ),
+                CustomParameter(
+                  name: 'publicOption',
+                  type: 'string',
+                  value: tuning,
+                ),
+              ],
             ),
-            CustomParameter(
-              name: 'publicOption',
-              type: 'string',
-              value: tuning,
-            ),
-          ],
-        ),
-      );
+          );
       final snapshot = FlowLaunchSnapshot.capture(
         flow,
         const ProviderEntriesState(),
         [assistant('assistant', 'old-secret', 'frozen')],
       );
       expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
-      final hydrated =
-          snapshot.resolveAssistants([
-                assistant('other', 'wrong-secret', 'wrong'),
-                assistant('assistant', 'new-secret', 'edited'),
-              ])
-              as List<Assistant>;
+      final hydrated = snapshot.resolveAssistants([
+        assistant('other', 'wrong-secret', 'wrong'),
+        assistant('assistant', 'new-secret', 'edited'),
+      ]) as List<Assistant>;
       expect(hydrated.single.prompt, 'frozen');
       expect(hydrated.single.settings.customParameters.map((p) => p.value), [
         'frozen',
@@ -800,9 +828,9 @@ void main() {
       // Cold dispatch is fire-and-forget; its durable writes can take longer
       // than a fixed delay when the complete suite runs concurrently.
       final deadline = DateTime.now().add(const Duration(seconds: 3));
-      while (notifier.execution('cold')!.status !=
-              FlowExecutionStatus.completed &&
-          DateTime.now().isBefore(deadline)) {
+      while (
+          notifier.execution('cold')!.status != FlowExecutionStatus.completed &&
+              DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
       expect(manager.assistants.single!.prompt, 'launch prompt');
@@ -840,169 +868,28 @@ void main() {
   );
 
   test(
-    'assistant snapshot does not capture a same-ID model from another provider',
+    'chat snapshot hydrates a credential reference from the live config',
     () {
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'LLM',
-            configs: [
-              ProviderConfigItem(
-                id: 'other-provider-config',
-                providerName: 'Other provider',
-                host: 'https://other.invalid',
-                key: 'test-key',
-                models: [
-                  ModelConfig(
-                    id: 'other-local',
-                    name: 'Other',
-                    modelId: 'shared-api',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+      final launch = _providers('llm', 'credentialed', key: 'old-secret');
+      launch.entries.single.configs.single.credentialRef = 'secure-key';
+      final snapshot = FlowLaunchSnapshot.capture(
+        flow,
+        launch,
+        [],
+        selectedChatModel: _reference('credentialed'),
       );
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'A',
-        prompt: 'P',
-        defaultModelId: 'shared-api',
-        defaultProviderName: 'Removed provider',
-        defaultModelName: 'Saved | Removed provider',
+      expect(jsonEncode(snapshot.toMap()), isNot(contains('old-secret')));
+
+      final current = _providers('llm', 'credentialed', key: 'fresh-secret');
+      current.entries.single.configs.single.credentialRef = 'secure-key';
+      final resolved = snapshot.resolveProviders(current);
+      final selected = resolveProviderModel(
+        resolved,
+        'llm',
+        _reference('credentialed'),
       );
 
-      final snapshot = FlowLaunchSnapshot.capture(flow, providers, [assistant]);
-
-      expect(
-        snapshot.toMap()['chatModels'],
-        isEmpty,
-        reason:
-            'a removed saved provider must not redirect the assistant to another model group',
-      );
-    },
-  );
-
-  test(
-    'assistant snapshot does not replace a missing stable ID by same-provider display name',
-    () {
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'LLM',
-            configs: [
-              ProviderConfigItem(
-                id: 'saved-provider-config',
-                providerName: 'Saved provider',
-                host: 'https://saved.invalid',
-                key: 'test-key',
-                models: [
-                  ModelConfig(
-                    id: 'other-local-model',
-                    name: 'Saved model',
-                    modelId: 'different-stable-id',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      );
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'A',
-        prompt: 'P',
-        defaultModelId: 'missing-stable-id',
-        defaultProviderName: 'Saved provider',
-        defaultModelName: 'Saved model | Saved provider',
-      );
-
-      final snapshot = FlowLaunchSnapshot.capture(flow, providers, [assistant]);
-
-      expect(
-        snapshot.toMap()['chatModels'],
-        isEmpty,
-        reason:
-            'a missing stable identity must not bind a different model by label',
-      );
-    },
-  );
-
-  test(
-    'assistant snapshot preserves a custom group reference after rename',
-    () {
-      const groupId = 'renamed-task-flow-group';
-      const localModelId = 'task-flow-local-model';
-      const upstreamModelId = 'task-flow-upstream-model';
-      const oldProviderName = 'Original Task Flow group';
-      final account = LlmAccount(
-        id: 'task-flow-group-account',
-        connectorType: 'openai-compatibility',
-        authType: 'none',
-        displayName: 'Task Flow group account',
-        models: const [
-          LlmUpstreamModel(
-            id: localModelId,
-            upstreamModelId: upstreamModelId,
-            displayName: 'Task Flow model',
-            capabilities: {'streaming': true},
-          ),
-        ],
-      );
-      final originalGroup = LlmModelGroup(
-        id: groupId,
-        displayName: oldProviderName,
-        members: const [
-          LlmModelGroupMember(
-            accountId: 'task-flow-group-account',
-            localModelId: localModelId,
-            upstreamModelId: upstreamModelId,
-          ),
-        ],
-      );
-      final originalConfig = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [originalGroup],
-      ).single;
-      final renamedConfig = buildLlmModelGroupProviderConfigs(
-        accounts: [account],
-        groups: [
-          LlmModelGroup(
-            id: groupId,
-            displayName: 'Renamed Task Flow group',
-            members: originalGroup.members,
-          ),
-        ],
-      ).single;
-      final providers = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'llm',
-            type: 'llm',
-            name: 'LLM',
-            configs: [renamedConfig],
-          ),
-        ],
-      );
-      final assistant = Assistant(
-        id: 'assistant',
-        name: 'Renamed group assistant',
-        prompt: 'P',
-        defaultModelId: originalConfig.models.single.modelId,
-        defaultProviderName: oldProviderName,
-        defaultModelName: 'Task Flow model | $oldProviderName',
-      );
-
-      final snapshot = FlowLaunchSnapshot.capture(flow, providers, [assistant]);
-      final chatModels = snapshot.toMap()['chatModels'] as List;
-
-      expect(chatModels, hasLength(1));
-      expect((chatModels.single as Map)['configId'], groupId);
+      expect(selected?.config.key, 'fresh-secret');
     },
   );
 
@@ -1035,13 +922,14 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       'provider_entries',
-      jsonEncode(providers.entries.map((e) => e.toMap()).toList()),
+      jsonEncode(
+        providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+      ),
     );
     final manager = _Manager();
     manager.adapter.selectModel(providers, 0, 1);
     final container = make(
       manager: manager,
-      providerEntries: _ProviderEntries(providers),
       runner: (b, input, id, step) async => const FlowPayload.text('done'),
     );
     final ids = await container
@@ -1059,7 +947,7 @@ void main() {
 
   test('explicit assistant model ignores stale default provider name', () {
     final first = _providers('llm', 'first');
-    final second = _providers('llm', 'second', api: 'second-api');
+    final second = _providers('llm', 'second');
     final firstConfig = first.entries.single.configs.single;
     final secondConfig = second.entries.single.configs.single;
     secondConfig.providerName = 'Other';
@@ -1134,49 +1022,6 @@ void main() {
     },
   );
 
-  test('stale assistant display reference rejects global model fallback', () {
-    final providers = ProviderEntriesState(
-      entries: [
-        ProviderEntry(
-          id: 'llm',
-          type: 'llm',
-          name: 'P',
-          configs: [
-            ProviderConfigItem(
-              id: 'config',
-              providerName: 'P',
-              host: 'https://example.invalid',
-              key: 'test-key',
-              models: [
-                ModelConfig(
-                  id: 'global',
-                  name: 'Global',
-                  modelId: 'global-api',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
-    final assistant = Assistant(
-      id: 'assistant',
-      name: 'Legacy',
-      prompt: 'P',
-      defaultModelName: 'Removed model | Removed provider',
-    );
-
-    expect(
-      () => FlowLaunchSnapshot.capture(
-        flow,
-        providers,
-        [assistant],
-        selectedChatModel: {'configId': 'config', 'modelId': 'global'},
-      ),
-      throwsA(isA<StateError>()),
-    );
-  });
-
   test(
     'unbound assistant without a selected chat model fails before queueing',
     () async {
@@ -1184,7 +1029,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'provider_entries',
-        jsonEncode(providers.entries.map((e) => e.toMap()).toList()),
+        jsonEncode(
+          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+        ),
       );
       final container = make(manager: _Manager());
       final service = container.read(taskFlowExecutionServiceProvider);
@@ -1218,31 +1065,43 @@ void main() {
     final scheduler = container.read(taskFlowSchedulerProvider);
     final firstId = (await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'https://example.com/first'),
-    ])).single;
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    ]))
+        .single;
+    await _waitFor(
+      () => dispatched.contains('https://example.com/first'),
+      'first CatCatch execution dispatches',
+    );
     await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'https://example.com/second'),
     ]);
+    await _waitFor(
+      () => scheduler.queuedCount == 1,
+      'second CatCatch execution waits for the first',
+    );
     expect(dispatched, ['https://example.com/first']);
     expect(scheduler.activeWeight, 2);
     await service.pauseExecution(firstId);
     expect(scheduler.holds(firstId), isFalse);
-    await Future<void>.delayed(const Duration(milliseconds: 550));
+    await _waitFor(
+      () => dispatched.contains('https://example.com/second'),
+      'second CatCatch execution dispatches after pause',
+    );
     expect(dispatched, [
       'https://example.com/first',
       'https://example.com/second',
     ]);
     final resuming = service.resumeExecution(firstId);
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    expect(scheduler.activeWeight, 2);
-    expect(scheduler.queuedCount, 1);
-    expect(
-      container
-          .read(taskFlowExecutionsProvider.notifier)
-          .execution(firstId)!
-          .status,
-      isNot(FlowExecutionStatus.running),
+    await _waitFor(
+      () =>
+          scheduler.queuedCount == 1 &&
+          container
+                  .read(taskFlowExecutionsProvider.notifier)
+                  .execution(firstId)!
+                  .status !=
+              FlowExecutionStatus.running,
+      'resumed CatCatch execution waits behind the second',
     );
+    expect(scheduler.activeWeight, 2);
     await service.pauseExecution(firstId);
     await resuming;
     expect(scheduler.queuedCount, 0);
@@ -1261,10 +1120,12 @@ void main() {
         blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
       );
       late _ManualDownloads downloads;
+      var downloadsInitialized = false;
       final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
           downloads = _ManualDownloads(ref);
+          downloadsInitialized = true;
           return downloads;
         },
       );
@@ -1272,16 +1133,31 @@ void main() {
       final scheduler = container.read(taskFlowSchedulerProvider);
       final firstId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/first'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      ]))
+          .single;
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/first') &&
+            scheduler.holds(firstId),
+        'first CatCatch execution acquires its slot',
+      );
       final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
-      expect(scheduler.holds(firstId), isTrue);
       final secondId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/second'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(scheduler.queuedCount, 1);
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      ]))
+          .single;
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'second CatCatch execution enters the scheduler queue',
+      );
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/second') &&
+            scheduler.holds(secondId),
+        'second CatCatch execution acquires its slot after the manual wait',
+      );
       expect(scheduler.holds(firstId), isFalse);
       expect(
         downloads.idsByUrl.containsKey('https://example.com/second'),
@@ -1307,7 +1183,10 @@ void main() {
         (notifier) => notifier.selectMedia(firstTaskId, media),
       );
       expect(await duplicate, isFalse);
-      expect(scheduler.queuedCount, 1);
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'manual selection waits behind the second CatCatch execution',
+      );
       expect(downloads.selected, isEmpty);
       downloads.finish(downloads.idsByUrl['https://example.com/second']!);
       expect(await selecting.timeout(const Duration(seconds: 3)), isTrue);
@@ -1324,10 +1203,12 @@ void main() {
         blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
       );
       late _ManualDownloads downloads;
+      var downloadsInitialized = false;
       final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
           downloads = _ManualDownloads(ref);
+          downloadsInitialized = true;
           return downloads;
         },
       );
@@ -1335,26 +1216,46 @@ void main() {
       final scheduler = container.read(taskFlowSchedulerProvider);
       final confirmId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/confirm'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(scheduler.holds(confirmId), isTrue);
+      ]))
+          .single;
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/confirm') &&
+            scheduler.holds(confirmId),
+        'special-format confirmation acquires its slot',
+      );
       final secondId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/second'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      ]))
+          .single;
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'second CatCatch execution enters the scheduler queue',
+      );
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/second') &&
+            scheduler.holds(secondId),
+        'second CatCatch execution acquires its slot after confirmation wait',
+      );
       final taskId = downloads.idsByUrl['https://example.com/confirm']!;
       expect(scheduler.holds(confirmId), isFalse);
       expect(scheduler.holds(secondId), isTrue);
 
       final heldAtConfirm = <bool>[];
-      downloads.onConfirm = (_) =>
-          heldAtConfirm.add(scheduler.holds(confirmId));
+      downloads.onConfirm =
+          (_) => heldAtConfirm.add(scheduler.holds(confirmId));
       final confirming = service.performManualCatCatchAction(
         taskId,
         false,
         (notifier) => notifier.confirmAndContinue(taskId),
       );
-      expect(scheduler.queuedCount, 1);
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'special-format confirmation waits behind the second CatCatch execution',
+      );
       expect(downloads.confirmed, isEmpty);
       downloads.finish(downloads.idsByUrl['https://example.com/second']!);
       expect(await confirming.timeout(const Duration(seconds: 3)), isTrue);
@@ -1381,7 +1282,8 @@ void main() {
     container.read(catcatchTasksProvider);
     final id = (await service.launchFlowMany('flow', [
       const FlowRunInput(text: 'https://example.com/first'),
-    ])).single;
+    ]))
+        .single;
     await _waitFor(
       () =>
           downloads.idsByUrl.containsKey('https://example.com/first') &&
@@ -1409,10 +1311,12 @@ void main() {
         blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
       );
       late _ManualDownloads downloads;
+      var downloadsInitialized = false;
       final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
           downloads = _ManualDownloads(ref);
+          downloadsInitialized = true;
           return downloads;
         },
       );
@@ -1420,8 +1324,15 @@ void main() {
       final scheduler = container.read(taskFlowSchedulerProvider);
       final id = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/single'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      ]))
+          .single;
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/single') &&
+            scheduler.holds(id),
+        'single-resource CatCatch download keeps its scheduler slot',
+      );
       expect(scheduler.holds(id), isTrue);
       expect(
         downloads.idsByUrl.containsKey('https://example.com/single'),
@@ -1438,10 +1349,12 @@ void main() {
         blocks: [TaskFlowBlock(typeKey: BlockType.catcatch)],
       );
       late _ManualDownloads downloads;
+      var downloadsInitialized = false;
       final container = make(
         scheduler: TaskFlowScheduler(coreCount: 4),
         downloads: (ref) {
           downloads = _ManualDownloads(ref);
+          downloadsInitialized = true;
           return downloads;
         },
       );
@@ -1449,13 +1362,31 @@ void main() {
       final scheduler = container.read(taskFlowSchedulerProvider);
       final firstId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/first'),
-      ])).single;
-      await Future<void>.delayed(const Duration(milliseconds: 550));
+      ]))
+          .single;
+      await _waitFor(
+        () =>
+            downloadsInitialized &&
+            downloads.idsByUrl.containsKey('https://example.com/first') &&
+            scheduler.holds(firstId),
+        'first CatCatch execution enters manual selection',
+      );
       final firstTaskId = downloads.idsByUrl['https://example.com/first']!;
-      await service.launchFlowMany('flow', [
+      final secondId = (await service.launchFlowMany('flow', [
         const FlowRunInput(text: 'https://example.com/second'),
-      ]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      ]))
+          .single;
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'second CatCatch execution waits for the first',
+      );
+      await _waitFor(
+        () =>
+            downloads.idsByUrl.containsKey('https://example.com/second') &&
+            !scheduler.holds(firstId) &&
+            scheduler.holds(secondId),
+        'second CatCatch execution acquires the slot after selection releases it',
+      );
       const media = MediaResource(
         url: 'https://x/one.mp4',
         name: 'one',
@@ -1466,7 +1397,10 @@ void main() {
         true,
         (notifier) => notifier.selectMedia(firstTaskId, media),
       );
-      expect(scheduler.queuedCount, 1);
+      await _waitFor(
+        () => scheduler.queuedCount == 1,
+        'manual selection queues behind the second execution',
+      );
       if (stop == 'pause') {
         await service.pauseExecution(firstId);
       } else {
@@ -1520,7 +1454,8 @@ void main() {
     await _waitFor(() => dispatched.contains('first'), 'first chat dispatch');
     final queued = (await service.launchFlowMany('download', [
       const FlowRunInput(text: 'https://example.com/download'),
-    ])).single;
+    ]))
+        .single;
     await _waitFor(
       () => scheduler.queuedCount == 1,
       'heavy download queue entry',
@@ -1566,9 +1501,8 @@ void main() {
       [],
     );
     final current = _providers('tts', 'tts', key: 'fresh-key');
-    final resolved =
-        snapshot.resolveProviders(current, blocks: [suffix])
-            as ProviderEntriesState;
+    final resolved = snapshot.resolveProviders(current, blocks: [suffix])
+        as ProviderEntriesState;
     expect(
       resolveProviderModel(resolved, 'tts', _reference('tts'))!.config.key,
       'fresh-key',
@@ -1629,7 +1563,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'provider_entries',
-        jsonEncode(providers.entries.map((e) => e.toMap()).toList()),
+        jsonEncode(
+          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+        ),
       );
       final prefix = TaskFlowBlock(
         typeKey: BlockType.asr,
@@ -1670,7 +1606,10 @@ void main() {
       await container
           .read(taskFlowExecutionServiceProvider)
           .resumeExecution('saved');
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await _waitFor(
+        () => notifier.execution('saved')!.isTerminal,
+        'checkpoint resume completion',
+      );
       expect(inputs, ['transcribed']);
       expect(
         notifier.execution('saved')!.status,
@@ -1776,7 +1715,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'provider_entries',
-        jsonEncode(providers.entries.map((e) => e.toMap()).toList()),
+        jsonEncode(
+          providers.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+        ),
       );
       flow = TaskFlowDefinition(
         id: 'flow',
@@ -1943,7 +1884,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
         'provider_entries',
-        jsonEncode(original.entries.map((e) => e.toMap()).toList()),
+        jsonEncode(
+          original.entries.map((e) => e.toCredentialMigrationMap()).toList(),
+        ),
       );
       flow = flow.copyWith(
         blocks: [

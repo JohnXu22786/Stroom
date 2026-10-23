@@ -98,9 +98,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (entry.type == 'mcp') {
       final config = entry.configs[configIndex];
-      final typeConfig = config.models.isNotEmpty
-          ? config.models[0].typeConfig
-          : null;
+      final typeConfig =
+          config.models.isNotEmpty ? config.models[0].typeConfig : null;
       if (typeConfig?['isHttpTool'] == true) {
         await _editHttpToolConfig(configIndex);
         return;
@@ -244,9 +243,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       config.typeConfig = Map<String, dynamic>.from(config.typeConfig)
         ..['connectivityTest'] = content;
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -568,9 +565,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     for (var i = 0; i < groupIndices.length; i++) {
       configs[groupIndices[i]] = groupConfigs[i];
     }
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -589,12 +584,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     int groupIndex,
   ) {
     final fullIndex = entry.configs.indexOf(config);
-    final providerName = config.providerName.isNotEmpty
-        ? config.providerName
-        : '（未命名）';
-    final typeConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final providerName =
+        config.providerName.isNotEmpty ? config.providerName : '（未命名）';
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     final isVendor = typeConfig?['isVendor'] as bool? ?? false;
     final isHttpTool = typeConfig?['isHttpTool'] as bool? ?? false;
     final transport = typeConfig?['transport'] as String? ?? 'sse';
@@ -654,8 +647,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final configsByGroup = <String, List<ProviderConfigItem>>{
       for (final group in groups)
         group.id: entry.configs.where((config) {
-          final groupId =
-              config.groupId ??
+          final groupId = config.groupId ??
               defaultMcpGroupIdForProvider(config.providerName);
           return groupId == group.id;
         }).toList(),
@@ -713,16 +705,14 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: _McpGroupHeaderCard(
                   group: group,
-                  itemCount:
-                      (configsByGroup[group.id]?.length ?? 0) +
+                  itemCount: (configsByGroup[group.id]?.length ?? 0) +
                       (group.id == builtinSearchMcpGroupId ? 1 : 0),
                   onEnabledChanged: (value) =>
                       _setMcpGroupEnabled(group, value),
                   onAdd: () => _addConfig(groupId: group.id),
                   onEdit: group.isBuiltin ? null : () => _editMcpGroup(group),
-                  onDelete: group.isBuiltin
-                      ? null
-                      : () => _deleteMcpGroup(group),
+                  onDelete:
+                      group.isBuiltin ? null : () => _deleteMcpGroup(group),
                 ),
               ),
             ),
@@ -754,11 +744,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                   itemCount: configsByGroup[group.id]!.length,
                   onReorderItem: (oldIndex, newIndex) =>
                       _reorderMcpGroupConfigs(
-                        entry,
-                        group.id,
-                        oldIndex,
-                        newIndex,
-                      ),
+                    entry,
+                    group.id,
+                    oldIndex,
+                    newIndex,
+                  ),
                   proxyDecorator: (child, index, animation) => Material(
                     elevation: 2,
                     borderRadius: BorderRadius.circular(12),
@@ -828,67 +818,61 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         !entry.configs.any((config) => config.id == account.id)) {
       return;
     }
-    final configs = entry.configs
-        .map((config) {
-          if (config.id != account.id) return config;
-          final raw = config.toMap()
-            ..['providerName'] = account.displayName
-            ..['connectorType'] = account.connectorType
-            ..['authType'] = account.authType
-            ..['endpointType'] =
-                LlmConnectorRegistry.canonicalId(account.connectorType) ==
-                    'claude'
+    final configs = entry.configs.map((config) {
+      if (config.id != account.id) return config;
+      final raw = config.toMap()
+        ..['providerName'] = account.displayName
+        ..['connectorType'] = account.connectorType
+        ..['authType'] = account.authType
+        ..['endpointType'] =
+            LlmConnectorRegistry.canonicalId(account.connectorType) == 'claude'
                 ? 'anthropic'
                 : 'openai'
-            ..['models'] = account.models.map((model) {
-              final modelConfig = Map<String, dynamic>.from(model.config)
-                ..['id'] = model.id
-                ..['name'] = model.displayName
-                ..['modelId'] = model.upstreamModelId
-                ..['capabilities'] = Map<String, dynamic>.from(
-                  model.capabilities,
-                )
-                // Legacy imports default these two capabilities to true.
-                // Mark account-edited rows so an omitted value stays unknown.
-                ..['accountCapabilitiesEdited'] = true;
-              final streaming = model.capabilities['streaming'];
-              if (streaming is bool) {
-                modelConfig['supportStream'] = streaming;
-              } else {
-                modelConfig.remove('supportStream');
-              }
-              final instruction = model.capabilities['instruction'];
-              if (instruction is bool) {
-                modelConfig['supportInstruction'] = instruction;
-              } else {
-                modelConfig.remove('supportInstruction');
-              }
-              return modelConfig;
-            }).toList();
-          final endpoint =
-              account.endpointConfig['baseUrl'] ??
-              account.endpointConfig['host'] ??
-              account.endpointConfig['apiBase'];
-          raw['host'] = endpoint is String ? endpoint : '';
-          for (final key in const ['baseUrl', 'apiBase']) {
-            final value = account.endpointConfig[key];
-            if (value is String && value.isNotEmpty) {
-              raw[key] = value;
-            } else {
-              raw.remove(key);
-            }
-          }
-          if (account.credentialRef == null) {
-            raw.remove('credentialRef');
+        ..['models'] = account.models.map((model) {
+          final modelConfig = Map<String, dynamic>.from(model.config)
+            ..['id'] = model.id
+            ..['name'] = model.displayName
+            ..['modelId'] = model.upstreamModelId
+            ..['capabilities'] = Map<String, dynamic>.from(
+              model.capabilities,
+            )
+            // Legacy imports default these two capabilities to true.
+            // Mark account-edited rows so an omitted value stays unknown.
+            ..['accountCapabilitiesEdited'] = true;
+          final streaming = model.capabilities['streaming'];
+          if (streaming is bool) {
+            modelConfig['supportStream'] = streaming;
           } else {
-            raw['credentialRef'] = account.credentialRef;
+            modelConfig.remove('supportStream');
           }
-          return ProviderConfigItem.fromMap(raw);
-        })
-        .toList(growable: false);
-    await ref
-        .read(providerEntriesProvider.notifier)
-        .update(
+          final instruction = model.capabilities['instruction'];
+          if (instruction is bool) {
+            modelConfig['supportInstruction'] = instruction;
+          } else {
+            modelConfig.remove('supportInstruction');
+          }
+          return modelConfig;
+        }).toList();
+      final endpoint = account.endpointConfig['baseUrl'] ??
+          account.endpointConfig['host'] ??
+          account.endpointConfig['apiBase'];
+      raw['host'] = endpoint is String ? endpoint : '';
+      for (final key in const ['baseUrl', 'apiBase']) {
+        final value = account.endpointConfig[key];
+        if (value is String && value.isNotEmpty) {
+          raw[key] = value;
+        } else {
+          raw.remove(key);
+        }
+      }
+      if (account.credentialRef == null) {
+        raw.remove('credentialRef');
+      } else {
+        raw['credentialRef'] = account.credentialRef;
+      }
+      return ProviderConfigItem.fromMap(raw);
+    }).toList(growable: false);
+    await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
           ProviderEntry(
             id: entry.id,
@@ -907,9 +891,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (identical(next, state)) return;
     final notifier = ref.read(providerEntriesProvider.notifier);
     for (final updated in next.entries) {
-      final previous = state.entries
-          .where((entry) => entry.id == updated.id)
-          .firstOrNull;
+      final previous =
+          state.entries.where((entry) => entry.id == updated.id).firstOrNull;
       if (previous != null && !identical(previous, updated)) {
         await notifier.update(updated.id, updated);
       }
@@ -1012,9 +995,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
                     providerName: providerName,
                     leadIcon: Icons.dns,
                     iconColor: Colors.teal,
-                    subtitle: config.host.isNotEmpty
-                        ? config.host
-                        : '(未设置 Host)',
+                    subtitle:
+                        config.host.isNotEmpty ? config.host : '(未设置 Host)',
                     apiKeyHint: null,
                     mcpDescription: null,
                     dragHandle: ReorderableDragStartListener(
@@ -1064,16 +1046,16 @@ class _McpPageIntro extends StatelessWidget {
               Text(
                 '服务与工具',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface,
-                ),
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
               ),
               const SizedBox(height: 4),
               Text(
                 '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
@@ -1112,9 +1094,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      ),
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1130,9 +1112,9 @@ class _McpSectionHeader extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                 ],
@@ -1176,9 +1158,9 @@ class _McpEmptyState extends StatelessWidget {
           Text(
             '还没有服务配置',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: cs.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1255,9 +1237,8 @@ class _McpConfigCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
     final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
@@ -1589,9 +1570,8 @@ class _McpMasterSwitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color backgroundColor = isDark
-        ? cs.surfaceContainerHigh
-        : cs.surfaceContainerLow;
+    final Color backgroundColor =
+        isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
 
     return Container(
       decoration: BoxDecoration(
@@ -1635,7 +1615,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 'MCP 服务器',
-                                style: Theme.of(context).textTheme.titleSmall
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
                                     ?.copyWith(
                                       color: cs.onSurface,
                                       fontWeight: FontWeight.w700,
@@ -1649,7 +1631,9 @@ class _McpMasterSwitchCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           '控制 MCP 服务器与内置搜索工具在助手和对话中的可用性。',
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
@@ -1684,9 +1668,9 @@ class _McpStatusLabel extends StatelessWidget {
       child: Text(
         enabled ? '已启用' : '已停用',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: enabled ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
-        ),
+              color: enabled ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }

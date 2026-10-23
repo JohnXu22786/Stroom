@@ -68,9 +68,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   @override
   Map<String, dynamic> get defaultHeaders => const {
-    'Content-Type': 'application/json',
-    'Accept': 'text/event-stream',
-  };
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      };
 
   @override
   Future<String> chat(
@@ -110,6 +110,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             onRequestSent: progress.markRequestSent,
           );
           _lastResponseStatusCode = response.statusCode;
+          _lastResponseHeaders = response.headers;
           final result = _readCompletion(response.body);
           _lastResponseData = result.data;
           _lastUsage = result.usage;
@@ -122,6 +123,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           );
           return result.text;
         } on LlmConnectorHttpException catch (error) {
+          _captureResponseFailure(error);
           throw LlmRouteRequestException(
             statusCode: error.statusCode,
             code: error.code,
@@ -190,6 +192,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 onRequestSent: progress.markRequestSent,
               );
               _lastResponseStatusCode = response.statusCode;
+              _lastResponseHeaders = response.headers;
               final eventStream = await _parseStream(
                 response,
                 progress,
@@ -204,6 +207,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 controller.add(event);
               }
             } on LlmConnectorHttpException catch (error) {
+              _captureResponseFailure(error);
               throw LlmRouteRequestException(
                 statusCode: error.statusCode,
                 code: error.code,
@@ -276,8 +280,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (endpointType == 'anthropic') {
       final thinking = extraParams?['thinking'];
       final thinkingType = thinking is Map ? thinking['type'] : null;
-      final extendedThinking =
-          thinkingType is String &&
+      final extendedThinking = thinkingType is String &&
           const {
             'enabled',
             'adaptive',
@@ -298,8 +301,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     return {
       'messages': messages,
-      'max_tokens': ?maxTokens,
-      'temperature': ?temperature,
+      if (maxTokens != null) 'max_tokens': maxTokens,
+      if (temperature != null) 'temperature': temperature,
       'stream': stream,
       if (tools != null && tools.isNotEmpty) 'tools': tools,
       ...?extraParams,
@@ -313,8 +316,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     required bool stream,
   }) {
     _lastRequestBody = body;
-    final baseUrl =
-        account.endpointConfig['baseUrl'] ??
+    final baseUrl = account.endpointConfig['baseUrl'] ??
         account.endpointConfig['host'] ??
         account.endpointConfig['apiBase'];
     _lastRequestUrl = baseUrl is String ? baseUrl : null;
@@ -328,6 +330,13 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     _lastResponseStatusCode = null;
     _lastResponseHeaders = null;
     _lastUsage = null;
+  }
+
+  void _captureResponseFailure(LlmConnectorHttpException error) {
+    _lastResponseStatusCode = error.statusCode;
+    _lastResponseHeaders = {
+      for (final entry in error.headers.entries) entry.key: [entry.value],
+    };
   }
 
   Future<Stream<AIStreamEvent>> _parseStream(
@@ -350,46 +359,54 @@ class LlmRoutedChatProvider extends BaseChatProvider {
           final trimmedPayload = payload.trim();
           if (trimmedPayload.isEmpty) continue;
           if (trimmedPayload == '[DONE]') break;
-          final decoded = jsonDecode(payload);
-          if (decoded is! Map) continue;
-          final data = Map<String, dynamic>.from(decoded);
-          _lastResponseData = data;
-          if (endpointType == 'anthropic') {
-            if (data['type'] == 'error') {
-              throw _streamRequestError(data['error']);
-            }
-            if (data['type'] == 'message_start') {
-              final rawUsage = (data['message'] as Map?)?['usage'];
-              if (rawUsage is Map) {
-                AnthropicChatProvider.mergeAnthropicUsage(usage, rawUsage);
+          try {
+            final decoded = jsonDecode(payload);
+            if (decoded is! Map) continue;
+            final data = Map<String, dynamic>.from(decoded);
+            _lastResponseData = data;
+            if (endpointType == 'anthropic') {
+              if (data['type'] == 'error') {
+                throw _streamRequestError(data['error']);
               }
-            } else if (data['type'] == 'message_delta' &&
-                data['usage'] is Map) {
-              AnthropicChatProvider.mergeAnthropicUsage(
-                usage,
-                data['usage'] as Map,
+              if (data['type'] == 'message_start') {
+                final rawUsage = (data['message'] as Map?)?['usage'];
+                if (rawUsage is Map) {
+                  AnthropicChatProvider.mergeAnthropicUsage(usage, rawUsage);
+                }
+              } else if (data['type'] == 'message_delta' &&
+                  data['usage'] is Map) {
+                AnthropicChatProvider.mergeAnthropicUsage(
+                  usage,
+                  data['usage'] as Map,
+                );
+              }
+              for (final event in processAnthropicStreamData(
+                data,
+                anthropicAccumulator,
+              )) {
+                parsedEvents.add(event);
+              }
+            } else {
+              final apiError = data['error'];
+              if (apiError is Map) throw _streamRequestError(apiError);
+              OpenAICompatibleChatProvider.throwIfApiError(data);
+              final chunkUsage = OpenAICompatibleChatProvider.normalizeUsage(
+                data['usage'],
               );
+              if (chunkUsage != null) usage.addAll(chunkUsage);
+              for (final event in OpenAICompatibleChatProvider.parseStreamEvent(
+                data,
+              )) {
+                parsedEvents.add(event);
+              }
+              _accumulateOpenAIToolCalls(data, toolsByIndex);
             }
-            for (final event in processAnthropicStreamData(
-              data,
-              anthropicAccumulator,
-            )) {
-              parsedEvents.add(event);
+          } catch (error) {
+            if (endpointType != 'anthropic' &&
+                (error is FormatException || error is TypeError)) {
+              continue;
             }
-          } else {
-            final apiError = data['error'];
-            if (apiError is Map) throw _streamRequestError(apiError);
-            OpenAICompatibleChatProvider.throwIfApiError(data);
-            final chunkUsage = OpenAICompatibleChatProvider.normalizeUsage(
-              data['usage'],
-            );
-            if (chunkUsage != null) usage.addAll(chunkUsage);
-            for (final event in OpenAICompatibleChatProvider.parseStreamEvent(
-              data,
-            )) {
-              parsedEvents.add(event);
-            }
-            _accumulateOpenAIToolCalls(data, toolsByIndex);
+            rethrow;
           }
         }
         final connectorObservation = await response.completedObservation;
@@ -469,11 +486,11 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       final blocks = data['content'];
       final text = blocks is List
           ? blocks
-                .whereType<Map>()
-                .where((block) => block['type'] == 'text')
-                .map((block) => block['text'])
-                .whereType<String>()
-                .join()
+              .whereType<Map>()
+              .where((block) => block['type'] == 'text')
+              .map((block) => block['text'])
+              .whereType<String>()
+              .join()
           : '';
       if (text.trim().isEmpty) throw const LlmConnectorHttpException();
       final usage = <String, dynamic>{};
@@ -603,9 +620,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
       if (call['type'] is String) entry['type'] = call['type'];
       final function = call['function'];
       if (function is! Map) continue;
-      final target =
-          entry.putIfAbsent('function', () => <String, dynamic>{})
-              as Map<String, dynamic>;
+      final target = entry.putIfAbsent('function', () => <String, dynamic>{})
+          as Map<String, dynamic>;
       if (function['name'] is String) target['name'] = function['name'];
       if (function['arguments'] is String) {
         target['arguments'] =
@@ -647,9 +663,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static LlmRouteRequestException _streamRequestError(Object? apiError) {
-    final rawCode = apiError is Map
-        ? apiError['code'] ?? apiError['type']
-        : null;
+    final rawCode =
+        apiError is Map ? apiError['code'] ?? apiError['type'] : null;
     return LlmRouteRequestException(code: rawCode is String ? rawCode : null);
   }
 }

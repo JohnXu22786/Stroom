@@ -55,7 +55,12 @@ void main() {
             ],
           ),
         );
-        final connector = _FakeConnectorClient(accounts);
+        final connector = _FakeConnectorClient(
+          accounts,
+          responseHeaders: const {
+            'x-request-id': ['request-123']
+          },
+        );
         final runtime = LlmChatRoutingRuntime(
           accountService: accounts,
           routingService: LlmRoutingService(
@@ -80,9 +85,86 @@ void main() {
         );
 
         expect(connector.requestBody?['model'], upstreamModelId);
+        expect(provider.lastResponseHeaders, {
+          'x-request-id': ['request-123'],
+        });
       },
     );
   }
+
+  test('routed HTTP failures preserve response metadata for diagnostics',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'diagnostic-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Diagnostic account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'diagnostic-model',
+            upstreamModelId: 'gpt-diagnostic',
+            displayName: 'Diagnostic model',
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'diagnostic-group',
+        displayName: 'Diagnostic group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'diagnostic-account',
+            localModelId: 'diagnostic-model',
+            upstreamModelId: 'gpt-diagnostic',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      firstRequestError: const _HttpExceptionWithHeaders(
+        statusCode: 429,
+        code: 'rate_limited',
+        headers: {'retry-after': '3'},
+      ),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'diagnostic-group',
+      localModelId: 'diagnostic-model',
+      endpointType: 'openai',
+    );
+
+    await expectLater(
+      provider.chat(const [
+        {'role': 'user', 'content': 'hello'},
+      ]),
+      throwsA(isA<LlmRoutingUnavailableException>()),
+    );
+
+    expect(provider.lastResponseStatusCode, 429);
+    expect(provider.lastResponseHeaders, {
+      'retry-after': ['3']
+    });
+  });
 
   for (final (connectorType, endpointType, errorStream) in [
     (
@@ -147,9 +229,9 @@ void main() {
         );
         final successStream = endpointType == 'anthropic'
             ? 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fallback"}}\n\n'
-                  'data: {"type":"message_stop"}\n\n'
+                'data: {"type":"message_stop"}\n\n'
             : 'data: {"choices":[{"delta":{"content":"fallback"},"finish_reason":null}]}\n\n'
-                  'data: [DONE]\n\n';
+                'data: [DONE]\n\n';
         final connector = _FakeConnectorClient(
           accounts,
           streamBodies: [
@@ -809,7 +891,8 @@ void main() {
     expect(connector.requestBody?['model'], 'gpt-unknown');
   });
 
-  test('streaming chat only selects members with streaming capability', () async {
+  test('streaming chat only selects members with streaming capability',
+      () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -887,6 +970,77 @@ void main() {
 
     expect(connector.requestedAccountIds, ['stream-account']);
     expect(connector.requestBody?['model'], 'gpt-stream');
+  });
+
+  test('streaming chat skips malformed OpenAI frames and keeps valid output',
+      () async {
+    final preferences = _MemoryPreferences();
+    final accounts = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await accounts.saveAccount(
+      LlmAccount(
+        id: 'malformed-stream-account',
+        connectorType: 'openai-compatibility',
+        authType: 'none',
+        displayName: 'Malformed stream account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'malformed-stream-model',
+            upstreamModelId: 'gpt-malformed-stream',
+            displayName: 'Malformed stream model',
+            capabilities: {'streaming': true},
+          ),
+        ],
+      ),
+    );
+    await accounts.saveModelGroup(
+      LlmModelGroup(
+        id: 'malformed-stream-group',
+        displayName: 'Malformed stream group',
+        members: const [
+          LlmModelGroupMember(
+            accountId: 'malformed-stream-account',
+            localModelId: 'malformed-stream-model',
+            upstreamModelId: 'gpt-malformed-stream',
+          ),
+        ],
+      ),
+    );
+    final connector = _FakeConnectorClient(
+      accounts,
+      streamBody: Stream<List<int>>.value(
+        utf8.encode(
+          'data: {malformed json}\n\n'
+          'data: {"choices":[{"delta":{"content":"survives"},"finish_reason":null}]}\n\n'
+          'data: [DONE]\n\n',
+        ),
+      ),
+    );
+    final provider = LlmRoutedChatProvider(
+      runtime: Future.value(
+        LlmChatRoutingRuntime(
+          accountService: accounts,
+          routingService: LlmRoutingService(
+            accountService: accounts,
+            stateStore: LlmRoutingStateStore(preferences: preferences),
+            concurrency: LlmConcurrencyReservations(),
+          ),
+          connectorClient: connector,
+        ),
+      ),
+      groupId: 'malformed-stream-group',
+      localModelId: 'malformed-stream-model',
+      endpointType: 'openai',
+    );
+
+    final events = await provider.chatStream(const [
+      {'role': 'user', 'content': 'hello'},
+    ]).toList();
+
+    expect(events.map((event) => event.text).join(), 'survives');
   });
 
   for (final (contentType, connectorType, endpointType, contentBlock) in [
@@ -995,7 +1149,8 @@ void main() {
     });
   }
 
-  test('records response cost alongside connector token observations', () async {
+  test('records response cost alongside connector token observations',
+      () async {
     final preferences = _MemoryPreferences();
     final accounts = LlmAccountConnectorService(
       preferences: preferences,
@@ -1097,12 +1252,9 @@ void main() {
     expect(measurements.where((item) => item.unit == 'usd').single.value, 0.03);
 
     Map<String, dynamic> storedAccountRecord() {
-      final envelope =
-          jsonDecode(
-                preferences.values[LlmAccountMigrationService
-                    .accountsPreferenceKey]!,
-              )
-              as Map;
+      final envelope = jsonDecode(
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+      ) as Map;
       return Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -1218,12 +1370,9 @@ void main() {
         {'role': 'user', 'content': 'hello'},
       ]).toList();
 
-      final envelope =
-          jsonDecode(
-                preferences.values[LlmAccountMigrationService
-                    .accountsPreferenceKey]!,
-              )
-              as Map;
+      final envelope = jsonDecode(
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+      ) as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -1338,12 +1487,9 @@ void main() {
         ),
       );
 
-      final envelope =
-          jsonDecode(
-                preferences.values[LlmAccountMigrationService
-                    .accountsPreferenceKey]!,
-              )
-              as Map;
+      final envelope = jsonDecode(
+        preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+      ) as Map;
       final savedAccount = Map<String, dynamic>.from(
         (envelope['items'] as List).single as Map,
       );
@@ -1365,17 +1511,19 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
     LlmAccountConnectorService accountService, {
     this.responseBody,
     this.responseBodies,
+    this.responseHeaders = const {},
     this.streamBody,
     this.streamBodies,
     LlmConnectorObservation? observation,
     this.completionObservation,
     this.failFirstRequestBeforeSend = false,
     this.firstRequestError,
-  }) : observation = observation ?? LlmConnectorObservation(),
-       super(accountService: accountService);
+  })  : observation = observation ?? LlmConnectorObservation(),
+        super(accountService: accountService);
 
   final Object? responseBody;
   final List<Object?>? responseBodies;
+  final Map<String, List<String>> responseHeaders;
   final Object? streamBody;
   final List<Object?>? streamBodies;
   final LlmConnectorObservation observation;
@@ -1413,22 +1561,23 @@ class _FakeConnectorClient extends LlmConnectorHttpClient {
         : streamBodies![requestedAccountIds.length - 1];
     final response = responseBodies == null
         ? responseBody ??
-              (account.connectorType == 'claude'
-                  ? {
-                      'content': [
-                        {'type': 'text', 'text': 'ok'},
-                      ],
-                    }
-                  : {
-                      'choices': [
-                        {
-                          'message': {'content': 'ok'},
-                        },
-                      ],
-                    })
+            (account.connectorType == 'claude'
+                ? {
+                    'content': [
+                      {'type': 'text', 'text': 'ok'},
+                    ],
+                  }
+                : {
+                    'choices': [
+                      {
+                        'message': {'content': 'ok'},
+                      },
+                    ],
+                  })
         : responseBodies![requestedAccountIds.length - 1];
     return LlmConnectorResponse(
       statusCode: 200,
+      headers: responseHeaders,
       body: stream ? requestStreamBody : response,
       observation: observation,
       completedObservation: stream ? completionObservation : null,
