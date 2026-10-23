@@ -13,6 +13,7 @@ import 'llm_connector_service.dart';
 /// explicitly supported observation.
 class LlmConnectorResponse {
   final int statusCode;
+  final Map<String, List<String>> headers;
   final Object? body;
   final LlmConnectorObservation observation;
   final Future<LlmConnectorObservation>? completedObservation;
@@ -21,6 +22,7 @@ class LlmConnectorResponse {
     required this.statusCode,
     required this.body,
     required this.observation,
+    this.headers = const {},
     this.completedObservation,
   });
 }
@@ -57,10 +59,44 @@ class LlmConnectorHttpClient {
     bool stream = false,
     String? nativeFormat,
     CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    Future<void> Function()? onRequestSent,
+    Duration? connectTimeout,
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
   }) async {
     if (cancelToken?.isCancelled ?? false) {
       throw const LlmConnectorRequestCancelled();
     }
+    var requestSentMarkerStarted = false;
+    Future<void>? requestSentMarker;
+    var requestSentMarkerFailed = false;
+    void markRequestSent() {
+      if (requestSentMarkerStarted) return;
+      requestSentMarkerStarted = true;
+      requestSentMarker = Future<void>.sync(() async {
+        await onRequestSent?.call();
+      }).then<void>(
+        (_) {},
+        onError: (Object _, StackTrace __) {
+          requestSentMarkerFailed = true;
+        },
+      );
+    }
+
+    Future<void> waitForRequestSentMarker() async {
+      final marker = requestSentMarker;
+      if (marker != null) await marker;
+      if (requestSentMarkerFailed) {
+        throw const LlmConnectorHttpException();
+      }
+    }
+
+    void reportSendProgress(int sent, int total) {
+      if (sent > 0) markRequestSent();
+      onSendProgress?.call(sent, total);
+    }
+
     if (modelId.trim().isEmpty) {
       throw const LlmConnectorHttpException();
     }
@@ -86,6 +122,7 @@ class LlmConnectorHttpClient {
       }
     }
     if (storedAccount.connectorType == 'aistudio') {
+      final requestCancelToken = _requestCancelToken(cancelToken);
       final prepared = _requestBuilder.build(
         account: storedAccount,
         credential: null,
@@ -98,13 +135,23 @@ class LlmConnectorHttpClient {
         final response = await _aiStudioWebViewSessionBridge.execute(
           storedAccount.id,
           prepared,
-          cancelToken: cancelToken,
+          cancelToken: requestCancelToken,
         );
+        markRequestSent();
+        await waitForRequestSentMarker();
         if (response.statusCode == 401) {
           throw const LlmConnectorAuthenticationRequired();
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw LlmConnectorHttpException(statusCode: response.statusCode);
+          throw await _failureFromResponse(
+            response.statusCode,
+            response.headers,
+            stream ? response.stream : response.body,
+            discardBody: stream,
+            onErrorBodyLimitReached: () {
+              requestCancelToken.cancel('Error response body limit reached');
+            },
+          );
         }
         final headerObservation = parseLlmConnectorHeaderObservation(
           storedAccount.connectorType,
@@ -121,6 +168,7 @@ class LlmConnectorHttpClient {
           );
           return LlmConnectorResponse(
             statusCode: response.statusCode,
+            headers: response.headers,
             body: chunks,
             observation: headerObservation,
             completedObservation: completed.future,
@@ -144,6 +192,7 @@ class LlmConnectorHttpClient {
               );
         return LlmConnectorResponse(
           statusCode: response.statusCode,
+          headers: response.headers,
           body: decoded,
           observation: mergeLlmConnectorObservations(
             headerObservation,
@@ -170,6 +219,7 @@ class LlmConnectorHttpClient {
     var didPrepareCredential = false;
     var didRetry = false;
     while (true) {
+      final requestCancelToken = _requestCancelToken(cancelToken);
       final credential = await accountService.readCredential(storedAccount.id);
       if (!didPrepareCredential &&
           _needsInitialCredentialRefresh(storedAccount, credential)) {
@@ -203,12 +253,6 @@ class LlmConnectorHttpClient {
       } catch (_) {
         throw const LlmConnectorHttpException();
       }
-      final requestCancelToken = CancelToken();
-      if (cancelToken != null) {
-        unawaited(
-          cancelToken.whenCancel.then(requestCancelToken.cancel),
-        );
-      }
       try {
         final response = await _dio.requestUri<Object?>(
           prepared.uri,
@@ -216,38 +260,51 @@ class LlmConnectorHttpClient {
           options: Options(
             method: prepared.method,
             headers: prepared.headers,
-            responseType: stream ? ResponseType.stream : ResponseType.bytes,
+            // Keep the response streamed until its status is known so an
+            // oversized error body can be cancelled before Dio buffers it.
+            responseType: ResponseType.stream,
             validateStatus: (status) => status != null,
+            connectTimeout: connectTimeout,
+            sendTimeout: sendTimeout,
+            receiveTimeout: receiveTimeout,
           ),
           cancelToken: requestCancelToken,
+          onSendProgress: reportSendProgress,
         );
+        // A response confirms dispatch, including when Dio did not report an
+        // upload callback (for example, an empty request body).
+        markRequestSent();
+        await waitForRequestSentMarker();
         final status = response.statusCode ?? 0;
-        if (status == 401 && !didRetry && _canRefresh(storedAccount)) {
-          if (stream && response.data is ResponseBody) {
-            requestCancelToken.cancel('Discarding unauthorized response body.');
-          }
-          didRetry = true;
-          try {
-            if (await accountService.refreshCredential(
-              storedAccount,
-              cancelToken: cancelToken,
-            )) {
-              continue;
-            }
-          } on DioException catch (error) {
-            if (CancelToken.isCancel(error)) {
-              throw const LlmConnectorRequestCancelled();
-            }
-            throw const LlmConnectorHttpException(statusCode: 401);
-          } catch (_) {
-            throw const LlmConnectorHttpException(statusCode: 401);
-          }
-        }
         if (status < 200 || status >= 300) {
-          if (stream && response.data is ResponseBody) {
-            requestCancelToken.cancel('Discarding error response body.');
+          final failure = await _failureFromResponse(
+            status,
+            response.headers.map,
+            response.data,
+            discardBody: stream,
+            onErrorBodyLimitReached: () {
+              requestCancelToken.cancel('Error response body limit reached');
+            },
+          );
+          if (status == 401 && !didRetry && _canRefresh(storedAccount)) {
+            didRetry = true;
+            try {
+              if (await accountService.refreshCredential(
+                storedAccount,
+                cancelToken: cancelToken,
+              )) {
+                continue;
+              }
+            } on DioException catch (error) {
+              if (CancelToken.isCancel(error)) {
+                throw const LlmConnectorRequestCancelled();
+              }
+            } catch (_) {
+              // Preserve the authentication response's safe classification
+              // data when credential refresh itself cannot complete.
+            }
           }
-          throw LlmConnectorHttpException(statusCode: status);
+          throw failure;
         }
         final headerObservation = parseLlmConnectorHeaderObservation(
           storedAccount.connectorType,
@@ -264,16 +321,23 @@ class LlmConnectorHttpClient {
             source,
             headerObservation,
             completed,
-            requestCancelToken: requestCancelToken,
           );
           return LlmConnectorResponse(
             statusCode: status,
+            headers: response.headers.map,
             body: chunks,
             observation: headerObservation,
             completedObservation: completed.future,
           );
         }
-        final decoded = _decodeResponseBody(response.data);
+        final responseData = response.data;
+        final decoded = _decodeResponseBody(
+          responseData is ResponseBody
+              ? await _readResponseStream(responseData.stream)
+              : responseData is Stream<List<int>>
+                  ? await _readResponseStream(responseData)
+                  : responseData,
+        );
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
                 parseLlmConnectorObservation(
@@ -291,6 +355,7 @@ class LlmConnectorHttpClient {
               );
         return LlmConnectorResponse(
           statusCode: status,
+          headers: response.headers.map,
           body: decoded,
           observation: mergeLlmConnectorObservations(
             headerObservation,
@@ -299,12 +364,20 @@ class LlmConnectorHttpClient {
         );
       } on LlmConnectorHttpException {
         rethrow;
+      } on LlmConnectorRequestCancelled {
+        rethrow;
       } on DioException catch (error) {
+        if (error.response != null) markRequestSent();
+        await waitForRequestSentMarker();
         if (CancelToken.isCancel(error)) {
           throw const LlmConnectorRequestCancelled();
         }
+        if (_isConnectionFailure(error)) {
+          throw const LlmConnectorHttpException(code: 'connection_error');
+        }
         throw const LlmConnectorHttpException();
       } catch (_) {
+        await waitForRequestSentMarker();
         throw const LlmConnectorHttpException();
       }
     }
@@ -318,12 +391,32 @@ class LlmConnectorHttpClient {
                 account.authType == 'service_account'));
   }
 
+  static bool _isConnectionFailure(DioException error) =>
+      error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.sendTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.connectionError;
+
+  static CancelToken _requestCancelToken(CancelToken? parent) {
+    final requestToken = CancelToken();
+    if (parent == null) return requestToken;
+    if (parent.isCancelled) {
+      requestToken.cancel(parent.cancelError);
+      return requestToken;
+    }
+    final requestTokenReference = WeakReference(requestToken);
+    parent.whenCancel.then((error) {
+      requestTokenReference.target?.cancel(error);
+    });
+    return requestToken;
+  }
+
   static Stream<List<int>> _observeResponseStream(
-      String connectorType,
-      Stream<List<int>> source,
-      LlmConnectorObservation initialObservation,
-      Completer<LlmConnectorObservation> completed,
-      {CancelToken? requestCancelToken}) async* {
+    String connectorType,
+    Stream<List<int>> source,
+    LlmConnectorObservation initialObservation,
+    Completer<LlmConnectorObservation> completed,
+  ) async* {
     var observation = initialObservation;
     var partialLine = '';
     final dataLines = <String>[];
@@ -432,11 +525,13 @@ class LlmConnectorHttpClient {
       if (CancelToken.isCancel(error)) {
         throw const LlmConnectorRequestCancelled();
       }
+      if (_isConnectionFailure(error)) {
+        throw const LlmConnectorHttpException(code: 'connection_error');
+      }
       throw const LlmConnectorHttpException();
     } catch (_) {
       throw const LlmConnectorHttpException();
     } finally {
-      requestCancelToken?.cancel('Response stream closed.');
       if (!completed.isCompleted) completed.complete(observation);
     }
   }
@@ -508,6 +603,130 @@ class LlmConnectorHttpClient {
     if (data is List) return data;
     return data;
   }
+
+  static Future<Uint8List> _readResponseStream(Stream<List<int>> stream) async {
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in stream) {
+      bytes.add(chunk);
+    }
+    return bytes.takeBytes();
+  }
+
+  static const _classificationHeaderNames = {
+    'retry-after',
+    'x-ratelimit-reset',
+    'x-rate-limit-reset',
+    'x-quota-reset',
+    'x-reset-at',
+  };
+
+  static Future<LlmConnectorHttpException> _failureFromResponse(
+    int statusCode,
+    Map<String, List<String>> headers,
+    Object? body, {
+    bool discardBody = false,
+    void Function()? onErrorBodyLimitReached,
+  }) async {
+    final safeHeaders = <String, String>{};
+    for (final entry in headers.entries) {
+      final name = entry.key.toLowerCase();
+      if (!_classificationHeaderNames.contains(name) || entry.value.isEmpty) {
+        continue;
+      }
+      final value = entry.value.first.trim();
+      if (value.isEmpty ||
+          value.length > 256 ||
+          value.contains(RegExp(r'[\x00-\x1f\x7f]'))) {
+        continue;
+      }
+      safeHeaders[name] = value;
+    }
+
+    Object? decodedBody;
+    try {
+      if (discardBody) {
+        onErrorBodyLimitReached?.call();
+      } else {
+        decodedBody = await _readFailureBody(
+          body,
+        );
+      }
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) {
+        throw const LlmConnectorRequestCancelled();
+      }
+      // Status and allowlisted headers still classify the request if the
+      // upstream error body is malformed or its stream fails while draining.
+    } catch (_) {
+      // Status and allowlisted headers still classify the request if the
+      // upstream error body is malformed or its stream fails while draining.
+    }
+
+    return LlmConnectorHttpException(
+      statusCode: statusCode,
+      code: _errorCode(decodedBody),
+      headers: Map.unmodifiable(safeHeaders),
+    );
+  }
+
+  static Future<Object?> _readFailureBody(
+    Object? body,
+  ) async {
+    if (body is ResponseBody) {
+      return _decodeResponseBody(
+        await _readBoundedFailureStream(body.stream),
+      );
+    }
+    if (body is Stream<List<int>>) {
+      return _decodeResponseBody(await _readBoundedFailureStream(body));
+    }
+    return _decodeResponseBody(body);
+  }
+
+  static Future<Uint8List> _readBoundedFailureStream(
+    Stream<List<int>> stream,
+  ) async {
+    const maxErrorBodyBytes = 32768;
+    final bytes = BytesBuilder(copy: false);
+    var retained = 0;
+    final iterator = StreamIterator<List<int>>(stream);
+    try {
+      while (await iterator.moveNext()) {
+        final chunk = iterator.current;
+        final available = maxErrorBodyBytes - retained;
+        if (available <= 0) break;
+        final take = chunk.length < available ? chunk.length : available;
+        bytes.add(take == chunk.length ? chunk : chunk.sublist(0, take));
+        retained += take;
+        if (retained >= maxErrorBodyBytes) {
+          break;
+        }
+      }
+    } finally {
+      // Wait for cancellation to reach the adapter before releasing the
+      // routed request and its concurrency reservation.
+      await iterator.cancel();
+    }
+    return bytes.takeBytes();
+  }
+
+  static String? _errorCode(Object? body) {
+    if (body is! Map) return null;
+    final error = body['error'];
+    final candidates = [
+      if (error is Map) error['code'],
+      if (error is Map) error['type'],
+      body['code'],
+      body['type'],
+    ];
+    final codePattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$');
+    for (final candidate in candidates) {
+      if (candidate is! String) continue;
+      final code = candidate.trim();
+      if (codePattern.hasMatch(code)) return code;
+    }
+    return null;
+  }
 }
 
 /// Safe failure that never forwards the upstream error body or transport
@@ -515,7 +734,18 @@ class LlmConnectorHttpClient {
 class LlmConnectorHttpException implements Exception {
   final int? statusCode;
 
-  const LlmConnectorHttpException({this.statusCode});
+  /// Stable classification hint; raw transport messages are never exposed.
+  final String? code;
+
+  /// Allowlisted classification headers; arbitrary upstream headers are never
+  /// forwarded into routing state.
+  final Map<String, String> headers;
+
+  const LlmConnectorHttpException({
+    this.statusCode,
+    this.code,
+    this.headers = const {},
+  });
 
   @override
   String toString() => statusCode == null

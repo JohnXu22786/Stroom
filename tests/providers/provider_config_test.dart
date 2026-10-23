@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/provider_config_detail_page.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/llm_account_migration_service.dart';
 
 // ===========================================================================
 // Helpers (from provider_config_asr_test.dart)
@@ -337,6 +338,70 @@ void main() {
   // 5. ProviderEntriesNotifier - ASR entry loading
   // =================================================================
   group('ProviderEntriesNotifier - ASR entry loading', () {
+    test(
+        'keeps saved provider entries readable when group preferences are malformed',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'provider_entries': _savedDataWithoutAsr(),
+        LlmAccountMigrationService.modelGroupsPreferenceKey: '{malformed',
+      });
+      final container = ProviderContainer(
+        overrides: [
+          providerEntriesProvider.overrideWith(
+            (ref) => ProviderEntriesNotifier(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(providerEntriesProvider.notifier).load();
+
+      final state = container.read(providerEntriesProvider);
+      expect(state.isLoaded, isTrue);
+      expect(state.entries.any((entry) => entry.id == 'builtin_llm'), isTrue);
+      expect(state.entries.any((entry) => entry.id == 'builtin_ocr'), isTrue);
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
+    });
+
+    test('provider edits preserve unavailable model-group catalog state',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final entry = ProviderEntry(
+        id: 'legacy-llm',
+        type: 'llm',
+        name: 'LLM供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Legacy OpenAI',
+            host: 'https://legacy.example.test/v1',
+          ),
+        ],
+      );
+      final notifier = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [entry],
+          llmModelGroupCatalogUnavailable: true,
+        );
+      final container = ProviderContainer(
+        overrides: [providerEntriesProvider.overrideWith((ref) => notifier)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(providerEntriesProvider.notifier).update(
+            entry.id,
+            ProviderEntry(
+              id: entry.id,
+              type: entry.type,
+              name: 'Edited LLM供应商',
+              configs: entry.configs,
+            ),
+          );
+
+      final state = container.read(providerEntriesProvider);
+      expect(state.entries.single.name, 'Edited LLM供应商');
+      expect(state.llmModelGroupCatalogUnavailable, isTrue);
+    });
+
     test('default entries include ASR when no saved data', () async {
       SharedPreferences.setMockInitialValues({});
       final container = ProviderContainer(

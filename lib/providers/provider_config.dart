@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mcp.dart';
 import '../models/mcp_provider_group.dart';
+import '../models/llm_account.dart';
 import '../models/tts_models.dart';
 import '../services/llm_account_migration_service.dart';
+import '../services/llm_model_group_provider.dart';
 import '../services/llm_credential_store.dart';
 import '../services/provider_model_migration.dart';
 import '../services/data_migration_service.dart';
@@ -41,12 +43,67 @@ class ProviderEntriesState {
 
   /// False only while the notifier is reading and migrating persisted entries.
   final bool isLoaded;
+  final bool llmCredentialMigrationUnavailable;
+  final bool llmModelGroupCatalogUnavailable;
 
   const ProviderEntriesState({
     this.entries = const [],
     this.mcpGroups = builtinMcpProviderGroups,
     this.isLoaded = true,
+    this.llmCredentialMigrationUnavailable = false,
+    this.llmModelGroupCatalogUnavailable = false,
   });
+
+  ProviderEntriesState copyWith({
+    List<ProviderEntry>? entries,
+    List<McpProviderGroup>? mcpGroups,
+  }) =>
+      ProviderEntriesState(
+        entries: entries ?? this.entries,
+        mcpGroups: mcpGroups ?? this.mcpGroups,
+        isLoaded: isLoaded,
+        llmCredentialMigrationUnavailable: llmCredentialMigrationUnavailable,
+        llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+      );
+}
+
+/// Removes legacy selector rows when their account is explicitly deleted.
+/// OCR rows keep a source config ID so stale Task Flow inputs cannot recreate
+/// the deleted account and credential.
+ProviderEntriesState removeLegacyLlmAccountSourceConfigs(
+  ProviderEntriesState state,
+  LlmAccount account,
+) {
+  final legacyOcrConfigId = account.endpointConfig['legacyOcrProviderConfigId'];
+  var changed = false;
+  final entries = state.entries.map((entry) {
+    final configs = entry.configs.where((config) {
+      final removeLlmSource = entry.type == 'llm' && config.id == account.id;
+      final removeOcrSource = legacyOcrConfigId is String &&
+          legacyOcrConfigId.isNotEmpty &&
+          entry.type == 'ocr' &&
+          config.id == legacyOcrConfigId;
+      return !(removeLlmSource || removeOcrSource);
+    }).toList(growable: false);
+    if (configs.length == entry.configs.length) return entry;
+    changed = true;
+    return ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      enabled: entry.enabled,
+      legacyFields: entry.legacyFields,
+      configs: configs,
+    );
+  }).toList(growable: false);
+  if (!changed) return state;
+  return ProviderEntriesState(
+    entries: entries,
+    mcpGroups: state.mcpGroups,
+    isLoaded: state.isLoaded,
+    llmCredentialMigrationUnavailable: state.llmCredentialMigrationUnavailable,
+    llmModelGroupCatalogUnavailable: state.llmModelGroupCatalogUnavailable,
+  );
 }
 
 bool isMcpProviderConfigEnabled(
@@ -263,6 +320,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     _providerEntriesSourceUnreadable = false;
     _loadedProviderEntriesSourceJson = null;
     var mcpGroups = builtinMcpProviderGroups;
+    var llmModelGroupCatalogUnavailable = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       mcpGroups = _readMcpGroups(prefs.getString('mcp_provider_groups'));
@@ -454,8 +512,22 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           }
         }
 
+        try {
+          await _appendLlmModelGroupConfigs(entries, prefs);
+        } catch (_) {
+          // The account/group catalog is an optional selector overlay. Keep
+          // existing provider settings readable when that separate catalog is
+          // damaged; the failed migration still gates mutations on a reload.
+          debugPrint('Failed to load LLM model groups for model selectors.');
+          llmModelGroupCatalogUnavailable = true;
+        }
         _loadedProviderEntriesSourceJson = providerEntriesJsonForLoad;
-        state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
+        state = ProviderEntriesState(
+          entries: entries,
+          mcpGroups: mcpGroups,
+          llmCredentialMigrationUnavailable: credentialMigrationUnavailable,
+          llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+        );
         _reloadBeforeNextMutation = credentialMigrationUnavailable;
         if (entriesChanged ||
             groupAssignmentsChanged ||
@@ -475,7 +547,20 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
 
     // 默认预置
-    state = _defaultEntries(mcpGroups: mcpGroups);
+    final defaultState = _defaultEntries(mcpGroups: mcpGroups);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await _appendLlmModelGroupConfigs(defaultState.entries, prefs);
+    } catch (_) {
+      debugPrint('Failed to load LLM model groups for model selectors.');
+      llmModelGroupCatalogUnavailable = true;
+    }
+    state = ProviderEntriesState(
+      entries: defaultState.entries,
+      mcpGroups: defaultState.mcpGroups,
+      isLoaded: defaultState.isLoaded,
+      llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+    );
     if (!_providerEntriesSourceUnreadable) {
       _reloadBeforeNextMutation = false;
     }
@@ -494,6 +579,57 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     if (!state.isLoaded) {
       throw StateError('Provider settings are unavailable.');
     }
+  }
+
+  Future<void> _appendLlmModelGroupConfigs(
+    List<ProviderEntry> entries,
+    SharedPreferences prefs,
+  ) async {
+    List<Map<String, dynamic>> readItems(String key) {
+      final encoded = prefs.getString(key);
+      if (encoded == null || encoded.isEmpty) return const [];
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map || decoded['items'] is! List) {
+        throw const LlmAccountMigrationException();
+      }
+      return (decoded['items'] as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false);
+    }
+
+    final accounts = readItems(
+      LlmAccountMigrationService.accountsPreferenceKey,
+    ).map(LlmAccount.fromMap).toList(growable: false);
+    final groups = readItems(
+      LlmAccountMigrationService.modelGroupsPreferenceKey,
+    ).map(LlmModelGroup.fromMap).toList(growable: false);
+
+    var llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
+    if (llmEntryIndex < 0 && groups.isEmpty) return;
+    if (llmEntryIndex < 0) {
+      entries.add(
+        ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
+      );
+    }
+    llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
+    final entry = entries[llmEntryIndex];
+    final realConfigs = markUnsupportedLegacyLlmConfigs(
+      entry.configs.where((config) => !isLlmModelGroupProviderConfig(config)),
+      accounts,
+    );
+    final groupConfigs = buildLlmModelGroupProviderConfigs(
+      accounts: accounts,
+      groups: groups,
+    );
+    entries[llmEntryIndex] = ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      enabled: entry.enabled,
+      legacyFields: entry.legacyFields,
+      configs: [...realConfigs, ...groupConfigs],
+    );
   }
 
   Future<void> _setStateAndPersist(ProviderEntriesState next) async {
@@ -528,10 +664,6 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   ) {
     if (preferences.getString(
               LlmAccountMigrationService.accountsPreferenceKey,
-            ) !=
-            null ||
-        preferences.getString(
-              LlmAccountMigrationService.modelGroupsPreferenceKey,
             ) !=
             null ||
         preferences.getString(LlmAccountMigrationService.migrationStateKey) !=
@@ -626,10 +758,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> addFirst(ProviderEntry entry) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: [entry, ...state.entries],
-        mcpGroups: state.mcpGroups,
-      ),
+      state.copyWith(entries: [entry, ...state.entries]),
     );
   }
 
@@ -665,7 +794,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     final conflictGeneration = _providerEntriesSourceConflictGeneration;
     try {
       await _setStateAndPersist(
-        ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+        state.copyWith(entries: entries),
       );
     } catch (_) {
       if (_providerEntriesSourceConflictGeneration != conflictGeneration) {
@@ -683,20 +812,14 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> remove(String id) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries.where((e) => e.id != id).toList(),
-        mcpGroups: state.mcpGroups,
-      ),
+      state.copyWith(entries: state.entries.where((e) => e.id != id).toList()),
     );
   }
 
   Future<void> addMcpGroup(McpProviderGroup group) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
-        mcpGroups: [...state.mcpGroups, group],
-      ),
+      state.copyWith(mcpGroups: [...state.mcpGroups, group]),
     );
   }
 
@@ -706,8 +829,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
     if (current == null || current.isBuiltin) return;
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
+      state.copyWith(
         mcpGroups: state.mcpGroups
             .map((group) => group.id == updated.id ? updated : group)
             .toList(),
@@ -718,8 +840,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> setMcpGroupEnabled(String id, bool enabled) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
+      state.copyWith(
         mcpGroups: state.mcpGroups
             .map(
               (group) =>
@@ -755,7 +876,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       );
     }).toList();
     await _setStateAndPersist(
-      ProviderEntriesState(
+      state.copyWith(
         entries: entries,
         mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
       ),
@@ -782,7 +903,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       );
     }).toList();
     await _setStateAndPersist(
-      ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+      state.copyWith(entries: entries),
     );
   }
 }

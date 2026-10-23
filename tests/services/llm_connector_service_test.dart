@@ -1810,8 +1810,26 @@ void main() {
       expect(body['requestType'], 'agent');
       expect(body['project'], 'antigravity-project');
       expect(body['request']['contents'], isNotEmpty);
-      expect(body['request']['sessionId'], isNotEmpty);
+      expect(body['request']['sessionId'], '-3238736544897475342');
       expect(body['requestId'], startsWith('agent-'));
+
+      final fallback = builder.build(
+        account: LlmAccount(
+          id: 'antigravity-fallback-session',
+          connectorType: 'antigravity',
+          authType: 'oauth',
+          displayName: 'Antigravity',
+        ),
+        credential: jsonEncode({'access_token': 'antigravity-access'}),
+        modelId: 'gemini-3.1-pro',
+        body: const {
+          'request': {'contents': []},
+        },
+      );
+      expect(
+        ((fallback.body as Map)['request'] as Map)['sessionId'],
+        matches(RegExp(r'^-\d+$')),
+      );
     });
 
     test('uses native Antigravity image and web-search envelope variants', () {
@@ -2942,7 +2960,7 @@ void main() {
     );
 
     test(
-      'refreshes an expired OAuth credential and retries once on 401',
+      'refreshes an expired OAuth credential after a truncated 401 body',
       () async {
         final preferences = _MemoryPreferences();
         final credentials = _MemoryCredentials();
@@ -2963,8 +2981,28 @@ void main() {
             }
             requestCount++;
             if (requestCount == 1) {
-              return ResponseBody.fromString(
-                jsonEncode({'error': 'auth rejected private-token-fragment'}),
+              final source = StreamController<Uint8List>(
+                onCancel: () {
+                  final token = options.cancelToken;
+                  if (token?.isCancelled == true) {
+                    throw token!.cancelError!;
+                  }
+                },
+              );
+              scheduleMicrotask(() {
+                source.add(
+                  Uint8List.fromList(
+                    utf8.encode(
+                      jsonEncode({
+                        'error': 'auth rejected private-token-fragment',
+                        'details': List.filled(40000, 'x').join(),
+                      }),
+                    ),
+                  ),
+                );
+              });
+              return ResponseBody(
+                source.stream,
                 401,
                 headers: const {
                   'content-type': ['application/json'],

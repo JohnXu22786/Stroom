@@ -21,6 +21,7 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
+import 'llm_chat_runtime.dart';
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -57,7 +58,7 @@ part 'chat_stream_manager_finalize.dart';
 
 class ChatStreamManager {
   final Ref? _ref;
-  final ChatAdapter _adapter = ChatAdapter();
+  final ChatAdapter _adapter;
 
   // ── Per-conversation stream states ──
   final Map<String, _ConversationStreamState> _streams = {};
@@ -95,7 +96,12 @@ class ChatStreamManager {
         hasAccumulatedToolCalls;
   }
 
-  ChatStreamManager([this._ref]);
+  ChatStreamManager([Ref? ref])
+      : _ref = ref,
+        _adapter = ChatAdapter(
+          routingRuntime:
+              ref == null ? null : LlmChatRoutingRuntime.sharedPlatform(),
+        );
 
   // ── 公开 getter ──
 
@@ -295,7 +301,9 @@ class ChatStreamManager {
       );
       if (!identical(pruned, state.history)) {
         AppLogService.info(
-            'ChatStreamManager', '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId');
+          'ChatStreamManager',
+          '[CTX-MGR] 工具结果 prune 执行完成, convId=$convId',
+        );
       }
       state.history = pruned;
     }
@@ -310,7 +318,7 @@ class ChatStreamManager {
     // completion (see streamingConversationsProvider docs).
     _setProvider(streamingConversationsProvider, <String>{
       ..._ref?.read(streamingConversationsProvider) ?? const {},
-      convId
+      convId,
     });
 
     // Push initial state to this conversation's family providers
@@ -433,8 +441,10 @@ class ChatStreamManager {
 
     try {
       try {
-        await AppLogService.info('ChatStreamManager',
-            '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}');
+        await AppLogService.info(
+          'ChatStreamManager',
+          '[STREAM-MGR] startStreaming: begin, convId=$convId, historyLen=${history.length}',
+        );
       } catch (_) {
         // 日志失败不能误判为流错误（否则主请求已发出但响应
         // 永不被消费，回复丢失）
@@ -462,8 +472,11 @@ class ChatStreamManager {
         final partial = state.fullReply;
         state.fullReply =
             partial.isEmpty ? errorText : '$errorText\n\n---\n$partial';
-        _pushToProvider(convId, streamingTextSectionsProvider,
-            List<String>.from(state.textChunks));
+        _pushToProvider(
+          convId,
+          streamingTextSectionsProvider,
+          List<String>.from(state.textChunks),
+        );
         _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
         state.toolCalls.clear();
         _pushToProvider(convId, streamingToolCallsProvider, <ToolCallData>[]);
@@ -477,8 +490,11 @@ class ChatStreamManager {
       // Set textSections first (no listener) so that when
       // fullReply fires its listener and reads streamingTextSectionsProvider
       // inside _rebuildLiveSegments, it sees the already-updated value.
-      _pushToProvider(convId, streamingTextSectionsProvider,
-          List<String>.from(state.textChunks));
+      _pushToProvider(
+        convId,
+        streamingTextSectionsProvider,
+        List<String>.from(state.textChunks),
+      );
       _pushToProvider(convId, streamingFullReplyProvider, state.fullReply);
     }
 
@@ -537,8 +553,11 @@ class ChatStreamManager {
   ///
   /// fire-and-forget（不 await）：幂等的增量累加 + 防抖持久化，
   /// 多请求并发提交安全。
-  void _commitUsage(String convId, Map<String, dynamic> usage,
-      {required bool recordInput}) {
+  void _commitUsage(
+    String convId,
+    Map<String, dynamic> usage, {
+    required bool recordInput,
+  }) {
     final ref = _ref;
     if (ref == null) return;
     try {
@@ -551,12 +570,14 @@ class ChatStreamManager {
       final hasMetering =
           recordInput && (inputTokens != null || outputTokens != null);
       if (!hasMetering && cost <= 0) return;
-      unawaited(ref.read(conversationsProvider.notifier).updateUsage(
-            conversationId: convId,
-            inputTokens: recordInput ? inputTokens : null,
-            outputTokens: recordInput ? outputTokens : null,
-            costIncrement: cost,
-          ));
+      unawaited(
+        ref.read(conversationsProvider.notifier).updateUsage(
+              conversationId: convId,
+              inputTokens: recordInput ? inputTokens : null,
+              outputTokens: recordInput ? outputTokens : null,
+              costIncrement: cost,
+            ),
+      );
     } catch (e) {
       debugPrint('[ChatStreamManager] usage 计量更新失败: $e');
     }

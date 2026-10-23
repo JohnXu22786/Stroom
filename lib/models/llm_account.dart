@@ -271,6 +271,8 @@ class LlmAccount {
   final List<LlmUpstreamModel> models;
   final LlmRoutingPolicy policy;
   final Map<LlmUsageWindow, LlmUsageWindowState> usageByWindow;
+  final LlmMetricObservation remainingQuota;
+  final Map<String, LlmMetricObservation> quotaSignals;
 
   LlmAccount({
     required this.id,
@@ -283,8 +285,11 @@ class LlmAccount {
     this.models = const [],
     LlmRoutingPolicy? policy,
     Map<LlmUsageWindow, LlmUsageWindowState>? usageByWindow,
+    this.remainingQuota = const LlmMetricObservation.unknown(),
+    Map<String, LlmMetricObservation> quotaSignals = const {},
   })  : policy = policy ?? LlmRoutingPolicy(),
-        usageByWindow = Map.unmodifiable(usageByWindow ?? const {});
+        usageByWindow = Map.unmodifiable(usageByWindow ?? const {}),
+        quotaSignals = Map.unmodifiable(quotaSignals);
 
   Map<String, dynamic> toMap() => Map<String, dynamic>.from(
         sanitizeCredentialFields({
@@ -300,6 +305,11 @@ class LlmAccount {
           'usageByWindow': {
             for (final entry in usageByWindow.entries)
               entry.key.name: entry.value.toMap(),
+          },
+          'remainingQuota': remainingQuota.toMap(),
+          'quotaSignals': {
+            for (final entry in quotaSignals.entries)
+              entry.key: entry.value.toMap(),
           },
         }) as Map,
       );
@@ -327,6 +337,17 @@ class LlmAccount {
         }
       }
     }
+    final rawQuotaSignals = map['quotaSignals'];
+    final quotaSignals = <String, LlmMetricObservation>{};
+    if (rawQuotaSignals is Map) {
+      for (final entry in rawQuotaSignals.entries) {
+        if (entry.key is String && entry.value is Map) {
+          quotaSignals[entry.key as String] = LlmMetricObservation.fromMap(
+            Map<String, dynamic>.from(entry.value as Map),
+          );
+        }
+      }
+    }
     final rawPolicy = map['policy'];
     return LlmAccount(
       id: map['id'] as String? ?? '',
@@ -349,6 +370,12 @@ class LlmAccount {
           ? LlmRoutingPolicy.fromMap(Map<String, dynamic>.from(rawPolicy))
           : LlmRoutingPolicy(),
       usageByWindow: usage,
+      remainingQuota: map['remainingQuota'] is Map
+          ? LlmMetricObservation.fromMap(
+              Map<String, dynamic>.from(map['remainingQuota'] as Map),
+            )
+          : const LlmMetricObservation.unknown(),
+      quotaSignals: quotaSignals,
     );
   }
 }
@@ -389,12 +416,16 @@ class LlmModelGroup {
   final String displayName;
   final List<LlmModelGroupMember> members;
   final LlmRoutingPolicy policy;
+  final String? legacyModelId;
+  final String? legacyProviderName;
 
   LlmModelGroup({
     required this.id,
     required this.displayName,
     required this.members,
     LlmRoutingPolicy? policy,
+    this.legacyModelId,
+    this.legacyProviderName,
   }) : policy = policy ?? LlmRoutingPolicy();
 
   Map<String, dynamic> toMap() => {
@@ -402,6 +433,9 @@ class LlmModelGroup {
         'displayName': displayName,
         'members': members.map((member) => member.toMap()).toList(),
         'policy': policy.toMap(),
+        if (legacyModelId != null) 'legacyModelId': legacyModelId,
+        if (legacyProviderName != null)
+          'legacyProviderName': legacyProviderName,
       };
 
   factory LlmModelGroup.fromMap(Map<String, dynamic> map) {
@@ -421,6 +455,12 @@ class LlmModelGroup {
       id: map['id'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
       members: members,
+      legacyModelId: map['legacyModelId'] is String
+          ? map['legacyModelId'] as String
+          : null,
+      legacyProviderName: map['legacyProviderName'] is String
+          ? map['legacyProviderName'] as String
+          : null,
       policy: rawPolicy is Map
           ? LlmRoutingPolicy.fromMap(Map<String, dynamic>.from(rawPolicy))
           : LlmRoutingPolicy(),

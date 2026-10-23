@@ -207,6 +207,13 @@ abstract final class LlmConnectorRegistry {
         'openai' => 'openai-compatibility',
         final normalized => normalized,
       };
+
+  static String? chatAdapterEndpointType(String connectorType) =>
+      switch (canonicalId(connectorType)) {
+        'claude' => 'anthropic',
+        'openai-compatibility' || 'kimi' || 'kimi-ai' || 'kimi.ai' => 'openai',
+        _ => null,
+      };
 }
 
 /// Result of a capability observation. Unknown quota is represented by a
@@ -266,6 +273,606 @@ class LlmAccountConnectorService {
       if (account.id == accountId) return account;
     }
     return null;
+  }
+
+  Future<List<LlmModelGroup>> listModelGroups() async {
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    try {
+      final records = await _readEnvelope(
+        await preferences.getString(
+          LlmAccountMigrationService.modelGroupsPreferenceKey,
+        ),
+      );
+      return records.map(LlmModelGroup.fromMap).toList(growable: false);
+    } on LlmAccountConnectorException {
+      rethrow;
+    } catch (_) {
+      throw const LlmAccountConnectorException();
+    } finally {
+      lease.release();
+    }
+  }
+
+  /// Imports one legacy OCR model and its stable group as a single transaction.
+  /// Existing account settings remain authoritative unless the legacy OCR
+  /// editor explicitly marks one of its changed source fields for syncing.
+  Future<void> ensureLegacyOcrModelGroup({
+    required String accountId,
+    required String sourceConfigId,
+    required String groupId,
+    required String localModelId,
+    required String upstreamModelId,
+    required String displayName,
+    required String baseUrl,
+    required String apiKey,
+    bool synchronizeEndpoint = false,
+    bool synchronizeCredential = false,
+    bool synchronizeModel = false,
+  }) async {
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    const accountsKey = LlmAccountMigrationService.accountsPreferenceKey;
+    const groupsKey = LlmAccountMigrationService.modelGroupsPreferenceKey;
+    String? previousAccounts;
+    String? previousGroups;
+    String? credentialReference;
+    String? credentialToDelete;
+    String? previousCredential;
+    var credentialWriteAttempted = false;
+    var accountsWriteAttempted = false;
+    var groupsWriteAttempted = false;
+    try {
+      if (sourceConfigId.trim().isEmpty ||
+          accountId != 'ocr-$sourceConfigId' ||
+          groupId != _modelGroupId(accountId, localModelId) ||
+          localModelId.trim().isEmpty ||
+          upstreamModelId.trim().isEmpty ||
+          displayName.trim().isEmpty ||
+          baseUrl.trim().isEmpty ||
+          (apiKey.isNotEmpty && apiKey.trim().isEmpty)) {
+        throw const LlmAccountConnectorException();
+      }
+
+      previousAccounts = await preferences.getString(accountsKey);
+      previousGroups = await preferences.getString(groupsKey);
+      final accountRecords = await _readAccounts();
+      final groupRecords = await _readEnvelope(previousGroups);
+      final accountIndex = accountRecords.indexWhere(
+        (record) => record['id'] == accountId,
+      );
+      final previousRecord =
+          accountIndex < 0 ? null : accountRecords[accountIndex];
+      final existing =
+          previousRecord == null ? null : LlmAccount.fromMap(previousRecord);
+      if (existing != null &&
+          existing.endpointConfig['legacyOcrProviderConfigId'] !=
+              sourceConfigId) {
+        throw const LlmAccountConnectorException();
+      }
+
+      final existingModel = existing?.models
+          .where((model) => model.id == localModelId)
+          .firstOrNull;
+      final refreshEndpoint = existing != null && synchronizeEndpoint;
+      final refreshCredential = existing != null && synchronizeCredential;
+      final refreshModel = existing != null && synchronizeModel;
+      final model = existingModel == null
+          ? LlmUpstreamModel(
+              id: localModelId,
+              upstreamModelId: upstreamModelId,
+              displayName: displayName,
+              capabilities: const {'vision': true},
+            )
+          : refreshModel
+              ? LlmUpstreamModel(
+                  id: existingModel.id,
+                  upstreamModelId: upstreamModelId,
+                  displayName: displayName,
+                  capabilities: existingModel.capabilities,
+                  config: existingModel.config,
+                )
+              : existingModel;
+      final endpointConfig = <String, dynamic>{
+        ...?existing?.endpointConfig,
+        if (existing == null || refreshEndpoint) 'baseUrl': baseUrl.trim(),
+        'legacyOcrProviderConfigId': sourceConfigId,
+        if (existing == null || refreshEndpoint) 'legacyOcrFullEndpoint': true,
+      };
+      final models = existingModel == null
+          ? [...?existing?.models, model]
+          : refreshModel
+              ? [
+                  for (final existingModel in existing.models)
+                    existingModel.id == localModelId ? model : existingModel,
+                ]
+              : existing!.models;
+      var authType =
+          existing?.authType ?? (apiKey.isEmpty ? 'none' : 'api_key');
+      String? effectiveCredentialReference = existing?.credentialRef;
+      if (existing == null && apiKey.isNotEmpty) {
+        final newReference = _newCredentialReference(accountId);
+        credentialReference = newReference;
+        if (accountRecords.any(
+          (record) => record['credentialRef'] == newReference,
+        )) {
+          throw const LlmAccountConnectorException();
+        }
+        effectiveCredentialReference = newReference;
+        authType = 'api_key';
+        previousCredential = await credentialStore.read(newReference);
+      } else if (refreshCredential) {
+        if (apiKey.isEmpty) {
+          authType = 'none';
+          final previousReference = existing.credentialRef;
+          if (previousReference != null &&
+              !accountRecords.any(
+                (record) =>
+                    record['id'] != accountId &&
+                    record['credentialRef'] == previousReference,
+              )) {
+            credentialToDelete = previousReference;
+            previousCredential = await credentialStore.read(previousReference);
+          }
+          effectiveCredentialReference = null;
+        } else {
+          authType = 'api_key';
+          effectiveCredentialReference ??= _newCredentialReference(accountId);
+          final currentCredentialReference = effectiveCredentialReference;
+          final currentCredential = await credentialStore.read(
+            currentCredentialReference,
+          );
+          final isSharedCredential = accountRecords.any(
+            (record) =>
+                record['id'] != accountId &&
+                record['credentialRef'] == currentCredentialReference,
+          );
+          if (isSharedCredential && currentCredential != apiKey) {
+            effectiveCredentialReference = _newCredentialReference(accountId);
+          }
+          if (accountRecords.any(
+            (record) =>
+                record['id'] != accountId &&
+                record['credentialRef'] == effectiveCredentialReference,
+          )) {
+            throw const LlmAccountConnectorException();
+          }
+          credentialReference = effectiveCredentialReference;
+          previousCredential = await credentialStore.read(
+            effectiveCredentialReference,
+          );
+          if (previousCredential != apiKey) {
+            credentialWriteAttempted = true;
+            await credentialStore.write(effectiveCredentialReference, apiKey);
+            if (await credentialStore.read(effectiveCredentialReference) !=
+                apiKey) {
+              throw const LlmAccountConnectorException();
+            }
+          }
+        }
+      }
+
+      final connectionIdentityChanged = existing != null &&
+          (existing.authType != authType ||
+              (refreshEndpoint &&
+                  existing.endpointConfig['baseUrl'] != baseUrl.trim()) ||
+              (refreshCredential && previousCredential != apiKey));
+
+      var account = LlmAccount(
+        id: accountId,
+        connectorType: existing?.connectorType ?? 'openai-compatibility',
+        authType: authType,
+        displayName: existing?.displayName ?? displayName,
+        status: existing?.status ?? LlmAccountStatus.unknown,
+        credentialRef: effectiveCredentialReference,
+        endpointConfig: endpointConfig,
+        models: models,
+        policy: existing?.policy,
+        usageByWindow:
+            connectionIdentityChanged ? const {} : existing?.usageByWindow,
+        remainingQuota: connectionIdentityChanged
+            ? const LlmMetricObservation.unknown()
+            : existing?.remainingQuota ?? const LlmMetricObservation.unknown(),
+        quotaSignals: connectionIdentityChanged
+            ? const {}
+            : existing?.quotaSignals ?? const {},
+      );
+
+      if (existing == null && apiKey.isNotEmpty) {
+        _validateCredential(account, apiKey);
+        final reference = effectiveCredentialReference!;
+        credentialWriteAttempted = true;
+        await credentialStore.write(reference, apiKey);
+        if (await credentialStore.read(reference) != apiKey) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+
+      account = _canonicalAccount(account);
+      _validateAccount(account);
+      final accountRecord = <String, dynamic>{
+        ...?previousRecord,
+        ...account.toMap(),
+      };
+      if (account.credentialRef == null) {
+        accountRecord.remove('credentialRef');
+      }
+      final accountChanged = existing == null ||
+          jsonEncode(existing.toMap()) != jsonEncode(account.toMap());
+      if (accountChanged) {
+        if (accountIndex < 0) {
+          accountRecords.add(accountRecord);
+        } else {
+          accountRecords[accountIndex] = accountRecord;
+        }
+      }
+
+      final groupIndex = groupRecords.indexWhere(
+        (record) => record['id'] == groupId,
+      );
+      final previousGroupRecord =
+          groupIndex < 0 ? null : groupRecords[groupIndex];
+      final existingGroup = previousGroupRecord == null
+          ? null
+          : LlmModelGroup.fromMap(previousGroupRecord);
+      final hasMember = existingGroup?.members.any(
+            (member) =>
+                member.accountId == accountId &&
+                member.localModelId == localModelId,
+          ) ??
+          false;
+      final group = LlmModelGroup(
+        id: groupId,
+        displayName: refreshModel
+            ? displayName
+            : existingGroup?.displayName ?? displayName,
+        members: [
+          for (final member in existingGroup?.members ?? const [])
+            if (member.accountId == accountId &&
+                member.localModelId == localModelId)
+              LlmModelGroupMember(
+                accountId: member.accountId,
+                upstreamModelId: refreshModel
+                    ? model.upstreamModelId
+                    : member.upstreamModelId,
+                priorityTier: member.priorityTier,
+                localModelId: member.localModelId,
+              )
+            else
+              member,
+          if (!hasMember)
+            LlmModelGroupMember(
+              accountId: accountId,
+              localModelId: localModelId,
+              upstreamModelId: model.upstreamModelId,
+            ),
+        ],
+        policy: existingGroup?.policy,
+        legacyModelId: refreshModel
+            ? model.upstreamModelId
+            : existingGroup?.legacyModelId ?? upstreamModelId,
+        legacyProviderName: existingGroup?.legacyProviderName,
+      );
+      _validateModelGroupIdentity(group);
+      final accountsById = {
+        for (final record in accountRecords)
+          if (record['id'] is String)
+            record['id'] as String: LlmAccount.fromMap(record),
+      };
+      _validateModelGroupMembers(group, accountsById);
+      final groupRecord = group.toMap();
+      final groupChanged = existingGroup == null ||
+          jsonEncode(existingGroup.toMap()) != jsonEncode(groupRecord);
+      if (groupChanged) {
+        if (groupIndex < 0) {
+          groupRecords.add(groupRecord);
+        } else {
+          groupRecords[groupIndex] = groupRecord;
+        }
+      }
+
+      if (accountChanged) {
+        final encoded = _encodeEnvelope(accountRecords);
+        accountsWriteAttempted = true;
+        if (!await preferences.setString(accountsKey, encoded) ||
+            await preferences.getString(accountsKey) != encoded) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+      if (groupChanged) {
+        final encoded = _encodeEnvelope(groupRecords);
+        groupsWriteAttempted = true;
+        if (!await preferences.setString(groupsKey, encoded) ||
+            await preferences.getString(groupsKey) != encoded) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+      if (credentialToDelete != null) {
+        credentialWriteAttempted = true;
+        await credentialStore.delete(credentialToDelete);
+        if (await credentialStore.read(credentialToDelete) != null) {
+          throw const LlmAccountConnectorException();
+        }
+      }
+    } catch (_) {
+      if (groupsWriteAttempted) {
+        await _restorePreference(groupsKey, previousGroups);
+      }
+      if (accountsWriteAttempted) {
+        await _restorePreference(accountsKey, previousAccounts);
+      }
+      if (credentialWriteAttempted) {
+        final restoreReference = credentialReference ?? credentialToDelete;
+        if (restoreReference != null) {
+          await _restoreCredential(restoreReference, previousCredential);
+        }
+      }
+      throw const LlmAccountConnectorException();
+    } finally {
+      lease.release();
+    }
+  }
+
+  /// Removes models imported from a legacy OCR provider after their source
+  /// config no longer contains them. Saving through [saveAccount] also removes
+  /// their group members while preserving stable group identity for older
+  /// conversation references.
+  Future<void> synchronizeLegacyOcrModelSet({
+    required String accountId,
+    required String sourceConfigId,
+    required Set<String> localModelIds,
+  }) async {
+    if (accountId != 'ocr-$sourceConfigId') {
+      throw const LlmAccountConnectorException();
+    }
+    final account = await getAccount(accountId);
+    if (account == null) return;
+    if (account.endpointConfig['legacyOcrProviderConfigId'] != sourceConfigId) {
+      throw const LlmAccountConnectorException();
+    }
+    final retainedModelIds = localModelIds.map((id) => id.trim()).toSet();
+    final models = account.models
+        .where((model) => retainedModelIds.contains(model.id))
+        .toList(growable: false);
+    if (models.length == account.models.length) return;
+    await saveAccount(
+      LlmAccount(
+        id: account.id,
+        connectorType: account.connectorType,
+        authType: account.authType,
+        displayName: account.displayName,
+        status: account.status,
+        credentialRef: account.credentialRef,
+        endpointConfig: account.endpointConfig,
+        models: models,
+        policy: account.policy,
+        usageByWindow: account.usageByWindow,
+        remainingQuota: account.remainingQuota,
+        quotaSignals: account.quotaSignals,
+      ),
+    );
+  }
+
+  /// Saves one stable model group after validating every account/model mapping.
+  /// Local model IDs are aliases resolved by ChatAdapter and may intentionally
+  /// differ from an account's own model-record ID.
+  Future<LlmModelGroup> saveModelGroup(LlmModelGroup group) async {
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    final key = LlmAccountMigrationService.modelGroupsPreferenceKey;
+    String? previous;
+    var writeAttempted = false;
+    try {
+      _validateModelGroupIdentity(group);
+      previous = await preferences.getString(key);
+      final groupRecords = await _readEnvelope(previous);
+      final accountRecords = await _readAccounts();
+      final accounts = {
+        for (final record in accountRecords)
+          if (record['id'] is String)
+            record['id'] as String: LlmAccount.fromMap(record),
+      };
+      _validateModelGroupMembers(group, accounts);
+
+      final index = groupRecords.indexWhere(
+        (record) => record['id'] == group.id,
+      );
+      final saved = group.toMap();
+      if (index < 0) {
+        groupRecords.add(saved);
+      } else {
+        groupRecords[index] = saved;
+      }
+      final encoded = _encodeEnvelope(groupRecords);
+      writeAttempted = true;
+      if (!await preferences.setString(key, encoded) ||
+          await preferences.getString(key) != encoded) {
+        throw const LlmAccountConnectorException();
+      }
+      return LlmModelGroup.fromMap(saved);
+    } catch (_) {
+      if (writeAttempted) await _restorePreference(key, previous);
+      throw const LlmAccountConnectorException();
+    } finally {
+      lease.release();
+    }
+  }
+
+  Future<void> deleteModelGroup(String groupId) async {
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    final key = LlmAccountMigrationService.modelGroupsPreferenceKey;
+    String? previous;
+    var writeAttempted = false;
+    try {
+      if (groupId.trim().isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      previous = await preferences.getString(key);
+      final records = await _readEnvelope(previous);
+      final updated =
+          records.where((record) => record['id'] != groupId).toList();
+      if (updated.length == records.length) return;
+      final encoded = _encodeEnvelope(updated);
+      writeAttempted = true;
+      if (!await preferences.setString(key, encoded) ||
+          await preferences.getString(key) != encoded) {
+        throw const LlmAccountConnectorException();
+      }
+    } catch (_) {
+      if (writeAttempted) await _restorePreference(key, previous);
+      throw const LlmAccountConnectorException();
+    } finally {
+      lease.release();
+    }
+  }
+
+  static void _validateModelGroupIdentity(LlmModelGroup group) {
+    // M1 stable IDs URI-encode arbitrary account/model identities and can be
+    // longer than custom UUID-based group IDs.
+    final validId = RegExp(r'^[^\s\x00-\x1f\x7f]{1,1024}$');
+    if (!validId.hasMatch(group.id) || group.displayName.trim().isEmpty) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
+  bool _synchronizeGroupModelMappingsForAccount({
+    required LlmAccount previous,
+    required LlmAccount updated,
+    required List<Map<String, dynamic>> groups,
+  }) {
+    final updatedById = {for (final model in updated.models) model.id: model};
+    var changed = false;
+    for (final group in groups) {
+      final rawMembers = group['members'];
+      if (rawMembers is! List) continue;
+      final nextMembers = <dynamic>[];
+      var groupChanged = false;
+      String? removedStableLocalModelId;
+      LlmUpstreamModel? removedStableModel;
+      for (final rawMember in rawMembers) {
+        if (rawMember is! Map || rawMember['accountId'] != updated.id) {
+          nextMembers.add(rawMember);
+          continue;
+        }
+        final upstreamModelId = rawMember['upstreamModelId'];
+        if (upstreamModelId is! String) {
+          nextMembers.add(rawMember);
+          continue;
+        }
+        final candidates = previous.models
+            .where((model) => model.upstreamModelId == upstreamModelId)
+            .toList(growable: false);
+        if (candidates.isEmpty) {
+          nextMembers.add(rawMember);
+          continue;
+        }
+        final localModelId = rawMember['localModelId'];
+        final localMatch = localModelId is String
+            ? candidates.where((model) => model.id == localModelId).firstOrNull
+            : null;
+        if (localMatch == null && candidates.length != 1) {
+          if (updated.models.any(
+            (model) => model.upstreamModelId == upstreamModelId,
+          )) {
+            nextMembers.add(rawMember);
+            continue;
+          }
+          throw const LlmAccountConnectorException();
+        }
+
+        final previousModel = localMatch ?? candidates.single;
+        final updatedModel = updatedById[previousModel.id];
+        if (updatedModel == null) {
+          if (updated.models.any(
+            (model) => model.upstreamModelId == upstreamModelId,
+          )) {
+            nextMembers.add(rawMember);
+          } else {
+            if (group['id'] == _modelGroupId(updated.id, previousModel.id)) {
+              removedStableLocalModelId = previousModel.id;
+              removedStableModel = previousModel;
+            }
+            groupChanged = true;
+          }
+          continue;
+        }
+        if (updatedModel.upstreamModelId == upstreamModelId) {
+          nextMembers.add(rawMember);
+          continue;
+        }
+        nextMembers.add({
+          ...Map<String, dynamic>.from(rawMember),
+          'upstreamModelId': updatedModel.upstreamModelId,
+        });
+        groupChanged = true;
+      }
+      if (removedStableLocalModelId != null && removedStableModel != null) {
+        if (group['legacyProviderName'] == null &&
+            previous.displayName.isNotEmpty) {
+          group['legacyProviderName'] = previous.displayName;
+          groupChanged = true;
+        }
+        if (group['legacyModelId'] == null &&
+            removedStableModel.upstreamModelId.isNotEmpty) {
+          group['legacyModelId'] = removedStableModel.upstreamModelId;
+          groupChanged = true;
+        }
+        final hasLegacyAlias = nextMembers.any(
+          (member) =>
+              member is Map &&
+              member['localModelId'] == removedStableLocalModelId,
+        );
+        final survivingMember = nextMembers.whereType<Map>().firstOrNull;
+        if (!hasLegacyAlias && survivingMember != null) {
+          nextMembers.add({
+            ...Map<String, dynamic>.from(survivingMember),
+            'localModelId': removedStableLocalModelId,
+          });
+          groupChanged = true;
+        }
+      }
+      if (groupChanged) {
+        group['members'] = nextMembers;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static void _validateModelGroupMembers(
+    LlmModelGroup group,
+    Map<String, LlmAccount> accounts,
+  ) {
+    final seenMappings = <String>{};
+    final endpointByLocalModel = <String, String>{};
+    for (final member in group.members) {
+      final account = accounts[member.accountId];
+      if (account == null ||
+          member.upstreamModelId.trim().isEmpty ||
+          (member.localModelId != null &&
+              member.localModelId!.trim().isEmpty)) {
+        throw const LlmAccountConnectorException();
+      }
+      final mappingId =
+          '${member.accountId}\u0000${member.localModelId ?? group.id}';
+      final localModelId = member.localModelId ?? group.id;
+      final endpointType = LlmConnectorRegistry.chatAdapterEndpointType(
+        account.connectorType,
+      );
+      final existingEndpoint = endpointByLocalModel[localModelId];
+      if (!seenMappings.add(mappingId) ||
+          (endpointType != null &&
+              existingEndpoint != null &&
+              existingEndpoint != endpointType) ||
+          !account.models.any(
+            (model) => model.upstreamModelId == member.upstreamModelId,
+          )) {
+        throw const LlmAccountConnectorException();
+      }
+      if (endpointType != null)
+        endpointByLocalModel[localModelId] = endpointType;
+    }
   }
 
   Future<String?> readCredential(String accountId) async {
@@ -536,6 +1143,8 @@ class LlmAccountConnectorService {
           models: account.models,
           policy: account.policy,
           usageByWindow: account.usageByWindow,
+          remainingQuota: account.remainingQuota,
+          quotaSignals: account.quotaSignals,
         );
         return saveAccount(updated);
       }
@@ -740,8 +1349,10 @@ class LlmAccountConnectorService {
       case 'antigravity':
         // OAuth application credentials stay in the secure account bundle.
         final clientId = _firstString(bundle, const ['client_id', 'clientId']);
-        final clientSecret =
-            _firstString(bundle, const ['client_secret', 'clientSecret']);
+        final clientSecret = _firstString(bundle, const [
+          'client_secret',
+          'clientSecret',
+        ]);
         if (clientId == null || clientSecret == null) return null;
         return _LlmTokenRefreshRequest(
           uri: Uri.parse('https://oauth2.googleapis.com/token'),
@@ -959,8 +1570,13 @@ class LlmAccountConnectorService {
     String? credentialToDelete;
     String? oldCredential;
     var credentialWasChanged = false;
+    var credentialValueChanged = false;
     String? oldAccountJson;
+    String? oldModelGroupsJson;
     var preferencesWriteAttempted = false;
+    var modelGroupsWriteAttempted = false;
+    var modelGroupsChanged = false;
+    List<Map<String, dynamic>>? updatedModelGroups;
     try {
       account = _canonicalAccount(account);
       _validateAccount(account);
@@ -973,6 +1589,33 @@ class LlmAccountConnectorService {
         (record) => record['id'] == account.id,
       );
       final previous = index < 0 ? null : currentRecords[index];
+      if (previous != null) {
+        oldModelGroupsJson = await preferences.getString(
+          LlmAccountMigrationService.modelGroupsPreferenceKey,
+        );
+        updatedModelGroups = await _readEnvelope(oldModelGroupsJson);
+        modelGroupsChanged = _synchronizeGroupModelMappingsForAccount(
+          previous: LlmAccount.fromMap(previous),
+          updated: account,
+          groups: updatedModelGroups,
+        );
+      }
+      if (previous != null &&
+          (previous['connectorType'] != account.connectorType ||
+              modelGroupsChanged)) {
+        final accountsAfterUpdate = <String, LlmAccount>{
+          for (final record in currentRecords)
+            if (record['id'] is String && record['id'] != account.id)
+              record['id'] as String: LlmAccount.fromMap(record),
+          account.id: account,
+        };
+        for (final record in updatedModelGroups ?? const []) {
+          final group = LlmModelGroup.fromMap(record);
+          if (group.members.any((member) => member.accountId == account.id)) {
+            _validateModelGroupMembers(group, accountsAfterUpdate);
+          }
+        }
+      }
       final previousReference = previous?['credentialRef'] as String?;
       if (previous != null &&
           (previous['authType'] != account.authType ||
@@ -1032,6 +1675,7 @@ class LlmAccountConnectorService {
           throw const LlmAccountConnectorException();
         }
         oldCredential = await credentialStore.read(reference);
+        credentialValueChanged = oldCredential != secret;
         credentialWasChanged = true;
         await credentialStore.write(reference, secret);
         if (await credentialStore.read(reference) != secret) {
@@ -1046,6 +1690,35 @@ class LlmAccountConnectorService {
       }
 
       final savedRecord = <String, dynamic>{...?previous, ...account.toMap()};
+      if (previous != null) {
+        final endpointConfigChanged =
+            jsonEncode(previous['endpointConfig'] ?? const {}) !=
+                jsonEncode(account.endpointConfig);
+        final connectionIdentityChanged =
+            previous['connectorType'] != account.connectorType ||
+                previous['authType'] != account.authType ||
+                endpointConfigChanged ||
+                credentialValueChanged;
+        if (connectionIdentityChanged) {
+          // Provider quota belongs to the old connection and must not affect
+          // routing or the account UI after its connector changes.
+          savedRecord['usageByWindow'] = const <String, dynamic>{};
+          savedRecord['remainingQuota'] =
+              LlmMetricObservation.unknown().toMap();
+          savedRecord['quotaSignals'] = const <String, dynamic>{};
+        } else {
+          // Account settings dialogs can stay open while requests record newer
+          // telemetry. Preserve those latest observations for the same
+          // connection instead of replaying the dialog snapshot.
+          for (final key in const [
+            'usageByWindow',
+            'remainingQuota',
+            'quotaSignals',
+          ]) {
+            if (previous.containsKey(key)) savedRecord[key] = previous[key];
+          }
+        }
+      }
       if (_requiresSecret(account.authType)) {
         savedRecord['credentialRef'] = reference;
       } else {
@@ -1070,6 +1743,20 @@ class LlmAccountConnectorService {
           encoded) {
         throw const LlmAccountConnectorException();
       }
+      if (modelGroupsChanged) {
+        final encodedGroups = _encodeEnvelope(updatedModelGroups!);
+        modelGroupsWriteAttempted = true;
+        if (!await preferences.setString(
+              LlmAccountMigrationService.modelGroupsPreferenceKey,
+              encodedGroups,
+            ) ||
+            await preferences.getString(
+                  LlmAccountMigrationService.modelGroupsPreferenceKey,
+                ) !=
+                encodedGroups) {
+          throw const LlmAccountConnectorException();
+        }
+      }
       if (credentialToDelete != null) {
         credentialWasChanged = true;
         await credentialStore.delete(credentialToDelete);
@@ -1079,6 +1766,12 @@ class LlmAccountConnectorService {
       }
       return LlmAccount.fromMap(savedRecord);
     } catch (_) {
+      if (modelGroupsWriteAttempted) {
+        await _restorePreference(
+          LlmAccountMigrationService.modelGroupsPreferenceKey,
+          oldModelGroupsJson,
+        );
+      }
       if (preferencesWriteAttempted) {
         await _restorePreference(
           LlmAccountMigrationService.accountsPreferenceKey,
@@ -1088,6 +1781,120 @@ class LlmAccountConnectorService {
       if (credentialWasChanged && reference != null) {
         await _restoreCredential(reference, oldCredential);
       }
+      throw const LlmAccountConnectorException();
+    } finally {
+      lease.release();
+    }
+  }
+
+  /// Stores quota observations reported by a connector request.
+  ///
+  /// Named time-window signals also update [LlmAccount.usageByWindow] so the
+  /// routing policy and account UI can consume the same observation. Unknown
+  /// or older values never erase a previously reported observation.
+  Future<void> recordQuotaObservation({
+    required String accountId,
+    required LlmMetricObservation remainingQuota,
+    required Map<String, LlmMetricObservation> quotaSignals,
+  }) async {
+    final validSignals = <String, LlmMetricObservation>{
+      for (final entry in quotaSignals.entries)
+        if (_isPersistableQuotaMetric(entry.value)) entry.key: entry.value,
+    };
+    final validRemainingQuota = _isPersistableQuotaMetric(remainingQuota)
+        ? remainingQuota
+        : const LlmMetricObservation.unknown();
+    if (!validRemainingQuota.isKnown && validSignals.isEmpty) return;
+
+    final lease =
+        await LlmAccountMigrationService.acquireCredentialTransaction();
+    final key = LlmAccountMigrationService.accountsPreferenceKey;
+    String? previous;
+    var writeAttempted = false;
+    try {
+      if (accountId.trim().isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      previous = await preferences.getString(key);
+      final records = await _readEnvelope(previous);
+      final index = records.indexWhere((record) => record['id'] == accountId);
+      if (index < 0) return;
+
+      final existingRecord = records[index];
+      final account = LlmAccount.fromMap(existingRecord);
+      final nextRemainingQuota = _preferNewerQuotaMetric(
+        account.remainingQuota,
+        validRemainingQuota,
+      );
+      final nextQuotaSignals = Map<String, LlmMetricObservation>.from(
+        account.quotaSignals,
+      );
+      final nextUsageByWindow = Map<LlmUsageWindow, LlmUsageWindowState>.from(
+        account.usageByWindow,
+      );
+      const windowBySignal = {
+        'primaryRemainingPercent': LlmUsageWindow.fiveHour,
+        'dailyRemainingPercent': LlmUsageWindow.day,
+        'secondaryRemainingPercent': LlmUsageWindow.week,
+        'weeklyRemainingPercent': LlmUsageWindow.week,
+        'monthlyRemainingPercent': LlmUsageWindow.month,
+      };
+      var changed = jsonEncode(nextRemainingQuota.toMap()) !=
+          jsonEncode(account.remainingQuota.toMap());
+      for (final entry in validSignals.entries) {
+        final current =
+            nextQuotaSignals[entry.key] ?? const LlmMetricObservation.unknown();
+        final selected = _preferNewerQuotaMetric(current, entry.value);
+        if (jsonEncode(selected.toMap()) != jsonEncode(current.toMap())) {
+          nextQuotaSignals[entry.key] = selected;
+          changed = true;
+        }
+        final window = windowBySignal[entry.key];
+        if (window == null) continue;
+        final windowState =
+            nextUsageByWindow[window] ?? const LlmUsageWindowState();
+        final nextRemaining = _preferNewerQuotaMetric(
+          windowState.remaining,
+          entry.value,
+        );
+        if (jsonEncode(nextRemaining.toMap()) ==
+            jsonEncode(windowState.remaining.toMap())) {
+          continue;
+        }
+        nextUsageByWindow[window] = LlmUsageWindowState(
+          quota: windowState.quota,
+          used: windowState.used,
+          remaining: nextRemaining,
+          resetAt: nextRemaining.resetAt,
+          source: nextRemaining.source,
+        );
+        changed = true;
+      }
+      if (!changed) return;
+
+      final updated = LlmAccount(
+        id: account.id,
+        connectorType: account.connectorType,
+        authType: account.authType,
+        displayName: account.displayName,
+        status: account.status,
+        credentialRef: account.credentialRef,
+        endpointConfig: account.endpointConfig,
+        models: account.models,
+        policy: account.policy,
+        usageByWindow: nextUsageByWindow,
+        remainingQuota: nextRemainingQuota,
+        quotaSignals: nextQuotaSignals,
+      );
+      records[index] = {...existingRecord, ...updated.toMap()};
+      final encoded = _encodeEnvelope(records);
+      writeAttempted = true;
+      if (!await preferences.setString(key, encoded) ||
+          await preferences.getString(key) != encoded) {
+        throw const LlmAccountConnectorException();
+      }
+    } catch (_) {
+      if (writeAttempted) await _restorePreference(key, previous);
       throw const LlmAccountConnectorException();
     } finally {
       lease.release();
@@ -1130,11 +1937,59 @@ class LlmAccountConnectorService {
       for (final group in groups) {
         final rawMembers = group['members'];
         if (rawMembers is! List) continue;
+        final removedMembers = rawMembers
+            .whereType<Map>()
+            .where((member) => member['accountId'] == accountId)
+            .toList(growable: false);
+        String? removedStableLocalModelId;
+        if (group['id'] is String) {
+          final groupId = group['id'] as String;
+          final models = removed['models'];
+          for (final member in removedMembers) {
+            final localModelId = member['localModelId'];
+            if (localModelId is! String ||
+                groupId != _modelGroupId(accountId, localModelId)) {
+              continue;
+            }
+            removedStableLocalModelId = localModelId;
+            if (group['legacyProviderName'] == null &&
+                removed['displayName'] is String &&
+                (removed['displayName'] as String).isNotEmpty) {
+              group['legacyProviderName'] = removed['displayName'];
+              groupsChanged = true;
+            }
+            if (group['legacyModelId'] == null && models is List) {
+              final model = models
+                  .whereType<Map>()
+                  .where((item) => item['id'] == localModelId)
+                  .firstOrNull;
+              final legacyModelId = model?['upstreamModelId'];
+              if (legacyModelId is String && legacyModelId.isNotEmpty) {
+                group['legacyModelId'] = legacyModelId;
+                groupsChanged = true;
+              }
+            }
+            break;
+          }
+        }
         final members = rawMembers
             .whereType<Map>()
             .where((member) => member['accountId'] != accountId)
             .toList();
         if (members.length != rawMembers.length) {
+          if (removedStableLocalModelId != null &&
+              members.isNotEmpty &&
+              !members.any(
+                (member) => member['localModelId'] == removedStableLocalModelId,
+              )) {
+            // Keep both identities available: old conversations use the
+            // anchor's local ID, while the fallback member may already have
+            // saved references to its own local alias.
+            members.add({
+              ...Map<String, dynamic>.from(members.first),
+              'localModelId': removedStableLocalModelId,
+            });
+          }
           group['members'] = members;
           groupsChanged = true;
         }
@@ -1177,6 +2032,13 @@ class LlmAccountConnectorService {
     } finally {
       lease.release();
     }
+  }
+
+  String _modelGroupId(String accountId, String localModelId) {
+    final encodedAccountId = Uri.encodeComponent(accountId);
+    final encodedLocalModelId = Uri.encodeComponent(localModelId);
+    return 'stroom.model-group.${encodedAccountId.length}:$encodedAccountId'
+        '${encodedLocalModelId.length}:$encodedLocalModelId';
   }
 
   Future<List<Map<String, dynamic>>> _readAccounts() async {
@@ -1276,6 +2138,8 @@ class LlmAccountConnectorService {
       models: account.models,
       policy: account.policy,
       usageByWindow: account.usageByWindow,
+      remainingQuota: account.remainingQuota,
+      quotaSignals: account.quotaSignals,
     );
   }
 
@@ -1824,16 +2688,16 @@ class LlmNativeRequestBuilder {
         final text = (parts.first as Map)['text'];
         if (text is! String || text.isEmpty) continue;
         final digest = crypto.sha256.convert(utf8.encode(text)).bytes;
-        var value = 0;
+        var value = BigInt.zero;
         for (var index = 0; index < 8; index++) {
-          value = (value << 8) | digest[index];
+          value = (value << 8) | BigInt.from(digest[index]);
         }
-        value &= 0x7fffffffffffffff;
+        value &= BigInt.parse('7fffffffffffffff', radix: 16);
         return '-$value';
       }
     }
     final random = const Uuid().v4().replaceAll('-', '').substring(0, 15);
-    return '-${int.parse(random, radix: 16)}';
+    return '-${BigInt.parse(random, radix: 16)}';
   }
 
   static String? _projectIdFromCredential(String? credential) {
@@ -1862,6 +2726,9 @@ class LlmNativeRequestBuilder {
     String baseUrl;
     String path;
     String? query;
+    final preserveLegacyOcrEndpoint =
+        account.connectorType == 'openai-compatibility' &&
+            config['legacyOcrFullEndpoint'] == true;
     switch (account.connectorType) {
       case 'codex':
         baseUrl = _baseUrl(
@@ -1978,7 +2845,8 @@ class LlmNativeRequestBuilder {
           throw const LlmAccountConnectorException();
         }
         final endpointPath = baseUri.path.replaceFirst(RegExp(r'/+$'), '');
-        if (endpointPath.endsWith('/chat/completions')) {
+        if (preserveLegacyOcrEndpoint ||
+            endpointPath.endsWith('/chat/completions')) {
           path = '';
         } else {
           path = '/chat/completions';
@@ -1996,6 +2864,7 @@ class LlmNativeRequestBuilder {
       throw const LlmAccountConnectorException();
     }
     _validateProviderBaseUrl(account, parsed);
+    if (preserveLegacyOcrEndpoint) return parsed.replace(fragment: null);
     final basePath = account.connectorType == 'openai-compatibility'
         ? parsed.path.replaceFirst(RegExp(r'/+$'), '')
         : parsed.path;
@@ -2310,10 +3179,7 @@ class LlmConnectorSseObservationAccumulator {
   num? _claudeInputTokens;
   num? _claudeOutputTokens;
 
-  LlmConnectorSseObservationAccumulator(
-    this.connectorType, {
-    this.observedAt,
-  });
+  LlmConnectorSseObservationAccumulator(this.connectorType, {this.observedAt});
 
   LlmConnectorObservation observe(Map frame) {
     final frameObservation = parseLlmConnectorObservation(
@@ -2733,4 +3599,25 @@ num? _firstNumber(Map? values, List<String> names) {
     }
   }
   return null;
+}
+
+bool _isPersistableQuotaMetric(LlmMetricObservation metric) =>
+    metric.isKnown &&
+    metric.value != null &&
+    metric.value!.isFinite &&
+    metric.value! >= 0;
+
+LlmMetricObservation _preferNewerQuotaMetric(
+  LlmMetricObservation current,
+  LlmMetricObservation incoming,
+) {
+  if (!_isPersistableQuotaMetric(incoming)) return current;
+  if (!_isPersistableQuotaMetric(current)) return incoming;
+  final currentAt = current.observedAt;
+  final incomingAt = incoming.observedAt;
+  if (currentAt != null &&
+      (incomingAt == null || incomingAt.isBefore(currentAt))) {
+    return current;
+  }
+  return incoming;
 }

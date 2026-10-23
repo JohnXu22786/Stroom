@@ -95,7 +95,9 @@ String flowChatEndpointType(
     providerName: assistant.modelId == null || assistant.modelId!.isEmpty
         ? assistant.defaultProviderName
         : null,
-    displayName: reference,
+    displayName: assistant.modelId?.isNotEmpty == true
+        ? assistant.modelId
+        : assistant.defaultModelName,
   );
   final entry =
       providers.entries.where((entry) => entry.type == 'llm').firstOrNull;

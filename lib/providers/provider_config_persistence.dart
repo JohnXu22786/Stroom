@@ -492,12 +492,27 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         throw StateError('Failed to persist provider configuration.');
       }
 
+      final persistedSourceEntries = state.entries.map((entry) {
+        if (entry.type != 'llm') return entry;
+        return ProviderEntry(
+          id: entry.id,
+          type: entry.type,
+          name: entry.name,
+          enabled: entry.enabled,
+          legacyFields: entry.legacyFields,
+          configs: entry.configs
+              .where((config) => !isLlmModelGroupProviderConfig(config))
+              .toList(),
+        );
+      }).toList(growable: false);
       _applyCredentialReferencesFromSavedEntries(
-        state.entries,
+        persistedSourceEntries,
         prefs.getString('provider_entries'),
       );
       final migrationInput = jsonEncode(
-        state.entries.map((entry) => entry.toCredentialMigrationMap()).toList(),
+        persistedSourceEntries
+            .map((entry) => entry.toCredentialMigrationMap())
+            .toList(),
       );
       try {
         await LlmAccountMigrationService(
@@ -521,10 +536,10 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
 
       _applyCredentialReferencesFromSavedEntries(
-        state.entries,
+        persistedSourceEntries,
         prefs.getString('provider_entries'),
       );
-      final persistedEntries = state.entries.map((entry) {
+      final persistedEntries = persistedSourceEntries.map((entry) {
         final serialized = entry.toMap();
         if (entry.type == 'llm') {
           serialized.remove('key');

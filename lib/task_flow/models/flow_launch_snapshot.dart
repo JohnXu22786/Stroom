@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
+import '../../services/llm_chat_runtime.dart';
+import '../../services/llm_model_group_provider.dart';
 import '../../utils/provider_models.dart';
 import 'task_flow_definition.dart';
 import 'block_type_definition.dart';
@@ -642,17 +644,22 @@ class FlowLaunchSnapshot {
     return current;
   }
 
-  factory FlowLaunchSnapshot.capture(TaskFlowDefinition flow,
-      ProviderEntriesState providers, List<Assistant> assistants,
-      {Map<String, dynamic> synthesisDefaults = const {},
-      Map<String, String>? selectedChatModel}) {
+  factory FlowLaunchSnapshot.capture(
+    TaskFlowDefinition flow,
+    ProviderEntriesState providers,
+    List<Assistant> assistants, {
+    Map<String, dynamic> synthesisDefaults = const {},
+    Map<String, String>? selectedChatModel,
+  }) {
     final models = <Map<String, dynamic>>[];
     final selectedAssistants = <Map<String, dynamic>>[];
     final configs = <Map<String, dynamic>>[];
     final chatModels = <Map<String, dynamic>>[];
     void capture(ProviderModel selected) {
-      models.add(
-          {'configId': selected.config.id, 'model': selected.model.toMap()});
+      models.add({
+        'configId': selected.config.id,
+        'model': selected.model.toMap(),
+      });
       // Freeze the public endpoint; hydrate credentials from its stable identity.
       final settings = selected.config.toMap()
         ..remove('key')
@@ -678,31 +685,86 @@ class FlowLaunchSnapshot {
         final requestedId = boundId != null && boundId.isNotEmpty
             ? boundId
             : assistant.defaultModelId;
+        final hasBoundId = boundId != null && boundId.isNotEmpty;
+        final hasRequestedId = requestedId != null && requestedId.isNotEmpty;
+        final savedProviderName = assistant.defaultProviderName?.trim();
+        final hasLegacyModelReference = !hasRequestedId &&
+            assistant.defaultModelName?.trim().isNotEmpty == true;
+        // Custom-group member IDs encode the group ID, so a stale provider
+        // label after a group rename must not hide the same stable member.
+        final stableGroupReference = llmModelGroupMemberReferenceForModelId(
+          requestedId,
+        );
+        final constrainToDefaultProvider = !hasBoundId &&
+            savedProviderName?.isNotEmpty == true &&
+            stableGroupReference == null;
         final byId =
             available.where((s) => s.model.modelId == requestedId).toList();
         final byProvider = byId
-            .where(
-                (s) => s.config.providerName == assistant.defaultProviderName)
+            .where((s) => s.config.providerName == savedProviderName)
             .toList();
         final byName = available
-            .where((s) =>
-                '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
-                assistant.defaultModelName)
+            .where(
+              (s) =>
+                  '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
+                      assistant.defaultModelName &&
+                  (!constrainToDefaultProvider ||
+                      s.config.providerName == savedProviderName),
+            )
             .toList();
+        ProviderModel? uniqueMatch(
+          List<ProviderModel> matches, {
+          String? displayName,
+        }) {
+          if (matches.length == 1) return matches.single;
+          if (matches.length < 2 ||
+              displayName == null ||
+              displayName.isEmpty) {
+            return null;
+          }
+          final named = matches
+              .where(
+                (s) =>
+                    '${s.model.name.isEmpty ? s.model.modelId : s.model.name} | ${s.config.providerName}' ==
+                    displayName,
+              )
+              .toList(growable: false);
+          return named.length == 1 ? named.single : null;
+        }
+
         final bySelectedIdentity = selectedChatModel == null
             ? null
             : available
-                .where((s) =>
-                    s.config.id == selectedChatModel['configId'] &&
-                    s.model.id == selectedChatModel['modelId'])
+                .where(
+                  (s) =>
+                      s.config.id == selectedChatModel['configId'] &&
+                      s.model.id == selectedChatModel['modelId'],
+                )
                 .firstOrNull;
-        final selected = boundId != null && boundId.isNotEmpty
-            ? byId.firstOrNull
-            : requestedId != null && requestedId.isNotEmpty
-                ? byProvider.firstOrNull ??
-                    byId.firstOrNull ??
-                    byName.firstOrNull
-                : byName.firstOrNull ?? bySelectedIdentity;
+        final identityCandidates = stableGroupReference != null
+            ? byId
+                .where(
+                  (selected) =>
+                      llmModelGroupIdForConfig(selected.config) ==
+                          stableGroupReference.groupId &&
+                      selected.model.id == stableGroupReference.localModelId,
+                )
+                .toList(growable: false)
+            : constrainToDefaultProvider
+                ? byProvider
+                : byId;
+        final selected = hasRequestedId
+            ? hasBoundId
+                ? identityCandidates.firstOrNull
+                : uniqueMatch(
+                    identityCandidates,
+                    displayName: assistant.defaultModelName,
+                  )
+            : uniqueMatch(byName, displayName: assistant.defaultModelName) ??
+                (hasLegacyModelReference ? null : bySelectedIdentity);
+        if (selected == null && (hasRequestedId || hasLegacyModelReference)) {
+          throw StateError('助手保存的模型引用已删除或供应商配置不可用，请重新选择模型');
+        }
         if (selected == null &&
             selectedChatModel != null &&
             bySelectedIdentity == null &&
@@ -713,8 +775,10 @@ class FlowLaunchSnapshot {
         final map = assistant.toMap();
         if (selected != null) {
           capture(selected);
-          chatModels
-              .add({'blockId': block.id, ...providerModelReference(selected)});
+          chatModels.add({
+            'blockId': block.id,
+            ...providerModelReference(selected),
+          });
           map.remove('modelId');
           map['defaultModelId'] = selected.model.modelId;
           map['defaultProviderName'] = selected.config.providerName;
@@ -723,36 +787,47 @@ class FlowLaunchSnapshot {
         }
         selectedAssistants.add(map);
       } else if (block.typeKey == BlockType.chat && selectedChatModel != null) {
-        final selected =
-            resolveProviderModel(providers, 'llm', selectedChatModel);
+        final selected = resolveProviderModel(
+          providers,
+          'llm',
+          selectedChatModel,
+        );
         if (selected == null) {
           throw StateError('当前选择的对话模型已删除或供应商配置不可用，请重新选择模型');
         }
         capture(selected);
-        chatModels
-            .add({'blockId': block.id, ...providerModelReference(selected)});
+        chatModels.add({
+          'blockId': block.id,
+          ...providerModelReference(selected),
+        });
       }
     }
     return FlowLaunchSnapshot._({
       'flow': flow
           .copyWith(
-              blocks: flow.blocks
-                  .map((b) =>
+            blocks: flow.blocks
+                .map(
+                  (b) =>
                       b.typeKey == BlockType.tts && synthesisDefaults.isNotEmpty
                           ? b.copyWithParam(
-                              '_launchSynthesisConfig', synthesisDefaults)
-                          : b)
-                  .toList())
+                              '_launchSynthesisConfig',
+                              synthesisDefaults,
+                            )
+                          : b,
+                )
+                .toList(),
+          )
           .toMap(),
       'models': models,
       'configs': configs,
       'assistants': selectedAssistants,
-      'chatModels': chatModels
+      'chatModels': chatModels,
     });
   }
 
   TaskFlowDefinition get flow => TaskFlowDefinition.fromMap(
-      Map<String, dynamic>.from(toMap()['flow'] as Map));
+        Map<String, dynamic>.from(toMap()['flow'] as Map),
+      );
   List<Assistant> get assistants => (toMap()['assistants'] as List? ?? [])
       .map((a) => Assistant.fromMap(Map<String, dynamic>.from(a as Map)))
       .toList();
@@ -789,28 +864,34 @@ class FlowLaunchSnapshot {
         .where((id) => id.isNotEmpty)
         .toSet();
     return assistants
-        .where((assistant) =>
-            requiredIds == null || requiredIds.contains(assistant.id))
+        .where(
+      (assistant) => requiredIds == null || requiredIds.contains(assistant.id),
+    )
         .map((assistant) {
       final matches = current.where((a) => a.id == assistant.id).toList();
       if (matches.length != 1) {
         throw StateError('运行快照引用的助手已删除或身份不唯一，请使用最新配置重试');
       }
-      return Assistant.fromMap(Map<String, dynamic>.from(
+      return Assistant.fromMap(
+        Map<String, dynamic>.from(
           _resolvedCredentials(assistant.toMap(), matches.single.toMap())
-              as Map));
+              as Map,
+        ),
+      );
     }).toList();
   }
 
   /// Scope resolution to the blocks that will run. Dispatch resolves one block
   /// at a time so chat's API-ID lookup cannot choose a competing live model.
-  ProviderEntriesState resolveProviders(ProviderEntriesState current,
-      {Iterable<TaskFlowBlock>? blocks}) {
+  ProviderEntriesState resolveProviders(
+    ProviderEntriesState current, {
+    Iterable<TaskFlowBlock>? blocks,
+  }) {
     final map = toMap();
     final frozen = (map['models'] as List? ?? []).cast<Map>();
     final configs = (map['configs'] as List? ?? []).cast<Map>();
     final chatModels = (map['chatModels'] as List? ?? []).cast<Map>();
-    final references = <(String, String)>{};
+    final references = <(String, String, String)>{};
     for (final block in blocks ?? flow.blocks) {
       final reference = block.typeKey == BlockType.chat
           ? chatModels.where((m) => m['blockId'] == block.id).firstOrNull
@@ -818,58 +899,168 @@ class FlowLaunchSnapshot {
       if (reference is Map &&
           reference['configId'] is String &&
           reference['modelId'] is String) {
-        references.add(
-            (reference['configId'] as String, reference['modelId'] as String));
+        references.add((
+          reference['configId'] as String,
+          reference['modelId'] as String,
+          block.typeKey == BlockType.chat ? 'llm' : block.typeKey.name,
+        ));
       }
     }
     final selectedModels = <Map>[];
     for (final reference in references) {
-      final captured = frozen
-          .where((m) =>
-              m['configId'] == reference.$1 &&
-              (m['model'] as Map)['id'] == reference.$2)
+      var captured = frozen
+          .where(
+            (m) =>
+                m['configId'] == reference.$1 &&
+                (m['model'] as Map)['id'] == reference.$2,
+          )
           .firstOrNull;
-      final matches = current.entries
-          .expand((e) => e.configs)
-          .where((config) =>
-              config.id == reference.$1 &&
-              config.host.trim().isNotEmpty &&
-              config.key.trim().isNotEmpty &&
-              config.models.any((model) => model.id == reference.$2))
-          .toList();
-      if (captured == null || matches.length != 1) {
+      if (captured == null &&
+          (reference.$3 == 'llm' || reference.$3 == 'ocr')) {
+        final groupId = reference.$3 == 'ocr'
+            ? llmOcrModelGroupIdForConfig(reference.$1, reference.$2)
+            : stableLlmModelGroupId(reference.$1, reference.$2);
+        captured = frozen
+            .where(
+              (m) =>
+                  m['configId'] == groupId &&
+                  (m['model'] as Map)['id'] == reference.$2,
+            )
+            .firstOrNull;
+      }
+      if (captured == null) {
         throw StateError('运行快照引用的模型或供应商配置已删除或不可用，请使用最新配置重试');
       }
-      selectedModels.add(captured);
+      var matches = current.entries
+          .expand((e) => e.configs)
+          .where(
+            (config) =>
+                config.id == reference.$1 &&
+                (isLlmModelGroupProviderConfig(config) ||
+                    (config.host.trim().isNotEmpty &&
+                        config.key.trim().isNotEmpty)) &&
+                config.models.any(
+                  (model) =>
+                      model.id == reference.$2 &&
+                      (reference.$3 != 'ocr' ||
+                          !isLlmModelGroupProviderConfig(config) ||
+                          llmModelConfigSupportsCapability(model, 'vision')) &&
+                      (reference.$3 != 'llm' ||
+                          !isLlmModelGroupProviderConfig(config) ||
+                          llmModelConfigSupportsCapability(
+                            model,
+                            'streaming',
+                          )),
+                ),
+          )
+          .toList();
+      if (matches.isEmpty && (reference.$3 == 'llm' || reference.$3 == 'ocr')) {
+        final groupId = reference.$3 == 'ocr'
+            ? llmOcrModelGroupIdForConfig(reference.$1, reference.$2)
+            : stableLlmModelGroupId(reference.$1, reference.$2);
+        matches = current.entries
+            .expand((e) => e.configs)
+            .where(
+              (config) =>
+                  isLlmModelGroupProviderConfig(config) &&
+                  llmModelGroupIdForConfig(config) == groupId &&
+                  config.models.any(
+                    (model) =>
+                        model.id == reference.$2 &&
+                        (reference.$3 != 'ocr' ||
+                            llmModelConfigSupportsCapability(
+                              model,
+                              'vision',
+                            )) &&
+                        (reference.$3 != 'llm' ||
+                            llmModelConfigSupportsCapability(
+                              model,
+                              'streaming',
+                            )),
+                  ),
+            )
+            .toList();
+      }
+      if (matches.length != 1) {
+        throw StateError('运行快照引用的模型或供应商配置已删除或不可用，请使用最新配置重试');
+      }
+      selectedModels.add({
+        ...Map<String, dynamic>.from(captured),
+        'configId': matches.single.id,
+        'legacyConfigId': reference.$1,
+      });
     }
-    return ProviderEntriesState(entries: [
-      for (final entry in current.entries)
-        if (entry.configs.any(
-            (config) => selectedModels.any((m) => m['configId'] == config.id)))
-          ProviderEntry.fromMap({
-            ...entry.toMap(),
-            'configs': [
-              for (final config in entry.configs)
-                if (selectedModels.any((m) => m['configId'] == config.id))
-                  {
-                    ...config.toMap(),
-                    ...Map<String, dynamic>.from(_resolvedCredentials(
-                        configs.firstWhere((s) => s['id'] == config.id),
-                        _currentProviderConfig(config)) as Map),
-                    'models': [
-                      for (final model in config.models)
-                        if (references.contains((config.id, model.id)))
+    final resolvedReferences = selectedModels
+        .map(
+          (item) => (
+            item['configId'] as String,
+            (item['model'] as Map)['id'] as String,
+          ),
+        )
+        .toSet();
+    Map<String, dynamic> resolveModel(
+      ProviderConfigItem config,
+      ModelConfig model,
+    ) {
+      final selected = selectedModels.firstWhere(
+        (item) =>
+            item['configId'] == config.id &&
+            (item['model'] as Map)['id'] == model.id,
+      );
+      final resolved = Map<String, dynamic>.from(
+        _resolvedCredentials(selected['model'], model.toMap()) as Map,
+      );
+      if (isLlmModelGroupProviderConfig(config)) {
+        for (final entry in model.legacyFields.entries) {
+          resolved.putIfAbsent(entry.key, () => entry.value);
+        }
+      }
+      return resolved;
+    }
+
+    Map snapshotConfigFor(ProviderConfigItem config) {
+      final selected = selectedModels.firstWhere(
+        (item) => item['configId'] == config.id,
+      );
+      return configs.firstWhere(
+        (snapshot) => snapshot['id'] == selected['legacyConfigId'],
+      );
+    }
+
+    final resultState = ProviderEntriesState(
+      entries: [
+        for (final entry in current.entries)
+          if (entry.configs.any(
+            (config) => selectedModels.any((m) => m['configId'] == config.id),
+          ))
+            ProviderEntry.fromMap({
+              ...entry.toMap(),
+              'configs': [
+                for (final config in entry.configs)
+                  if (selectedModels.any((m) => m['configId'] == config.id))
+                    {
+                      ...config.toMap(),
+                      if (!isLlmModelGroupProviderConfig(config))
+                        ...Map<String, dynamic>.from(
                           _resolvedCredentials(
-                              selectedModels.firstWhere((m) =>
-                                  m['configId'] == config.id &&
-                                  (m['model'] as Map)['id'] ==
-                                      model.id)['model'],
-                              model.toMap())
-                    ]
-                  }
-            ]
-          })
-    ]);
+                            snapshotConfigFor(config),
+                            _currentProviderConfig(config),
+                          ) as Map,
+                        ),
+                      'models': [
+                        for (final model in config.models)
+                          if (resolvedReferences.contains((
+                            config.id,
+                            model.id,
+                          )))
+                            resolveModel(config, model),
+                      ],
+                    },
+              ],
+            }),
+      ],
+    );
+    return resultState;
   }
 
   Map<String, dynamic> toMap() => jsonDecode(_encoded) as Map<String, dynamic>;

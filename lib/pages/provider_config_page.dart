@@ -1,14 +1,21 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/llm_account.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
+import '../services/llm_chat_runtime.dart';
+import '../services/llm_connector_service.dart';
+import '../services/llm_model_group_provider.dart';
 import '../services/todo_tool_service.dart';
 import '../services/web_search_service.dart';
 import 'connectivity_test_dialog.dart';
 import 'provider_config_detail_page.dart';
+import 'llm_account_management_page.dart';
 import 'mcp_server_config_page.dart';
 import 'provider_config_tool_dialogs.dart';
 import 'provider_settings_panel.dart';
@@ -104,6 +111,8 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         configIndex: configIndex,
       );
     } else {
+      final originalConfig = entry.configs[configIndex];
+      final editedConfigId = originalConfig.id;
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -113,6 +122,29 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           ),
         ),
       );
+      if (entry.type == 'ocr' && mounted) {
+        final updatedConfig = _entry?.configs
+            .where((config) => config.id == editedConfigId)
+            .firstOrNull;
+        if (updatedConfig != null &&
+            jsonEncode(originalConfig.toMap()) !=
+                jsonEncode(updatedConfig.toMap())) {
+          try {
+            final runtime = await LlmChatRoutingRuntime.sharedPlatform();
+            await ensureLegacyOcrProviderConfigGroups(
+              runtime: runtime,
+              config: updatedConfig,
+              previousConfig: originalConfig,
+            );
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('OCR 账号同步失败；请在账号管理中检查配置。')),
+              );
+            }
+          }
+        }
+      }
     }
     if (!mounted) return;
     setState(() {});
@@ -298,6 +330,24 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
     if (confirmed != true) return;
 
+    final sourceConfig = entry.configs[configIndex];
+    if (entry.type == 'ocr') {
+      try {
+        final runtime = await LlmChatRoutingRuntime.sharedPlatform();
+        await ensureLegacyOcrProviderConfigGroups(
+          runtime: runtime,
+          config: sourceConfig,
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('OCR 账号迁移失败；原配置仍保留。')));
+        }
+        return;
+      }
+    }
+
     var configs = entry.configs.map((c) => c.copy()).toList();
     configs.removeAt(configIndex);
 
@@ -409,8 +459,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     if (name == null || name.isEmpty || !mounted) return;
     final groups = ref.read(providerEntriesProvider).mcpGroups;
     if (groups.any((group) => group.name.toLowerCase() == name.toLowerCase())) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
     await ref
@@ -428,8 +479,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       (item) =>
           item.id != group.id && item.name.toLowerCase() == name.toLowerCase(),
     )) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('组别名称已存在')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('组别名称已存在')));
       return;
     }
     await ref
@@ -759,6 +811,94 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     );
   }
 
+  Future<void> _syncLegacyLlmAccountConfig(LlmAccount account) async {
+    final state = ref.read(providerEntriesProvider);
+    final entry = state.entries.where((item) => item.type == 'llm').firstOrNull;
+    if (entry == null ||
+        !entry.configs.any((config) => config.id == account.id)) {
+      return;
+    }
+    final configs = entry.configs.map((config) {
+      if (config.id != account.id) return config;
+      final raw = config.toMap()
+        ..['providerName'] = account.displayName
+        ..['connectorType'] = account.connectorType
+        ..['authType'] = account.authType
+        ..['endpointType'] =
+            LlmConnectorRegistry.canonicalId(account.connectorType) == 'claude'
+                ? 'anthropic'
+                : 'openai'
+        ..['models'] = account.models.map((model) {
+          final modelConfig = Map<String, dynamic>.from(model.config)
+            ..['id'] = model.id
+            ..['name'] = model.displayName
+            ..['modelId'] = model.upstreamModelId
+            ..['capabilities'] = Map<String, dynamic>.from(
+              model.capabilities,
+            )
+            // Legacy imports default these two capabilities to true.
+            // Mark account-edited rows so an omitted value stays unknown.
+            ..['accountCapabilitiesEdited'] = true;
+          final streaming = model.capabilities['streaming'];
+          if (streaming is bool) {
+            modelConfig['supportStream'] = streaming;
+          } else {
+            modelConfig.remove('supportStream');
+          }
+          final instruction = model.capabilities['instruction'];
+          if (instruction is bool) {
+            modelConfig['supportInstruction'] = instruction;
+          } else {
+            modelConfig.remove('supportInstruction');
+          }
+          return modelConfig;
+        }).toList();
+      final endpoint = account.endpointConfig['baseUrl'] ??
+          account.endpointConfig['host'] ??
+          account.endpointConfig['apiBase'];
+      raw['host'] = endpoint is String ? endpoint : '';
+      for (final key in const ['baseUrl', 'apiBase']) {
+        final value = account.endpointConfig[key];
+        if (value is String && value.isNotEmpty) {
+          raw[key] = value;
+        } else {
+          raw.remove(key);
+        }
+      }
+      if (account.credentialRef == null) {
+        raw.remove('credentialRef');
+      } else {
+        raw['credentialRef'] = account.credentialRef;
+      }
+      return ProviderConfigItem.fromMap(raw);
+    }).toList(growable: false);
+    await ref.read(providerEntriesProvider.notifier).update(
+          entry.id,
+          ProviderEntry(
+            id: entry.id,
+            type: entry.type,
+            name: entry.name,
+            enabled: entry.enabled,
+            legacyFields: entry.legacyFields,
+            configs: configs,
+          ),
+        );
+  }
+
+  Future<void> _removeLegacyLlmAccountConfig(LlmAccount account) async {
+    final state = ref.read(providerEntriesProvider);
+    final next = removeLegacyLlmAccountSourceConfigs(state, account);
+    if (identical(next, state)) return;
+    final notifier = ref.read(providerEntriesProvider.notifier);
+    for (final updated in next.entries) {
+      final previous =
+          state.entries.where((entry) => entry.id == updated.id).firstOrNull;
+      if (previous != null && !identical(previous, updated)) {
+        await notifier.update(updated.id, updated);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final entriesState = ref.watch(providerEntriesProvider);
@@ -769,6 +909,16 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
       return Scaffold(
         appBar: AppBar(title: const Text('配置')),
         body: const Center(child: Text('供应商未找到')),
+      );
+    }
+    if (entry.type == 'llm' &&
+        !entriesState.llmCredentialMigrationUnavailable &&
+        !entriesState.llmModelGroupCatalogUnavailable) {
+      return LlmAccountManagementPage(
+        onConfigurationChanged: () =>
+            ref.read(providerEntriesProvider.notifier).load(),
+        onAccountSaved: _syncLegacyLlmAccountConfig,
+        onAccountDeleted: _removeLegacyLlmAccountConfig,
       );
     }
     if (entry.type == 'mcp') {
@@ -905,10 +1055,9 @@ class _McpPageIntro extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: colorScheme.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
@@ -975,10 +1124,9 @@ class _McpSectionHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 description,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -1011,19 +1159,18 @@ class _McpEmptyState extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             '还没有服务配置',
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w600),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 4),
           Text(
             '添加一个 MCP 服务或 HTTP 搜索接口，连接后即可在助手中使用。',
             textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
           FilledButton.tonalIcon(
