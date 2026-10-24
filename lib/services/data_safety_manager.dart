@@ -32,6 +32,10 @@ enum DataSafetyState {
 
 /// 持久化的数据安全状态（`<AppStorage>/.data_safety.json`）。
 class DataSafetyStatus {
+  static final RegExp _versionPattern = RegExp(
+    r'^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
+  );
+
   final DataSafetyState state;
 
   /// 冻结时的应用版本（编译期常量 [appVersion]）。
@@ -79,9 +83,8 @@ class DataSafetyStatus {
     if (stateName is! String) {
       throw const FormatException('数据安全状态缺少有效 state');
     }
-    final matchingStates = DataSafetyState.values
-        .where((state) =>
-            state.name == stateName && state != DataSafetyState.unreadable);
+    final matchingStates = DataSafetyState.values.where((state) =>
+        state.name == stateName && state != DataSafetyState.unreadable);
     if (matchingStates.isEmpty) {
       throw FormatException('无效的数据安全状态: $stateName');
     }
@@ -92,15 +95,17 @@ class DataSafetyStatus {
     final updatedAtValue = json['updatedAt'];
     if (frozenByVersion != null && frozenByVersion is! String ||
         failedMigration != null && failedMigration is! String ||
-        targetFormatVersion != null && targetFormatVersion is! num ||
+        targetFormatVersion != null &&
+            (targetFormatVersion is! num ||
+                !targetFormatVersion.isFinite ||
+                targetFormatVersion != targetFormatVersion.toInt()) ||
         updatedAtValue != null && updatedAtValue is! String) {
       throw const FormatException('数据安全状态字段格式无效');
     }
     if (matchingStates.single == DataSafetyState.frozen) {
       final version = frozenByVersion as String?;
-      final isValidVersion = version != null &&
-          RegExp(r'^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
-              .hasMatch(version);
+      final isValidVersion =
+          version != null && _versionPattern.hasMatch(version);
       if (!isValidVersion) {
         throw const FormatException('冻结状态缺少有效的冻结版本');
       }
@@ -211,6 +216,10 @@ class DataSafetyManager {
     required String description,
   }) async {
     final current = await loadStatus();
+    if (current.isUnreadable) {
+      debugPrint('[DataSafetyManager] 状态未知，保持现有安全标记');
+      return;
+    }
     await saveStatus(DataSafetyStatus(
       state: DataSafetyState.frozen,
       frozenByVersion: appVersion,

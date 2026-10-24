@@ -180,7 +180,7 @@ void main() {
       final status = await DataSafetyManager.loadStatus();
       await DataSafetyManager.saveStatus(DataSafetyStatus(
         state: DataSafetyState.frozen,
-        frozenByVersion: 'other-version-999',
+        frozenByVersion: 'v0.4.9',
         failedMigration: status.failedMigration,
       ));
       result = await DataSafetyManager.checkAndRepair();
