@@ -107,7 +107,7 @@ class AssistantSelectionPage extends ConsumerWidget {
                     gridCrossAxisSpacing: 12,
                     gridMainAxisSpacing: 12,
                     gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 800),
+                    dragDelay: const Duration(milliseconds: 600),
                     dragHighlightColor: dragHighlightColor,
                     draggedItemOpacity: 0.88,
                     values: [for (final a in assistants) a.id],

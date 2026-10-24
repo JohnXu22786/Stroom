@@ -197,6 +197,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   /// 最近一次拖拽指针的全局坐标（边缘滚动时重新计算插入点）。
   Offset? _lastDragGlobal;
 
+  /// 网格项松手后飞向槽位的副本；源项保持隐藏直到动画结束。
+  OverlayEntry? _releaseOverlayEntry;
+  String? _releaseValue;
+
   /// 条目之间的横向间隙（网格用列间距，其余 8）。
   double get _itemGap => widget.grid ? widget.gridCrossAxisSpacing : 8;
 
@@ -263,13 +267,18 @@ class _DragSortAreaState extends State<DragSortArea> {
     // dispose——必须停掉自动滚动，否则其内部循环会对已销毁的 ScrollPosition
     // 继续滚动、并回调 _onScrollDuringDrag 对已销毁的 State 调用 setState。
     _stopAutoScroll();
+    _releaseOverlayEntry?.remove();
+    _releaseOverlayEntry?.dispose();
     super.dispose();
   }
 
-  void dragEnd() {
+  void dragEnd([DraggableDetails? details]) {
     _stopAutoScroll();
     final d = _dragIndex;
     final t = _insertIndex;
+    if (widget.grid && details != null && d != null && t != null) {
+      _animateGridRelease(d, t, details.offset);
+    }
     // 页面已在拖拽中被移除（返回上级等）：不更新 UI，也不提交排序
     if (!mounted) return;
     setState(() {
@@ -279,6 +288,65 @@ class _DragSortAreaState extends State<DragSortArea> {
     if (d == null || t == null || d == t) return;
     // _insertIndex 已是「移除后插入」索引
     widget.onReorder(d, t);
+  }
+
+  void _animateGridRelease(int from, int to, Offset globalOffset) {
+    final areaBox = context.findRenderObject() as RenderBox?;
+    final overlay = Overlay.maybeOf(context);
+    final overlayBox = overlay?.context.findRenderObject() as RenderBox?;
+    if (areaBox == null || overlay == null || overlayBox == null ||
+        !areaBox.hasSize || !overlayBox.hasSize) {
+      return;
+    }
+
+    final targetRect = _layoutPreview(to, from)[to];
+    final targetGlobal = areaBox.localToGlobal(targetRect.topLeft);
+    // DraggableDetails.offset is already the feedback's global top-left
+    // (the pointer's drag anchor has been subtracted by Draggable).
+    final begin = overlayBox.globalToLocal(globalOffset);
+    final end = overlayBox.globalToLocal(targetGlobal);
+    final value = widget.values[from];
+    final releasedChild = _withDragHighlight(
+      widget.itemBuilder!(context, from, value),
+    );
+
+    _releaseOverlayEntry?.remove();
+    _releaseOverlayEntry?.dispose();
+    _releaseValue = value;
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) => TweenAnimationBuilder<Offset>(
+        tween: Tween<Offset>(begin: begin, end: end),
+        duration: const Duration(milliseconds: 190),
+        curve: Curves.easeOutBack,
+        onEnd: () {
+          if (!identical(_releaseOverlayEntry, entry)) return;
+          entry.remove();
+          entry.dispose();
+          _releaseOverlayEntry = null;
+          if (mounted) {
+            setState(() => _releaseValue = null);
+          }
+        },
+        builder: (context, position, child) => Positioned(
+          left: position.dx,
+          top: position.dy,
+          width: targetRect.width,
+          height: targetRect.height,
+          child: IgnorePointer(child: child),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: releasedChild,
+          ),
+        ),
+      ),
+    );
+    _releaseOverlayEntry = entry;
+    overlay.insert(entry);
   }
 
   void dragCanceled() {
@@ -444,8 +512,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       ignoringFeedbackPointer: true,
       onDragStarted: () => dragStarted(k),
       onDragUpdate: (d) => dragUpdate(d.globalPosition),
-      onDragEnd: (details) => dragEnd(),
-      onDraggableCanceled: (velocity, offset) => dragCanceled(),
+      onDragEnd: dragEnd,
       feedback: Container(
         width: _gridCellWidth,
         height: _gridCellHeight,
@@ -671,10 +738,15 @@ class _DragSortAreaState extends State<DragSortArea> {
             );
             for (var k = 0; k < n; k++) {
               final child = _item(k);
+              final releasing = widget.grid && _releaseValue == values[k];
               entries.add((
                 _keyOf(k),
                 rects[k],
-                !widget.wrap ? Opacity(opacity: 1.0, child: child) : child,
+                releasing
+                    ? Opacity(opacity: 0, child: child)
+                    : !widget.wrap
+                        ? Opacity(opacity: 1.0, child: child)
+                        : child,
               ));
             }
           }
