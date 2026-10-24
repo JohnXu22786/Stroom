@@ -80,7 +80,8 @@ class DataSafetyStatus {
       throw const FormatException('数据安全状态缺少有效 state');
     }
     final matchingStates = DataSafetyState.values
-        .where((state) => state.name == stateName && !state.isUnreadable);
+        .where((state) =>
+            state.name == stateName && state != DataSafetyState.unreadable);
     if (matchingStates.isEmpty) {
       throw FormatException('无效的数据安全状态: $stateName');
     }
@@ -95,10 +96,14 @@ class DataSafetyStatus {
         updatedAtValue != null && updatedAtValue is! String) {
       throw const FormatException('数据安全状态字段格式无效');
     }
-    if (matchingStates.single == DataSafetyState.frozen &&
-        (frozenByVersion == null ||
-            (frozenByVersion as String).trim().isEmpty)) {
-      throw const FormatException('冻结状态缺少有效的冻结版本');
+    if (matchingStates.single == DataSafetyState.frozen) {
+      final version = frozenByVersion as String?;
+      final isValidVersion = version != null &&
+          RegExp(r'^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
+              .hasMatch(version);
+      if (!isValidVersion) {
+        throw const FormatException('冻结状态缺少有效的冻结版本');
+      }
     }
     final updatedAt = updatedAtValue == null
         ? null

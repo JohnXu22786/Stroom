@@ -197,12 +197,12 @@ class _StartupAppState extends State<StartupApp>
                 '为避免覆盖可能存在的冻结状态，应用已阻止启动，未执行数据修复或格式迁移。'
                 '请先使用「导出数据」保存数据文件，然后退出应用并修复状态标记后重试。'
             : (status.failedMigration != null)
-            ? '数据格式迁移失败（${status.failedMigration}）。\n\n'
-                '为保护数据未做任何改动。请回退到旧版本应用，'
-                '或等待修复版本发布后再升级。'
-            : '数据损坏且无法自动修复。\n\n'
-                '应用已冻结以防止进一步破坏。请使用「导出数据」'
-                '保存数据文件，然后手动导入或重新安装。';
+                ? '数据格式迁移失败（${status.failedMigration}）。\n\n'
+                    '为保护数据未做任何改动。请回退到旧版本应用，'
+                    '或等待修复版本发布后再升级。'
+                : '数据损坏且无法自动修复。\n\n'
+                    '应用已冻结以防止进一步破坏。请使用「导出数据」'
+                    '保存数据文件，然后手动导入或重新安装。';
         setState(() {
           _isWorking = false;
           _dataSafetyBlocked = desc;
@@ -249,12 +249,12 @@ class _StartupAppState extends State<StartupApp>
                 '应用已停止继续启动。请先使用「导出数据」保存数据文件，'
                 '然后退出应用并修复状态标记后重试。'
             : (postMigrationStatus.failedMigration != null)
-            ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
-                '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
-                '或等待修复版本发布后再升级。'
-            : '数据损坏且无法自动修复。\n\n'
-                '应用已冻结以防止进一步破坏。请使用「导出数据」'
-                '保存数据文件，然后手动导入或重新安装。';
+                ? '数据格式迁移失败（${postMigrationStatus.failedMigration}）。\n\n'
+                    '已自动恢复到迁移前的数据。为保护数据，请回退到旧版本应用，'
+                    '或等待修复版本发布后再升级。'
+                : '数据损坏且无法自动修复。\n\n'
+                    '应用已冻结以防止进一步破坏。请使用「导出数据」'
+                    '保存数据文件，然后手动导入或重新安装。';
         debugPrint('[StartupApp] 迁移后检测到冻结，显示阻断页');
         setState(() {
           _isWorking = false;
