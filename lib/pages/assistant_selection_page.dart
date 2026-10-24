@@ -111,11 +111,9 @@ class AssistantSelectionPage extends ConsumerWidget {
                     dragHighlightColor: dragHighlightColor,
                     draggedItemOpacity: 0.88,
                     values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) =>
-                        ref.read(assistantProvider.notifier).reorderAssistant(
-                              from,
-                              to,
-                            ),
+                    onReorder: (from, to) => ref
+                        .read(assistantProvider.notifier)
+                        .reorderAssistant(from, to),
                     itemBuilder: (context, index, id) {
                       final assistant = assistants[index];
                       return AssistantCard(
@@ -190,7 +188,9 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref.read(assistantProvider.notifier).createAssistant(
+                ref
+                    .read(assistantProvider.notifier)
+                    .createAssistant(
                       name: name,
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,

@@ -76,7 +76,7 @@ class DragSortArea extends StatefulWidget {
   /// 行/网格布局：条目内容构建器。行内含 [DragSortRowHandle] 作为拖拽
   /// 把手；网格内整格长按拖拽。
   final Widget Function(BuildContext context, int index, String value)?
-      itemBuilder;
+  itemBuilder;
 
   /// 排序提交回调：from/to 为「移除 after 插入」索引（与
   /// `ReorderableListView.onReorderItem` 一致）。
@@ -143,10 +143,7 @@ class DragSortRowHandle extends StatelessWidget {
       onDraggableCanceled: (velocity, offset) => controller.dragCanceled(),
       // 反馈在 Overlay 上以松散约束布局，必须限定宽度（行内 Expanded
       // 需要有界宽度，否则整行会被撑满屏幕）。
-      feedback: SizedBox(
-        width: controller.maxWidth,
-        child: feedback,
-      ),
+      feedback: SizedBox(width: controller.maxWidth, child: feedback),
       childWhenDragging: Opacity(opacity: 1.0, child: child),
       child: child,
     );
@@ -294,8 +291,11 @@ class _DragSortAreaState extends State<DragSortArea> {
     final areaBox = context.findRenderObject() as RenderBox?;
     final overlay = Overlay.maybeOf(context);
     final overlayBox = overlay?.context.findRenderObject() as RenderBox?;
-    if (areaBox == null || overlay == null || overlayBox == null ||
-        !areaBox.hasSize || !overlayBox.hasSize) {
+    if (areaBox == null ||
+        overlay == null ||
+        overlayBox == null ||
+        !areaBox.hasSize ||
+        !overlayBox.hasSize) {
       return;
     }
 
@@ -382,10 +382,12 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   double _distanceToRect(Offset p, Rect r) {
-    final dx =
-        p.dx < r.left ? r.left - p.dx : (p.dx > r.right ? p.dx - r.right : 0);
-    final dy =
-        p.dy < r.top ? r.top - p.dy : (p.dy > r.bottom ? p.dy - r.bottom : 0);
+    final dx = p.dx < r.left
+        ? r.left - p.dx
+        : (p.dx > r.right ? p.dx - r.right : 0);
+    final dy = p.dy < r.top
+        ? r.top - p.dy
+        : (p.dy > r.bottom ? p.dy - r.bottom : 0);
     return math.sqrt(dx * dx + dy * dy);
   }
 
@@ -417,15 +419,17 @@ class _DragSortAreaState extends State<DragSortArea> {
     return kPrime < t ? kPrime : kPrime + 1;
   }
 
-  List<Rect> _layoutRects(List<double> widths,
-      [List<double> minWidths = const []]) {
+  List<Rect> _layoutRects(
+    List<double> widths, [
+    List<double> minWidths = const [],
+  ]) {
     final rects = <Rect>[];
     var x = 0.0, y = 0.0, rowBottom = 0.0;
     final itemHeight = widget.grid
         ? _gridCellHeight
         : widget.wrap
-            ? _kPillHeight
-            : widget.rowExtent;
+        ? _kPillHeight
+        : widget.rowExtent;
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
@@ -654,11 +658,13 @@ class _DragSortAreaState extends State<DragSortArea> {
       height: size.height,
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(widget.wrap
-            ? 20
-            : widget.grid
-                ? 16
-                : 8),
+        borderRadius: BorderRadius.circular(
+          widget.wrap
+              ? 20
+              : widget.grid
+              ? 16
+              : 8,
+        ),
         border: Border.all(
           color: cs.primary.withValues(alpha: 0.7),
           width: 1.5,
@@ -725,10 +731,7 @@ class _DragSortAreaState extends State<DragSortArea> {
               _keyOf(d),
               rects[t],
               !widget.wrap
-                  ? Opacity(
-                      opacity: widget.draggedItemOpacity,
-                      child: _item(d),
-                    )
+                  ? Opacity(opacity: widget.draggedItemOpacity, child: _item(d))
                   : _item(d),
             ));
           } else {
@@ -745,8 +748,8 @@ class _DragSortAreaState extends State<DragSortArea> {
                 releasing
                     ? Opacity(opacity: 0, child: child)
                     : !widget.wrap
-                        ? Opacity(opacity: 1.0, child: child)
-                        : child,
+                    ? Opacity(opacity: 1.0, child: child)
+                    : child,
               ));
             }
           }
