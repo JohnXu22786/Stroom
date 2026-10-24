@@ -471,4 +471,27 @@ void main() {
       expect(manager.adapter.modelConfig?.id, 'model-B');
     },
   );
+
+  test(
+    'Task Flow snapshots restore credentials from migrated secure refs',
+    () async {
+      final providers = _providers();
+      await prepare(providers);
+      final migrated = container.read(providerEntriesProvider);
+      final snapshot = FlowLaunchSnapshot.capture(
+        TaskFlowDefinition(blocks: [TaskFlowBlock(typeKey: BlockType.chat)]),
+        migrated,
+        [],
+        selectedChatModel: _referenceA,
+      );
+
+      final resolved = snapshot.resolveProviders(migrated);
+      final config = resolved.entries
+          .expand((entry) => entry.configs)
+          .firstWhere((config) => config.id == 'config-A');
+
+      expect(config.credentialRef, isNotNull);
+      expect(config.key, 'old-key');
+    },
+  );
 }
