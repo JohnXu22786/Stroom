@@ -81,6 +81,8 @@ Widget _buildTestApp({
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
+  Future<int?> Function(OcrConfig config, List<SelectedImage> images)?
+      testRequestSizePreflight,
   OcrService Function(OcrConfig config)? testOcrServiceFactory,
   Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer,
@@ -129,6 +131,7 @@ Widget _buildTestApp({
         testCameraPicker: testCameraPicker,
         testGalleryPicker: testGalleryPicker,
         testImagePayloadPreparer: testImagePayloadPreparer,
+        testRequestSizePreflight: testRequestSizePreflight,
         testRetryImageRestorer: testRetryImageRestorer,
         testRetrySnapshotCacher: testRetrySnapshotCacher,
       ),
@@ -2137,6 +2140,87 @@ void main() {
   });
 
   group('OcrPage - instruction selector', () {
+    testWidgets(
+      'keeps the submitted instruction when selection changes during preflight',
+      (tester) async {
+        final preflightStarted = Completer<void>();
+        final finishPreflight = Completer<int?>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final adapter = _CapturingOcrAdapter();
+        OcrConfig? preflightConfig;
+        OcrConfig? serviceConfig;
+        OcrRetrySnapshot? cachedSnapshot;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [_createValidOcrTestImage()],
+            backgroundTasksNotifier: notifier,
+            ocrInstructions: const [
+              OcrInstruction(name: 'Instruction A', content: 'original prompt'),
+              OcrInstruction(name: 'Instruction B', content: 'changed prompt'),
+            ],
+            testRequestSizePreflight: (config, _) {
+              preflightConfig = config;
+              preflightStarted.complete();
+              return finishPreflight.future;
+            },
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cachedSnapshot = snapshot;
+              return Future.value(
+                OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ),
+              );
+            },
+            testOcrServiceFactory: (config) {
+              serviceConfig = config;
+              return OcrService(
+                config: config,
+                dio: Dio()..httpClientAdapter = adapter,
+              );
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Instruction A').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preflightStarted.future;
+
+        await tester.tap(find.text('Instruction A'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Instruction B').last);
+        await tester.pumpAndSettle();
+
+        finishPreflight.complete(defaultOcrRequestSizeBudgetBytes);
+        await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);
+        await _pumpUntil(tester, () => serviceConfig != null);
+
+        expect(
+          preflightConfig?.typeConfig['userInstruction'],
+          'original prompt',
+        );
+        expect(
+          serviceConfig?.typeConfig['userInstruction'],
+          'original prompt',
+        );
+        expect(cachedSnapshot?.instructionContent, 'original prompt');
+        expect(
+          OcrRetrySnapshot.fromMap(notifier.tasksForTest.single.retryData!)
+              .instructionContent,
+          'original prompt',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
     testWidgets('always shown even without any configured instructions', (
       tester,
     ) async {
