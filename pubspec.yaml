@@ -112,6 +112,11 @@ dev_dependencies:
   # (transitive via flutter_chat_ui, but must be declared to import it).
   visibility_detector: ^0.4.0+2
 
+dependency_overrides:
+  # Newer AVFoundation plugin releases use an isolation argument unavailable in
+  # the Xcode SDK used by the macOS and iOS release runners.
+  video_player_avfoundation: 2.12.0
+
 flutter:
   config:
     enable-swift-package-manager: false
