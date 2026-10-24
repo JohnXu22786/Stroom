@@ -14,6 +14,36 @@ import 'package:stroom/services/background_service.dart';
 import 'package:stroom/services/desktop_app_service.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/services/ios_continued_task_service.dart';
+import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
+
+class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
+  @override
+  Future<void> setIcon(String iconPath) async {}
+
+  @override
+  Future<void> setToolTip(String toolTip) async {}
+
+  @override
+  Future<void> setContextMenu(Menu menu) async {}
+
+  @override
+  Future<void> popUpContextMenu() async {}
+
+  @override
+  Future<void> destroy() async {}
+
+  @override
+  void addListener(TrayListener listener) {}
+
+  @override
+  void removeListener(TrayListener listener) {}
+}
+
+void _resetDesktopAppServiceForTest() {
+  final service = DesktopAppService.instance;
+  service.resetForTesting();
+  service.setTrayAdapterForTesting(_TestDesktopTrayAdapter());
+}
 
 /// Builds the test app wrapping BackgroundOptimizationPage.
 /// Optionally overrides [backgroundTasksProvider] with a pre-seeded notifier
@@ -194,6 +224,8 @@ MockBackgroundServicePlatform registerMockPlatform() {
 }
 
 void main() {
+  setUp(_resetDesktopAppServiceForTest);
+
   tearDown(() {
     // 清理跨测试泄漏的 mock 通道处理器与平台覆盖。
     final messenger =
@@ -597,7 +629,7 @@ void main() {
           });
           debugDefaultTargetPlatformOverride = TargetPlatform.windows;
           final service = DesktopAppService.instance;
-          service.resetForTesting();
+          _resetDesktopAppServiceForTest();
           final menuReady = Completer<void>();
           final messenger =
               TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -639,7 +671,7 @@ void main() {
           } finally {
             if (!menuReady.isCompleted) menuReady.complete();
             await tester.pumpWidget(const SizedBox.shrink());
-            service.resetForTesting();
+            _resetDesktopAppServiceForTest();
             messenger.setMockMethodCallHandler(
                 const MethodChannel('tray_manager'), null);
             debugDefaultTargetPlatformOverride = null;
@@ -676,7 +708,7 @@ void main() {
         expect(find.textContaining('系统托盘'), findsWidgets);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -708,7 +740,7 @@ void main() {
         expect(find.textContaining('桌面平台已启用托盘驻留'), findsNothing);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -734,7 +766,7 @@ void main() {
         expect(find.textContaining('托盘菜单选择「显示主窗口」'), findsOneWidget);
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -1548,7 +1580,7 @@ void main() {
         );
       } finally {
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -1556,7 +1588,7 @@ void main() {
         'keeps saved close behavior when the desktop preference write fails',
         (tester) async {
       registerMockPlatform();
-      DesktopAppService.instance.resetForTesting();
+      _resetDesktopAppServiceForTest();
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       final originalExitApp = DesktopAppService.exitApp;
       final exitCodes = <int>[];
@@ -1625,7 +1657,7 @@ void main() {
       } finally {
         DesktopAppService.exitApp = originalExitApp;
         debugDefaultTargetPlatformOverride = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
 
@@ -1712,7 +1744,7 @@ void main() {
       final exitCodes = <int>[];
       DesktopAppService.exitApp = exitCodes.add;
       try {
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
         debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
@@ -1736,7 +1768,7 @@ void main() {
       } finally {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.exitApp = exit;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
     testWidgets('quit button respects the injected quit confirmation',
@@ -1754,7 +1786,7 @@ void main() {
       final exitCodes = <int>[];
       DesktopAppService.exitApp = exitCodes.add;
       try {
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
         debugDefaultTargetPlatformOverride = TargetPlatform.windows;
         tester.view.physicalSize = const Size(1080, 5000);
         tester.view.devicePixelRatio = 1.0;
@@ -1783,7 +1815,7 @@ void main() {
         debugDefaultTargetPlatformOverride = null;
         DesktopAppService.exitApp = exit;
         DesktopAppService.instance.onQuitConfirmation = null;
-        DesktopAppService.instance.resetForTesting();
+        _resetDesktopAppServiceForTest();
       }
     });
   });

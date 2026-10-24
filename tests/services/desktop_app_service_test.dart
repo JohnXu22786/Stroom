@@ -68,7 +68,9 @@ class _RecordingTrayAdapter implements DesktopTrayAdapter {
   @override
   void removeListener(TrayListener listener) {
     mock.hasListeners = false;
-    _record('removeListener');
+    // Listener cleanup must not replay a tray failure deliberately injected
+    // into operational calls by an error-path test.
+    mock.calls.add(const MethodCall('removeListener'));
   }
 }
 
