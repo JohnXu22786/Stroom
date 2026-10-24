@@ -9,11 +9,48 @@ import 'package:flutter/foundation.dart'
         debugPrint,
         defaultTargetPlatform,
         visibleForTesting;
-import 'package:tray_manager/tray_manager.dart';
+import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
 import 'background_service.dart' as background_service;
+
+/// Operations the desktop window service needs from the native tray plugin.
+/// Keeping this boundary injectable lets tests cover tray behavior without
+/// constructing GTK or other platform-native objects.
+abstract interface class DesktopTrayAdapter {
+  Future<void> setIcon(String iconPath);
+  Future<void> setToolTip(String toolTip);
+  Future<void> setContextMenu(Menu menu);
+  Future<void> popUpContextMenu();
+  Future<void> destroy();
+  void addListener(TrayListener listener);
+  void removeListener(TrayListener listener);
+}
+
+class _LegacyDesktopTrayAdapter implements DesktopTrayAdapter {
+  @override
+  Future<void> setIcon(String iconPath) => trayManager.setIcon(iconPath);
+
+  @override
+  Future<void> setToolTip(String toolTip) => trayManager.setToolTip(toolTip);
+
+  @override
+  Future<void> setContextMenu(Menu menu) => trayManager.setContextMenu(menu);
+
+  @override
+  Future<void> popUpContextMenu() => trayManager.popUpContextMenu();
+
+  @override
+  Future<void> destroy() => trayManager.destroy();
+
+  @override
+  void addListener(TrayListener listener) => trayManager.addListener(listener);
+
+  @override
+  void removeListener(TrayListener listener) =>
+      trayManager.removeListener(listener);
+}
 
 // ====================================================================
 // DesktopAppService — 桌面端窗口与系统托盘驻留服务
@@ -67,6 +104,7 @@ class DesktopAppService extends WindowListener with TrayListener {
   final _trayReady = ValueNotifier<bool>(false);
   bool _quitRequested = false;
   Menu? _menu;
+  DesktopTrayAdapter _trayAdapter = _LegacyDesktopTrayAdapter();
 
   /// 当前是否运行在桌面平台（Windows / macOS / Linux）。
   ///
@@ -77,6 +115,13 @@ class DesktopAppService extends WindowListener with TrayListener {
   /// 测试用：暴露构建好的托盘菜单，便于模拟菜单点击。
   @visibleForTesting
   Menu? get trayMenuForTesting => _menu;
+
+  /// Replaces native tray calls in tests to avoid loading platform FFI code.
+  @visibleForTesting
+  void setTrayAdapterForTesting(DesktopTrayAdapter adapter) {
+    _trayAdapter.removeListener(this);
+    _trayAdapter = adapter;
+  }
 
   /// 托盘是否已成功注册（用于 UI 展示真实状态）。
   bool get isTrayReady => _trayReady.value;
@@ -95,7 +140,8 @@ class DesktopAppService extends WindowListener with TrayListener {
   @visibleForTesting
   void resetForTesting() {
     windowManager.removeListener(this);
-    trayManager.removeListener(this);
+    _trayAdapter.removeListener(this);
+    _trayAdapter = _LegacyDesktopTrayAdapter();
     _initialized = false;
     _windowCloseListenerRegistered = false;
     _pendingCloseBeforeTrayReady = false;
@@ -150,7 +196,7 @@ class DesktopAppService extends WindowListener with TrayListener {
       // 2. 注册托盘图标与菜单。失败则回退为「关闭即退出」，
       //    避免窗口隐藏后应用无法找回。
       try {
-        await trayManager
+        await _trayAdapter
             .setIcon(
               defaultTargetPlatform == TargetPlatform.windows
                   ? _trayIconIco
@@ -161,12 +207,12 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 单独捕获，避免拖垮整个托盘注册流程；同样受超时保护
         // （DBus/appindicator 挂起时不能无限期停留在无监听的拦截状态）。
         try {
-          await trayManager.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
+          await _trayAdapter.setToolTip('Stroom 正在后台运行').timeout(_trayTimeout);
         } catch (e) {
           debugPrint('[DesktopAppService] setToolTip unsupported: $e');
         }
         _menu = _buildMenu();
-        await trayManager.setContextMenu(_menu!).timeout(_trayTimeout);
+        await _trayAdapter.setContextMenu(_menu!).timeout(_trayTimeout);
         _trayReady.value = true;
         _trayRollbackCloseInterceptionFailed = false;
         debugPrint('[DesktopAppService] Tray icon registered');
@@ -178,7 +224,7 @@ class DesktopAppService extends WindowListener with TrayListener {
         // 同样受超时保护：回滚路径绝不能再次被插件挂起阻塞
         // （否则 setPreventClose(false) 永远执行不到，窗口无法关闭）。
         try {
-          await trayManager.destroy().timeout(_trayTimeout);
+          await _trayAdapter.destroy().timeout(_trayTimeout);
         } catch (_) {}
         // 托盘不可用：撤销拦截，恢复「关闭即退出」。
         // 此时尚未注册监听，也不会有幽灵窗口。
@@ -213,7 +259,7 @@ class DesktopAppService extends WindowListener with TrayListener {
       }
 
       // 3. 窗口关闭监听已在启动时注册；托盘就绪后注册托盘事件监听。
-      trayManager.addListener(this);
+      _trayAdapter.addListener(this);
       if (_pendingCloseBeforeTrayReady) {
         _pendingCloseBeforeTrayReady = false;
         unawaited(_handleWindowClose());
@@ -340,9 +386,10 @@ class DesktopAppService extends WindowListener with TrayListener {
     // Linux 插件未实现 popUpContextMenu（菜单随左键自动弹出），
     // 异常通过 Future 异步抛出，必须用 catchError 兜住。
     unawaited(
-      trayManager.popUpContextMenu().catchError((Object e) => debugPrint(
-            '[DesktopAppService] popUpContextMenu unsupported: $e',
-          )),
+      _trayAdapter.popUpContextMenu().catchError(
+            (Object e) => debugPrint(
+                '[DesktopAppService] popUpContextMenu unsupported: $e'),
+          ),
     );
   }
 
@@ -394,7 +441,7 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 时绝不能让 exitApp 永远执行不到 —— 最坏情况是残留一个原生托盘
     // 条目，进程退出时由系统清理。
     try {
-      await trayManager.destroy().timeout(_trayTimeout);
+      await _trayAdapter.destroy().timeout(_trayTimeout);
     } catch (e) {
       debugPrint('[DesktopAppService] Failed to destroy tray: $e');
     }

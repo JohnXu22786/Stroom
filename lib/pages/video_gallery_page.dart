@@ -17,6 +17,7 @@ import 'package:path/path.dart' as p;
 import '../providers/video_provider.dart';
 import 'video_gallery_shared.dart';
 import '../utils/video_manifest.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
 import '../utils/manifest_bridge.dart';
@@ -30,8 +31,11 @@ class VideoGalleryPage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
 
-  const VideoGalleryPage(
-      {super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const VideoGalleryPage({
+    super.key,
+    this.tabIndex = 0,
+    this.isActiveTab = true,
+  });
 
   @override
   ConsumerState<VideoGalleryPage> createState() => _VideoGalleryPageState();
@@ -313,10 +317,7 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         );
         usedInBatch.add(displayName);
 
-        final videoPath = await VideoManifest.writeFile(
-          storageFileName,
-          bytes,
-        );
+        final videoPath = await VideoManifest.writeFile(storageFileName, bytes);
         // Try to obtain video duration and thumbnail from the file
         int videoDurationMs = 0;
         if (kIsWeb || videoPath.isEmpty) {
@@ -440,15 +441,15 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
       }
 
       final exportName = '${file.name}.${file.format}';
-      final outputPath = await FilePicker.saveFile(
+      final outputUri = await saveFileWithType(
         dialogTitle: '导出视频',
         fileName: exportName,
-        type: FileType.custom,
-        allowedExtensions: [file.format],
+        extensions: [file.format],
         bytes: data,
         initialDirectory: SystemPickDirectories.videos(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已导出到: $outputPath'),
@@ -499,11 +500,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
         final exportName = '${file.name}.${file.format}';
 
         if (kIsWeb) {
-          final saved = await FilePicker.saveFile(
+          final saved = await saveFileWithType(
             dialogTitle: '导出视频',
             fileName: exportName,
-            type: FileType.custom,
-            allowedExtensions: [file.format],
+            extensions: [file.format],
             bytes: data,
             initialDirectory: SystemPickDirectories.videos(),
           );
@@ -590,11 +590,10 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
             if (data == null || data.isEmpty) continue;
             final exportName = '${file.name}.${file.format}';
             // 用户取消保存时不计数
-            final saved = await FilePicker.saveFile(
+            final saved = await saveFileWithType(
               dialogTitle: '导出视频',
               fileName: exportName,
-              type: FileType.custom,
-              allowedExtensions: [file.format],
+              extensions: [file.format],
               bytes: data,
               initialDirectory: SystemPickDirectories.videos(),
             );
@@ -929,8 +928,9 @@ class _VideoGalleryPageState extends ConsumerState<VideoGalleryPage> {
     final navigateToParentSignal = ref.watch(
       filesPageNavigateToParentSignalProvider,
     );
-    final tabResetSignal =
-        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
+    final tabResetSignal = ref.watch(
+      fileTabFolderResetSignalProvider(widget.tabIndex),
+    );
 
     return FileManagerView<VideoRecord>(
       tabResetSignal: tabResetSignal,

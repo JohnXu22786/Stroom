@@ -1,19 +1,19 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ignore: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 
 import 'package:stroom/pages/asr_page.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/tts_state_provider.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/file_manifest.dart';
+
+import '../../fake_file_picker.dart';
 
 // ============================================================================
 // Helper: Build test app with optional provider overrides
@@ -48,23 +48,20 @@ class _AudioInputFilePicker extends FilePickerPlatform {
   final Uint8List bytes;
 
   @override
-  Future<FilePickerResult?> pickFiles({
+  Future<List<PlatformFile>> pickFiles({
     String? dialogTitle,
     String? initialDirectory,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     Function(FilePickerStatus)? onFileLoading,
     int compressionQuality = 0,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
-    bool cancelUploadOnWindowBlur = true,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
   }) async {
-    return FilePickerResult([
-      PlatformFile(name: 'malformed.wav', size: bytes.length, bytes: bytes),
-    ]);
+    return [FakePlatformFile(name: 'malformed.wav', bytes: bytes)];
   }
 }
 
@@ -144,9 +141,7 @@ void main() {
             providerName: 'TestAI',
             host: 'https://api.test.ai',
             key: 'test-key',
-            models: [
-              ModelConfig(name: '', modelId: 'test-asr-model'),
-            ],
+            models: [ModelConfig(name: '', modelId: 'test-asr-model')],
           ),
         ],
       );
@@ -169,9 +164,7 @@ void main() {
             providerName: '',
             host: 'https://api.test.ai',
             key: 'test-key',
-            models: [
-              ModelConfig(name: 'TestModel', modelId: 'test-model-v1'),
-            ],
+            models: [ModelConfig(name: 'TestModel', modelId: 'test-model-v1')],
           ),
         ],
       );
@@ -550,119 +543,109 @@ void main() {
       },
     );
 
-    testWidgets(
-      'shows models from ALL valid configs (not just first)',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_asr',
-          type: 'asr',
-          name: '音频转写供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'First',
-              host: 'https://api.first.com/v1/audio/transcriptions',
-              key: 'first-key',
-              models: [
-                ModelConfig(name: 'First-Model', modelId: 'first-model'),
-              ],
-            ),
-            ProviderConfigItem(
-              providerName: 'Second',
-              host: 'https://api.second.com/v1/audio/transcriptions',
-              key: 'second-key',
-              models: [
-                ModelConfig(name: 'Second-Model', modelId: 'second-model'),
-                ModelConfig(name: 'Second-Model-2', modelId: 'second-model-2'),
-              ],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows models from ALL valid configs (not just first)', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_asr',
+        type: 'asr',
+        name: '音频转写供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'First',
+            host: 'https://api.first.com/v1/audio/transcriptions',
+            key: 'first-key',
+            models: [ModelConfig(name: 'First-Model', modelId: 'first-model')],
+          ),
+          ProviderConfigItem(
+            providerName: 'Second',
+            host: 'https://api.second.com/v1/audio/transcriptions',
+            key: 'second-key',
+            models: [
+              ModelConfig(name: 'Second-Model', modelId: 'second-model'),
+              ModelConfig(name: 'Second-Model-2', modelId: 'second-model-2'),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // First model is selected by default (visible in collapsed dropdown)
-        expect(find.text('First-Model | First'), findsOneWidget);
+      // First model is selected by default (visible in collapsed dropdown)
+      expect(find.text('First-Model | First'), findsOneWidget);
 
-        // Tap the dropdown to open it and see all items
-        await tester.tap(find.text('First-Model | First'));
-        await tester.pumpAndSettle();
+      // Tap the dropdown to open it and see all items
+      await tester.tap(find.text('First-Model | First'));
+      await tester.pumpAndSettle();
 
-        // Should show models from ALL valid configs in the dropdown
-        expect(find.text('Second-Model | Second'), findsWidgets);
-        expect(find.text('Second-Model-2 | Second'), findsWidgets);
-      },
-    );
+      // Should show models from ALL valid configs in the dropdown
+      expect(find.text('Second-Model | Second'), findsWidgets);
+      expect(find.text('Second-Model-2 | Second'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no config has valid host/key',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_asr',
-          type: 'asr',
-          name: '音频转写供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'Empty',
-              host: '',
-              key: '',
-              models: [
-                ModelConfig(name: 'Empty-Model', modelId: 'empty-model'),
-              ],
-            ),
-            ProviderConfigItem(
-              providerName: 'Also Empty',
-              host: '',
-              key: '',
-              models: [
-                ModelConfig(name: 'Also-Empty', modelId: 'also-empty'),
-              ],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no config has valid host/key', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_asr',
+        type: 'asr',
+        name: '音频转写供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Empty',
+            host: '',
+            key: '',
+            models: [ModelConfig(name: 'Empty-Model', modelId: 'empty-model')],
+          ),
+          ProviderConfigItem(
+            providerName: 'Also Empty',
+            host: '',
+            key: '',
+            models: [ModelConfig(name: 'Also-Empty', modelId: 'also-empty')],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt instead of hiding
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt instead of hiding
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no ASR models exist',
-      (tester) async {
-        final entry = ProviderEntry(
-          id: 'test_asr',
-          type: 'asr',
-          name: '音频转写供应商',
-          configs: [
-            ProviderConfigItem(
-              providerName: 'Empty',
-              host: '',
-              key: '',
-              models: [],
-            ),
-          ],
-        );
-        await tester.pumpWidget(_buildTestApp(entries: [entry]));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no ASR models exist', (
+      tester,
+    ) async {
+      final entry = ProviderEntry(
+        id: 'test_asr',
+        type: 'asr',
+        name: '音频转写供应商',
+        configs: [
+          ProviderConfigItem(
+            providerName: 'Empty',
+            host: '',
+            key: '',
+            models: [],
+          ),
+        ],
+      );
+      await tester.pumpWidget(_buildTestApp(entries: [entry]));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
 
-    testWidgets(
-      'shows configure prompt when no ASR entry exists',
-      (tester) async {
-        await tester.pumpWidget(_buildTestApp(entries: []));
-        await tester.pumpAndSettle();
+    testWidgets('shows configure prompt when no ASR entry exists', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp(entries: []));
+      await tester.pumpAndSettle();
 
-        // Should show configure prompt
-        expect(find.text('识别模型'), findsOneWidget);
-        expect(find.textContaining('配置'), findsWidgets);
-      },
-    );
+      // Should show configure prompt
+      expect(find.text('识别模型'), findsOneWidget);
+      expect(find.textContaining('配置'), findsWidgets);
+    });
   });
 }

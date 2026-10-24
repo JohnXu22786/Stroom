@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 
 import '../providers/text_provider.dart';
 import '../utils/system_pick_utils.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/text_manifest.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
@@ -26,8 +27,11 @@ class TextStoragePage extends ConsumerStatefulWidget {
   final int tabIndex;
   final bool isActiveTab;
 
-  const TextStoragePage(
-      {super.key, this.tabIndex = 0, this.isActiveTab = true});
+  const TextStoragePage({
+    super.key,
+    this.tabIndex = 0,
+    this.isActiveTab = true,
+  });
 
   @override
   ConsumerState<TextStoragePage> createState() => _TextStoragePageState();
@@ -97,14 +101,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: _supportedFormats.toList(),
-        withData: true,
-        allowMultiple: true,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) {
+      if (files.isEmpty) {
         _isImporting = false;
         return;
       }
@@ -133,9 +135,9 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       final records = ref.read(textRecordsProvider);
       final usedInBatch = <String>{};
       var count = 0;
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
 
         final content = utf8.decode(bytes);
         final hash = computeTextHash(bytes);
@@ -249,10 +251,8 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => MermaidChartPage(
-            initialCode: content,
-            existingRecord: file,
-          ),
+          builder: (_) =>
+              MermaidChartPage(initialCode: content, existingRecord: file),
         ),
       );
     } else {
@@ -293,15 +293,15 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
 
       final exportName = '${file.name}.${file.format}';
       final data = Uint8List.fromList(utf8.encode(content));
-      final outputPath = await FilePicker.saveFile(
+      final outputUri = await saveFileWithType(
         dialogTitle: '导出文本',
         fileName: exportName,
-        type: FileType.custom,
-        allowedExtensions: [file.format],
+        extensions: [file.format],
         bytes: data,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已导出到: $outputPath'),
@@ -354,11 +354,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
         if (kIsWeb) {
           final data = Uint8List.fromList(utf8.encode(content));
           // Web 端逐文件保存：用户取消保存时不计数
-          final saved = await FilePicker.saveFile(
+          final saved = await saveFileWithType(
             dialogTitle: '导出文本',
             fileName: exportName,
-            type: FileType.custom,
-            allowedExtensions: [file.format],
+            extensions: [file.format],
             bytes: data,
             initialDirectory: SystemPickDirectories.documents(),
           );
@@ -444,11 +443,10 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
             final exportName = '${file.name}.${file.format}';
             final data = Uint8List.fromList(utf8.encode(content));
             // 用户取消保存时不计数
-            final saved = await FilePicker.saveFile(
+            final saved = await saveFileWithType(
               dialogTitle: '导出文本',
               fileName: exportName,
-              type: FileType.custom,
-              allowedExtensions: [file.format],
+              extensions: [file.format],
               bytes: data,
               initialDirectory: SystemPickDirectories.documents(),
             );
@@ -693,10 +691,12 @@ class _TextStoragePageState extends ConsumerState<TextStoragePage> {
       ],
     );
 
-    final navigateToParentSignal =
-        ref.watch(filesPageNavigateToParentSignalProvider);
-    final tabResetSignal =
-        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
+    final navigateToParentSignal = ref.watch(
+      filesPageNavigateToParentSignalProvider,
+    );
+    final tabResetSignal = ref.watch(
+      fileTabFolderResetSignalProvider(widget.tabIndex),
+    );
 
     return FileManagerView<TextRecord>(
       tabResetSignal: tabResetSignal,

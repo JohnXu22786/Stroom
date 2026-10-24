@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -15,12 +16,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 
@@ -360,8 +363,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Minimum display duration of the top load-more indicator. The spinner
   /// must stay up for at least this long even when the page loads
   /// instantly, otherwise it flashes for a single frame.
-  static const Duration _loadMoreMinDisplayDuration =
-      Duration(milliseconds: 500);
+  static const Duration _loadMoreMinDisplayDuration = Duration(
+    milliseconds: 500,
+  );
 
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from

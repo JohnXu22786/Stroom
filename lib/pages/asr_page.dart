@@ -1252,18 +1252,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Future<void> _pickAudioFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.audio,
-        allowMultiple: true,
-        withData: true,
         initialDirectory: SystemPickDirectories.music(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final newAudios = <SelectedAudio>[];
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
         newAudios.add(
           SelectedAudio(
             bytes: bytes,
@@ -1385,9 +1383,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         );
       }
     } on FormatException catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择音频文件失败: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $error')));
       return;
     }
 
