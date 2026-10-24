@@ -196,7 +196,7 @@ class _DragSortAreaState extends State<DragSortArea> {
 
   /// 网格项松手后飞向槽位的副本；源项保持隐藏直到动画结束。
   OverlayEntry? _releaseOverlayEntry;
-  String? _releaseValue;
+  int? _releaseIndex;
 
   /// 条目之间的横向间隙（网格用列间距，其余 8）。
   double get _itemGap => widget.grid ? widget.gridCrossAxisSpacing : 8;
@@ -271,13 +271,14 @@ class _DragSortAreaState extends State<DragSortArea> {
 
   void dragEnd([DraggableDetails? details]) {
     _stopAutoScroll();
+    // The owning page can be removed while a drag avatar is active. Do not
+    // access this State's context or commit a reorder after disposal.
+    if (!mounted) return;
     final d = _dragIndex;
     final t = _insertIndex;
     if (widget.grid && details != null && d != null && t != null) {
       _animateGridRelease(d, t, details.offset);
     }
-    // 页面已在拖拽中被移除（返回上级等）：不更新 UI，也不提交排序
-    if (!mounted) return;
     setState(() {
       _dragIndex = null;
       _insertIndex = null;
@@ -312,7 +313,9 @@ class _DragSortAreaState extends State<DragSortArea> {
 
     _releaseOverlayEntry?.remove();
     _releaseOverlayEntry?.dispose();
-    _releaseValue = value;
+    // Reordering moves the source to [to] before the next build. Hide only
+    // that slot, so duplicate values elsewhere remain visible.
+    _releaseIndex = to;
 
     late final OverlayEntry entry;
     entry = OverlayEntry(
@@ -326,7 +329,7 @@ class _DragSortAreaState extends State<DragSortArea> {
           entry.dispose();
           _releaseOverlayEntry = null;
           if (mounted) {
-            setState(() => _releaseValue = null);
+            setState(() => _releaseIndex = null);
           }
         },
         builder: (context, position, child) => Positioned(
@@ -739,7 +742,7 @@ class _DragSortAreaState extends State<DragSortArea> {
             );
             for (var k = 0; k < n; k++) {
               final child = _item(k);
-              final releasing = widget.grid && _releaseValue == values[k];
+              final releasing = widget.grid && _releaseIndex == k;
               entries.add((
                 _keyOf(k),
                 rects[k],
