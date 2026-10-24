@@ -66,9 +66,8 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           .where((t) => t.status == TaskStatus.running)
           .toList();
       if (runningTasks.isNotEmpty) {
-        final errorMsg = state == AppLifecycleState.detached
-            ? '应用已退出，合成中断'
-            : '应用进入后台，合成中断';
+        final errorMsg =
+            state == AppLifecycleState.detached ? '应用已退出，合成中断' : '应用进入后台，合成中断';
         ref
             .read(taskListProvider.notifier)
             .failAllRunningTasks(error: errorMsg);

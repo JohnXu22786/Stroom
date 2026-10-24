@@ -245,8 +245,8 @@ void main() {
             for (var attempt = 0; attempt < 100; attempt++) {
               if (storage.existsSync() &&
                   storage.listSync().whereType<File>().any(
-                    (file) => file.lengthSync() == 6,
-                  )) {
+                        (file) => file.lengthSync() == 6,
+                      )) {
                 await Future<void>.delayed(const Duration(milliseconds: 10));
                 return;
               }
@@ -263,11 +263,9 @@ void main() {
         final firstCopy = storage.listSync().whereType<File>().single;
         await tester.runAsync(() async {
           await tester.tap(find.byTooltip('移除'));
-          for (
-            var attempt = 0;
-            attempt < 100 && firstCopy.existsSync();
-            attempt++
-          ) {
+          for (var attempt = 0;
+              attempt < 100 && firstCopy.existsSync();
+              attempt++) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
           }
         });
@@ -363,8 +361,8 @@ void main() {
         for (var attempt = 0; attempt < 200; attempt++) {
           if (storage.existsSync() &&
               storage.listSync().whereType<File>().any(
-                (file) => file.lengthSync() == maxAttachmentBytes + 1,
-              )) {
+                    (file) => file.lengthSync() == maxAttachmentBytes + 1,
+                  )) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
             return;
           }
@@ -492,8 +490,8 @@ void main() {
         for (var attempt = 0; attempt < 100; attempt++) {
           if (storage.existsSync() &&
               storage.listSync().whereType<File>().any(
-                (file) => file.lengthSync() == 6,
-              )) {
+                    (file) => file.lengthSync() == 6,
+                  )) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
             return;
           }
@@ -514,7 +512,8 @@ void main() {
       expect(copy.existsSync(), isFalse);
     });
 
-    testWidgets('CatCatch first: URL + 时/分/秒 box, start disabled until a valid '
+    testWidgets(
+        'CatCatch first: URL + 时/分/秒 box, start disabled until a valid '
         'URL is entered', (tester) async {
       await _pumpRunMode(tester, TaskFlowBlock(typeKey: BlockType.catcatch));
 
@@ -552,7 +551,8 @@ void main() {
       expect(_startButtonEnabled(tester), isTrue);
     });
 
-    testWidgets('OCR first: multi-select image picker button, no manual '
+    testWidgets(
+        'OCR first: multi-select image picker button, no manual '
         'path/identifier text field', (tester) async {
       await _pumpRunMode(tester, TaskFlowBlock(typeKey: BlockType.ocr));
 

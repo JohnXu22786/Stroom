@@ -341,9 +341,9 @@ class DesktopAppService extends WindowListener with TrayListener {
     // 异常通过 Future 异步抛出，必须用 catchError 兜住。
     unawaited(
       trayManager.popUpContextMenu().catchError(
-        (Object e) =>
-            debugPrint('[DesktopAppService] popUpContextMenu unsupported: $e'),
-      ),
+            (Object e) => debugPrint(
+                '[DesktopAppService] popUpContextMenu unsupported: $e'),
+          ),
     );
   }
 

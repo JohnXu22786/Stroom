@@ -13,8 +13,8 @@ final class FakePlatformFile extends PlatformFile {
     this.localPath,
     this.reportedLength,
   }) : uri = localPath == null
-           ? Uri.dataFromBytes(bytes ?? Uint8List(0))
-           : Uri.file(localPath!);
+            ? Uri.dataFromBytes(bytes ?? Uint8List(0))
+            : Uri.file(localPath!);
 
   @override
   final String name;
@@ -67,7 +67,7 @@ final class FakePlatformFile extends PlatformFile {
 /// simulate a slow native dialog).
 class FakeFilePicker extends FilePickerPlatform {
   FakeFilePicker({Uri? result, this.completer})
-    : result = result ?? Uri.parse('file:///C:/saved/code.txt');
+      : result = result ?? Uri.parse('file:///C:/saved/code.txt');
 
   Uri? result;
   final Completer<Uri?>? completer;

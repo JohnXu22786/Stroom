@@ -565,8 +565,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                               'configId': option.configId,
                               'modelId': option.modelId,
                             };
-                            final resetRetryState =
-                                _modelSelectionRequired ||
+                            final resetRetryState = _modelSelectionRequired ||
                                 !_sameModelReference(
                                   _selectedModelReference,
                                   newReference,
@@ -642,9 +641,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: sourceControlsDisabled
-                    ? null
-                    : _showAudioSourceSheet,
+                onPressed:
+                    sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -663,9 +661,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed: sourceControlsDisabled
-                    ? null
-                    : _showAudioSourceSheet,
+                onPressed:
+                    sourceControlsDisabled ? null : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -749,8 +746,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       onPressed: _isProcessing || _retryLoading
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
-                          ? _showUrlInputDialog
-                          : _showAudioSourceSheet,
+                              ? _showUrlInputDialog
+                              : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('重新选择'),
                     ),
@@ -983,8 +980,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed:
-                    _selectedAudios.isEmpty ||
+                onPressed: _selectedAudios.isEmpty ||
                         _isProcessing ||
                         _retryLoading ||
                         _retrySourcesIncomplete

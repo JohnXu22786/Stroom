@@ -179,10 +179,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     final fileType = mimeType.startsWith('image/')
         ? 'image'
         : mimeType.startsWith('video/')
-        ? 'video'
-        : mimeType.startsWith('audio/')
-        ? 'audio'
-        : 'document';
+            ? 'video'
+            : mimeType.startsWith('audio/')
+                ? 'audio'
+                : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
     final hash = AttachmentStorage.computeHash(bytes);
 
@@ -340,8 +340,7 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
-    final isOriginalEditAttachment =
-        widget.editingMessageId != null &&
+    final isOriginalEditAttachment = widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any((a) => a.id == att.id) ?? false);
     if (isOriginalEditAttachment) {
       _removedEditAttachments.add(att);

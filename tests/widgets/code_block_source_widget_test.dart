@@ -295,8 +295,8 @@ void main() {
     }
 
     Finder horizontalScrollViews() => find.byWidgetPredicate(
-      (w) => w is Scrollable && w.axis == Axis.horizontal,
-    );
+          (w) => w is Scrollable && w.axis == Axis.horizontal,
+        );
 
     String? wrapLabel(WidgetTester tester) =>
         tester.widget<Icon>(find.byIcon(Icons.wrap_text)).semanticLabel;
@@ -528,8 +528,7 @@ void main() {
         expect(
           numTop - firstNumTop,
           closeTo(renderTops[i] - firstRenderTop, 0.01),
-          reason:
-              'line number ${i + 1} must align with code line ${i + 1} '
+          reason: 'line number ${i + 1} must align with code line ${i + 1} '
               '(drifts if the gutter uses a hardcoded or wrong line height)',
         );
       }
@@ -571,7 +570,8 @@ void main() {
       final charWidth = (TextPainter(
         text: TextSpan(text: 'x', style: style),
         textDirection: TextDirection.ltr,
-      )..layout()).width;
+      )..layout())
+          .width;
 
       // codeAreaWidth = surfaceWidth - 1 (borders) - 12 (right padding)
       //   - 32 (gutter) - 8 (gap) = surfaceWidth - 53.
@@ -756,8 +756,9 @@ void main() {
     // The vertical code-area scroll view (the outer SingleChildScrollView;
     // no-wrap mode also has a nested horizontal one).
     Finder verticalScrollView() => find.byWidgetPredicate(
-      (w) => w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
-    );
+          (w) =>
+              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        );
 
     ScrollPosition position(WidgetTester tester) => tester
         .widget<SingleChildScrollView>(verticalScrollView())
@@ -1011,7 +1012,8 @@ void main() {
       expect(find.byIcon(Icons.arrow_downward), findsNothing);
     });
 
-    testWidgets('reconciles the button state when metric-only changes move the '
+    testWidgets(
+        'reconciles the button state when metric-only changes move the '
         'position to the bottom', (tester) async {
       await tester.binding.setSurfaceSize(const Size(800, 600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1029,8 +1031,7 @@ void main() {
       expect(
         find.byIcon(Icons.arrow_downward),
         findsNothing,
-        reason:
-            'the button must reflect the current metrics, not the '
+        reason: 'the button must reflect the current metrics, not the '
             'last scroll action',
       );
       expect(
@@ -1150,8 +1151,7 @@ void main() {
         expect(
           position(tester).pixels,
           0,
-          reason:
-              'a static block must not start following when re-labeled '
+          reason: 'a static block must not start following when re-labeled '
               'with unchanged code',
         );
         expect(find.byIcon(Icons.arrow_downward), findsNothing);

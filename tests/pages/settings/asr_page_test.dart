@@ -66,10 +66,10 @@ class _AudioInputFilePicker extends FilePickerPlatform {
 }
 
 Uint8List _truncatedWaveBytes() => Uint8List.fromList([
-  0x52, 0x49, 0x46, 0x46, // RIFF
-  100, 0, 0, 0, // Declared container extends beyond the selected data.
-  0x57, 0x41, 0x56, 0x45, // WAVE
-]);
+      0x52, 0x49, 0x46, 0x46, // RIFF
+      100, 0, 0, 0, // Declared container extends beyond the selected data.
+      0x57, 0x41, 0x56, 0x45, // WAVE
+    ]);
 
 // ============================================================================
 // Helper: Create a sample ASR provider entry with models

@@ -73,10 +73,10 @@ class _CatCatchInputEntry {
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
-    : urlController = TextEditingController(),
-      hourController = TextEditingController(),
-      minuteController = TextEditingController(),
-      secondController = TextEditingController();
+      : urlController = TextEditingController(),
+        hourController = TextEditingController(),
+        minuteController = TextEditingController(),
+        secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
@@ -146,9 +146,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref
-          .read(taskFlowListProvider)
-          .firstWhere(
+      final flow = ref.read(taskFlowListProvider).firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -564,9 +562,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-    final current = _editingFlowId == null
-        ? null
-        : notifier.getFlow(_editingFlowId!);
+    final current =
+        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
     final flow = TaskFlowDefinition(
       id: _editingFlowId,
       name: name,
@@ -732,11 +729,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   bool get _isFileRunInput => const {
-    IOType.image,
-    IOType.audio,
-    IOType.video,
-    IOType.file,
-  }.contains(_runInputType);
+        IOType.image,
+        IOType.audio,
+        IOType.video,
+        IOType.file,
+      }.contains(_runInputType);
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -793,9 +790,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed: !_isStarting && _canStartFlow()
-                      ? _startFlow
-                      : null,
+                  onPressed:
+                      !_isStarting && _canStartFlow() ? _startFlow : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('开始任务流'),
                 ),
@@ -1073,20 +1069,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               isImage
                   ? Icons.image_outlined
                   : isAudio
-                  ? Icons.audiotrack
-                  : isFile
-                  ? Icons.insert_drive_file_outlined
-                  : Icons.videocam_outlined,
+                      ? Icons.audiotrack
+                      : isFile
+                          ? Icons.insert_drive_file_outlined
+                          : Icons.videocam_outlined,
               size: 16,
             ),
             label: Text(
               isImage
                   ? '选择图片（可多选）'
                   : isAudio
-                  ? '选择音频（可多选）'
-                  : isFile
-                  ? '选择文件（可多选）'
-                  : '选择视频（可多选）',
+                      ? '选择音频（可多选）'
+                      : isFile
+                          ? '选择文件（可多选）'
+                          : '选择视频（可多选）',
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1104,10 +1100,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     isImage
                         ? Icons.image
                         : isAudio
-                        ? Icons.audiotrack
-                        : isFile
-                        ? Icons.insert_drive_file
-                        : Icons.videocam,
+                            ? Icons.audiotrack
+                            : isFile
+                                ? Icons.insert_drive_file
+                                : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
@@ -1293,9 +1289,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) {
-                  final paramDef = def?.params
-                      .where((p) => p.key == e.key)
-                      .firstOrNull;
+                  final paramDef =
+                      def?.params.where((p) => p.key == e.key).firstOrNull;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
@@ -1455,8 +1450,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-      '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件',
-    );
+          '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件',
+        );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
         IOType.image;

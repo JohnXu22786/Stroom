@@ -8,8 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 
 import 'system_gallery_picker_stub.dart'
-    if (dart.library.io) 'system_gallery_picker_io.dart'
-    as nativeGalleryPicker;
+    if (dart.library.io) 'system_gallery_picker_io.dart' as nativeGalleryPicker;
 
 /// 系统默认目录类型。
 enum SystemFolder { documents, music, pictures, videos }

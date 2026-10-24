@@ -288,9 +288,8 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     final isDark = cs.brightness == Brightness.dark;
 
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor = isDark
-        ? const Color(0xfff8f8f2)
-        : const Color(0xff000000);
+    final textColor =
+        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
     const lineHeight = 13.0 * 1.5; // fontSize * height
@@ -310,9 +309,8 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     const verticalPadding = 40.0 + 12.0;
     const maxVisibleLines = 15;
     final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
-    final contentHeight = lineCount > 0
-        ? lineCount * lineHeight + verticalPadding
-        : 40.0;
+    final contentHeight =
+        lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
     final maxAllowedHeight = maxVisibleLines * lineHeight + verticalPadding;
     final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
     final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax).toDouble();
@@ -716,12 +714,12 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
                 // the numbers below them.
                 final codeAreaWidth = wrap
                     ? (constraints.maxWidth -
-                              lineNumWidth -
-                              8.0 -
-                              1.0 -
-                              _selectableCursorWidth)
-                          .clamp(1.0, double.infinity)
-                          .toDouble()
+                            lineNumWidth -
+                            8.0 -
+                            1.0 -
+                            _selectableCursorWidth)
+                        .clamp(1.0, double.infinity)
+                        .toDouble()
                     : double.infinity;
                 final visualHeights = _measureLineHeights(
                   lines,
