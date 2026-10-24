@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart'
         debugPrint,
         defaultTargetPlatform,
         visibleForTesting;
-import 'package:tray_manager/tray_manager.dart';
+import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app_log_service.dart';
@@ -340,9 +340,10 @@ class DesktopAppService extends WindowListener with TrayListener {
     // Linux 插件未实现 popUpContextMenu（菜单随左键自动弹出），
     // 异常通过 Future 异步抛出，必须用 catchError 兜住。
     unawaited(
-      trayManager.popUpContextMenu().catchError((Object e) => debugPrint(
-            '[DesktopAppService] popUpContextMenu unsupported: $e',
-          )),
+      trayManager.popUpContextMenu().catchError(
+        (Object e) =>
+            debugPrint('[DesktopAppService] popUpContextMenu unsupported: $e'),
+      ),
     );
   }
 

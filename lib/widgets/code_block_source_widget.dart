@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:stroom/utils/file_picker_utils.dart';
 import 'package:stroom/utils/system_pick_utils.dart';
 
 /// A reusable widget that displays source code with line numbers and a
@@ -287,8 +288,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     final isDark = cs.brightness == Brightness.dark;
 
     final bgColor = isDark ? const Color(0xff555555) : const Color(0xffeff1f3);
-    final textColor =
-        isDark ? const Color(0xfff8f8f2) : const Color(0xff000000);
+    final textColor = isDark
+        ? const Color(0xfff8f8f2)
+        : const Color(0xff000000);
     final borderColor = cs.outlineVariant;
 
     const lineHeight = 13.0 * 1.5; // fontSize * height
@@ -308,8 +310,9 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
     const verticalPadding = 40.0 + 12.0;
     const maxVisibleLines = 15;
     final lineCount = widget.code.isEmpty ? 0 : widget.code.split('\n').length;
-    final contentHeight =
-        lineCount > 0 ? lineCount * lineHeight + verticalPadding : 40.0;
+    final contentHeight = lineCount > 0
+        ? lineCount * lineHeight + verticalPadding
+        : 40.0;
     final maxAllowedHeight = maxVisibleLines * lineHeight + verticalPadding;
     final effectiveMax = maxAllowedHeight < 40.0 ? 40.0 : maxAllowedHeight;
     final adaptiveHeight = contentHeight.clamp(40.0, effectiveMax).toDouble();
@@ -362,16 +365,8 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
             // Hidden while the code is empty so it cannot cover the
             // "(empty)" placeholder.
             if (widget.language.isNotEmpty && widget.code.isNotEmpty)
-              Positioned(
-                top: 8,
-                left: 12,
-                child: _buildLanguageLabel(),
-              ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: _buildButtonRow(),
-            ),
+              Positioned(top: 8, left: 12, child: _buildLanguageLabel()),
+            Positioned(top: 4, right: 4, child: _buildButtonRow()),
             // Scroll-to-bottom overlay button (bottom-right corner), shown
             // only while the block is still being generated AND the user
             // has interrupted the auto-scroll.
@@ -721,15 +716,18 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
                 // the numbers below them.
                 final codeAreaWidth = wrap
                     ? (constraints.maxWidth -
-                            lineNumWidth -
-                            8.0 -
-                            1.0 -
-                            _selectableCursorWidth)
-                        .clamp(1.0, double.infinity)
-                        .toDouble()
+                              lineNumWidth -
+                              8.0 -
+                              1.0 -
+                              _selectableCursorWidth)
+                          .clamp(1.0, double.infinity)
+                          .toDouble()
                     : double.infinity;
-                final visualHeights =
-                    _measureLineHeights(lines, codeStyle, codeAreaWidth);
+                final visualHeights = _measureLineHeights(
+                  lines,
+                  codeStyle,
+                  codeAreaWidth,
+                );
 
                 final codeSelectable = SelectableText(
                   widget.code,
@@ -788,11 +786,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
           // Copy button (with checkmark feedback)
           _buildCopyButton(),
           // Save button — opens the system file save panel
-          _buildActionButton(
-            icon: Icons.save,
-            label: '保存',
-            onTap: _saveCode,
-          ),
+          _buildActionButton(icon: Icons.save, label: '保存', onTap: _saveCode),
           // Wrap toggle button (always present)
           _buildActionButton(
             icon: Icons.wrap_text,
@@ -892,15 +886,15 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       }
 
       final bytes = Uint8List.fromList(utf8.encode(widget.code));
-      final outputPath = await FilePicker.saveFile(
+      final outputUri = await saveFileWithType(
         dialogTitle: '保存代码',
         fileName: 'code.${_primaryExtension()}',
-        type: FileType.custom,
-        allowedExtensions: _saveExtensions(),
+        extensions: _saveExtensions(),
         bytes: bytes,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已保存到: $outputPath'),
@@ -933,10 +927,7 @@ class _CodeBlockSourceViewState extends State<CodeBlockSourceView> {
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: child,
-        ),
+        child: Padding(padding: const EdgeInsets.all(8), child: child),
       ),
     );
   }

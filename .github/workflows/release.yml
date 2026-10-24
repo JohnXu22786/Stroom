@@ -63,13 +63,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
-          # 固定 3.44.9：Flutter 3.47.0 在 windows 上 flutter_assemble 失败
-          # （MSB8066, flutter_windows.dll），3.44.9 已验证可成功构建。
-          flutter-version: 3.44.9
+          # Keep release builds on the same exact SDK as the checked-in lockfile.
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build windows --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Windows installer
         shell: pwsh
@@ -94,11 +92,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -160,11 +158,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -224,14 +222,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: |
           sudo apt-get update -y
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev libayatana-appindicator3-dev
       - run: flutter create --platforms=linux .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build linux --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Linux archive
         run: |
@@ -249,10 +247,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build web --release --dart-define=APP_VERSION=${{ needs.prepare-version.outputs.app_version }} --dart-define=APP_RELEASE_TIME=${{ needs.prepare-version.outputs.release_time }} --dart-define=APP_RELEASE_NOTES_B64=${{ needs.prepare-version.outputs.release_notes_b64 }}
       - name: Create Web archive
         run: |
@@ -270,11 +268,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=ios .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -310,7 +308,7 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - uses: actions/cache@v4
@@ -320,7 +318,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14"
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 -d > ${{ runner.temp }}/keystore.jks
       - name: Build APK

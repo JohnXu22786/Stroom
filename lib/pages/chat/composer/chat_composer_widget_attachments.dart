@@ -1,4 +1,5 @@
 part of 'chat_composer_widget.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -127,15 +128,13 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   /// - 桌面原生: 原生系统文件对话框（定位到系统"文档"目录）
   Future<void> _pickFromFilePicker() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.any,
-        withData: true,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return;
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) return;
       await _addPendingAttachment(file.name, bytes);
     } on UnsupportedError catch (e) {
       if (mounted) {
@@ -180,10 +179,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     final fileType = mimeType.startsWith('image/')
         ? 'image'
         : mimeType.startsWith('video/')
-            ? 'video'
-            : mimeType.startsWith('audio/')
-                ? 'audio'
-                : 'document';
+        ? 'video'
+        : mimeType.startsWith('audio/')
+        ? 'audio'
+        : 'document';
     final storagePath = await AttachmentStorage.saveFile(fileName, bytes);
     final hash = AttachmentStorage.computeHash(bytes);
 
@@ -267,7 +266,10 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
   }
 
   Future<void> _preCompressImage(
-      Attachment att, Uint8List bytes, String? convIdAtStart) async {
+    Attachment att,
+    Uint8List bytes,
+    String? convIdAtStart,
+  ) async {
     try {
       await preCompressImageForPendingAttachment(
         att,
@@ -338,7 +340,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
     // - 编辑模式 + 原消息附件：**不立即清理**——用户可能取消编辑，
     //   原消息仍引用该附件；确定重发时（_handleSubmitted 编辑分支）
     //   再统一清理。
-    final isOriginalEditAttachment = widget.editingMessageId != null &&
+    final isOriginalEditAttachment =
+        widget.editingMessageId != null &&
         (widget.editingMessageAttachments?.any((a) => a.id == att.id) ?? false);
     if (isOriginalEditAttachment) {
       _removedEditAttachments.add(att);
@@ -399,10 +402,8 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
 
     final shouldEdit = await showDialog<bool>(
       context: context,
-      builder: (ctx) => ImagePreviewDialog(
-        imageData: imageBytes,
-        fileName: att.fileName,
-      ),
+      builder: (ctx) =>
+          ImagePreviewDialog(imageData: imageBytes, fileName: att.fileName),
     );
 
     if (shouldEdit != true || !mounted) return;
@@ -496,8 +497,9 @@ extension _ChatComposerAttachmentsExt on ChatComposerWidgetState {
         // 旧字节的压缩缓存一并清理（hash 已变，旧缓存成为孤儿）。
         // 等旧 hash 在途的预压缩完成后删除，防止它复活旧缓存。
         await _deleteCompressedCacheAfterPreCompress(oldAtt);
-      } else if (widget.editingMessageAttachments
-              ?.any((a) => a.id == oldAtt.id) ??
+      } else if (widget.editingMessageAttachments?.any(
+            (a) => a.id == oldAtt.id,
+          ) ??
           false) {
         // 编辑模式 + 原消息附件被编辑：旧字节缓存同样推迟到确定重发
         // 时清理（可能取消编辑，原消息仍引用旧字节）。

@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../providers/tts_state_provider.dart';
 import '../providers/task_provider.dart';
 import '../utils/file_manifest.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/manifest_bridge.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/sort_config.dart';
@@ -65,8 +66,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
           .where((t) => t.status == TaskStatus.running)
           .toList();
       if (runningTasks.isNotEmpty) {
-        final errorMsg =
-            state == AppLifecycleState.detached ? '应用已退出，合成中断' : '应用进入后台，合成中断';
+        final errorMsg = state == AppLifecycleState.detached
+            ? '应用已退出，合成中断'
+            : '应用进入后台，合成中断';
         ref
             .read(taskListProvider.notifier)
             .failAllRunningTasks(error: errorMsg);
@@ -101,13 +103,11 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
     // pop 会误弹下层路由（应用根路由），因此必须带条件执行
     var dialogShown = false;
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.audio,
-        withData: true,
-        allowMultiple: true,
         initialDirectory: SystemPickDirectories.music(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       if (!mounted) return;
       showDialog(
@@ -133,9 +133,9 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       final records = ref.read(audioRecordsProvider);
       final usedInBatch = <String>{};
       var count = 0;
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
 
         final hash = computeAudioHash(bytes);
         final rawName = sanitizeFileName(file.name);
@@ -244,15 +244,15 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       if (kIsWeb) {
         downloadAudioFile(data, exportName, mimeType);
       } else {
-        final outputPath = await FilePicker.saveFile(
+        final outputUri = await saveFileWithType(
           dialogTitle: '导出音频文件',
           fileName: exportName,
-          type: FileType.custom,
-          allowedExtensions: [exportFormat],
+          extensions: [exportFormat],
           bytes: data,
           initialDirectory: SystemPickDirectories.music(),
         );
-        if (outputPath != null && mounted) {
+        if (outputUri != null && mounted) {
+          final outputPath = filePickerLocationLabel(outputUri);
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('已导出到: $outputPath')));
@@ -734,10 +734,12 @@ class _TtsPageState extends ConsumerState<TtsPage> with WidgetsBindingObserver {
       extraAppBarActions: () => [],
     );
 
-    final navigateToParentSignal =
-        ref.watch(filesPageNavigateToParentSignalProvider);
-    final tabResetSignal =
-        ref.watch(fileTabFolderResetSignalProvider(widget.tabIndex));
+    final navigateToParentSignal = ref.watch(
+      filesPageNavigateToParentSignalProvider,
+    );
+    final tabResetSignal = ref.watch(
+      fileTabFolderResetSignalProvider(widget.tabIndex),
+    );
 
     return FileManagerView<AudioRecord>(
       tabResetSignal: tabResetSignal,

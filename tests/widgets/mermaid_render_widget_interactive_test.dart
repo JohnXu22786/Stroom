@@ -3,7 +3,7 @@ import 'dart:convert';
 // The platform interface lives under the package's src/ (not exported
 // publicly); extending it is the supported way to fake the save dialog.
 // ignore_for_file: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';

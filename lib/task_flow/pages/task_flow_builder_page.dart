@@ -73,10 +73,10 @@ class _CatCatchInputEntry {
   final TextEditingController secondController;
 
   _CatCatchInputEntry()
-      : urlController = TextEditingController(),
-        hourController = TextEditingController(),
-        minuteController = TextEditingController(),
-        secondController = TextEditingController();
+    : urlController = TextEditingController(),
+      hourController = TextEditingController(),
+      minuteController = TextEditingController(),
+      secondController = TextEditingController();
 
   void dispose() {
     urlController.dispose();
@@ -146,7 +146,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       _isRunMode = widget.startInRunMode;
       _enteredFromRunMode = widget.startInRunMode;
 
-      final flow = ref.read(taskFlowListProvider).firstWhere(
+      final flow = ref
+          .read(taskFlowListProvider)
+          .firstWhere(
             (f) => f.id == widget.flowId,
             orElse: () => TaskFlowDefinition(name: ''),
           );
@@ -310,11 +312,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       // Only undo this editor's failed draft, not a newer external update.
       if (identical(notifier.getFlow(failedSave.id), failedSave)) {
         if (_isEditing) {
-          notifier.updateFlow(failedSave.id,
-              name: _initialName,
-              description: _initialDesc,
-              inputType: _initialInputType,
-              blocks: _initialBlocks);
+          notifier.updateFlow(
+            failedSave.id,
+            name: _initialName,
+            description: _initialDesc,
+            inputType: _initialInputType,
+            blocks: _initialBlocks,
+          );
         } else {
           notifier.removeFlow(failedSave.id);
         }
@@ -414,10 +418,13 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     onTemporaryOutputChanged: (index, enabled) {
                       if (index < 0 || index >= _blocks.length) return;
                       final block = _blocks[index];
-                      setState(() => _chain.updateParams(
+                      setState(
+                        () => _chain.updateParams(
                           block.id,
                           Map<String, dynamic>.from(block.params)
-                            ..[flowTemporaryOutputParam] = enabled));
+                            ..[flowTemporaryOutputParam] = enabled,
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -533,8 +540,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
 
     if (_chain.issues.isNotEmpty) {
       final issue = _chain.issues.first;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('步骤 ${issue.blockIndex + 1}：${issue.message}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('步骤 ${issue.blockIndex + 1}：${issue.message}')),
+      );
       return;
     }
 
@@ -556,8 +564,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     }
 
     final notifier = ref.read(taskFlowListProvider.notifier);
-    final current =
-        _editingFlowId == null ? null : notifier.getFlow(_editingFlowId!);
+    final current = _editingFlowId == null
+        ? null
+        : notifier.getFlow(_editingFlowId!);
     final flow = TaskFlowDefinition(
       id: _editingFlowId,
       name: name,
@@ -576,15 +585,17 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     if (!saved) {
-      messenger.showSnackBar(SnackBar(
-        content: const Text('保存失败，更改仍保留，请重试'),
-        action: SnackBarAction(label: '重试', onPressed: _saveFlow),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('保存失败，更改仍保留，请重试'),
+          action: SnackBarAction(label: '重试', onPressed: _saveFlow),
+        ),
+      );
       return;
     }
-    messenger.showSnackBar(SnackBar(
-      content: Text(_isEditing ? '任务流已更新' : '任务流已创建'),
-    ));
+    messenger.showSnackBar(
+      SnackBar(content: Text(_isEditing ? '任务流已更新' : '任务流已创建')),
+    );
     _isEditing = true;
 
     _initialName = flow.name;
@@ -721,11 +732,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       : _firstBlockDef?.inputType ?? _inputType.userFacing;
 
   bool get _isFileRunInput => const {
-        IOType.image,
-        IOType.audio,
-        IOType.video,
-        IOType.file,
-      }.contains(_runInputType);
+    IOType.image,
+    IOType.audio,
+    IOType.video,
+    IOType.file,
+  }.contains(_runInputType);
 
   Widget _buildRunInputSection(ColorScheme cs) {
     final firstDef = _firstBlockDef;
@@ -782,8 +793,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 width: double.infinity,
                 height: 44,
                 child: FilledButton.icon(
-                  onPressed:
-                      !_isStarting && _canStartFlow() ? _startFlow : null,
+                  onPressed: !_isStarting && _canStartFlow()
+                      ? _startFlow
+                      : null,
                   icon: const Icon(Icons.play_arrow, size: 18),
                   label: const Text('开始任务流'),
                 ),
@@ -883,11 +895,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                   width: 36,
                   height: 36,
                   child: IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      size: 18,
-                      color: cs.error,
-                    ),
+                    icon: Icon(Icons.close, size: 18, color: cs.error),
                     onPressed: () {
                       setState(() {
                         entry.dispose();
@@ -920,9 +928,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -945,9 +951,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -970,9 +974,7 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     textInputAction: TextInputAction.done,
                     onChanged: (_) => setState(() {}),
                   ),
@@ -983,18 +985,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               padding: const EdgeInsets.only(top: 8, left: 4),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.timer_outlined,
-                    size: 16,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.timer_outlined, size: 16, color: cs.primary),
                   const SizedBox(width: 4),
                   Text(
                     '预览: ',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                   ),
                   Text(
                     preview,
@@ -1078,20 +1073,20 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
               isImage
                   ? Icons.image_outlined
                   : isAudio
-                      ? Icons.audiotrack
-                      : isFile
-                          ? Icons.insert_drive_file_outlined
-                          : Icons.videocam_outlined,
+                  ? Icons.audiotrack
+                  : isFile
+                  ? Icons.insert_drive_file_outlined
+                  : Icons.videocam_outlined,
               size: 16,
             ),
             label: Text(
               isImage
                   ? '选择图片（可多选）'
                   : isAudio
-                      ? '选择音频（可多选）'
-                      : isFile
-                          ? '选择文件（可多选）'
-                          : '选择视频（可多选）',
+                  ? '选择音频（可多选）'
+                  : isFile
+                  ? '选择文件（可多选）'
+                  : '选择视频（可多选）',
             ),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -1109,10 +1104,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                     isImage
                         ? Icons.image
                         : isAudio
-                            ? Icons.audiotrack
-                            : isFile
-                                ? Icons.insert_drive_file
-                                : Icons.videocam,
+                        ? Icons.audiotrack
+                        : isFile
+                        ? Icons.insert_drive_file
+                        : Icons.videocam,
                     size: 16,
                     color: cs.onSurfaceVariant,
                   ),
@@ -1167,8 +1162,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   bool _canStartFlow() {
     if (_isPickingFiles) return false;
     if (_firstBlockDef?.typeKey == BlockType.catcatch) {
-      return _catcatchInputs
-          .any((e) => _isValidUrl(e.urlController.text.trim()));
+      return _catcatchInputs.any(
+        (e) => _isValidUrl(e.urlController.text.trim()),
+      );
     }
     if (_isFileRunInput) {
       return _mediaInputs.isNotEmpty;
@@ -1297,8 +1293,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
                 ),
                 const SizedBox(height: 4),
                 ...block.params.entries.map((e) {
-                  final paramDef =
-                      def?.params.where((p) => p.key == e.key).firstOrNull;
+                  final paramDef = def?.params
+                      .where((p) => p.key == e.key)
+                      .firstOrNull;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
@@ -1407,16 +1404,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   Future<void> _pickGenericFileInputs() async {
     final savedPaths = <String>[];
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.any,
-        allowMultiple: true,
-        withData: false,
-        withReadStream: true,
-      );
-      if (result == null) return;
+      final files = await FilePicker.pickFiles(type: FileType.any);
+      if (files.isEmpty) return;
       final selected = <String, String>{};
       final owned = <String, String>{};
-      for (final file in result.files) {
+      for (final file in files) {
         final bytes = await _readGenericFile(file);
         final storagePath = await AttachmentStorage.saveFile(file.name, bytes);
         savedPaths.add(storagePath);
@@ -1424,8 +1416,10 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         // execution use File(reference), so they need the absolute path.
         final reference = kIsWeb
             ? storagePath
-            : p.join(await AttachmentStorage.getStorageDirPath(),
-                p.basename(storagePath));
+            : p.join(
+                await AttachmentStorage.getStorageDirPath(),
+                p.basename(storagePath),
+              );
         selected[reference] = file.name;
         owned[reference] = storagePath;
       }
@@ -1436,8 +1430,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return;
       }
       setState(() {
-        _mediaInputs.addAll(selected.keys
-            .where((reference) => !_mediaInputs.contains(reference)));
+        _mediaInputs.addAll(
+          selected.keys.where((reference) => !_mediaInputs.contains(reference)),
+        );
         _inputDisplayNames.addAll(selected);
         _ownedStoragePaths.addAll(owned);
         _unsubmittedFileInputs.addAll(selected.keys);
@@ -1449,9 +1444,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         } catch (_) {}
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择文件失败：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择文件失败：$error')));
       }
     }
   }
@@ -1460,7 +1455,8 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
     // Images can be compressed by the chat pipeline; other documents use its
     // ordinary attachment limit. Check both before accumulating file bytes.
     Never tooLarge(int limit) => throw FormatException(
-        '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件');
+      '「${file.name}」超过 ${limit ~/ (1024 * 1024)} MB，请选择较小文件',
+    );
     bool isImage(List<int> header) =>
         flowMimeType(flowFileMimeType(file.name, headerBytes: header)) ==
         IOType.image;
@@ -1472,10 +1468,12 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       final handle = await File(file.path!).open();
       try {
         final length = await handle.length();
+        final reportedLength = file.lengthSync();
         final header = await handle.read(32);
         if (header.isEmpty) throw StateError('「${file.name}」为空或无法读取');
         final limit = limitFor(header);
-        if (file.size > limit || length > limit) {
+        if ((reportedLength != null && reportedLength > limit) ||
+            length > limit) {
           tooLarge(limit);
         }
         await handle.setPosition(0);
@@ -1484,31 +1482,31 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       } finally {
         await handle.close();
       }
-    } else if (file.readStream != null) {
+    } else {
       final builder = BytesBuilder(copy: false);
       final header = <int>[];
-      await for (final chunk in file.readStream!) {
+      final reportedLength = file.lengthSync() ?? await file.length();
+      await for (final chunk in file.readAsByteStream()) {
         if (header.length < 32) {
           header.addAll(chunk.take(32 - header.length));
         }
         final limit = limitFor(header);
-        if ((header.length == 32 && file.size > limit) ||
+        if ((header.length == 32 &&
+                reportedLength != null &&
+                reportedLength > limit) ||
             builder.length + chunk.length > limit) {
           tooLarge(limit);
         }
         builder.add(chunk);
       }
       bytes = builder.takeBytes();
-    } else if (file.bytes != null) {
-      // Some picker implementations supply bytes without a stream.
-      bytes = file.bytes!;
-    } else {
-      throw StateError('「${file.name}」为空或无法读取');
     }
 
     if (bytes.isEmpty) throw StateError('「${file.name}」为空或无法读取');
     final limit = limitFor(bytes.take(32).toList());
-    if (file.size > limit || bytes.length > limit) {
+    final reportedLength = file.lengthSync();
+    if ((reportedLength != null && reportedLength > limit) ||
+        bytes.length > limit) {
       tooLarge(limit);
     }
     return bytes;
@@ -1579,9 +1577,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       return File(p).existsSync();
     }).toList();
     if (valid.length != paths.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('部分文件不存在，已跳过')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('部分文件不存在，已跳过')));
     }
     // Skip paths already selected — re-picking the same file must not
     // fan out a duplicate execution.
@@ -1618,10 +1616,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
       return [
         for (final path in _mediaInputs)
           FlowRunInput(
-              text: path,
-              mimeType: _inputMimeTypes[path],
-              fileName: _inputDisplayNames[path],
-              ownedStoragePath: _ownedStoragePaths[path]),
+            text: path,
+            mimeType: _inputMimeTypes[path],
+            fileName: _inputDisplayNames[path],
+            ownedStoragePath: _ownedStoragePaths[path],
+          ),
       ];
     }
     final text = _inputController.text.trim();
@@ -1629,8 +1628,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
   }
 
   Future<void> _showValidationError(TaskFlowValidationException error) async {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(error.toString())));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.toString())));
     if (error.isInputError) return;
     setState(() => _isRunMode = false);
     await WidgetsBinding.instance.endOfFrame;
@@ -1663,8 +1663,9 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
         return path != null && execNotifier.referencesInputStoragePath(path);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
       }
       return;
     } finally {
@@ -1686,8 +1687,11 @@ class _TaskFlowBuilderPageState extends ConsumerState<TaskFlowBuilderPage> {
           duration: const Duration(seconds: 2),
         ),
       );
-      Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => TaskFlowRunPage(executionIds: executionIds)));
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => TaskFlowRunPage(executionIds: executionIds),
+        ),
+      );
     }
   }
 }

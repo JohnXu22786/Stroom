@@ -565,7 +565,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                               'configId': option.configId,
                               'modelId': option.modelId,
                             };
-                            final resetRetryState = _modelSelectionRequired ||
+                            final resetRetryState =
+                                _modelSelectionRequired ||
                                 !_sameModelReference(
                                   _selectedModelReference,
                                   newReference,
@@ -641,8 +642,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed:
-                    sourceControlsDisabled ? null : _showAudioSourceSheet,
+                onPressed: sourceControlsDisabled
+                    ? null
+                    : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -661,8 +663,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton.icon(
-                onPressed:
-                    sourceControlsDisabled ? null : _showAudioSourceSheet,
+                onPressed: sourceControlsDisabled
+                    ? null
+                    : _showAudioSourceSheet,
                 style: ElevatedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -746,8 +749,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                       onPressed: _isProcessing || _retryLoading
                           ? null
                           : _getCurrentUploadMethod() == AudioUploadMethod.url
-                              ? _showUrlInputDialog
-                              : _showAudioSourceSheet,
+                          ? _showUrlInputDialog
+                          : _showAudioSourceSheet,
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('重新选择'),
                     ),
@@ -980,7 +983,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               width: double.infinity,
               height: 48,
               child: FilledButton.icon(
-                onPressed: _selectedAudios.isEmpty ||
+                onPressed:
+                    _selectedAudios.isEmpty ||
                         _isProcessing ||
                         _retryLoading ||
                         _retrySourcesIncomplete
@@ -1252,18 +1256,16 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Future<void> _pickAudioFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.audio,
-        allowMultiple: true,
-        withData: true,
         initialDirectory: SystemPickDirectories.music(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final newAudios = <SelectedAudio>[];
-      for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
         newAudios.add(
           SelectedAudio(
             bytes: bytes,
@@ -1385,9 +1387,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         );
       }
     } on FormatException catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择音频文件失败: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $error')));
       return;
     }
 

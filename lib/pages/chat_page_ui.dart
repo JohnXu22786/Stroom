@@ -1,4 +1,5 @@
 part of 'chat_page.dart';
+
 // Extension methods on the State class cannot use @protected members
 // (setState / state) without analyzer warnings, but the receiver IS the
 // State/StateNotifier, so runtime behavior is identical to the original
@@ -336,8 +337,9 @@ extension _ChatPageUiExt on _ChatPageState {
       _settleAtBottomAndFinish();
       return;
     }
-    final box = _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
-        as RenderBox?;
+    final box =
+        _messageKeys[lastUserMsgId]?.currentContext?.findRenderObject()
+            as RenderBox?;
     if (box == null || !box.attached) {
       // Target message not laid out yet. First land at the bottom; while
       // maxScrollExtent is still moving (the sliver estimates it from the
@@ -384,7 +386,8 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishAtBottom();
       return;
     }
-    final targetTop = box.localToGlobal(Offset.zero).dy -
+    final targetTop =
+        box.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels;
     // Measure the tail from the LAST message's render box (when it is
@@ -396,7 +399,7 @@ extension _ChatPageUiExt on _ChatPageState {
     final lastBox = lastMessageId == null
         ? null
         : _messageKeys[lastMessageId]?.currentContext?.findRenderObject()
-            as RenderBox?;
+              as RenderBox?;
     if (lastBox == null || !lastBox.attached) {
       // Tail not measurable (e.g. the last message is a streaming
       // placeholder without a key) — assume it does not fit and show the
@@ -407,7 +410,8 @@ extension _ChatPageUiExt on _ChatPageState {
       _finishInitialScrollAdjustment();
       return;
     }
-    final tailBottom = lastBox.localToGlobal(Offset.zero).dy -
+    final tailBottom =
+        lastBox.localToGlobal(Offset.zero).dy -
         viewportBox.localToGlobal(Offset.zero).dy +
         pos.pixels +
         lastBox.size.height;
@@ -506,8 +510,8 @@ extension _ChatPageUiExt on _ChatPageState {
         .watch(conversationsProvider)
         .where((c) => c.id == convId)
         .firstOrNull;
-    final modelContext =
-        (_adapter.modelConfig?.typeConfig['context'] as num?)?.toInt();
+    final modelContext = (_adapter.modelConfig?.typeConfig['context'] as num?)
+        ?.toInt();
     final inputTokens = conv?.lastInputTokens;
     final cost = conv?.totalCost ?? 0;
     final cs = Theme.of(context).colorScheme;
@@ -575,7 +579,9 @@ extension _ChatPageUiExt on _ChatPageState {
                       '上下文已压缩，旧对话已总结'
                       '${_showCompactionSummary ? '（点击收起）' : '（点击查看摘要）'}',
                       style: TextStyle(
-                          fontSize: 12, color: cs.onTertiaryContainer),
+                        fontSize: 12,
+                        color: cs.onTertiaryContainer,
+                      ),
                     ),
                   ),
                 ],
@@ -618,8 +624,9 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildTopBar({required String title, Conversation? conversation}) {
     final cs = Theme.of(context).colorScheme;
     final isTemporary = conversation?.isTemporary ?? false;
-    final temporaryExpiresAt =
-        isTemporary ? conversation!.temporaryExpiresAt : null;
+    final temporaryExpiresAt = isTemporary
+        ? conversation!.temporaryExpiresAt
+        : null;
     final titleText = Text(
       title,
       overflow: TextOverflow.ellipsis,
@@ -721,8 +728,9 @@ extension _ChatPageUiExt on _ChatPageState {
           IconButton(
             icon: Icon(
               _isSearching ? Icons.search_off : Icons.search,
-              color:
-                  _isSearching ? Theme.of(context).colorScheme.primary : null,
+              color: _isSearching
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
             tooltip: '搜索消息',
             onPressed: () => setState(() {
@@ -748,11 +756,8 @@ extension _ChatPageUiExt on _ChatPageState {
             hintText: '输入新名称',
             border: OutlineInputBorder(),
           ),
-          onSubmitted: (_) => _saveConversationTitle(
-            dialogContext,
-            conversation,
-            controller,
-          ),
+          onSubmitted: (_) =>
+              _saveConversationTitle(dialogContext, conversation, controller),
         ),
         actions: [
           TextButton(
@@ -760,11 +765,8 @@ extension _ChatPageUiExt on _ChatPageState {
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () => _saveConversationTitle(
-              dialogContext,
-              conversation,
-              controller,
-            ),
+            onPressed: () =>
+                _saveConversationTitle(dialogContext, conversation, controller),
             child: const Text('确定'),
           ),
         ],
@@ -779,10 +781,9 @@ extension _ChatPageUiExt on _ChatPageState {
   ) {
     final title = controller.text.trim();
     if (title.isNotEmpty) {
-      ref.read(conversationsProvider.notifier).renameConversation(
-            conversation.id,
-            title,
-          );
+      ref
+          .read(conversationsProvider.notifier)
+          .renameConversation(conversation.id, title);
     }
     Navigator.of(dialogContext).pop();
   }
@@ -791,10 +792,7 @@ extension _ChatPageUiExt on _ChatPageState {
   Widget _buildUnconfiguredBanner() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 6,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       color: Theme.of(
         context,
       ).colorScheme.errorContainer.withValues(alpha: 0.3),
@@ -811,9 +809,7 @@ extension _ChatPageUiExt on _ChatPageState {
               '⚠️ 未配置聊天API — 前往设置',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onErrorContainer,
+                color: Theme.of(context).colorScheme.onErrorContainer,
               ),
             ),
           ),
@@ -857,10 +853,7 @@ extension _ChatPageUiExt on _ChatPageState {
       onCopy: () {
         Clipboard.setData(ClipboardData(text: message.text));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('已复制'),
-            duration: Duration(seconds: 1),
-          ),
+          const SnackBar(content: Text('已复制'), duration: Duration(seconds: 1)),
         );
       },
       onRetryOrEdit: () => isAi
@@ -920,8 +913,7 @@ extension _ChatPageUiExt on _ChatPageState {
   /// 首先选择保存位置；应用文件排在第一项。
   Future<MessageSaveDestination?> _askSaveDestinationDialog(
     BuildContext context,
-  ) =>
-      showMessageSaveDestinationDialog(context);
+  ) => showMessageSaveDestinationDialog(context);
 
   /// 多步工具调用且步骤之间有回话反馈时弹出的选择面板：
   /// "保存完整消息" / "保存最后的消息" / 取消。
@@ -934,10 +926,7 @@ extension _ChatPageUiExt on _ChatPageState {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              '该回复包含多步工具调用，选择要保存的内容：',
-              style: TextStyle(fontSize: 13),
-            ),
+            const Text('该回复包含多步工具调用，选择要保存的内容：', style: TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.article_outlined, size: 18),
@@ -979,15 +968,15 @@ extension _ChatPageUiExt on _ChatPageState {
   Future<void> _saveMarkdownToDevice(String markdown) async {
     try {
       final bytes = Uint8List.fromList(utf8.encode(markdown));
-      final outputPath = await FilePicker.saveFile(
+      final outputUri = await saveFileWithType(
         dialogTitle: '保存消息为 Markdown',
         fileName: '${_defaultMarkdownFileName()}.md',
-        type: FileType.custom,
-        allowedExtensions: ['md'],
+        extensions: ['md'],
         bytes: bytes,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (outputPath != null && mounted) {
+      if (outputUri != null && mounted) {
+        final outputPath = filePickerLocationLabel(outputUri);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('已保存到: $outputPath'),
@@ -1042,9 +1031,9 @@ extension _ChatPageUiExt on _ChatPageState {
           .replaceFirst(RegExp(r'\.md$', caseSensitive: false), '')
           .trim();
       if (fileName.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文件名不能为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
         return;
       }
 

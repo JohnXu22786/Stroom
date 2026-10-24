@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
-import 'package:tray_manager/tray_manager.dart' show trayManager;
+import 'package:tray_manager/legacy.dart' show trayManager;
 import 'package:window_manager/window_manager.dart' show windowManager;
 
 /// Records method calls made on a mocked platform channel.

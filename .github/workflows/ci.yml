@@ -35,10 +35,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Check Dart formatting
         # Preserve the repo's Dart 3.0 formatting baseline after raising its SDK minimum.
         run: dart format --language-version=3.0 --set-exit-if-changed .
@@ -53,10 +53,10 @@ jobs:
           fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Run Dart analyzer
         run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - name: Check changed files have tests
@@ -231,10 +231,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.9
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - uses: browser-actions/setup-chrome@v1
         id: setup-chrome
         if: matrix.suite == 'application-shared' || matrix.suite == 'chat-ai-ui'

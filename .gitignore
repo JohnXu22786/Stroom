@@ -350,6 +350,7 @@ lcov.info
 *.swo
 *~
 *.lock
+!pubspec.lock
 *.orig
 *.rej
 *.bak

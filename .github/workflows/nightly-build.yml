@@ -21,10 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Run all tests with coverage
         run: flutter test tests --coverage
       - name: Install lcov
@@ -44,10 +44,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Install xvfb for headless display
         run: sudo apt-get install -y xvfb
       - name: Run integration tests
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - name: Install Linux dependencies
@@ -78,7 +78,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
       - run: flutter create --platforms=linux .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build linux --release
 
   # ── Web Build ────────────────────────────────────────────────────────────
@@ -89,10 +89,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build web --release
 
   # ── Android Build ────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ jobs:
           java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - uses: actions/cache@v4
@@ -117,7 +117,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14"
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Create dummy keystore for CI
         run: keytool -genkey -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=CI, OU=Build, O=Stroom, L=Unknown, ST=Unknown, C=XX"
       - run: flutter build apk --release
@@ -130,10 +130,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build windows --release
 
   # ── macOS ARM64 Build ─────────────────────────────────────────────────────
@@ -145,11 +145,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -177,11 +177,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       - run: flutter create --platforms=macos .
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
@@ -205,12 +205,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: 3.47.8
           cache: true
           pub-cache: true
       # ios/ 工程已随仓库提交（含 BGContinuedProcessingTask 常驻后台配置），
       # 不再现场生成。
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Clean SwiftPM cache and artifacts
         run: |
           rm -rf ~/Library/Caches/org.swift.swiftpm
