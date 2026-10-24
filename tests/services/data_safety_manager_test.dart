@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,15 +17,25 @@ void main() {
 
   late String appDir;
   late Directory snapDir;
+  late Directory isolatedAppDir;
 
   setUp(() async {
     AppLogService.disableFileLogging();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     AppStorage.resetCache();
+    isolatedAppDir = await Directory.systemTemp.createTemp(
+      'stroom_data_safety_test_',
+    );
+    // Other test files run in parallel and may write their own safety marker;
+    // keep this file's marker and integrity fixtures in a private app dir.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => isolatedAppDir.path,
+    );
     appDir = await AppStorage.directory;
-    // 清理共享 systemTemp 下其他测试文件可能残留的脏数据文件
-    //（checkAndRepair 会扫描这些路径，残留坏文件会造成误判损坏）
+    // 只扫描本测试隔离目录中的数据，避免其他并行测试的文件影响判断。
     for (final rel in [
       'synthesis/tasks.json',
       'catcatch/tasks.json',
@@ -51,6 +62,12 @@ void main() {
 
   tearDown(() async {
     SnapshotService.debugNow = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    AppStorage.resetCache();
     try {
       if (await snapDir.exists()) {
         await snapDir.delete(recursive: true);
@@ -60,6 +77,11 @@ void main() {
       final stateFile = File(p.join(appDir, DataSafetyManager.stateFileName));
       if (await stateFile.exists()) {
         await stateFile.delete();
+      }
+    } catch (_) {}
+    try {
+      if (await isolatedAppDir.exists()) {
+        await isolatedAppDir.delete(recursive: true);
       }
     } catch (_) {}
   });

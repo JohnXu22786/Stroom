@@ -17,6 +17,10 @@ import 'package:stroom/services/ios_continued_task_service.dart';
 import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
 
 class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
+  _TestDesktopTrayAdapter({this.onSetContextMenu});
+
+  final Future<void> Function(Menu menu)? onSetContextMenu;
+
   @override
   Future<void> setIcon(String iconPath) async {}
 
@@ -24,7 +28,7 @@ class _TestDesktopTrayAdapter implements DesktopTrayAdapter {
   Future<void> setToolTip(String toolTip) async {}
 
   @override
-  Future<void> setContextMenu(Menu menu) async {}
+  Future<void> setContextMenu(Menu menu) async => onSetContextMenu?.call(menu);
 
   @override
   Future<void> popUpContextMenu() async {}
@@ -611,10 +615,6 @@ void main() {
         const MethodChannel('window_manager'),
         (MethodCall call) async => true,
       );
-      messenger.setMockMethodCallHandler(
-        const MethodChannel('tray_manager'),
-        (MethodCall call) async => true,
-      );
       await DesktopAppService.instance.setupTrayAndCloseBehavior();
     }
 
@@ -631,18 +631,16 @@ void main() {
           final service = DesktopAppService.instance;
           _resetDesktopAppServiceForTest();
           final menuReady = Completer<void>();
+          service.setTrayAdapterForTesting(
+            _TestDesktopTrayAdapter(
+              onSetContextMenu: (_) => menuReady.future,
+            ),
+          );
           final messenger =
               TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
           messenger.setMockMethodCallHandler(
             const MethodChannel('window_manager'),
             (call) async => true,
-          );
-          messenger.setMockMethodCallHandler(
-            const MethodChannel('tray_manager'),
-            (call) async {
-              if (call.method == 'setContextMenu') await menuReady.future;
-              return true;
-            },
           );
           tester.view.physicalSize = const Size(1080, 4000);
           tester.view.devicePixelRatio = 1.0;
@@ -672,8 +670,6 @@ void main() {
             if (!menuReady.isCompleted) menuReady.complete();
             await tester.pumpWidget(const SizedBox.shrink());
             _resetDesktopAppServiceForTest();
-            messenger.setMockMethodCallHandler(
-                const MethodChannel('tray_manager'), null);
             debugDefaultTargetPlatformOverride = null;
             tester.view.resetPhysicalSize();
             tester.view.resetDevicePixelRatio();
@@ -1523,13 +1519,6 @@ void main() {
           return true;
         },
       );
-      // 托盘通道同样 mock，并先完成托盘注册 —— 页面只会在托盘就绪后
-      // 才重新武装关闭拦截（托盘不可用时不武装，保证窗口仍可关闭）。
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('tray_manager'),
-        (MethodCall call) async => true,
-      );
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
       try {
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
@@ -1620,11 +1609,6 @@ void main() {
             windowCalls.add(call);
             return true;
           },
-        );
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
-          const MethodChannel('tray_manager'),
-          (MethodCall call) async => true,
         );
         await DesktopAppService.instance.setupTrayAndCloseBehavior();
         expect(DesktopAppService.instance.isTrayReady, isTrue);
