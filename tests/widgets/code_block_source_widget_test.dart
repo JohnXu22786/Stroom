@@ -1518,7 +1518,7 @@ void main() {
     });
 
     testWidgets('cancelling the save panel shows no snackbar', (tester) async {
-      final picker = FakeFilePicker(result: null);
+      final picker = FakeFilePicker(cancel: true);
       final originalPicker = FilePickerPlatform.instance;
       FilePickerPlatform.instance = picker;
       addTearDown(() => FilePickerPlatform.instance = originalPicker);

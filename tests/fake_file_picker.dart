@@ -66,8 +66,9 @@ final class FakePlatformFile extends PlatformFile {
 /// Records save arguments and returns [result] (or blocks on [completer] to
 /// simulate a slow native dialog).
 class FakeFilePicker extends FilePickerPlatform {
-  FakeFilePicker({Uri? result, this.completer})
-      : result = result ?? Uri.parse('file:///C:/saved/code.txt');
+  FakeFilePicker({Uri? result, bool cancel = false, this.completer})
+      : result =
+            cancel ? null : result ?? Uri.parse('file:///C:/saved/code.txt');
 
   Uri? result;
   final Completer<Uri?>? completer;

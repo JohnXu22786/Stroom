@@ -172,7 +172,7 @@ void main() {
             .onPressed,
         isNull,
       );
-      pending.complete(null);
+      pending.complete(const []);
       await tester.pumpAndSettle();
       expect(_startButtonEnabled(tester), isTrue);
     });
