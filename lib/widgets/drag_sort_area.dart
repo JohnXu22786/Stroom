@@ -76,7 +76,7 @@ class DragSortArea extends StatefulWidget {
   /// 行/网格布局：条目内容构建器。行内含 [DragSortRowHandle] 作为拖拽
   /// 把手；网格内整格长按拖拽。
   final Widget Function(BuildContext context, int index, String value)?
-  itemBuilder;
+      itemBuilder;
 
   /// 排序提交回调：from/to 为「移除 after 插入」索引（与
   /// `ReorderableListView.onReorderItem` 一致）。
@@ -382,12 +382,10 @@ class _DragSortAreaState extends State<DragSortArea> {
   }
 
   double _distanceToRect(Offset p, Rect r) {
-    final dx = p.dx < r.left
-        ? r.left - p.dx
-        : (p.dx > r.right ? p.dx - r.right : 0);
-    final dy = p.dy < r.top
-        ? r.top - p.dy
-        : (p.dy > r.bottom ? p.dy - r.bottom : 0);
+    final dx =
+        p.dx < r.left ? r.left - p.dx : (p.dx > r.right ? p.dx - r.right : 0);
+    final dy =
+        p.dy < r.top ? r.top - p.dy : (p.dy > r.bottom ? p.dy - r.bottom : 0);
     return math.sqrt(dx * dx + dy * dy);
   }
 
@@ -428,8 +426,8 @@ class _DragSortAreaState extends State<DragSortArea> {
     final itemHeight = widget.grid
         ? _gridCellHeight
         : widget.wrap
-        ? _kPillHeight
-        : widget.rowExtent;
+            ? _kPillHeight
+            : widget.rowExtent;
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
@@ -662,8 +660,8 @@ class _DragSortAreaState extends State<DragSortArea> {
           widget.wrap
               ? 20
               : widget.grid
-              ? 16
-              : 8,
+                  ? 16
+                  : 8,
         ),
         border: Border.all(
           color: cs.primary.withValues(alpha: 0.7),
@@ -748,8 +746,8 @@ class _DragSortAreaState extends State<DragSortArea> {
                 releasing
                     ? Opacity(opacity: 0, child: child)
                     : !widget.wrap
-                    ? Opacity(opacity: 1.0, child: child)
-                    : child,
+                        ? Opacity(opacity: 1.0, child: child)
+                        : child,
               ));
             }
           }

@@ -188,9 +188,7 @@ class AssistantSelectionPage extends ConsumerWidget {
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) return;
-                ref
-                    .read(assistantProvider.notifier)
-                    .createAssistant(
+                ref.read(assistantProvider.notifier).createAssistant(
                       name: name,
                       prompt: promptController.text.trim(),
                       emoji: selectedEmoji,
