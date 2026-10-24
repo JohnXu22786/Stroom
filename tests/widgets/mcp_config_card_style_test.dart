@@ -13,9 +13,8 @@ import 'package:stroom/providers/provider_config.dart';
 /// a neutral surface tone, mixing styles on the same page. The LLM provider
 /// page (and all other provider pages) show uniform neutral cards.
 ///
-/// FIX: every MCP card uses the same theme-adaptive background and a soft
-/// outline border, regardless of vendor/transport, so light and dark mode
-/// look consistent with the rest of the settings UI.
+/// FIX: every MCP card uses the same neutral theme-adaptive background and
+/// simplified icon/text treatment, regardless of vendor or transport.
 void main() {
   ProviderEntriesState mixedState() {
     return ProviderEntriesState(
@@ -155,28 +154,6 @@ void main() {
     return container.decoration! as BoxDecoration;
   }
 
-  /// The icon-box Containers (borderRadius 10) of all cards.
-  Future<List<Color?>> iconBoxColors(WidgetTester tester) async {
-    final colors = <Color?>[];
-    // The preceding style checks leave the scroll view at the last card.
-    for (var i = 2; i >= 0; i--) {
-      await scrollToCard(tester, i, delta: -200);
-      final card = find.byKey(ValueKey('config_test_mcp_$i'));
-      final boxes = find
-          .descendant(of: card, matching: find.byType(Container))
-          .evaluate()
-          .map((e) => e.widget as Container)
-          .where((c) {
-        final d = c.decoration;
-        return d is BoxDecoration &&
-            d.borderRadius == BorderRadius.circular(10);
-      }).toList();
-      expect(boxes, hasLength(1), reason: 'each card has exactly one icon box');
-      colors.add((boxes.first.decoration as BoxDecoration).color);
-    }
-    return colors;
-  }
-
   testWidgets('all MCP config cards share one unified style (light)',
       (tester) async {
     await pumpPage(tester, Brightness.light);
@@ -185,25 +162,13 @@ void main() {
     ).colorScheme;
 
     final expectedBg = cs.surfaceContainerLow;
-    final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
       final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'vendor and user-added cards must use the same background '
               '(matching the LLM provider page) — no primaryContainer tint');
-      final border = d.border as Border;
-      expect(border.top.color, expectedBorder,
-          reason: 'all cards must use the same soft outline border color');
-      expect(border.top.width, 0.5,
-          reason: 'all cards must use the same border width');
-    }
-
-    // MCP icon boxes use the same theme-aware primary container color across
-    // vendor and transport types.
-    final expectedIconBox = cs.primaryContainer;
-    for (final color in await iconBoxColors(tester)) {
-      expect(color, expectedIconBox,
-          reason: 'icon boxes must use the same tint for every card');
+      expect(d.border, isNull,
+          reason: 'MCP rows use a simple borderless settings style');
     }
   });
 
@@ -215,23 +180,13 @@ void main() {
     ).colorScheme;
 
     final expectedBg = cs.surfaceContainerHigh;
-    final expectedBorder = cs.outlineVariant.withValues(alpha: 0.5);
     for (var i = 0; i < 3; i++) {
       final d = await cardDecoration(tester, i);
       expect(d.color, expectedBg,
           reason: 'dark mode must use the same adaptive background for every '
               'card, no vendor tint');
-      final border = d.border as Border;
-      expect(border.top.color, expectedBorder,
-          reason: 'all cards must use the same soft outline border color');
-      expect(border.top.width, 0.5,
-          reason: 'all cards must use the same border width');
-    }
-
-    final expectedIconBox = cs.primaryContainer;
-    for (final color in await iconBoxColors(tester)) {
-      expect(color, expectedIconBox,
-          reason: 'icon boxes must use the same tint for every card');
+      expect(d.border, isNull,
+          reason: 'dark MCP rows also use a simple borderless settings style');
     }
   });
 
