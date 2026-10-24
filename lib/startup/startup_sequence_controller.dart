@@ -88,11 +88,13 @@ class StartupSequenceController {
       // This noncritical update hint must not block data-safety checks.
       try {
         if (await hasPendingUpdateRestart()) {
-          debugPrint('[StartupSequenceController] Clearing update restart flag');
+          debugPrint(
+              '[StartupSequenceController] Clearing update restart flag');
           await clearPendingUpdateRestart();
         }
       } catch (error) {
-        debugPrint('[StartupSequenceController] Update flag read failed: $error');
+        debugPrint(
+            '[StartupSequenceController] Update flag read failed: $error');
       }
 
       _publish('正在检查数据安全...', '0/5');
@@ -100,7 +102,8 @@ class StartupSequenceController {
 
       final versionAhead = await StartupCheckService.checkVersionAhead();
       if (versionAhead != null) {
-        debugPrint('[StartupSequenceController] Data version is ahead: $versionAhead');
+        debugPrint(
+            '[StartupSequenceController] Data version is ahead: $versionAhead');
         final blocked = '数据由更新版本的应用创建（$versionAhead）。\n\n'
             '当前版本无法安全读取这些数据。请安装最新版本的应用，'
             '数据未做任何改动。';
@@ -142,7 +145,8 @@ class StartupSequenceController {
           '数据格式版本检查完成: needsMigration=${migrationResult.needsMigration}',
         );
       } catch (error) {
-        debugPrint('[StartupSequenceController] checkFormatVersion failed: $error');
+        debugPrint(
+            '[StartupSequenceController] checkFormatVersion failed: $error');
         if (error is StartupPreferencesUnavailable ||
             error is StartupDataValidationUnavailable) {
           rethrow;
@@ -187,7 +191,8 @@ class StartupSequenceController {
           '数据格式验证完成: 发现 ${formatIssues.length} 个问题',
         );
       } catch (error) {
-        debugPrint('[StartupSequenceController] validateDataFormats failed: $error');
+        debugPrint(
+            '[StartupSequenceController] validateDataFormats failed: $error');
         if (error is StartupDataValidationUnavailable ||
             error is StartupPreferencesUnavailable) {
           rethrow;
@@ -214,7 +219,8 @@ class StartupSequenceController {
           '数据完整性检查完成: 发现 ${integrityIssues.length} 个问题',
         );
       } catch (error) {
-        debugPrint('[StartupSequenceController] checkDataIntegrity failed: $error');
+        debugPrint(
+            '[StartupSequenceController] checkDataIntegrity failed: $error');
         if (error is StartupDataValidationUnavailable ||
             error is StartupPreferencesUnavailable) {
           rethrow;
@@ -236,7 +242,8 @@ class StartupSequenceController {
       String? warning;
       if (allIssues.isNotEmpty) {
         for (final issue in allIssues) {
-          debugPrint('[StartupSequenceController] ${issue.severity.name}: ${issue.message}');
+          debugPrint(
+              '[StartupSequenceController] ${issue.severity.name}: ${issue.message}');
         }
         final errors = allIssues
             .where((issue) => issue.severity == StartupIssueSeverity.error)
