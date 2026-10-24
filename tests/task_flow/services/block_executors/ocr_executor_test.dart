@@ -73,28 +73,30 @@ void main() {
   });
 
   ProviderEntriesState providerForOcr() => ProviderEntriesState(
-    entries: [
-      ProviderEntry(
-        name: 'OCR',
-        type: 'ocr',
-        configs: [
-          ProviderConfigItem(
-            id: 'config',
-            host: 'https://example.invalid/recognition',
-            key: 'test-key',
-            models: [ModelConfig(id: 'model', name: 'Test', modelId: 'test')],
+        entries: [
+          ProviderEntry(
+            name: 'OCR',
+            type: 'ocr',
+            configs: [
+              ProviderConfigItem(
+                id: 'config',
+                host: 'https://example.invalid/recognition',
+                key: 'test-key',
+                models: [
+                  ModelConfig(id: 'model', name: 'Test', modelId: 'test')
+                ],
+              ),
+            ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 
   TaskFlowBlock ocrBlock() => TaskFlowBlock(
-    typeKey: BlockType.ocr,
-    params: {
-      'modelRef': {'configId': 'config', 'modelId': 'model'},
-    },
-  );
+        typeKey: BlockType.ocr,
+        params: {
+          'modelRef': {'configId': 'config', 'modelId': 'model'},
+        },
+      );
 
   test('OCR uses payload bytes instead of the filename suffix', () async {
     final bytes = _validPng();
@@ -238,7 +240,7 @@ void main() {
 
 class _ExecutorFakeConnector extends LlmConnectorHttpClient {
   _ExecutorFakeConnector(LlmAccountConnectorService accountService)
-    : super(accountService: accountService);
+      : super(accountService: accountService);
 
   String? requestedAccountId;
   String? requestedModelId;

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,10 +28,10 @@ const kBuiltinWebSearchEntryName = 'Built-in Web Search';
 /// Static read-only catalog row for local web search; it is never persisted
 /// with the configurable provider entries.
 ProviderEntry createBuiltinWebSearchEntry() => ProviderEntry(
-  id: kBuiltinWebSearchEntryId,
-  type: kBuiltinWebSearchEntryType,
-  name: kBuiltinWebSearchEntryName,
-);
+      id: kBuiltinWebSearchEntryId,
+      type: kBuiltinWebSearchEntryType,
+      name: kBuiltinWebSearchEntryName,
+    );
 
 // ============================================================================
 // 供应商条目列表状态
@@ -42,54 +43,66 @@ class ProviderEntriesState {
 
   /// False only while the notifier is reading and migrating persisted entries.
   final bool isLoaded;
+  final bool llmCredentialMigrationUnavailable;
+  final bool llmModelGroupCatalogUnavailable;
 
   const ProviderEntriesState({
     this.entries = const [],
     this.mcpGroups = builtinMcpProviderGroups,
     this.isLoaded = true,
+    this.llmCredentialMigrationUnavailable = false,
+    this.llmModelGroupCatalogUnavailable = false,
   });
+
+  ProviderEntriesState copyWith({
+    List<ProviderEntry>? entries,
+    List<McpProviderGroup>? mcpGroups,
+  }) =>
+      ProviderEntriesState(
+        entries: entries ?? this.entries,
+        mcpGroups: mcpGroups ?? this.mcpGroups,
+        isLoaded: isLoaded,
+        llmCredentialMigrationUnavailable: llmCredentialMigrationUnavailable,
+        llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+      );
 }
 
-/// Removes legacy selector source rows when their account is explicitly
-/// deleted. OCR rows keep a source config ID in the migrated account so stale
-/// Task Flow inputs cannot lazily recreate that account and credential.
+/// Removes legacy selector rows when their account is explicitly deleted.
+/// OCR rows keep a source config ID so stale Task Flow inputs cannot recreate
+/// the deleted account and credential.
 ProviderEntriesState removeLegacyLlmAccountSourceConfigs(
   ProviderEntriesState state,
   LlmAccount account,
 ) {
   final legacyOcrConfigId = account.endpointConfig['legacyOcrProviderConfigId'];
   var changed = false;
-  final entries = state.entries
-      .map((entry) {
-        final configs = entry.configs
-            .where((config) {
-              final removeLlmSource =
-                  entry.type == 'llm' && config.id == account.id;
-              final removeOcrSource =
-                  legacyOcrConfigId is String &&
-                  legacyOcrConfigId.isNotEmpty &&
-                  entry.type == 'ocr' &&
-                  config.id == legacyOcrConfigId;
-              return !(removeLlmSource || removeOcrSource);
-            })
-            .toList(growable: false);
-        if (configs.length == entry.configs.length) return entry;
-        changed = true;
-        return ProviderEntry(
-          id: entry.id,
-          type: entry.type,
-          name: entry.name,
-          enabled: entry.enabled,
-          legacyFields: entry.legacyFields,
-          configs: configs,
-        );
-      })
-      .toList(growable: false);
+  final entries = state.entries.map((entry) {
+    final configs = entry.configs.where((config) {
+      final removeLlmSource = entry.type == 'llm' && config.id == account.id;
+      final removeOcrSource = legacyOcrConfigId is String &&
+          legacyOcrConfigId.isNotEmpty &&
+          entry.type == 'ocr' &&
+          config.id == legacyOcrConfigId;
+      return !(removeLlmSource || removeOcrSource);
+    }).toList(growable: false);
+    if (configs.length == entry.configs.length) return entry;
+    changed = true;
+    return ProviderEntry(
+      id: entry.id,
+      type: entry.type,
+      name: entry.name,
+      enabled: entry.enabled,
+      legacyFields: entry.legacyFields,
+      configs: configs,
+    );
+  }).toList(growable: false);
   if (!changed) return state;
   return ProviderEntriesState(
     entries: entries,
     mcpGroups: state.mcpGroups,
     isLoaded: state.isLoaded,
+    llmCredentialMigrationUnavailable: state.llmCredentialMigrationUnavailable,
+    llmModelGroupCatalogUnavailable: state.llmModelGroupCatalogUnavailable,
   );
 }
 
@@ -103,8 +116,7 @@ bool isMcpProviderConfigEnabled(
 }
 
 String defaultMcpGroupIdForConfig(ProviderConfigItem config) {
-  final stableHttpToolName =
-      config.models.isNotEmpty &&
+  final stableHttpToolName = config.models.isNotEmpty &&
           config.models[0].typeConfig['isHttpTool'] == true
       ? config.models[0].name
       : null;
@@ -122,9 +134,8 @@ Map<String, String> mcpPlaceholderToolNamesByConfigId(
   final serverNamesByConfigId = <String, String>{};
   final configIdsByBaseName = <String, List<String>>{};
   for (final config in configs) {
-    final typeConfig = config.models.isNotEmpty
-        ? config.models[0].typeConfig
-        : null;
+    final typeConfig =
+        config.models.isNotEmpty ? config.models[0].typeConfig : null;
     if (typeConfig?['isHttpTool'] == true) continue;
     final serverConfig = McpServerConfig.fromProviderConfig(
       providerName: config.providerName,
@@ -181,8 +192,8 @@ String _uniqueMcpPlaceholderToolName(
     final stem = maxStemLength <= 0
         ? ''
         : baseStem.length <= maxStemLength
-        ? baseStem
-        : _truncateMcpToolNameStem(baseStem, maxStemLength);
+            ? baseStem
+            : _truncateMcpToolNameStem(baseStem, maxStemLength);
     final name = '${stem}_${suffix}_mcp';
     if (usedNames.add(name)) return name;
     if (suffixLength < maxSuffixLength) {
@@ -190,12 +201,11 @@ String _uniqueMcpPlaceholderToolName(
       if (suffixLength > maxSuffixLength) suffixLength = maxSuffixLength;
       continue;
     }
-    for (var index = 2; ; index++) {
+    for (var index = 2;; index++) {
       final indexText = index.toString();
       final suffixBudget = 58 - indexText.length;
-      final duplicateSuffixLength = stableId.length <= suffixBudget
-          ? stableId.length
-          : suffixBudget;
+      final duplicateSuffixLength =
+          stableId.length <= suffixBudget ? stableId.length : suffixBudget;
       final duplicateSuffix = stableId.substring(
         stableId.length - duplicateSuffixLength,
       );
@@ -204,8 +214,8 @@ String _uniqueMcpPlaceholderToolName(
       final duplicateStem = duplicateStemLength <= 0
           ? ''
           : baseStem.length <= duplicateStemLength
-          ? baseStem
-          : _truncateMcpToolNameStem(baseStem, duplicateStemLength);
+              ? baseStem
+              : _truncateMcpToolNameStem(baseStem, duplicateStemLength);
       final duplicateName =
           '${duplicateStem}_${duplicateSuffix}_${indexText}_mcp';
       if (usedNames.add(duplicateName)) return duplicateName;
@@ -229,9 +239,8 @@ String? mcpProviderConfigToolName(
   ProviderConfigItem config, {
   Map<String, String>? placeholderNamesByConfigId,
 }) {
-  final typeConfig = config.models.isNotEmpty
-      ? config.models[0].typeConfig
-      : null;
+  final typeConfig =
+      config.models.isNotEmpty ? config.models[0].typeConfig : null;
   if (typeConfig?['isHttpTool'] == true) {
     // The provider name is editable in the settings panel. Keep matching the
     // registered HTTP handler through the model's stable built-in name.
@@ -254,9 +263,8 @@ String? mcpProviderConfigToolName(
 }
 
 Set<String> disabledMcpToolNames(ProviderEntriesState state) {
-  final mcpEntry = state.entries
-      .where((entry) => entry.type == 'mcp')
-      .firstOrNull;
+  final mcpEntry =
+      state.entries.where((entry) => entry.type == 'mcp').firstOrNull;
   final mcpConfigs = mcpEntry?.configs ?? const <ProviderConfigItem>[];
   final placeholderNamesByConfigId = mcpPlaceholderToolNamesByConfigId(
     mcpConfigs,
@@ -286,20 +294,23 @@ Set<String> disabledMcpToolNames(ProviderEntriesState state) {
 /// 供应商条目列表提供器（持久化）
 final providerEntriesProvider =
     StateNotifierProvider<ProviderEntriesNotifier, ProviderEntriesState>((ref) {
-      final notifier = ProviderEntriesNotifier();
-      notifier._loading = notifier.load();
-      return notifier;
-    });
+  final notifier = ProviderEntriesNotifier();
+  notifier._loading = notifier.load();
+  return notifier;
+});
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final LlmCredentialStore _credentialStore;
   bool _providerEntriesSourceUnreadable = false;
   bool _reloadBeforeNextMutation = false;
   bool _lastLoadSucceeded = false;
+  int _providerEntriesSourceConflictGeneration = 0;
+  final Map<String, String> _conflictedEntryUpdateFingerprints = {};
+  String? _loadedProviderEntriesSourceJson;
 
   ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
-    : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
-      super(const ProviderEntriesState(isLoaded: false));
+      : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
+        super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
   Future<void> get ready => _loading;
@@ -307,7 +318,9 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> load() async {
     _lastLoadSucceeded = false;
     _providerEntriesSourceUnreadable = false;
+    _loadedProviderEntriesSourceJson = null;
     var mcpGroups = builtinMcpProviderGroups;
+    var llmModelGroupCatalogUnavailable = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       mcpGroups = _readMcpGroups(prefs.getString('mcp_provider_groups'));
@@ -325,28 +338,74 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       final json = prefs.getString('provider_entries');
       if (json != null && json.isNotEmpty) {
         final List<dynamic> rawList;
+        var credentialMigrationUnavailable = false;
+        var sourceForLoad = json;
+        String? providerEntriesJsonForLoad = json;
         try {
           jsonDecode(json) as List;
-          // Covers old settings imported after startup as well: persist IDs
-          // before publishing models to selectors or task flows.
-          await ProviderModelMigration.migrateSettings();
+          // Stage stable IDs so a later secure-storage failure cannot leave
+          // provider_entries partly migrated before credentials are safe.
+          final modelMigratedJson =
+              await ProviderModelMigration.migrateSettingsContent(json);
+          sourceForLoad = modelMigratedJson;
           try {
             await LlmAccountMigrationService(
               preferences: _SharedPreferencesLlmAccountPreferences(prefs),
               credentialStore: _credentialStore,
-            ).migrate();
+            ).migrate(
+              sourceProviderEntriesJson: modelMigratedJson,
+              expectedStoredProviderEntriesJson: json,
+            );
           } on LlmAccountMigrationException {
-            // Keep serving the original config in memory. The migration
-            // service leaves provider_entries untouched until secure writes
-            // and account/group validation succeed; later saves retry it.
             _reloadBeforeNextMutation = true;
-            state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
             debugPrint(
               'Secure credential migration is unavailable; legacy LLM settings are preserved.',
             );
-            return;
+            final currentSource = prefs.getString('provider_entries');
+            if (currentSource == null || currentSource.isEmpty) {
+              state = ProviderEntriesState(
+                isLoaded: false,
+                mcpGroups: mcpGroups,
+              );
+              return;
+            }
+            if (currentSource != json) {
+              try {
+                sourceForLoad =
+                    await ProviderModelMigration.migrateSettingsContent(
+                  currentSource,
+                );
+              } catch (_) {
+                state = ProviderEntriesState(
+                  isLoaded: false,
+                  mcpGroups: mcpGroups,
+                );
+                return;
+              }
+            }
+            providerEntriesJsonForLoad = currentSource;
+            if (!_canServeLegacyProviderEntries(sourceForLoad, prefs)) {
+              state = ProviderEntriesState(
+                isLoaded: false,
+                mcpGroups: mcpGroups,
+              );
+              return;
+            }
+            // The legacy source is still authoritative and has no secure
+            // references to hydrate. Keep it readable for settings and
+            // existing model selectors, but do not let a later edit persist
+            // it until secure migration can be retried successfully.
+            credentialMigrationUnavailable = true;
           }
-          rawList = jsonDecode(prefs.getString('provider_entries')!) as List;
+          if (credentialMigrationUnavailable) {
+            rawList = jsonDecode(sourceForLoad) as List;
+          } else {
+            providerEntriesJsonForLoad = prefs.getString('provider_entries');
+            if (providerEntriesJsonForLoad == null) {
+              throw StateError('Provider settings disappeared during load.');
+            }
+            rawList = jsonDecode(providerEntriesJsonForLoad) as List;
+          }
         } catch (_) {
           _providerEntriesSourceUnreadable = true;
           // 结构性损坏（非法 JSON）：备份原始数据再回退默认预置，
@@ -453,42 +512,73 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           }
         }
 
-        await _appendLlmModelGroupConfigs(entries, prefs);
-
-        state = ProviderEntriesState(entries: entries, mcpGroups: mcpGroups);
-        _reloadBeforeNextMutation = false;
+        try {
+          await _appendLlmModelGroupConfigs(entries, prefs);
+        } catch (_) {
+          // The account/group catalog is an optional selector overlay. Keep
+          // existing provider settings readable when that separate catalog is
+          // damaged; the failed migration still gates mutations on a reload.
+          debugPrint('Failed to load LLM model groups for model selectors.');
+          llmModelGroupCatalogUnavailable = true;
+        }
+        _loadedProviderEntriesSourceJson = providerEntriesJsonForLoad;
+        state = ProviderEntriesState(
+          entries: entries,
+          mcpGroups: mcpGroups,
+          llmCredentialMigrationUnavailable: credentialMigrationUnavailable,
+          llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+        );
+        _reloadBeforeNextMutation = credentialMigrationUnavailable;
         if (entriesChanged ||
             groupAssignmentsChanged ||
             prefs.getString('mcp_provider_groups') !=
                 jsonEncode(mcpGroups.map((group) => group.toMap()).toList())) {
-          await _persist();
+          if (!credentialMigrationUnavailable) await _persist();
         }
         _lastLoadSucceeded = !_reloadBeforeNextMutation;
         return;
       }
+      _loadedProviderEntriesSourceJson = json;
     } catch (_) {
-      debugPrint('Failed to load provider entries.');
       _providerEntriesSourceUnreadable = true;
       _reloadBeforeNextMutation = true;
       state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
       return;
     }
 
-    // 默认预置。 Account/group records can exist before a provider_entries
-    // document is created, so expose them in the same selector catalog.
+    // 默认预置
     final defaultState = _defaultEntries(mcpGroups: mcpGroups);
     try {
       final prefs = await SharedPreferences.getInstance();
       await _appendLlmModelGroupConfigs(defaultState.entries, prefs);
     } catch (_) {
       debugPrint('Failed to load LLM model groups for model selectors.');
+      llmModelGroupCatalogUnavailable = true;
     }
-    state = defaultState;
+    state = ProviderEntriesState(
+      entries: defaultState.entries,
+      mcpGroups: defaultState.mcpGroups,
+      isLoaded: defaultState.isLoaded,
+      llmModelGroupCatalogUnavailable: llmModelGroupCatalogUnavailable,
+    );
     if (!_providerEntriesSourceUnreadable) {
       _reloadBeforeNextMutation = false;
     }
     _lastLoadSucceeded =
         !_providerEntriesSourceUnreadable && !_reloadBeforeNextMutation;
+  }
+
+  Future<void> _reloadBeforeMutationIfNeeded() async {
+    if (_reloadBeforeNextMutation) {
+      await load();
+      if (!_lastLoadSucceeded) {
+        throw StateError('Provider settings must be reloaded before editing.');
+      }
+      _reloadBeforeNextMutation = false;
+    }
+    if (!state.isLoaded) {
+      throw StateError('Provider settings are unavailable.');
+    }
   }
 
   Future<void> _appendLlmModelGroupConfigs(
@@ -515,15 +605,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       LlmAccountMigrationService.modelGroupsPreferenceKey,
     ).map(LlmModelGroup.fromMap).toList(growable: false);
 
-    final llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
+    var llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
     if (llmEntryIndex < 0 && groups.isEmpty) return;
     if (llmEntryIndex < 0) {
       entries.add(
         ProviderEntry(id: 'builtin_llm', type: 'llm', name: 'LLM供应商'),
       );
     }
-    final index = entries.indexWhere((entry) => entry.type == 'llm');
-    final entry = entries[index];
+    llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
+    final entry = entries[llmEntryIndex];
     final realConfigs = markUnsupportedLegacyLlmConfigs(
       entry.configs.where((config) => !isLlmModelGroupProviderConfig(config)),
       accounts,
@@ -532,7 +622,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       accounts: accounts,
       groups: groups,
     );
-    entries[index] = ProviderEntry(
+    entries[llmEntryIndex] = ProviderEntry(
       id: entry.id,
       type: entry.type,
       name: entry.name,
@@ -540,19 +630,6 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       legacyFields: entry.legacyFields,
       configs: [...realConfigs, ...groupConfigs],
     );
-  }
-
-  Future<void> _reloadBeforeMutationIfNeeded() async {
-    if (_reloadBeforeNextMutation) {
-      await load();
-      if (!_lastLoadSucceeded) {
-        throw StateError('Provider settings must be reloaded before editing.');
-      }
-      _reloadBeforeNextMutation = false;
-    }
-    if (!state.isLoaded) {
-      throw StateError('Provider settings are unavailable.');
-    }
   }
 
   Future<void> _setStateAndPersist(ProviderEntriesState next) async {
@@ -578,6 +655,39 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           rethrow;
         }
       }
+    }
+  }
+
+  bool _canServeLegacyProviderEntries(
+    String json,
+    SharedPreferences preferences,
+  ) {
+    if (preferences.getString(
+              LlmAccountMigrationService.accountsPreferenceKey,
+            ) !=
+            null ||
+        preferences.getString(LlmAccountMigrationService.migrationStateKey) !=
+            null) {
+      return false;
+    }
+
+    try {
+      final rawEntries = jsonDecode(json);
+      if (rawEntries is! List) return false;
+      for (final rawEntry in rawEntries) {
+        if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
+        if (rawEntry['credentialRef'] != null) return false;
+        final rawConfigs = rawEntry['configs'];
+        if (rawConfigs is! List) return false;
+        for (final rawConfig in rawConfigs) {
+          if (rawConfig is! Map || rawConfig['credentialRef'] != null) {
+            return false;
+          }
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -609,13 +719,10 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       for (final builtin in builtinMcpProviderGroups)
         builtin.copyWith(enabled: saved[builtin.id]?.enabled ?? true),
     ];
-    final builtinIds = builtinMcpProviderGroups
-        .map((group) => group.id)
-        .toSet();
+    final builtinIds =
+        builtinMcpProviderGroups.map((group) => group.id).toSet();
     groups.addAll(
-      saved.values
-          .where((group) => !builtinIds.contains(group.id))
-          .map(
+      saved.values.where((group) => !builtinIds.contains(group.id)).map(
             (group) => McpProviderGroup(
               id: group.id,
               name: group.name.trim(),
@@ -651,10 +758,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> addFirst(ProviderEntry entry) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: [entry, ...state.entries],
-        mcpGroups: state.mcpGroups,
-      ),
+      state.copyWith(entries: [entry, ...state.entries]),
     );
   }
 
@@ -665,44 +769,67 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     bool requirePersistence = false,
   }) async {
     await _reloadBeforeMutationIfNeeded();
-    await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries.map((e) => e.id == id ? updated : e).toList(),
-        mcpGroups: state.mcpGroups,
-      ),
-    );
+    final updateFingerprint = _entryUpdateFingerprint(updated);
+    final conflictedFingerprint = _conflictedEntryUpdateFingerprints[id];
+    if (conflictedFingerprint != null &&
+        conflictedFingerprint == updateFingerprint) {
+      // A whole-entry object that already failed against a concurrent update
+      // must not be retried after the notifier reloads newer settings.
+      throw StateError(
+        'Provider settings changed before this update; reload and try again.',
+      );
+    }
+    _conflictedEntryUpdateFingerprints.remove(id);
+    final index = state.entries.indexWhere((entry) => entry.id == id);
+    if (index < 0) {
+      if (requirePersistence) {
+        throw StateError(
+          'Provider entry was removed before it could be saved.',
+        );
+      }
+      return;
+    }
+    final entries = List<ProviderEntry>.from(state.entries);
+    entries[index] = updated;
+    final conflictGeneration = _providerEntriesSourceConflictGeneration;
+    try {
+      await _setStateAndPersist(
+        state.copyWith(entries: entries),
+      );
+    } catch (_) {
+      if (_providerEntriesSourceConflictGeneration != conflictGeneration) {
+        _conflictedEntryUpdateFingerprints[id] = updateFingerprint;
+      }
+      rethrow;
+    }
   }
+
+  String _entryUpdateFingerprint(ProviderEntry entry) => sha256
+      .convert(utf8.encode(jsonEncode(entry.toCredentialMigrationMap())))
+      .toString();
 
   /// 删除条目
   Future<void> remove(String id) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries.where((e) => e.id != id).toList(),
-        mcpGroups: state.mcpGroups,
-      ),
+      state.copyWith(entries: state.entries.where((e) => e.id != id).toList()),
     );
   }
 
   Future<void> addMcpGroup(McpProviderGroup group) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
-        mcpGroups: [...state.mcpGroups, group],
-      ),
+      state.copyWith(mcpGroups: [...state.mcpGroups, group]),
     );
   }
 
   Future<void> updateMcpGroup(McpProviderGroup updated) async {
     await _reloadBeforeMutationIfNeeded();
-    final current = state.mcpGroups
-        .where((group) => group.id == updated.id)
-        .firstOrNull;
+    final current =
+        state.mcpGroups.where((group) => group.id == updated.id).firstOrNull;
     if (current == null || current.isBuiltin) return;
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
+      state.copyWith(
         mcpGroups: state.mcpGroups
             .map((group) => group.id == updated.id ? updated : group)
             .toList(),
@@ -713,8 +840,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> setMcpGroupEnabled(String id, bool enabled) async {
     await _reloadBeforeMutationIfNeeded();
     await _setStateAndPersist(
-      ProviderEntriesState(
-        entries: state.entries,
+      state.copyWith(
         mcpGroups: state.mcpGroups
             .map(
               (group) =>
@@ -750,7 +876,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       );
     }).toList();
     await _setStateAndPersist(
-      ProviderEntriesState(
+      state.copyWith(
         entries: entries,
         mcpGroups: state.mcpGroups.where((item) => item.id != id).toList(),
       ),
@@ -777,7 +903,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       );
     }).toList();
     await _setStateAndPersist(
-      ProviderEntriesState(entries: entries, mcpGroups: state.mcpGroups),
+      state.copyWith(entries: entries),
     );
   }
 }

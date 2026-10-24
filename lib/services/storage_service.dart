@@ -15,13 +15,14 @@ class AppStorage {
   AppStorage._();
 
   static String? _resolved;
+  static String? _testDirectory;
 
   /// Returns the path to the application documents directory.
   ///
   /// Resolution order:
   /// 1. [getApplicationDocumentsDirectory] (native)
   /// 2. If [MissingPluginException] is thrown:
-  ///    - `FLUTTER_TEST` environment is set → [Directory.systemTemp]
+  ///    - `FLUTTER_TEST` environment is set → a private temp directory
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
   ///
@@ -54,7 +55,8 @@ class AppStorage {
     // Check for test environment (dart:io Platform might be partially available)
     try {
       if (Platform.environment['FLUTTER_TEST'] == 'true') {
-        return _safeTempPath();
+        return _testDirectory ??=
+            Directory.systemTemp.createTempSync('stroom_test_data_').path;
       }
     } catch (e) {
       AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');

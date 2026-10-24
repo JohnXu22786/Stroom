@@ -32,9 +32,9 @@ void main() {
         // 12:34 PDT on Wednesday, May 20, 2026.
         final now = DateTime.utc(2026, 5, 20, 19, 34);
         LlmWindowPolicy calendar() => const LlmWindowPolicy(
-          mode: LlmWindowMode.calendar,
-          timeZone: 'America/Los_Angeles',
-        );
+              mode: LlmWindowMode.calendar,
+              timeZone: 'America/Los_Angeles',
+            );
 
         final fiveHour = LlmQuotaWindowService.bounds(
           LlmUsageWindow.fiveHour,

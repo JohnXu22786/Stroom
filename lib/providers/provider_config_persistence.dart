@@ -20,9 +20,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       if (json == null || json.isEmpty) return;
 
       // 兜底：使用 whereType 安全过滤非 Map 条目，避免 `.cast<>()` 或 `as Map` 闪退
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -74,9 +73,8 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final json = prefs.getString('provider_entries');
       if (json == null || json.isEmpty) return;
 
-      final list = (jsonDecode(json) as List)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      final list =
+          (jsonDecode(json) as List).whereType<Map<String, dynamic>>().toList();
       bool changed = false;
 
       for (final entry in list) {
@@ -469,6 +467,11 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         }
         return;
       }
+      if (providerEntriesBeforeMigration != _loadedProviderEntriesSourceJson) {
+        _reloadBeforeNextMutation = true;
+        _providerEntriesSourceConflictGeneration++;
+        throw StateError('Provider settings changed since they were loaded.');
+      }
       final groupsJson = jsonEncode(
         state.mcpGroups.map((group) => group.toMap()).toList(),
       );
@@ -489,21 +492,19 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         throw StateError('Failed to persist provider configuration.');
       }
 
-      final persistedSourceEntries = state.entries
-          .map((entry) {
-            if (entry.type != 'llm') return entry;
-            return ProviderEntry(
-              id: entry.id,
-              type: entry.type,
-              name: entry.name,
-              enabled: entry.enabled,
-              legacyFields: entry.legacyFields,
-              configs: entry.configs
-                  .where((config) => !isLlmModelGroupProviderConfig(config))
-                  .toList(),
-            );
-          })
-          .toList(growable: false);
+      final persistedSourceEntries = state.entries.map((entry) {
+        if (entry.type != 'llm') return entry;
+        return ProviderEntry(
+          id: entry.id,
+          type: entry.type,
+          name: entry.name,
+          enabled: entry.enabled,
+          legacyFields: entry.legacyFields,
+          configs: entry.configs
+              .where((config) => !isLlmModelGroupProviderConfig(config))
+              .toList(),
+        );
+      }).toList(growable: false);
       _applyCredentialReferencesFromSavedEntries(
         persistedSourceEntries,
         prefs.getString('provider_entries'),
@@ -517,9 +518,17 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         await LlmAccountMigrationService(
           preferences: _SharedPreferencesLlmAccountPreferences(prefs),
           credentialStore: _credentialStore,
-        ).migrate(sourceProviderEntriesJson: migrationInput);
+        ).migrate(
+          sourceProviderEntriesJson: migrationInput,
+          expectedStoredProviderEntriesJson: providerEntriesBeforeMigration,
+          checkExpectedStoredProviderEntriesJson: true,
+        );
       } on LlmAccountMigrationException {
         _reloadBeforeNextMutation = true;
+        if (prefs.getString('provider_entries') !=
+            providerEntriesBeforeMigration) {
+          _providerEntriesSourceConflictGeneration++;
+        }
         debugPrint(
           'Secure credential storage is unavailable; provider settings were not persisted.',
         );
@@ -527,7 +536,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
 
       _applyCredentialReferencesFromSavedEntries(
-        state.entries,
+        persistedSourceEntries,
         prefs.getString('provider_entries'),
       );
       final persistedEntries = persistedSourceEntries.map((entry) {
@@ -554,6 +563,9 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         groupsJson,
       );
       if (!providerEntriesMatch || !mcpGroupsMatch) {
+        if (!providerEntriesMatch) {
+          _providerEntriesSourceConflictGeneration++;
+        }
         throw StateError('Provider settings changed during persistence.');
       }
       attemptedProviderEntries = json;
@@ -561,8 +573,7 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
         prefs.getString('provider_entries'),
         json,
       );
-      final entriesSaved =
-          entriesAlreadySaved ||
+      final entriesSaved = entriesAlreadySaved ||
           await prefs.setString('provider_entries', json);
       final entriesVerified = _jsonPreferenceEquals(
         prefs.getString('provider_entries'),
@@ -571,8 +582,12 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       final groupsVerified =
           prefs.getString('mcp_provider_groups') == groupsJson;
       if (!entriesSaved || !entriesVerified || !groupsVerified) {
+        if (!entriesVerified) {
+          _providerEntriesSourceConflictGeneration++;
+        }
         throw StateError('Failed to persist provider configuration.');
       } else {
+        _loadedProviderEntriesSourceJson = prefs.getString('provider_entries');
         _reloadBeforeNextMutation = false;
       }
     } catch (_) {
@@ -669,10 +684,6 @@ extension _ProviderEntriesNotifierPersistenceExt on ProviderEntriesNotifier {
       }
       for (final entry in entries.where((entry) => entry.type == 'llm')) {
         for (final config in entry.configs) {
-          if (config.legacyFields['authType'] == 'none' ||
-              config.legacyFields['authType'] == 'relay') {
-            continue;
-          }
           final reference = referencesByConfigId[config.id];
           if (reference != null && config.credentialRef == null) {
             config.credentialRef = reference;

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/providers/task_provider_shared.dart';
+import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
@@ -34,6 +35,92 @@ import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
 
 Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
+
+class _OcrRoutingPreferences implements LlmAccountPreferences {
+  final values = <String, String>{};
+
+  @override
+  Future<String?> getString(String key) async => values[key];
+
+  @override
+  Future<bool> remove(String key) async => values.remove(key) != null;
+
+  @override
+  Future<bool> setString(String key, String value) async {
+    values[key] = value;
+    return true;
+  }
+}
+
+class _OcrRoutingCredentials implements LlmCredentialStore {
+  final values = <String, String>{};
+
+  @override
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String secret) async {
+    values[reference] = secret;
+  }
+
+  @override
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
+}
+
+class _CapturingOcrConnector extends LlmConnectorHttpClient {
+  _CapturingOcrConnector(LlmAccountConnectorService accountService)
+      : super(accountService: accountService);
+
+  Uri? requestedUri;
+  Map<String, dynamic>? requestBody;
+
+  @override
+  Future<LlmConnectorResponse> request({
+    required LlmAccount account,
+    required String modelId,
+    required Object? body,
+    bool stream = false,
+    String? nativeFormat,
+    CancelToken? cancelToken,
+    ProgressCallback? onSendProgress,
+    Future<void> Function()? onRequestSent,
+    Duration? connectTimeout,
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
+  }) async {
+    final decodedBody = Map<String, dynamic>.from(body! as Map);
+    requestedUri = LlmNativeRequestBuilder()
+        .build(
+          account: account,
+          credential: await accountService.readCredential(account.id),
+          modelId: modelId,
+          body: decodedBody,
+          stream: stream,
+          nativeFormat: nativeFormat,
+        )
+        .uri;
+    requestBody = decodedBody;
+    await onRequestSent?.call();
+    return LlmConnectorResponse(
+      statusCode: 200,
+      body: {
+        'choices': [
+          {
+            'finish_reason': 'length',
+            'message': {
+              'content': [
+                {'type': 'text', 'text': 'partial OCR text'},
+              ],
+            },
+          },
+        ],
+      },
+      observation: LlmConnectorObservation(),
+    );
+  }
+}
 
 class _CancelOnCompletedStepBackground extends BackgroundTaskNotifier {
   void Function()? onCompletedStep;
@@ -272,47 +359,19 @@ void main() {
         ),
       ],
     );
-    Map<String, dynamic>? requestBody;
-    String? requestUrl;
-    final dio = Dio()
-      ..interceptors.add(InterceptorsWrapper(
-        onRequest: (options, handler) {
-          requestBody = Map<String, dynamic>.from(options.data as Map);
-          requestUrl = options.uri.toString();
-          handler.resolve(Response(
-            requestOptions: options,
-            statusCode: 200,
-            data: {
-              'choices': [
-                {
-                  'finish_reason': 'length',
-                  'message': {
-                    'content': [
-                      {'type': 'text', 'text': 'partial OCR text'},
-                    ],
-                  },
-                },
-              ],
-            },
-          ));
-        },
-      ));
-    final preferences = _MemoryLlmPreferences();
-    final accountService = LlmAccountConnectorService(
+    final preferences = _OcrRoutingPreferences();
+    final accounts = LlmAccountConnectorService(
       preferences: preferences,
-      credentialStore: _MemoryLlmCredentialStore(),
+      credentialStore: _OcrRoutingCredentials(),
     );
-    final routingRuntime = LlmChatRoutingRuntime(
-      accountService: accountService,
+    final connector = _CapturingOcrConnector(accounts);
+    final runtime = LlmChatRoutingRuntime(
+      accountService: accounts,
       routingService: LlmRoutingService(
-        accountService: accountService,
+        accountService: accounts,
         stateStore: LlmRoutingStateStore(preferences: preferences),
-        concurrency: LlmConcurrencyReservations(),
       ),
-      connectorClient: LlmConnectorHttpClient(
-        accountService: accountService,
-        dio: dio,
-      ),
+      connectorClient: connector,
     );
 
     await expectLater(
@@ -325,20 +384,22 @@ void main() {
         flowSubTask: subTask,
         bgNotifier: background,
         providerEntries: providers,
-        ocrDio: dio,
-        routingRuntime: Future.value(routingRuntime),
+        routingRuntime: Future.value(runtime),
       ),
       throwsA(isA<BlockExecutionException>()),
     );
 
-    expect(requestUrl, 'https://example.invalid/v1/chat/completions/');
-    expect(requestBody?['model'], 'test');
-    expect(requestBody?['max_tokens'], 777);
-    expect(requestBody?['temperature'], 0.35);
-    expect(requestBody?['top_p'], 0.8);
-    expect(requestBody?['response_format'], {'type': 'json_object'});
-    expect(requestBody?['top_k'], 50);
-    final messages = requestBody?['messages'] as List;
+    expect(
+      connector.requestedUri.toString(),
+      'https://example.invalid/v1/chat/completions/',
+    );
+    expect(connector.requestBody?['model'], 'test');
+    expect(connector.requestBody?['max_tokens'], 777);
+    expect(connector.requestBody?['temperature'], 0.35);
+    expect(connector.requestBody?['top_p'], 0.8);
+    expect(connector.requestBody?['response_format'], {'type': 'json_object'});
+    expect(connector.requestBody?['top_k'], 50);
+    final messages = connector.requestBody?['messages'] as List;
     final userContent = (messages[1] as Map)['content'] as List;
     expect(userContent.last, {'type': 'text', 'text': '提取票据号码'});
 
@@ -1083,37 +1144,4 @@ void main() {
         computeTextHash(Uint8List.fromList(utf8.encode('late result')));
     expect(await WebFileStore.exists('texts/$hash.txt'), isFalse);
   });
-}
-
-class _MemoryLlmPreferences implements LlmAccountPreferences {
-  final values = <String, String>{};
-
-  @override
-  Future<String?> getString(String key) async => values[key];
-
-  @override
-  Future<bool> remove(String key) async => values.remove(key) != null;
-
-  @override
-  Future<bool> setString(String key, String value) async {
-    values[key] = value;
-    return true;
-  }
-}
-
-class _MemoryLlmCredentialStore implements LlmCredentialStore {
-  final values = <String, String>{};
-
-  @override
-  Future<void> delete(String reference) async {
-    values.remove(reference);
-  }
-
-  @override
-  Future<String?> read(String reference) async => values[reference];
-
-  @override
-  Future<void> write(String reference, String value) async {
-    values[reference] = value;
-  }
 }

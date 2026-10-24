@@ -1491,37 +1491,36 @@ void main() {
         ).route((candidate, progress) async => candidate.account.id);
         expect(consumeLow.candidate.account.id, 'low');
 
-        final balanceLowerAtFloor =
-            await _Rig(
-              now: now,
-              accounts: [
-                _account(
-                  'balance-lower-at-floor',
-                  'codex',
-                  policy: LlmRoutingPolicy(
-                    windows: {
-                      LlmUsageWindow.day: const LlmWindowPolicy(
-                        reserveFloor: LlmLimitThreshold.fixed(
-                          25,
-                          unit: 'credits',
-                        ),
-                      ),
-                    },
-                  ),
-                  usage: {
-                    LlmUsageWindow.day: LlmUsageWindowState(
-                      quota: _metric(100, 'credits', now),
-                      remaining: _metric(26, 'credits', now),
-                      resetAt: now.add(const Duration(hours: 12)),
+        final balanceLowerAtFloor = await _Rig(
+          now: now,
+          accounts: [
+            _account(
+              'balance-lower-at-floor',
+              'codex',
+              policy: LlmRoutingPolicy(
+                windows: {
+                  LlmUsageWindow.day: const LlmWindowPolicy(
+                    reserveFloor: LlmLimitThreshold.fixed(
+                      25,
+                      unit: 'credits',
                     ),
-                  },
+                  ),
+                },
+              ),
+              usage: {
+                LlmUsageWindow.day: LlmUsageWindowState(
+                  quota: _metric(100, 'credits', now),
+                  remaining: _metric(26, 'credits', now),
+                  resetAt: now.add(const Duration(hours: 12)),
                 ),
-              ],
-              strategy: LlmSelectionStrategy.balanceLower,
-            ).route(
-              (candidate, progress) async => candidate.account.id,
-              estimatedUsage: const {'credits': 1},
-            );
+              },
+            ),
+          ],
+          strategy: LlmSelectionStrategy.balanceLower,
+        ).route(
+          (candidate, progress) async => candidate.account.id,
+          estimatedUsage: const {'credits': 1},
+        );
         expect(
           balanceLowerAtFloor.candidate.account.id,
           'balance-lower-at-floor',
@@ -2929,8 +2928,7 @@ class _Rig {
     LlmFallbackScope fallbackScope = LlmFallbackScope.modelGroup,
   }) {
     final accountById = {for (final account in accounts) account.id: account};
-    final members =
-        groupMembers ??
+    final members = groupMembers ??
         [
           for (final account in accounts)
             (account.id, account.models.first.upstreamModelId, 0),
@@ -2947,27 +2945,27 @@ class _Rig {
             localModelId: 'chat-model',
           ),
       ],
-      policy:
-          groupPolicy ??
+      policy: groupPolicy ??
           LlmRoutingPolicy(fallbackScope: fallbackScope, strategy: strategy),
     );
     preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
         jsonEncode({
-          'version': 1,
-          'items': accountById.values.map((item) => item.toMap()).toList(),
-        });
+      'version': 1,
+      'items': accountById.values.map((item) => item.toMap()).toList(),
+    });
   }
 
   Future<LlmRoutingExecution<T>> route<T>(
     Future<T> Function(LlmRouteCandidate candidate, LlmRouteProgress progress)
-    request, {
+        request, {
     Map<String, num> estimatedUsage = const {'requests': 1},
-  }) => service.execute(
-    group: group,
-    requestedModelId: 'chat-model',
-    estimatedUsage: estimatedUsage,
-    request: request,
-  );
+  }) =>
+      service.execute(
+        group: group,
+        requestedModelId: 'chat-model',
+        estimatedUsage: estimatedUsage,
+        request: request,
+      );
 
   void advance(Duration duration) {
     now = now.add(duration);
@@ -2995,35 +2993,37 @@ LlmAccount _account(
   LlmRoutingPolicy? policy,
   Map<LlmUsageWindow, LlmUsageWindowState> usage = const {},
   String? upstreamModel,
-}) => LlmAccount(
-  id: id,
-  connectorType: connector,
-  authType: 'api_key',
-  displayName: id,
-  status: LlmAccountStatus.ready,
-  models: [
-    LlmUpstreamModel(
-      id: '$id-model',
-      upstreamModelId: upstreamModel ?? '$connector-model',
-      displayName: upstreamModel ?? '$connector-model',
-      capabilities: const {'tools': true, 'vision': true},
-    ),
-  ],
-  policy: policy,
-  usageByWindow: usage,
-);
+}) =>
+    LlmAccount(
+      id: id,
+      connectorType: connector,
+      authType: 'api_key',
+      displayName: id,
+      status: LlmAccountStatus.ready,
+      models: [
+        LlmUpstreamModel(
+          id: '$id-model',
+          upstreamModelId: upstreamModel ?? '$connector-model',
+          displayName: upstreamModel ?? '$connector-model',
+          capabilities: const {'tools': true, 'vision': true},
+        ),
+      ],
+      policy: policy,
+      usageByWindow: usage,
+    );
 
 LlmMetricObservation _metric(
   num value,
   String unit,
   DateTime observedAt, {
   String source = 'provider',
-}) => LlmMetricObservation.reported(
-  value,
-  unit: unit,
-  source: source,
-  observedAt: observedAt,
-);
+}) =>
+    LlmMetricObservation.reported(
+      value,
+      unit: unit,
+      source: source,
+      observedAt: observedAt,
+    );
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};

@@ -383,12 +383,18 @@ class BrowserCookieService {
     return _serializeRetentionOperation(() async {
       final retentionEnabled = await getRetentionMode();
       try {
-        await _removeGoogleSessionCookiesFromFile();
+        try {
+          await _removeGoogleSessionCookiesFromFile();
+        } catch (e) {
+          debugPrint(
+            'BrowserCookieService.snapshotCookiesForBackup could not scrub the saved cookie snapshot: $e',
+          );
+        }
         final result = await _collectPlatformCookies();
         if (result.cookies == null) {
           if (!retentionEnabled) return null;
           final persistedCookies = _withoutGoogleSessionCookies(
-            await _readCookiesFile(),
+            await _readCookiesFileForBackup(),
           );
           return persistedCookies.isEmpty ? null : persistedCookies;
         }
@@ -400,7 +406,7 @@ class BrowserCookieService {
         if (!retentionEnabled) return currentCookies;
 
         final persistedCookies = _withoutGoogleSessionCookies(
-          await _readCookiesFile(),
+          await _readCookiesFileForBackup(),
         );
         persistedCookies.removeWhere(
           (cookie) =>
@@ -412,6 +418,17 @@ class BrowserCookieService {
         return null;
       }
     });
+  }
+
+  static Future<List<Map<String, dynamic>>> _readCookiesFileForBackup() async {
+    try {
+      return await _readCookiesFile();
+    } catch (e) {
+      debugPrint(
+        'BrowserCookieService.snapshotCookiesForBackup could not read the saved cookie snapshot: $e',
+      );
+      return [];
+    }
   }
 
   /// Restores cookies from the local JSON file to the platform CookieManager.

@@ -441,9 +441,12 @@ int? _protoScalar(List<_ProtoField> fields, int number) => fields
     .map((field) => field.scalar!)
     .firstOrNull;
 
-DateTime? _dateFromEpoch(int? seconds) => seconds == null || seconds <= 0
-    ? null
-    : DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+DateTime? _dateFromEpoch(int? seconds) {
+  if (seconds == null || seconds <= 0 || seconds > 8640000000000) {
+    return null;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+}
 
 class _ProtoField {
   final int number;

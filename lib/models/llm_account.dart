@@ -1,3 +1,5 @@
+import '../utils/credential_field_sanitizer.dart';
+
 /// Persisted, connector-neutral account and model-group data.
 ///
 /// These types describe configuration and observations only. They do not
@@ -20,17 +22,17 @@ class LlmLimitThreshold {
   final String? unit;
 
   const LlmLimitThreshold.fixed(this.value, {this.unit})
-    : kind = LlmLimitKind.fixed;
+      : kind = LlmLimitKind.fixed;
 
   const LlmLimitThreshold.percentage(this.value)
-    : kind = LlmLimitKind.percentage,
-      unit = 'percent';
+      : kind = LlmLimitKind.percentage,
+        unit = 'percent';
 
   Map<String, dynamic> toMap() => {
-    'kind': kind.name,
-    'value': value,
-    if (unit != null) 'unit': unit,
-  };
+        'kind': kind.name,
+        'value': value,
+        if (unit != null) 'unit': unit,
+      };
 
   factory LlmLimitThreshold.fromMap(Map<String, dynamic> map) {
     final kind = _enumByName(
@@ -63,30 +65,30 @@ class LlmWindowPolicy {
   });
 
   Map<String, dynamic> toMap() => {
-    'mode': mode.name,
-    if (timeZone != null) 'timeZone': timeZone,
-    if (reserveFloor != null) 'reserveFloor': reserveFloor!.toMap(),
-    if (usageCeiling != null) 'usageCeiling': usageCeiling!.toMap(),
-  };
+        'mode': mode.name,
+        if (timeZone != null) 'timeZone': timeZone,
+        if (reserveFloor != null) 'reserveFloor': reserveFloor!.toMap(),
+        if (usageCeiling != null) 'usageCeiling': usageCeiling!.toMap(),
+      };
 
   factory LlmWindowPolicy.fromMap(Map<String, dynamic> map) => LlmWindowPolicy(
-    mode: _enumByName(
-      LlmWindowMode.values,
-      map['mode'],
-      fallback: LlmWindowMode.rolling,
-    ),
-    timeZone: map['timeZone'] is String ? map['timeZone'] as String : null,
-    reserveFloor: map['reserveFloor'] is Map
-        ? LlmLimitThreshold.fromMap(
-            Map<String, dynamic>.from(map['reserveFloor'] as Map),
-          )
-        : null,
-    usageCeiling: map['usageCeiling'] is Map
-        ? LlmLimitThreshold.fromMap(
-            Map<String, dynamic>.from(map['usageCeiling'] as Map),
-          )
-        : null,
-  );
+        mode: _enumByName(
+          LlmWindowMode.values,
+          map['mode'],
+          fallback: LlmWindowMode.rolling,
+        ),
+        timeZone: map['timeZone'] is String ? map['timeZone'] as String : null,
+        reserveFloor: map['reserveFloor'] is Map
+            ? LlmLimitThreshold.fromMap(
+                Map<String, dynamic>.from(map['reserveFloor'] as Map),
+              )
+            : null,
+        usageCeiling: map['usageCeiling'] is Map
+            ? LlmLimitThreshold.fromMap(
+                Map<String, dynamic>.from(map['usageCeiling'] as Map),
+              )
+            : null,
+      );
 }
 
 class LlmRoutingPolicy {
@@ -103,13 +105,14 @@ class LlmRoutingPolicy {
   }) : windows = _completeWindows(windows);
 
   Map<String, dynamic> toMap() => {
-    'fallbackScope': fallbackScope.name,
-    'strategy': strategy.name,
-    'windows': {
-      for (final entry in windows.entries) entry.key.name: entry.value.toMap(),
-    },
-    if (concurrencyLimit != null) 'concurrencyLimit': concurrencyLimit,
-  };
+        'fallbackScope': fallbackScope.name,
+        'strategy': strategy.name,
+        'windows': {
+          for (final entry in windows.entries)
+            entry.key.name: entry.value.toMap(),
+        },
+        if (concurrencyLimit != null) 'concurrencyLimit': concurrencyLimit,
+      };
 
   factory LlmRoutingPolicy.fromMap(Map<String, dynamic> map) {
     final rawWindows = map['windows'];
@@ -151,12 +154,12 @@ class LlmMetricObservation {
   final DateTime? resetAt;
 
   const LlmMetricObservation.unknown()
-    : isKnown = false,
-      value = null,
-      unit = null,
-      source = null,
-      observedAt = null,
-      resetAt = null;
+      : isKnown = false,
+        value = null,
+        unit = null,
+        source = null,
+        observedAt = null,
+        resetAt = null;
 
   const LlmMetricObservation.reported(
     this.value, {
@@ -167,13 +170,13 @@ class LlmMetricObservation {
   }) : isKnown = true;
 
   Map<String, dynamic> toMap() => {
-    'state': isKnown ? 'reported' : 'unknown',
-    if (isKnown) 'value': value,
-    if (unit != null) 'unit': unit,
-    if (source != null) 'source': source,
-    if (observedAt != null) 'observedAt': observedAt!.toIso8601String(),
-    if (resetAt != null) 'resetAt': resetAt!.toIso8601String(),
-  };
+        'state': isKnown ? 'reported' : 'unknown',
+        if (isKnown) 'value': value,
+        if (unit != null) 'unit': unit,
+        if (source != null) 'source': source,
+        if (observedAt != null) 'observedAt': observedAt!.toIso8601String(),
+        if (resetAt != null) 'resetAt': resetAt!.toIso8601String(),
+      };
 
   factory LlmMetricObservation.fromMap(Map<String, dynamic> map) {
     if (map['state'] != 'reported' && map['isKnown'] != true) {
@@ -205,12 +208,12 @@ class LlmUsageWindowState {
   });
 
   Map<String, dynamic> toMap() => {
-    'quota': quota.toMap(),
-    'used': used.toMap(),
-    'remaining': remaining.toMap(),
-    if (resetAt != null) 'resetAt': resetAt!.toIso8601String(),
-    if (source != null) 'source': source,
-  };
+        'quota': quota.toMap(),
+        'used': used.toMap(),
+        'remaining': remaining.toMap(),
+        if (resetAt != null) 'resetAt': resetAt!.toIso8601String(),
+        if (source != null) 'source': source,
+      };
 
   factory LlmUsageWindowState.fromMap(Map<String, dynamic> map) =>
       LlmUsageWindowState(
@@ -238,12 +241,12 @@ class LlmUpstreamModel {
   });
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'upstreamModelId': upstreamModelId,
-    'displayName': displayName,
-    'capabilities': capabilities,
-    'config': config,
-  };
+        'id': id,
+        'upstreamModelId': upstreamModelId,
+        'displayName': displayName,
+        'capabilities': capabilities,
+        'config': config,
+      };
 
   factory LlmUpstreamModel.fromMap(Map<String, dynamic> map) =>
       LlmUpstreamModel(
@@ -284,40 +287,43 @@ class LlmAccount {
     Map<LlmUsageWindow, LlmUsageWindowState>? usageByWindow,
     this.remainingQuota = const LlmMetricObservation.unknown(),
     Map<String, LlmMetricObservation> quotaSignals = const {},
-  }) : policy = policy ?? LlmRoutingPolicy(),
-       usageByWindow = Map.unmodifiable(usageByWindow ?? const {}),
-       quotaSignals = Map.unmodifiable(quotaSignals);
+  })  : policy = policy ?? LlmRoutingPolicy(),
+        usageByWindow = Map.unmodifiable(usageByWindow ?? const {}),
+        quotaSignals = Map.unmodifiable(quotaSignals);
 
-  Map<String, dynamic> toMap() => {
-    'id': id,
-    'connectorType': connectorType,
-    'authType': authType,
-    'displayName': displayName,
-    'status': status.name,
-    if (credentialRef != null) 'credentialRef': credentialRef,
-    'endpointConfig': endpointConfig,
-    'models': models.map((model) => model.toMap()).toList(),
-    'policy': policy.toMap(),
-    'usageByWindow': {
-      for (final entry in usageByWindow.entries)
-        entry.key.name: entry.value.toMap(),
-    },
-    'remainingQuota': remainingQuota.toMap(),
-    'quotaSignals': {
-      for (final entry in quotaSignals.entries) entry.key: entry.value.toMap(),
-    },
-  };
+  Map<String, dynamic> toMap() => Map<String, dynamic>.from(
+        sanitizeCredentialFields({
+          'id': id,
+          'connectorType': connectorType,
+          'authType': authType,
+          'displayName': displayName,
+          'status': status.name,
+          if (credentialRef != null) 'credentialRef': credentialRef,
+          'endpointConfig': endpointConfig,
+          'models': models.map((model) => model.toMap()).toList(),
+          'policy': policy.toMap(),
+          'usageByWindow': {
+            for (final entry in usageByWindow.entries)
+              entry.key.name: entry.value.toMap(),
+          },
+          'remainingQuota': remainingQuota.toMap(),
+          'quotaSignals': {
+            for (final entry in quotaSignals.entries)
+              entry.key: entry.value.toMap(),
+          },
+        }) as Map,
+      );
 
   factory LlmAccount.fromMap(Map<String, dynamic> map) {
     final rawModels = map['models'];
     final models = rawModels is List
         ? rawModels
-              .whereType<Map>()
-              .map(
-                (item) =>
-                    LlmUpstreamModel.fromMap(Map<String, dynamic>.from(item)),
-              )
-              .toList()
+            .whereType<Map>()
+            .map(
+              (item) =>
+                  LlmUpstreamModel.fromMap(Map<String, dynamic>.from(item)),
+            )
+            .toList()
         : <LlmUpstreamModel>[];
     final rawUsage = map['usageByWindow'];
     final usage = <LlmUsageWindow, LlmUsageWindowState>{};
@@ -388,11 +394,11 @@ class LlmModelGroupMember {
   });
 
   Map<String, dynamic> toMap() => {
-    'accountId': accountId,
-    'upstreamModelId': upstreamModelId,
-    'priorityTier': priorityTier,
-    if (localModelId != null) 'localModelId': localModelId,
-  };
+        'accountId': accountId,
+        'upstreamModelId': upstreamModelId,
+        'priorityTier': priorityTier,
+        if (localModelId != null) 'localModelId': localModelId,
+      };
 
   factory LlmModelGroupMember.fromMap(Map<String, dynamic> map) =>
       LlmModelGroupMember(
@@ -410,13 +416,7 @@ class LlmModelGroup {
   final String displayName;
   final List<LlmModelGroupMember> members;
   final LlmRoutingPolicy policy;
-
-  /// The upstream model ID that legacy provider references used for this
-  /// stable group. It survives removal of the account that anchored M1's ID.
   final String? legacyModelId;
-
-  /// The provider identity used by existing conversations before this group
-  /// was created. It survives removal or renaming of M1's anchor account.
   final String? legacyProviderName;
 
   LlmModelGroup({
@@ -429,56 +429,59 @@ class LlmModelGroup {
   }) : policy = policy ?? LlmRoutingPolicy();
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'displayName': displayName,
-    'members': members.map((member) => member.toMap()).toList(),
-    'policy': policy.toMap(),
-    if (legacyModelId != null) 'legacyModelId': legacyModelId,
-    if (legacyProviderName != null) 'legacyProviderName': legacyProviderName,
-  };
+        'id': id,
+        'displayName': displayName,
+        'members': members.map((member) => member.toMap()).toList(),
+        'policy': policy.toMap(),
+        if (legacyModelId != null) 'legacyModelId': legacyModelId,
+        if (legacyProviderName != null)
+          'legacyProviderName': legacyProviderName,
+      };
 
   factory LlmModelGroup.fromMap(Map<String, dynamic> map) {
     final rawMembers = map['members'];
     final members = rawMembers is List
         ? rawMembers
-              .whereType<Map>()
-              .map(
-                (item) => LlmModelGroupMember.fromMap(
-                  Map<String, dynamic>.from(item),
-                ),
-              )
-              .toList()
+            .whereType<Map>()
+            .map(
+              (item) => LlmModelGroupMember.fromMap(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .toList()
         : <LlmModelGroupMember>[];
     final rawPolicy = map['policy'];
     return LlmModelGroup(
       id: map['id'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
       members: members,
-      policy: rawPolicy is Map
-          ? LlmRoutingPolicy.fromMap(Map<String, dynamic>.from(rawPolicy))
-          : LlmRoutingPolicy(),
       legacyModelId: map['legacyModelId'] is String
           ? map['legacyModelId'] as String
           : null,
       legacyProviderName: map['legacyProviderName'] is String
           ? map['legacyProviderName'] as String
           : null,
+      policy: rawPolicy is Map
+          ? LlmRoutingPolicy.fromMap(Map<String, dynamic>.from(rawPolicy))
+          : LlmRoutingPolicy(),
     );
   }
 }
 
 Map<LlmUsageWindow, LlmWindowPolicy> _completeWindows(
   Map<LlmUsageWindow, LlmWindowPolicy>? values,
-) => {
-  for (final window in LlmUsageWindow.values)
-    window: values?[window] ?? const LlmWindowPolicy(),
-};
+) =>
+    {
+      for (final window in LlmUsageWindow.values)
+        window: values?[window] ?? const LlmWindowPolicy(),
+    };
 
 T _enumByName<T extends Enum>(
   List<T> values,
   Object? value, {
   required T fallback,
-}) => _enumByNameOrNull(values, value) ?? fallback;
+}) =>
+    _enumByNameOrNull(values, value) ?? fallback;
 
 T? _enumByNameOrNull<T extends Enum>(List<T> values, Object? value) {
   if (value is! String) return null;
