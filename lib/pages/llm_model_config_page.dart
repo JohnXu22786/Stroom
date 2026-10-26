@@ -491,10 +491,8 @@ class _LlmModelConfigPageState extends State<LlmModelConfigPage> {
     _overrideEndpointType = m?.endpointType != null;
     _endpointType = m?.endpointType ?? 'openai';
 
-    // 自定义参数：合并视图工作副本（供应商参数 + 模型参数，同名时模型
-    // 参数覆盖供应商参数，与请求构建时的合并语义一致；照搬推理参数的
-    // 「继承视图」——供应商已配置的自定义参数直接显示在本页）。
-    // 无「继承/独立」标记：页面显示什么、保存就写入什么。
+    // 自定义参数：合并供应商与模型参数。同名时默认继承供应商类型/默认
+    // 值，仅显式编辑后才使用模型覆盖；模型保存的选项选择与顺序仍保留。
     _customParams = mergeCustomParams(
       widget.provider?.customParams ?? [],
       m?.customParams ?? [],

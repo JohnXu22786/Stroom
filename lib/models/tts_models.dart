@@ -57,6 +57,10 @@ class CustomParam {
   String defaultValue;
   String type;
 
+  /// Whether the model page intentionally overrides the provider's type and
+  /// default value for a same-name parameter.
+  bool typeDefaultOverridden;
+
   /// 选项值列表（与推理力度同款的胶囊块编辑）。
   /// 空时向后兼容：请求发送 [defaultValue]（旧数据）；非空时发送
   /// 第一个选项（排序决定默认值）。
@@ -72,6 +76,7 @@ class CustomParam {
     required this.paramName,
     this.defaultValue = '',
     this.type = 'string',
+    this.typeDefaultOverridden = false,
     List<String>? options,
     this.optionOrder = const [],
   }) : options = options ?? [];
@@ -82,6 +87,7 @@ class CustomParam {
         'paramName': paramName,
         'defaultValue': defaultValue,
         'type': type,
+        if (typeDefaultOverridden) 'typeDefaultOverridden': true,
         if (options.isNotEmpty) 'options': options,
         if (optionOrder.isNotEmpty) 'optionOrder': optionOrder,
       };
@@ -90,6 +96,7 @@ class CustomParam {
         paramName: map['paramName'] as String? ?? '',
         defaultValue: map['defaultValue'] as String? ?? '',
         type: map['type'] as String? ?? 'string',
+        typeDefaultOverridden: map['typeDefaultOverridden'] as bool? ?? false,
         options: (map['options'] as List?)?.cast<String>() ?? const [],
         optionOrder: (map['optionOrder'] as List?)?.cast<String>() ?? const [],
       );
@@ -98,6 +105,7 @@ class CustomParam {
         paramName: paramName,
         defaultValue: defaultValue,
         type: type,
+        typeDefaultOverridden: typeDefaultOverridden,
         options: List.of(options),
         optionOrder: List<String>.from(optionOrder),
       );
@@ -391,10 +399,9 @@ List<ReasoningParam> mergeReasoningParams(
 
 /// 合并供应商级与模型级自定义参数，供模型配置页继承视图使用。
 ///
-/// 同名参数以供应商的类型和默认值为准，同时保留模型保存的选项选择与
-/// 顺序；未被覆盖的供应商参数追加在模型参数之后；参数名为空的条目不
-/// 参与合并。这样重开模型时供应商字段会更新，而模型自定义的选项状态
-/// 仍可持久化。
+/// 同名参数默认使用供应商的类型和默认值；模型页明确编辑过这两项时，
+/// 保留模型覆盖。同时保留模型保存的选项选择与顺序；未被覆盖的供应商
+/// 参数追加在模型参数之后；参数名为空的条目不参与合并。
 List<CustomParam> mergeCustomParams(
   List<CustomParam> providerParams,
   List<CustomParam> modelParams,
@@ -414,8 +421,11 @@ List<CustomParam> mergeCustomParams(
       result.add(
         CustomParam(
           paramName: p.paramName,
-          type: provider.type,
-          defaultValue: provider.defaultValue,
+          type: p.typeDefaultOverridden ? p.type : provider.type,
+          defaultValue: p.typeDefaultOverridden
+              ? p.defaultValue
+              : provider.defaultValue,
+          typeDefaultOverridden: p.typeDefaultOverridden,
           options: List.of(p.options),
           optionOrder: List.of(p.optionOrder),
         ),

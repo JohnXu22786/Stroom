@@ -424,6 +424,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               if (v != null) {
                                 setState(() {
                                   param.type = v;
+                                  param.typeDefaultOverridden = true;
                                   // 切换到 string/number：注册勾选块状态
                                   // 并清空 defaultValue（json 的旧值不应
                                   // 在 options 模式下继续发送）
@@ -503,6 +504,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                             ),
                             onChanged: (v) {
                               param.defaultValue = v;
+                              param.typeDefaultOverridden = true;
                               _validateJsonField(i, param);
                               setState(() {});
                             },
@@ -520,6 +522,7 @@ extension _BuildSectionsExt on _LlmModelConfigPageState {
                               type: param.type,
                               onSave: (result) {
                                 param.defaultValue = result;
+                                param.typeDefaultOverridden = true;
                                 _validateJsonField(i, param);
                                 setState(() {});
                               },
