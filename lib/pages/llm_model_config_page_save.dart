@@ -92,9 +92,8 @@ extension _SaveExt on _LlmModelConfigPageState {
         return;
       }
       if (param.type == 'number') {
-        final values = param.options.isNotEmpty
-            ? param.options
-            : [param.defaultValue];
+        final values =
+            param.options.isNotEmpty ? param.options : [param.defaultValue];
         final valueLabel = param.options.isNotEmpty ? '选项值' : '默认值';
         for (final value in values) {
           final parsed = double.tryParse(value.trim());

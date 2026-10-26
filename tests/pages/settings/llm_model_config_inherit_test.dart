@@ -1733,7 +1733,8 @@ void main() {
     ModelConfig modelWithNumberParam({
       required String defaultValue,
       List<String> options = const [],
-    }) => ModelConfig(
+    }) =>
+        ModelConfig(
           name: 'test-model',
           modelId: 'test-model',
           typeConfig: {'context': 4096},
@@ -1759,8 +1760,8 @@ void main() {
         );
 
         expect(saved, isNull, reason: '$invalidValue must not be saved');
-        expect(find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'),
-            findsOneWidget);
+        expect(
+            find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'), findsOneWidget);
       }
     });
 
