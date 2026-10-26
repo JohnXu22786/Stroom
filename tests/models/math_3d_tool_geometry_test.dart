@@ -1,10 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_3d_construction.dart';
-import 'package:stroom/models/math_3d_object.dart';
-import 'package:stroom/models/math_3d_tool.dart';
-import 'package:stroom/models/math_3d_scene.dart';
+import 'package:dart_math/dart_math.dart';
 
 void main() {
   test(

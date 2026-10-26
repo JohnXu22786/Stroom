@@ -2,8 +2,23 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const {fileURLToPath, pathToFileURL} = require('node:url');
 const {JSDOM} = require('jsdom');
-const assets = path.resolve(__dirname, '../../assets/vendor/mathlive');
+const packageConfigPath = path.resolve(
+  __dirname,
+  '../../.dart_tool/package_config.json',
+);
+const packageConfig = JSON.parse(fs.readFileSync(packageConfigPath, 'utf8'));
+const dartMathPackage = packageConfig.packages.find(({name}) => name === 'dart_math');
+if (!dartMathPackage) {
+  throw new Error('dart_math package is missing from package_config.json');
+}
+const packageConfigDirectory = path.dirname(packageConfigPath) + path.sep;
+const dartMathRoot = fileURLToPath(new URL(
+  dartMathPackage.rootUri,
+  pathToFileURL(packageConfigDirectory),
+));
+const assets = path.join(dartMathRoot, 'assets/vendor/mathlive');
 
 async function editor() {
   const dom = new JSDOM('<div id="problem"></div>',
