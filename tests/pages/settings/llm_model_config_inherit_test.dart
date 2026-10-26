@@ -1700,7 +1700,8 @@ void main() {
       expect(saved, isNull,
           reason: 'An empty JSON default must prevent the page from saving.');
       expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget,
-          reason: 'A stale non-JSON option must not satisfy JSON value validation.');
+          reason:
+              'A stale non-JSON option must not satisfy JSON value validation.');
     });
 
     testWidgets('valid JSON default saves even when stale options remain',
