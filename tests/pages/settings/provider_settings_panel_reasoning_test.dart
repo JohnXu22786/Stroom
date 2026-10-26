@@ -77,6 +77,89 @@ void main() {
       expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
     });
 
+    testWidgets('rejects invalid numeric custom-param options', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['10', 'oops'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'every selectable numeric option must parse before saving');
+      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+    });
+
+    testWidgets('rejects blank numeric custom-param options', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['1', ''],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'blank numeric options are not valid values to coerce');
+      expect(find.text('参数 "top_k" 的数值选项不能为空'), findsOneWidget);
+    });
+
+    testWidgets('rejects an invalid numeric default value', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            defaultValue: 'oops',
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull);
+      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+    });
+
+    testWidgets('preserves valid integer and decimal custom-param options',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['10', '0.25'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['10', '0.25']);
+    });
+
     testWidgets('shows toggle, effort and additional param sections',
         (tester) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
