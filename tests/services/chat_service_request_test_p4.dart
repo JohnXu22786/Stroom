@@ -385,5 +385,81 @@ void chatServiceRequestGroup4() {
           reason: 'response_format should be a Map in the final JSON body');
       expect((responseFormat as Map)['type'], equals('json_object'));
     });
+
+    test(
+        'dotted provider param before JSON object preserves object fields and wins collisions',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: 'path-value',
+          ),
+          CustomParam(
+            paramName: 'provider',
+            defaultValue:
+                '{"sort":"object-value","order":["deepinfra"],"allow_fallbacks":true}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      expect(providerField['sort'], equals('path-value'));
+      expect(providerField['order'], equals(['deepinfra']));
+      expect(providerField['allow_fallbacks'], isTrue);
+    });
+
+    test(
+        'JSON object before dotted provider param preserves object fields and lets path win collisions',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider',
+            defaultValue:
+                '{"sort":"object-value","order":["deepinfra"],"allow_fallbacks":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: 'path-value',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      expect(providerField['sort'], equals('path-value'));
+      expect(providerField['order'], equals(['deepinfra']));
+      expect(providerField['allow_fallbacks'], isTrue);
+    });
   });
 }

@@ -118,15 +118,11 @@ extension _ChatServiceParamsExt on ChatService {
       // Provider-level custom params
       // 点号参数名（如 `provider.only`）展开为嵌套 JSON，
       // 与推理参数的 setNestedParam 语义一致。
-      for (final cp in _providerConfig!.customParams) {
-        setNestedParam(
-          result,
-          cp.paramName,
-          ChatService._coerceCustomParam(
-              cp.paramName, cp.type, _customParamEffectiveValue(cp),
-              source: 'provider'),
-        );
-      }
+      _setCustomParams(
+        result,
+        _providerConfig!.customParams,
+        source: 'provider',
+      );
 
       // Provider-level reasoning params:
       // - The reasoning toggle (isReasoningToggle=true) is ALWAYS sent when
@@ -225,15 +221,7 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Model-level custom params
     // 点号参数名（如 `provider.only`）展开为嵌套 JSON。
-    for (final cp in _modelConfig!.customParams) {
-      setNestedParam(
-        result,
-        cp.paramName,
-        ChatService._coerceCustomParam(
-            cp.paramName, cp.type, _customParamEffectiveValue(cp),
-            source: 'model'),
-      );
-    }
+    _setCustomParams(result, _modelConfig!.customParams, source: 'model');
 
     // Model-level reasoning params:
     // - The reasoning toggle param (isReasoningToggle=true) controls the
@@ -337,5 +325,39 @@ extension _ChatServiceParamsExt on ChatService {
     if (cp.defaultValue.trim().isNotEmpty) return cp.defaultValue;
     if (cp.type == 'boolean') return 'true';
     return '';
+  }
+
+  /// Apply a layer's custom params while ensuring a flat JSON object is
+  /// present before any dotted children beneath it. This lets those children
+  /// merge into the object regardless of saved order; their later assignment
+  /// through [setNestedParam] retains the documented nested-path-wins policy.
+  void _setCustomParams(
+    Map<String, dynamic> result,
+    List<CustomParam> customParams, {
+    required String source,
+  }) {
+    bool isJsonParent(CustomParam param) =>
+        param.type == 'json' &&
+        !param.paramName.contains('.') &&
+        customParams.any(
+          (other) => other.paramName.startsWith('${param.paramName}.'),
+        );
+
+    final orderedParams = [
+      ...customParams.where(isJsonParent),
+      ...customParams.where((param) => !isJsonParent(param)),
+    ];
+    for (final cp in orderedParams) {
+      setNestedParam(
+        result,
+        cp.paramName,
+        ChatService._coerceCustomParam(
+          cp.paramName,
+          cp.type,
+          _customParamEffectiveValue(cp),
+          source: source,
+        ),
+      );
+    }
   }
 }
