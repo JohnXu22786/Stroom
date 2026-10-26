@@ -98,6 +98,27 @@ void main() {
       expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
     });
 
+    testWidgets('rejects blank numeric custom-param options', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['1', ''],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'blank numeric options are not valid values to coerce');
+      expect(find.text('参数 "top_k" 的数值选项不能为空'), findsOneWidget);
+    });
+
     testWidgets('rejects an invalid numeric default value', (tester) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
