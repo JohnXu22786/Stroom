@@ -297,34 +297,10 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     CustomParam param,
     String oldValue,
   ) async {
-    final controller = TextEditingController(text: oldValue);
     final value = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('编辑选项值'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '如 low、medium、high',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+      builder: (_) => _EditCustomParamOptionDialog(initialValue: oldValue),
     );
-    controller.dispose();
     if (value == null || value.isEmpty || !mounted) return;
     final blocks = _customParamBlockValues[param];
     if (blocks == null || blocks.contains(value)) return;
@@ -566,5 +542,54 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     return toggle.paramName.trim().isNotEmpty &&
         (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
         (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
+  }
+}
+
+class _EditCustomParamOptionDialog extends StatefulWidget {
+  final String initialValue;
+
+  const _EditCustomParamOptionDialog({required this.initialValue});
+
+  @override
+  State<_EditCustomParamOptionDialog> createState() =>
+      _EditCustomParamOptionDialogState();
+}
+
+class _EditCustomParamOptionDialogState
+    extends State<_EditCustomParamOptionDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('编辑选项值'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: '如 low、medium、high',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('保存'),
+        ),
+      ],
+    );
   }
 }
