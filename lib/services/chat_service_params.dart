@@ -88,6 +88,28 @@ extension _ChatServiceParamsExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
   }) {
     final result = <String, dynamic>{};
+    // Discover explicit empty JSON parents across both custom-param layers
+    // before applying either layer. Provider and model params are assembled
+    // separately below, but an invalid descendant in either layer must not
+    // erase a valid `{}` parent from the other layer.
+    final emptyJsonParents = <String>{};
+    for (final customParams in [
+      _providerConfig?.customParams,
+      _modelConfig?.customParams,
+    ]) {
+      if (customParams == null) continue;
+      for (final cp in customParams) {
+        if (cp.type != 'json') continue;
+        try {
+          final value = ChatService.parseJsonValue(cp.defaultValue);
+          if (value is Map && value.isEmpty) {
+            emptyJsonParents.add(cp.paramName);
+          }
+        } on FormatException {
+          // Invalid JSON is handled and logged by the normal coercion path.
+        }
+      }
+    }
 
     // 1. Provider-level params first (defaults)
     // 配置值可能为 null（UI 保存路径的残留/损坏数据）：as num 强转
@@ -121,6 +143,7 @@ extension _ChatServiceParamsExt on ChatService {
       _setCustomParams(
         result,
         _providerConfig!.customParams,
+        emptyJsonParents: emptyJsonParents,
         source: 'provider',
       );
 
@@ -221,7 +244,12 @@ extension _ChatServiceParamsExt on ChatService {
 
     // Model-level custom params
     // 点号参数名（如 `provider.only`）展开为嵌套 JSON。
-    _setCustomParams(result, _modelConfig!.customParams, source: 'model');
+    _setCustomParams(
+      result,
+      _modelConfig!.customParams,
+      emptyJsonParents: emptyJsonParents,
+      source: 'model',
+    );
 
     // Model-level reasoning params:
     // - The reasoning toggle param (isReasoningToggle=true) controls the
@@ -334,6 +362,7 @@ extension _ChatServiceParamsExt on ChatService {
   void _setCustomParams(
     Map<String, dynamic> result,
     List<CustomParam> customParams, {
+    required Set<String> emptyJsonParents,
     required String source,
   }) {
     bool isJsonParent(CustomParam param) =>
@@ -352,7 +381,6 @@ extension _ChatServiceParamsExt on ChatService {
       ...jsonParents,
       ...customParams.where((param) => !isJsonParent(param)),
     ];
-    final emptyJsonParents = <String>{};
     for (final cp in orderedParams) {
       final value = ChatService._coerceCustomParam(
         cp.paramName,
