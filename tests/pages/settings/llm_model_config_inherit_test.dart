@@ -1729,6 +1729,68 @@ void main() {
     });
   });
 
+  group('LlmModelConfigPage number custom param save validation', () {
+    ModelConfig modelWithNumberParam({
+      required String defaultValue,
+      List<String> options = const [],
+    }) =>
+        ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          customParams: [
+            CustomParam(
+              paramName: 'top_p',
+              type: 'number',
+              defaultValue: defaultValue,
+              options: options,
+            ),
+          ],
+        );
+
+    for (final invalidValue in ['not-a-number', 'NaN', 'Infinity']) {
+      testWidgets('rejects $invalidValue number options', (tester) async {
+        final saved = await _pumpAndSave(
+          tester,
+          model: modelWithNumberParam(
+            defaultValue: '0.5',
+            options: [invalidValue],
+          ),
+        );
+
+        expect(saved, isNull, reason: '$invalidValue must not be saved');
+        expect(
+          find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'),
+          findsOneWidget,
+        );
+      });
+    }
+
+    testWidgets('rejects invalid legacy number default', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: modelWithNumberParam(defaultValue: 'NaN'),
+      );
+
+      expect(saved, isNull);
+      expect(find.text('参数 "top_p" 的选项值必须是有限数字：NaN'), findsOneWidget);
+    });
+
+    testWidgets('saves integer and decimal option values', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: modelWithNumberParam(
+          defaultValue: '1.5',
+          options: ['1', '0.25'],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['1', '0.25']);
+      expect(saved.customParams.single.defaultValue, '1.5');
+    });
+  });
+
   group('LlmModelConfigPage provider custom params inheritance', () {
     ProviderConfigItem providerWithCustomParams({
       List<String> options = const ['warm', 'cool'],
