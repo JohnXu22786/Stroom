@@ -112,7 +112,10 @@ class ConversationMigrationService {
             'Legacy conversation list contains a non-object row.');
       }
       conversations.add(
-        await _conversationForRepository(Map<String, dynamic>.from(item)),
+        await _conversationForRepository(
+          Map<String, dynamic>.from(item),
+          preferences,
+        ),
       );
     }
 
@@ -281,6 +284,7 @@ class ConversationMigrationService {
 
   Future<StroomConversation> _conversationForRepository(
     Map<String, dynamic> source,
+    SharedPreferences preferences,
   ) async {
     final conversation = Map<String, dynamic>.from(
       jsonDecode(jsonEncode(source)) as Map,
@@ -313,11 +317,45 @@ class ConversationMigrationService {
           attachment['hash'] = AttachmentStorage.computeHash(bytes);
         }
         attachment.remove('base64Data');
+        await _appendAttachmentManifest(preferences, attachment);
         rawDraftAttachments[rawDraftAttachments.indexOf(rawAttachment)] =
             attachment;
       }
     }
     return ConversationRecordAdapter.fromLegacyMap(conversation);
+  }
+
+  Future<void> _appendAttachmentManifest(
+    SharedPreferences preferences,
+    Map<String, dynamic> attachment,
+  ) async {
+    final path = attachment['storagePath'] as String? ??
+        attachment['thumbnailPath'] as String?;
+    if (path == null || path.isEmpty) return;
+    final existing = preferences.getString(attachmentManifestBackupKey);
+    final manifest = <Map<String, dynamic>>[];
+    if (existing != null) {
+      final decoded = jsonDecode(existing);
+      if (decoded is! List) {
+        throw const FormatException(
+            'Invalid conversation attachment manifest.');
+      }
+      manifest.addAll(
+        decoded
+            .whereType<Map>()
+            .map((entry) => Map<String, dynamic>.from(entry)),
+      );
+    }
+    if (!manifest.any((entry) => entry['storagePath'] == path)) {
+      final copy = Map<String, dynamic>.from(attachment)..remove('base64Data');
+      manifest.add(copy);
+      if (!await preferences.setString(
+        attachmentManifestBackupKey,
+        jsonEncode(manifest),
+      )) {
+        throw StateError('Could not save the migrated attachment manifest.');
+      }
+    }
   }
 
   static bool _sameIds(List<String> expected, List<String> actual) {

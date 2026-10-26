@@ -558,6 +558,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Map<String, Map<String, String>> _persistedMessageRecords = {};
   final Map<String, Map<String, int>> _persistedMessageSequences = {};
   final Map<String, int> _repositoryMessageOffsets = {};
+  ConversationRepository? _conversationRepository;
   bool _repositoryReady = false;
 
   ConversationsNotifier(this._ref) : super([]);

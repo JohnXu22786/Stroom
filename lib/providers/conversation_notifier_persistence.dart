@@ -227,6 +227,7 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   Future<void> _loadFromConversationRepository() async {
     final preferences = await SharedPreferences.getInstance();
     final repository = _ref.read(conversationRepositoryProvider);
+    _conversationRepository = repository;
     final migration = await ConversationMigrationService(
       repository,
     ).migrate(preferences);
@@ -825,7 +826,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   }
 
   Future<bool> _persistRepositorySnapshot(List<Conversation> snapshot) async {
-    final repository = _ref.read(conversationRepositoryProvider);
+    final repository = _conversationRepository;
+    if (repository == null) return false;
     try {
       for (final conversation in snapshot) {
         final signature = _conversationRecordSignature(conversation);

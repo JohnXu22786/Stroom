@@ -652,7 +652,7 @@ void main() {
       id: 'expired-paged',
       title: 'Expired',
       isTemporary: true,
-      temporaryExpiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+      temporaryExpiresAt: DateTime.now().add(const Duration(hours: 1)),
       messages: [
         for (var index = 0; index < 35; index++)
           ChatMessage(
@@ -666,7 +666,8 @@ void main() {
                       fileName: 'older.txt',
                       mimeType: 'text/plain',
                       fileType: 'text',
-                      hash: 'test-hash',
+                      hash: AttachmentStorage.computeHash(
+                          Uint8List.fromList([1, 2, 3])),
                       storagePath: attachmentPath,
                       fileSize: 3,
                     ),
@@ -677,6 +678,7 @@ void main() {
     );
     SharedPreferences.setMockInitialValues({
       'conversations': jsonEncode([expired.toMap()]),
+      'active_conversation_id': 'expired-paged',
     });
     final repository = MemoryConversationRepository();
     await repository.initialize();
@@ -693,6 +695,8 @@ void main() {
     expect(
         container.read(conversationsProvider).single.messages, hasLength(20));
 
+    container.read(conversationsProvider).single.temporaryExpiresAt =
+        DateTime.now().subtract(const Duration(minutes: 1));
     await notifier.checkTemporaryExpiryNow();
 
     expect(await AttachmentStorage.readFile(attachmentPath), isNull);
