@@ -292,6 +292,52 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
+  /// 编辑模型自建的自定义参数选项值；替换列表原位并迁移勾选状态。
+  Future<void> _editCustomParamOptionWithDialog(
+    CustomParam param,
+    String oldValue,
+  ) async {
+    final controller = TextEditingController(text: oldValue);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('编辑选项值'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: '如 low、medium、high',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty || !mounted) return;
+    final blocks = _customParamBlockValues[param];
+    if (blocks == null || blocks.contains(value)) return;
+    final index = blocks.indexOf(oldValue);
+    if (index < 0) return;
+    setState(() {
+      final selected = _customParamSelectedValues[param];
+      final wasSelected = selected?.remove(oldValue) ?? false;
+      blocks[index] = value;
+      if (wasSelected) selected?.add(value);
+    });
+  }
+
   /// 删除自定义参数选项块（供应商来源的块只能取消勾选，不能删除）。
   void _removeCustomParamOption(CustomParam param, String value) {
     setState(() {
@@ -324,6 +370,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
           deletable: (v) =>
               !(_providerCustomParamValues[param]?.contains(v) ?? false),
           onTap: (v) => _toggleCustomParamOption(param, v),
+          editable: (v) =>
+              !(_providerCustomParamValues[param]?.contains(v) ?? false),
+          onEdit: (v) => _editCustomParamOptionWithDialog(param, v),
           onDelete: (v) => _removeCustomParamOption(param, v),
           onReorder: (from, to) => _moveCustomParamOptionTo(param, from, to),
         ),

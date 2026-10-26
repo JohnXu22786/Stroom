@@ -1599,6 +1599,85 @@ void main() {
     });
   });
 
+  group('LlmModelConfigPage model custom param option editing', () {
+    testWidgets(
+      'editing an option preserves order and selection; cancel is inert',
+      (tester) async {
+        final model = ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          customParams: [
+            CustomParam(
+              paramName: 'voice_style',
+              type: 'string',
+              options: ['warm', 'cool'],
+              optionOrder: ['warm', 'cool'],
+            ),
+          ],
+        );
+
+        final saved = await _pumpAndSave(
+          tester,
+          model: model,
+          beforeSave: (tester) async {
+            await _scrollToReasoning(tester, find.text('自定义参数'));
+            await tester.ensureVisible(find.text('warm'));
+            await tester.pumpAndSettle();
+            expect(find.byIcon(Icons.edit), findsNWidgets(2));
+            await tester.tap(find.text('warm'));
+            await tester.pumpAndSettle();
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            expect(find.text('编辑选项值'), findsOneWidget);
+            expect(find.byType(TextField).last, findsOneWidget);
+            expect(
+              (tester
+                      .widget<TextField>(find.byType(TextField).last)
+                      .controller)!
+                  .text,
+              'warm',
+            );
+            await tester.enterText(find.byType(TextField).last, '   ');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'unused');
+            await tester.tap(find.text('取消').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+            expect(find.text('unused'), findsNothing);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'cool');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+            expect(find.text('cool'), findsOneWidget);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'cozy');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsNothing);
+            expect(find.text('cozy'), findsOneWidget);
+            expect(find.text('cool'), findsOneWidget);
+          },
+        );
+
+        expect(saved, isNotNull);
+        expect(saved!.customParams.single.options, ['cool']);
+        expect(saved.customParams.single.optionOrder, ['cozy', 'cool']);
+      },
+    );
+  });
+
   group('LlmModelConfigPage provider custom params inheritance', () {
     ProviderConfigItem providerWithCustomParams({
       List<String> options = const ['warm', 'cool'],
