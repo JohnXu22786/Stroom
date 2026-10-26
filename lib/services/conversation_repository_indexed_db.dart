@@ -467,9 +467,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
       final messages = await getMessages(conversation.id,
           limit: await countMessages(conversationId: conversation.id));
       for (final message in messages) {
-        for (final part in message.content) {
-          final reference = conversationMediaReferenceForPart(part);
-          if (reference == null) continue;
+        for (final reference in conversationMessageMediaReferences(message)) {
           await _validateMediaReference(
             issues,
             conversation.id,

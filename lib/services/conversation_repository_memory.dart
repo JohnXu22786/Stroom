@@ -237,9 +237,7 @@ class MemoryConversationRepository implements ConversationRepository {
     final issues = <ConversationIntegrityIssue>[];
     for (final entry in _messages.entries) {
       for (final message in entry.value.values) {
-        for (final part in message.content) {
-          final reference = conversationMediaReferenceForPart(part);
-          if (reference == null) continue;
+        for (final reference in conversationMessageMediaReferences(message)) {
           await _checkReference(
             issues,
             entry.key,

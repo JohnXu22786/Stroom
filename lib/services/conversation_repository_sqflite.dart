@@ -475,9 +475,7 @@ class SqfliteConversationRepository implements ConversationRepository {
       final messages =
           await getMessages(id, limit: await countMessages(conversationId: id));
       for (final message in messages) {
-        for (final part in message.content) {
-          final reference = conversationMediaReferenceForPart(part);
-          if (reference == null) continue;
+        for (final reference in conversationMessageMediaReferences(message)) {
           await _validateMediaReference(
             issues,
             id,
