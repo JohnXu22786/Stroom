@@ -1884,6 +1884,62 @@ void main() {
     });
 
     testWidgets(
+        'provider custom param with all options unchecked stays unchecked '
+        'on reopen', (tester) async {
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            defaultValue: 'fallback',
+            options: ['warm', 'cool'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await scrollToCustomValue(tester, 'warm');
+          await tester.tap(find.text('warm'));
+          await tester.tap(find.text('cool'));
+          await tester.pumpAndSettle();
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, isEmpty);
+      expect(saved.customParams.single.optionOrder, ['warm', 'cool']);
+
+      final reopened = await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: provider,
+        beforeSave: (tester) async {
+          await scrollToCustomValue(tester, 'warm');
+          for (final value in ['warm', 'cool']) {
+            expect(find.text(value), findsOneWidget,
+                reason: 'unchecked provider candidates must remain visible');
+            final text = tester.widget<Text>(find.text(value));
+            expect(text.style?.fontWeight, FontWeight.normal,
+                reason: '$value should remain unchecked after reopening');
+          }
+        },
+      );
+      expect(reopened, isNotNull);
+      expect(reopened!.customParams.single.options, isEmpty);
+      expect(reopened.customParams.single.optionOrder, ['warm', 'cool']);
+    });
+
+    testWidgets(
         'opening the page with provider custom params and going back '
         'does not warn', (tester) async {
       // 新模型 + 供应商自定义参数：打开即显示供应商参数不算改动，
