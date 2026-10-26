@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:function_tree/src/defs.dart' as engine;
-import 'package:dart_math/dart_math.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   test('explicit logarithm shortcuts keep their bases and exponential grouping',

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dart_math/dart_math.dart';
+import 'package:visual_math/visual_math.dart';
 
 Future<void> _selectCategory(WidgetTester tester, String category) async {
   await tester.ensureVisible(find.byTooltip('全部符号分类'));

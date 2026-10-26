@@ -9,16 +9,16 @@ const packageConfigPath = path.resolve(
   '../../.dart_tool/package_config.json',
 );
 const packageConfig = JSON.parse(fs.readFileSync(packageConfigPath, 'utf8'));
-const dartMathPackage = packageConfig.packages.find(({name}) => name === 'dart_math');
-if (!dartMathPackage) {
-  throw new Error('dart_math package is missing from package_config.json');
+const visualMathPackage = packageConfig.packages.find(({name}) => name === 'visual_math');
+if (!visualMathPackage) {
+  throw new Error('visual_math package is missing from package_config.json');
 }
 const packageConfigDirectory = path.dirname(packageConfigPath) + path.sep;
-const dartMathRoot = fileURLToPath(new URL(
-  dartMathPackage.rootUri,
+const visualMathRoot = fileURLToPath(new URL(
+  visualMathPackage.rootUri,
   pathToFileURL(packageConfigDirectory),
 ));
-const assets = path.join(dartMathRoot, 'assets/vendor/mathlive');
+const assets = path.join(visualMathRoot, 'assets/vendor/mathlive');
 
 async function editor() {
   const dom = new JSDOM('<div id="problem"></div>',

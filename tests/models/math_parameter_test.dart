@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dart_math/dart_math.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   test('parameter defaults and exact typed values remain independent of step',

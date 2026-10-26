@@ -8,14 +8,14 @@ void registerBundledAssetLicenses() {
     yield LicenseEntryWithLineBreaks(
       const ['MathLive 0.111.0'],
       await rootBundle.loadString(
-        'packages/dart_math/assets/vendor/mathlive/LICENSE.txt',
+        'packages/visual_math/assets/vendor/mathlive/LICENSE.txt',
       ),
     );
 
     yield LicenseEntryWithLineBreaks(
       const ['KaTeX fonts (katex 0.16.22)'],
       await rootBundle.loadString(
-        'packages/dart_math/assets/vendor/mathlive/fonts/LICENSE.txt',
+        'packages/visual_math/assets/vendor/mathlive/fonts/LICENSE.txt',
       ),
     );
 

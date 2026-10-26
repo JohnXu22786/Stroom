@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dart_math/dart_math.dart';
+import 'package:visual_math/visual_math.dart';
 
 Future<void> _expectPlanarArrowsFollowAxes(
   WidgetTester tester, {
