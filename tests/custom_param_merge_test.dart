@@ -1,6 +1,6 @@
 // 供应商/模型自定义参数合并与勾选块顺序测试：
-// - mergeCustomParams：模型同名覆盖、供应商追加、空名跳过（与
-//   mergeReasoningParams 同语义）
+// - mergeCustomParams：供应商字段同步、模型选项选择/顺序保留、供应商追加、
+//   空名跳过
 // - mergeOptionBlocks：勾选状态不改变显示顺序（修复「选中值自动前置」）；
 //   已保存的完整顺序（optionOrder）优先（拖动/添加跨重启保留）
 // - selectedInBlockOrder：勾选值按块顺序归一化（保存与未保存比较共用）
@@ -24,13 +24,48 @@ void main() {
       ]);
     });
 
-    test('model param with the same name replaces the provider param', () {
-      final provider = p('temperature_style', options: ['warm', 'cool']);
+    test('same-name param uses provider fields and model option state', () {
+      final provider = CustomParam(
+        paramName: 'temperature_style',
+        type: 'json',
+        defaultValue: '{"mode":"provider"}',
+        options: ['warm', 'cool'],
+      );
       final model = p('temperature_style', options: ['balanced']);
+      model.optionOrder = ['balanced', 'warm'];
       final merged = mergeCustomParams([provider], [model]);
       expect(merged.length, 1);
-      expect(identical(merged.first, model), isTrue);
+      expect(merged.first.type, 'json');
+      expect(merged.first.defaultValue, '{"mode":"provider"}');
       expect(merged.first.options, ['balanced']);
+      expect(merged.first.optionOrder, ['balanced', 'warm']);
+    });
+
+    test('reopening uses current provider JSON type and default', () {
+      // Saving the merged model page used to persist these old provider-owned
+      // fields on the model, where they hid later provider edits on reopen.
+      final savedModelParam = CustomParam(
+        paramName: 'response_options',
+        type: 'string',
+        defaultValue: 'old',
+        options: ['compact'],
+        optionOrder: ['expanded', 'compact'],
+      );
+      final currentProviderParam = CustomParam(
+        paramName: 'response_options',
+        type: 'json',
+        defaultValue: '{"format":"new"}',
+      );
+
+      final reopened = mergeCustomParams(
+        [currentProviderParam],
+        [CustomParam.fromMap(savedModelParam.toMap())],
+      ).single;
+
+      expect(reopened.type, 'json');
+      expect(reopened.defaultValue, '{"format":"new"}');
+      expect(reopened.options, ['compact']);
+      expect(reopened.optionOrder, ['expanded', 'compact']);
     });
 
     test('empty-name params are skipped', () {
