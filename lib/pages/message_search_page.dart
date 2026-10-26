@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -42,7 +44,7 @@ class SearchResult {
 
 /// Full-screen page for searching message content across all conversations.
 ///
-/// Returns a [Map] with keys `conversationId` and `query` when a result is
+/// Returns the selected conversation, message, and query when a result is
 /// selected via [Navigator.pop].
 class MessageSearchPage extends ConsumerStatefulWidget {
   const MessageSearchPage({super.key});
@@ -121,6 +123,9 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<SearchResult> _results = [];
   String _query = '';
+  String? _searchError;
+  bool _isSearching = false;
+  int _searchGeneration = 0;
 
   @override
   void dispose() {
@@ -129,16 +134,39 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   }
 
   void _onSearchChanged(String value) {
+    final generation = ++_searchGeneration;
     setState(() {
       _query = value;
-      final conversations = ref.read(conversationsProvider);
-      _results = MessageSearchPage.searchMessageContents(conversations, value);
+      _results = [];
+      _searchError = null;
+      _isSearching = value.trim().isNotEmpty;
     });
+    unawaited(_searchRepository(value, generation));
+  }
+
+  Future<void> _searchRepository(String query, int generation) async {
+    if (query.trim().isEmpty) return;
+    try {
+      final notifier = ref.read(conversationsProvider.notifier);
+      final conversations = await notifier.loadConversationsForSearch();
+      if (!mounted || generation != _searchGeneration || _query != query) return;
+      setState(() {
+        _results = MessageSearchPage.searchMessageContents(conversations, query);
+        _isSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration || _query != query) return;
+      setState(() {
+        _searchError = '搜索失败，请稍后重试';
+        _isSearching = false;
+      });
+    }
   }
 
   void _onResultTapped(SearchResult result) {
     Navigator.of(context).pop({
       'conversationId': result.conversation.id,
+      'messageId': result.matches.first.messageId,
       'query': _query,
     });
   }
@@ -196,7 +224,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
           Expanded(
             child: _query.isEmpty
                 ? _buildInitialState(cs)
-                : _results.isEmpty
+                : _searchError != null
+                    ? _buildSearchErrorState(cs)
+                    : _isSearching
+                        ? const Center(child: CircularProgressIndicator())
+                        : _results.isEmpty
                     ? _buildEmptyState(cs)
                     : _buildResultsList(cs),
           ),
@@ -218,6 +250,15 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchErrorState(ColorScheme cs) {
+    return Center(
+      child: Text(
+        _searchError!,
+        style: TextStyle(color: cs.error),
       ),
     );
   }

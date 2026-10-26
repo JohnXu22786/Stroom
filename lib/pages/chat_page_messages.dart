@@ -114,10 +114,35 @@ extension _ChatPageMessagesExt on _ChatPageState {
     final loadGeneration = ++_loadMoreGeneration;
 
     try {
-      final newStart = _loadedUpToIndex >= _ChatPageState._pageSize
-          ? _loadedUpToIndex - _ChatPageState._pageSize
+      final oldLoadedUpToIndex = _loadedUpToIndex;
+      final newStart = oldLoadedUpToIndex >= _ChatPageState._pageSize
+          ? oldLoadedUpToIndex - _ChatPageState._pageSize
           : 0;
-      final batchMessages = _history.sublist(newStart, _loadedUpToIndex);
+      final List<ChatMessage> batchMessages;
+      if (oldLoadedUpToIndex > 0) {
+        batchMessages = _history.sublist(newStart, oldLoadedUpToIndex);
+      } else {
+        final conversationId = _loadedConversationId;
+        if (conversationId == null) {
+          _markNoMoreMessagesReached();
+          return;
+        }
+        batchMessages = await ref
+            .read(conversationsProvider.notifier)
+            .loadEarlierRepositoryMessages(
+              conversationId,
+              limit: _ChatPageState._pageSize,
+            );
+        if (loadGeneration != _loadMoreGeneration) return;
+        if (batchMessages.isEmpty) {
+          _markNoMoreMessagesReached();
+          return;
+        }
+        _history.insertAll(0, batchMessages);
+        ref
+            .read(conversationsProvider.notifier)
+            .commitLoadedRepositoryMessages(conversationId, batchMessages);
+      }
 
       // Convert ChatMessage list to flutter_chat_ui Message list
       final msgs = batchMessages
@@ -154,7 +179,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // Re-check after await: conversation might have switched during the
         // insertion.
         if (loadGeneration == _loadMoreGeneration) {
-          _loadedUpToIndex = newStart;
+          _loadedUpToIndex = oldLoadedUpToIndex > 0 ? newStart : 0;
         }
       }
     } catch (e, s) {
@@ -264,15 +289,21 @@ extension _ChatPageMessagesExt on _ChatPageState {
           mounted &&
           loadGeneration == _conversationLoadGeneration &&
           ref.read(activeConversationIdProvider) == activeId;
-      final convs = ref.read(conversationsProvider);
+      final convCount = ref.read(conversationsProvider).length;
       await AppLogService.info('ChatPage',
-          '[STREAM-LOAD] _loadConversationMessages: activeId=$activeId convCount=${convs.length}');
+          '[STREAM-LOAD] _loadConversationMessages: activeId=$activeId convCount=$convCount');
       if (activeId == null) {
         await AppLogService.warning(
             'ChatPage', '[STREAM-LOAD] activeConversationId is null, skip');
         if (isCurrentLoad()) _clearConversationView();
         return;
       }
+      final conversationsNotifier = ref.read(conversationsProvider.notifier);
+      await conversationsNotifier.ready;
+      if (!isCurrentLoad()) return;
+      await conversationsNotifier.loadMessages(activeId);
+      if (!isCurrentLoad()) return;
+      final convs = ref.read(conversationsProvider);
       final conv = convs.where((c) => c.id == activeId).firstOrNull;
       if (conv == null) {
         await AppLogService.warning(
@@ -338,11 +369,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final loadedHistory = <ChatMessage>[];
       final loadedChatSegments = <String, List<MessageSegment>>{};
       final loadedReasoningContents = <String, List<String>>{};
-      // Load all messages into _history (needed for full context in API calls
-      // and search), but only insert the last _pageSize messages into the
-      // controller for display (lazy loading).
+      // The repository supplies only the latest page. Older repository pages
+      // are fetched as the user scrolls toward the top of the chat.
       final msgCount = messages.length;
-      await AppLogService.info('ChatPage', '开始加载 $msgCount 条消息到 _history');
+      await AppLogService.info('ChatPage', '开始加载最近 $msgCount 条消息到 _history');
       for (final msg in messages) {
         loadedHistory.add(msg);
         // Restore reasoning sections from persisted ChatMessage.

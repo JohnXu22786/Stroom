@@ -12,6 +12,7 @@ part of 'conversation_provider.dart';
 /// SharedPreferences from growing without bound on devices that
 /// repeatedly hit decode failures.
 const int _maxCorruptBackups = 3;
+const int _conversationRepositoryMessagePageSize = 20;
 
 extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   // --------------------------------------------------------------------------
@@ -24,6 +25,17 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     // 需要把合并结果落盘（见 finally）：否则"下次持久化前退出"
     // 会丢失新对话。
     var hadInMemoryMerge = false;
+    try {
+      await _loadFromConversationRepository();
+      return;
+    } catch (error) {
+      _repositoryReady = false;
+      debugPrint('Conversation repository unavailable; reading legacy data: $error');
+      await AppLogService.warning(
+        'ConversationsNotifier',
+        '新对话仓库未通过校验，继续读取 SharedPreferences 旧记录',
+      );
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = prefs.getString('conversations');
@@ -211,6 +223,353 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
     }
   }
 
+  Future<void> _loadFromConversationRepository() async {
+    final preferences = await SharedPreferences.getInstance();
+    final repository = _ref.read(conversationRepositoryProvider);
+    final migration = await ConversationMigrationService(
+      repository,
+    ).migrate(preferences);
+    if (!migration.verified) throw StateError('Conversation migration was not verified.');
+
+    final summaries = await repository.listSummaries();
+    final conversations = <Conversation>[];
+    for (final summary in summaries) {
+      final record = await repository.getConversation(summary.id);
+      if (record == null) throw StateError('Missing conversation ${summary.id}.');
+      conversations.add(
+        Conversation.fromMap(ConversationRecordAdapter.toLegacyMap(record, const [])),
+      );
+      _persistedConversationRecords[summary.id] =
+          _conversationRecordSignature(conversations.last);
+      _persistedMessageRecords[summary.id] = {};
+    }
+    if (conversations.any((conversation) => conversation.assistantId == null)) {
+      final defaultAssistantId = await _resolveDefaultAssistantId(preferences);
+      if (defaultAssistantId != null) {
+        for (final conversation in conversations) {
+          if (conversation.assistantId != null) continue;
+          conversation.assistantId = defaultAssistantId;
+          final record = ConversationRecordAdapter.fromLegacyMap(
+            conversation.toMap(),
+          );
+          await repository.upsertConversation(
+            StroomConversation(
+              schemaVersion: record.schemaVersion,
+              id: record.id,
+              title: record.title,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+              extensions: record.extensions,
+              extraFields: record.extraFields,
+            ),
+          );
+          _persistedConversationRecords[conversation.id] =
+              _conversationRecordSignature(conversation);
+        }
+      }
+    }
+    if (!mounted) return;
+    final loadedIds = conversations.map((conversation) => conversation.id).toSet();
+    final inMemoryAdditions = state
+        .where((conversation) => !loadedIds.contains(conversation.id))
+        .toList();
+    state = pinnedFirstStable([...inMemoryAdditions, ...conversations]);
+    _repositoryReady = true;
+    _loadHasRun = true;
+    if (inMemoryAdditions.isNotEmpty) unawaited(_persistCore());
+
+    final activeId = preferences.getString('active_conversation_id');
+    if (activeId != null && state.any((conversation) => conversation.id == activeId)) {
+      _ref.read(activeConversationIdProvider.notifier).state = activeId;
+      await _loadMessagesFromRepository(activeId);
+    }
+    _syncTemporaryTimer();
+    unawaited(_checkTemporaryExpiry());
+  }
+
+  ChatMessage _legacyMessageFromRepository(StroomMessage message) =>
+      ChatMessage.fromMap(
+        ConversationRecordAdapter.messageToLegacyMap(message),
+      );
+
+  Future<List<ChatMessage>> _readAllRepositoryMessages(String conversationId) async {
+    final repository = _ref.read(conversationRepositoryProvider);
+    final result = <ChatMessage>[];
+    const pageSize = 100;
+    var offset = 0;
+    while (true) {
+      final page = await repository.getMessages(
+        conversationId,
+        offset: offset,
+        limit: pageSize,
+      );
+      if (page.isEmpty) break;
+      result.addAll(page.map(_legacyMessageFromRepository));
+      offset += page.length;
+      if (page.length < pageSize) break;
+    }
+    return result;
+  }
+
+  /// Loads complete history for a model request without expanding the active
+  /// chat's displayed, paged window or the list-view summaries.
+  Future<List<ChatMessage>> loadFullMessagesForContext(String conversationId) async {
+    await ready;
+    if (!_repositoryReady) {
+      return List<ChatMessage>.from(
+        state.where((conversation) => conversation.id == conversationId)
+            .firstOrNull?.messages ?? const [],
+      );
+    }
+    final repository = _ref.read(conversationRepositoryProvider);
+    final result = <ChatMessage>[];
+    final sequences = _persistedMessageSequences.putIfAbsent(
+      conversationId,
+      () => {},
+    );
+    const pageSize = 100;
+    var offset = 0;
+    while (true) {
+      final page = await repository.getMessages(
+        conversationId,
+        offset: offset,
+        limit: pageSize,
+      );
+      if (page.isEmpty) break;
+      for (final message in page) {
+        sequences[message.id] = message.sequence;
+        result.add(_legacyMessageFromRepository(message));
+      }
+      offset += page.length;
+      if (page.length < pageSize) break;
+    }
+    return result;
+  }
+
+  /// Reloads the latest page after a stream persisted its complete context.
+  /// The stream manager can work with the full history while the UI stays
+  /// windowed to the latest segment until the user scrolls back.
+  Future<List<ChatMessage>> reloadLatestMessagePage(String conversationId) async {
+    if (!_repositoryReady) {
+      return List<ChatMessage>.from(
+        state.where((conversation) => conversation.id == conversationId)
+            .firstOrNull?.messages ?? const [],
+      );
+    }
+    await _loadMessagesFromRepository(conversationId);
+    return List<ChatMessage>.from(
+      state.where((conversation) => conversation.id == conversationId)
+          .firstOrNull?.messages ?? const [],
+    );
+  }
+
+  Future<void> _loadMessagesFromRepository(String conversationId) async {
+    final repository = _ref.read(conversationRepositoryProvider);
+    final messageCount = await repository.countMessages(
+      conversationId: conversationId,
+    );
+    final offset = (messageCount - _conversationRepositoryMessagePageSize)
+        .clamp(0, messageCount)
+        .toInt();
+    final repositoryMessages = await repository.getMessages(
+      conversationId,
+      offset: offset,
+      limit: _conversationRepositoryMessagePageSize,
+    );
+    final messages = repositoryMessages.map(_legacyMessageFromRepository).toList();
+    if (!mounted) return;
+    final conversation = state.where((item) => item.id == conversationId).firstOrNull;
+    if (conversation == null) return;
+    conversation.messages = messages;
+    _messageLoadedConversationIds.add(conversationId);
+    _repositoryMessageOffsets[conversationId] = offset;
+    _persistedMessageRecords[conversationId] = {
+      for (var index = 0; index < repositoryMessages.length; index++)
+        repositoryMessages[index].id: jsonEncode({
+          'sequence': repositoryMessages[index].sequence,
+          'record': messages[index].toMap(),
+        }),
+    };
+    _persistedMessageSequences[conversationId] = {
+      for (final message in repositoryMessages)
+        message.id: message.sequence,
+    };
+    state = List<Conversation>.from(state);
+  }
+
+  bool hasEarlierRepositoryMessages(String conversationId) =>
+      _repositoryReady && (_repositoryMessageOffsets[conversationId] ?? 0) > 0;
+
+  /// Fetches one earlier page without replacing the provider's visible list
+  /// state. The chat page owns the loaded window and asks for additional pages
+  /// as the user scrolls toward the beginning of the history.
+  Future<List<ChatMessage>> loadEarlierRepositoryMessages(
+    String conversationId, {
+    int limit = _conversationRepositoryMessagePageSize,
+  }) async {
+    if (!_repositoryReady || limit <= 0) return const [];
+    final currentOffset = _repositoryMessageOffsets[conversationId] ?? 0;
+    if (currentOffset <= 0) return const [];
+    final newOffset = (currentOffset - limit)
+        .clamp(0, currentOffset)
+        .toInt();
+    final repository = _ref.read(conversationRepositoryProvider);
+    final rows = await repository.getMessages(
+      conversationId,
+      offset: newOffset,
+      limit: currentOffset - newOffset,
+    );
+    if (rows.isEmpty) _repositoryMessageOffsets[conversationId] = 0;
+    final messages = rows.map(_legacyMessageFromRepository).toList();
+    final sequences = _persistedMessageSequences.putIfAbsent(
+      conversationId,
+      () => {},
+    );
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      sequences[row.id] = row.sequence;
+    }
+    return messages;
+  }
+
+  /// Loads the page containing a selected message so search results can open
+  /// older records without retaining the entire conversation in chat state.
+  Future<bool> loadMessagesAroundMessage(
+    String conversationId,
+    String messageId, {
+    int pageSize = _conversationRepositoryMessagePageSize,
+  }) async {
+    if (!_repositoryReady || pageSize <= 0) return false;
+    final repository = _ref.read(conversationRepositoryProvider);
+    const scanPageSize = 100;
+    var scanOffset = 0;
+    int? targetOffset;
+    while (true) {
+      final page = await repository.getMessages(
+        conversationId,
+        offset: scanOffset,
+        limit: scanPageSize,
+      );
+      if (page.isEmpty) break;
+      final index = page.indexWhere((message) => message.id == messageId);
+      if (index >= 0) {
+        targetOffset = scanOffset + index;
+        break;
+      }
+      scanOffset += page.length;
+      if (page.length < scanPageSize) break;
+    }
+    if (targetOffset == null) return false;
+
+    final messageOffset = (targetOffset ~/ pageSize) * pageSize;
+    final rows = await repository.getMessages(
+      conversationId,
+      offset: messageOffset,
+      limit: pageSize,
+    );
+    if (!rows.any((message) => message.id == messageId)) return false;
+    final messages = rows.map(_legacyMessageFromRepository).toList();
+    if (!mounted) return false;
+    final conversation = state
+        .where((item) => item.id == conversationId)
+        .firstOrNull;
+    if (conversation == null) return false;
+    conversation.messages = messages;
+    _messageLoadedConversationIds.add(conversationId);
+    _repositoryMessageOffsets[conversationId] = messageOffset;
+    _persistedMessageRecords[conversationId] = {
+      for (var index = 0; index < rows.length; index++)
+        rows[index].id: jsonEncode({
+          'sequence': rows[index].sequence,
+          'record': messages[index].toMap(),
+        }),
+    };
+    _persistedMessageSequences[conversationId] = {
+      for (final row in rows) row.id: row.sequence,
+    };
+    state = List<Conversation>.from(state);
+    return true;
+  }
+
+  /// Commits a page fetched by the chat view after it has incorporated that
+  /// page into its local history window. Keeping the notifier window in sync
+  /// protects later metadata saves from treating loaded older rows as deleted.
+  void commitLoadedRepositoryMessages(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) {
+    if (!_repositoryReady || messages.isEmpty) return;
+    final conversation = state
+        .where((item) => item.id == conversationId)
+        .firstOrNull;
+    if (conversation == null) return;
+    final existingIds = conversation.messages.map((message) => message.id).toSet();
+    final older = messages
+        .where((message) => !existingIds.contains(message.id))
+        .toList();
+    if (older.isEmpty) return;
+    conversation.messages = [...older, ...conversation.messages];
+    final signatures = _persistedMessageRecords.putIfAbsent(
+      conversationId,
+      () => {},
+    );
+    final sequences = _persistedMessageSequences[conversationId] ?? const {};
+    for (final message in older) {
+      final sequence = sequences[message.id];
+      if (sequence == null) continue;
+      signatures[message.id] = jsonEncode({
+        'sequence': sequence,
+        'record': message.toMap(),
+      });
+    }
+    final currentOffset = _repositoryMessageOffsets[conversationId] ?? 0;
+    _repositoryMessageOffsets[conversationId] =
+        (currentOffset - older.length).clamp(0, currentOffset).toInt();
+    state = List<Conversation>.from(state);
+  }
+
+  /// Loads a conversation's message history from its repository pages. This
+  /// leaves list-view summaries free of message bodies until a chat is opened.
+  Future<void> loadMessages(String conversationId) async {
+    if (!_repositoryReady || _messageLoadedConversationIds.contains(conversationId)) {
+      return;
+    }
+    await _loadMessagesFromRepository(conversationId);
+  }
+
+  /// Loads histories into a transient search snapshot without retaining every
+  /// conversation's messages in the list-view provider state.
+  Future<List<Conversation>> loadConversationsForSearch() async {
+    await ready;
+    final snapshot = List<Conversation>.from(state);
+    if (!_repositoryReady) return snapshot;
+    final results = <Conversation>[];
+    for (final conversation in snapshot) {
+      final messages = await _readAllRepositoryMessages(conversation.id);
+      results.add(
+        Conversation.fromMap({
+          ...conversation.toMap(),
+          'messages': messages.map((message) => message.toMap()).toList(),
+        }),
+      );
+    }
+    return results;
+  }
+
+  String _conversationRecordSignature(Conversation conversation) {
+    final record = ConversationRecordAdapter.fromLegacyMap(conversation.toMap());
+    final metadata = StroomConversation(
+      schemaVersion: record.schemaVersion,
+      id: record.id,
+      title: record.title,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      extensions: record.extensions,
+      extraFields: record.extraFields,
+    );
+    return jsonEncode(metadata.toMap());
+  }
+
   /// Move a corrupt conversations JSON blob to a timestamped backup key so
   /// the user can inspect it later and we don't overwrite it on the next save.
   ///
@@ -337,6 +696,7 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
   }
 
   Future<bool> _persistSnapshot(List<Conversation> snapshot) async {
+    if (_repositoryReady) return _persistRepositorySnapshot(snapshot);
     SharedPreferences? prefs;
     try {
       prefs = await SharedPreferences.getInstance();
@@ -445,5 +805,127 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
       // (we never overwrote it). Log loudly so the user can find the cause.
     }
     return false;
+  }
+
+  Future<bool> _persistRepositorySnapshot(List<Conversation> snapshot) async {
+    final repository = _ref.read(conversationRepositoryProvider);
+    try {
+      for (final conversation in snapshot) {
+        final signature = _conversationRecordSignature(conversation);
+        final metadataChanged =
+            _persistedConversationRecords[conversation.id] != signature;
+        final oldRecords = Map<String, String>.from(
+          _persistedMessageRecords[conversation.id] ?? const <String, String>{},
+        );
+        final sequences = Map<String, int>.from(
+          _persistedMessageSequences[conversation.id] ?? const <String, int>{},
+        );
+        var nextSequence = sequences.isEmpty
+            ? 0
+            : sequences.values.reduce((a, b) => a > b ? a : b) + 1;
+        final currentIds = <String>{};
+        final upserts = <StroomMessage>[];
+        if (_messageLoadedConversationIds.contains(conversation.id)) {
+          for (final message in conversation.messages) {
+            currentIds.add(message.id);
+            final existingSequence = sequences[message.id];
+            final sequence = existingSequence ?? nextSequence++;
+            sequences[message.id] = sequence;
+            final messageSignature = jsonEncode({
+              'sequence': sequence,
+              'record': message.toMap(),
+            });
+            final previousSignature = oldRecords[message.id];
+            // A sequence loaded by the full-context reader identifies an
+            // existing row even when its full message signature was never
+            // retained in memory. Preserve that row unless a loaded page has
+            // a prior signature showing a real edit.
+            final isNewMessage = existingSequence == null;
+            if (previousSignature == messageSignature ||
+                (previousSignature == null && !isNewMessage)) {
+              continue;
+            }
+            final neutral = StroomMessage.fromLegacy(message, sequence: sequence);
+            upserts.add(StroomMessage(
+              id: neutral.id,
+              role: neutral.role,
+              sequence: neutral.sequence,
+              createdAt: neutral.createdAt,
+              content: neutral.content,
+              status: neutral.status,
+              diagnostics: neutral.diagnostics,
+              extensions: {
+                ...neutral.extensions,
+                ConversationRecordAdapter.legacyMessageNamespace: {
+                  ...?neutral.extensions[
+                    ConversationRecordAdapter.legacyMessageNamespace
+                  ] as Map<String, dynamic>?,
+                  'record': ConversationRecordAdapter.legacyMessageRecordForStorage(
+                    message.toMap(),
+                  ),
+                },
+              },
+              extraFields: neutral.extraFields,
+            ));
+            oldRecords[message.id] = messageSignature;
+          }
+        }
+        final deletedIds = _messageLoadedConversationIds.contains(conversation.id)
+            ? oldRecords.keys.where((id) => !currentIds.contains(id)).toList()
+            : const <String>[];
+        for (final staleId in deletedIds) {
+          oldRecords.remove(staleId);
+          sequences.remove(staleId);
+        }
+        if (metadataChanged || upserts.isNotEmpty || deletedIds.isNotEmpty) {
+          final record = ConversationRecordAdapter.fromLegacyMap(
+            conversation.toMap(),
+          );
+          await repository.applyConversationChanges(
+            StroomConversation(
+              schemaVersion: record.schemaVersion,
+              id: record.id,
+              title: record.title,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+              extensions: record.extensions,
+              extraFields: record.extraFields,
+            ),
+            upsertMessages: upserts,
+            deleteMessageIds: deletedIds,
+          );
+        }
+        _persistedConversationRecords[conversation.id] = signature;
+        if (_messageLoadedConversationIds.contains(conversation.id)) {
+          _persistedMessageRecords[conversation.id] = oldRecords;
+          _persistedMessageSequences[conversation.id] = sequences;
+        }
+      }
+      // Persist order before removing repository rows. If the order write
+      // fails, no conversation or message data has been deleted and callers
+      // can safely restore their in-memory snapshot.
+      await repository.setConversationOrder(
+        snapshot.map((conversation) => conversation.id).toList(),
+      );
+      final currentIds = snapshot.map((conversation) => conversation.id).toSet();
+      for (final staleId in _persistedConversationRecords.keys
+          .where((id) => !currentIds.contains(id)).toList()) {
+        await repository.deleteConversation(staleId);
+        _persistedConversationRecords.remove(staleId);
+        _persistedMessageRecords.remove(staleId);
+        _persistedMessageSequences.remove(staleId);
+        _repositoryMessageOffsets.remove(staleId);
+        _messageLoadedConversationIds.remove(staleId);
+      }
+      return true;
+    } catch (error) {
+      debugPrint('Failed to persist conversation repository rows: $error');
+      await AppLogService.error(
+        'ConversationsNotifier',
+        '持久化对话仓库记录失败',
+        error,
+      );
+      return false;
+    }
   }
 }

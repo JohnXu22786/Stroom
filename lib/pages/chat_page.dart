@@ -288,6 +288,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
+  String? _pendingSearchMessageId;
   final List<SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
   final TextEditingController _searchTextController = TextEditingController();
@@ -327,10 +328,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Number of messages to load per page.
   static const int _pageSize = 20;
 
-  /// Index in [_history] pointing to the first message that is loaded into
-  /// the chat controller. All messages from [_loadedUpToIndex] to the end of
-  /// [_history] are visible. When [_loadedUpToIndex] is 0, all messages are
-  /// already loaded.
+  /// Index in the current [_history] window pointing to the first message
+  /// already loaded into the chat controller. Repository pages older than this
+  /// window are fetched separately as the user scrolls.
   int _loadedUpToIndex = 0;
 
   /// Whether a pagination load is currently in progress.
@@ -371,7 +371,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   int _conversationLoadGeneration = 0;
 
   /// Whether there are more older messages to load.
-  bool get _hasMoreMessages => _loadedUpToIndex > 0;
+  bool get _hasMoreMessages {
+    if (_loadedUpToIndex > 0) return true;
+    final conversationId = _loadedConversationId;
+    return conversationId != null &&
+        ref
+            .read(conversationsProvider.notifier)
+            .hasEarlierRepositoryMessages(conversationId);
+  }
 
   @override
   void initState() {

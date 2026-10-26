@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'storage_service.dart';
+import 'conversation_repository.dart';
+import '../models/stroom_conversation.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
 import 'startup_preferences.dart';
@@ -108,35 +110,49 @@ Future<void> writeBackupFile(
 
 Future<Set<String>> collectAttachmentPaths() async {
   final paths = <String>{};
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString('conversations');
-    if (json == null) return paths;
-
-    // 顶层也需防御：conversations 整体不是数组时，`as List` 强转抛
-    // TypeError 会让整个备份静默丢失所有附件路径。
-    final decoded = jsonDecode(json);
-    if (decoded is! List) {
-      debugPrint('conversations 不是合法数组，跳过附件路径收集');
-      return paths;
+  var repositoryIsAuthoritative = false;
+  if (_shouldReadConversationRepository) {
+    final repository = createConversationRepository();
+    try {
+      await repository.initialize();
+      repositoryIsAuthoritative = await repository.migrationSourceHash() != null;
+      _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
+    } catch (e) {
+      debugPrint('收集仓库媒体引用失败: $e');
+      rethrow;
+    } finally {
+      await repository.close();
     }
-    final conversations = decoded;
-    for (final conv in conversations) {
-      // 逐层防御：损坏数据（非 Map 会话/消息、非 List 字段、非 Map
-      // 附件）只跳过对应条目，绝不中断整个扫描 —— 否则一条坏数据
-      // 会让备份丢失所有附件路径（旧代码 TypeError 被外层 catch
-      // 吞掉，静默丢失）。
-      if (conv is! Map<String, dynamic>) continue;
-      final rawMessages = conv['messages'];
-      if (rawMessages is List) {
-        for (final msg in rawMessages) {
-          if (msg is! Map<String, dynamic>) continue;
-          _collectAttachments(msg['attachments'], paths);
+  }
+  try {
+    if (!repositoryIsAuthoritative) {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('conversations');
+      if (json == null) return paths;
+      // 顶层也需防御：conversations 整体不是数组时，`as List` 强转抛
+      // TypeError 会让整个备份静默丢失所有附件路径。
+      final decoded = jsonDecode(json);
+      if (decoded is! List) {
+        debugPrint('conversations 不是合法数组，跳过附件路径收集');
+      } else {
+        for (final conv in decoded) {
+          // 逐层防御：损坏数据（非 Map 会话/消息、非 List 字段、非 Map
+          // 附件）只跳过对应条目，绝不中断整个扫描 —— 否则一条坏数据
+          // 会让备份丢失所有附件路径（旧代码 TypeError 被外层 catch
+          // 吞掉，静默丢失）。
+          if (conv is! Map<String, dynamic>) continue;
+          final rawMessages = conv['messages'];
+          if (rawMessages is List) {
+            for (final msg in rawMessages) {
+              if (msg is! Map<String, dynamic>) continue;
+              _collectAttachments(msg['attachments'], paths);
+            }
+          }
+          // Draft attachments are persisted with the conversation too; retaining
+          // the draft without its files would leave broken references after import.
+          _collectAttachments(conv['draftAttachments'], paths);
         }
       }
-      // Draft attachments are persisted with the conversation too; retaining
-      // the draft without its files would leave broken references after import.
-      _collectAttachments(conv['draftAttachments'], paths);
     }
   } catch (e) {
     // 仅当整体 JSON 无法解析时才放弃（逐条目损坏已在上面跳过）。
@@ -152,17 +168,79 @@ Future<Set<String>> collectAttachmentPaths() async {
 /// cleanup must abort rather than risk deleting a live attachment.
 Future<Set<String>?> collectAttachmentPathsForSafety() async {
   try {
-    final json = await StartupPreferences.getString('conversations');
-    if (json == null) return <String>{};
-    if (kIsWeb || _isBackupServiceFlutterTest) {
-      return _collectAttachmentPathsFromJson(json);
+    final paths = <String>{};
+    var repositoryIsAuthoritative = false;
+    if (_shouldReadConversationRepository) {
+      final repository = createConversationRepository();
+      try {
+        await repository.initialize();
+        repositoryIsAuthoritative =
+            await repository.migrationSourceHash() != null;
+        _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
+      } finally {
+        await repository.close();
+      }
     }
-    return await data_migration_isolate.runInIsolate(
-      () => _collectAttachmentPathsFromJson(json),
-    );
+    if (!repositoryIsAuthoritative) {
+      final json = await StartupPreferences.getString('conversations');
+      if (json != null) {
+        if (kIsWeb || _isBackupServiceFlutterTest) {
+          paths.addAll(_collectAttachmentPathsFromJson(json));
+        } else {
+          paths.addAll(await data_migration_isolate.runInIsolate(
+            () => _collectAttachmentPathsFromJson(json),
+          ));
+        }
+      }
+    }
+    return paths;
   } catch (error) {
     debugPrint('启动时收集附件路径失败，中止孤儿清理: $error');
     return null;
+  }
+}
+
+bool get _shouldReadConversationRepository =>
+    kIsWeb || (!WebFileStore.isTestMode && !_isBackupServiceFlutterTest);
+
+void _collectRepositoryAttachmentPaths(
+  Object? rawData,
+  Set<String> paths,
+) {
+  if (rawData is! Map) {
+    throw const FormatException('Invalid conversation repository export.');
+  }
+  void addMediaReference(Map<String, dynamic> reference) {
+    for (final key in ['storagePath', 'reference', 'thumbnailPath']) {
+      final path = _canonicalAttachmentPath(reference[key]);
+      if (path != null) paths.add(path);
+    }
+  }
+
+  final data = Map<String, dynamic>.from(rawData);
+  final conversations = data['conversations'];
+  if (conversations is List) {
+    for (final raw in conversations) {
+      if (raw is! Map) continue;
+      final conversation = StroomConversation.fromMap(
+        Map<String, dynamic>.from(raw),
+      );
+      for (final reference
+          in conversationDraftAttachmentReferences(conversation)) {
+        addMediaReference(reference);
+      }
+    }
+  }
+  final messages = data['messages'];
+  if (messages is List) {
+    for (final raw in messages) {
+      if (raw is! Map) continue;
+      final record = Map<String, dynamic>.from(raw)..remove('conversationId');
+      final message = StroomMessage.fromMap(record);
+      for (final reference in conversationMessageMediaReferences(message)) {
+        addMediaReference(reference);
+      }
+    }
   }
 }
 
@@ -207,6 +285,7 @@ void _collectAttachments(Object? rawAttachments, Set<String> paths) {
 
 String? _canonicalAttachmentPath(Object? value) {
   if (value is! String || value.isEmpty) return null;
+  if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(value)) return null;
   if (value.startsWith('temp_edited/')) {
     return 'attachments/${p.basename(value)}';
   }

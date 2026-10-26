@@ -32,6 +32,14 @@ extension _ChatPageSearchExt on _ChatPageState {
           start = idx + query.length;
         }
       }
+      final requestedMessageId = _pendingSearchMessageId;
+      if (requestedMessageId != null) {
+        final targetMatch = _searchMatches.indexWhere(
+          (match) => match.messageId == requestedMessageId,
+        );
+        if (targetMatch >= 0) _currentMatchIndex = targetMatch;
+        _pendingSearchMessageId = null;
+      }
     });
     if (_searchMatches.isNotEmpty) {
       // Scroll after the rebuild so the message list reflects the new
@@ -233,12 +241,22 @@ extension _ChatPageSearchExt on _ChatPageState {
         .then((result) async {
       if (!mounted || result == null) return;
       final conversationId = result['conversationId'] as String?;
+      final messageId = result['messageId'] as String?;
       final query = result['query'] as String?;
       if (conversationId == null || query == null || query.isEmpty) return;
 
       // Step 1: Save current conversation's messages first (before switching)
       await _saveMessages();
       if (!mounted) return;
+
+      final conversationsNotifier = ref.read(conversationsProvider.notifier);
+      if (messageId != null) {
+        await conversationsNotifier.loadMessagesAroundMessage(
+          conversationId,
+          messageId,
+        );
+        if (!mounted) return;
+      }
 
       // Step 2: If switching to a different conversation, select it.
       // The activeConversationIdProvider listener schedules
@@ -247,9 +265,13 @@ extension _ChatPageSearchExt on _ChatPageState {
       // post-frame callback so it runs AFTER that load completes.
       final activeId = ref.read(activeConversationIdProvider);
       if (conversationId != activeId) {
-        ref
-            .read(conversationsProvider.notifier)
-            .selectConversation(conversationId);
+        conversationsNotifier.selectConversation(conversationId);
+      }
+      if (messageId != null) {
+        // Load the page selected above before activating local search. This
+        // also handles a result in the conversation already being viewed.
+        await _loadConversationMessages();
+        if (!mounted) return;
       }
       // Step 2b: Sync the session assistant selection to the opened
       // conversation's bound assistant. Global search can open ANY
@@ -282,6 +304,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       // safety in case the listener doesn't fire as expected.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        _pendingSearchMessageId = messageId;
         setState(() {
           _searchTextController.text = query;
           _isSearching = true;

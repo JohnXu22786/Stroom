@@ -318,6 +318,24 @@ extension _ChatPageStreamingExt on _ChatPageState {
 
     if (!mounted) return;
 
+    // The stream manager persists the complete model context, then return the
+    // latest repository page to the chat UI so sending does not expand its
+    // displayed history window.
+    var displayedHistory = result.history;
+    if (ref.read(activeConversationIdProvider) == effectiveConvId) {
+      try {
+        displayedHistory = await ref
+            .read(conversationsProvider.notifier)
+            .reloadLatestMessagePage(effectiveConvId);
+      } catch (e) {
+        debugPrint('[ChatPage] failed to reload latest message page: $e');
+        displayedHistory = result.history.length <= 20
+            ? result.history
+            : result.history.sublist(result.history.length - 20);
+      }
+    }
+    if (!mounted) return;
+
     // ── Post-stream completion ──
     // CRITICAL: Update _history FIRST, before any debug/log calls that
     // could throw and prevent the update. Without this, the next message
@@ -329,7 +347,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
         ref.read(activeConversationIdProvider) == effectiveConvId;
     if (pageOwnedStream) {
       _history.clear();
-      _history.addAll(result.history);
+      _history.addAll(displayedHistory);
     }
 
     // Clear the local streaming flag IMMEDIATELY (before any await below)

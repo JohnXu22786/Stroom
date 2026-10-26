@@ -9,8 +9,12 @@ import 'package:uuid/uuid.dart';
 
 import '../models/assistant.dart';
 import '../models/chat_message.dart';
+import '../models/stroom_conversation.dart';
 import '../services/app_log_service.dart';
 import '../services/attachment_storage.dart';
+import '../services/conversation_migration_service.dart';
+import '../services/conversation_record_adapter.dart';
+import '../services/conversation_repository.dart';
 import 'assistant_provider.dart';
 
 part 'conversation_notifier_persistence.dart';
@@ -536,6 +540,13 @@ final conversationSearchQueryProvider = StateProvider<String>((ref) => '');
 /// **周期性刷新**的 UI 监听它，避免按秒重建整个对话列表/聊天页。
 final temporaryCountdownTickProvider = StateProvider<int>((ref) => 0);
 
+/// One protocol-neutral conversation store shared by native and Web clients.
+final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
+  final repository = createConversationRepository();
+  ref.onDispose(() => unawaited(repository.close()));
+  return repository;
+});
+
 /// Persistent list of all conversations.
 final conversationsProvider =
     StateNotifierProvider<ConversationsNotifier, List<Conversation>>((ref) {
@@ -547,6 +558,12 @@ final conversationsProvider =
 class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref _ref;
   List<dynamic> _unparsedConversationRecords = [];
+  final Set<String> _messageLoadedConversationIds = {};
+  final Map<String, String> _persistedConversationRecords = {};
+  final Map<String, Map<String, String>> _persistedMessageRecords = {};
+  final Map<String, Map<String, int>> _persistedMessageSequences = {};
+  final Map<String, int> _repositoryMessageOffsets = {};
+  bool _repositoryReady = false;
 
   ConversationsNotifier(this._ref) : super([]);
 
@@ -635,7 +652,19 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// image cache. Used by temporary expiry and replacement of a flow attempt.
   /// Failures are ignored: removing the stale record is the critical part.
   Future<void> _cleanupConversationFiles(Conversation conv) async {
-    for (final msg in conv.messages) {
+    final messagesById = {for (final message in conv.messages) message.id: message};
+    if (_repositoryReady) {
+      try {
+        // A repository-backed conversation keeps only the currently loaded
+        // page in memory. Expiry cleanup must also visit older message rows.
+        for (final message in await _readAllRepositoryMessages(conv.id)) {
+          messagesById[message.id] = message;
+        }
+      } catch (error) {
+        debugPrint('Failed to read conversation attachments for cleanup: $error');
+      }
+    }
+    for (final msg in messagesById.values) {
       for (final att in msg.attachments) {
         try {
           await AttachmentStorage.deleteFile(att.storagePath);

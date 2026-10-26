@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,11 +21,48 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   final Set<String> _selectedIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  List<Conversation>? _searchConversations;
+  bool _searchFailed = false;
+  Timer? _searchDebounce;
+  int _searchGeneration = 0;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    final query = value.trim().toLowerCase();
+    final generation = ++_searchGeneration;
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchQuery = query;
+      _searchConversations = null;
+      _searchFailed = false;
+    });
+    if (query.isEmpty) return;
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_loadSearchConversations(query, generation));
+    });
+  }
+
+  Future<void> _loadSearchConversations(String query, int generation) async {
+    try {
+      final results = await ref
+          .read(conversationsProvider.notifier)
+          .loadConversationsForSearch();
+      if (!mounted ||
+          generation != _searchGeneration ||
+          _searchController.text.trim().toLowerCase() != query) {
+        return;
+      }
+      setState(() => _searchConversations = results);
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() => _searchFailed = true);
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -55,12 +94,16 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     var result = _sortedConversations(conversations);
     if (query.isNotEmpty) {
       // Search both conversation titles AND message content
+      final searchById = {
+        for (final conversation in _searchConversations ?? const <Conversation>[])
+          conversation.id: conversation,
+      };
       result = result.where((c) {
         // Check title match
         final displayTitle = c.title.isEmpty ? '新对话' : c.title;
         if (displayTitle.toLowerCase().contains(query)) return true;
         // Check message content match
-        if (countMessageMatches(c, query) > 0) return true;
+        if (countMessageMatches(searchById[c.id] ?? c, query) > 0) return true;
         return false;
       }).toList();
     }
@@ -290,7 +333,7 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: cs.onSurfaceVariant),
                 ),
-                onChanged: (value) => setState(() {}),
+                onChanged: _onSearchChanged,
               ),
             )
           : AppBar(
@@ -330,7 +373,19 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                 ),
               ],
             ),
-      body: filtered.isEmpty
+      body: filtered.isEmpty &&
+              _searchController.text.trim().isNotEmpty &&
+              _searchConversations == null &&
+              !_searchFailed
+          ? const Center(child: CircularProgressIndicator())
+          : filtered.isEmpty && _searchFailed
+              ? Center(
+                  child: Text(
+                    '搜索失败，请稍后重试',
+                    style: TextStyle(color: cs.error),
+                  ),
+                )
+              : filtered.isEmpty
           ? _buildEmptyState(cs)
           : _searchController.text.trim().isNotEmpty
               ? ListView.builder(
@@ -531,7 +586,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   Widget _buildMatchBadge(Conversation conv, ColorScheme cs) {
-    final matchCount = countMessageMatches(conv, _searchQuery);
+    final source = _searchConversations
+            ?.where((conversation) => conversation.id == conv.id)
+            .firstOrNull ??
+        conv;
+    final matchCount = countMessageMatches(source, _searchQuery);
     if (matchCount == 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 4),

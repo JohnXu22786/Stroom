@@ -14,11 +14,14 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/stroom_conversation.dart';
 import 'backup_location_manager.dart';
 import 'backup_service_shared.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
+import 'conversation_migration_service.dart';
+import 'conversation_repository.dart';
 import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
@@ -259,6 +262,8 @@ class BackupSelection {
 // ====================================================================
 
 class BackupService {
+  static const _conversationRepositoryBackupField =
+      'conversation_repository';
   static int? _lastBackupFileTimestampSeconds;
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
@@ -476,6 +481,7 @@ class BackupService {
         for (final key in await StartupPreferences.getKeys()) {
           if (key.startsWith('flutter.') ||
               _isLegacyProviderQuarantineKey(key) ||
+              _isConversationMigrationKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -503,7 +509,14 @@ class BackupService {
                 ),
               );
         if (selection.chatRecordsAndAttachments) {
-          jsonFiles['chat_data.json'] = encoded['chat_data']!;
+          final chatData = Map<String, dynamic>.from(
+            jsonDecode(encoded['chat_data']!) as Map,
+          );
+          final repositoryData = await _exportConversationRepository();
+          if (repositoryData != null) {
+            chatData[_conversationRepositoryBackupField] = repositoryData;
+          }
+          jsonFiles['chat_data.json'] = jsonEncode(chatData);
         }
         if (selection.settings) {
           jsonFiles['settings.json'] = encoded['settings']!;
@@ -515,6 +528,7 @@ class BackupService {
         for (final key in prefs.getKeys()) {
           if (key.startsWith('flutter.') ||
               _isLegacyProviderQuarantineKey(key) ||
+              _isConversationMigrationKey(key) ||
               DataMigrationService.isFormatMetadataKey(key) ||
               _isDeviceLocalPreferenceKey(key) ||
               (key == _browserCookieRetentionKey &&
@@ -531,6 +545,10 @@ class BackupService {
         }
         _sanitizeBackupSettings(settingsData);
         if (selection.chatRecordsAndAttachments) {
+          final repositoryData = await _exportConversationRepository();
+          if (repositoryData != null) {
+            chatData[_conversationRepositoryBackupField] = repositoryData;
+          }
           jsonFiles['chat_data.json'] = jsonEncode(chatData);
         }
         if (selection.settings) {
@@ -1545,6 +1563,30 @@ class BackupService {
     return key == 'conversations' || key == 'active_conversation_id';
   }
 
+  static bool _isConversationMigrationKey(String key) =>
+      key.startsWith('conversations.migration.');
+
+  static Future<Map<String, dynamic>?> _exportConversationRepository() async {
+    if (WebFileStore.isTestMode) return null;
+    final repository = createConversationRepository();
+    try {
+      await repository.initialize();
+      final preferences = await SharedPreferences.getInstance();
+      final migration = await ConversationMigrationService(
+        repository,
+      ).migrate(preferences);
+      if (!migration.verified) {
+        throw StateError('Conversation migration was not verified before backup.');
+      }
+      return await repository.exportData();
+    } catch (error) {
+      debugPrint('Conversation repository backup export failed: $error');
+      rethrow;
+    } finally {
+      await repository.close();
+    }
+  }
+
   static const _browserCookieRetentionKey = 'browser_cookie_retention';
 
   static const _portableAppDataPathPrefix = 'stroom-app-data:/';
@@ -1651,6 +1693,7 @@ class BackupService {
   static bool _isKeyInSelection(String key, BackupSelection selection) {
     if (key.startsWith('flutter.') ||
         _isLegacyProviderQuarantineKey(key) ||
+        _isConversationMigrationKey(key) ||
         _isDeviceLocalPreferenceKey(key) ||
         DataMigrationService.isFormatMetadataKey(key)) {
       return false;
@@ -1851,6 +1894,7 @@ class BackupService {
       for (final key in prefs.getKeys()) {
         if (key.startsWith('flutter.') ||
             _isLegacyProviderQuarantineKey(key) ||
+            _isConversationMigrationKey(key) ||
             DataMigrationService.isFormatMetadataKey(key) ||
             _isDeviceLocalPreferenceKey(key) ||
             (key == _browserCookieRetentionKey && !selection.browserCookies)) {
@@ -1870,6 +1914,10 @@ class BackupService {
     }
 
     if (selection.chatRecordsAndAttachments) {
+      final repositoryData = await _exportConversationRepository();
+      if (repositoryData != null) {
+        chatData[_conversationRepositoryBackupField] = repositoryData;
+      }
       addStringToArchive(archive, 'chat_data.json', jsonEncode(chatData));
     }
     if (selection.settings) {
@@ -2852,6 +2900,13 @@ class BackupService {
       }
     }
 
+    final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
+    if (repositoryBackup != null && !_isValidConversationRepositoryBackup(repositoryBackup)) {
+      throw const BackupValidationException(
+        'Conversation repository data in the backup is invalid.',
+      );
+    }
+
     final declaredSelection = _selectionFromDeclaredParts(
       manifest['dataParts'],
     );
@@ -3406,19 +3461,86 @@ class BackupService {
     required bool requireFiles,
   }) {
     if (!requireFiles) return true;
-    final rawConversations = chatPrefs?['conversations'];
-    if (rawConversations == null) return true;
-    if (rawConversations is! String) return false;
-
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(rawConversations);
-    } catch (_) {
-      return false;
-    }
-    if (decoded is! List) return false;
-
     bool allPresent = true;
+    final rawConversations = chatPrefs?['conversations'];
+    if (rawConversations != null) {
+      if (rawConversations is! String) return false;
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(rawConversations);
+      } catch (_) {
+        return false;
+      }
+      if (decoded is! List) return false;
+      for (final conv in decoded) {
+        if (conv is! Map) continue;
+        final messages = conv['messages'];
+        if (messages is List) {
+          for (final message in messages) {
+            if (message is Map) checkAttachments(message['attachments']);
+          }
+        }
+        checkAttachments(conv['draftAttachments']);
+      }
+    }
+    final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
+    if (repositoryBackup is Map) {
+      final seen = <String>{};
+      void checkRepositoryPath(Object? rawPath) {
+        if (rawPath is! String || rawPath.isEmpty) return;
+        if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(rawPath)) return;
+        if (!seen.add(rawPath)) return;
+        final path = rawPath.replaceAll(r'\', '/');
+        if (!_isSafeRelativeArchivePath(path)) {
+          allPresent = false;
+          return;
+        }
+        final archivePaths = path.startsWith('temp_edited/')
+            ? {path, 'attachments/${p.posix.basename(path)}'}
+            : {path.startsWith('attachments/') ? path : 'attachments/$path'};
+        if (!archivePaths.any(archiveEntries.contains)) allPresent = false;
+      }
+
+      void checkRepositoryAttachment(Object? raw) {
+        if (raw is! Map) return;
+        checkRepositoryPath(raw['storagePath']);
+        checkRepositoryPath(raw['thumbnailPath']);
+      }
+
+      final repositoryConversations = repositoryBackup['conversations'];
+      if (repositoryConversations is List) {
+        for (final raw in repositoryConversations) {
+          if (raw is! Map) continue;
+          checkAttachments(raw['draftAttachments']);
+          final extensions = raw['extensions'];
+          final legacy = extensions is Map
+              ? extensions['stroom.legacyConversation']
+              : null;
+          if (legacy is Map) checkAttachments(legacy['draftAttachments']);
+        }
+      }
+      final repositoryMessages = repositoryBackup['messages'];
+      if (repositoryMessages is List) {
+        for (final raw in repositoryMessages) {
+          if (raw is! Map) continue;
+          final content = raw['content'];
+          if (content is! List) continue;
+          for (final part in content) {
+            if (part is! Map) continue;
+            final data = part['data'];
+            if (data is! Map) continue;
+            final attachment = data['attachment'];
+            if (attachment is Map) {
+              checkRepositoryAttachment(attachment);
+            } else if (const {'image', 'audio', 'video', 'file'}
+                .contains(part['type'])) {
+              checkRepositoryPath(data['reference'] ?? data['storagePath']);
+              checkRepositoryPath(data['thumbnailPath']);
+            }
+          }
+        }
+      }
+    }
     void checkAttachments(Object? rawAttachments) {
       if (rawAttachments == null) return;
       if (rawAttachments is! List) {
@@ -3450,26 +3572,47 @@ class BackupService {
       }
     }
 
-    for (final conversation in decoded) {
-      if (conversation is! Map) {
-        allPresent = false;
-        continue;
-      }
-      final messages = conversation['messages'];
-      if (messages is! List) {
-        allPresent = false;
-      } else {
-        for (final message in messages) {
-          if (message is! Map) {
-            allPresent = false;
-            continue;
-          }
-          checkAttachments(message['attachments']);
+    return allPresent;
+  }
+
+  static bool _isValidConversationRepositoryBackup(Object? raw) {
+    if (raw is! Map) return false;
+    final data = Map<String, dynamic>.from(raw);
+    if (data['schemaVersion'] != 1 ||
+        data['conversations'] is! List ||
+        data['messages'] is! List) {
+      return false;
+    }
+    try {
+      final conversationIds = <String>{};
+      for (final item in data['conversations'] as List) {
+        if (item is! Map) return false;
+        final conversation = StroomConversation.fromMap(
+          Map<String, dynamic>.from(item),
+        );
+        if (conversation.id.isEmpty || !conversationIds.add(conversation.id)) {
+          return false;
         }
       }
-      checkAttachments(conversation['draftAttachments']);
+      final messageIds = <String>{};
+      for (final item in data['messages'] as List) {
+        if (item is! Map) return false;
+        final row = Map<String, dynamic>.from(item);
+        final conversationId = row.remove('conversationId');
+        if (conversationId is! String ||
+            !conversationIds.contains(conversationId)) {
+          return false;
+        }
+        final message = StroomMessage.fromMap(row);
+        if (message.id.isEmpty ||
+            !messageIds.add('$conversationId\u0000${message.id}')) {
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
     }
-    return allPresent;
   }
 
   static bool _hasAllPortableTaskFileReferences({
@@ -3590,6 +3733,7 @@ class BackupService {
           (key) =>
               !_isDeviceLocalPreferenceKey(key) &&
               !_isLegacyProviderQuarantineKey(key) &&
+              !_isConversationMigrationKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key) &&
               predicate(key),
         ) ??
@@ -3602,6 +3746,7 @@ class BackupService {
               !key.startsWith('flutter.') &&
               !_isDeviceLocalPreferenceKey(key) &&
               !_isLegacyProviderQuarantineKey(key) &&
+              !_isConversationMigrationKey(key) &&
               !DataMigrationService.isFormatMetadataKey(key),
         ) ??
         false;
@@ -5179,13 +5324,50 @@ class BackupService {
       includeMediaFiles: false,
     );
     if (restoreChatPreferences || selection.settings) {
-      final restoredPrefs = selectedPreferences ??
-          _restoredPreferencePayload(metadata, selection);
+      final restoredPrefs = Map<String, dynamic>.from(
+        selectedPreferences ?? _restoredPreferencePayload(metadata, selection),
+      );
+      final repositoryBackup =
+          restoredPrefs.remove(_conversationRepositoryBackupField);
       await _restorePreferencesFromJson(
         restoredPrefs,
         selection: preferenceSelection,
         useStartupPreferenceAdapter: useStartupPreferenceAdapter,
       );
+      if (restoreChatPreferences && (!WebFileStore.isTestMode || kIsWeb)) {
+        final repository = createConversationRepository();
+        try {
+          await repository.initialize();
+          final data = repositoryBackup is Map
+              ? Map<String, dynamic>.from(repositoryBackup)
+              : <String, dynamic>{
+                  'schemaVersion': 1,
+                  'conversations': <dynamic>[],
+                  'messages': <dynamic>[],
+                };
+          await repository.restoreData(data);
+          final legacyJson = await StartupPreferences.getString('conversations');
+          if (repositoryBackup is Map && legacyJson != null) {
+            await StartupPreferences.setString(
+              ConversationMigrationService.stateKey,
+              jsonEncode({
+                'sourceHash': sha256.convert(utf8.encode(legacyJson)).toString(),
+                'verified': true,
+                'conversationCount': data['conversations'] is List
+                    ? (data['conversations'] as List).length
+                    : 0,
+                'messageCount': data['messages'] is List
+                    ? (data['messages'] as List).length
+                    : 0,
+              }),
+            );
+          } else {
+            await StartupPreferences.remove(ConversationMigrationService.stateKey);
+          }
+        } finally {
+          await repository.close();
+        }
+      }
     }
   }
 

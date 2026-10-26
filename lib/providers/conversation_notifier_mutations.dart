@@ -87,13 +87,35 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
+    final wasActive = _ref.read(activeConversationIdProvider) == id;
+    final removed = state.where((conversation) => conversation.id == id).toList();
+    if (removed.isEmpty) return;
+    if (_repositoryReady) {
+      try {
+        removed.first.messages = await _readAllRepositoryMessages(id);
+      } catch (error) {
+        debugPrint('Failed to read conversation attachments: $error');
+      }
+    }
     state = state.where((c) => c.id != id).toList();
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    await _persist();
+    if (!await _persistNowChecked()) {
+      if (mounted) {
+        state = pinnedFirstStable([...removed, ...state]);
+        if (wasActive) {
+          _ref.read(activeConversationIdProvider.notifier).state = id;
+        }
+        _syncTemporaryTimer();
+      }
+      return;
+    }
     await _persistActiveId();
+    for (final conversation in removed) {
+      await _cleanupConversationFiles(conversation);
+    }
   }
 
   /// Replaces a flow-owned conversation from a prior attempt. Unlike the
@@ -102,6 +124,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   Future<bool> deleteFlowConversationWithFiles(String id) async {
     final old = state.where((c) => c.id == id).toList();
     if (old.isEmpty) return true;
+    if (_repositoryReady) {
+      try {
+        // The repository will remove its message rows when this conversation
+        // is persisted as deleted, so capture every attachment reference
+        // before that transaction runs.
+        old.first.messages = await _readAllRepositoryMessages(id);
+      } catch (error) {
+        debugPrint('Failed to read flow conversation attachments: $error');
+      }
+    }
     state = state.where((c) => c.id != id).toList();
     _syncTemporaryTimer();
     bool saved;
@@ -137,6 +169,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Selects a conversation by [id], setting it as the active one.
   void selectConversation(String id) {
     _ref.read(activeConversationIdProvider.notifier).state = id;
+    if (_repositoryReady && !_messageLoadedConversationIds.contains(id)) {
+      unawaited(_loadMessagesFromRepository(id));
+    }
     _persistActiveId();
   }
 
@@ -288,6 +323,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
 
   void _replaceMessages(String conversationId, List<ChatMessage> messages,
       {bool resetTemporaryCountdown = false}) {
+    if (_repositoryReady) _messageLoadedConversationIds.add(conversationId);
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
