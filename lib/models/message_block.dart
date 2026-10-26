@@ -13,7 +13,7 @@ sealed class MessageBlock {
       'reasoning' => ReasoningBlock.fromMap(map),
       'tool_call' => ToolCallBlock.fromMap(map),
       'error' => ErrorBlock.fromMap(map),
-      _ => ErrorBlock(message: 'Unknown block type: $type'),
+      _ => UnknownMessageBlock(map),
     };
   }
 
@@ -24,33 +24,62 @@ sealed class MessageBlock {
   }
 }
 
+/// A block introduced by a newer protocol or app version.
+///
+/// Unknown blocks are retained as data so an older Stroom version can load and
+/// save a conversation without converting protocol content into display text.
+class UnknownMessageBlock extends MessageBlock {
+  final Map<String, dynamic> raw;
+
+  UnknownMessageBlock(Map<String, dynamic> raw)
+    : raw = Map<String, dynamic>.unmodifiable(raw);
+
+  @override
+  Map<String, dynamic> toMap() => Map<String, dynamic>.from(raw);
+}
+
 class TextBlock extends MessageBlock {
   final String text;
-  const TextBlock({required this.text});
-  factory TextBlock.fromMap(Map<String, dynamic> map) =>
-      TextBlock(text: (map['text'] as String?) ?? '');
+  final Map<String, dynamic> extraFields;
+  const TextBlock({required this.text, this.extraFields = const {}});
+  factory TextBlock.fromMap(Map<String, dynamic> map) => TextBlock(
+    text: (map['text'] as String?) ?? '',
+    extraFields: _extraFields(map, const {'type', 'text'}),
+  );
   @override
-  Map<String, dynamic> toMap() => {'type': 'text', 'text': text};
+  Map<String, dynamic> toMap() => {
+    ...extraFields,
+    'type': 'text',
+    'text': text,
+  };
 }
 
 class ReasoningBlock extends MessageBlock {
   final String text;
   final bool isComplete;
-  const ReasoningBlock({required this.text, this.isComplete = false});
+  final Map<String, dynamic> extraFields;
+  const ReasoningBlock({
+    required this.text,
+    this.isComplete = false,
+    this.extraFields = const {},
+  });
   factory ReasoningBlock.fromMap(Map<String, dynamic> map) => ReasoningBlock(
-        text: (map['text'] as String?) ?? '',
-        isComplete: (map['isComplete'] as bool?) ?? false,
-      );
+    text: (map['text'] as String?) ?? '',
+    isComplete: (map['isComplete'] as bool?) ?? false,
+    extraFields: _extraFields(map, const {'type', 'text', 'isComplete'}),
+  );
   @override
   Map<String, dynamic> toMap() => {
-        'type': 'reasoning',
-        'text': text,
-        'isComplete': isComplete,
-      };
+    ...extraFields,
+    'type': 'reasoning',
+    'text': text,
+    'isComplete': isComplete,
+  };
   ReasoningBlock append(String more, {bool? isComplete}) => ReasoningBlock(
-        text: text + more,
-        isComplete: isComplete ?? this.isComplete,
-      );
+    text: text + more,
+    isComplete: isComplete ?? this.isComplete,
+    extraFields: extraFields,
+  );
 }
 
 class ToolCallBlock extends MessageBlock {
@@ -63,6 +92,7 @@ class ToolCallBlock extends MessageBlock {
   /// 工具结果被 prune 的时间戳（软删除标记）。
   /// 非 null 时 [result] 已被替换为占位文本。
   final DateTime? compactedAt;
+  final Map<String, dynamic> extraFields;
 
   const ToolCallBlock({
     required this.id,
@@ -71,6 +101,7 @@ class ToolCallBlock extends MessageBlock {
     this.status = ToolCallStatus.pending,
     this.result,
     this.compactedAt,
+    this.extraFields = const {},
   });
 
   factory ToolCallBlock.fromMap(Map<String, dynamic> map) {
@@ -91,47 +122,71 @@ class ToolCallBlock extends MessageBlock {
       status: _parseStatus(map['status'] as String?),
       result: map['result'] as String?,
       compactedAt: compactedAt,
+      extraFields: _extraFields(map, const {
+        'type',
+        'id',
+        'name',
+        'arguments',
+        'status',
+        'result',
+        'compactedAt',
+      }),
     );
   }
 
   static ToolCallStatus _parseStatus(String? s) => switch (s) {
-        'running' => ToolCallStatus.running,
-        'completed' => ToolCallStatus.completed,
-        'error' => ToolCallStatus.error,
-        _ => ToolCallStatus.pending,
-      };
+    'running' => ToolCallStatus.running,
+    'completed' => ToolCallStatus.completed,
+    'error' => ToolCallStatus.error,
+    _ => ToolCallStatus.pending,
+  };
 
   @override
   Map<String, dynamic> toMap() => {
-        'type': 'tool_call',
-        'id': id,
-        'name': name,
-        'arguments': arguments,
-        'status': status.name,
-        if (result != null) 'result': result,
-        if (compactedAt != null) 'compactedAt': compactedAt!.toIso8601String(),
-      };
+    ...extraFields,
+    'type': 'tool_call',
+    'id': id,
+    'name': name,
+    'arguments': arguments,
+    'status': status.name,
+    if (result != null) 'result': result,
+    if (compactedAt != null) 'compactedAt': compactedAt!.toIso8601String(),
+  };
 
   ToolCallBlock copyWith({
     ToolCallStatus? status,
     String? result,
     DateTime? compactedAt,
-  }) =>
-      ToolCallBlock(
-        id: id,
-        name: name,
-        arguments: Map.from(arguments),
-        status: status ?? this.status,
-        result: result ?? this.result,
-        compactedAt: compactedAt ?? this.compactedAt,
-      );
+  }) => ToolCallBlock(
+    id: id,
+    name: name,
+    arguments: Map.from(arguments),
+    status: status ?? this.status,
+    result: result ?? this.result,
+    compactedAt: compactedAt ?? this.compactedAt,
+    extraFields: extraFields,
+  );
 }
 
 class ErrorBlock extends MessageBlock {
   final String message;
-  const ErrorBlock({required this.message});
-  factory ErrorBlock.fromMap(Map<String, dynamic> map) =>
-      ErrorBlock(message: (map['message'] as String?) ?? map.toString());
+  final Map<String, dynamic> extraFields;
+  const ErrorBlock({required this.message, this.extraFields = const {}});
+  factory ErrorBlock.fromMap(Map<String, dynamic> map) => ErrorBlock(
+    message: (map['message'] as String?) ?? map.toString(),
+    extraFields: _extraFields(map, const {'type', 'message'}),
+  );
   @override
-  Map<String, dynamic> toMap() => {'type': 'error', 'message': message};
+  Map<String, dynamic> toMap() => {
+    ...extraFields,
+    'type': 'error',
+    'message': message,
+  };
 }
+
+Map<String, dynamic> _extraFields(
+  Map<String, dynamic> map,
+  Set<String> knownFields,
+) => Map<String, dynamic>.fromEntries(
+  map.entries.where((entry) => !knownFields.contains(entry.key)),
+);

@@ -30,10 +30,7 @@ class ReasoningSegment extends MessageSegment {
   final int sectionIndex;
   final bool isStreaming;
 
-  ReasoningSegment({
-    required this.sectionIndex,
-    this.isStreaming = false,
-  });
+  ReasoningSegment({required this.sectionIndex, this.isStreaming = false});
 }
 
 /// Metadata for a search match within a message.
@@ -59,7 +56,8 @@ enum SearchMode { current, global }
 /// Segments of different types (e.g. [ToolCallSegment]) act as natural
 /// boundaries and are never merged with adjacent [TextSegment]s.
 List<MessageSegment> mergeConsecutiveTextSegments(
-    List<MessageSegment> segments) {
+  List<MessageSegment> segments,
+) {
   if (segments.isEmpty) return [];
   final merged = <MessageSegment>[];
   for (final seg in segments) {
@@ -139,11 +137,14 @@ List<MessageSegment> _buildWithRounds(
   for (int i = 0; i < numRounds; i++) {
     // Reasoning for this round
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
-      segments.add(ReasoningSegment(
-        sectionIndex: i,
-        isStreaming: isLastReasoningStreaming &&
-            i == _lastNonEmptyIndex(reasoningSections),
-      ));
+      segments.add(
+        ReasoningSegment(
+          sectionIndex: i,
+          isStreaming:
+              isLastReasoningStreaming &&
+              i == _lastNonEmptyIndex(reasoningSections),
+        ),
+      );
     }
 
     // Text before this round's tool calls
@@ -160,15 +161,20 @@ List<MessageSegment> _buildWithRounds(
   }
 
   // Remaining reasoning and text after all tool rounds
-  for (int i = numRounds;
-      i < reasoningSections.length || i < textChunks.length;
-      i++) {
+  for (
+    int i = numRounds;
+    i < reasoningSections.length || i < textChunks.length;
+    i++
+  ) {
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
-      segments.add(ReasoningSegment(
-        sectionIndex: i,
-        isStreaming: isLastReasoningStreaming &&
-            i == _lastNonEmptyIndex(reasoningSections),
-      ));
+      segments.add(
+        ReasoningSegment(
+          sectionIndex: i,
+          isStreaming:
+              isLastReasoningStreaming &&
+              i == _lastNonEmptyIndex(reasoningSections),
+        ),
+      );
     }
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
       segments.add(TextSegment(textChunks[i]));
@@ -199,11 +205,14 @@ List<MessageSegment> _buildLegacy(
 
   for (var i = 0; i < maxRounds; i++) {
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
-      segments.add(ReasoningSegment(
-        sectionIndex: i,
-        isStreaming: isLastReasoningStreaming &&
-            i == _lastNonEmptyIndex(reasoningSections),
-      ));
+      segments.add(
+        ReasoningSegment(
+          sectionIndex: i,
+          isStreaming:
+              isLastReasoningStreaming &&
+              i == _lastNonEmptyIndex(reasoningSections),
+        ),
+      );
     }
 
     if (i < textChunks.length && textChunks[i].isNotEmpty) {
@@ -220,8 +229,9 @@ List<MessageSegment> _buildLegacy(
 
 /// Shared state provider tracking whether AI is currently streaming a response
 /// for a specific conversation.
-final isStreamingProvider =
-    StateProvider.family<bool, String>((ref, conversationId) => false);
+final isStreamingProvider = StateProvider.family<bool, String>(
+  (ref, conversationId) => false,
+);
 
 /// Shared state provider tracking whether reasoning is enabled.
 final reasoningEnabledProvider = StateProvider<bool>((ref) => false);
@@ -235,8 +245,9 @@ final reasoningEffortProvider = StateProvider<String>((ref) => 'medium');
 /// Shared state provider tracking selected values for each reasoning parameter.
 /// Key is the paramName (e.g. 'reasoning_effort', 'thinking.type'),
 /// value is the selected option string (e.g. 'high', 'enabled').
-final reasoningParamValuesProvider =
-    StateProvider<Map<String, String>>((ref) => {});
+final reasoningParamValuesProvider = StateProvider<Map<String, String>>(
+  (ref) => {},
+);
 
 // ── Block converters ─────────────────────────────────────────────────
 
@@ -247,28 +258,38 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
       case TextBlock(:final text):
         segs.add(TextSegment(text));
       case ReasoningBlock(:final isComplete):
-        segs.add(ReasoningSegment(
-          sectionIndex: segs.whereType<ReasoningSegment>().length,
-          isStreaming: !isComplete,
-        ));
+        segs.add(
+          ReasoningSegment(
+            sectionIndex: segs.whereType<ReasoningSegment>().length,
+            isStreaming: !isComplete,
+          ),
+        );
       case ToolCallBlock(
-          :final id,
-          :final name,
-          :final arguments,
-          :final status,
-          :final result,
-          :final compactedAt
-        ):
-        segs.add(ToolCallSegment(ToolCallData(
-          id: id,
-          name: name,
-          arguments: arguments,
-          status: status,
-          result: result,
-          compactedAt: compactedAt,
-        )));
+        :final id,
+        :final name,
+        :final arguments,
+        :final status,
+        :final result,
+        :final compactedAt,
+      ):
+        segs.add(
+          ToolCallSegment(
+            ToolCallData(
+              id: id,
+              name: name,
+              arguments: arguments,
+              status: status,
+              result: result,
+              compactedAt: compactedAt,
+            ),
+          ),
+        );
       case ErrorBlock(:final message):
         segs.add(TextSegment('[Error: $message]'));
+      case UnknownMessageBlock():
+        // Keep unknown protocol content in persistence; do not mislabel it as
+        // an error or render fabricated text in the chat transcript.
+        break;
     }
   }
   return segs;
@@ -301,18 +322,20 @@ List<MessageBlock> legacyToBlocks({
     final start = toolCallRoundStarts.isNotEmpty ? toolCallRoundStarts[i] : i;
     final end =
         i + 1 < toolCallRoundStarts.length && toolCallRoundStarts.isNotEmpty
-            ? toolCallRoundStarts[i + 1]
-            : toolCalls.length;
+        ? toolCallRoundStarts[i + 1]
+        : toolCalls.length;
     for (var j = start; j < end && j < toolCalls.length; j++) {
       final tc = toolCalls[j];
-      blocks.add(ToolCallBlock(
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-        status: tc.status,
-        result: tc.result,
-        compactedAt: tc.compactedAt,
-      ));
+      blocks.add(
+        ToolCallBlock(
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          status: tc.status,
+          result: tc.result,
+          compactedAt: tc.compactedAt,
+        ),
+      );
     }
   }
   // Remaining reasoning/text after all tool rounds — interleaved, matching _buildWithRounds

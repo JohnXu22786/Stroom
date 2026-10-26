@@ -37,6 +37,9 @@ class Attachment {
   /// 避免同一会话内重复写盘（每次发送都会经过读取路径）。
   bool compressedCachePersisted = false;
 
+  /// Fields introduced by a newer app version, retained through legacy JSON.
+  final Map<String, dynamic> extraFields;
+
   Attachment({
     String? id,
     required this.fileName,
@@ -49,27 +52,42 @@ class Attachment {
     this.thumbnailPath,
     this.base64Data,
     this.conversationId,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now();
+    this.extraFields = const {},
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap({bool includeBase64Data = false}) => {
-        'id': id,
-        'fileName': fileName,
-        'mimeType': mimeType,
-        'fileType': fileType,
-        'hash': hash,
-        'storagePath': storagePath,
-        'fileSize': fileSize,
-        'createdAt': createdAt.toIso8601String(),
-        if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
-        if (conversationId != null) 'conversationId': conversationId,
-        // NOTE: base64Data 默认不序列化——历史消息的附件若带内存缓存
-        // 会让对话 JSON 膨胀到不可用。仅在显式请求时携带（对话草稿
-        // 附件：图片的预压缩 base64 随草稿持久化，恢复后发送零等待）。
-        if (includeBase64Data && base64Data != null) 'base64Data': base64Data,
-      };
+    ...extraFields,
+    'id': id,
+    'fileName': fileName,
+    'mimeType': mimeType,
+    'fileType': fileType,
+    'hash': hash,
+    'storagePath': storagePath,
+    'fileSize': fileSize,
+    'createdAt': createdAt.toIso8601String(),
+    if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
+    if (conversationId != null) 'conversationId': conversationId,
+    // NOTE: base64Data 默认不序列化——历史消息的附件若带内存缓存
+    // 会让对话 JSON 膨胀到不可用。仅在显式请求时携带（对话草稿
+    // 附件：图片的预压缩 base64 随草稿持久化，恢复后发送零等待）。
+    if (includeBase64Data && base64Data != null) 'base64Data': base64Data,
+  };
 
   factory Attachment.fromMap(Map<String, dynamic> map) {
+    const knownFields = {
+      'id',
+      'fileName',
+      'mimeType',
+      'fileType',
+      'hash',
+      'storagePath',
+      'fileSize',
+      'createdAt',
+      'thumbnailPath',
+      'conversationId',
+      'base64Data',
+    };
     // Defensive DateTime parsing
     DateTime? createdAt;
     final createdAtRaw = map['createdAt'];
@@ -95,6 +113,9 @@ class Attachment {
       // 仅对话草稿附件会序列化 base64Data（预压缩产物）；
       // 历史消息附件没有该字段，保持 null。
       base64Data: map['base64Data'] as String?,
+      extraFields: Map<String, dynamic>.fromEntries(
+        map.entries.where((entry) => !knownFields.contains(entry.key)),
+      ),
     );
   }
 
@@ -113,19 +134,21 @@ class Attachment {
     bool? compressedCachePersisted,
   }) =>
       Attachment(
-        id: id ?? this.id,
-        fileName: fileName ?? this.fileName,
-        mimeType: mimeType ?? this.mimeType,
-        fileType: fileType ?? this.fileType,
-        hash: hash ?? this.hash,
-        storagePath: storagePath ?? this.storagePath,
-        fileSize: fileSize ?? this.fileSize,
-        createdAt: createdAt ?? this.createdAt,
-        thumbnailPath: thumbnailPath ?? this.thumbnailPath,
-        base64Data: base64Data ?? this.base64Data,
-        conversationId: conversationId ?? this.conversationId,
-      )..compressedCachePersisted =
-          compressedCachePersisted ?? this.compressedCachePersisted;
+          id: id ?? this.id,
+          fileName: fileName ?? this.fileName,
+          mimeType: mimeType ?? this.mimeType,
+          fileType: fileType ?? this.fileType,
+          hash: hash ?? this.hash,
+          storagePath: storagePath ?? this.storagePath,
+          fileSize: fileSize ?? this.fileSize,
+          createdAt: createdAt ?? this.createdAt,
+          thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+          base64Data: base64Data ?? this.base64Data,
+          conversationId: conversationId ?? this.conversationId,
+          extraFields: extraFields,
+        )
+        ..compressedCachePersisted =
+            compressedCachePersisted ?? this.compressedCachePersisted;
 
   @override
   String toString() =>
@@ -133,6 +156,8 @@ class Attachment {
 }
 
 class ChatMessage {
+  static const int currentSchemaVersion = 1;
+
   final String id;
   final String role; // 'user' | 'assistant'
   final String content;
@@ -178,6 +203,13 @@ class ChatMessage {
   final List<int>? toolCallRoundStarts;
 
   final List<MessageBlock>? blocks;
+  final int schemaVersion;
+
+  /// Unrecognized fields from older/newer serialized records.
+  ///
+  /// This is a compatibility bag, not protocol metadata. Protocol-specific
+  /// values belong in `StroomMessage.extensions` on the neutral schema.
+  final Map<String, dynamic> legacyFields;
 
   ChatMessage({
     String? id,
@@ -195,9 +227,11 @@ class ChatMessage {
     this.textSections,
     this.toolCallRoundStarts,
     this.blocks,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now(),
-        attachments = attachments ?? [];
+    this.schemaVersion = currentSchemaVersion,
+    this.legacyFields = const {},
+  }) : id = id ?? const Uuid().v4(),
+       createdAt = createdAt ?? DateTime.now(),
+       attachments = attachments ?? [];
 
   /// Sanitize a raw data map for JSON serialization.
   ///
@@ -290,36 +324,56 @@ class ChatMessage {
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'role': role,
-        'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'attachments': attachments.map((a) => a.toMap()).toList(),
-        if (isStreaming) 'isStreaming': true,
-        if (isError) 'isError': true,
-        if (reasoningContent != null) 'reasoningContent': reasoningContent,
-        // Sanitize raw maps to ensure JSON-serializable output.
-        // This prevents non-serializable types (Dio ResponseBody, DateTime,
-        // custom objects, etc.) from silently breaking conversation persistence.
-        if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
-        if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
-        // Persist tool calls if present and non-empty.
-        if (toolCalls != null && toolCalls!.isNotEmpty)
-          'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
-        // Persist reasoning sections if present and non-empty.
-        if (reasoningSections != null && reasoningSections!.isNotEmpty)
-          'reasoningSections': reasoningSections!.toList(),
-        // Persist per-round text sections if present and non-empty.
-        if (textSections != null && textSections!.isNotEmpty)
-          'textSections': textSections!.toList(),
-        // Persist round boundary indices for multi-tool grouping.
-        if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
-          'toolCallRoundStarts': toolCallRoundStarts!.toList(),
-        if (blocks != null && blocks!.isNotEmpty)
-          'blocks': blocks!.map((b) => b.toMap()).toList(),
-      };
+    ...legacyFields,
+    'schemaVersion': schemaVersion,
+    'id': id,
+    'role': role,
+    'content': content,
+    'createdAt': createdAt.toIso8601String(),
+    'attachments': attachments.map((a) => a.toMap()).toList(),
+    if (isStreaming) 'isStreaming': true,
+    if (isError) 'isError': true,
+    if (reasoningContent != null) 'reasoningContent': reasoningContent,
+    // Sanitize raw maps to ensure JSON-serializable output.
+    // This prevents non-serializable types (Dio ResponseBody, DateTime,
+    // custom objects, etc.) from silently breaking conversation persistence.
+    if (rawRequest != null) 'rawRequest': _sanitizeRawMap(rawRequest),
+    if (rawResponse != null) 'rawResponse': _sanitizeRawMap(rawResponse),
+    // Persist tool calls if present and non-empty.
+    if (toolCalls != null && toolCalls!.isNotEmpty)
+      'toolCalls': toolCalls!.map((tc) => tc.toMap()).toList(),
+    // Persist reasoning sections if present and non-empty.
+    if (reasoningSections != null && reasoningSections!.isNotEmpty)
+      'reasoningSections': reasoningSections!.toList(),
+    // Persist per-round text sections if present and non-empty.
+    if (textSections != null && textSections!.isNotEmpty)
+      'textSections': textSections!.toList(),
+    // Persist round boundary indices for multi-tool grouping.
+    if (toolCallRoundStarts != null && toolCallRoundStarts!.isNotEmpty)
+      'toolCallRoundStarts': toolCallRoundStarts!.toList(),
+    if (blocks != null && blocks!.isNotEmpty)
+      'blocks': blocks!.map((b) => b.toMap()).toList(),
+  };
 
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
+    const knownKeys = {
+      'schemaVersion',
+      'id',
+      'role',
+      'content',
+      'createdAt',
+      'attachments',
+      'isStreaming',
+      'isError',
+      'reasoningContent',
+      'rawRequest',
+      'rawResponse',
+      'toolCalls',
+      'reasoningSections',
+      'textSections',
+      'toolCallRoundStarts',
+      'blocks',
+    };
     final roleRaw = map['role'];
     var roleStr = roleRaw is String ? roleRaw : '';
     if (roleStr != 'user' && roleStr != 'assistant') {
@@ -381,8 +435,10 @@ class ChatMessage {
     if (roundStartsRaw is List) {
       // web 端 JSON 大整数可能以 double 形式反序列化：用 num 兼容
       // （whereType<int> 会过滤掉 double，导致多工具轮次分组退化）
-      toolCallRoundStarts =
-          roundStartsRaw.whereType<num>().map((e) => e.toInt()).toList();
+      toolCallRoundStarts = roundStartsRaw
+          .whereType<num>()
+          .map((e) => e.toInt())
+          .toList();
       if (toolCallRoundStarts.isEmpty) toolCallRoundStarts = null;
     }
     final keepEmptySections = toolCallRoundStarts != null;
@@ -392,8 +448,9 @@ class ChatMessage {
     if (sectionsRaw is List) {
       reasoningSections = sectionsRaw.whereType<String>().toList();
       if (!keepEmptySections) {
-        reasoningSections =
-            reasoningSections.where((s) => s.isNotEmpty).toList();
+        reasoningSections = reasoningSections
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
       if (reasoningSections.isEmpty) reasoningSections = null;
     }
@@ -433,6 +490,12 @@ class ChatMessage {
       textSections: textSections,
       toolCallRoundStarts: toolCallRoundStarts,
       blocks: _parseBlocks(map['blocks']),
+      schemaVersion: map['schemaVersion'] is num
+          ? (map['schemaVersion'] as num).toInt()
+          : currentSchemaVersion,
+      legacyFields: Map<String, dynamic>.fromEntries(
+        map.entries.where((entry) => !knownKeys.contains(entry.key)),
+      ),
     );
   }
 
@@ -463,24 +526,25 @@ class ChatMessage {
     List<String>? textSections,
     List<int>? toolCallRoundStarts,
     List<MessageBlock>? blocks,
-  }) =>
-      ChatMessage(
-        id: id,
-        role: role ?? this.role,
-        content: content ?? this.content,
-        createdAt: createdAt ?? this.createdAt,
-        attachments: attachments ?? this.attachments,
-        isStreaming: isStreaming ?? this.isStreaming,
-        isError: isError ?? this.isError,
-        reasoningContent: reasoningContent ?? this.reasoningContent,
-        rawRequest: rawRequest ?? this.rawRequest,
-        rawResponse: rawResponse ?? this.rawResponse,
-        toolCalls: toolCalls ?? this.toolCalls,
-        reasoningSections: reasoningSections ?? this.reasoningSections,
-        textSections: textSections ?? this.textSections,
-        toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
-        blocks: blocks ?? this.blocks,
-      );
+  }) => ChatMessage(
+    id: id,
+    role: role ?? this.role,
+    content: content ?? this.content,
+    createdAt: createdAt ?? this.createdAt,
+    attachments: attachments ?? this.attachments,
+    isStreaming: isStreaming ?? this.isStreaming,
+    isError: isError ?? this.isError,
+    reasoningContent: reasoningContent ?? this.reasoningContent,
+    rawRequest: rawRequest ?? this.rawRequest,
+    rawResponse: rawResponse ?? this.rawResponse,
+    toolCalls: toolCalls ?? this.toolCalls,
+    reasoningSections: reasoningSections ?? this.reasoningSections,
+    textSections: textSections ?? this.textSections,
+    toolCallRoundStarts: toolCallRoundStarts ?? this.toolCallRoundStarts,
+    blocks: blocks ?? this.blocks,
+    schemaVersion: schemaVersion,
+    legacyFields: legacyFields,
+  );
 
   @override
   String toString() => 'ChatMessage(id: $id, role: $role)';
