@@ -221,8 +221,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: cf0388361cc9c0ff2f513639db6e972e3beaf7e3
-      resolved-ref: cf0388361cc9c0ff2f513639db6e972e3
+      ref: 011e23eabe04558dd68724c135857c41468f70c6
+      resolved-ref: 011e23eabe04558dd68724c135857c41468f70c6
       url: "https://github.com/JohnXu22786/dart-math.git"
     source: git
     version: "0.1.0"

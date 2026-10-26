@@ -73,7 +73,7 @@ dependencies:
   dart_math:
     git:
       url: https://github.com/JohnXu22786/dart-math.git
-      ref: cf0388361cc9c0ff2f513639db6e972e3beaf7e3
+      ref: 011e23eabe04558dd68724c135857c41468f70c6
 
   # UI and Utilities
   cupertino_icons: ^1.0.9
