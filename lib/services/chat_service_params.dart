@@ -352,17 +352,31 @@ extension _ChatServiceParamsExt on ChatService {
       ...jsonParents,
       ...customParams.where((param) => !isJsonParent(param)),
     ];
+    final emptyJsonParents = <String>{};
     for (final cp in orderedParams) {
+      final value = ChatService._coerceCustomParam(
+        cp.paramName,
+        cp.type,
+        _customParamEffectiveValue(cp),
+        source: source,
+      );
+      final hasEmptyJsonParent = emptyJsonParents.any(
+        (parent) => cp.paramName.startsWith('$parent.'),
+      );
+      if (value is _OmittedSentinel && hasEmptyJsonParent) {
+        // Do not let an invalid descendant turn an explicitly configured `{}`
+        // into a wrapper that _stripOmitted would mistake for an all-invalid
+        // branch and remove.
+        continue;
+      }
       setNestedParam(
         result,
         cp.paramName,
-        ChatService._coerceCustomParam(
-          cp.paramName,
-          cp.type,
-          _customParamEffectiveValue(cp),
-          source: source,
-        ),
+        value,
       );
+      if (cp.type == 'json' && value is Map && value.isEmpty) {
+        emptyJsonParents.add(cp.paramName);
+      }
     }
   }
 }

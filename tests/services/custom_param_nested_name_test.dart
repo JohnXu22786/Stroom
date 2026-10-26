@@ -260,6 +260,45 @@ void main() {
       expect(extra!.containsKey('provider'), isFalse);
       expect(extra['style'], equals('cheerful'));
     });
+
+    test('invalid dotted child does not erase an explicit empty JSON parent',
+        () async {
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'options.bad',
+            defaultValue: '{invalid json}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'standalone.bad',
+            defaultValue: '{invalid json}',
+            type: 'json',
+          ),
+        ],
+      );
+
+      final provider = _NestedCaptureProvider();
+      final service = ChatService(provider: provider, modelConfig: modelConfig);
+
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future.delayed(Duration.zero);
+
+      final extra = provider.capturedExtraParams;
+      expect(extra, isNotNull);
+      expect(extra!['options'], isEmpty,
+          reason: 'An explicitly configured empty JSON parent is valid.');
+      expect(extra.containsKey('standalone'), isFalse,
+          reason: 'An invalid dotted param without a parent remains omitted.');
+    });
   });
 
   group('_stripOmitted recursive sentinel stripping', () {
