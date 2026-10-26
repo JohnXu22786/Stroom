@@ -1678,6 +1678,57 @@ void main() {
     );
   });
 
+  group('LlmModelConfigPage JSON custom param save validation', () {
+    testWidgets('stale options do not satisfy a blank JSON default',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            type: 'json',
+            options: ['legacy-option'],
+            optionOrder: ['legacy-option'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(tester, model: model);
+
+      expect(saved, isNull,
+          reason: 'An empty JSON default must prevent the page from saving.');
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget,
+          reason:
+              'A stale non-JSON option must not satisfy JSON value validation.');
+    });
+
+    testWidgets('valid JSON default saves even when stale options remain',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            type: 'json',
+            defaultValue: '{"type":"json_object"}',
+            options: ['legacy-option'],
+            optionOrder: ['legacy-option'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(tester, model: model);
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.defaultValue, '{"type":"json_object"}');
+      expect(saved.customParams.single.options, ['legacy-option']);
+    });
+  });
+
   group('LlmModelConfigPage provider custom params inheritance', () {
     ProviderConfigItem providerWithCustomParams({
       List<String> options = const ['warm', 'cool'],
