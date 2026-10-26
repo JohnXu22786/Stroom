@@ -182,4 +182,20 @@ Iterable<Map<String, dynamic>> conversationMessageMediaReferences(
     final reference = conversationMediaReferenceForPart(part);
     if (reference != null) yield reference;
   }
+
+  // The migration adapter retains the complete legacy message map in this
+  // namespaced record. Older ChatMessage attachments are not always represented
+  // as typed content parts, so include their durable paths in repository scans.
+  final legacy = message.extensions['stroom.legacy'];
+  final record = legacy is Map ? legacy['record'] : null;
+  final attachments = record is Map ? record['attachments'] : null;
+  if (attachments is List) {
+    for (final attachment in attachments) {
+      if (attachment is Map &&
+          (attachment['storagePath'] is String ||
+              attachment['thumbnailPath'] is String)) {
+        yield Map<String, dynamic>.from(attachment);
+      }
+    }
+  }
 }

@@ -3463,6 +3463,37 @@ class BackupService {
   }) {
     if (!requireFiles) return true;
     bool allPresent = true;
+    void checkAttachments(Object? rawAttachments) {
+      if (rawAttachments == null) return;
+      if (rawAttachments is! List) {
+        allPresent = false;
+        return;
+      }
+      for (final attachment in rawAttachments) {
+        if (attachment is! Map) {
+          allPresent = false;
+          continue;
+        }
+        for (final key in const ['storagePath', 'thumbnailPath']) {
+          final path = attachment[key];
+          if (path == null || path == '') continue;
+          if (path is! String) {
+            allPresent = false;
+            continue;
+          }
+          final normalizedPath = path.replaceAll(r'\', '/');
+          if (!_isSafeRelativeArchivePath(normalizedPath)) {
+            allPresent = false;
+            continue;
+          }
+          final archivePaths = normalizedPath.startsWith('temp_edited/')
+              ? {normalizedPath, 'attachments/${p.basename(normalizedPath)}'}
+              : {normalizedPath};
+          if (!archivePaths.any(archiveEntries.contains)) allPresent = false;
+        }
+      }
+    }
+
     final rawConversations = chatPrefs?['conversations'];
     if (rawConversations != null) {
       if (rawConversations is! String) return false;
@@ -3524,6 +3555,12 @@ class BackupService {
       if (repositoryMessages is List) {
         for (final raw in repositoryMessages) {
           if (raw is! Map) continue;
+          final extensions = raw['extensions'];
+          final legacy = extensions is Map ? extensions['stroom.legacy'] : null;
+          final legacyRecord = legacy is Map ? legacy['record'] : null;
+          if (legacyRecord is Map) {
+            checkAttachments(legacyRecord['attachments']);
+          }
           final content = raw['content'];
           if (content is! List) continue;
           for (final part in content) {
@@ -3539,36 +3576,6 @@ class BackupService {
               checkRepositoryPath(data['thumbnailPath']);
             }
           }
-        }
-      }
-    }
-    void checkAttachments(Object? rawAttachments) {
-      if (rawAttachments == null) return;
-      if (rawAttachments is! List) {
-        allPresent = false;
-        return;
-      }
-      for (final attachment in rawAttachments) {
-        if (attachment is! Map) {
-          allPresent = false;
-          continue;
-        }
-        for (final key in const ['storagePath', 'thumbnailPath']) {
-          final path = attachment[key];
-          if (path == null || path == '') continue;
-          if (path is! String) {
-            allPresent = false;
-            continue;
-          }
-          final normalizedPath = path.replaceAll(r'\', '/');
-          if (!_isSafeRelativeArchivePath(normalizedPath)) {
-            allPresent = false;
-            continue;
-          }
-          final archivePaths = normalizedPath.startsWith('temp_edited/')
-              ? {normalizedPath, 'attachments/${p.basename(normalizedPath)}'}
-              : {normalizedPath};
-          if (!archivePaths.any(archiveEntries.contains)) allPresent = false;
         }
       }
     }

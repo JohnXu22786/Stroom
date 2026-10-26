@@ -213,6 +213,47 @@ void main() {
       expect(issues, isEmpty);
     });
 
+    test('integrity check follows legacy message attachment records', () async {
+      await repository.upsertConversation(
+        StroomConversation(
+          id: 'conversation-legacy-record-media',
+          title: 'Legacy record media',
+        ),
+      );
+      await repository.upsertMessage(
+        'conversation-legacy-record-media',
+        StroomMessage(
+          id: 'legacy-record-media-message',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          extensions: {
+            'stroom.legacy': {
+              'record': {
+                'attachments': [
+                  {
+                    'storagePath': 'attachments/legacy-photo.png',
+                    'thumbnailPath': 'attachments/legacy-photo-thumb.png',
+                  },
+                ],
+              },
+            },
+          },
+        ),
+      );
+
+      final issues =
+          await repository.checkIntegrity(readMedia: (_) async => null);
+
+      expect(
+        issues.map((issue) => issue.reference).toSet(),
+        {
+          'attachments/legacy-photo.png',
+          'attachments/legacy-photo-thumb.png',
+        },
+      );
+    });
+
     test('integrity check leaves open extension references opaque', () async {
       await repository.upsertConversation(
         StroomConversation(

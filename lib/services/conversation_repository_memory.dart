@@ -140,10 +140,13 @@ class MemoryConversationRepository implements ConversationRepository {
   Future<int> countConversations() async => _conversations.length;
 
   @override
-  Future<int> countMessages({String? conversationId}) async => conversationId ==
-          null
-      ? _messages.values.fold(0, (count, messages) => count + messages.length)
-      : _messages[conversationId]?.length ?? 0;
+  Future<int> countMessages({String? conversationId}) async =>
+      conversationId == null
+          ? _messages.values.fold<int>(
+              0,
+              (count, messages) => count + messages.length,
+            )
+          : _messages[conversationId]?.length ?? 0;
 
   @override
   Future<String?> migrationSourceHash() async => _migrationSourceHash;
