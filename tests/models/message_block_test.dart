@@ -47,8 +47,10 @@ void main() {
 
     test('ToolCallBlock missing status defaults to pending', () {
       final j = {'type': 'tool_call', 'id': 'c1', 'name': 'n', 'arguments': {}};
-      expect((MessageBlock.fromMap(j) as ToolCallBlock).status,
-          ToolCallStatus.pending);
+      expect(
+        (MessageBlock.fromMap(j) as ToolCallBlock).status,
+        ToolCallStatus.pending,
+      );
     });
 
     test('ErrorBlock toMap/fromMap round-trip', () {
@@ -58,21 +60,36 @@ void main() {
       expect((r as ErrorBlock).message, 'fail');
     });
 
-    test('unknown type produces ErrorBlock', () {
-      final r = MessageBlock.fromMap({'type': 'unknown', 'msg': 'x'});
-      expect(r, isA<ErrorBlock>());
-      expect((r as ErrorBlock).message, contains('unknown'));
+    test('unknown type and fields survive serialization', () {
+      final input = {
+        'type': 'unknown',
+        'msg': 'x',
+        'nested': {'vendor': true},
+      };
+      final r = MessageBlock.fromMap(input);
+      expect(r, isA<UnknownMessageBlock>());
+      expect(r.toMap(), input);
+    });
+
+    test('unknown fields on known blocks survive serialization', () {
+      final input = {
+        'type': 'text',
+        'text': 'x',
+        'provider_annotation': {'keep': 1},
+      };
+      expect(MessageBlock.fromMap(input).toMap(), input);
     });
 
     test('list of mixed blocks round-trip via JSON', () {
       final blocks = <MessageBlock>[
         ReasoningBlock(text: 'think'),
         ToolCallBlock(
-            id: 'c1',
-            name: 's',
-            arguments: {},
-            status: ToolCallStatus.completed,
-            result: 'ok'),
+          id: 'c1',
+          name: 's',
+          arguments: {},
+          status: ToolCallStatus.completed,
+          result: 'ok',
+        ),
         TextBlock(text: 'answer'),
       ];
       final json = jsonEncode(blocks.map((b) => b.toMap()).toList());

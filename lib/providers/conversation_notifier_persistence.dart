@@ -390,6 +390,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
                       textSections: m.textSections,
                       toolCallRoundStarts: m.toolCallRoundStarts,
                       blocks: m.blocks,
+                      schemaVersion: m.schemaVersion,
+                      legacyFields: m.legacyFields,
                       // Tier 2 的目的就是剥离 rawRequest/rawResponse
                       // （通常含大体积 base64，Tier 1 全量保存失败的
                       // 原因）：这里必须传 null，否则与 Tier 1 相同
@@ -418,6 +420,8 @@ extension _ConversationsNotifierPersistenceExt on ConversationsNotifier {
               isTemporary: c.isTemporary,
               temporaryExpiresAt: c.temporaryExpiresAt,
               temporaryExpiryVersion: c.temporaryExpiryVersion,
+              schemaVersion: c.schemaVersion,
+              legacyFields: c.legacyFields,
             ),
           )
           .toList();
