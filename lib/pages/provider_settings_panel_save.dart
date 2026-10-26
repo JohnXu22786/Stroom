@@ -242,7 +242,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       key: _keyController.text.trim(),
       models: widget.config.models.map((m) => m.copy()).toList(),
       typeConfig: typeConfig,
-      customParams: _customParams.map((p) => p.copy()).toList(),
+      customParams: _customParams
+          .map((p) => p.copy()..paramName = p.paramName.trim())
+          .toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: _endpointType,
     );
