@@ -70,6 +70,12 @@ class DragSortArea extends StatefulWidget {
   /// 胶囊布局：点击回调（勾选/取消）。
   final void Function(String value)? onTap;
 
+  /// 胶囊布局：是否可编辑（在删除按钮前显示编辑按钮）。
+  final bool Function(String value)? editable;
+
+  /// 胶囊布局：编辑回调。
+  final void Function(String value)? onEdit;
+
   /// 胶囊布局：删除回调。
   final void Function(String value)? onDelete;
 
@@ -98,6 +104,8 @@ class DragSortArea extends StatefulWidget {
     this.selected,
     this.deletable,
     this.onTap,
+    this.editable,
+    this.onEdit,
     this.onDelete,
     this.itemBuilder,
     required this.onReorder,
@@ -434,7 +442,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
-      // 可删除胶囊不能低于其最小宽度（padding + 边框 + 固定 24px 按钮），
+      // 带操作按钮的胶囊不能低于其最小宽度（padding + 边框 + 按钮），
       // 否则内部 Row 溢出抛异常。父级过窄时轻微超出布局宽度（Stack
       // clipBehavior 为 none，可正常绘制）。
       if (i < minWidths.length && w < minWidths[i]) w = minWidths[i];
@@ -449,13 +457,15 @@ class _DragSortAreaState extends State<DragSortArea> {
     return rects;
   }
 
-  /// 可删除胶囊的最小宽度（水平 padding 20 + 边框 + 删除按钮 24）。
+  /// 可操作胶囊的最小宽度（水平 padding 20 + 边框 + 每个操作按钮 24）。
   double _minWidthOf(int k) {
     if (!widget.wrap) return 0;
     final value = widget.values[k];
-    if (!(widget.deletable?.call(value) ?? false)) return 0;
+    final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
+    if (!deletable && !editable) return 0;
     final selected = widget.selected?.call(value) ?? false;
-    return 20 + (selected ? 3.0 : 2.0) + _kPillDeleteWidth;
+    return 20 + (selected ? 3.0 : 2.0) + _kPillDeleteWidth * (editable ? 2 : 1);
   }
 
   double _widthOf(int k) {
@@ -482,10 +492,12 @@ class _DragSortAreaState extends State<DragSortArea> {
     // 胶囊会横向溢出 1px。
     final border = selected ? 3.0 : 2.0;
     final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
+    final hasActions = deletable || editable;
     return painter.width +
-        (deletable ? 20 : 24) +
+        (hasActions ? 20 : 24) +
         border +
-        (deletable ? _kPillDeleteWidth : 0);
+        _kPillDeleteWidth * ((deletable ? 1 : 0) + (editable ? 1 : 0));
   }
 
   bool get _uniqueValues =>
@@ -603,6 +615,7 @@ class _DragSortAreaState extends State<DragSortArea> {
   Widget _pillVisual(String value, ColorScheme cs) {
     final selected = widget.selected?.call(value) ?? false;
     final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
     final text = Text(
       value,
       maxLines: 1,
@@ -614,7 +627,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       ),
     );
     final chip = Container(
-      padding: EdgeInsets.fromLTRB(12, 6, deletable ? 8 : 12, 6),
+      padding: EdgeInsets.fromLTRB(12, 6, deletable || editable ? 8 : 12, 6),
       decoration: BoxDecoration(
         // 与聊天推理面板的 OptionChip 一致：选中 = 主色淡底 + 主色边框
         color: selected ? cs.primaryContainer : Colors.transparent,
@@ -628,11 +641,26 @@ class _DragSortAreaState extends State<DragSortArea> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(child: text),
+          if (editable) _editControl(value, cs),
           if (deletable) _deleteControl(value, cs),
         ],
       ),
     );
     return chip;
+  }
+
+  /// 胶囊右侧的编辑按钮：位于删除按钮之前。
+  Widget _editControl(String value, ColorScheme cs) {
+    return GestureDetector(
+      onTap: widget.onEdit == null ? null : () => widget.onEdit!(value),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: _kPillDeleteWidth,
+        height: _kPillHeight - 12 - 3,
+        alignment: Alignment.center,
+        child: Icon(Icons.edit, size: 14, color: cs.onSurfaceVariant),
+      ),
+    );
   }
 
   /// 胶囊右侧的删除按钮：与文字标签同一行、等高（整行高度都可点），

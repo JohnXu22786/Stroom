@@ -292,6 +292,28 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     });
   }
 
+  /// 编辑模型自建的自定义参数选项值；替换列表原位并迁移勾选状态。
+  Future<void> _editCustomParamOptionWithDialog(
+    CustomParam param,
+    String oldValue,
+  ) async {
+    final value = await showDialog<String>(
+      context: context,
+      builder: (_) => _EditCustomParamOptionDialog(initialValue: oldValue),
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    final blocks = _customParamBlockValues[param];
+    if (blocks == null || blocks.contains(value)) return;
+    final index = blocks.indexOf(oldValue);
+    if (index < 0) return;
+    setState(() {
+      final selected = _customParamSelectedValues[param];
+      final wasSelected = selected?.remove(oldValue) ?? false;
+      blocks[index] = value;
+      if (wasSelected) selected?.add(value);
+    });
+  }
+
   /// 删除自定义参数选项块（供应商来源的块只能取消勾选，不能删除）。
   void _removeCustomParamOption(CustomParam param, String value) {
     setState(() {
@@ -324,6 +346,9 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
           deletable: (v) =>
               !(_providerCustomParamValues[param]?.contains(v) ?? false),
           onTap: (v) => _toggleCustomParamOption(param, v),
+          editable: (v) =>
+              !(_providerCustomParamValues[param]?.contains(v) ?? false),
+          onEdit: (v) => _editCustomParamOptionWithDialog(param, v),
           onDelete: (v) => _removeCustomParamOption(param, v),
           onReorder: (from, to) => _moveCustomParamOptionTo(param, from, to),
         ),
@@ -517,5 +542,54 @@ extension _ReasoningActionsExt on _LlmModelConfigPageState {
     return toggle.paramName.trim().isNotEmpty &&
         (toggle.onValue != null && toggle.onValue!.trim().isNotEmpty) &&
         (toggle.offValue != null && toggle.offValue!.trim().isNotEmpty);
+  }
+}
+
+class _EditCustomParamOptionDialog extends StatefulWidget {
+  final String initialValue;
+
+  const _EditCustomParamOptionDialog({required this.initialValue});
+
+  @override
+  State<_EditCustomParamOptionDialog> createState() =>
+      _EditCustomParamOptionDialogState();
+}
+
+class _EditCustomParamOptionDialogState
+    extends State<_EditCustomParamOptionDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('编辑选项值'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: '如 low、medium、high',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('保存'),
+        ),
+      ],
+    );
   }
 }
