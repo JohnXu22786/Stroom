@@ -1748,9 +1748,8 @@ void main() {
           ],
         );
 
-    testWidgets('rejects nonnumeric and non-finite number options',
-        (tester) async {
-      for (final invalidValue in ['not-a-number', 'NaN', 'Infinity']) {
+    for (final invalidValue in ['not-a-number', 'NaN', 'Infinity']) {
+      testWidgets('rejects $invalidValue number options', (tester) async {
         final saved = await _pumpAndSave(
           tester,
           model: modelWithNumberParam(
@@ -1761,19 +1760,20 @@ void main() {
 
         expect(saved, isNull, reason: '$invalidValue must not be saved');
         expect(
-            find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'), findsOneWidget);
-      }
-    });
+          find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'),
+          findsOneWidget,
+        );
+      });
+    }
 
-    testWidgets('validates fallback default when number options are empty',
-        (tester) async {
+    testWidgets('rejects invalid legacy number default', (tester) async {
       final saved = await _pumpAndSave(
         tester,
         model: modelWithNumberParam(defaultValue: 'NaN'),
       );
 
       expect(saved, isNull);
-      expect(find.text('参数 "top_p" 的默认值必须是有限数字：NaN'), findsOneWidget);
+      expect(find.text('参数 "top_p" 的选项值必须是有限数字：NaN'), findsOneWidget);
     });
 
     testWidgets('saves integer and decimal option values', (tester) async {
