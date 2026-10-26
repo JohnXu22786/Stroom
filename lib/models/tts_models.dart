@@ -391,9 +391,10 @@ List<ReasoningParam> mergeReasoningParams(
 
 /// 合并供应商级与模型级自定义参数，供模型配置页继承视图使用。
 ///
-/// 规则与 [mergeReasoningParams] 一致：模型同名参数覆盖（替换）供应商
-/// 参数；未被覆盖的供应商参数追加在模型参数之后；参数名为空的条目不
-/// 参与合并。供应商的自定义参数由此获得与推理参数相同的「继承视图」。
+/// 同名参数以供应商的类型和默认值为准，同时保留模型保存的选项选择与
+/// 顺序；未被覆盖的供应商参数追加在模型参数之后；参数名为空的条目不
+/// 参与合并。这样重开模型时供应商字段会更新，而模型自定义的选项状态
+/// 仍可持久化。
 List<CustomParam> mergeCustomParams(
   List<CustomParam> providerParams,
   List<CustomParam> modelParams,
@@ -406,8 +407,20 @@ List<CustomParam> mergeCustomParams(
   }
   final result = <CustomParam>[];
   for (final p in modelParams) {
-    result.add(p);
-    providerByName.remove(p.paramName.trim());
+    final provider = providerByName.remove(p.paramName.trim());
+    if (provider == null) {
+      result.add(p);
+    } else {
+      result.add(
+        CustomParam(
+          paramName: p.paramName,
+          type: provider.type,
+          defaultValue: provider.defaultValue,
+          options: List.of(p.options),
+          optionOrder: List.of(p.optionOrder),
+        ),
+      );
+    }
   }
   result.addAll(providerByName.values);
   return result;
