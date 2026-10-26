@@ -31,7 +31,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     } catch (error) {
       _repositoryReady = false;
       debugPrint(
-          'Conversation repository unavailable; reading legacy data: $error');
+        'Conversation repository unavailable; reading legacy data: $error',
+      );
       await AppLogService.warning(
         'ConversationsNotifier',
         '新对话仓库未通过校验，继续读取 SharedPreferences 旧记录',
@@ -242,10 +243,12 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
         throw StateError('Missing conversation ${summary.id}.');
       conversations.add(
         Conversation.fromMap(
-            ConversationRecordAdapter.toLegacyMap(record, const [])),
+          ConversationRecordAdapter.toLegacyMap(record, const []),
+        ),
       );
-      _persistedConversationRecords[summary.id] =
-          _conversationRecordSignature(conversations.last);
+      _persistedConversationRecords[summary.id] = _conversationRecordSignature(
+        conversations.last,
+      );
       _persistedMessageRecords[summary.id] = {};
     }
     if (conversations.any((conversation) => conversation.assistantId == null)) {
@@ -300,7 +303,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
       );
 
   Future<List<ChatMessage>> _readAllRepositoryMessages(
-      String conversationId) async {
+    String conversationId,
+  ) async {
     final repository = _ref.read(conversationRepositoryProvider);
     final result = <ChatMessage>[];
     const pageSize = 100;
@@ -322,7 +326,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   /// Loads complete history for a model request without expanding the active
   /// chat's displayed, paged window or the list-view summaries.
   Future<List<ChatMessage>> loadFullMessagesForContext(
-      String conversationId) async {
+    String conversationId,
+  ) async {
     await ready;
     if (!_repositoryReady) {
       return List<ChatMessage>.from(
@@ -362,7 +367,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   /// The stream manager can work with the full history while the UI stays
   /// windowed to the latest segment until the user scrolls back.
   Future<List<ChatMessage>> reloadLatestMessagePage(
-      String conversationId) async {
+    String conversationId,
+  ) async {
     if (!_repositoryReady) {
       return List<ChatMessage>.from(
         state
@@ -404,6 +410,7 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     conversation.messages = messages;
     _messageLoadedConversationIds.add(conversationId);
     _repositoryMessageOffsets[conversationId] = offset;
+    _repositoryMessageCounts[conversationId] = messageCount;
     _persistedMessageRecords[conversationId] = {
       for (var index = 0; index < repositoryMessages.length; index++)
         repositoryMessages[index].id: jsonEncode({
@@ -419,6 +426,16 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
 
   bool hasEarlierRepositoryMessages(String conversationId) =>
       _repositoryReady && (_repositoryMessageOffsets[conversationId] ?? 0) > 0;
+
+  bool hasLaterRepositoryMessages(String conversationId) {
+    if (!_repositoryReady) return false;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
+    if (conversation == null) return false;
+    final offset = _repositoryMessageOffsets[conversationId] ?? 0;
+    final count = _repositoryMessageCounts[conversationId] ?? 0;
+    return offset + conversation.messages.length < count;
+  }
 
   /// Fetches one earlier page without replacing the provider's visible list
   /// state. The chat page owns the loaded window and asks for additional pages
@@ -445,6 +462,38 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     );
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
+      sequences[row.id] = row.sequence;
+    }
+    return messages;
+  }
+
+  /// Fetches one later page after a search result opened an older history
+  /// window. The chat view appends these rows as the user scrolls toward the
+  /// conversation's newest messages.
+  Future<List<ChatMessage>> loadLaterRepositoryMessages(
+    String conversationId, {
+    int limit = _conversationRepositoryMessagePageSize,
+  }) async {
+    if (!_repositoryReady || limit <= 0) return const [];
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
+    if (conversation == null) return const [];
+    final offset = _repositoryMessageOffsets[conversationId] ?? 0;
+    final count = _repositoryMessageCounts[conversationId] ?? 0;
+    final nextOffset = offset + conversation.messages.length;
+    if (nextOffset >= count) return const [];
+    final repository = _ref.read(conversationRepositoryProvider);
+    final rows = await repository.getMessages(
+      conversationId,
+      offset: nextOffset,
+      limit: limit,
+    );
+    final messages = rows.map(_legacyMessageFromRepository).toList();
+    final sequences = _persistedMessageSequences.putIfAbsent(
+      conversationId,
+      () => {},
+    );
+    for (final row in rows) {
       sequences[row.id] = row.sequence;
     }
     return messages;
@@ -494,6 +543,9 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     conversation.messages = messages;
     _messageLoadedConversationIds.add(conversationId);
     _repositoryMessageOffsets[conversationId] = messageOffset;
+    _repositoryMessageCounts[conversationId] = await repository.countMessages(
+      conversationId: conversationId,
+    );
     _persistedMessageRecords[conversationId] = {
       for (var index = 0; index < rows.length; index++)
         rows[index].id: jsonEncode({
@@ -544,6 +596,37 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     state = List<Conversation>.from(state);
   }
 
+  /// Commits a page fetched after the currently loaded window.
+  void commitLoadedLaterRepositoryMessages(
+    String conversationId,
+    List<ChatMessage> messages,
+  ) {
+    if (!_repositoryReady || messages.isEmpty) return;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
+    if (conversation == null) return;
+    final existingIds =
+        conversation.messages.map((message) => message.id).toSet();
+    final newer =
+        messages.where((message) => !existingIds.contains(message.id)).toList();
+    if (newer.isEmpty) return;
+    conversation.messages = [...conversation.messages, ...newer];
+    final signatures = _persistedMessageRecords.putIfAbsent(
+      conversationId,
+      () => {},
+    );
+    final sequences = _persistedMessageSequences[conversationId] ?? const {};
+    for (final message in newer) {
+      final sequence = sequences[message.id];
+      if (sequence == null) continue;
+      signatures[message.id] = jsonEncode({
+        'sequence': sequence,
+        'record': message.toMap(),
+      });
+    }
+    state = List<Conversation>.from(state);
+  }
+
   /// Loads a conversation's message history from its repository pages. This
   /// leaves list-view summaries free of message bodies until a chat is opened.
   Future<void> loadMessages(String conversationId) async {
@@ -574,8 +657,9 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
   }
 
   String _conversationRecordSignature(Conversation conversation) {
-    final record =
-        ConversationRecordAdapter.fromLegacyMap(conversation.toMap());
+    final record = ConversationRecordAdapter.fromLegacyMap(
+      conversation.toMap(),
+    );
     final metadata = StroomConversation(
       schemaVersion: record.schemaVersion,
       id: record.id,
@@ -707,9 +791,12 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     final write = _persistQueue.then((_) => _persistSnapshot(snapshot));
     // Keep the queue usable after an unexpected write error. Callers still
     // await their own write and receive its error.
-    _persistQueue = write.then((_) {}, onError: (Object error, StackTrace st) {
-      debugPrint('Failed to queue conversation persistence: $error');
-    });
+    _persistQueue = write.then(
+      (_) {},
+      onError: (Object error, StackTrace st) {
+        debugPrint('Failed to queue conversation persistence: $error');
+      },
+    );
     return write;
   }
 
@@ -864,29 +951,33 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
                 (previousSignature == null && !isNewMessage)) {
               continue;
             }
-            final neutral =
-                StroomMessage.fromLegacy(message, sequence: sequence);
-            upserts.add(StroomMessage(
-              id: neutral.id,
-              role: neutral.role,
-              sequence: neutral.sequence,
-              createdAt: neutral.createdAt,
-              content: neutral.content,
-              status: neutral.status,
-              diagnostics: neutral.diagnostics,
-              extensions: {
-                ...neutral.extensions,
-                ConversationRecordAdapter.legacyMessageNamespace: {
-                  ...?neutral.extensions[ConversationRecordAdapter
-                      .legacyMessageNamespace] as Map<String, dynamic>?,
-                  'record':
-                      ConversationRecordAdapter.legacyMessageRecordForStorage(
-                    message.toMap(),
-                  ),
+            final neutral = StroomMessage.fromLegacy(
+              message,
+              sequence: sequence,
+            );
+            upserts.add(
+              StroomMessage(
+                id: neutral.id,
+                role: neutral.role,
+                sequence: neutral.sequence,
+                createdAt: neutral.createdAt,
+                content: neutral.content,
+                status: neutral.status,
+                diagnostics: neutral.diagnostics,
+                extensions: {
+                  ...neutral.extensions,
+                  ConversationRecordAdapter.legacyMessageNamespace: {
+                    ...?neutral.extensions[ConversationRecordAdapter
+                        .legacyMessageNamespace] as Map<String, dynamic>?,
+                    'record':
+                        ConversationRecordAdapter.legacyMessageRecordForStorage(
+                      message.toMap(),
+                    ),
+                  },
                 },
-              },
-              extraFields: neutral.extraFields,
-            ));
+                extraFields: neutral.extraFields,
+              ),
+            );
             oldRecords[message.id] = messageSignature;
           }
         }
@@ -938,16 +1029,13 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
         _persistedMessageRecords.remove(staleId);
         _persistedMessageSequences.remove(staleId);
         _repositoryMessageOffsets.remove(staleId);
+        _repositoryMessageCounts.remove(staleId);
         _messageLoadedConversationIds.remove(staleId);
       }
       return true;
     } catch (error) {
       debugPrint('Failed to persist conversation repository rows: $error');
-      await AppLogService.error(
-        'ConversationsNotifier',
-        '持久化对话仓库记录失败',
-        error,
-      );
+      await AppLogService.error('ConversationsNotifier', '持久化对话仓库记录失败', error);
       return false;
     }
   }

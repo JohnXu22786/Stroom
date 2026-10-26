@@ -110,7 +110,7 @@ class MemoryConversationRepository implements ConversationRepository {
       throw StateError('Unknown conversation: $conversationId');
     }
     _messages[conversationId] = {
-      for (final message in messages) message.id: message
+      for (final message in messages) message.id: message,
     };
   }
 
@@ -185,8 +185,9 @@ class MemoryConversationRepository implements ConversationRepository {
     for (final raw in rawConversations) {
       if (raw is! Map)
         throw const FormatException('Invalid conversation record.');
-      final conversation =
-          StroomConversation.fromMap(Map<String, dynamic>.from(raw));
+      final conversation = StroomConversation.fromMap(
+        Map<String, dynamic>.from(raw),
+      );
       if (conversation.id.isEmpty ||
           conversations.containsKey(conversation.id)) {
         throw const FormatException('Invalid or duplicate conversation id.');
@@ -203,7 +204,8 @@ class MemoryConversationRepository implements ConversationRepository {
       if (conversationId is! String ||
           !conversations.containsKey(conversationId)) {
         throw const FormatException(
-            'Message references a missing conversation.');
+          'Message references a missing conversation.',
+        );
       }
       final message = StroomMessage.fromMap(row);
       if (message.id.isEmpty ||
@@ -249,8 +251,9 @@ class MemoryConversationRepository implements ConversationRepository {
       }
     }
     for (final conversation in _conversations.values) {
-      for (final reference
-          in conversationDraftAttachmentReferences(conversation)) {
+      for (final reference in conversationDraftAttachmentReferences(
+        conversation,
+      )) {
         await _checkReference(
           issues,
           conversation.id,
@@ -294,11 +297,13 @@ class MemoryConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = reference['reference'] as String? ??
-        reference['storagePath'] as String? ??
-        '';
-    if (path.isEmpty) {
-      issues.add(_issue(conversationId, messageId, '', 'missing_reference'));
+    final path = conversationLocalMediaPath(reference['reference']) ??
+        conversationLocalMediaPath(reference['storagePath']);
+    if (path == null) {
+      if (!conversationIsExternalMediaUri(reference['reference']) &&
+          !conversationIsExternalMediaUri(reference['storagePath'])) {
+        issues.add(_issue(conversationId, messageId, '', 'missing_reference'));
+      }
     } else {
       final bytes = await readMedia(path);
       if (bytes == null) {
@@ -313,14 +318,14 @@ class MemoryConversationRepository implements ConversationRepository {
         }
       }
     }
-    final thumbnailPath = reference['thumbnailPath'];
-    if (thumbnailPath is String &&
-        thumbnailPath.isNotEmpty &&
-        thumbnailPath != path) {
+    final rawThumbnailPath = reference['thumbnailPath'];
+    final thumbnailPath = conversationLocalMediaPath(rawThumbnailPath);
+    if (thumbnailPath != null && thumbnailPath != path) {
       final thumbnailBytes = await readMedia(thumbnailPath);
       if (thumbnailBytes == null) {
         issues.add(
-            _issue(conversationId, messageId, thumbnailPath, 'missing_media'));
+          _issue(conversationId, messageId, thumbnailPath, 'missing_media'),
+        );
       } else {
         final thumbnailReference = <String, dynamic>{
           if (reference['thumbnailSha256'] is String)
@@ -330,17 +335,19 @@ class MemoryConversationRepository implements ConversationRepository {
         };
         if (thumbnailReference.isNotEmpty &&
             !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
-          issues.add(_issue(
-              conversationId, messageId, thumbnailPath, 'hash_mismatch'));
+          issues.add(
+            _issue(conversationId, messageId, thumbnailPath, 'hash_mismatch'),
+          );
         }
         final thumbnailSize = reference['thumbnailSize'];
         if (thumbnailSize is num &&
             thumbnailSize.toInt() != thumbnailBytes.length) {
-          issues.add(_issue(
-              conversationId, messageId, thumbnailPath, 'size_mismatch'));
+          issues.add(
+            _issue(conversationId, messageId, thumbnailPath, 'size_mismatch'),
+          );
         }
       }
-    } else if (thumbnailPath != null && thumbnailPath is! String) {
+    } else if (rawThumbnailPath != null && rawThumbnailPath is! String) {
       issues.add(_issue(conversationId, messageId, '', 'missing_reference'));
     }
   }

@@ -38,8 +38,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
     final orderBytes = await WebFileStore.read(_orderKey);
     if (orderBytes != null) {
       try {
-        _cachedOrder =
-            List<String>.from(jsonDecode(utf8.decode(orderBytes)) as List);
+        _cachedOrder = List<String>.from(
+          jsonDecode(utf8.decode(orderBytes)) as List,
+        );
       } catch (_) {
         _cachedOrder = [];
       }
@@ -93,10 +94,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
     int limit = 50,
   }) async {
     if (offset < 0 || limit < 0) throw ArgumentError('Invalid message page.');
-    final keys = await WebFileStore.keysWithPrefix(
-      _messagePrefixFor(conversationId),
-    )
-      ..sort();
+    final keys =
+        await WebFileStore.keysWithPrefix(_messagePrefixFor(conversationId))
+          ..sort();
     if (offset >= keys.length || limit == 0) return const [];
     final page = keys.skip(offset).take(limit);
     final messages = <StroomMessage>[];
@@ -124,14 +124,13 @@ class IndexedDbConversationRepository implements ConversationRepository {
     List<String> deleteMessageIds = const [],
   }) async {
     final writes = <String, Uint8List>{
-      _conversationKey(conversation.id):
-          _encode(_withoutMessages(conversation).toMap()),
+      _conversationKey(conversation.id): _encode(
+        _withoutMessages(conversation).toMap(),
+      ),
     };
     final deletes = <String>{};
     final indexKeys = <String>{
-      ...deleteMessageIds.map(
-        (id) => _messageIndexKey(conversation.id, id),
-      ),
+      ...deleteMessageIds.map((id) => _messageIndexKey(conversation.id, id)),
       ...upsertMessages.map(
         (message) => _messageIndexKey(conversation.id, message.id),
       ),
@@ -162,8 +161,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
       _messageIndexPrefixFor(conversation.id),
     );
     final writes = <String, Uint8List>{
-      _conversationKey(conversation.id):
-          _encode(_withoutMessages(conversation).toMap()),
+      _conversationKey(conversation.id): _encode(
+        _withoutMessages(conversation).toMap(),
+      ),
     };
     for (final message in conversation.messages) {
       final rowKey = _orderedMessageKey(conversation.id, message);
@@ -171,10 +171,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
       writes[_messageIndexKey(conversation.id, message.id)] =
           Uint8List.fromList(utf8.encode(rowKey));
     }
-    await WebFileStore.writeBatch(
-      writes,
-      deletes: [...oldRows, ...oldIndexes],
-    );
+    await WebFileStore.writeBatch(writes, deletes: [...oldRows, ...oldIndexes]);
   }
 
   List<String> _cachedOrder = [];
@@ -184,8 +181,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
     final bytes = await WebFileStore.read(_orderKey);
     if (bytes != null) {
       try {
-        _cachedOrder =
-            List<String>.from(jsonDecode(utf8.decode(bytes)) as List);
+        _cachedOrder = List<String>.from(
+          jsonDecode(utf8.decode(bytes)) as List,
+        );
       } catch (_) {
         _cachedOrder = [];
       }
@@ -198,8 +196,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
 
   @override
   Future<void> clearConversations() async {
-    final conversations =
-        await WebFileStore.keysWithPrefix(_conversationPrefix);
+    final conversations = await WebFileStore.keysWithPrefix(
+      _conversationPrefix,
+    );
     final messages = await WebFileStore.keysWithPrefix(_messagePrefix);
     final indexes = await WebFileStore.keysWithPrefix(_messageIndexPrefix);
     await WebFileStore.writeBatch(
@@ -232,8 +231,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
     for (final message in messages) {
       final rowKey = _orderedMessageKey(conversationId, message);
       writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversationId, message.id)] =
-          Uint8List.fromList(utf8.encode(rowKey));
+      writes[_messageIndexKey(conversationId, message.id)] = Uint8List.fromList(
+        utf8.encode(rowKey),
+      );
     }
     await WebFileStore.writeBatch(
       writes,
@@ -243,7 +243,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
 
   @override
   Future<void> upsertMessage(
-      String conversationId, StroomMessage message) async {
+    String conversationId,
+    StroomMessage message,
+  ) async {
     if (await getConversation(conversationId) == null) {
       throw StateError('Unknown conversation: $conversationId');
     }
@@ -299,14 +301,17 @@ class IndexedDbConversationRepository implements ConversationRepository {
           .length;
     }
     var count = 0;
-    final conversations =
-        await WebFileStore.keysWithPrefix(_conversationPrefix);
+    final conversations = await WebFileStore.keysWithPrefix(
+      _conversationPrefix,
+    );
     for (final key in conversations) {
       final bytes = await WebFileStore.read(key);
       if (bytes != null) {
         final id = StroomConversation.fromMap(_decode(bytes)).id;
-        count +=
-            (await WebFileStore.keysWithPrefix(_messagePrefixFor(id))).length;
+        count += (await WebFileStore.keysWithPrefix(
+          _messagePrefixFor(id),
+        ))
+            .length;
       }
     }
     return count;
@@ -330,8 +335,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
   Future<Map<String, dynamic>> exportData() async {
     final conversations = <Map<String, dynamic>>[];
     final messages = <Map<String, dynamic>>[];
-    final conversationKeys =
-        await WebFileStore.keysWithPrefix(_conversationPrefix);
+    final conversationKeys = await WebFileStore.keysWithPrefix(
+      _conversationPrefix,
+    );
     conversationKeys.sort();
     final orderBytes = await WebFileStore.read(_orderKey);
     final order = orderBytes == null
@@ -344,10 +350,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
       if (bytes == null) continue;
       final conversation = StroomConversation.fromMap(_decode(bytes));
       recordsById[conversation.id] = _withoutMessages(conversation);
-      final messageKeys = await WebFileStore.keysWithPrefix(
-        _messagePrefixFor(conversation.id),
-      )
-        ..sort();
+      final messageKeys =
+          await WebFileStore.keysWithPrefix(_messagePrefixFor(conversation.id))
+            ..sort();
       for (final messageKey in messageKeys) {
         final messageBytes = await WebFileStore.read(messageKey);
         if (messageBytes != null) {
@@ -383,8 +388,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
     for (final raw in rawConversations) {
       if (raw is! Map)
         throw const FormatException('Invalid conversation record.');
-      final conversation =
-          StroomConversation.fromMap(Map<String, dynamic>.from(raw));
+      final conversation = StroomConversation.fromMap(
+        Map<String, dynamic>.from(raw),
+      );
       if (conversation.id.isEmpty ||
           conversations.containsKey(conversation.id)) {
         throw const FormatException('Invalid or duplicate conversation id.');
@@ -419,7 +425,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
       if (conversationId is! String ||
           !conversations.containsKey(conversationId)) {
         throw const FormatException(
-            'Message references a missing conversation.');
+          'Message references a missing conversation.',
+        );
       }
       final message = StroomMessage.fromMap(row);
       final compositeId = '$conversationId\u0000${message.id}';
@@ -428,15 +435,19 @@ class IndexedDbConversationRepository implements ConversationRepository {
       }
       final rowKey = _orderedMessageKey(conversationId, message);
       writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversationId, message.id)] =
-          Uint8List.fromList(utf8.encode(rowKey));
+      writes[_messageIndexKey(conversationId, message.id)] = Uint8List.fromList(
+        utf8.encode(rowKey),
+      );
     }
-    final currentConversationKeys =
-        await WebFileStore.keysWithPrefix(_conversationPrefix);
-    final currentMessageKeys =
-        await WebFileStore.keysWithPrefix(_messagePrefix);
-    final currentIndexKeys =
-        await WebFileStore.keysWithPrefix(_messageIndexPrefix);
+    final currentConversationKeys = await WebFileStore.keysWithPrefix(
+      _conversationPrefix,
+    );
+    final currentMessageKeys = await WebFileStore.keysWithPrefix(
+      _messagePrefix,
+    );
+    final currentIndexKeys = await WebFileStore.keysWithPrefix(
+      _messageIndexPrefix,
+    );
     await WebFileStore.writeBatch(
       writes,
       deletes: [
@@ -456,16 +467,20 @@ class IndexedDbConversationRepository implements ConversationRepository {
   }) async {
     final issues = <ConversationIntegrityIssue>[];
     final conversationIds = <String>{};
-    final conversationKeys =
-        await WebFileStore.keysWithPrefix(_conversationPrefix);
+    final conversationKeys = await WebFileStore.keysWithPrefix(
+      _conversationPrefix,
+    );
     for (final key in conversationKeys) {
       final conversationBytes = await WebFileStore.read(key);
       if (conversationBytes == null) continue;
-      final conversation =
-          StroomConversation.fromMap(_decode(conversationBytes));
+      final conversation = StroomConversation.fromMap(
+        _decode(conversationBytes),
+      );
       conversationIds.add(conversation.id);
-      final messages = await getMessages(conversation.id,
-          limit: await countMessages(conversationId: conversation.id));
+      final messages = await getMessages(
+        conversation.id,
+        limit: await countMessages(conversationId: conversation.id),
+      );
       for (final message in messages) {
         for (final reference in conversationMessageMediaReferences(message)) {
           await _validateMediaReference(
@@ -477,8 +492,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
           );
         }
       }
-      for (final reference
-          in conversationDraftAttachmentReferences(conversation)) {
+      for (final reference in conversationDraftAttachmentReferences(
+        conversation,
+      )) {
         await _validateMediaReference(
           issues,
           conversation.id,
@@ -494,9 +510,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
       final encodedConversationId = suffix.split('/').first;
       final conversationId = Uri.decodeComponent(encodedConversationId);
       if (!conversationIds.contains(conversationId)) {
-        issues.add(
-          _issue(conversationId, '', key, 'missing_conversation'),
-        );
+        issues.add(_issue(conversationId, '', key, 'missing_conversation'));
       }
     }
     return issues;
@@ -509,52 +523,68 @@ class IndexedDbConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = reference['reference'] as String? ??
-        reference['storagePath'] as String? ??
-        '';
-    if (path.isEmpty) {
-      issues.add(ConversationIntegrityIssue(
-          conversationId: conversationId,
-          messageId: messageId,
-          reference: '',
-          reason: 'missing_reference'));
+    final path = conversationLocalMediaPath(reference['reference']) ??
+        conversationLocalMediaPath(reference['storagePath']);
+    if (path == null) {
+      if (!conversationIsExternalMediaUri(reference['reference']) &&
+          !conversationIsExternalMediaUri(reference['storagePath'])) {
+        issues.add(
+          ConversationIntegrityIssue(
+            conversationId: conversationId,
+            messageId: messageId,
+            reference: '',
+            reason: 'missing_reference',
+          ),
+        );
+      }
     } else {
       final bytes = await readMedia(path);
       if (bytes == null) {
-        issues.add(ConversationIntegrityIssue(
+        issues.add(
+          ConversationIntegrityIssue(
             conversationId: conversationId,
             messageId: messageId,
             reference: path,
-            reason: 'missing_media'));
+            reason: 'missing_media',
+          ),
+        );
       } else {
         final size = reference['size'] ?? reference['fileSize'];
         if (!conversationMediaHashMatches(reference, bytes)) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: path,
-              reason: 'hash_mismatch'));
+              reason: 'hash_mismatch',
+            ),
+          );
         }
         if (size is num && size.toInt() != bytes.length) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: path,
-              reason: 'size_mismatch'));
+              reason: 'size_mismatch',
+            ),
+          );
         }
       }
     }
-    final thumbnailPath = reference['thumbnailPath'];
-    if (thumbnailPath is String &&
-        thumbnailPath.isNotEmpty &&
-        thumbnailPath != path) {
+    final rawThumbnailPath = reference['thumbnailPath'];
+    final thumbnailPath = conversationLocalMediaPath(rawThumbnailPath);
+    if (thumbnailPath != null && thumbnailPath != path) {
       final thumbnailBytes = await readMedia(thumbnailPath);
       if (thumbnailBytes == null) {
-        issues.add(ConversationIntegrityIssue(
+        issues.add(
+          ConversationIntegrityIssue(
             conversationId: conversationId,
             messageId: messageId,
             reference: thumbnailPath,
-            reason: 'missing_media'));
+            reason: 'missing_media',
+          ),
+        );
       } else {
         final thumbnailReference = <String, dynamic>{
           if (reference['thumbnailSha256'] is String)
@@ -564,28 +594,37 @@ class IndexedDbConversationRepository implements ConversationRepository {
         };
         if (thumbnailReference.isNotEmpty &&
             !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: thumbnailPath,
-              reason: 'hash_mismatch'));
+              reason: 'hash_mismatch',
+            ),
+          );
         }
         final thumbnailSize = reference['thumbnailSize'];
         if (thumbnailSize is num &&
             thumbnailSize.toInt() != thumbnailBytes.length) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: thumbnailPath,
-              reason: 'size_mismatch'));
+              reason: 'size_mismatch',
+            ),
+          );
         }
       }
-    } else if (thumbnailPath != null && thumbnailPath is! String) {
-      issues.add(ConversationIntegrityIssue(
+    } else if (rawThumbnailPath != null && rawThumbnailPath is! String) {
+      issues.add(
+        ConversationIntegrityIssue(
           conversationId: conversationId,
           messageId: messageId,
           reference: '',
-          reason: 'missing_reference'));
+          reason: 'missing_reference',
+        ),
+      );
     }
   }
 

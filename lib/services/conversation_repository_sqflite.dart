@@ -123,10 +123,13 @@ class SqfliteConversationRepository implements ConversationRepository {
       offset: offset,
     );
     return rows
-        .map((row) => StroomMessage.fromMap(
-              Map<String, dynamic>.from(
-                  jsonDecode(row['record_json']! as String)),
-            ))
+        .map(
+          (row) => StroomMessage.fromMap(
+            Map<String, dynamic>.from(
+              jsonDecode(row['record_json']! as String),
+            ),
+          ),
+        )
         .toList();
   }
 
@@ -142,10 +145,17 @@ class SqfliteConversationRepository implements ConversationRepository {
     };
     final db = await _db;
     await db.transaction((txn) async {
-      await txn.insert('conversations', values,
-          conflictAlgorithm: ConflictAlgorithm.ignore);
-      await txn.update('conversations', values,
-          where: 'id = ?', whereArgs: [conversation.id]);
+      await txn.insert(
+        'conversations',
+        values,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      await txn.update(
+        'conversations',
+        values,
+        where: 'id = ?',
+        whereArgs: [conversation.id],
+      );
     });
   }
 
@@ -165,10 +175,17 @@ class SqfliteConversationRepository implements ConversationRepository {
     };
     final db = await _db;
     await db.transaction((txn) async {
-      await txn.insert('conversations', values,
-          conflictAlgorithm: ConflictAlgorithm.ignore);
-      await txn.update('conversations', values,
-          where: 'id = ?', whereArgs: [conversation.id]);
+      await txn.insert(
+        'conversations',
+        values,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      await txn.update(
+        'conversations',
+        values,
+        where: 'id = ?',
+        whereArgs: [conversation.id],
+      );
       for (final id in deleteMessageIds) {
         await txn.delete(
           'messages',
@@ -194,10 +211,17 @@ class SqfliteConversationRepository implements ConversationRepository {
     };
     final db = await _db;
     await db.transaction((txn) async {
-      await txn.insert('conversations', values,
-          conflictAlgorithm: ConflictAlgorithm.ignore);
-      await txn.update('conversations', values,
-          where: 'id = ?', whereArgs: [conversation.id]);
+      await txn.insert(
+        'conversations',
+        values,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      await txn.update(
+        'conversations',
+        values,
+        where: 'id = ?',
+        whereArgs: [conversation.id],
+      );
       await txn.delete(
         'messages',
         where: 'conversation_id = ?',
@@ -213,8 +237,11 @@ class SqfliteConversationRepository implements ConversationRepository {
   Future<void> setConversationOrder(List<String> conversationIds) async {
     final db = await _db;
     await db.transaction((txn) async {
-      final rows = await txn.query('conversations',
-          columns: ['id', 'sort_order'], orderBy: 'sort_order ASC');
+      final rows = await txn.query(
+        'conversations',
+        columns: ['id', 'sort_order'],
+        orderBy: 'sort_order ASC',
+      );
       final currentIds = rows.map((row) => row['id']! as String).toList();
       final wanted = <String>[
         ...conversationIds.where((id) => currentIds.contains(id)),
@@ -230,8 +257,12 @@ class SqfliteConversationRepository implements ConversationRepository {
         if (index < rows.length &&
             rows[index]['id'] == wanted[index] &&
             rows[index]['sort_order'] == index) continue;
-        await txn.update('conversations', {'sort_order': index},
-            where: 'id = ?', whereArgs: [wanted[index]]);
+        await txn.update(
+          'conversations',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [wanted[index]],
+        );
       }
     });
   }
@@ -257,8 +288,11 @@ class SqfliteConversationRepository implements ConversationRepository {
     final db = await _db;
     await db.transaction((txn) async {
       await _requireConversation(txn, conversationId);
-      await txn.delete('messages',
-          where: 'conversation_id = ?', whereArgs: [conversationId]);
+      await txn.delete(
+        'messages',
+        where: 'conversation_id = ?',
+        whereArgs: [conversationId],
+      );
       for (final message in messages) {
         await _insertMessage(txn, conversationId, message);
       }
@@ -267,7 +301,9 @@ class SqfliteConversationRepository implements ConversationRepository {
 
   @override
   Future<void> upsertMessage(
-      String conversationId, StroomMessage message) async {
+    String conversationId,
+    StroomMessage message,
+  ) async {
     final db = await _db;
     await db.transaction((txn) async {
       await _requireConversation(txn, conversationId);
@@ -281,20 +317,24 @@ class SqfliteConversationRepository implements ConversationRepository {
     StroomMessage message,
   ) =>
       db.insert(
-        'messages',
-        {
-          'id': message.id,
-          'conversation_id': conversationId,
-          'sequence': message.sequence,
-          'created_at': message.createdAt.millisecondsSinceEpoch,
-          'record_json': jsonEncode(message.toMap()),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+          'messages',
+          {
+            'id': message.id,
+            'conversation_id': conversationId,
+            'sequence': message.sequence,
+            'created_at': message.createdAt.millisecondsSinceEpoch,
+            'record_json': jsonEncode(message.toMap()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
   Future<void> _requireConversation(DatabaseExecutor db, String id) async {
-    final rows = await db.query('conversations',
-        columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      'conversations',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) throw StateError('Unknown conversation: $id');
   }
 
@@ -309,27 +349,34 @@ class SqfliteConversationRepository implements ConversationRepository {
 
   @override
   Future<void> deleteConversation(String conversationId) async {
-    await (await _db)
-        .delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    await (await _db).delete(
+      'conversations',
+      where: 'id = ?',
+      whereArgs: [conversationId],
+    );
   }
 
   @override
   Future<int> countConversations() async =>
       Sqflite.firstIntValue(
-          await (await _db).rawQuery('SELECT COUNT(*) FROM conversations')) ??
+        await (await _db).rawQuery('SELECT COUNT(*) FROM conversations'),
+      ) ??
       0;
 
   @override
-  Future<int> countMessages({String? conversationId}) async => conversationId ==
-          null
-      ? Sqflite.firstIntValue(
-              await (await _db).rawQuery('SELECT COUNT(*) FROM messages')) ??
-          0
-      : Sqflite.firstIntValue(await (await _db).rawQuery(
-            'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
-            [conversationId],
-          )) ??
-          0;
+  Future<int> countMessages({String? conversationId}) async =>
+      conversationId == null
+          ? Sqflite.firstIntValue(
+                await (await _db).rawQuery('SELECT COUNT(*) FROM messages'),
+              ) ??
+              0
+          : Sqflite.firstIntValue(
+                await (await _db).rawQuery(
+                  'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
+                  [conversationId],
+                ),
+              ) ??
+              0;
 
   @override
   Future<String?> migrationSourceHash() async {
@@ -346,10 +393,12 @@ class SqfliteConversationRepository implements ConversationRepository {
   @override
   Future<void> setMigrationSourceHash(String sourceHash) async {
     await (await _db).insert(
-      'repository_metadata',
-      {'key': 'migration_source_hash', 'value': sourceHash},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+        'repository_metadata',
+        {
+          'key': 'migration_source_hash',
+          'value': sourceHash,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -359,8 +408,10 @@ class SqfliteConversationRepository implements ConversationRepository {
       'conversations',
       orderBy: 'sort_order ASC, id ASC',
     );
-    final messages = await db.query('messages',
-        orderBy: 'conversation_id ASC, sequence ASC, id ASC');
+    final messages = await db.query(
+      'messages',
+      orderBy: 'conversation_id ASC, sequence ASC, id ASC',
+    );
     final sourceHash = await migrationSourceHash();
     return {
       'schemaVersion': 1,
@@ -393,8 +444,9 @@ class SqfliteConversationRepository implements ConversationRepository {
     for (final raw in rawConversations) {
       if (raw is! Map)
         throw const FormatException('Invalid conversation record.');
-      final conversation =
-          StroomConversation.fromMap(Map<String, dynamic>.from(raw));
+      final conversation = StroomConversation.fromMap(
+        Map<String, dynamic>.from(raw),
+      );
       if (conversation.id.isEmpty ||
           conversations.containsKey(conversation.id)) {
         throw const FormatException('Invalid or duplicate conversation id.');
@@ -412,7 +464,8 @@ class SqfliteConversationRepository implements ConversationRepository {
       if (conversationId is! String ||
           !conversations.containsKey(conversationId)) {
         throw const FormatException(
-            'Message references a missing conversation.');
+          'Message references a missing conversation.',
+        );
       }
       final message = StroomMessage.fromMap(row);
       final compositeId = '$conversationId\u0000${message.id}';
@@ -467,13 +520,17 @@ class SqfliteConversationRepository implements ConversationRepository {
     required Future<Uint8List?> Function(String reference) readMedia,
   }) async {
     final issues = <ConversationIntegrityIssue>[];
-    final conversations =
-        await (await _db).query('conversations', columns: ['id']);
+    final conversations = await (await _db).query(
+      'conversations',
+      columns: ['id'],
+    );
     for (final row in conversations) {
       final id = row['id']! as String;
       final record = await getConversation(id);
-      final messages =
-          await getMessages(id, limit: await countMessages(conversationId: id));
+      final messages = await getMessages(
+        id,
+        limit: await countMessages(conversationId: id),
+      );
       for (final message in messages) {
         for (final reference in conversationMessageMediaReferences(message)) {
           await _validateMediaReference(
@@ -507,52 +564,68 @@ class SqfliteConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = reference['reference'] as String? ??
-        reference['storagePath'] as String? ??
-        '';
-    if (path.isEmpty) {
-      issues.add(ConversationIntegrityIssue(
-          conversationId: conversationId,
-          messageId: messageId,
-          reference: '',
-          reason: 'missing_reference'));
+    final path = conversationLocalMediaPath(reference['reference']) ??
+        conversationLocalMediaPath(reference['storagePath']);
+    if (path == null) {
+      if (!conversationIsExternalMediaUri(reference['reference']) &&
+          !conversationIsExternalMediaUri(reference['storagePath'])) {
+        issues.add(
+          ConversationIntegrityIssue(
+            conversationId: conversationId,
+            messageId: messageId,
+            reference: '',
+            reason: 'missing_reference',
+          ),
+        );
+      }
     } else {
       final bytes = await readMedia(path);
       if (bytes == null) {
-        issues.add(ConversationIntegrityIssue(
+        issues.add(
+          ConversationIntegrityIssue(
             conversationId: conversationId,
             messageId: messageId,
             reference: path,
-            reason: 'missing_media'));
+            reason: 'missing_media',
+          ),
+        );
       } else {
         final size = reference['size'] ?? reference['fileSize'];
         if (!conversationMediaHashMatches(reference, bytes)) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: path,
-              reason: 'hash_mismatch'));
+              reason: 'hash_mismatch',
+            ),
+          );
         }
         if (size is num && size.toInt() != bytes.length) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: path,
-              reason: 'size_mismatch'));
+              reason: 'size_mismatch',
+            ),
+          );
         }
       }
     }
-    final thumbnailPath = reference['thumbnailPath'];
-    if (thumbnailPath is String &&
-        thumbnailPath.isNotEmpty &&
-        thumbnailPath != path) {
+    final rawThumbnailPath = reference['thumbnailPath'];
+    final thumbnailPath = conversationLocalMediaPath(rawThumbnailPath);
+    if (thumbnailPath != null && thumbnailPath != path) {
       final thumbnailBytes = await readMedia(thumbnailPath);
       if (thumbnailBytes == null) {
-        issues.add(ConversationIntegrityIssue(
+        issues.add(
+          ConversationIntegrityIssue(
             conversationId: conversationId,
             messageId: messageId,
             reference: thumbnailPath,
-            reason: 'missing_media'));
+            reason: 'missing_media',
+          ),
+        );
       } else {
         final thumbnailReference = <String, dynamic>{
           if (reference['thumbnailSha256'] is String)
@@ -562,28 +635,37 @@ class SqfliteConversationRepository implements ConversationRepository {
         };
         if (thumbnailReference.isNotEmpty &&
             !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: thumbnailPath,
-              reason: 'hash_mismatch'));
+              reason: 'hash_mismatch',
+            ),
+          );
         }
         final thumbnailSize = reference['thumbnailSize'];
         if (thumbnailSize is num &&
             thumbnailSize.toInt() != thumbnailBytes.length) {
-          issues.add(ConversationIntegrityIssue(
+          issues.add(
+            ConversationIntegrityIssue(
               conversationId: conversationId,
               messageId: messageId,
               reference: thumbnailPath,
-              reason: 'size_mismatch'));
+              reason: 'size_mismatch',
+            ),
+          );
         }
       }
-    } else if (thumbnailPath != null && thumbnailPath is! String) {
-      issues.add(ConversationIntegrityIssue(
+    } else if (rawThumbnailPath != null && rawThumbnailPath is! String) {
+      issues.add(
+        ConversationIntegrityIssue(
           conversationId: conversationId,
           messageId: messageId,
           reference: '',
-          reason: 'missing_reference'));
+          reason: 'missing_reference',
+        ),
+      );
     }
   }
 

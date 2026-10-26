@@ -335,6 +335,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
+  bool _isLoadingNewer = false;
 
   /// True once the user has reached the top of the list while no older
   /// messages remain — shows the "没有更多内容了" hint above the first
@@ -351,8 +352,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Minimum display duration of the top load-more indicator. The spinner
   /// must stay up for at least this long even when the page loads
   /// instantly, otherwise it flashes for a single frame.
-  static const Duration _loadMoreMinDisplayDuration =
-      Duration(milliseconds: 500);
+  static const Duration _loadMoreMinDisplayDuration = Duration(
+    milliseconds: 500,
+  );
 
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from

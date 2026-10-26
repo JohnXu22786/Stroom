@@ -558,6 +558,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Map<String, Map<String, String>> _persistedMessageRecords = {};
   final Map<String, Map<String, int>> _persistedMessageSequences = {};
   final Map<String, int> _repositoryMessageOffsets = {};
+  final Map<String, int> _repositoryMessageCounts = {};
   ConversationRepository? _conversationRepository;
   bool _repositoryReady = false;
 
@@ -649,7 +650,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   /// Failures are ignored: removing the stale record is the critical part.
   Future<void> _cleanupConversationFiles(Conversation conv) async {
     final messagesById = {
-      for (final message in conv.messages) message.id: message
+      for (final message in conv.messages) message.id: message,
     };
     if (_repositoryReady) {
       try {
@@ -660,7 +661,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         }
       } catch (error) {
         debugPrint(
-            'Failed to read conversation attachments for cleanup: $error');
+          'Failed to read conversation attachments for cleanup: $error',
+        );
       }
     }
     for (final msg in messagesById.values) {

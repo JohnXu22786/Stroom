@@ -9,6 +9,19 @@ import 'conversation_repository_factory_stub.dart'
 
 export 'conversation_repository_memory.dart';
 
+/// Returns a local media path, excluding URI references that are resolved by
+/// the content consumer and are not part of this app's attachment store.
+String? conversationLocalMediaPath(Object? value) {
+  if (value is! String || value.isEmpty) return null;
+  if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(value)) return null;
+  return value;
+}
+
+bool conversationIsExternalMediaUri(Object? value) =>
+    value is String &&
+    value.isNotEmpty &&
+    RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(value);
+
 /// Legacy Stroom attachments use MD5 in `hash`; neutral media references may
 /// provide an explicit SHA-256 digest. Accept either stored representation.
 bool conversationMediaHashMatches(

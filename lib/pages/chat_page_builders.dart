@@ -70,9 +70,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
             // ensures the scroll area auto-adjusts as the
             // composer height changes (e.g. multi-line input).
             composerBuilder: (_) => const SizedBox.shrink(),
-            textMessageBuilder: (context, message, index,
-                    {required bool isSentByMe,
-                    MessageGroupStatus? groupStatus}) =>
+            textMessageBuilder: (
+              context,
+              message,
+              index, {
+              required bool isSentByMe,
+              MessageGroupStatus? groupStatus,
+            }) =>
                 _buildTextMessage(
               context,
               message,
@@ -83,9 +87,13 @@ extension _ChatPageBuildersExt on _ChatPageState {
               isStreaming: isStreaming,
               activeId: activeId,
             ),
-            textStreamMessageBuilder: (context, message, index,
-                    {required bool isSentByMe,
-                    MessageGroupStatus? groupStatus}) =>
+            textStreamMessageBuilder: (
+              context,
+              message,
+              index, {
+              required bool isSentByMe,
+              MessageGroupStatus? groupStatus,
+            }) =>
                 _buildTextStreamMessage(
               context,
               message,
@@ -111,13 +119,11 @@ extension _ChatPageBuildersExt on _ChatPageState {
   /// default indicator is replaced with a matrix-based stretch
   /// ([TransformStretchOverscroll]) so the mermaid area stretches together
   /// with the rest of the message content.
-  Widget _buildChatAnimatedList(
-    BuildContext context,
-    ChatItem itemBuilder,
-  ) {
+  Widget _buildChatAnimatedList(BuildContext context, ChatItem itemBuilder) {
     final list = ChatAnimatedList(
       itemBuilder: itemBuilder,
       onEndReached: _loadMoreMessages,
+      onStartReached: _loadNewerRepositoryMessages,
       scrollController: _chatScrollController,
       // 顶部"没有更多内容了"提示（用户滚到顶部且无更早历史消息时显示）。
       topSliver: _buildNoMoreMessagesSliver(),
@@ -251,21 +257,14 @@ extension _ChatPageBuildersExt on _ChatPageState {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          key: _messageKeys.putIfAbsent(
-            message.id,
-            () => GlobalKey(),
-          ),
+          key: _messageKeys.putIfAbsent(message.id, () => GlobalKey()),
           child: messageBubble,
         ),
         // Timestamp below bubble (user messages only),
         // above action buttons, with theme-adaptive color.
         if (!isAi)
           Padding(
-            padding: const EdgeInsets.only(
-              left: 4,
-              top: 2,
-              bottom: 2,
-            ),
+            padding: const EdgeInsets.only(left: 4, top: 2, bottom: 2),
             child: Text(
               DateFormat('yyyy-MM-dd HH:mm').format(
                 (message.createdAt ?? message.resolvedTime ?? DateTime.now())
@@ -278,11 +277,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
             ),
           ),
         Padding(
-          padding: const EdgeInsets.only(
-            left: 4,
-            top: 2,
-            bottom: 4,
-          ),
+          padding: const EdgeInsets.only(left: 4, top: 2, bottom: 4),
           child: _buildMessageActionButtons(
             context: context,
             message: message,
@@ -397,9 +392,7 @@ extension _ChatPageBuildersExt on _ChatPageState {
       child: SizedBox(
         width: 20,
         height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-        ),
+        child: CircularProgressIndicator(strokeWidth: 2),
       ),
     );
   }
