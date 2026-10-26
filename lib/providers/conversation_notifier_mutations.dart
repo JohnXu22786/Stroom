@@ -88,7 +88,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// the active selection.
   Future<void> deleteConversation(String id) async {
     final wasActive = _ref.read(activeConversationIdProvider) == id;
-    final removed = state.where((conversation) => conversation.id == id).toList();
+    final removed =
+        state.where((conversation) => conversation.id == id).toList();
     if (removed.isEmpty) return;
     if (_repositoryReady) {
       try {

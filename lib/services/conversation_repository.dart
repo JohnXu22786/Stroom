@@ -48,14 +48,15 @@ class ConversationSummary {
   factory ConversationSummary.fromConversation(
     StroomConversation conversation, {
     required int messageCount,
-  }) => ConversationSummary(
-    id: conversation.id,
-    title: conversation.title,
-    createdAt: conversation.createdAt,
-    updatedAt: conversation.updatedAt,
-    messageCount: messageCount,
-    extraFields: conversation.extraFields,
-  );
+  }) =>
+      ConversationSummary(
+        id: conversation.id,
+        title: conversation.title,
+        createdAt: conversation.createdAt,
+        updatedAt: conversation.updatedAt,
+        messageCount: messageCount,
+        extraFields: conversation.extraFields,
+      );
 }
 
 class ConversationIntegrityIssue {

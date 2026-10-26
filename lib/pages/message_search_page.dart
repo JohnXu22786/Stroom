@@ -149,13 +149,16 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     try {
       final notifier = ref.read(conversationsProvider.notifier);
       final conversations = await notifier.loadConversationsForSearch();
-      if (!mounted || generation != _searchGeneration || _query != query) return;
+      if (!mounted || generation != _searchGeneration || _query != query)
+        return;
       setState(() {
-        _results = MessageSearchPage.searchMessageContents(conversations, query);
+        _results =
+            MessageSearchPage.searchMessageContents(conversations, query);
         _isSearching = false;
       });
     } catch (_) {
-      if (!mounted || generation != _searchGeneration || _query != query) return;
+      if (!mounted || generation != _searchGeneration || _query != query)
+        return;
       setState(() {
         _searchError = '搜索失败，请稍后重试';
         _isSearching = false;
@@ -229,8 +232,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                     : _isSearching
                         ? const Center(child: CircularProgressIndicator())
                         : _results.isEmpty
-                    ? _buildEmptyState(cs)
-                    : _buildResultsList(cs),
+                            ? _buildEmptyState(cs)
+                            : _buildResultsList(cs),
           ),
         ],
       ),

@@ -124,7 +124,8 @@ class SqfliteConversationRepository implements ConversationRepository {
     );
     return rows
         .map((row) => StroomMessage.fromMap(
-              Map<String, dynamic>.from(jsonDecode(row['record_json']! as String)),
+              Map<String, dynamic>.from(
+                  jsonDecode(row['record_json']! as String)),
             ))
         .toList();
   }
@@ -133,12 +134,12 @@ class SqfliteConversationRepository implements ConversationRepository {
   Future<void> upsertConversation(StroomConversation conversation) async {
     final record = _withoutMessages(conversation);
     final values = {
-        'id': conversation.id,
-        'title': conversation.title,
-        'created_at': conversation.createdAt.millisecondsSinceEpoch,
-        'updated_at': conversation.updatedAt.millisecondsSinceEpoch,
-        'record_json': record.toJson(),
-      };
+      'id': conversation.id,
+      'title': conversation.title,
+      'created_at': conversation.createdAt.millisecondsSinceEpoch,
+      'updated_at': conversation.updatedAt.millisecondsSinceEpoch,
+      'record_json': record.toJson(),
+    };
     final db = await _db;
     await db.transaction((txn) async {
       await txn.insert('conversations', values,
@@ -212,7 +213,8 @@ class SqfliteConversationRepository implements ConversationRepository {
   Future<void> setConversationOrder(List<String> conversationIds) async {
     final db = await _db;
     await db.transaction((txn) async {
-      final rows = await txn.query('conversations', columns: ['id', 'sort_order'], orderBy: 'sort_order ASC');
+      final rows = await txn.query('conversations',
+          columns: ['id', 'sort_order'], orderBy: 'sort_order ASC');
       final currentIds = rows.map((row) => row['id']! as String).toList();
       final wanted = <String>[
         ...conversationIds.where((id) => currentIds.contains(id)),
@@ -220,8 +222,8 @@ class SqfliteConversationRepository implements ConversationRepository {
       ];
       if (_sameIds(currentIds, wanted) &&
           rows.asMap().entries.every(
-            (entry) => entry.value['sort_order'] == entry.key,
-          )) {
+                (entry) => entry.value['sort_order'] == entry.key,
+              )) {
         return;
       }
       for (var index = 0; index < wanted.length; index++) {
@@ -255,7 +257,8 @@ class SqfliteConversationRepository implements ConversationRepository {
     final db = await _db;
     await db.transaction((txn) async {
       await _requireConversation(txn, conversationId);
-      await txn.delete('messages', where: 'conversation_id = ?', whereArgs: [conversationId]);
+      await txn.delete('messages',
+          where: 'conversation_id = ?', whereArgs: [conversationId]);
       for (final message in messages) {
         await _insertMessage(txn, conversationId, message);
       }
@@ -263,7 +266,8 @@ class SqfliteConversationRepository implements ConversationRepository {
   }
 
   @override
-  Future<void> upsertMessage(String conversationId, StroomMessage message) async {
+  Future<void> upsertMessage(
+      String conversationId, StroomMessage message) async {
     final db = await _db;
     await db.transaction((txn) async {
       await _requireConversation(txn, conversationId);
@@ -275,20 +279,22 @@ class SqfliteConversationRepository implements ConversationRepository {
     DatabaseExecutor db,
     String conversationId,
     StroomMessage message,
-  ) => db.insert(
-    'messages',
-    {
-      'id': message.id,
-      'conversation_id': conversationId,
-      'sequence': message.sequence,
-      'created_at': message.createdAt.millisecondsSinceEpoch,
-      'record_json': jsonEncode(message.toMap()),
-    },
-    conflictAlgorithm: ConflictAlgorithm.replace,
-  );
+  ) =>
+      db.insert(
+        'messages',
+        {
+          'id': message.id,
+          'conversation_id': conversationId,
+          'sequence': message.sequence,
+          'created_at': message.createdAt.millisecondsSinceEpoch,
+          'record_json': jsonEncode(message.toMap()),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
   Future<void> _requireConversation(DatabaseExecutor db, String id) async {
-    final rows = await db.query('conversations', columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query('conversations',
+        columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) throw StateError('Unknown conversation: $id');
   }
 
@@ -303,20 +309,27 @@ class SqfliteConversationRepository implements ConversationRepository {
 
   @override
   Future<void> deleteConversation(String conversationId) async {
-    await (await _db).delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
+    await (await _db)
+        .delete('conversations', where: 'id = ?', whereArgs: [conversationId]);
   }
 
   @override
   Future<int> countConversations() async =>
-      Sqflite.firstIntValue(await (await _db).rawQuery('SELECT COUNT(*) FROM conversations')) ?? 0;
+      Sqflite.firstIntValue(
+          await (await _db).rawQuery('SELECT COUNT(*) FROM conversations')) ??
+      0;
 
   @override
-  Future<int> countMessages({String? conversationId}) async => conversationId == null
-      ? Sqflite.firstIntValue(await (await _db).rawQuery('SELECT COUNT(*) FROM messages')) ?? 0
+  Future<int> countMessages({String? conversationId}) async => conversationId ==
+          null
+      ? Sqflite.firstIntValue(
+              await (await _db).rawQuery('SELECT COUNT(*) FROM messages')) ??
+          0
       : Sqflite.firstIntValue(await (await _db).rawQuery(
-          'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
-          [conversationId],
-        )) ?? 0;
+            'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
+            [conversationId],
+          )) ??
+          0;
 
   @override
   Future<String?> migrationSourceHash() async {
@@ -346,14 +359,14 @@ class SqfliteConversationRepository implements ConversationRepository {
       'conversations',
       orderBy: 'sort_order ASC, id ASC',
     );
-    final messages = await db.query('messages', orderBy: 'conversation_id ASC, sequence ASC, id ASC');
+    final messages = await db.query('messages',
+        orderBy: 'conversation_id ASC, sequence ASC, id ASC');
     final sourceHash = await migrationSourceHash();
     return {
       'schemaVersion': 1,
       if (sourceHash != null) 'migrationSourceHash': sourceHash,
-      'conversationOrder': conversations
-          .map((row) => row['id'] as String)
-          .toList(),
+      'conversationOrder':
+          conversations.map((row) => row['id'] as String).toList(),
       'conversations': conversations
           .map((row) => jsonDecode(row['record_json']! as String))
           .toList(),
@@ -378,9 +391,12 @@ class SqfliteConversationRepository implements ConversationRepository {
     }
     final conversations = <String, StroomConversation>{};
     for (final raw in rawConversations) {
-      if (raw is! Map) throw const FormatException('Invalid conversation record.');
-      final conversation = StroomConversation.fromMap(Map<String, dynamic>.from(raw));
-      if (conversation.id.isEmpty || conversations.containsKey(conversation.id)) {
+      if (raw is! Map)
+        throw const FormatException('Invalid conversation record.');
+      final conversation =
+          StroomConversation.fromMap(Map<String, dynamic>.from(raw));
+      if (conversation.id.isEmpty ||
+          conversations.containsKey(conversation.id)) {
         throw const FormatException('Invalid or duplicate conversation id.');
       }
       conversations[conversation.id] = _withoutMessages(conversation);
@@ -393,8 +409,10 @@ class SqfliteConversationRepository implements ConversationRepository {
       if (raw is! Map) throw const FormatException('Invalid message record.');
       final row = Map<String, dynamic>.from(raw);
       final conversationId = row.remove('conversationId');
-      if (conversationId is! String || !conversations.containsKey(conversationId)) {
-        throw const FormatException('Message references a missing conversation.');
+      if (conversationId is! String ||
+          !conversations.containsKey(conversationId)) {
+        throw const FormatException(
+            'Message references a missing conversation.');
       }
       final message = StroomMessage.fromMap(row);
       final compositeId = '$conversationId\u0000${message.id}';
@@ -449,11 +467,13 @@ class SqfliteConversationRepository implements ConversationRepository {
     required Future<Uint8List?> Function(String reference) readMedia,
   }) async {
     final issues = <ConversationIntegrityIssue>[];
-    final conversations = await (await _db).query('conversations', columns: ['id']);
+    final conversations =
+        await (await _db).query('conversations', columns: ['id']);
     for (final row in conversations) {
       final id = row['id']! as String;
       final record = await getConversation(id);
-      final messages = await getMessages(id, limit: await countMessages(conversationId: id));
+      final messages =
+          await getMessages(id, limit: await countMessages(conversationId: id));
       for (final message in messages) {
         for (final part in message.content) {
           final reference = conversationMediaReferenceForPart(part);
@@ -468,8 +488,7 @@ class SqfliteConversationRepository implements ConversationRepository {
         }
       }
       if (record != null) {
-        for (final reference
-            in conversationDraftAttachmentReferences(record)) {
+        for (final reference in conversationDraftAttachmentReferences(record)) {
           await _validateMediaReference(
             issues,
             id,
@@ -490,43 +509,83 @@ class SqfliteConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = reference['reference'] as String? ?? reference['storagePath'] as String? ?? '';
+    final path = reference['reference'] as String? ??
+        reference['storagePath'] as String? ??
+        '';
     if (path.isEmpty) {
-      issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: '', reason: 'missing_reference'));
+      issues.add(ConversationIntegrityIssue(
+          conversationId: conversationId,
+          messageId: messageId,
+          reference: '',
+          reason: 'missing_reference'));
     } else {
       final bytes = await readMedia(path);
       if (bytes == null) {
-        issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: path, reason: 'missing_media'));
+        issues.add(ConversationIntegrityIssue(
+            conversationId: conversationId,
+            messageId: messageId,
+            reference: path,
+            reason: 'missing_media'));
       } else {
         final size = reference['size'] ?? reference['fileSize'];
         if (!conversationMediaHashMatches(reference, bytes)) {
-          issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: path, reason: 'hash_mismatch'));
+          issues.add(ConversationIntegrityIssue(
+              conversationId: conversationId,
+              messageId: messageId,
+              reference: path,
+              reason: 'hash_mismatch'));
         }
         if (size is num && size.toInt() != bytes.length) {
-          issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: path, reason: 'size_mismatch'));
+          issues.add(ConversationIntegrityIssue(
+              conversationId: conversationId,
+              messageId: messageId,
+              reference: path,
+              reason: 'size_mismatch'));
         }
       }
     }
     final thumbnailPath = reference['thumbnailPath'];
-    if (thumbnailPath is String && thumbnailPath.isNotEmpty && thumbnailPath != path) {
+    if (thumbnailPath is String &&
+        thumbnailPath.isNotEmpty &&
+        thumbnailPath != path) {
       final thumbnailBytes = await readMedia(thumbnailPath);
       if (thumbnailBytes == null) {
-        issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: thumbnailPath, reason: 'missing_media'));
+        issues.add(ConversationIntegrityIssue(
+            conversationId: conversationId,
+            messageId: messageId,
+            reference: thumbnailPath,
+            reason: 'missing_media'));
       } else {
         final thumbnailReference = <String, dynamic>{
-          if (reference['thumbnailSha256'] is String) 'sha256': reference['thumbnailSha256'],
-          if (reference['thumbnailHash'] is String) 'hash': reference['thumbnailHash'],
+          if (reference['thumbnailSha256'] is String)
+            'sha256': reference['thumbnailSha256'],
+          if (reference['thumbnailHash'] is String)
+            'hash': reference['thumbnailHash'],
         };
-        if (thumbnailReference.isNotEmpty && !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
-          issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: thumbnailPath, reason: 'hash_mismatch'));
+        if (thumbnailReference.isNotEmpty &&
+            !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
+          issues.add(ConversationIntegrityIssue(
+              conversationId: conversationId,
+              messageId: messageId,
+              reference: thumbnailPath,
+              reason: 'hash_mismatch'));
         }
         final thumbnailSize = reference['thumbnailSize'];
-        if (thumbnailSize is num && thumbnailSize.toInt() != thumbnailBytes.length) {
-          issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: thumbnailPath, reason: 'size_mismatch'));
+        if (thumbnailSize is num &&
+            thumbnailSize.toInt() != thumbnailBytes.length) {
+          issues.add(ConversationIntegrityIssue(
+              conversationId: conversationId,
+              messageId: messageId,
+              reference: thumbnailPath,
+              reason: 'size_mismatch'));
         }
       }
     } else if (thumbnailPath != null && thumbnailPath is! String) {
-      issues.add(ConversationIntegrityIssue(conversationId: conversationId, messageId: messageId, reference: '', reason: 'missing_reference'));
+      issues.add(ConversationIntegrityIssue(
+          conversationId: conversationId,
+          messageId: messageId,
+          reference: '',
+          reason: 'missing_reference'));
     }
   }
 
@@ -538,15 +597,16 @@ class SqfliteConversationRepository implements ConversationRepository {
     );
   }
 
-  static StroomConversation _withoutMessages(StroomConversation source) => StroomConversation(
-    schemaVersion: source.schemaVersion,
-    id: source.id,
-    title: source.title,
-    createdAt: source.createdAt,
-    updatedAt: source.updatedAt,
-    extensions: source.extensions,
-    extraFields: source.extraFields,
-  );
+  static StroomConversation _withoutMessages(StroomConversation source) =>
+      StroomConversation(
+        schemaVersion: source.schemaVersion,
+        id: source.id,
+        title: source.title,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt,
+        extensions: source.extensions,
+        extraFields: source.extraFields,
+      );
 
   static bool _sameIds(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

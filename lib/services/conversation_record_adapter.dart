@@ -10,24 +10,29 @@ class ConversationRecordAdapter {
   static StroomConversation fromLegacyMap(Map<String, dynamic> map) {
     final id = map['id'];
     if (id is! String || id.isEmpty) {
-      throw const FormatException('Legacy conversation is missing its stable id.');
+      throw const FormatException(
+          'Legacy conversation is missing its stable id.');
     }
     final rawMessages = map['messages'];
     if (rawMessages != null && rawMessages is! List) {
-      throw const FormatException('Legacy conversation messages must be a list.');
+      throw const FormatException(
+          'Legacy conversation messages must be a list.');
     }
     final messages = <StroomMessage>[];
     final usedMessageIds = <String>{};
     for (final rawMessage in (rawMessages as List? ?? const [])) {
       if (rawMessage is! Map) {
-        throw FormatException('Conversation $id contains a non-object message.');
+        throw FormatException(
+            'Conversation $id contains a non-object message.');
       }
       final legacyMap = Map<String, dynamic>.from(rawMessage);
       final legacy = ChatMessage.fromMap(legacyMap);
       if (legacy.id.isEmpty || !usedMessageIds.add(legacy.id)) {
-        throw FormatException('Conversation $id contains a missing or duplicate message id.');
+        throw FormatException(
+            'Conversation $id contains a missing or duplicate message id.');
       }
-      final neutral = StroomMessage.fromLegacy(legacy, sequence: messages.length);
+      final neutral =
+          StroomMessage.fromLegacy(legacy, sequence: messages.length);
       final oldLegacyExtension = neutral.extensions[legacyMessageNamespace];
       final legacyRecord = legacyMessageRecordForStorage(legacyMap);
       messages.add(
@@ -99,9 +104,11 @@ class ConversationRecordAdapter {
       'updatedAt': conversation.updatedAt.toIso8601String(),
       'messages': messages.map(messageToLegacyMap).toList(),
     };
-    final ordinaryExtensions = Map<String, dynamic>.from(conversation.extensions)
-      ..remove(legacyConversationNamespace);
-    if (ordinaryExtensions.isNotEmpty) result['extensions'] = ordinaryExtensions;
+    final ordinaryExtensions =
+        Map<String, dynamic>.from(conversation.extensions)
+          ..remove(legacyConversationNamespace);
+    if (ordinaryExtensions.isNotEmpty)
+      result['extensions'] = ordinaryExtensions;
     return result;
   }
 
@@ -137,9 +144,10 @@ class ConversationRecordAdapter {
   /// carried separately in StroomMessage's redacted, bounded diagnostics field.
   static Map<String, dynamic> legacyMessageRecordForStorage(
     Map<String, dynamic> map,
-  ) => Map<String, dynamic>.from(map)
-    ..remove('rawRequest')
-    ..remove('rawResponse');
+  ) =>
+      Map<String, dynamic>.from(map)
+        ..remove('rawRequest')
+        ..remove('rawResponse');
 
   static DateTime _date(Object? value) {
     if (value is String) {

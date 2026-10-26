@@ -183,8 +183,9 @@ class DataIntegrityChecker {
       issues.add(
         DataIntegrityIssue(
           part: 'chat',
-          message: 'Conversation repository integrity check unavailable: $error',
-        isCorruption: error is FormatException || error is TypeError,
+          message:
+              'Conversation repository integrity check unavailable: $error',
+          isCorruption: error is FormatException || error is TypeError,
         ),
       );
     } finally {

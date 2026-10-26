@@ -115,7 +115,8 @@ Future<Set<String>> collectAttachmentPaths() async {
     final repository = createConversationRepository();
     try {
       await repository.initialize();
-      repositoryIsAuthoritative = await repository.migrationSourceHash() != null;
+      repositoryIsAuthoritative =
+          await repository.migrationSourceHash() != null;
       _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
     } catch (e) {
       debugPrint('收集仓库媒体引用失败: $e');

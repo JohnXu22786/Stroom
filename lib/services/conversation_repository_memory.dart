@@ -109,7 +109,9 @@ class MemoryConversationRepository implements ConversationRepository {
     if (!_conversations.containsKey(conversationId)) {
       throw StateError('Unknown conversation: $conversationId');
     }
-    _messages[conversationId] = {for (final message in messages) message.id: message};
+    _messages[conversationId] = {
+      for (final message in messages) message.id: message
+    };
   }
 
   @override
@@ -138,8 +140,8 @@ class MemoryConversationRepository implements ConversationRepository {
   Future<int> countConversations() async => _conversations.length;
 
   @override
-  Future<int> countMessages({String? conversationId}) async =>
-      conversationId == null
+  Future<int> countMessages({String? conversationId}) async => conversationId ==
+          null
       ? _messages.values.fold(0, (count, messages) => count + messages.length)
       : _messages[conversationId]?.length ?? 0;
 
@@ -153,20 +155,21 @@ class MemoryConversationRepository implements ConversationRepository {
 
   @override
   Future<Map<String, dynamic>> exportData() async => {
-    'schemaVersion': 1,
-    if (_migrationSourceHash != null)
-      'migrationSourceHash': _migrationSourceHash,
-    'conversationOrder': [
-      ..._order.where(_conversations.containsKey),
-      ..._conversations.keys.where((id) => !_order.contains(id)),
-    ],
-    'conversations': _conversations.values.map((item) => item.toMap()).toList(),
-    'messages': [
-      for (final entry in _messages.entries)
-        for (final message in entry.value.values)
-          {'conversationId': entry.key, ...message.toMap()},
-    ],
-  };
+        'schemaVersion': 1,
+        if (_migrationSourceHash != null)
+          'migrationSourceHash': _migrationSourceHash,
+        'conversationOrder': [
+          ..._order.where(_conversations.containsKey),
+          ..._conversations.keys.where((id) => !_order.contains(id)),
+        ],
+        'conversations':
+            _conversations.values.map((item) => item.toMap()).toList(),
+        'messages': [
+          for (final entry in _messages.entries)
+            for (final message in entry.value.values)
+              {'conversationId': entry.key, ...message.toMap()},
+        ],
+      };
 
   @override
   Future<void> restoreData(Map<String, dynamic> data) async {
@@ -177,9 +180,12 @@ class MemoryConversationRepository implements ConversationRepository {
     }
     final conversations = <String, StroomConversation>{};
     for (final raw in rawConversations) {
-      if (raw is! Map) throw const FormatException('Invalid conversation record.');
-      final conversation = StroomConversation.fromMap(Map<String, dynamic>.from(raw));
-      if (conversation.id.isEmpty || conversations.containsKey(conversation.id)) {
+      if (raw is! Map)
+        throw const FormatException('Invalid conversation record.');
+      final conversation =
+          StroomConversation.fromMap(Map<String, dynamic>.from(raw));
+      if (conversation.id.isEmpty ||
+          conversations.containsKey(conversation.id)) {
         throw const FormatException('Invalid or duplicate conversation id.');
       }
       conversations[conversation.id] = _withoutMessages(conversation);
@@ -191,11 +197,14 @@ class MemoryConversationRepository implements ConversationRepository {
       if (raw is! Map) throw const FormatException('Invalid message record.');
       final row = Map<String, dynamic>.from(raw);
       final conversationId = row.remove('conversationId');
-      if (conversationId is! String || !conversations.containsKey(conversationId)) {
-        throw const FormatException('Message references a missing conversation.');
+      if (conversationId is! String ||
+          !conversations.containsKey(conversationId)) {
+        throw const FormatException(
+            'Message references a missing conversation.');
       }
       final message = StroomMessage.fromMap(row);
-      if (message.id.isEmpty || messages[conversationId]!.containsKey(message.id)) {
+      if (message.id.isEmpty ||
+          messages[conversationId]!.containsKey(message.id)) {
         throw const FormatException('Invalid or duplicate message id.');
       }
       messages[conversationId]![message.id] = message;
@@ -269,12 +278,13 @@ class MemoryConversationRepository implements ConversationRepository {
     String messageId,
     String reference,
     String reason,
-  ) => ConversationIntegrityIssue(
-    conversationId: conversationId,
-    messageId: messageId,
-    reference: reference,
-    reason: reason,
-  );
+  ) =>
+      ConversationIntegrityIssue(
+        conversationId: conversationId,
+        messageId: messageId,
+        reference: reference,
+        reason: reason,
+      );
 
   static Future<void> _checkReference(
     List<ConversationIntegrityIssue> issues,
@@ -308,7 +318,8 @@ class MemoryConversationRepository implements ConversationRepository {
         thumbnailPath != path) {
       final thumbnailBytes = await readMedia(thumbnailPath);
       if (thumbnailBytes == null) {
-        issues.add(_issue(conversationId, messageId, thumbnailPath, 'missing_media'));
+        issues.add(
+            _issue(conversationId, messageId, thumbnailPath, 'missing_media'));
       } else {
         final thumbnailReference = <String, dynamic>{
           if (reference['thumbnailSha256'] is String)
@@ -318,11 +329,14 @@ class MemoryConversationRepository implements ConversationRepository {
         };
         if (thumbnailReference.isNotEmpty &&
             !conversationMediaHashMatches(thumbnailReference, thumbnailBytes)) {
-          issues.add(_issue(conversationId, messageId, thumbnailPath, 'hash_mismatch'));
+          issues.add(_issue(
+              conversationId, messageId, thumbnailPath, 'hash_mismatch'));
         }
         final thumbnailSize = reference['thumbnailSize'];
-        if (thumbnailSize is num && thumbnailSize.toInt() != thumbnailBytes.length) {
-          issues.add(_issue(conversationId, messageId, thumbnailPath, 'size_mismatch'));
+        if (thumbnailSize is num &&
+            thumbnailSize.toInt() != thumbnailBytes.length) {
+          issues.add(_issue(
+              conversationId, messageId, thumbnailPath, 'size_mismatch'));
         }
       }
     } else if (thumbnailPath != null && thumbnailPath is! String) {

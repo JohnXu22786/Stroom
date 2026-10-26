@@ -95,7 +95,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     if (query.isNotEmpty) {
       // Search both conversation titles AND message content
       final searchById = {
-        for (final conversation in _searchConversations ?? const <Conversation>[])
+        for (final conversation
+            in _searchConversations ?? const <Conversation>[])
           conversation.id: conversation,
       };
       result = result.where((c) {
@@ -386,50 +387,52 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   ),
                 )
               : filtered.isEmpty
-          ? _buildEmptyState(cs)
-          : _searchController.text.trim().isNotEmpty
-              ? ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final conv = filtered[index];
-                    final isActive = conv.id == activeId;
-                    return _buildConversationItem(
-                        conv, isActive, cs, index, activeId);
-                  },
-                )
-              : ReorderableListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: filtered.length,
-                  buildDefaultDragHandles: false,
-                  onReorderItem: (oldIndex, newIndex) {
-                    // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
-                    // 调整过的索引（框架保证），直接按显示位置映射回存储
-                    // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
-                    final convs = ref.read(conversationsProvider);
-                    final item = filtered[oldIndex];
-                    final realOld = convs.indexWhere((c) => c.id == item.id);
-                    final target = filtered[newIndex];
-                    final realNew = convs.indexWhere((c) => c.id == target.id);
-                    if (realOld >= 0 && realNew >= 0) {
-                      ref
-                          .read(conversationsProvider.notifier)
-                          .reorderConversation(realOld, realNew);
-                    }
-                  },
-                  proxyDecorator: (child, index, animation) => Material(
-                    elevation: 2,
-                    color: cs.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(8),
-                    child: child,
-                  ),
-                  itemBuilder: (context, index) {
-                    final conv = filtered[index];
-                    final isActive = conv.id == activeId;
-                    return _buildConversationItem(
-                        conv, isActive, cs, index, activeId);
-                  },
-                ),
+                  ? _buildEmptyState(cs)
+                  : _searchController.text.trim().isNotEmpty
+                      ? ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final conv = filtered[index];
+                            final isActive = conv.id == activeId;
+                            return _buildConversationItem(
+                                conv, isActive, cs, index, activeId);
+                          },
+                        )
+                      : ReorderableListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: filtered.length,
+                          buildDefaultDragHandles: false,
+                          onReorderItem: (oldIndex, newIndex) {
+                            // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                            // 调整过的索引（框架保证），直接按显示位置映射回存储
+                            // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
+                            final convs = ref.read(conversationsProvider);
+                            final item = filtered[oldIndex];
+                            final realOld =
+                                convs.indexWhere((c) => c.id == item.id);
+                            final target = filtered[newIndex];
+                            final realNew =
+                                convs.indexWhere((c) => c.id == target.id);
+                            if (realOld >= 0 && realNew >= 0) {
+                              ref
+                                  .read(conversationsProvider.notifier)
+                                  .reorderConversation(realOld, realNew);
+                            }
+                          },
+                          proxyDecorator: (child, index, animation) => Material(
+                            elevation: 2,
+                            color: cs.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(8),
+                            child: child,
+                          ),
+                          itemBuilder: (context, index) {
+                            final conv = filtered[index];
+                            final isActive = conv.id == activeId;
+                            return _buildConversationItem(
+                                conv, isActive, cs, index, activeId);
+                          },
+                        ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _batchDelete,

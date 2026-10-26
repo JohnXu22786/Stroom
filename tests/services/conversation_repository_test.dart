@@ -109,7 +109,8 @@ void main() {
       expect(secondPage.map((message) => message.id), ['m3']);
     });
 
-    test('updating one message leaves other message records unchanged', () async {
+    test('updating one message leaves other message records unchanged',
+        () async {
       await repository.upsertConversation(
         StroomConversation(id: 'conversation-1', title: 'Edit'),
       );
@@ -129,7 +130,8 @@ void main() {
       expect(messages.last.content.single.data['text'], 'keep');
     });
 
-    test('applies metadata and message deltas as one repository change', () async {
+    test('applies metadata and message deltas as one repository change',
+        () async {
       await repository.importConversation(
         StroomConversation(
           id: 'atomic-conversation',
@@ -144,7 +146,8 @@ void main() {
         deleteMessageIds: const ['remove'],
       );
 
-      expect((await repository.getConversation('atomic-conversation'))!.title, 'After');
+      expect((await repository.getConversation('atomic-conversation'))!.title,
+          'After');
       final messages = await repository.getMessages('atomic-conversation');
       expect(messages.map((message) => message.id), ['keep']);
       expect(messages.single.content.single.data['text'], 'edited');
@@ -180,7 +183,8 @@ void main() {
 
     test('integrity check follows legacy attachment wrappers', () async {
       await repository.upsertConversation(
-        StroomConversation(id: 'conversation-legacy-media', title: 'Legacy media'),
+        StroomConversation(
+            id: 'conversation-legacy-media', title: 'Legacy media'),
       );
       await repository.upsertMessage(
         'conversation-legacy-media',
@@ -260,7 +264,8 @@ void main() {
       expect(issues.single.reason, 'missing_media');
     });
 
-    test('backup export and restore retain message rows and list order', () async {
+    test('backup export and restore retain message rows and list order',
+        () async {
       await repository.upsertConversation(
         StroomConversation(id: 'backup-a', title: 'A'),
       );
@@ -296,8 +301,8 @@ void main() {
       final repository = MemoryConversationRepository();
       await repository.initialize();
 
-      final initial = await ConversationMigrationService(repository)
-          .migrate(preferences);
+      final initial =
+          await ConversationMigrationService(repository).migrate(preferences);
       await repository.importConversation(
         StroomConversation(
           id: 'fresh-conversation',
@@ -305,8 +310,8 @@ void main() {
           messages: [_message('fresh-message', 0)],
         ),
       );
-      final retry = await ConversationMigrationService(repository)
-          .migrate(preferences);
+      final retry =
+          await ConversationMigrationService(repository).migrate(preferences);
 
       expect(initial.verified, isTrue);
       expect(await repository.migrationSourceHash(), '');
@@ -343,7 +348,7 @@ void main() {
       final migration = ConversationMigrationService(
         repository,
         batchSize: 1,
-        beforeBatchCommit: (batchIndex) {
+        beforeBatchCommit: (batchIndex) async {
           if (batchIndex == 1 && !failed) {
             failed = true;
             throw StateError('simulated interruption');
@@ -367,7 +372,8 @@ void main() {
       expect(result.messageCount, 3);
       expect(preferences.getString('conversations'), raw);
       expect(await repository.countConversations(), 2);
-      expect((await repository.getMessages('c1')).map((m) => m.id), ['m1', 'm2']);
+      expect(
+          (await repository.getMessages('c1')).map((m) => m.id), ['m1', 'm2']);
       expect((await repository.listSummaries()).map((summary) => summary.id), [
         'c1',
         'c2',
@@ -415,7 +421,7 @@ void main() {
       final interruptedMigration = ConversationMigrationService(
         repository,
         batchSize: 1,
-        beforeBatchCommit: (batchIndex) {
+        beforeBatchCommit: (batchIndex) async {
           if (batchIndex == 1) throw StateError('simulated interruption');
         },
       );
@@ -425,10 +431,11 @@ void main() {
       );
       expect(await repository.countConversations(), 1);
 
-      final replacementSource = '[${_legacyConversation('replacement', ['new'])}]';
+      final replacementSource =
+          '[${_legacyConversation('replacement', ['new'])}]';
       await preferences.setString('conversations', replacementSource);
-      final result = await ConversationMigrationService(repository)
-          .migrate(preferences);
+      final result =
+          await ConversationMigrationService(repository).migrate(preferences);
 
       expect(result.verified, isTrue);
       expect(await repository.countConversations(), 1);
@@ -443,7 +450,8 @@ void main() {
       await repository.close();
     });
 
-    test('externalizes inline draft payloads before repository storage', () async {
+    test('externalizes inline draft payloads before repository storage',
+        () async {
       final previousPathProvider = PathProviderPlatform.instance;
       final directory = Directory.systemTemp.createTempSync('draft_migration_');
       PathProviderPlatform.instance = _TestPathProvider(directory.path);
@@ -475,8 +483,8 @@ void main() {
       final repository = MemoryConversationRepository();
       await repository.initialize();
 
-      final result = await ConversationMigrationService(repository)
-          .migrate(preferences);
+      final result =
+          await ConversationMigrationService(repository).migrate(preferences);
 
       expect(result.verified, isTrue);
       final stored = await repository.getConversation('draft-conversation');
@@ -489,14 +497,16 @@ void main() {
         bytes,
       );
       final manifest = jsonDecode(
-        preferences.getString(ConversationMigrationService.attachmentManifestBackupKey)!,
+        preferences.getString(
+            ConversationMigrationService.attachmentManifestBackupKey)!,
       ) as List;
       expect(manifest.single, isNot(contains('base64Data')));
       await repository.close();
     });
   });
 
-  test('chat notifier loads the latest page and older pages on demand', () async {
+  test('chat notifier loads the latest page and older pages on demand',
+      () async {
     SharedPreferences.setMockInitialValues({
       'active_conversation_id': 'paged-conversation',
     });
@@ -506,7 +516,9 @@ void main() {
       StroomConversation(
         id: 'paged-conversation',
         title: 'Paged',
-        messages: [for (var index = 0; index < 45; index++) _message('p$index', index)],
+        messages: [
+          for (var index = 0; index < 45; index++) _message('p$index', index)
+        ],
       ),
     );
     final container = ProviderContainer(
@@ -551,7 +563,8 @@ void main() {
       for (var index = 0; index < 5; index++) 'p$index',
     ]);
     notifier.commitLoadedRepositoryMessages('paged-conversation', firstPage);
-    expect(notifier.hasEarlierRepositoryMessages('paged-conversation'), isFalse);
+    expect(
+        notifier.hasEarlierRepositoryMessages('paged-conversation'), isFalse);
 
     final latestPage = await notifier.reloadLatestMessagePage(
       'paged-conversation',
@@ -569,15 +582,21 @@ void main() {
       isTrue,
     );
     expect(
-      container.read(conversationsProvider).single.messages.map((message) => message.id),
+      container
+          .read(conversationsProvider)
+          .single
+          .messages
+          .map((message) => message.id),
       [for (var index = 20; index < 40; index++) 'p$index'],
     );
     expect(notifier.hasEarlierRepositoryMessages('paged-conversation'), isTrue);
   });
 
-  test('expiry cleanup removes attachments from unloaded repository pages', () async {
+  test('expiry cleanup removes attachments from unloaded repository pages',
+      () async {
     final previousPathProvider = PathProviderPlatform.instance;
-    final directory = Directory.systemTemp.createTempSync('conversation_cleanup_');
+    final directory =
+        Directory.systemTemp.createTempSync('conversation_cleanup_');
     PathProviderPlatform.instance = _TestPathProvider(directory.path);
     addTearDown(() {
       PathProviderPlatform.instance = previousPathProvider;
@@ -630,14 +649,16 @@ void main() {
 
     final notifier = container.read(conversationsProvider.notifier);
     await notifier.ready;
-    expect(container.read(conversationsProvider).single.messages, hasLength(20));
+    expect(
+        container.read(conversationsProvider).single.messages, hasLength(20));
 
     await notifier.checkTemporaryExpiryNow();
 
     expect(await AttachmentStorage.readFile(attachmentPath), isNull);
   });
 
-  test('failed conversation ordering does not delete repository messages', () async {
+  test('failed conversation ordering does not delete repository messages',
+      () async {
     SharedPreferences.setMockInitialValues({});
     final repository = _FailingOrderMemoryRepository();
     await repository.initialize();
@@ -662,7 +683,9 @@ void main() {
     await notifier.deleteConversation('order-failure');
 
     expect(
-      container.read(conversationsProvider).map((conversation) => conversation.id),
+      container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id),
       contains('order-failure'),
     );
     expect(await repository.countConversations(), 1);
@@ -692,9 +715,9 @@ void main() {
       ],
     });
     final message = conversation.messages.single;
-    final legacyExtension = message.extensions[
-      ConversationRecordAdapter.legacyMessageNamespace
-    ] as Map<String, dynamic>;
+    final legacyExtension =
+        message.extensions[ConversationRecordAdapter.legacyMessageNamespace]
+            as Map<String, dynamic>;
     final storedRecord = legacyExtension['record'] as Map<String, dynamic>;
 
     expect(storedRecord, isNot(contains('rawRequest')));
@@ -716,4 +739,4 @@ String _legacyConversation(String id, List<String> messageIds) =>
     '{"id":"$id","title":"$id","createdAt":"2025-01-01T00:00:00.000Z",'
     '"updatedAt":"2025-01-02T00:00:00.000Z","messages":['
     '${messageIds.map((messageId) => '{"id":"$messageId","role":"user",'
-            '"content":"$messageId","createdAt":"2025-01-01T00:00:00.000Z"}').join(',')}]}';
+        '"content":"$messageId","createdAt":"2025-01-01T00:00:00.000Z"}').join(',')}]}';

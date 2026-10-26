@@ -262,8 +262,7 @@ class BackupSelection {
 // ====================================================================
 
 class BackupService {
-  static const _conversationRepositoryBackupField =
-      'conversation_repository';
+  static const _conversationRepositoryBackupField = 'conversation_repository';
   static int? _lastBackupFileTimestampSeconds;
   static const _audioDraftsDirectory = 'audio_drafts';
   static final _audioRecordingDraftFileName = RegExp(
@@ -1576,7 +1575,8 @@ class BackupService {
         repository,
       ).migrate(preferences);
       if (!migration.verified) {
-        throw StateError('Conversation migration was not verified before backup.');
+        throw StateError(
+            'Conversation migration was not verified before backup.');
       }
       return await repository.exportData();
     } catch (error) {
@@ -2901,7 +2901,8 @@ class BackupService {
     }
 
     final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
-    if (repositoryBackup != null && !_isValidConversationRepositoryBackup(repositoryBackup)) {
+    if (repositoryBackup != null &&
+        !_isValidConversationRepositoryBackup(repositoryBackup)) {
       throw const BackupValidationException(
         'Conversation repository data in the backup is invalid.',
       );
@@ -5346,12 +5347,14 @@ class BackupService {
                   'messages': <dynamic>[],
                 };
           await repository.restoreData(data);
-          final legacyJson = await StartupPreferences.getString('conversations');
+          final legacyJson =
+              await StartupPreferences.getString('conversations');
           if (repositoryBackup is Map && legacyJson != null) {
             await StartupPreferences.setString(
               ConversationMigrationService.stateKey,
               jsonEncode({
-                'sourceHash': sha256.convert(utf8.encode(legacyJson)).toString(),
+                'sourceHash':
+                    sha256.convert(utf8.encode(legacyJson)).toString(),
                 'verified': true,
                 'conversationCount': data['conversations'] is List
                     ? (data['conversations'] as List).length
@@ -5362,7 +5365,8 @@ class BackupService {
               }),
             );
           } else {
-            await StartupPreferences.remove(ConversationMigrationService.stateKey);
+            await StartupPreferences.remove(
+                ConversationMigrationService.stateKey);
           }
         } finally {
           await repository.close();
