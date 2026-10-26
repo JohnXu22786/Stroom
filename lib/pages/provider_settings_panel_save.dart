@@ -70,9 +70,8 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
         }
       }
       if (param.type == 'number') {
-        final values = param.options.isNotEmpty
-            ? param.options
-            : [param.defaultValue];
+        final values =
+            param.options.isNotEmpty ? param.options : [param.defaultValue];
         for (final value in values) {
           if (value.trim().isEmpty) continue;
           final number = double.tryParse(value);
