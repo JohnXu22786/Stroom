@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dart_math/dart_math.dart';
+import 'package:visual_math/visual_math.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(
