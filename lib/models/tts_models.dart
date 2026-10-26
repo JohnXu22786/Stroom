@@ -422,9 +422,8 @@ List<CustomParam> mergeCustomParams(
         CustomParam(
           paramName: p.paramName,
           type: p.typeDefaultOverridden ? p.type : provider.type,
-          defaultValue: p.typeDefaultOverridden
-              ? p.defaultValue
-              : provider.defaultValue,
+          defaultValue:
+              p.typeDefaultOverridden ? p.defaultValue : provider.defaultValue,
           typeDefaultOverridden: p.typeDefaultOverridden,
           options: List.of(p.options),
           optionOrder: List.of(p.optionOrder),
