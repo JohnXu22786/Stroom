@@ -57,6 +57,38 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
 
 void main() {
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets('trims surrounding whitespace from saved custom-param names',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: '  response_format  ',
+            defaultValue: 'json',
+            type: 'string',
+            options: ['json', 'text'],
+            optionOrder: ['text', 'json', 'yaml'],
+          ),
+          CustomParam(paramName: 'second', defaultValue: 'value'),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.customParams.map((param) => param.paramName),
+        ['response_format', 'second'],
+      );
+      final firstParam = saved.customParams.first;
+      expect(firstParam.defaultValue, 'json');
+      expect(firstParam.type, 'string');
+      expect(firstParam.options, ['json', 'text']);
+      expect(firstParam.optionOrder, ['text', 'json', 'yaml']);
+    });
+
     testWidgets('rejects a blank first custom-param option', (tester) async {
       final config = ProviderConfigItem(
         providerName: 'Test Provider',
