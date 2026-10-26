@@ -345,8 +345,8 @@ extension _ChatServiceParamsExt on ChatService {
     final jsonParents = customParams.where(isJsonParent).toList()
       ..sort(
         (a, b) => a.paramName.split('.').length.compareTo(
-          b.paramName.split('.').length,
-        ),
+              b.paramName.split('.').length,
+            ),
       );
     final orderedParams = [
       ...jsonParents,
