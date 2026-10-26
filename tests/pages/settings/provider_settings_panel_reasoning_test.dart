@@ -17,17 +17,19 @@ Future<ProviderConfigItem?> _openAndSave(
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
-      home: Builder(
-        builder: (context) => Center(
-          child: ElevatedButton(
-            onPressed: () async {
-              saved = await showProviderSettingsPanel(
-                context: context,
-                config: config,
-                providerType: 'llm',
-              );
-            },
-            child: const Text('打开供应商设置'),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: ElevatedButton(
+              onPressed: () async {
+                saved = await showProviderSettingsPanel(
+                  context: context,
+                  config: config,
+                  providerType: 'llm',
+                );
+              },
+              child: const Text('打开供应商设置'),
+            ),
           ),
         ),
       ),
