@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/formula_entry.dart';
-import 'package:stroom/models/math_expression.dart';
-import 'package:stroom/widgets/math_canvas.dart';
+import 'package:dart_math/dart_math.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

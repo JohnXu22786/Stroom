@@ -23,7 +23,7 @@ import 'asr_page.dart';
 import 'audio_separation_page.dart';
 import 'tts_create_page.dart';
 import 'mermaid_chart_page.dart';
-import 'math_drawing_page.dart';
+import 'package:dart_math/dart_math.dart';
 import 'anki_page.dart';
 
 import '../task_flow/pages/task_flow_list_page.dart';
