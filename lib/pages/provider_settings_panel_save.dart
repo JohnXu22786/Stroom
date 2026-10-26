@@ -22,8 +22,11 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       final pn = param.paramName.trim();
       // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
       final hasValue = param.type == 'boolean' ||
-          param.options.any((o) => o.trim().isNotEmpty) ||
-          param.defaultValue.trim().isNotEmpty;
+          (param.type == 'json'
+              ? param.defaultValue.trim().isNotEmpty
+              : param.options.isNotEmpty
+                  ? param.options.first.trim().isNotEmpty
+                  : param.defaultValue.trim().isNotEmpty);
       if (pn.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
