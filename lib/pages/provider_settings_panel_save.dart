@@ -69,6 +69,23 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
           return false;
         }
       }
+      if (param.type == 'number') {
+        final values = param.options.isNotEmpty
+            ? param.options
+            : [param.defaultValue];
+        for (final value in values) {
+          if (value.trim().isEmpty) continue;
+          final number = double.tryParse(value);
+          if (number == null || !number.isFinite) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('参数 "$pn" 的值不是合法数字：$value'),
+              ),
+            );
+            return false;
+          }
+        }
+      }
     }
 
     // Validate reasoning params
