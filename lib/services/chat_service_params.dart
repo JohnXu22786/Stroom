@@ -327,9 +327,9 @@ extension _ChatServiceParamsExt on ChatService {
     return '';
   }
 
-  /// Apply a layer's custom params while ensuring a flat JSON object is
-  /// present before any dotted children beneath it. This lets those children
-  /// merge into the object regardless of saved order; their later assignment
+  /// Apply a layer's custom params while ensuring JSON objects are present
+  /// before any dotted children beneath them. This lets those children merge
+  /// into the object regardless of saved order; their later assignment
   /// through [setNestedParam] retains the documented nested-path-wins policy.
   void _setCustomParams(
     Map<String, dynamic> result,
@@ -338,13 +338,18 @@ extension _ChatServiceParamsExt on ChatService {
   }) {
     bool isJsonParent(CustomParam param) =>
         param.type == 'json' &&
-        !param.paramName.contains('.') &&
         customParams.any(
           (other) => other.paramName.startsWith('${param.paramName}.'),
         );
 
+    final jsonParents = customParams.where(isJsonParent).toList()
+      ..sort(
+        (a, b) => a.paramName.split('.').length.compareTo(
+              b.paramName.split('.').length,
+            ),
+      );
     final orderedParams = [
-      ...customParams.where(isJsonParent),
+      ...jsonParents,
       ...customParams.where((param) => !isJsonParent(param)),
     ];
     for (final cp in orderedParams) {

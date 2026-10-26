@@ -461,5 +461,79 @@ void chatServiceRequestGroup4() {
       expect(providerField['order'], equals(['deepinfra']));
       expect(providerField['allow_fallbacks'], isTrue);
     });
+
+    test(
+        'nested JSON provider parent before dotted descendant preserves both fields',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: '{"direction":"asc","enabled":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'provider.sort.direction',
+            defaultValue: 'desc',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      final sort = providerField['sort'] as Map;
+      expect(sort['direction'], equals('desc'));
+      expect(sort['enabled'], isTrue);
+    });
+
+    test(
+        'dotted provider descendant before nested JSON parent preserves both fields',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort.direction',
+            defaultValue: 'desc',
+          ),
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: '{"direction":"asc","enabled":true}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      final sort = providerField['sort'] as Map;
+      expect(sort['direction'], equals('desc'));
+      expect(sort['enabled'], isTrue);
+    });
   });
 }
