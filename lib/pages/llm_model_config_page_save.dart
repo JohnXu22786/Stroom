@@ -91,6 +91,24 @@ extension _SaveExt on _LlmModelConfigPageState {
         );
         return;
       }
+      if (param.type == 'number') {
+        final values = param.options.isNotEmpty
+            ? param.options
+            : [param.defaultValue];
+        final valueLabel = param.options.isNotEmpty ? '选项值' : '默认值';
+        for (final value in values) {
+          final parsed = double.tryParse(value.trim());
+          if (parsed == null || !parsed.isFinite) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('参数 "$name" 的$valueLabel必须是有限数字：$value'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+        }
+      }
       // JSON 类型的默认值必须是合法 JSON
       if (param.type == 'json' && param.defaultValue.trim().isNotEmpty) {
         try {
