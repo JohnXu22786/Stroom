@@ -17,17 +17,19 @@ Future<ProviderConfigItem?> _openAndSave(
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
-      home: Builder(
-        builder: (context) => Center(
-          child: ElevatedButton(
-            onPressed: () async {
-              saved = await showProviderSettingsPanel(
-                context: context,
-                config: config,
-                providerType: 'llm',
-              );
-            },
-            child: const Text('打开供应商设置'),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: ElevatedButton(
+              onPressed: () async {
+                saved = await showProviderSettingsPanel(
+                  context: context,
+                  config: config,
+                  providerType: 'llm',
+                );
+              },
+              child: const Text('打开供应商设置'),
+            ),
           ),
         ),
       ),
@@ -55,6 +57,26 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
 
 void main() {
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets('rejects a blank first custom-param option', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            options: ['', 'json'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'the first option is sent as the effective default');
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+    });
+
     testWidgets('shows toggle, effort and additional param sections',
         (tester) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
