@@ -1072,33 +1072,36 @@ class AsrTaskScheduler {
     final chunk = event.chunkCount > 1
         ? '（片段 ${event.chunkIndex}/${event.chunkCount}）'
         : '';
+    final metrics =
+        ' · 阶段 ${event.phaseElapsedMs}ms · 请求 ${event.completedRequestCount} '
+        '· 已完成片段 ${event.completedChunkCount}/${event.chunkCount}';
     switch (event.phase) {
       case AsrRequestPhase.uploading:
         notifier.updateStep(job.taskId, 0, completed: true);
         final label = event.totalSendBytes > 0
-            ? '上传音频$chunk ${((event.sentBytes * 100) ~/ event.totalSendBytes).clamp(0, 100)}%'
+            ? '上传音频$chunk ${((event.sentBytes * 100) ~/ event.totalSendBytes).clamp(0, 100)}% · ${event.totalSendBytes} bytes$metrics'
             : '上传音频$chunk';
         notifier.updateStep(job.taskId, 1, running: true, label: label);
       case AsrRequestPhase.waiting:
         notifier.updateStep(job.taskId, 0, completed: true);
         notifier.updateStep(job.taskId, 1, completed: true);
         final label = event.chunkCount > 1
-            ? '转写中（片段 ${event.chunkIndex}/${event.chunkCount}）'
-            : '转写中';
+            ? '转写中（片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
+            : '转写中$metrics';
         notifier.updateStep(job.taskId, 2, running: true, label: label);
       case AsrRequestPhase.receiving:
         if (event.chunkIndex == event.chunkCount) {
           notifier.updateStep(job.taskId, 2, completed: true);
           final label = event.totalReceiveBytes > 0
-              ? '接收结果 ${((event.receivedBytes * 100) ~/ event.totalReceiveBytes).clamp(0, 100)}%'
-              : '接收结果';
+              ? '接收结果 ${((event.receivedBytes * 100) ~/ event.totalReceiveBytes).clamp(0, 100)}%$metrics'
+              : '接收结果$metrics';
           notifier.updateStep(job.taskId, 3, running: true, label: label);
         } else {
           notifier.updateStep(
             job.taskId,
             2,
             running: true,
-            label: '转写中（接收片段 ${event.chunkIndex}/${event.chunkCount}）',
+            label: '转写中（接收片段 ${event.chunkIndex}/${event.chunkCount}）$metrics',
           );
         }
       case AsrRequestPhase.responseReceived:
@@ -1108,8 +1111,8 @@ class AsrTaskScheduler {
           notifier.updateStep(job.taskId, 3, running: true, label: '接收结果');
         } else {
           final label = event.phase == AsrRequestPhase.chunkCompleted
-              ? '转写中（已完成片段 ${event.chunkIndex}/${event.chunkCount}）'
-              : '转写中（片段 ${event.chunkIndex}/${event.chunkCount} 已返回）';
+              ? '转写中（已完成片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
+              : '转写中（片段 ${event.chunkIndex}/${event.chunkCount} 已返回）$metrics';
           notifier.updateStep(job.taskId, 2, running: true, label: label);
         }
     }

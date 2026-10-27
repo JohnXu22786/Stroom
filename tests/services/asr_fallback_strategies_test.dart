@@ -321,6 +321,9 @@ void main() {
             }
           },
         );
+        // A status retained from a previous request must not override this
+        // local encoding failure's diagnostic category.
+        service.lastResponseStatusCode = 401;
         var chunkAttempts = 0;
 
         Object? failure;
@@ -334,8 +337,18 @@ void main() {
           failure = error;
         }
 
-        expect(failure, isNotNull);
-        expect(failure, isNot(isA<AsrChunkedTranscriptionException>()));
+        expect(failure, isA<AsrChunkedTranscriptionException>());
+        final chunkFailure = failure! as AsrChunkedTranscriptionException;
+        expect(chunkFailure.chunks, hasLength(1));
+        expect(chunkFailure.chunks.single.status, AsrChunkStatus.failed);
+        expect(
+          chunkFailure.chunks.single.error,
+          allOf(
+            contains('sizeLimit'),
+            contains('encoding'),
+            contains('chunk 1/'),
+          ),
+        );
         expect(chunkAttempts, 0);
         expect(adapter.requests, isEmpty);
       },
@@ -359,8 +372,13 @@ void main() {
           audioBytes: _buildWav(seconds: 1), // 16000 bytes > 1024
           audioFormat: 'wav',
         ),
-        throwsA(predicate(
-            (e) => e is Exception && e.toString().contains('文件大小超过限制'))),
+        throwsA(
+          isA<AsrFailureDiagnostic>().having(
+            (error) => error.category,
+            'category',
+            AsrFailureCategory.sizeLimit,
+          ),
+        ),
       );
       expect(adapter.requests, isEmpty);
     });
