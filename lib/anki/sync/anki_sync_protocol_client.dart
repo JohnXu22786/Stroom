@@ -17,36 +17,51 @@ class AnkiSyncProtocolClient {
     'https://sync.ankiweb.net/sync/',
   );
   static const int protocolVersion = 10;
+  static const int maxCollectionDownloadBytes = 512 * 1024 * 1024;
+  static const int maxInMemoryCollectionBytes = 64 * 1024 * 1024;
   static const int maxMediaArchiveBytes = 128 * 1024 * 1024;
   static const Duration _timeout = Duration(seconds: 45);
 
-  final Uri syncRoot;
+  final Uri _configuredSyncRoot;
+  Uri? _redirectedSyncRoot;
   final http.Client _client;
   final bool _ownsClient;
+  final bool _allowAnkiWebMetaRedirect;
   final String _sessionKey;
+  final Duration _requestTimeout;
   String? _hostKey;
   bool _closed = false;
 
+  Uri get syncRoot => _redirectedSyncRoot ?? _configuredSyncRoot;
+
   AnkiSyncProtocolClient._({
-    required this.syncRoot,
+    required Uri syncRoot,
     required http.Client client,
     required bool ownsClient,
     required String sessionKey,
+    required Duration requestTimeout,
+    required bool allowAnkiWebMetaRedirect,
     String? hostKey,
-  })  : _client = client,
+  })  : _configuredSyncRoot = syncRoot,
+        _client = client,
         _ownsClient = ownsClient,
+        _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
         _sessionKey = sessionKey,
+        _requestTimeout = requestTimeout,
         _hostKey = hostKey;
 
   factory AnkiSyncProtocolClient.ankiWeb({
     http.Client? client,
     String? hostKey,
+    Duration requestTimeout = _timeout,
   }) =>
       AnkiSyncProtocolClient._(
         syncRoot: ankiWebSyncRoot,
         client: client ?? http.Client(),
         ownsClient: client == null,
         sessionKey: _newSessionKey(),
+        requestTimeout: requestTimeout,
+        allowAnkiWebMetaRedirect: true,
         hostKey: hostKey,
       );
 
@@ -55,6 +70,7 @@ class AnkiSyncProtocolClient {
     String certificate = '',
     http.Client? client,
     String? hostKey,
+    Duration requestTimeout = _timeout,
   }) {
     final root = _selfHostedRoot(endpoint);
     if (client != null) {
@@ -63,6 +79,8 @@ class AnkiSyncProtocolClient {
         client: client,
         ownsClient: false,
         sessionKey: _newSessionKey(),
+        requestTimeout: requestTimeout,
+        allowAnkiWebMetaRedirect: false,
         hostKey: hostKey,
       );
     }
@@ -76,6 +94,8 @@ class AnkiSyncProtocolClient {
       client: IOClient(HttpClient(context: context)),
       ownsClient: true,
       sessionKey: _newSessionKey(),
+      requestTimeout: requestTimeout,
+      allowAnkiWebMetaRedirect: false,
       hostKey: hostKey,
     );
   }
@@ -88,7 +108,7 @@ class AnkiSyncProtocolClient {
   String get destinationIdentity {
     _requireAuthenticated();
     final keyHash = sha256.convert(utf8.encode(_hostKey!));
-    return '${syncRoot.toString()}#$keyHash';
+    return '${_configuredSyncRoot.toString()}#$keyHash';
   }
 
   /// Exchange account credentials for an Anki sync host key.
@@ -120,21 +140,68 @@ class AnkiSyncProtocolClient {
     return AnkiRemoteMeta.fromJson(json);
   }
 
-  /// One-way collection replacement. Callers must show an explicit
-  /// destructive-action confirmation and retain a local backup beforehand.
-  Future<void> uploadCollection(List<int> collectionBytes) async {
+  /// One-way collection replacement. Gzip is staged on disk so large local
+  /// collections do not need to exist in memory alongside a compressed copy.
+  Future<void> uploadCollectionFile(File collectionFile) async {
     _requireAuthenticated();
-    final response = await _send('upload', collectionBytes);
-    if (utf8.decode(response, allowMalformed: true).trim() != 'OK') {
-      throw const AnkiSyncException('服务器没有接受 collection 上传');
+    Directory? stagingDirectory;
+    try {
+      stagingDirectory = await collectionFile.parent.createTemp(
+        '.anki-sync-upload-',
+      );
+      final compressedFile = File('${stagingDirectory.path}/collection.gz');
+      await collectionFile
+          .openRead()
+          .transform(gzip.encoder)
+          .pipe(compressedFile.openWrite());
+
+      final response = await _send(
+        'upload',
+        const <int>[],
+        precompressedPayloadFile: compressedFile,
+      );
+      if (utf8.decode(response, allowMalformed: true).trim() != 'OK') {
+        throw const AnkiSyncException('服务器没有接受 collection 上传');
+      }
+    } on AnkiSyncException {
+      rethrow;
+    } catch (_) {
+      throw const AnkiSyncException('无法读取本地 collection 上传文件');
+    } finally {
+      if (stagingDirectory != null && await stagingDirectory.exists()) {
+        try {
+          await stagingDirectory.delete(recursive: true);
+        } catch (_) {
+          throw const AnkiSyncException('无法清理 collection 上传暂存文件');
+        }
+      }
     }
   }
 
   /// Downloads the remote collection bytes. The caller must validate them,
   /// back up the local collection, and only then replace the local database.
+  /// This compatibility helper is limited to small collections; full syncs
+  /// should use [downloadCollectionToFile] to avoid buffering the collection.
   Future<List<int>> downloadCollection() async {
     _requireAuthenticated();
-    return _send('download', utf8.encode('{}'));
+    return _send(
+      'download',
+      utf8.encode('{}'),
+      maxResponseBytes: maxInMemoryCollectionBytes,
+      maxResponseExceededMessage: 'collection 内存下载超过 64 MB',
+    );
+  }
+
+  /// Streams a full collection to disk with a bounded response size.
+  Future<void> downloadCollectionToFile(File destination) async {
+    _requireAuthenticated();
+    await _send(
+      'download',
+      utf8.encode('{}'),
+      maxResponseBytes: maxCollectionDownloadBytes,
+      responseFile: destination,
+      maxResponseExceededMessage: 'collection 下载超过 512 MB',
+    );
   }
 
   /// Send a JSON request to a collection or media sync endpoint. Media
@@ -205,10 +272,11 @@ class AnkiSyncProtocolClient {
 
   Future<List<int>> downloadMediaZip(List<String> filenames) async {
     return requestMediaData(
-      'downloadFiles',
-      {'files': filenames},
-      maxResponseBytes: maxMediaArchiveBytes,
-    );
+        'downloadFiles',
+        {
+          'files': filenames,
+        },
+        maxResponseBytes: maxMediaArchiveBytes);
   }
 
   Future<List<int>> _send(
@@ -216,38 +284,99 @@ class AnkiSyncProtocolClient {
     List<int> payload, {
     String? hostKey,
     bool compress = true,
+    File? precompressedPayloadFile,
+    bool allowMetaRedirect = true,
     int? maxResponseBytes,
+    File? responseFile,
+    String maxResponseExceededMessage = '媒体 ZIP 压缩数据超过 128 MB',
   }) async {
     if (_closed) throw const AnkiSyncException('同步连接已关闭');
-    final request = http.MultipartRequest('POST', _endpointFor(method))
+    final abortRequest = Completer<void>();
+    var requestTimedOut = false;
+    Timer? requestTimer;
+    void resetRequestTimer() {
+      requestTimer?.cancel();
+      requestTimer = Timer(_requestTimeout, () {
+        requestTimedOut = true;
+        if (!abortRequest.isCompleted) abortRequest.complete();
+      });
+    }
+
+    final request = _ProgressAwareMultipartRequest(
+      _endpointFor(method),
+      abortTrigger: abortRequest.future,
+      onProgress: resetRequestTimer,
+    )
+      ..followRedirects = false
       ..fields['c'] = compress ? '1' : '0'
       ..fields['k'] = hostKey ?? _hostKey ?? ''
       ..fields['s'] = _sessionKey;
+    final requestBytes = precompressedPayloadFile == null
+        ? (compress ? gzip.encode(payload) : payload)
+        : null;
+    final requestLength = precompressedPayloadFile == null
+        ? requestBytes!.length
+        : await precompressedPayloadFile.length();
     request.files.add(
-      http.MultipartFile.fromBytes(
+      http.MultipartFile(
         'data',
-        compress ? gzip.encode(payload) : payload,
+        precompressedPayloadFile?.openRead() ?? _chunkedBytes(requestBytes!),
+        requestLength,
         filename: 'data',
       ),
     );
 
     try {
-      final streamed = await _client.send(request).timeout(_timeout);
+      resetRequestTimer();
+      final streamed = await Future.any<http.StreamedResponse>([
+        _client.send(request),
+        abortRequest.future.then<http.StreamedResponse>((_) {
+          throw TimeoutException('HTTP request timed out', _requestTimeout);
+        }),
+      ]);
+      requestTimer?.cancel();
       if (streamed.statusCode != HttpStatus.ok) {
         await streamed.stream.listen((_) {}).cancel();
+        if (streamed.statusCode == HttpStatus.permanentRedirect &&
+            method == 'meta' &&
+            allowMetaRedirect &&
+            _allowAnkiWebMetaRedirect) {
+          final redirectedRoot = _validatedAnkiWebRedirectRoot(
+            streamed.headers['location'],
+          );
+          if (redirectedRoot == null) {
+            throw const AnkiSyncException('AnkiWeb 同步重定向地址无效');
+          }
+          _redirectedSyncRoot = redirectedRoot;
+          return await _send(
+            method,
+            payload,
+            hostKey: hostKey,
+            compress: compress,
+            precompressedPayloadFile: precompressedPayloadFile,
+            allowMetaRedirect: false,
+            maxResponseBytes: maxResponseBytes,
+            responseFile: responseFile,
+            maxResponseExceededMessage: maxResponseExceededMessage,
+          );
+        }
         throw AnkiSyncException(_safeHttpError(streamed.statusCode));
       }
-      if (maxResponseBytes != null) {
-        return await _readResponseWithLimit(streamed, maxResponseBytes);
-      }
-      final response = await http.Response.fromStream(streamed).timeout(
-        _timeout,
+      return await _readResponse(
+        streamed,
+        maxBytes: maxResponseBytes,
+        outputFile: responseFile,
+        maxBytesExceededMessage: maxResponseExceededMessage,
       );
-      return response.bodyBytes;
     } on AnkiSyncException {
       rethrow;
     } on TimeoutException {
       throw const AnkiSyncException('连接超时，请检查网络和服务器地址');
+    } on http.RequestAbortedException {
+      if (requestTimedOut) {
+        throw const AnkiSyncException('连接超时，请检查网络和服务器地址');
+      }
+      throw const AnkiSyncException('同步请求失败，请检查服务器和网络');
     } on HandshakeException {
       throw const AnkiSyncException('TLS 证书验证失败');
     } on SocketException {
@@ -256,40 +385,89 @@ class AnkiSyncProtocolClient {
       // Never include request/response bodies here; authentication responses
       // may contain information that should not be placed in logs or UI.
       throw const AnkiSyncException('同步请求失败，请检查服务器和网络');
+    } finally {
+      requestTimer?.cancel();
     }
   }
 
-  Future<List<int>> _readResponseWithLimit(
-    http.StreamedResponse response,
-    int maxBytes,
-  ) async {
+  static Stream<List<int>> _chunkedBytes(List<int> bytes) async* {
+    const chunkSize = 64 * 1024;
+    for (var start = 0; start < bytes.length; start += chunkSize) {
+      final end = min(start + chunkSize, bytes.length);
+      yield bytes.sublist(start, end);
+    }
+  }
+
+  Future<List<int>> _readResponse(
+    http.StreamedResponse response, {
+    int? maxBytes,
+    File? outputFile,
+    String maxBytesExceededMessage = '媒体 ZIP 压缩数据超过 128 MB',
+  }) async {
     final declaredLength = response.contentLength;
-    if (declaredLength != null && declaredLength > maxBytes) {
+    if (maxBytes != null &&
+        declaredLength != null &&
+        declaredLength > maxBytes) {
       await response.stream.listen((_) {}).cancel();
-      throw const AnkiSyncException('媒体 ZIP 压缩数据超过 128 MB');
+      throw AnkiSyncException(maxBytesExceededMessage);
     }
 
-    final output = BytesBuilder(copy: false);
-    final iterator = StreamIterator<List<int>>(response.stream);
-    final deadline = DateTime.now().add(_timeout);
+    final output = outputFile == null ? BytesBuilder(copy: false) : null;
+    final fileSink = outputFile?.openWrite();
+    final completed = Completer<void>();
+    StreamSubscription<List<int>>? subscription;
+    Timer? timeout;
+    var responseEnded = false;
     var length = 0;
+
+    void resetResponseTimeout() {
+      timeout?.cancel();
+      timeout = Timer(
+        _timeout,
+        () => completed.completeError(
+          TimeoutException('HTTP response timed out', _timeout),
+        ),
+      );
+    }
+
     try {
-      while (true) {
-        final remaining = deadline.difference(DateTime.now());
-        if (remaining.inMicroseconds <= 0) {
-          throw TimeoutException('Media ZIP response timed out', _timeout);
-        }
-        if (!await iterator.moveNext().timeout(remaining)) break;
-        final chunk = iterator.current;
-        if (chunk.length > maxBytes - length) {
-          throw const AnkiSyncException('媒体 ZIP 压缩数据超过 128 MB');
-        }
-        length += chunk.length;
-        output.add(chunk);
-      }
-      return output.takeBytes();
+      // Bound stalled responses while allowing large media files to stream for
+      // longer than the connection timeout as long as bytes keep arriving.
+      resetResponseTimeout();
+      subscription = response.stream.listen(
+        (chunk) {
+          if (completed.isCompleted) return;
+          if (maxBytes != null && chunk.length > maxBytes - length) {
+            completed.completeError(AnkiSyncException(maxBytesExceededMessage));
+            return;
+          }
+          length += chunk.length;
+          if (fileSink == null) {
+            output!.add(chunk);
+          } else {
+            fileSink.add(chunk);
+          }
+          if (chunk.isNotEmpty) resetResponseTimeout();
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (!completed.isCompleted) {
+            completed.completeError(error, stackTrace);
+          }
+        },
+        onDone: () {
+          responseEnded = true;
+          if (!completed.isCompleted) completed.complete();
+        },
+        cancelOnError: true,
+      );
+
+      await completed.future;
+      await fileSink?.flush();
+      return output?.takeBytes() ?? const <int>[];
     } finally {
-      await iterator.cancel();
+      timeout?.cancel();
+      if (!responseEnded) await subscription?.cancel();
+      await fileSink?.close();
     }
   }
 
@@ -309,6 +487,24 @@ class AnkiSyncProtocolClient {
       throw const AnkiSyncException('同步请求路径无效');
     }
     return endpoint;
+  }
+
+  static Uri? _validatedAnkiWebRedirectRoot(String? location) {
+    if (location == null || location.trim().isEmpty) return null;
+    final uri = Uri.tryParse(location.trim());
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        uri.port != 443 ||
+        !RegExp(r'^sync(?:[0-9]+)?\.ankiweb\.net$')
+            .hasMatch(uri.host.toLowerCase()) ||
+        !const ['', '/', '/sync', '/sync/'].contains(uri.path)) {
+      return null;
+    }
+    return uri.replace(path: '/sync/');
   }
 
   Map<String, dynamic> _decodeJson(List<int> bytes, String message) {
@@ -408,20 +604,38 @@ class AnkiRemoteMeta {
     required this.mediaUsn,
   });
 
-  factory AnkiRemoteMeta.fromJson(Map<String, dynamic> json) => AnkiRemoteMeta(
-        modified: _asInt(json['mod']),
-        schema: _asInt(json['scm']),
-        usn: _asInt(json['usn']),
-        serverTime: _asInt(json['ts']),
-        message: json['msg'] as String? ?? '',
-        shouldContinue: json['cont'] as bool? ?? true,
-        hostNumber: _asInt(json['hostNum']),
-        isEmpty: json['empty'] as bool? ?? false,
-        mediaUsn: _asInt(json['media_usn']),
-      );
+  factory AnkiRemoteMeta.fromJson(Map<String, dynamic> json) {
+    return AnkiRemoteMeta(
+      modified: _requiredInt(json, 'mod'),
+      schema: _requiredInt(json, 'scm'),
+      usn: _requiredInt(json, 'usn'),
+      serverTime: _requiredInt(json, 'ts'),
+      message: _requiredString(json, 'msg'),
+      shouldContinue: _requiredBool(json, 'cont'),
+      hostNumber: _requiredInt(json, 'hostNum'),
+      isEmpty: _requiredBool(json, 'empty'),
+      mediaUsn: _requiredInt(json, 'media_usn'),
+    );
+  }
 }
 
-int _asInt(Object? value) => value is num ? value.toInt() : 0;
+int _requiredInt(Map<String, dynamic> json, String field) {
+  final value = json[field];
+  if (value is int) return value;
+  throw const AnkiSyncException('同步状态响应无效');
+}
+
+String _requiredString(Map<String, dynamic> json, String field) {
+  final value = json[field];
+  if (value is String) return value;
+  throw const AnkiSyncException('同步状态响应无效');
+}
+
+bool _requiredBool(Map<String, dynamic> json, String field) {
+  final value = json[field];
+  if (value is bool) return value;
+  throw const AnkiSyncException('同步状态响应无效');
+}
 
 class AnkiSyncException implements Exception {
   final String message;
@@ -429,4 +643,28 @@ class AnkiSyncException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class _ProgressAwareMultipartRequest extends http.MultipartRequest
+    with http.Abortable {
+  @override
+  final Future<void>? abortTrigger;
+  final void Function() onProgress;
+
+  _ProgressAwareMultipartRequest(
+    Uri url, {
+    required this.abortTrigger,
+    required this.onProgress,
+  }) : super('POST', url);
+
+  @override
+  http.ByteStream finalize() {
+    final body = super.finalize();
+    return http.ByteStream(
+      body.map((chunk) {
+        onProgress();
+        return chunk;
+      }),
+    );
+  }
 }

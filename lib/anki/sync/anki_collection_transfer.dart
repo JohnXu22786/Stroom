@@ -90,12 +90,11 @@ class AnkiCollectionTransfer {
 
     await _validateCollection(collectionPath);
     final backupPath = await _createBackup(collection);
-    final bytes = await collection.readAsBytes();
     // A server may commit the full collection and lose the response. Mark the
     // local association unresolved before sending, and clear that state only
     // after a successful response confirms which destination received it.
     await AnkiSyncDestinationState.markCollectionFilePending(collectionPath);
-    await client.uploadCollection(bytes);
+    await client.uploadCollectionFile(collection);
     await AnkiSyncDestinationState.markCollectionFile(
       collectionPath,
       client.destinationIdentity,
@@ -108,9 +107,6 @@ class AnkiCollectionTransfer {
     String? documentsPath,
   }) async {
     final collectionPath = await _collectionPath(documentsPath);
-    final bytes = await client.downloadCollection();
-    if (bytes.isEmpty) throw const AnkiSyncException('服务器返回了空 collection');
-
     final tempPath = '$collectionPath.sync-download.tmp';
     final tempFile = File(tempPath);
     final currentFile = File(collectionPath);
@@ -118,7 +114,10 @@ class AnkiCollectionTransfer {
     final displacedPath = '$collectionPath.pre-sync-$stamp';
 
     try {
-      await tempFile.writeAsBytes(bytes, flush: true);
+      await client.downloadCollectionToFile(tempFile);
+      if (!await tempFile.exists() || await tempFile.length() == 0) {
+        throw const AnkiSyncException('服务器返回了空 collection');
+      }
       await _validateCollection(tempPath);
       await _markFullDownloadSynced(tempPath, client.destinationIdentity);
 

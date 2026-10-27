@@ -18,7 +18,7 @@ import '../models/note.dart';
 /// app documents directory if [basePath] is null). Creates tables
 /// and seeds the initial col row on first run.
 class AnkiDatabase {
-  static const _legacySyncMetadataMigrationVersion = 2;
+  static const _legacySyncMetadataMigrationVersion = 3;
 
   Database? _db;
   Future<void>? _opening;
@@ -256,10 +256,15 @@ class AnkiDatabase {
       if (models != null) {
         var modelsChanged = false;
         for (final value in models.values) {
-          if (value is Map && (value['mod'] as num? ?? 0) > 100000000000) {
-            value['mod'] = ((value['mod'] as num).toInt() ~/ 1000);
-            value['usn'] = -1;
-            modelsChanged = true;
+          if (value is Map) {
+            if ((value['mod'] as num? ?? 0) > 100000000000) {
+              value['mod'] = ((value['mod'] as num).toInt() ~/ 1000);
+              value['usn'] = -1;
+              modelsChanged = true;
+            }
+            if (_normalizeLegacyNotetypeRequirement(value)) {
+              modelsChanged = true;
+            }
           }
         }
         if (modelsChanged) collectionChanges['models'] = jsonEncode(models);
@@ -313,6 +318,9 @@ class AnkiDatabase {
 
     if (_isVersionOneMarkerForCollection(previousMarkerValue, created)) {
       await _migrateLegacyDeckCreationDates(db);
+      await _migrateLegacyNotetypeRequirements(db);
+    } else if (_isVersionTwoMarkerForCollection(previousMarkerValue, created)) {
+      await _migrateLegacyNotetypeRequirements(db);
     } else {
       await _migrateLegacySyncMetadata(db);
     }
@@ -329,13 +337,70 @@ class AnkiDatabase {
   }
 
   bool _isVersionOneMarkerForCollection(String? marker, int created) {
-    if (_legacySyncMetadataMigrationVersion != 2 || marker == null) {
-      return false;
-    }
+    if (marker == null) return false;
     final parts = marker.split(':');
     return parts.length == 2 &&
         int.tryParse(parts[0]) == 1 &&
         int.tryParse(parts[1]) == created;
+  }
+
+  bool _isVersionTwoMarkerForCollection(String? marker, int created) {
+    if (marker == null) return false;
+    final parts = marker.split(':');
+    return parts.length == 2 &&
+        int.tryParse(parts[0]) == 2 &&
+        int.tryParse(parts[1]) == created;
+  }
+
+  Future<void> _migrateLegacyNotetypeRequirements(Database db) async {
+    final rows = await db.query('col', columns: ['models'], where: 'id = 1');
+    if (rows.isEmpty) return;
+    final models = _tryJsonMap(rows.first['models']);
+    if (models == null) return;
+
+    var changed = false;
+    for (final value in models.values) {
+      if (value is Map && _normalizeLegacyNotetypeRequirement(value)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      await db.update(
+        'col',
+        {'models': jsonEncode(models)},
+        where: 'id = 1',
+      );
+    }
+  }
+
+  bool _normalizeLegacyNotetypeRequirement(Map value) {
+    final req = value['req'];
+    if (req is! List ||
+        req.length != 3 ||
+        req[0] is! num ||
+        req[1] is! num ||
+        req[2] is! List) {
+      return false;
+    }
+
+    final type = value['type'];
+    final legacyKind = (req[1] as num).toInt();
+    final requirementKind = switch (legacyKind) {
+      0 => type is num && type.toInt() == 1 ? 'any' : 'all',
+      1 => 'any',
+      _ => null,
+    };
+    if (requirementKind == null) return false;
+    value['req'] = [
+      [
+        (req[0] as num).toInt(),
+        requirementKind,
+        List<dynamic>.from(req[2] as List),
+      ],
+    ];
+    value['mod'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    value['usn'] = -1;
+    return true;
   }
 
   Future<void> _migrateLegacyDeckCreationDates(Database db) async {

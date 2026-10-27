@@ -38,7 +38,10 @@ class AnkiIncrementalSync {
     final localSchema = _int(local['scm']);
     final localUsn = _int(local['usn']);
     final hasPending = await _hasPendingChanges(db);
-    final needsCollectionSync = localModified != remote.modified || hasPending;
+    final needsCollectionSync =
+        localModified != remote.modified ||
+        localUsn != remote.usn ||
+        hasPending;
 
     if (localSchema != remote.schema) {
       throw const AnkiSyncFullTransferRequired(
@@ -94,13 +97,23 @@ class AnkiIncrementalSync {
             throw const AnkiSyncException('同步服务器 chunk 响应无法解析');
           }
           final chunk = _map(payload);
-          receivedCards += await _applyRemoteCards(txn, _list(chunk['cards']));
-          receivedNotes += await _applyRemoteNotes(txn, _list(chunk['notes']));
+          final done = chunk['done'];
+          if (done is! bool) {
+            throw const AnkiSyncException('同步服务器 chunk 响应缺少有效的 done 状态');
+          }
+          receivedCards += await _applyRemoteCards(
+            txn,
+            _chunkList(chunk, 'cards'),
+          );
+          receivedNotes += await _applyRemoteNotes(
+            txn,
+            _chunkList(chunk, 'notes'),
+          );
           receivedReviews += await _applyRemoteReviews(
             txn,
-            _list(chunk['revlog']),
+            _chunkList(chunk, 'revlog'),
           );
-          if (chunk['done'] == true) break;
+          if (done) break;
         }
 
         final sent = await _sendLocalChunks(txn, client, remote.usn);
@@ -112,14 +125,11 @@ class AnkiIncrementalSync {
         }
         final finishedAt = finish.toInt();
         final nextUsn = remote.usn + 1;
-        await txn.update(
-            'col',
-            {
-              'ls': finishedAt,
-              'usn': nextUsn,
-              'mod': finishedAt,
-            },
-            where: 'id = 1');
+        await txn.update('col', {
+          'ls': finishedAt,
+          'usn': nextUsn,
+          'mod': finishedAt,
+        }, where: 'id = 1');
         await AnkiSyncDestinationState.mark(txn, destination);
         return AnkiCollectionSyncResult(
           changedCards: receivedCards + sent.cards,
@@ -160,8 +170,9 @@ class AnkiIncrementalSync {
     int serverUsn,
   ) async {
     final localRows = await txn.query('graves', where: 'usn = -1');
-    final sentGraves =
-        localRows.map((row) => (_int(row['type']), _int(row['oid']))).toSet();
+    final sentGraves = localRows
+        .map((row) => (_int(row['type']), _int(row['oid'])))
+        .toSet();
     if (localRows.isNotEmpty) {
       await txn.update('graves', {'usn': serverUsn}, where: 'usn = -1');
     }
@@ -211,7 +222,58 @@ class AnkiIncrementalSync {
         await _retainRemoteGrave(txn, id, 2, sentGraves);
         deckMap.remove(id.toString());
       }
-      await txn.update('col', {'decks': jsonEncode(deckMap)}, where: 'id = 1');
+      final configRows = await txn.query(
+        'col',
+        columns: ['conf'],
+        where: 'id = 1',
+      );
+      final collectionConfig = _decodeObject(configRows.first['conf']);
+      final survivingDeckIds = <int>{};
+      int? fallbackDeckId;
+      for (final entry in deckMap.entries) {
+        final id = int.tryParse(entry.key);
+        if (id == null) continue;
+        survivingDeckIds.add(id);
+        final deck = entry.value;
+        if (fallbackDeckId == null &&
+            (deck is! Map || _int(deck['dyn']) != 1)) {
+          fallbackDeckId = id;
+        }
+      }
+      int? deckIdFrom(Object? value) {
+        if (value is num && value.toInt() == value) return value.toInt();
+        if (value is String) return int.tryParse(value);
+        return null;
+      }
+
+      final activeDecks = <int>[];
+      final configuredActiveDecks = collectionConfig['activeDecks'];
+      if (configuredActiveDecks is List) {
+        for (final value in configuredActiveDecks) {
+          final id = deckIdFrom(value);
+          if (id != null &&
+              survivingDeckIds.contains(id) &&
+              !activeDecks.contains(id)) {
+            activeDecks.add(id);
+          }
+        }
+      }
+      final currentDeckId = deckIdFrom(collectionConfig['curDeck']);
+      final selectedDeckId =
+          currentDeckId != null && survivingDeckIds.contains(currentDeckId)
+          ? currentDeckId
+          : activeDecks.isNotEmpty
+          ? activeDecks.first
+          : fallbackDeckId;
+      if (selectedDeckId != null && !activeDecks.contains(selectedDeckId)) {
+        activeDecks.add(selectedDeckId);
+      }
+      collectionConfig['curDeck'] = selectedDeckId ?? 0;
+      collectionConfig['activeDecks'] = activeDecks;
+      await txn.update('col', {
+        'decks': jsonEncode(deckMap),
+        'conf': jsonEncode(collectionConfig),
+      }, where: 'id = 1');
     }
   }
 
@@ -327,14 +389,11 @@ class AnkiIncrementalSync {
       await txn.update('config', {'usn': serverUsn});
     }
 
-    await txn.update(
-        'col',
-        {
-          'models': jsonEncode(models),
-          'decks': jsonEncode(decks),
-          'tags': jsonEncode(tags),
-        },
-        where: 'id = 1');
+    await txn.update('col', {
+      'models': jsonEncode(models),
+      'decks': jsonEncode(decks),
+      'tags': jsonEncode(tags),
+    }, where: 'id = 1');
 
     final response = await client.requestJson('applyChanges', {
       'changes': localChanges,
@@ -347,12 +406,12 @@ class AnkiIncrementalSync {
     final remoteDecksPayload = _list(remote['decks']);
     final remoteDecks =
         remoteDecksPayload.isNotEmpty && remoteDecksPayload.first is List
-            ? _list(remoteDecksPayload.first)
-            : remoteDecksPayload;
+        ? _list(remoteDecksPayload.first)
+        : remoteDecksPayload;
     final remoteDeckConfigs =
         remoteDecksPayload.length > 1 && remoteDecksPayload[1] is List
-            ? _list(remoteDecksPayload[1])
-            : const <dynamic>[];
+        ? _list(remoteDecksPayload[1])
+        : const <dynamic>[];
 
     for (final model in remoteModels) {
       if (model is! Map) continue;
@@ -369,14 +428,27 @@ class AnkiIncrementalSync {
       final id = _int(value['id']);
       final existing = decks[id.toString()];
       if (existing is! Map || _int(existing['mod']) <= _int(value['mod'])) {
+        final name = value['name'];
+        if (name is String) {
+          final uniqueName = _uniqueDeckName(name, decks, id);
+          if (uniqueName != name) {
+            value['name'] = uniqueName;
+            value['mod'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+            value['usn'] = -1;
+          }
+        }
         decks[id.toString()] = value;
       }
     }
     for (final rawConfig in remoteDeckConfigs) {
       final tuple = _list(rawConfig);
-      if (tuple.length < 5) continue;
-      final id = _int(tuple[0]);
-      final mtime = _int(tuple[2]);
+      if (tuple.length < 5 || tuple[4] is! Map || tuple[1] is! String) {
+        throw const AnkiSyncException('同步服务器 deck config 数据不完整');
+      }
+      final id = _tupleInt(tuple[0], 'deck config');
+      final mtime = _tupleInt(tuple[2], 'deck config');
+      final usn = _tupleInt(tuple[3], 'deck config');
+      final config = _map(tuple[4]);
       final localRows = await txn.query(
         'deck_config',
         where: 'id = ?',
@@ -388,20 +460,20 @@ class AnkiIncrementalSync {
       }
       final values = {
         'id': id,
-        'name': tuple[1]?.toString() ?? '',
+        'name': tuple[1],
         'mtime_secs': mtime,
-        'usn': _int(tuple[3]),
-        'config': jsonEncode(_map(tuple[4])),
+        'usn': usn,
+        'config': jsonEncode(config),
       };
       await txn.insert(
         'deck_config',
         values,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      final configJson = Map<String, dynamic>.from(_map(tuple[4]))
-        ..['id'] = _int(tuple[0])
-        ..['name'] = tuple[1]?.toString() ?? '';
-      deckConfigMap[_int(tuple[0]).toString()] = configJson;
+      final configJson = Map<String, dynamic>.from(config)
+        ..['id'] = id
+        ..['name'] = tuple[1];
+      deckConfigMap[id.toString()] = configJson;
     }
     for (final tag in _list(remote['tags'])) {
       if (tag is String && tag.isNotEmpty) {
@@ -409,17 +481,18 @@ class AnkiIncrementalSync {
       }
     }
     if (remote['conf'] is Map) {
-      for (final entry in _map(remote['conf']).entries) {
-        collectionConfig[entry.key] = entry.value;
-        await txn.insert(
-            'config',
-            {
-              'key': entry.key,
-              'usn': serverUsn,
-              'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              'config': jsonEncode(entry.value),
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace);
+      final remoteConfig = _map(remote['conf']);
+      collectionConfig
+        ..clear()
+        ..addAll(remoteConfig);
+      await txn.delete('config');
+      for (final entry in remoteConfig.entries) {
+        await txn.insert('config', {
+          'key': entry.key,
+          'usn': serverUsn,
+          'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          'config': jsonEncode(entry.value),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     }
     final updates = <String, Object?>{
@@ -450,9 +523,18 @@ class AnkiIncrementalSync {
         : _decodeObject(collectionRows.first['models']);
     for (final raw in entries) {
       final e = _list(raw);
-      if (e.length < 11) continue;
-      final id = _int(e[0]);
-      final remoteMtime = _int(e[3]);
+      if (e.length < 11) {
+        throw const AnkiSyncException('同步服务器 note 数据不完整');
+      }
+      final id = _tupleInt(e[0], 'note');
+      final modelId = _tupleInt(e[2], 'note');
+      final remoteMtime = _tupleInt(e[3], 'note');
+      final remoteUsn = _tupleInt(e[4], 'note');
+      final guid = _tupleString(e[1], 'note');
+      final tags = _tupleString(e[5], 'note');
+      final fields = _tupleString(e[6], 'note');
+      final flags = _tupleInt(e[9], 'note');
+      final data = _tupleString(e[10], 'note');
       final existing = await txn.query(
         'notes',
         columns: ['usn', 'mod'],
@@ -464,34 +546,30 @@ class AnkiIncrementalSync {
           _int(existing.first['mod']) >= remoteMtime) {
         continue;
       }
-      final fields = e[6]?.toString() ?? '';
       final firstField = fields.split('\x1f').first;
-      final notetype = models[_int(e[2]).toString()];
+      final notetype = models[modelId.toString()];
       final rawSortIndex = notetype is Map ? notetype['sortf'] : null;
       final sortIndex = rawSortIndex is num ? rawSortIndex.toInt() : 0;
       final noteFields = fields.split('\x1f');
       final sortField = sortIndex >= 0 && sortIndex < noteFields.length
           ? noteFields[sortIndex]
           : firstField;
-      await txn.insert(
-          'notes',
-          {
-            'id': id,
-            'guid': e[1]?.toString() ?? '',
-            'mid': _int(e[2]),
-            'mod': remoteMtime,
-            'usn': _int(e[4]),
-            'tags': e[5]?.toString() ?? '',
-            'flds': fields,
-            // Anki's NoteEntry leaves these two tuple values empty. Derive
-            // them from the stored fields and notetype instead of trusting
-            // the placeholders.
-            'sfld': Note.stripHtml(sortField),
-            'csum': _checksum(firstField),
-            'flags': _int(e[9]),
-            'data': e[10]?.toString() ?? '',
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('notes', {
+        'id': id,
+        'guid': guid,
+        'mid': modelId,
+        'mod': remoteMtime,
+        'usn': remoteUsn,
+        'tags': tags,
+        'flds': fields,
+        // Anki's NoteEntry leaves these two tuple values empty. Derive
+        // them from the stored fields and notetype instead of trusting
+        // the placeholders.
+        'sfld': Note.stripHtml(sortField),
+        'csum': _checksum(firstField),
+        'flags': flags,
+        'data': data,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       applied++;
     }
     return applied;
@@ -504,9 +582,26 @@ class AnkiIncrementalSync {
     var applied = 0;
     for (final raw in entries) {
       final e = _list(raw);
-      if (e.length < 18) continue;
-      final id = _int(e[0]);
-      final remoteMtime = _int(e[4]);
+      if (e.length < 18) {
+        throw const AnkiSyncException('同步服务器 card 数据不完整');
+      }
+      final id = _tupleInt(e[0], 'card');
+      final noteId = _tupleInt(e[1], 'card');
+      final deckId = _tupleInt(e[2], 'card');
+      final ordinal = _tupleInt(e[3], 'card');
+      final remoteMtime = _tupleInt(e[4], 'card');
+      final remoteUsn = _tupleInt(e[5], 'card');
+      final type = _tupleInt(e[6], 'card');
+      final queue = _tupleInt(e[7], 'card');
+      final due = _tupleInt(e[8], 'card');
+      final interval = _tupleInt(e[9], 'card');
+      final factor = _tupleInt(e[10], 'card');
+      final reps = _tupleInt(e[11], 'card');
+      final lapses = _tupleInt(e[12], 'card');
+      final left = _tupleInt(e[13], 'card');
+      final originalDue = _tupleInt(e[14], 'card');
+      final originalDeckId = _tupleInt(e[15], 'card');
+      final flags = _tupleInt(e[16], 'card');
       final existing = await txn.query(
         'cards',
         columns: ['usn', 'mod'],
@@ -518,29 +613,26 @@ class AnkiIncrementalSync {
           _int(existing.first['mod']) >= remoteMtime) {
         continue;
       }
-      await txn.insert(
-          'cards',
-          {
-            'id': id,
-            'nid': _int(e[1]),
-            'did': _int(e[2]),
-            'ord': _int(e[3]),
-            'mod': remoteMtime,
-            'usn': _int(e[5]),
-            'type': _int(e[6]),
-            'queue': _int(e[7]),
-            'due': _int(e[8]),
-            'ivl': _int(e[9]),
-            'factor': _int(e[10]),
-            'reps': _int(e[11]),
-            'lapses': _int(e[12]),
-            'left': _int(e[13]),
-            'odue': _int(e[14]),
-            'odid': _int(e[15]),
-            'flags': _int(e[16]),
-            'data': e[17]?.toString() ?? '',
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('cards', {
+        'id': id,
+        'nid': noteId,
+        'did': deckId,
+        'ord': ordinal,
+        'mod': remoteMtime,
+        'usn': remoteUsn,
+        'type': type,
+        'queue': queue,
+        'due': due,
+        'ivl': interval,
+        'factor': factor,
+        'reps': reps,
+        'lapses': lapses,
+        'left': left,
+        'odue': originalDue,
+        'odid': originalDeckId,
+        'flags': flags,
+        'data': e[17]?.toString() ?? '',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
       applied++;
     }
     return applied;
@@ -553,22 +645,29 @@ class AnkiIncrementalSync {
     var applied = 0;
     for (final raw in entries) {
       final e = _list(raw);
-      if (e.length < 9) continue;
-      final id = _int(e[0]);
-      final inserted = await txn.insert(
-          'revlog',
-          {
-            'id': id,
-            'cid': _int(e[1]),
-            'usn': _int(e[2]),
-            'ease': _int(e[3]),
-            'ivl': _int(e[4]),
-            'lastIvl': _int(e[5]),
-            'factor': _int(e[6]),
-            'time': _int(e[7]),
-            'type': _int(e[8]),
-          },
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (e.length < 9) {
+        throw const AnkiSyncException('同步服务器 review 数据不完整');
+      }
+      final id = _tupleInt(e[0], 'review');
+      final cardId = _tupleInt(e[1], 'review');
+      final remoteUsn = _tupleInt(e[2], 'review');
+      final ease = _tupleInt(e[3], 'review');
+      final interval = _tupleInt(e[4], 'review');
+      final lastInterval = _tupleInt(e[5], 'review');
+      final factor = _tupleInt(e[6], 'review');
+      final time = _tupleInt(e[7], 'review');
+      final type = _tupleInt(e[8], 'review');
+      final inserted = await txn.insert('revlog', {
+        'id': id,
+        'cid': cardId,
+        'usn': remoteUsn,
+        'ease': ease,
+        'ivl': interval,
+        'lastIvl': lastInterval,
+        'factor': factor,
+        'time': time,
+        'type': type,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
       if (inserted != 0) applied++;
     }
     return applied;
@@ -674,34 +773,32 @@ class AnkiIncrementalSync {
     Transaction txn,
     AnkiSyncProtocolClient client,
   ) async {
-    final counts = <String, dynamic>{
+    final clientCounts = <dynamic>[
       // Anki's v10 client sends the default due-count tuple; the server fills
       // its own counts when comparing the rest of the sanity metadata.
-      'counts': [0, 0, 0],
-      'cards': await _count(txn, 'cards'),
-      'notes': await _count(txn, 'notes'),
-      'revlog': await _count(txn, 'revlog'),
-      'graves': 0,
-      'models': _decodeObject(
+      [0, 0, 0],
+      await _count(txn, 'cards'),
+      await _count(txn, 'notes'),
+      await _count(txn, 'revlog'),
+      0,
+      _decodeObject(
         (await txn.query(
           'col',
           columns: ['models'],
           where: 'id = 1',
-        ))
-            .first['models'],
+        )).first['models'],
       ).length,
-      'decks': _decodeObject(
+      _decodeObject(
         (await txn.query(
           'col',
           columns: ['decks'],
           where: 'id = 1',
-        ))
-            .first['decks'],
+        )).first['decks'],
       ).length,
-      'deck_config': await _count(txn, 'deck_config'),
-    };
+      await _count(txn, 'deck_config'),
+    ];
     final response = await client.requestJson('sanityCheck2', {
-      'client': counts,
+      'client': clientCounts,
     });
     if (response is! Map<String, dynamic> || response['status'] != 'ok') {
       throw const AnkiSyncException('同步数据校验失败，本地事务已回滚；请完整下载服务器 collection 后重试');
@@ -731,8 +828,7 @@ class AnkiIncrementalSync {
       'col',
       columns: ['models', 'decks', 'tags'],
       where: 'id = 1',
-    ))
-        .first;
+    )).first;
     for (final values in [
       _decodeObject(col['models']).values,
       _decodeObject(col['decks']).values,
@@ -765,16 +861,66 @@ class AnkiIncrementalSync {
     }
   }
 
+  static String _uniqueDeckName(
+    String name,
+    Map<String, dynamic> decks,
+    int incomingId,
+  ) {
+    final usedNames = <String>{};
+    for (final entry in decks.entries) {
+      if (entry.key == incomingId.toString() || entry.value is! Map) continue;
+      final existingName = (entry.value as Map)['name'];
+      if (existingName is String) usedNames.add(existingName);
+    }
+    if (!usedNames.contains(name)) return name;
+
+    final base = '$name (sync conflict $incomingId)';
+    var uniqueName = base;
+    var suffix = 2;
+    while (usedNames.contains(uniqueName)) {
+      uniqueName = '$base $suffix';
+      suffix++;
+    }
+    return uniqueName;
+  }
+
   static Map<String, dynamic> _map(Object? value) =>
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
 
   static List<dynamic> _list(Object? value) =>
       value is List ? value : const <dynamic>[];
 
+  static List<dynamic> _chunkList(Map<String, dynamic> chunk, String key) {
+    // The v10 server omits empty arrays, so absence represents an empty
+    // collection. A present non-array value is malformed and must not be
+    // silently treated as an empty chunk.
+    if (!chunk.containsKey(key)) return const <dynamic>[];
+    final value = chunk[key];
+    if (value is List) return value;
+    throw AnkiSyncException('同步服务器 chunk $key 数据无法解析');
+  }
+
   static List<int> _intList(Object? value) => _list(value).map(_int).toList();
 
   static int _int(Object? value) =>
       value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+  static int _tupleInt(Object? value, String type) {
+    if (value is int) return value;
+    if (value is num && value.isFinite && value == value.toInt()) {
+      return value.toInt();
+    }
+    if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    throw AnkiSyncException('同步服务器 $type 数据包含无效数字');
+  }
+
+  static String _tupleString(Object? value, String type) {
+    if (value is String) return value;
+    throw AnkiSyncException('同步服务器 $type 数据包含无效文本');
+  }
 
   static int _checksum(String text) {
     return Note.computeChecksum(text);

@@ -346,7 +346,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (_remoteMeta == null || !_remoteMeta!.shouldContinue) return;
       final confirmed = await _confirmDestructiveAction(
         title: '用本地 collection 覆盖服务器？',
-        message: '服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。'
+        message:
+            '服务器上的 collection 将被本地数据完整替换。Stroom 会先保留一份本地数据库备份。'
             '\n\n随后仍会按服务器媒体清单双向同步文件。',
         action: '覆盖服务器',
       );
@@ -355,25 +356,23 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       setState(() => _status = '正在备份并上传 collection…');
       await AnkiDatabase.closeOpenedInstance();
       final client = _clientFor(config);
-      backupPath = await AnkiCollectionTransfer.uploadLocalCollection(
-        client,
-      );
+      backupPath = await AnkiCollectionTransfer.uploadLocalCollection(client);
       collectionUploaded = true;
-      final media = await AnkiMediaSync.sync(
-        client,
-      );
+      final media = await AnkiMediaSync.sync(client);
       if (!mounted) return;
       setState(() {
         _remoteMeta = null;
-        _status = '服务器已接受本地 collection，媒体同步完成：上传 ${media.uploadedFiles} 个，'
+        _status =
+            '服务器已接受本地 collection，媒体同步完成：上传 ${media.uploadedFiles} 个，'
             '下载 ${media.downloadedFiles} 个，删除 ${media.deletedFiles} 个。'
             '${backupPath.isEmpty ? '' : '\n本地备份：${p.basename(backupPath)}'}'
             '\n请重新检查服务器状态。';
       });
     } catch (error) {
       if (!mounted) return;
-      final prefix =
-          collectionUploaded ? '服务器 collection 已替换，但媒体同步未完成：' : '上传失败：';
+      final prefix = collectionUploaded
+          ? '服务器 collection 已替换，但媒体同步未完成：'
+          : '上传失败：';
       setState(() => _status = '$prefix${_safeMessage(error)}');
     } finally {
       if (transferStarted) _invalidateAnkiDatabase();
@@ -398,7 +397,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (meta == null || !meta.shouldContinue || meta.isEmpty) return;
       final confirmed = await _confirmDestructiveAction(
         title: '用服务器 collection 替换本地？',
-        message: '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。'
+        message:
+            '本地 collection 将被服务器数据替换。Stroom 会先保留一份本地数据库备份。'
             '\n\n随后会用服务器媒体替换本地媒体并下载缺失文件。若任一步失败，Stroom 会恢复本地 collection 和媒体目录。',
         action: '替换本地数据',
       );
@@ -406,17 +406,13 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       transferStarted = true;
       setState(() => _status = '正在下载并验证 collection…');
       final client = _clientFor(config);
-      mediaReset = await AnkiMediaSync.prepareForFullDownload(
-        client: client,
-      );
+      mediaReset = await AnkiMediaSync.prepareForFullDownload(client: client);
       await AnkiDatabase.closeOpenedInstance();
       backupPath =
           await AnkiCollectionTransfer.downloadAndReplaceLocalCollection(
-        client,
-      );
-      final media = await AnkiMediaSync.sync(
-        client,
-      );
+            client,
+          );
+      final media = await AnkiMediaSync.sync(client);
       await mediaReset.commit();
       if (!mounted) return;
       setState(() {
@@ -462,27 +458,24 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (mounted) setState(() => _status = '正在合并 collection 变更…');
       final client = _clientFor(config);
       final database = await ref.read(ankiDatabaseProvider.future);
-      final collectionResult = await AnkiIncrementalSync.sync(
-        database,
-        client,
-      );
+      final collectionResult = await AnkiIncrementalSync.sync(database, client);
       collectionComplete = true;
+      // The collection transaction has committed, so make its changes visible
+      // even if the subsequent media phase fails.
+      ref.read(ankiRefreshProvider.notifier).refresh();
       if (!mounted) return;
       setState(() => _status = 'Collection 增量合并完成，正在同步媒体文件…');
-      final mediaResult = await AnkiMediaSync.sync(
-        client,
-        database: database,
-      );
-      ref.read(ankiRefreshProvider.notifier).refresh();
+      final mediaResult = await AnkiMediaSync.sync(client, database: database);
       if (!mounted) return;
       setState(() {
         _remoteMeta = null;
         final collectionText = collectionResult.collectionChanged
             ? '新增/更新 ${collectionResult.changedNotes} 个笔记、'
-                '${collectionResult.changedCards} 张卡片、'
-                '${collectionResult.changedReviews} 条复习记录'
+                  '${collectionResult.changedCards} 张卡片、'
+                  '${collectionResult.changedReviews} 条复习记录'
             : 'collection 没有待合并变更';
-        _status = '双向同步完成：$collectionText；媒体上传 ${mediaResult.uploadedFiles} 个、'
+        _status =
+            '双向同步完成：$collectionText；媒体上传 ${mediaResult.uploadedFiles} 个、'
             '下载 ${mediaResult.downloadedFiles} 个、删除 ${mediaResult.deletedFiles} 个。';
       });
     } catch (error) {
@@ -498,24 +491,23 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     required String title,
     required String message,
     required String action,
-  }) =>
-      showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(action),
-            ),
-          ],
+  }) => showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('取消'),
         ),
-      );
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: Text(action),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _logout(AnkiSyncState config) async {
     if (_busy) return;
@@ -554,8 +546,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
   String _safeMessage(Object error) => error is AnkiSyncException
       ? error.message
       : error is AnkiSyncFullTransferRequired
-          ? error.message
-          : '操作未完成，请检查安全存储、网络和服务器地址';
+      ? error.message
+      : '操作未完成，请检查安全存储、网络和服务器地址';
 
   @override
   Widget build(BuildContext context) {
@@ -601,8 +593,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     Text(
                       '登录状态按服务分别保存。切换方式不会合并或覆盖数据。',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -647,7 +639,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                       } catch (error) {
                         if (mounted) {
                           setState(
-                              () => _status = '设置未保存：${_safeMessage(error)}');
+                            () => _status = '设置未保存：${_safeMessage(error)}',
+                          );
                         }
                       }
                     },
@@ -663,8 +656,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     '自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。'
                     '服务器需支持 Anki sync v10，证书验证默认开启。',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Material(
@@ -714,8 +707,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   _restoring || _busy
                       ? Icons.sync_rounded
                       : isLoggedIn
-                          ? Icons.cloud_done_outlined
-                          : Icons.cloud_off_outlined,
+                      ? Icons.cloud_done_outlined
+                      : Icons.cloud_off_outlined,
                   color: isLoggedIn ? colors.primary : colors.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
@@ -731,9 +724,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                         const SizedBox(height: 3),
                         Text(
                           _status,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: colors.onSurfaceVariant),
                         ),
                       ],

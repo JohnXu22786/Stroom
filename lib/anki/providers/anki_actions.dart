@@ -65,9 +65,13 @@ class AnkiActions {
     if (models.isEmpty) {
       final basic = Notetype.createBasic();
       col.addModel(basic);
-      mid = modelId ?? basic.id;
+      mid = basic.id;
     } else {
-      mid = modelId ?? models.first.id;
+      // A dialog opened before the model-list provider finished loading may
+      // still pass its placeholder ID. Resolve it against the current models.
+      mid = modelId != null && models.any((model) => model.id == modelId)
+          ? modelId
+          : models.first.id;
     }
     // Ensure Cloze model exists
     if (!col.modelList.any((m) => m.name == 'Cloze')) {

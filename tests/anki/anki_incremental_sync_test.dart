@@ -13,6 +13,7 @@ import 'package:stroom/anki/database/note_dao.dart';
 import 'package:stroom/anki/database/revlog_dao.dart';
 import 'package:stroom/anki/models/card.dart' as anki;
 import 'package:stroom/anki/models/deck.dart' as anki_deck;
+import 'package:stroom/anki/models/model.dart';
 import 'package:stroom/anki/models/note.dart';
 import 'package:stroom/anki/models/revlog.dart';
 import 'package:stroom/anki/providers/anki_actions.dart';
@@ -87,33 +88,376 @@ void main() {
     final sanityRequest = fakeHttp.requests.singleWhere(
       (request) => request.url.path == '/sync/sanityCheck2',
     );
-    final clientCounts =
-        (_decodedRequestData(sanityRequest)['client'] as Map<String, dynamic>);
-    expect(clientCounts['counts'], [0, 0, 0]);
+    expect(_decodedRequestData(sanityRequest)['client'], [
+      [0, 0, 0],
+      1, // cards
+      1, // notes
+      0, // revlog
+      0, // graves
+      1, // models
+      1, // decks
+      1, // deck configs
+    ]);
   });
 
-  test('requires a full transfer when unchanged collection schemas differ',
-      () async {
+  test(
+    'syncs when the remote USN advances within the same modification second',
+    () async {
+      await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+      await AnkiIncrementalSync.sync(collection, client);
+
+      final local = (await collection.db.query('col')).single;
+      final localModified = local['mod'] as int;
+      final localUsn = local['usn'] as int;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: localModified,
+        remoteUsn: localUsn + 1,
+      );
+
+      final requestCountBeforeSync = fakeHttp.requests.length;
+      final result = await AnkiIncrementalSync.sync(collection, client);
+
+      expect(result.collectionChanged, isTrue);
+      expect(
+        fakeHttp.requests
+            .skip(requestCountBeforeSync)
+            .map((request) => request.url.path),
+        contains('/sync/start'),
+      );
+    },
+  );
+
+  test('rejects short remote note, card, and review tuples', () async {
+    final model = collection.col.modelList.first;
+    final note = Note.createNew(
+      notetype_id: model.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = anki.Card.createNew(note_id: note.id, deck_id: 1);
+    await collection.cards.insert(card);
+    final review = RevlogEntry(cid: card.id, button_chosen: 3, interval: 1);
+    await collection.revlog.insert(review);
+
     await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
     await AnkiIncrementalSync.sync(collection, client);
 
-    final local = (await collection.db.query('col')).single;
-    final requestCount = fakeHttp.requests.length;
-    await _queueCollectionSync(
-      fakeHttp,
-      collection,
-      sanityStatus: 'ok',
-      remoteModified: local['mod'] as int,
-      remoteSchema: (local['scm'] as int) + 1,
+    final malformedTuples = <MapEntry<String, List<int>>>[
+      MapEntry('notes', [note.id]),
+      MapEntry('cards', [card.id]),
+      MapEntry('revlog', [review.id]),
+    ];
+    for (final malformed in malformedTuples) {
+      final before = (await collection.db.query('col')).single;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (before['mod'] as int) - 1,
+        remoteChunk: {
+          'done': true,
+          malformed.key: [malformed.value],
+        },
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      final after = (await collection.db.query('col')).single;
+      expect(after['mod'], before['mod']);
+      expect(after['usn'], before['usn']);
+      fakeHttp.responses.clear();
+    }
+  });
+
+  test('rejects nonnumeric remote note, card, and review IDs', () async {
+    final model = collection.col.modelList.first;
+    final note = Note.createNew(
+      notetype_id: model.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+    final card = anki.Card.createNew(note_id: note.id, deck_id: 1);
+    await collection.cards.insert(card);
+    await collection.revlog.insert(
+      RevlogEntry(cid: card.id, button_chosen: 3, interval: 1),
     );
 
-    await expectLater(
-      AnkiIncrementalSync.sync(collection, client),
-      throwsA(isA<AnkiSyncFullTransferRequired>()),
-    );
-    expect(fakeHttp.requests.length, requestCount + 1);
-    expect(fakeHttp.requests.last.url.path, endsWith('/sync/meta'));
+    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+    await AnkiIncrementalSync.sync(collection, client);
+
+    final malformedTuples = <MapEntry<String, List<dynamic>>>[
+      MapEntry('notes', [
+        'invalid-note-id',
+        'guid',
+        model.id,
+        1,
+        0,
+        '',
+        'front\x1fback',
+        '',
+        '',
+        0,
+        '',
+      ]),
+      MapEntry('cards', [
+        'invalid-card-id',
+        note.id,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        2500,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        '',
+      ]),
+      MapEntry('revlog', [
+        'invalid-review-id',
+        card.id,
+        0,
+        3,
+        1,
+        0,
+        2500,
+        1000,
+        0,
+      ]),
+    ];
+
+    for (final malformed in malformedTuples) {
+      final before = (await collection.db.query('col')).single;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (before['mod'] as int) - 1,
+        remoteChunk: {
+          'done': true,
+          malformed.key: [malformed.value],
+        },
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      final table = switch (malformed.key) {
+        'notes' => 'notes',
+        'cards' => 'cards',
+        _ => 'revlog',
+      };
+      expect(await collection.db.query(table, where: 'id = 0'), isEmpty);
+      final after = (await collection.db.query('col')).single;
+      expect(after['mod'], before['mod']);
+      expect(after['usn'], before['usn']);
+      fakeHttp.responses.clear();
+    }
   });
+
+  test('rejects remote chunk collections that have the wrong type', () async {
+    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+    await AnkiIncrementalSync.sync(collection, client);
+
+    for (final key in ['cards', 'notes', 'revlog']) {
+      final before = (await collection.db.query('col')).single;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (before['mod'] as int) - 1,
+        remoteChunk: {'done': true, key: 'not-an-array'},
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      final after = (await collection.db.query('col')).single;
+      expect(after['mod'], before['mod']);
+      expect(after['usn'], before['usn']);
+      fakeHttp.responses.clear();
+    }
+  });
+
+  test('rejects chunk responses without a boolean done field', () async {
+    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+    await AnkiIncrementalSync.sync(collection, client);
+
+    for (final remoteChunk in [
+      {'cards': [], 'notes': [], 'revlog': []},
+      {'done': 'true', 'cards': [], 'notes': [], 'revlog': []},
+    ]) {
+      final before = (await collection.db.query('col')).single;
+      final previousChunkRequests = fakeHttp.requests
+          .where((request) => request.url.path == '/sync/chunk')
+          .length;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (before['mod'] as int) - 1,
+        remoteChunk: remoteChunk,
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(
+        fakeHttp.requests
+            .where((request) => request.url.path == '/sync/chunk')
+            .length,
+        previousChunkRequests + 1,
+      );
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      final after = (await collection.db.query('col')).single;
+      expect(after['mod'], before['mod']);
+      expect(after['usn'], before['usn']);
+      fakeHttp.responses.clear();
+    }
+  });
+
+  test('aborts when required remote note strings are not strings', () async {
+    final model = collection.col.modelList.first;
+    final note = Note.createNew(
+      notetype_id: model.id,
+      fields: ['front', 'back'],
+    );
+    await collection.notes.insert(note);
+
+    for (final index in [1, 5, 6, 10]) {
+      final before = (await collection.db.query(
+        'notes',
+        where: 'id = ?',
+        whereArgs: [note.id],
+      )).single;
+      final colBefore = (await collection.db.query('col')).single;
+      final remoteTuple = <dynamic>[
+        note.id,
+        'remote-guid',
+        model.id,
+        note.mtime + 1,
+        0,
+        ' remote-tag ',
+        'remote front\x1fremote back',
+        '',
+        '',
+        0,
+        '',
+      ]..[index] = null;
+
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (colBefore['mod'] as int) - 1,
+        remoteChunk: {
+          'done': true,
+          'notes': [remoteTuple],
+        },
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      final after = (await collection.db.query(
+        'notes',
+        where: 'id = ?',
+        whereArgs: [note.id],
+      )).single;
+      for (final field in ['guid', 'tags', 'flds', 'data', 'usn', 'mod']) {
+        expect(after[field], before[field], reason: 'field $field changed');
+      }
+      final colAfter = (await collection.db.query('col')).single;
+      expect(colAfter['mod'], colBefore['mod']);
+      expect(colAfter['usn'], colBefore['usn']);
+      fakeHttp.responses.clear();
+    }
+  });
+
+  test(
+    'sends Basic and Cloze requirement tuples in Anki schema shape',
+    () async {
+      collection.col.addModel(Notetype.createCloze());
+      await collection.col.save();
+
+      await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+      await AnkiIncrementalSync.sync(collection, client);
+
+      final changesRequest = fakeHttp.requests.singleWhere(
+        (request) => request.url.path == '/sync/applyChanges',
+      );
+      final changes =
+          _decodedRequestData(changesRequest)['changes']
+              as Map<String, dynamic>;
+      final models = (changes['models'] as List).cast<Map<String, dynamic>>();
+      final basic = models.singleWhere((model) => model['name'] == 'Basic');
+      final cloze = models.singleWhere((model) => model['name'] == 'Cloze');
+
+      expect(basic['req'], [
+        [
+          0,
+          'all',
+          [0],
+        ],
+      ]);
+      expect(cloze['req'], [
+        [
+          0,
+          'any',
+          [0],
+        ],
+      ]);
+    },
+  );
+
+  test(
+    'requires a full transfer when unchanged collection schemas differ',
+    () async {
+      await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+      await AnkiIncrementalSync.sync(collection, client);
+
+      final local = (await collection.db.query('col')).single;
+      final requestCount = fakeHttp.requests.length;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: local['mod'] as int,
+        remoteSchema: (local['scm'] as int) + 1,
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncFullTransferRequired>()),
+      );
+      expect(fakeHttp.requests.length, requestCount + 1);
+      expect(fakeHttp.requests.last.url.path, endsWith('/sync/meta'));
+    },
+  );
 
   test('requires a full transfer before changing sync destinations', () async {
     final note = Note.createNew(
@@ -228,6 +572,77 @@ void main() {
     );
   });
 
+  test('aborts on a truncated remote deck config tuple', () async {
+    final localRow = (await collection.db.query('deck_config')).single;
+    final beforeUsn = (await collection.db.query('col')).single['usn'];
+    await _queueCollectionSync(
+      fakeHttp,
+      collection,
+      sanityStatus: 'ok',
+      remoteChanges: {
+        'decks': [
+          [],
+          [
+            [
+              localRow['id'],
+              localRow['name'],
+              (localRow['mtime_secs'] as int) + 1,
+              0,
+            ],
+          ],
+        ],
+      },
+    );
+
+    await expectLater(
+      AnkiIncrementalSync.sync(collection, client),
+      throwsA(isA<AnkiSyncException>()),
+    );
+
+    expect(fakeHttp.requests.last.url.path, '/sync/abort');
+    expect((await collection.db.query('col')).single['usn'], beforeUsn);
+    expect(
+      (await collection.db.query('deck_config')).single['config'],
+      localRow['config'],
+    );
+  });
+
+  test('aborts on a remote deck config that is not an object', () async {
+    final localRow = (await collection.db.query('deck_config')).single;
+    final beforeUsn = (await collection.db.query('col')).single['usn'];
+    await _queueCollectionSync(
+      fakeHttp,
+      collection,
+      sanityStatus: 'ok',
+      remoteChanges: {
+        'decks': [
+          [],
+          [
+            [
+              localRow['id'],
+              localRow['name'],
+              (localRow['mtime_secs'] as int) + 1,
+              0,
+              'not-an-object',
+            ],
+          ],
+        ],
+      },
+    );
+
+    await expectLater(
+      AnkiIncrementalSync.sync(collection, client),
+      throwsA(isA<AnkiSyncException>()),
+    );
+
+    expect(fakeHttp.requests.last.url.path, '/sync/abort');
+    expect((await collection.db.query('col')).single['usn'], beforeUsn);
+    expect(
+      (await collection.db.query('deck_config')).single['config'],
+      localRow['config'],
+    );
+  });
+
   test('saves in-place notetype list edits as pending sync changes', () async {
     final colRow = (await collection.db.query('col')).single;
     final models =
@@ -236,17 +651,14 @@ void main() {
     modelJson
       ..['mod'] = 1
       ..['usn'] = 0;
-    await collection.db.update(
-        'col',
-        {
-          'models': jsonEncode(models),
-        },
-        where: 'id = 1');
+    await collection.db.update('col', {
+      'models': jsonEncode(models),
+    }, where: 'id = 1');
     await collection.col.reload();
 
     final model = collection.col.modelList.first;
     model.tags.add('edited tag');
-    (model.req[2] as List).add(1);
+    ((model.req.single as List)[2] as List).add(1);
     await collection.col.save();
 
     expect(model.usn, -1);
@@ -263,7 +675,13 @@ void main() {
         (changes['models'] as List).single as Map<String, dynamic>;
     expect(sentModel['id'], model.id);
     expect(sentModel['tags'], contains('edited tag'));
-    expect(sentModel['req'][2], [0, 1]);
+    expect(sentModel['req'], [
+      [
+        0,
+        'all',
+        [0, 1],
+      ],
+    ]);
   });
 
   test(
@@ -289,6 +707,30 @@ void main() {
       expect(collection.col.getModel(note!.notetype_id), isNotNull);
       expect(await collection.cards.listByNote(noteId), hasLength(1));
       expect(collection.col.getModel(note.notetype_id)!.name, 'Basic');
+    },
+  );
+
+  test(
+    'addCard falls back to an available note type when the placeholder is stale',
+    () async {
+      final availableModelId = collection.col.modelList.first.id;
+      expect(availableModelId, isNot(1));
+
+      final container = ProviderContainer(
+        overrides: [
+          ankiColDaoProvider.overrideWith((ref) async => collection.col),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final noteId = await container
+          .read(ankiActionsProvider)
+          .addCard(1, 'new front', 'new back', modelId: 1);
+
+      expect(
+        (await collection.notes.get(noteId))!.notetype_id,
+        availableModelId,
+      );
     },
   );
 
@@ -427,18 +869,14 @@ void main() {
       'col',
       columns: ['dconf'],
       where: 'id = 1',
-    ))
-        .single;
+    )).single;
     final configs = jsonDecode(row['dconf'] as String) as Map<String, dynamic>;
     configs['2'] = Map<String, dynamic>.from(configs['1'] as Map)
       ..['id'] = 2
       ..['name'] = 'Second';
-    await collection.db.update(
-        'col',
-        {
-          'dconf': jsonEncode(configs),
-        },
-        where: 'id = 1');
+    await collection.db.update('col', {
+      'dconf': jsonEncode(configs),
+    }, where: 'id = 1');
     await collection.db.delete('deck_config');
     await collection.db.execute('''
       CREATE TRIGGER fail_second_deck_config
@@ -460,9 +898,7 @@ void main() {
     await collection.open();
     final seededIds = (await collection.db.query(
       'deck_config',
-    ))
-        .map((config) => config['id'])
-        .toSet();
+    )).map((config) => config['id']).toSet();
     expect(seededIds, containsAll([1, 2]));
   });
 
@@ -494,12 +930,101 @@ void main() {
       'notes',
       where: 'id = ?',
       whereArgs: [note.id],
-    ))
-        .single;
+    )).single;
     expect(row['mod'], preservedLegacyMillis);
     expect(row['usn'], 7);
     expect(row['sfld'], 'intentionally stale after migration');
     expect(row['csum'], 0);
+  });
+
+  test('migrates legacy Basic and Cloze requirement metadata', () async {
+    final cloze = Notetype.createCloze();
+    collection.col.addModel(cloze);
+    final customAny = Notetype.createBasic()
+      ..id = cloze.id + 1
+      ..name = 'Custom any';
+    collection.col.addModel(customAny);
+    await collection.col.save();
+
+    final basic = collection.col.modelList.firstWhere(
+      (model) => model.type == 0,
+    );
+    final models =
+        jsonDecode(
+              (await collection.db.query(
+                    'col',
+                    columns: ['models'],
+                  )).single['models']
+                  as String,
+            )
+            as Map<String, dynamic>;
+    for (final model in [basic, cloze]) {
+      final json = models[model.id.toString()] as Map<String, dynamic>;
+      json['req'] = [
+        0,
+        0,
+        [0],
+      ];
+      json['usn'] = 0;
+    }
+    models[customAny.id.toString()] as Map<String, dynamic>
+      ..['req'] = [
+        0,
+        1,
+        [0],
+      ]
+      ..['usn'] = 0;
+    await collection.db.update('col', {
+      'models': jsonEncode(models),
+    }, where: 'id = 1');
+    final created =
+        ((await collection.db.query('col', columns: ['crt'])).single['crt']
+                as num)
+            .toInt();
+    final migrationMarker = File(
+      '${workDir.path}${Platform.pathSeparator}'
+      'collection.anki2.stroom-sync-metadata-migration',
+    );
+    await migrationMarker.writeAsString('2:$created');
+
+    await collection.close();
+    collection = AnkiDatabase(basePath: workDir.path);
+    await collection.open();
+    await collection.col.load();
+
+    final migratedBasic = collection.col.modelList.firstWhere(
+      (model) => model.type == 0,
+    );
+    final migratedCloze = collection.col.modelList.firstWhere(
+      (model) => model.type == 1,
+    );
+    final migratedCustomAny = collection.col.modelList.firstWhere(
+      (model) => model.id == customAny.id,
+    );
+    expect(migratedBasic.req, [
+      [
+        0,
+        'all',
+        [0],
+      ],
+    ]);
+    expect(migratedBasic.usn, -1);
+    expect(migratedCloze.req, [
+      [
+        0,
+        'any',
+        [0],
+      ],
+    ]);
+    expect(migratedCloze.usn, -1);
+    expect(migratedCustomAny.req, [
+      [
+        0,
+        'any',
+        [0],
+      ],
+    ]);
+    expect(migratedCustomAny.usn, -1);
   });
 
   test(
@@ -521,12 +1046,9 @@ void main() {
           ((await collection.db.query('col', columns: ['crt'])).single['crt']
                   as num)
               .toInt();
-      await collection.db.update(
-          'col',
-          {
-            'crt': originalCollectionCreated + 1,
-          },
-          where: 'id = 1');
+      await collection.db.update('col', {
+        'crt': originalCollectionCreated + 1,
+      }, where: 'id = 1');
 
       await collection.close();
       collection = AnkiDatabase(basePath: workDir.path);
@@ -536,8 +1058,7 @@ void main() {
         'notes',
         where: 'id = ?',
         whereArgs: [note.id],
-      ))
-          .single;
+      )).single;
       expect(row['sfld'], 'replacement front');
       expect(row['csum'], Note.computeChecksum('replacement front'));
     },
@@ -846,12 +1367,9 @@ void main() {
       where: 'id = ?',
       whereArgs: [note.id],
     );
-    await collection.db.update(
-        'col',
-        {
-          'mod': collectionModifiedMs,
-        },
-        where: 'id = 1');
+    await collection.db.update('col', {
+      'mod': collectionModifiedMs,
+    }, where: 'id = 1');
     await _removeSyncMetadataMigrationMarker(workDir);
 
     await collection.close();
@@ -862,8 +1380,7 @@ void main() {
       'notes',
       where: 'id = ?',
       whereArgs: [note.id],
-    ))
-        .single;
+    )).single;
     expect(migrated['mod'], noteModifiedSecs);
     expect(migrated['sfld'], 'legacy');
     expect(migrated['csum'], Note.computeChecksum('legacy'));
@@ -881,8 +1398,7 @@ void main() {
       'col',
       columns: ['crt', 'decks'],
       where: 'id = 1',
-    ))
-        .single;
+    )).single;
     final collectionCreated = (collectionRow['crt'] as num).toInt();
     final decks =
         jsonDecode(collectionRow['decks'] as String) as Map<String, dynamic>;
@@ -892,12 +1408,9 @@ void main() {
       ..['crt'] = legacyDeckCreationMillis
       ..['usn'] = 7;
     decks[deckKey] = legacyDeck;
-    await collection.db.update(
-        'col',
-        {
-          'decks': jsonEncode(decks),
-        },
-        where: 'id = 1');
+    await collection.db.update('col', {
+      'decks': jsonEncode(decks),
+    }, where: 'id = 1');
     // Simulate an installation that already ran migration v1, which did not
     // normalize deck creation timestamps.
     await File(
@@ -908,13 +1421,15 @@ void main() {
     collection = AnkiDatabase(basePath: workDir.path);
     await collection.open();
 
-    final migratedDecks = jsonDecode(
-      (await collection.db.query(
-        'col',
-        columns: ['decks'],
-      ))
-          .single['decks'] as String,
-    ) as Map<String, dynamic>;
+    final migratedDecks =
+        jsonDecode(
+              (await collection.db.query(
+                    'col',
+                    columns: ['decks'],
+                  )).single['decks']
+                  as String,
+            )
+            as Map<String, dynamic>;
     final migratedDeck = migratedDecks[deckKey] as Map<String, dynamic>;
     expect(migratedDeck['crt'], legacyDeckCreationMillis ~/ 1000);
     expect(migratedDeck['usn'], -1);
@@ -928,8 +1443,8 @@ void main() {
         _decodedRequestData(changesRequest)['changes'] as Map<String, dynamic>;
     final syncedDecks = (changes['decks'] as List)[0] as List<dynamic>;
     final syncedDeck = syncedDecks.cast<Map<String, dynamic>>().singleWhere(
-          (deck) => deck['id'] == deckId,
-        );
+      (deck) => deck['id'] == deckId,
+    );
     expect(syncedDeck['crt'], legacyDeckCreationMillis ~/ 1000);
   });
 
@@ -939,8 +1454,7 @@ void main() {
       'col',
       columns: ['models', 'decks'],
       where: 'id = 1',
-    ))
-        .single;
+    )).single;
     final originalModels = collectionRow['models'] as String;
     final decks =
         jsonDecode(collectionRow['decks'] as String) as Map<String, dynamic>;
@@ -948,13 +1462,10 @@ void main() {
       ..['crt'] = legacyDeckCreationMillis
       ..['usn'] = 4;
     decks[decks.keys.single] = deck;
-    await collection.db.update(
-        'col',
-        {
-          'models': '{malformed',
-          'decks': jsonEncode(decks),
-        },
-        where: 'id = 1');
+    await collection.db.update('col', {
+      'models': '{malformed',
+      'decks': jsonEncode(decks),
+    }, where: 'id = 1');
     await _removeSyncMetadataMigrationMarker(workDir);
 
     await collection.close();
@@ -965,8 +1476,7 @@ void main() {
       'col',
       columns: ['models', 'decks'],
       where: 'id = 1',
-    ))
-        .single;
+    )).single;
     expect(migrated['models'], '{malformed');
     final migratedDecks =
         jsonDecode(migrated['decks'] as String) as Map<String, dynamic>;
@@ -1029,22 +1539,21 @@ void main() {
         ..['curDeck'] = deletedDeck.id
         ..['activeDecks'] = [deletedDeck.id];
       collection.col.confJson = jsonEncode(config);
-      await collection.db.update(
-          'col',
-          {
-            'conf': collection.col.confJson,
-          },
-          where: 'id = 1');
+      await collection.db.update('col', {
+        'conf': collection.col.confJson,
+      }, where: 'id = 1');
 
       await collection.col.removeDeck(deletedDeck.id);
 
-      final storedConfig = jsonDecode(
-        (await collection.db.query(
-          'col',
-          columns: ['conf'],
-        ))
-            .single['conf'] as String,
-      ) as Map<String, dynamic>;
+      final storedConfig =
+          jsonDecode(
+                (await collection.db.query(
+                      'col',
+                      columns: ['conf'],
+                    )).single['conf']
+                    as String,
+              )
+              as Map<String, dynamic>;
       expect(storedConfig['curDeck'], survivor.id);
       expect(storedConfig['activeDecks'], [survivor.id]);
     },
@@ -1118,6 +1627,48 @@ void main() {
     },
   );
 
+  test('remote collection config removes keys deleted on the server', () async {
+    final localConfig = {'removedOnServer': 'stale', 'serverUpdated': 'old'};
+    await collection.db.update('col', {
+      'conf': jsonEncode(localConfig),
+    }, where: 'id = 1');
+    for (final entry in localConfig.entries) {
+      await collection.db.insert('config', {
+        'key': entry.key,
+        'usn': 0,
+        'mtime_secs': 1,
+        'config': jsonEncode(entry.value),
+      });
+    }
+
+    final row = (await collection.db.query('col')).single;
+    const remoteConfig = {'serverUpdated': 'new'};
+    await _queueCollectionSync(
+      fakeHttp,
+      collection,
+      sanityStatus: 'ok',
+      remoteModified: (row['mod'] as int) + 1,
+      remoteChanges: {'conf': remoteConfig},
+    );
+
+    await AnkiIncrementalSync.sync(collection, client);
+
+    final storedConfig =
+        jsonDecode(
+              (await collection.db.query(
+                    'col',
+                    columns: ['conf'],
+                  )).single['conf']
+                  as String,
+            )
+            as Map<String, dynamic>;
+    expect(storedConfig, remoteConfig);
+
+    final configRows = await collection.db.query('config');
+    expect(configRows.map((row) => row['key']), ['serverUpdated']);
+    expect(jsonDecode(configRows.single['config'] as String), 'new');
+  });
+
   test('pending notes do not make local collection settings newer', () async {
     final model = collection.col.modelList.first;
     final note = Note.createNew(
@@ -1126,15 +1677,15 @@ void main() {
     );
     await collection.notes.insert(note);
     await collection.db.update('col', {'mod': 1000}, where: 'id = 1');
+    final remoteConfig = Map<String, dynamic>.from(
+      jsonDecode(collection.col.confJson) as Map,
+    )..['reviewLimit'] = 7;
     await _queueCollectionSync(
       fakeHttp,
       collection,
       sanityStatus: 'ok',
       remoteModified: 2000,
-      remoteChanges: {
-        'conf': {'reviewLimit': 7},
-        'crt': 123,
-      },
+      remoteChanges: {'conf': remoteConfig, 'crt': 123},
     );
 
     await AnkiIncrementalSync.sync(collection, client);
@@ -1156,35 +1707,112 @@ void main() {
         jsonDecode(localCollection['conf'] as String) as Map<String, dynamic>;
     expect(collectionConfig['reviewLimit'], 7);
     expect(collectionConfig['activeDecks'], isNotEmpty);
-    final remoteConfig = await collection.db.query(
+    final remoteConfigRows = await collection.db.query(
       'config',
       where: 'key = ?',
       whereArgs: ['reviewLimit'],
     );
-    expect(jsonDecode(remoteConfig.single['config'] as String), 7);
+    expect(jsonDecode(remoteConfigRows.single['config'] as String), 7);
   });
 
-  test('uploads collection settings from col.conf when the sidecar is empty',
-      () async {
-    final originalConfig =
-        jsonDecode(collection.col.confJson) as Map<String, dynamic>;
-    final localConfig = {...originalConfig, 'reviewLimit': 42};
-    await collection.db.update(
-      'col',
-      {'conf': jsonEncode(localConfig)},
-      where: 'id = 1',
+  test(
+    'uploads collection settings from col.conf when the sidecar is empty',
+    () async {
+      final originalConfig =
+          jsonDecode(collection.col.confJson) as Map<String, dynamic>;
+      final localConfig = {...originalConfig, 'reviewLimit': 42};
+      await collection.db.update('col', {
+        'conf': jsonEncode(localConfig),
+      }, where: 'id = 1');
+      expect(await collection.db.query('config'), isEmpty);
+      await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+
+      await AnkiIncrementalSync.sync(collection, client);
+
+      final changesRequest = fakeHttp.requests.singleWhere(
+        (request) => request.url.path == '/sync/applyChanges',
+      );
+      final changes =
+          _decodedRequestData(changesRequest)['changes']
+              as Map<String, dynamic>;
+      expect(changes['conf'], localConfig);
+    },
+  );
+
+  test('renames remote decks that collide with a local deck name', () async {
+    final localDeck = collection.col.addDeck('Sync collision deck');
+    await collection.col.save();
+    final remoteDeck = anki_deck.Deck.createNew(name: localDeck.name)
+      ..id = localDeck.id + 1
+      ..usn = 0;
+
+    await _queueCollectionSync(
+      fakeHttp,
+      collection,
+      sanityStatus: 'ok',
+      remoteChanges: {
+        'decks': [
+          [remoteDeck.toJson()],
+          [],
+        ],
+      },
     );
-    expect(await collection.db.query('config'), isEmpty);
-    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
 
     await AnkiIncrementalSync.sync(collection, client);
 
-    final changesRequest = fakeHttp.requests.singleWhere(
-      (request) => request.url.path == '/sync/applyChanges',
+    final row = (await collection.db.query('col')).single;
+    final decks = jsonDecode(row['decks'] as String) as Map<String, dynamic>;
+    final storedRemote = anki_deck.Deck.fromJson(
+      Map<String, dynamic>.from(decks[remoteDeck.id.toString()] as Map),
     );
-    final changes =
-        _decodedRequestData(changesRequest)['changes'] as Map<String, dynamic>;
-    expect(changes['conf'], localConfig);
+    final names = decks.values
+        .cast<Map>()
+        .map((deck) => deck['name'] as String)
+        .toList();
+
+    expect(storedRemote.id, remoteDeck.id);
+    expect(storedRemote.name, isNot(localDeck.name));
+    expect(storedRemote.usn, -1);
+    expect(names.toSet(), hasLength(names.length));
+  });
+
+  test('remote deck graves choose a surviving current deck', () async {
+    final deletedDeck = collection.col.addDeck('Remote deleted deck');
+    await collection.col.save();
+    final survivor = collection.col.deckList.firstWhere(
+      (deck) => deck.id != deletedDeck.id,
+    );
+    final config = jsonDecode(collection.col.confJson) as Map<String, dynamic>
+      ..['curDeck'] = deletedDeck.id
+      ..['activeDecks'] = [deletedDeck.id];
+    await collection.db.update('col', {
+      'conf': jsonEncode(config),
+    }, where: 'id = 1');
+
+    await _queueCollectionSync(
+      fakeHttp,
+      collection,
+      sanityStatus: 'ok',
+      remoteGraves: {
+        'cards': [],
+        'notes': [],
+        'decks': [deletedDeck.id],
+      },
+    );
+    await AnkiIncrementalSync.sync(collection, client);
+
+    final rows = await collection.db.query(
+      'col',
+      columns: ['conf', 'decks'],
+      where: 'id = 1',
+    );
+    final storedConfig =
+        jsonDecode(rows.single['conf'] as String) as Map<String, dynamic>;
+    final storedDecks =
+        jsonDecode(rows.single['decks'] as String) as Map<String, dynamic>;
+    expect(storedDecks, isNot(contains(deletedDeck.id.toString())));
+    expect(storedConfig['curDeck'], survivor.id);
+    expect(storedConfig['activeDecks'], [survivor.id]);
   });
 
   test(
@@ -1254,8 +1882,9 @@ void main() {
       final applyGravesRequest = fakeHttp.requests.lastWhere(
         (request) => request.url.path == '/sync/applyGraves',
       );
-      final sentGraves = _decodedRequestData(applyGravesRequest)['chunk']
-          as Map<String, dynamic>;
+      final sentGraves =
+          _decodedRequestData(applyGravesRequest)['chunk']
+              as Map<String, dynamic>;
       expect(sentGraves['cards'], contains(cardOnlyDeleted.id));
       expect(sentGraves['notes'], contains(deletedNote.id));
     },
@@ -1298,6 +1927,7 @@ Future<void> _queueCollectionSync(
   required String sanityStatus,
   Map<String, dynamic>? remoteChunk,
   int? remoteModified,
+  int? remoteUsn,
   int? remoteSchema,
   Map<String, dynamic>? remoteGraves,
   Map<String, dynamic>? remoteChanges,
@@ -1315,7 +1945,7 @@ Future<void> _queueCollectionSync(
     _json({
       'mod': remoteModified ?? (row['mod'] as int) - 1,
       'scm': remoteSchema ?? row['scm'],
-      'usn': row['usn'],
+      'usn': remoteUsn ?? row['usn'],
       'ts': nowSecs,
       'msg': '',
       'cont': true,

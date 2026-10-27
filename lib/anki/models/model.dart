@@ -68,10 +68,12 @@ class Notetype {
         ),
       ],
       req: [
-        0,
-        0,
-        [0],
-      ], // ord 0, all, field 0
+        [
+          0,
+          'all',
+          [0]
+        ],
+      ],
       sortFieldIndex: 0,
     );
   }
@@ -97,9 +99,11 @@ class Notetype {
         ),
       ],
       req: [
-        0,
-        0,
-        [0],
+        [
+          0,
+          'any',
+          [0]
+        ],
       ],
       sortFieldIndex: 0,
     );

@@ -23,6 +23,7 @@ import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
 import '../anki/database/anki_database.dart';
+import '../anki/sync/anki_media_sync.dart';
 import '../utils/app_version.dart';
 import '../utils/atomic_file.dart';
 import '../utils/backup_archive_path.dart';
@@ -5570,9 +5571,18 @@ class BackupService {
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&
           (completeFileInventories == null ||
-              completeFileInventories.contains(DataParts.anki)) &&
-          !await _deleteDirectory('collection.media')) {
-        deleteFailed = true;
+              completeFileInventories.contains(DataParts.anki))) {
+        if (!await _deleteDirectory('collection.media')) deleteFailed = true;
+        if (!kIsWeb && !WebFileStore.isTestMode) {
+          try {
+            await AnkiMediaSync.clearSyncIndexes(
+              documentsPath: await AppStorage.directory,
+            );
+          } catch (e) {
+            debugPrint('删除 Anki 媒体同步索引失败: $e');
+            deleteFailed = true;
+          }
+        }
       }
     }
 
