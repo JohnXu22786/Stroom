@@ -1620,8 +1620,7 @@ bool _legacyOcrTextContainsMaskedCredential(
               prefix,
               textWithoutPartMarkers.substring(match.end).trimLeft(),
             );
-            if (isLineBrokenCarefulActionEcho &&
-                !isReadCarefullyObjectPhrase) {
+            if (isLineBrokenCarefulActionEcho && !isReadCarefullyObjectPhrase) {
               return true;
             }
             if (_legacyOcrHasNaturalConnectorAfterLineBreak(
