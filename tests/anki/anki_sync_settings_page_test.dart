@@ -239,7 +239,9 @@ void main() {
     expect(find.text('other page'), findsOneWidget);
     expect(client.closeCount, 0);
     client.respondWithMeta();
-    await client.closed.future.timeout(const Duration(seconds: 2));
+    await tester.runAsync(
+      () => client.closed.future.timeout(const Duration(seconds: 2)),
+    );
 
     expect(client.closeCount, 1);
     expect(tester.takeException(), isNull);
