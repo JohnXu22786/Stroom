@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -19,8 +20,9 @@ class AppStorage {
   /// Returns the path to the application documents directory.
   ///
   /// Resolution order:
-  /// 1. `FLUTTER_TEST` environment is set → [Directory.systemTemp]
-  /// 2. [getApplicationDocumentsDirectory] (native)
+  /// 1. [getApplicationDocumentsDirectory] (native or test override)
+  /// 2. In Flutter tests, if the platform channel does not respond within one
+  ///    second → [Directory.systemTemp]
   /// 3. If [MissingPluginException] is thrown:
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
@@ -29,12 +31,10 @@ class AppStorage {
   static Future<String> get directory async {
     if (_resolved != null) return _resolved!;
 
+    var isFlutterTest = false;
     if (!kIsWeb) {
       try {
-        if (Platform.environment['FLUTTER_TEST'] == 'true') {
-          _resolved = _safeTempPath();
-          return _resolved!;
-        }
+        isFlutterTest = Platform.environment['FLUTTER_TEST'] == 'true';
       } catch (e) {
         AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');
       }
@@ -43,8 +43,14 @@ class AppStorage {
     await AppLogService.info('AppStorage', '获取应用文档目录');
 
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final directoryFuture = getApplicationDocumentsDirectory();
+      final dir = isFlutterTest
+          ? await directoryFuture.timeout(const Duration(seconds: 1))
+          : await directoryFuture;
       _resolved = dir.path;
+    } on TimeoutException {
+      if (!isFlutterTest) rethrow;
+      _resolved = _safeTempPath();
     } on MissingPluginException {
       _resolved = _fallbackPath();
     }

@@ -18,7 +18,7 @@ void main() {
   });
 
   test(
-    'uses the test storage path without waiting for Path Provider',
+    'uses the test storage fallback when Path Provider never responds',
     () async {
       AppStorage.resetCache();
       final pendingPath = Completer<Object?>();
@@ -34,12 +34,25 @@ void main() {
       });
 
       final path = await AppStorage.directory.timeout(
-        const Duration(milliseconds: 100),
+        const Duration(seconds: 2),
       );
 
       expect(path, Directory.systemTemp.path);
-      expect(pathProviderCalls, 0);
+      expect(pathProviderCalls, 1);
       pendingPath.complete(Directory.systemTemp.path);
     },
   );
+
+  test('uses an available Path Provider directory in Flutter tests', () async {
+    final documents = await Directory.systemTemp.createTemp('app_storage_');
+    addTearDown(() => documents.delete(recursive: true));
+    messenger.setMockMethodCallHandler(
+      pathProviderChannel,
+      (call) async => documents.path,
+    );
+
+    final path = await AppStorage.directory;
+
+    expect(path, documents.path);
+  });
 }
