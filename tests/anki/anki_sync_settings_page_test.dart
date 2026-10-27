@@ -180,8 +180,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final status = find.textContaining('结构版本戳');
-    await tester.scrollUntilVisible(status, 300);
-    final statusText = tester.widget<Text>(status).data!;
+    await tester.ensureVisible(status.first);
+    final statusText = tester.widget<Text>(status.first).data!;
     expect(statusText, contains('修改时间 2023-11-14'));
   });
 
