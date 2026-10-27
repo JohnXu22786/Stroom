@@ -3339,6 +3339,78 @@ void main() {
   });
 
   group('OcrPage - async image validation races', () {
+    testWidgets(
+      'folder picker started before OCR preflight cannot '
+      'change the snapped destination',
+      (tester) async {
+        await TextManifest.addFolder('destination');
+        final folderLoadStarted = Completer<void>();
+        final finishFolderLoad = Completer<void>();
+        TextManifest.beforeFolderLoadForTesting = () async {
+          folderLoadStarted.complete();
+          await finishFolderLoad.future;
+        };
+        TextManifest.invalidateCache();
+        addTearDown(() => TextManifest.beforeFolderLoadForTesting = null);
+
+        final preflightStarted = Completer<void>();
+        final finishPreflight = Completer<int?>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final adapter = _CapturingOcrAdapter();
+        OcrRetrySnapshot? cachedSnapshot;
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry()],
+            testImages: [_createValidOcrTestImage()],
+            backgroundTasksNotifier: notifier,
+            testRequestSizePreflight: (_, _) {
+              preflightStarted.complete();
+              return finishPreflight.future;
+            },
+            testOcrServiceFactory: (config) => OcrService(
+              config: config,
+              dio: Dio()..httpClientAdapter = adapter,
+            ),
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cachedSnapshot = snapshot;
+              return Future.value(
+                OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ),
+              );
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('保存至'));
+        await tester.pump();
+        await folderLoadStarted.future;
+
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preflightStarted.future;
+
+        finishFolderLoad.complete();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('选择保存文件夹'), findsNothing);
+        expect(find.text('根目录'), findsOneWidget);
+
+        finishPreflight.complete(defaultOcrRequestSizeBudgetBytes);
+        await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);
+
+        expect(cachedSnapshot?.saveFolder, isEmpty);
+        expect(
+          OcrRetrySnapshot.fromMap(notifier.tasksForTest.single.retryData!)
+              .saveFolder,
+          isEmpty,
+        );
+        await tester.pumpAndSettle();
+      },
+    );
+
     testWidgets('does not restore a selection cleared during OCR startup', (
       tester,
     ) async {

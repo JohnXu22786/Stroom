@@ -1690,7 +1690,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
-        onTap: _pickSaveFolder,
+        onTap: _ocrStarting || _isProcessing ? null : _pickSaveFolder,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -1720,8 +1720,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   }
 
   Future<void> _pickSaveFolder() async {
+    if (_ocrStarting || _isProcessing) return;
     final folders = await TextManifest.getAllFolders();
-    if (!mounted) return;
+    if (!mounted || _ocrStarting || _isProcessing) return;
     final result = await FolderPickerDialog.show(
       context,
       currentFolder: _saveFolder,
@@ -1733,7 +1734,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       },
       onRefreshFolders: () async => TextManifest.getAllFolders(),
     );
-    if (result != null && mounted) {
+    if (result != null && mounted && !_ocrStarting && !_isProcessing) {
       setState(() => _saveFolder = result);
     }
   }
