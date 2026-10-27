@@ -2194,9 +2194,11 @@ void main() {
         await preflightStarted.future;
 
         await tester.tap(find.text('Instruction A'));
-        await tester.pumpAndSettle();
+        // The OCR progress indicator remains active while preflight is held,
+        // so pump a fixed duration instead of waiting for global settlement.
+        await tester.pump(const Duration(milliseconds: 500));
         await tester.tap(find.text('Instruction B').last);
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 500));
 
         finishPreflight.complete(defaultOcrRequestSizeBudgetBytes);
         await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);
