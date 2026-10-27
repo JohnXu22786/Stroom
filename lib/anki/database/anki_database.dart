@@ -21,7 +21,7 @@ import '../../services/storage_service.dart';
 /// app documents directory if [basePath] is null). Creates tables
 /// and seeds the initial col row on first run.
 class AnkiDatabase {
-  static const _legacySyncMetadataMigrationVersion = 3;
+  static const _legacySyncMetadataMigrationVersion = 4;
 
   Database? _db;
   Future<void>? _opening;
@@ -205,7 +205,7 @@ class AnkiDatabase {
   Future<void> _migrateLegacySyncMetadata(Database db) async {
     final colRows = await db.query(
       'col',
-      columns: ['models', 'decks'],
+      columns: ['mod', 'models', 'decks'],
       where: 'id = 1',
     );
     final collectionRow = colRows.isEmpty ? null : colRows.first;
@@ -255,6 +255,10 @@ class AnkiDatabase {
     if (collectionRow != null) {
       final decks = _tryJsonMap(collectionRow['decks']);
       final collectionChanges = <String, Object?>{};
+      final oldCollectionMod = (collectionRow['mod'] as num).toInt();
+      if (oldCollectionMod > 100000000000) {
+        collectionChanges['mod'] = oldCollectionMod ~/ 1000;
+      }
       if (models != null) {
         var modelsChanged = false;
         for (final value in models.values) {
@@ -318,14 +322,7 @@ class AnkiDatabase {
       }
     }
 
-    if (_isVersionOneMarkerForCollection(previousMarkerValue, created)) {
-      await _migrateLegacyDeckCreationDates(db);
-      await _migrateLegacyNotetypeRequirements(db);
-    } else if (_isVersionTwoMarkerForCollection(previousMarkerValue, created)) {
-      await _migrateLegacyNotetypeRequirements(db);
-    } else {
-      await _migrateLegacySyncMetadata(db);
-    }
+    await _migrateLegacySyncMetadata(db);
 
     final temporaryMarker = File('${marker.path}.tmp');
     try {
@@ -335,39 +332,6 @@ class AnkiDatabase {
       await temporaryMarker.rename(marker.path);
     } finally {
       if (await temporaryMarker.exists()) await temporaryMarker.delete();
-    }
-  }
-
-  bool _isVersionOneMarkerForCollection(String? marker, int created) {
-    if (marker == null) return false;
-    final parts = marker.split(':');
-    return parts.length == 2 &&
-        int.tryParse(parts[0]) == 1 &&
-        int.tryParse(parts[1]) == created;
-  }
-
-  bool _isVersionTwoMarkerForCollection(String? marker, int created) {
-    if (marker == null) return false;
-    final parts = marker.split(':');
-    return parts.length == 2 &&
-        int.tryParse(parts[0]) == 2 &&
-        int.tryParse(parts[1]) == created;
-  }
-
-  Future<void> _migrateLegacyNotetypeRequirements(Database db) async {
-    final rows = await db.query('col', columns: ['models'], where: 'id = 1');
-    if (rows.isEmpty) return;
-    final models = _tryJsonMap(rows.first['models']);
-    if (models == null) return;
-
-    var changed = false;
-    for (final value in models.values) {
-      if (value is Map && _normalizeLegacyNotetypeRequirement(value)) {
-        changed = true;
-      }
-    }
-    if (changed) {
-      await db.update('col', {'models': jsonEncode(models)}, where: 'id = 1');
     }
   }
 
@@ -399,15 +363,6 @@ class AnkiDatabase {
     value['mod'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     value['usn'] = -1;
     return true;
-  }
-
-  Future<void> _migrateLegacyDeckCreationDates(Database db) async {
-    final rows = await db.query('col', columns: ['decks'], where: 'id = 1');
-    if (rows.isEmpty) return;
-    final decks = _tryJsonMap(rows.first['decks']);
-    if (decks == null) return;
-    if (!_normalizeLegacyDeckCreationDates(decks)) return;
-    await db.update('col', {'decks': jsonEncode(decks)}, where: 'id = 1');
   }
 
   bool _normalizeLegacyDeckCreationDates(Map<String, dynamic> decks) {

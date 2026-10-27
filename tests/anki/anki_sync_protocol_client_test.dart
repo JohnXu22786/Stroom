@@ -50,7 +50,7 @@ void main() {
         ..add(_jsonResponse({'key': 'host-key'}))
         ..add(
           _jsonResponse({
-            'mod': 1700000000000,
+            'mod': 1700000000,
             'scm': 1600000000000,
             'usn': 7,
             'ts': 1700000000,
@@ -65,7 +65,7 @@ void main() {
       await client.login('test@example.invalid', 'test-only');
       final meta = await client.checkStatus();
 
-      expect(meta.modified, 1700000000000);
+      expect(meta.modified, 1700000000);
       expect(meta.schema, 1600000000000);
       expect(meta.usn, 7);
       expect(meta.isEmpty, isFalse);
@@ -84,7 +84,7 @@ void main() {
         ..add(_jsonResponse({'key': 'host-key'}))
         ..add(
           _jsonResponse({
-            'mod': 1700000000000,
+            'mod': 1700000000,
             'scm': 1600000000000,
             'usn': 7,
             'ts': 1700000000,
@@ -108,7 +108,7 @@ void main() {
       await client.login('test@example.invalid', 'test-only');
 
       Map<String, dynamic> validMetadata() => {
-            'mod': 1700000000000,
+            'mod': 1700000000,
             'scm': 1600000000000,
             'usn': 7,
             'ts': 1700000000,
@@ -322,7 +322,7 @@ void main() {
         )
         ..add(
           _jsonResponse({
-            'mod': 1700000000000,
+            'mod': 1700000000,
             'scm': 1600000000000,
             'usn': 7,
             'ts': 1700000000,

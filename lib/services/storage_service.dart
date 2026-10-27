@@ -21,7 +21,7 @@ class AppStorage {
   ///
   /// Resolution order:
   /// 1. [getApplicationDocumentsDirectory] (native or test override)
-  /// 2. In Flutter tests without a platform override → [Directory.systemTemp]
+  /// 2. In Flutter tests with the default platform provider → [Directory.systemTemp]
   /// 3. If [MissingPluginException] is thrown:
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
@@ -39,14 +39,12 @@ class AppStorage {
       }
     }
 
-    await AppLogService.info('AppStorage', '获取应用文档目录');
-
-    if (isFlutterTest &&
-        PathProviderPlatform.instance.runtimeType.toString() ==
-            'MethodChannelPathProvider') {
+    if (isFlutterTest && _usesDefaultPathProvider) {
       _resolved = _safeTempPath();
       return _resolved!;
     }
+
+    await AppLogService.info('AppStorage', '获取应用文档目录');
 
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -56,6 +54,17 @@ class AppStorage {
     }
 
     return _resolved!;
+  }
+
+  static bool get _usesDefaultPathProvider {
+    final type = PathProviderPlatform.instance.runtimeType.toString();
+    return const {
+      'MethodChannelPathProvider',
+      'PathProviderAndroid',
+      'PathProviderFoundation',
+      'PathProviderLinux',
+      'PathProviderWindows',
+    }.contains(type);
   }
 
   /// Determines a fallback path when [getApplicationDocumentsDirectory] fails.

@@ -10,7 +10,7 @@ class RevlogDao {
     entry.usn = -1;
     await _db.insert('revlog', entry.toMap());
     await _db.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
-      DateTime.now().millisecondsSinceEpoch,
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
     ]);
   }
 

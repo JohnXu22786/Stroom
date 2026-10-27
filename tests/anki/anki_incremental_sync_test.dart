@@ -1150,7 +1150,19 @@ void main() {
           ..due = -102
           ..original_due = 43
           ..original_deck_id = homeDeck.id;
-    for (final card in [reviewCard, learningCard, suspendedCard]) {
+    final dayLearningReviewCard =
+        anki.Card.createNew(note_id: note.id, deck_id: filteredDeck.id)
+          ..ctype = anki.CardType.review
+          ..queue = anki.CardQueue.review
+          ..due = -103
+          ..original_due = 1700000000
+          ..original_deck_id = homeDeck.id;
+    for (final card in [
+      reviewCard,
+      learningCard,
+      suspendedCard,
+      dayLearningReviewCard,
+    ]) {
       await collection.cards.insert(card);
       await collection.revlog.insert(
         RevlogEntry(cid: card.id, button_chosen: 3, interval: 1),
@@ -1178,8 +1190,19 @@ void main() {
     expect(restoredSuspended.due, 43);
     expect(restoredSuspended.queue, anki.CardQueue.suspended);
 
+    final restoredDayLearningReview =
+        (await collection.cards.get(dayLearningReviewCard.id))!;
+    expect(restoredDayLearningReview.deck_id, homeDeck.id);
+    expect(restoredDayLearningReview.due, 1700000000);
+    expect(restoredDayLearningReview.queue, anki.CardQueue.learn);
+
     expect(await collection.notes.get(note.id), isNotNull);
-    for (final card in [reviewCard, learningCard, suspendedCard]) {
+    for (final card in [
+      reviewCard,
+      learningCard,
+      suspendedCard,
+      dayLearningReviewCard,
+    ]) {
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
     }
     final graves = await collection.graves.all();
@@ -1379,7 +1402,12 @@ void main() {
           'mod': collectionModifiedMs,
         },
         where: 'id = 1');
-    await _removeSyncMetadataMigrationMarker(workDir);
+    final migrationMarker = File(
+      '${workDir.path}/collection.anki2.stroom-sync-metadata-migration',
+    );
+    final created =
+        (await collection.db.query('col', columns: ['crt'])).single['crt'];
+    await migrationMarker.writeAsString('3:$created');
 
     await collection.close();
     collection = AnkiDatabase(basePath: workDir.path);
@@ -1397,7 +1425,7 @@ void main() {
     expect(migrated['usn'], -1);
     expect(
       (await collection.db.query('col')).single['mod'],
-      collectionModifiedMs,
+      collectionModifiedMs ~/ 1000,
     );
   });
 
@@ -1522,17 +1550,25 @@ void main() {
     expect((await notes.get(note.id))!.usn, -1);
     expect((await cards.get(card.id))!.usn, -1);
     expect((await revlog.listByCard(card.id)).single.usn, -1);
-    expect(
-      (await collection.db.query('col')).single['mod'],
-      greaterThan(beforeMod),
-    );
+    final changedCollectionMod =
+        (await collection.db.query('col')).single['mod'] as int;
+    expect(changedCollectionMod, greaterThanOrEqualTo(beforeMod));
+    expect(changedCollectionMod, lessThan(100000000000));
 
     final deck = col.addDeck('Sync tracking test');
     col.renameDeck(deck.id, 'Renamed sync tracking test');
     await col.save();
     expect(col.getDeck(deck.id)!.usn, -1);
+    expect(
+      (await collection.db.query('col')).single['mod'],
+      lessThan(100000000000),
+    );
 
     await col.removeDeck(deck.id);
+    expect(
+      (await collection.db.query('col')).single['mod'],
+      lessThan(100000000000),
+    );
     await col.save();
     expect(
       (await collection.graves.all())

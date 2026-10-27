@@ -155,7 +155,7 @@ class NoteDao {
       }
       if (removed > 0 || cards.isNotEmpty) {
         await txn.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
-          DateTime.now().millisecondsSinceEpoch,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
         ]);
       }
     });
@@ -163,7 +163,7 @@ class NoteDao {
 
   Future<void> _touchCollection() => _db.rawUpdate(
         'UPDATE col SET mod = ? WHERE id = 1',
-        [DateTime.now().millisecondsSinceEpoch],
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000],
       );
 
   Future<List<Note>> all() async {

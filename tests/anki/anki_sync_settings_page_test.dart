@@ -142,6 +142,46 @@ void main() {
     expect(find.text('登录自建同步服务器'), findsOneWidget);
   });
 
+  testWidgets('formats the server modification time as Unix seconds', (
+    tester,
+  ) async {
+    const serverUrl = 'https://sync.example.invalid/sync/';
+    SharedPreferences.setMockInitialValues({
+      'anki_sync_mode': 'selfHosted',
+      'custom_sync_server_enabled': true,
+      'custom_sync_server_collection_url': serverUrl,
+    });
+    final config = AnkiSyncState(
+      mode: AnkiSyncMode.selfHosted,
+      selfHostedUrl: serverUrl,
+      isLoaded: true,
+    );
+    final requests = <Uri>[];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.selfHosted(
+              endpoint: config.selfHostedUrl,
+              client: _RecordingHttpClient(requests, modified: 1700000000),
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检查服务器状态'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('修改时间 2023-11-14'), findsOneWidget);
+  });
+
   testWidgets('blocks a second sync tap while saving server settings', (
     tester,
   ) async {
@@ -453,9 +493,10 @@ class _DelayedSecureStorage extends FlutterSecureStorage {
 }
 
 class _RecordingHttpClient extends http.BaseClient {
-  _RecordingHttpClient(this.requests);
+  _RecordingHttpClient(this.requests, {this.modified = 1});
 
   final List<Uri> requests;
+  final int modified;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -464,7 +505,7 @@ class _RecordingHttpClient extends http.BaseClient {
       Stream<List<int>>.value(
         utf8.encode(
           jsonEncode({
-            'mod': 1,
+            'mod': modified,
             'scm': 1,
             'usn': 0,
             'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,

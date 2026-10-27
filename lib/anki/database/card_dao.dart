@@ -111,7 +111,7 @@ class CardDao {
         await txn.delete('revlog', where: 'cid = ?', whereArgs: [id]);
         await txn.insert('graves', {'usn': -1, 'oid': id, 'type': 0});
         await txn.rawUpdate('UPDATE col SET mod = ? WHERE id = 1', [
-          DateTime.now().millisecondsSinceEpoch,
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
         ]);
       }
     });
@@ -119,7 +119,7 @@ class CardDao {
 
   Future<void> _touchCollection() => _db.rawUpdate(
         'UPDATE col SET mod = ? WHERE id = 1',
-        [DateTime.now().millisecondsSinceEpoch],
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000],
       );
 
   Future<int> totalCount(int deckId) async {

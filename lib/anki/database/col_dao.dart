@@ -77,7 +77,7 @@ class ColDao {
     await db.insert('col', {
       'id': 1,
       'crt': now ~/ 1000,
-      'mod': now,
+      'mod': now ~/ 1000,
       'scm': now,
       'ver': 11,
       'dty': 0,
@@ -153,7 +153,7 @@ class ColDao {
   Future<void> save() async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final nowSecs = nowMs ~/ 1000;
-    modified = nowMs;
+    modified = nowSecs;
     for (final entry in _decks.entries) {
       final current = entry.value.toJson();
       if (_savedDecks[entry.key] == null ||
@@ -229,7 +229,7 @@ class ColDao {
     }
 
     if (modelsChanged) {
-      modified = DateTime.now().millisecondsSinceEpoch;
+      modified = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       await _db.update(
           'col',
           {
@@ -355,7 +355,7 @@ class ColDao {
               ? currentQueue
               : switch (cardType) {
                   1 || 3 => restoredDue > 1000000000 ? 1 : 3,
-                  2 => 2,
+                  2 => restoredDue > 1000000000 ? 3 : 2,
                   _ => 0,
                 };
 
@@ -407,14 +407,14 @@ class ColDao {
           {
             'decks': jsonEncode(decksJson),
             'conf': nextConfJson,
-            'mod': nowMs,
+            'mod': nowSecs,
           },
           where: 'id = 1');
     });
 
     _decks.remove(id);
     confJson = nextConfJson;
-    modified = nowMs;
+    modified = nowSecs;
     _savedDecks = _decks.map((key, value) => MapEntry(key, value.toJson()));
   }
 

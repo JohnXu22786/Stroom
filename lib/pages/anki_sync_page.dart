@@ -848,7 +848,7 @@ class _RemoteStatus extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final modified = meta.modified <= 0
         ? '未知'
-        : DateTime.fromMillisecondsSinceEpoch(meta.modified)
+        : DateTime.fromMillisecondsSinceEpoch(meta.modified * 1000)
             .toLocal()
             .toString()
             .substring(0, 16);
