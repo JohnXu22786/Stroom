@@ -345,6 +345,7 @@ class OcrService {
     } on DioException catch (e) {
       // Capture response diagnostics from exception
       _captureDioExceptionDiagnostics(e);
+      if (e.type == DioExceptionType.cancel) rethrow;
       throwWrappedDioException(e);
     } finally {
       _finishDiagnosticCapture(stopwatch);
@@ -435,6 +436,7 @@ class OcrService {
     } on DioException catch (e) {
       // Capture response diagnostics from exception
       _captureDioExceptionDiagnostics(e);
+      if (e.type == DioExceptionType.cancel) rethrow;
       throwWrappedDioException(e);
     } finally {
       _finishDiagnosticCapture(stopwatch);
