@@ -399,7 +399,9 @@ dynamic _sanitizeAsrDiagnosticValue(dynamic value, String apiKey) {
           caseSensitive: false,
         ).hasMatch(value);
         if (isPublicFileReference || isFileMetadata) {
-          return sanitizeAsrDiagnostic(value, apiKey: apiKey);
+          return isPublicFileReference
+              ? sanitizeAsrDiagnostic(value, apiKey: apiKey)
+              : value;
         }
       }
       return '[PAYLOAD REDACTED]';
@@ -623,7 +625,13 @@ bool _isWrappedNetworkFailure(Object? cause) {
 String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
   var safe = value;
   if (apiKey != null && apiKey.isNotEmpty) {
-    safe = safe.replaceAll(apiKey, '[REDACTED]');
+    final apiKeyPattern = apiKey.length >= 4
+        ? RegExp.escape(apiKey)
+        : '(?<![A-Za-z0-9_-])${RegExp.escape(apiKey)}(?![A-Za-z0-9_-])';
+    safe = safe.replaceAll(
+      RegExp(apiKeyPattern),
+      '[REDACTED]',
+    );
   }
   safe = safe.replaceAll(
     RegExp(r'Bearer\s+[^\s,;]+', caseSensitive: false),
@@ -637,6 +645,25 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
       caseSensitive: false,
     ),
     (match) => '${match.group(1)}[REDACTED]',
+  );
+  safe = safe.replaceAllMapped(
+    RegExp(
+      r'(/[A-Za-z0-9._~-]+/(?:api[_-]?key|token|secret|credential)/)[^/\s]+',
+      caseSensitive: false,
+    ),
+    (match) => '${match.group(1)}[REDACTED]',
+  );
+  final safeCredentialPaths = <String>[];
+  safe = safe.replaceAllMapped(
+    RegExp(
+      r'(?<!\S)(/[A-Za-z0-9._~-]+/(?:api[_-]?key|token|secret|credential))(?=/|\s|$)',
+      caseSensitive: false,
+    ),
+    (match) {
+      final marker = '\u0001${safeCredentialPaths.length}\u0001';
+      safeCredentialPaths.add(match.group(1)!);
+      return marker;
+    },
   );
   final urls = <String>[];
   safe = safe.replaceAllMapped(RegExp(r"""https?://[^\s<>"']+"""), (match) {
@@ -721,6 +748,12 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
   );
   for (var index = 0; index < urls.length; index++) {
     safe = safe.replaceAll('\u0000$index\u0000', urls[index]);
+  }
+  for (var index = 0; index < safeCredentialPaths.length; index++) {
+    safe = safe.replaceAll(
+      '\u0001$index\u0001',
+      safeCredentialPaths[index],
+    );
   }
   if (safe.length > 500) safe = '${safe.substring(0, 500)}…';
   return safe;

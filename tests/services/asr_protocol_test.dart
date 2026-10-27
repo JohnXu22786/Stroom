@@ -290,6 +290,27 @@ void main() {
       expect(safe, isNot(contains('bearer-value')));
     });
 
+    test('preserves credential route names while redacting path values', () {
+      const secret = 'scheduler-path-secret';
+      final safe = sanitizeAsrDiagnostic(
+        '/transcribe/api_key/$secret',
+        apiKey: 'key',
+      );
+
+      expect(safe, contains('/transcribe/api_key'));
+      expect(safe, isNot(contains(secret)));
+    });
+
+    test('redacts configured keys embedded in ordinary path segments', () {
+      const secret = 'k3y1234';
+      final safe = sanitizeAsrDiagnostic(
+        '/transcribe/${secret}suffix',
+        apiKey: secret,
+      );
+
+      expect(safe, isNot(contains(secret)));
+    });
+
     test('redacts list and short Base64 payloads in provider error maps', () {
       final request = RequestOptions(path: '/');
       final diagnostic = AsrFailureDiagnostic.fromError(
