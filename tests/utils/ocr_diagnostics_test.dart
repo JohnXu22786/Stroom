@@ -58,6 +58,7 @@ void main() {
     for (final entry in [
       ('X-Secret-Key', 'opaque-user-secret-192'),
       ('X-Private-Key', 'opaque-private-value-192'),
+      ('X-Secret', 'opaque-bare-secret-value-192'),
     ]) {
       final credentialValues =
           OcrDiagnosticSnapshot.credentialValuesFromRequest(
@@ -68,6 +69,7 @@ void main() {
       final response = OcrDiagnosticSnapshot.sanitizeResponse(
         {
           'statusCode': 401,
+          'requestId': entry.$2,
           'data': {'id': entry.$2},
         },
         excludedValues: credentialValues,

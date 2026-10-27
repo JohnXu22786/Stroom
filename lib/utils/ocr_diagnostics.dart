@@ -130,7 +130,7 @@ class OcrDiagnosticSnapshot {
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
     if (rawHeaders is! Map) return const [];
     final credentialHeader = RegExp(
-      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?token|refresh.?token|(?:private|secret).?key|client.?secret|password|cookie)',
+      r'(?:authorization|auth.?token|(?:^|[-_.])token|api.?key|access.?token|refresh.?token|(?:private|secret).?key|(?:^|[-_.])secret(?:$|[-_.])|client.?secret|password|cookie)',
       caseSensitive: false,
     );
     final values = <String>{};
