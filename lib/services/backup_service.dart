@@ -3536,6 +3536,7 @@ class BackupService {
       void checkRepositoryAttachment(Object? raw) {
         if (raw is! Map) return;
         checkRepositoryPath(raw['storagePath']);
+        checkRepositoryPath(raw['reference']);
         checkRepositoryPath(raw['thumbnailPath']);
       }
 

@@ -50,6 +50,49 @@ Uint8List _backupWithSettings(
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }
 
+Uint8List _backupWithRepositoryAttachment(
+  Uint8List source,
+  String reference,
+) {
+  final archive = ZipDecoder().decodeBytes(source);
+  final chatFile = archive.findFile('chat_data.json')!;
+  final chatData = jsonDecode(utf8.decode(chatFile.content as List<int>))
+      as Map<String, dynamic>;
+  chatData['conversation_repository'] = {
+    'schemaVersion': 1,
+    'conversations': [
+      {
+        'schemaVersion': 1,
+        'id': 'backup-conversation',
+        'title': 'Backup',
+        'createdAt': '2025-01-01T00:00:00.000Z',
+        'updatedAt': '2025-01-01T00:00:00.000Z',
+      },
+    ],
+    'messages': [
+      {
+        'conversationId': 'backup-conversation',
+        'id': 'backup-message',
+        'role': 'user',
+        'sequence': 0,
+        'createdAt': '2025-01-01T00:00:00.000Z',
+        'content': [
+          {
+            'type': 'file',
+            'data': {
+              'attachment': {'reference': reference},
+            },
+          },
+        ],
+      },
+    ],
+  };
+  archive.removeFile(chatFile);
+  final encoded = utf8.encode(jsonEncode(chatData));
+  archive.addFile(ArchiveFile('chat_data.json', encoded.length, encoded));
+  return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,6 +102,33 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     TextManifest.invalidateCache();
+  });
+
+  test('rejects missing local repository attachment references', () async {
+    final backup = await BackupService.buildBackupBytesForTest();
+    final incomplete = _backupWithRepositoryAttachment(
+      backup,
+      'attachments/missing.pdf',
+    );
+
+    await expectLater(
+      BackupService.restoreFromBytesForTest(incomplete),
+      throwsA(isA<BackupValidationException>()),
+    );
+  });
+
+  test('allows external repository attachment references', () async {
+    final backup = await BackupService.buildBackupBytesForTest();
+    final complete = _backupWithRepositoryAttachment(
+      backup,
+      'https://media.example/document.pdf',
+    );
+
+    await BackupService.restoreFromBytesForTest(
+      complete,
+      skipPostRestoreMigration: true,
+      skipMissingCategories: true,
+    );
   });
 
   testWidgets('LLM credentials migrate out of ordinary backup exports', (
