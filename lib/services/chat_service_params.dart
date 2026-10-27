@@ -89,6 +89,8 @@ extension _ChatServiceParamsExt on ChatService {
   }) {
     final result = <String, dynamic>{};
     final providerFlatJsonMaps = <String>{};
+    final providerJsonMaps = <String>{};
+    final providerNestedParamNames = <String>{};
     // Discover explicit empty JSON parents across both custom-param layers
     // before applying either layer. Provider and model params are assembled
     // separately below, but an invalid descendant in either layer must not
@@ -147,6 +149,13 @@ extension _ChatServiceParamsExt on ChatService {
         emptyJsonParents: emptyJsonParents,
         source: 'provider',
         flatJsonMapNames: providerFlatJsonMaps,
+        jsonMapNames: providerJsonMaps,
+        preserveNestedParamNames: providerNestedParamNames,
+      );
+      providerNestedParamNames.addAll(
+        _providerConfig!.customParams
+            .map((param) => param.paramName)
+            .where((name) => name.contains('.')),
       );
 
       // Provider-level reasoning params:
@@ -187,6 +196,7 @@ extension _ChatServiceParamsExt on ChatService {
           toggleValue,
           source: 'provider',
         );
+        providerNestedParamNames.add(providerToggleParam.paramName);
       }
 
       if (reasoning) {
@@ -215,6 +225,7 @@ extension _ChatServiceParamsExt on ChatService {
               selectedValue,
               source: 'provider',
             );
+            providerNestedParamNames.add(rp.paramName);
           }
         }
       }
@@ -252,6 +263,8 @@ extension _ChatServiceParamsExt on ChatService {
       emptyJsonParents: emptyJsonParents,
       source: 'model',
       replaceFlatJsonMapNames: providerFlatJsonMaps,
+      jsonMapNames: providerJsonMaps,
+      preserveNestedParamNames: providerNestedParamNames,
     );
 
     // Model-level reasoning params:
@@ -369,7 +382,17 @@ extension _ChatServiceParamsExt on ChatService {
     required String source,
     Set<String>? flatJsonMapNames,
     Set<String>? replaceFlatJsonMapNames,
+    Set<String>? jsonMapNames,
+    required Set<String> preserveNestedParamNames,
   }) {
+    if (source == 'model') {
+      preserveNestedParamNames.addAll(
+        customParams
+            .map((param) => param.paramName)
+            .where((name) => name.contains('.')),
+      );
+    }
+
     bool isJsonParent(CustomParam param) =>
         param.type == 'json' &&
         customParams.any(
@@ -395,7 +418,17 @@ extension _ChatServiceParamsExt on ChatService {
         // all-unchecked selection from legacy params that have no options.
         // Replace any provider-layer value with an omission marker so the
         // inherited default is removed from the final request as well.
-        setNestedParam(result, cp.paramName, const _OmittedSentinel());
+        final nestedValues = _nestedParamValues(
+          result,
+          cp.paramName,
+          preserveNestedParamNames,
+        );
+        setNestedParam(
+          result,
+          cp.paramName,
+          nestedValues.isEmpty ? const _OmittedSentinel() : nestedValues,
+          replaceExistingMap: jsonMapNames?.contains(cp.paramName) == true,
+        );
         continue;
       }
       final value = ChatService._coerceCustomParam(
@@ -427,6 +460,9 @@ extension _ChatServiceParamsExt on ChatService {
       if (cp.type == 'json' && value is Map && value.isEmpty) {
         emptyJsonParents.add(cp.paramName);
       }
+      if (cp.type == 'json' && value is Map) {
+        jsonMapNames?.add(cp.paramName);
+      }
       if (cp.type == 'json' &&
           value is Map &&
           !cp.paramName.contains('.') &&
@@ -440,4 +476,40 @@ extension _ChatServiceParamsExt on ChatService {
       }
     }
   }
+}
+
+Map<String, dynamic> _nestedParamValues(
+  Map<String, dynamic> params,
+  String parent,
+  Set<String> nestedParamNames,
+) {
+  dynamic parentValue = params;
+  for (final part in parent.split('.')) {
+    if (parentValue is Map && parentValue.containsKey(part)) {
+      parentValue = parentValue[part];
+    } else {
+      return {};
+    }
+  }
+  if (parentValue is! Map) return {};
+
+  final retained = <String, dynamic>{};
+  for (final name in nestedParamNames) {
+    if (!name.startsWith('$parent.')) continue;
+    final relativeName = name.substring(parent.length + 1);
+    dynamic value = parentValue;
+    var found = true;
+    for (final part in relativeName.split('.')) {
+      if (value is Map && value.containsKey(part)) {
+        value = value[part];
+      } else {
+        found = false;
+        break;
+      }
+    }
+    if (found && value is! _OmittedSentinel) {
+      setNestedParam(retained, relativeName, value);
+    }
+  }
+  return retained;
 }

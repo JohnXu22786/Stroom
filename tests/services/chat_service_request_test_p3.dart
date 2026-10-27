@@ -222,15 +222,22 @@ void chatServiceRequestGroup3() {
   });
 
   group('ChatService - saved empty model option selection', () {
-    Future<Map<String, dynamic>?> captureParams(CustomParam modelParam) async {
+    Future<Map<String, dynamic>?> captureParams(CustomParam modelParam,
+        {bool providerObject = false}) async {
       final providerConfig = ProviderConfigItem(
         providerName: 'Test provider',
         customParams: [
-          CustomParam(
-            paramName: modelParam.paramName,
-            defaultValue: modelParam.defaultValue,
-            type: modelParam.type,
-          ),
+          providerObject
+              ? CustomParam(
+                  paramName: modelParam.paramName,
+                  defaultValue: '{"inherited": true}',
+                  type: 'json',
+                )
+              : CustomParam(
+                  paramName: modelParam.paramName,
+                  defaultValue: modelParam.defaultValue,
+                  type: modelParam.type,
+                ),
         ],
       );
       final modelConfig = ModelConfig(
@@ -280,6 +287,133 @@ void chatServiceRequestGroup3() {
 
       expect(params, isNotNull);
       expect(params!.containsKey('top_k'), isFalse);
+    });
+
+    test('omits provider JSON object for an empty string selection', () async {
+      final params = await captureParams(
+        CustomParam(
+          paramName: 'route',
+          defaultValue: 'provider-route',
+          options: const [],
+          optionOrder: const ['fast', 'accurate'],
+        ),
+        providerObject: true,
+      );
+
+      expect(params, isNotNull);
+      expect(params!.containsKey('route'), isFalse);
+    });
+
+    test('omits provider JSON object for an empty number selection', () async {
+      final params = await captureParams(
+        CustomParam(
+          paramName: 'top_k',
+          defaultValue: '32',
+          type: 'number',
+          options: const [],
+          optionOrder: const ['16', '32'],
+        ),
+        providerObject: true,
+      );
+
+      expect(params, isNotNull);
+      expect(params!.containsKey('top_k'), isFalse);
+    });
+
+    test('preserves provider dotted descendants of an omitted JSON map',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'Test provider',
+        customParams: [
+          CustomParam(
+            paramName: 'route.config',
+            defaultValue: '{"inherited": true}',
+            type: 'json',
+          ),
+        ],
+        reasoningParams: [
+          ReasoningParam(
+            paramName: 'route.config.mode',
+            isReasoningToggle: false,
+            options: const ['provider-mode'],
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'route.config',
+            defaultValue: 'model-route',
+            options: const [],
+            optionOrder: const ['fast', 'accurate'],
+          ),
+        ],
+      );
+      final provider = _CapturingProvider();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      service
+          .sendStream(
+            'Hi',
+            history: [],
+            reasoning: true,
+            reasoningParamValues: const {'route.config.mode': 'provider-mode'},
+          )
+          .listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.capturedExtraParams, isNotNull);
+      expect(provider.capturedExtraParams!['route'], {
+        'config': {'mode': 'provider-mode'}
+      });
+    });
+
+    test(
+        'preserves model dotted descendants while omitting a provider JSON map',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'Test provider',
+        customParams: [
+          CustomParam(
+            paramName: 'route',
+            defaultValue: '{"inherited": true}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(paramName: 'route.mode', defaultValue: 'model-mode'),
+          CustomParam(
+            paramName: 'route',
+            defaultValue: 'model-route',
+            options: const [],
+            optionOrder: const ['fast', 'accurate'],
+          ),
+        ],
+      );
+      final provider = _CapturingProvider();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.capturedExtraParams, isNotNull);
+      expect(provider.capturedExtraParams!['route'], {'mode': 'model-mode'});
     });
 
     test('uses legacy default when no explicit empty selection was saved',
