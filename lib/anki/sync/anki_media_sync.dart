@@ -470,12 +470,9 @@ class AnkiMediaSync {
         throw const AnkiSyncException('本地媒体文件名不符合 Anki 同步规则，请先重命名后重试同步');
       }
       if (length == 0 || length > _maxMediaFileBytes) {
-        final existing = await _find(index, filename);
-        if (existing?['sha1'] != null &&
-            _int(existing?['sync_required']) != 1) {
-          throw const AnkiSyncException('已同步的本地媒体文件为空或超过 100 MB，请修复后重试同步');
-        }
-        continue;
+        throw const AnkiSyncException(
+          '本地媒体文件为空或超过 100 MB，请修复后重试同步',
+        );
       }
       final bytes = await entity.readAsBytes();
       final hash = sha1.convert(bytes).toString();

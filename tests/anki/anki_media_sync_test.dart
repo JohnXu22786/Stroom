@@ -700,6 +700,43 @@ void main() {
       },
     );
 
+    test('fails on new empty or oversized media files', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_new_invalid_test_',
+      );
+      const identity = 'ankiweb:new-invalid-media';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
+      final oversized = await File('${mediaDir.path}/oversized.bin')
+          .open(mode: FileMode.write);
+      await oversized.truncate(100 * 1024 * 1024 + 1);
+      await oversized.close();
+      await _seedMediaIndex(workDir, identity, files: []);
+      final fake = _QueueHttpClient();
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'new-invalid-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fake.paths, isEmpty);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
     test('keeps invalid pending media uploads pending and fails sync', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_pending_invalid_test_',
