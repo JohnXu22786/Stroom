@@ -1846,19 +1846,6 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
       final beforeEcho = sanitized.substring(0, match.start + boundaryLength);
       final afterEcho = sanitized.substring(match.end);
-      final naturalAuthenticationDocumentationInstruction =
-          prefix.toLowerCase() == 'document' &&
-              RegExp(
-                r'^\s*read\s+the\s+$',
-                caseSensitive: false,
-              ).hasMatch(beforeEcho) &&
-              RegExp(
-                r'^\s+on\s+authentication[.!?]?\s*$',
-                caseSensitive: false,
-              ).hasMatch(afterEcho);
-      if (naturalAuthenticationDocumentationInstruction) {
-        return match.group(0)!;
-      }
       final naturalCarefulInstructionLead =
           _legacyOcrNaturalCarefulInstructionActions
                   .contains(prefix.toLowerCase()) &&
@@ -2047,6 +2034,16 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(r'^carefully\b', caseSensitive: false).hasMatch(after);
+  final readAuthenticationDocumentationPrompt =
+      naturalWord == 'documentation' &&
+          RegExp(
+            r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          RegExp(
+            r'^on authentication\b',
+            caseSensitive: false,
+          ).hasMatch(after);
   final naturalReadFromOcrSourcePrompt = isNaturalWordContinuation &&
       RegExp(
         r'\b(?:please\s+)?read(?:\s+(?:the|this|that|these|those|a|an))?$',
@@ -2133,6 +2130,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   return !hasCredentialUseContext &&
       (politeNaturalVerbPrompt ||
           readDocumentationCarefullyPrompt ||
+          readAuthenticationDocumentationPrompt ||
           naturalReadFromOcrSourcePrompt ||
           naturalCredentialProcessInstructionPrompt ||
           readHandwritingInstructionPrompt ||
