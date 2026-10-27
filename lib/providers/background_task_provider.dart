@@ -1845,6 +1845,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
       final beforeEcho = sanitized.substring(0, match.start + boundaryLength);
+      final afterEcho = sanitized.substring(match.end);
       final naturalCarefulInstructionLead =
           _legacyOcrNaturalCarefulInstructionActions
                   .contains(prefix.toLowerCase()) &&
@@ -1927,7 +1928,6 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               );
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
-      final afterEcho = sanitized.substring(match.end);
       final hasAuthorizationConnectorAfterEcho = RegExp(
         r'^\s+as\s+',
         caseSensitive: false,
@@ -2034,6 +2034,16 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(r'^carefully\b', caseSensitive: false).hasMatch(after);
+  final readAuthenticationDocumentationPrompt =
+      naturalWord == 'documentation' &&
+          RegExp(
+            r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+            caseSensitive: false,
+          ).hasMatch(before) &&
+          RegExp(
+            r'^on authentication\b',
+            caseSensitive: false,
+          ).hasMatch(after);
   final naturalReadFromOcrSourcePrompt = isNaturalWordContinuation &&
       RegExp(
         r'\b(?:please\s+)?read(?:\s+(?:the|this|that|these|those|a|an))?$',
@@ -2120,6 +2130,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
   return !hasCredentialUseContext &&
       (politeNaturalVerbPrompt ||
           readDocumentationCarefullyPrompt ||
+          readAuthenticationDocumentationPrompt ||
           naturalReadFromOcrSourcePrompt ||
           naturalCredentialProcessInstructionPrompt ||
           readHandwritingInstructionPrompt ||
