@@ -1201,6 +1201,65 @@ void main() {
     expect(await TextManifest.readText(record.storageFileName), 'owned text');
   });
 
+  test(
+      'partial save waits for durable approval and restore retains it after cancellation',
+      () async {
+    notifier.setResult(id, 'owned partial text', isComplete: false);
+    notifier.failTask(id, error: 'incomplete OCR result');
+    await notifier.pendingPersistence;
+
+    final approvalWriteStarted = Completer<void>();
+    final releaseApprovalWrite = Completer<void>();
+    var snapshotWrites = 0;
+    BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = () async {
+      snapshotWrites++;
+      if (snapshotWrites == 1) {
+        approvalWriteStarted.complete();
+        await releaseApprovalWrite.future;
+      }
+    };
+    final saveWriteStarted = Completer<void>();
+    final releaseSaveWrite = Completer<void>();
+    final saver = OcrResultSaver(
+      taskId: id,
+      notifier: notifier,
+      title: 'owned',
+      folder: '',
+      onSaved: () {},
+      writeText: (name, text, {beforeCommit}) async {
+        saveWriteStarted.complete();
+        await releaseSaveWrite.future;
+        return name;
+      },
+    );
+
+    try {
+      final retry = saver.retryTaskResult(allowPartial: true);
+      await approvalWriteStarted.future;
+      expect(saveWriteStarted.isCompleted, isFalse);
+
+      releaseApprovalWrite.complete();
+      await saveWriteStarted.future;
+      notifier.cancelTask(id);
+      releaseSaveWrite.complete();
+      await expectLater(retry, throwsA(anything));
+      await notifier.pendingPersistence;
+
+      final restored = BackgroundTaskNotifier();
+      try {
+        expect(await restored.restoreFromPersistence(), isTrue);
+        expect(restored.taskById(id)?.partialSaveRequested, isTrue);
+      } finally {
+        restored.dispose();
+        await restored.pendingPersistence;
+      }
+    } finally {
+      if (!releaseApprovalWrite.isCompleted) releaseApprovalWrite.complete();
+      if (!releaseSaveWrite.isCompleted) releaseSaveWrite.complete();
+      BackgroundTaskNotifier.debugBeforeTaskSnapshotWrite = null;
+    }
+  });
+
   test('cancelling save-only retry preserves an existing shared text file',
       () async {
     final hash = computeTextHash(Uint8List.fromList(utf8.encode('owned text')));
