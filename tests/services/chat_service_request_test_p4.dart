@@ -437,6 +437,113 @@ void chatServiceRequestGroup4() {
       expect(parsedBody['fallback'], equals(['model']));
     });
 
+    test('model string overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(paramName: 'options', defaultValue: 'model-value'),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], equals('model-value'));
+    });
+
+    test('model number overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '7.5',
+            type: 'number',
+          ),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], equals(7.5));
+    });
+
+    test('model boolean overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: 'true',
+            type: 'boolean',
+          ),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], isTrue);
+    });
+
     test(
         'dotted provider param before JSON object preserves object fields and wins collisions',
         () async {
