@@ -552,8 +552,15 @@ void main() {
 
     test('reconciles stale rows when the legacy source changes', () async {
       final preferences = await SharedPreferences.getInstance();
-      final originalSource = '[${_legacyConversation('stale', ['old'])},'
-          '${_legacyConversation('interrupted', ['pending'])}]';
+      final originalConversation = Map<String, dynamic>.from(
+        jsonDecode(_legacyConversation('stale', ['old'])) as Map,
+      )..['draftAttachments'] = [
+          {'storagePath': 'https://media.example/original.png'},
+        ];
+      final originalSource = jsonEncode([
+        originalConversation,
+        jsonDecode(_legacyConversation('interrupted', ['pending'])),
+      ]);
       await preferences.setString('conversations', originalSource);
       final repository = MemoryConversationRepository();
       await repository.initialize();
@@ -570,8 +577,12 @@ void main() {
       );
       expect(await repository.countConversations(), 1);
 
-      final replacementSource =
-          '[${_legacyConversation('replacement', ['new'])}]';
+      final replacementConversation = Map<String, dynamic>.from(
+        jsonDecode(_legacyConversation('replacement', ['new'])) as Map,
+      )..['draftAttachments'] = [
+          {'storagePath': 'https://media.example/replacement.png'},
+        ];
+      final replacementSource = jsonEncode([replacementConversation]);
       await preferences.setString('conversations', replacementSource);
       final result = await ConversationMigrationService(
         repository,
@@ -583,6 +594,18 @@ void main() {
         'replacement',
       ]);
       expect((await repository.getMessages('replacement')).single.id, 'new');
+      expect(
+        preferences.getString(ConversationMigrationService.backupKey),
+        replacementSource,
+      );
+      final attachmentManifest = jsonDecode(
+        preferences.getString(
+          ConversationMigrationService.attachmentManifestBackupKey,
+        )!,
+      ) as List;
+      expect(attachmentManifest, hasLength(1));
+      expect(attachmentManifest.single['storagePath'],
+          'https://media.example/replacement.png');
       await repository.close();
     });
 

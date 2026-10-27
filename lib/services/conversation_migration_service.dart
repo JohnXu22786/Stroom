@@ -104,7 +104,11 @@ class ConversationMigrationService {
     if (decoded is! List) {
       throw const FormatException('Legacy conversations must be a JSON list.');
     }
-    await _writeBackup(preferences, raw);
+    await _writeBackup(
+      preferences,
+      raw,
+      replaceExisting: restartForChangedSource,
+    );
     final conversations = <StroomConversation>[];
     for (final item in decoded) {
       if (item is! Map) {
@@ -239,10 +243,11 @@ class ConversationMigrationService {
 
   Future<void> _writeBackup(
     SharedPreferences preferences,
-    String raw,
-  ) async {
+    String raw, {
+    bool replaceExisting = false,
+  }) async {
     final existingBackup = preferences.getString(backupKey);
-    if (existingBackup == null) {
+    if (replaceExisting || existingBackup == null) {
       if (!await preferences.setString(backupKey, raw)) {
         throw StateError('Could not back up the legacy conversations key.');
       }
@@ -274,7 +279,8 @@ class ConversationMigrationService {
       }
     }
     final manifestJson = jsonEncode(manifest.values.toList());
-    if (preferences.getString(attachmentManifestBackupKey) == null &&
+    if ((replaceExisting ||
+            preferences.getString(attachmentManifestBackupKey) == null) &&
         !await preferences.setString(
             attachmentManifestBackupKey, manifestJson)) {
       throw StateError(
