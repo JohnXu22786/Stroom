@@ -16,6 +16,7 @@ import 'package:stroom/services/asr_task_scheduler.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/audio_utils.dart';
 import 'package:stroom/utils/audio_chunker.dart';
+import 'package:stroom/utils/asr_audio_stream.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 const _config = AsrConfig(apiKey: 'key', host: 'https://asr.test/transcribe');
@@ -139,7 +140,11 @@ class _UriValidatingAdapter extends _ControlledAdapter {
   }
 }
 
-class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
+class _MemoryRetryAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStoragePresence,
+        AsrRetryStorageCancellable {
   final Map<String, Uint8List> files = {};
   Completer<void>? writeEntered;
   Completer<void>? releaseWrite;
@@ -178,6 +183,20 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
       files[key] == null ? null : Uint8List.fromList(files[key]!);
 
   @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    final bytes = await read(key);
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    return bytes;
+  }
+
+  @override
+  Future<bool> contains(String key) async => files.containsKey(key);
+
+  @override
   Future<void> delete(String key) async {
     files.remove(key);
   }
@@ -185,6 +204,29 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
   @override
   Future<List<String>> keysWithPrefix(String prefix) async =>
       files.keys.where((key) => key.startsWith(prefix)).toList();
+}
+
+class _CancellationAwareReadRetryAdapter extends _MemoryRetryAdapter
+    implements AsrRetryStorageCancellable {
+  final readEntered = Completer<void>();
+  var cancellableAudioReadCount = 0;
+  var cancellationObserved = false;
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (!key.endsWith('.audio')) return read(key);
+    // save() reads back its just-written audio once to verify durable staging.
+    // Let that read finish so the blocked read below is specifically the task's
+    // later reload before transcription.
+    if (++cancellableAudioReadCount == 1) return super.read(key);
+    readEntered.complete();
+    await cancelToken.whenCancel;
+    cancellationObserved = true;
+    throw cancelToken.cancelError!;
+  }
 }
 
 class _FailOnceOnSuccessfulChunkCheckpoint extends BackgroundTaskNotifier {
@@ -251,6 +293,29 @@ void main() {
   AsrTaskAudio audio(String name) =>
       AsrTaskAudio(bytes: Uint8List.fromList([1, 2, 3]), name: name);
 
+  test(
+    'cancellable staging rejects a legacy loader before it starts',
+    () async {
+      var sourceLoads = 0;
+      final source = AsrTaskAudio(
+        name: 'legacy-loader.wav',
+        loadBytes: () async {
+          sourceLoads++;
+          return Uint8List.fromList([1, 2, 3]);
+        },
+      );
+
+      await expectLater(
+        source.loadBytesWithCancellation(CancelToken()),
+        throwsStateError,
+      );
+
+      expect(sourceLoads, 0);
+      expect(await source.loadBytes(), [1, 2, 3]);
+      expect(sourceLoads, 1, reason: 'direct staging remains supported');
+    },
+  );
+
   AsrTaskScheduler scheduler(
     _ControlledAdapter adapter, {
     required List<AsrTaskAudio> audios,
@@ -293,12 +358,12 @@ void main() {
     final input = audio('captured.wav');
     final run = scheduler(adapter, audios: [input]);
     input.bytes[0] = 99;
+    expect(run.audios.single.bytes.first, 1);
 
     final first = run.start();
     final second = run.start();
     await adapter.requestStarted.future.timeout(const Duration(seconds: 5));
     expect(run.taskIds, hasLength(1));
-    expect(run.audios.single.bytes.first, 1);
     expect(notifier.state.single.title, 'ASR_captured.wav');
     expect(notifier.state.single.status, TaskStatus.running);
     expect(notifier.state.single.steps[2].status, BgStepStatus.running);
@@ -313,6 +378,159 @@ void main() {
     expect(notifier.state.single.resultFolder, 'captured-folder');
     expect((await TextManifest.loadRecords()).single.folder, 'captured-folder');
     expect(retryFiles.files, isEmpty);
+  });
+
+  test(
+    'lazy batch sources are loaded sequentially before provider requests',
+    () async {
+      final source = pcmToWav(Uint8List(32000));
+      var loadCount = 0;
+      var activeLoads = 0;
+      var maxActiveLoads = 0;
+      var releasedSources = 0;
+      final adapter = _ControlledAdapter(
+        beforeResponse: (_) {
+          expect(
+            loadCount,
+            2,
+            reason: 'the durable batch snapshot is saved before any upload',
+          );
+          expect(
+            releasedSources,
+            2,
+            reason: 'staged task sources release their loader closures',
+          );
+        },
+      );
+
+      AsrTaskAudio lazyAudio(String name) => AsrTaskAudio(
+            bytes: Uint8List(0),
+            name: name,
+            format: 'wav',
+            byteLength: source.length,
+            onSourceReleased: () => releasedSources++,
+            loadBytesWithCancellation: (cancelToken) async {
+              throwIfAsrAudioCanceled(cancelToken);
+              loadCount++;
+              activeLoads++;
+              if (activeLoads > maxActiveLoads) maxActiveLoads = activeLoads;
+              try {
+                await Future<void>.delayed(Duration.zero);
+                throwIfAsrAudioCanceled(cancelToken);
+                return Uint8List.fromList(source);
+              } finally {
+                activeLoads--;
+              }
+            },
+          );
+
+      final run = scheduler(
+        adapter,
+        audios: [lazyAudio('first.wav'), lazyAudio('second.wav')],
+      );
+      expect(loadCount, 0, reason: 'construction must keep sources lazy');
+      expect(run.audios.map((audio) => audio.bytes.length), [0, 0]);
+
+      await run.start().timeout(const Duration(seconds: 5));
+
+      expect(loadCount, 2);
+      expect(maxActiveLoads, 1, reason: 'only one source is staged at once');
+      expect(adapter.calls, hasLength(2), reason: 'requests stay serial');
+    },
+  );
+
+  test(
+    'canceling during lazy source loading cancels the stream before staging',
+    () async {
+      final streamListening = Completer<void>();
+      final streamCanceled = Completer<void>();
+      var sourceReleased = false;
+      final source = StreamController<List<int>>(
+        onListen: streamListening.complete,
+        onCancel: streamCanceled.complete,
+      );
+      final adapter = _ControlledAdapter();
+      final run = scheduler(
+        adapter,
+        audios: [
+          AsrTaskAudio(
+            bytes: Uint8List(0),
+            name: 'blocked.wav',
+            onSourceReleased: () => sourceReleased = true,
+            loadBytesWithCancellation: (cancelToken) =>
+                readAsrAudioStream(source.stream, cancelToken: cancelToken),
+          ),
+        ],
+      );
+
+      final execution = run.start();
+      await streamListening.future.timeout(const Duration(seconds: 5));
+      notifier.cancelTask(run.taskIds.single);
+      await streamCanceled.future.timeout(const Duration(seconds: 5));
+      await execution.timeout(const Duration(seconds: 5));
+
+      expect(adapter.calls, isEmpty);
+      expect(retryFiles.files, isEmpty);
+      expect(notifier.taskById(run.taskIds.single)!.status, TaskStatus.failed);
+      expect(sourceReleased, isTrue);
+    },
+  );
+
+  test(
+    'removing during lazy source loading releases the source loader',
+    () async {
+      final streamListening = Completer<void>();
+      final streamCanceled = Completer<void>();
+      var sourceReleased = false;
+      final source = StreamController<List<int>>(
+        onListen: streamListening.complete,
+        onCancel: streamCanceled.complete,
+      );
+      final adapter = _ControlledAdapter();
+      final run = scheduler(
+        adapter,
+        audios: [
+          AsrTaskAudio(
+            bytes: Uint8List(0),
+            name: 'removed-while-loading.wav',
+            onSourceReleased: () => sourceReleased = true,
+            loadBytesWithCancellation: (cancelToken) =>
+                readAsrAudioStream(source.stream, cancelToken: cancelToken),
+          ),
+        ],
+      );
+
+      final execution = run.start();
+      await streamListening.future.timeout(const Duration(seconds: 5));
+      notifier.removeTask(run.taskIds.single);
+      await streamCanceled.future.timeout(const Duration(seconds: 5));
+      await execution.timeout(const Duration(seconds: 5));
+
+      expect(adapter.calls, isEmpty);
+      expect(retryFiles.files, isEmpty);
+      expect(notifier.taskById(run.taskIds.single), isNull);
+      expect(sourceReleased, isTrue);
+    },
+  );
+
+  test('canceling during staged audio reload stops the storage read', () async {
+    final cancellableRetryFiles = _CancellationAwareReadRetryAdapter();
+    retryFiles = cancellableRetryFiles;
+    retryStore = AsrRetryAudioStore(adapter: cancellableRetryFiles);
+    final adapter = _ControlledAdapter();
+    final run = scheduler(adapter, audios: [audio('staged-read.wav')]);
+
+    final execution = run.start();
+    await cancellableRetryFiles.readEntered.future.timeout(
+      const Duration(seconds: 5),
+    );
+    notifier.cancelTask(run.taskIds.single);
+    await execution.timeout(const Duration(seconds: 5));
+
+    expect(cancellableRetryFiles.cancellableAudioReadCount, 2);
+    expect(cancellableRetryFiles.cancellationObserved, isTrue);
+    expect(adapter.calls, isEmpty);
+    expect(notifier.taskById(run.taskIds.single)!.status, TaskStatus.failed);
   });
 
   test(
@@ -362,6 +580,43 @@ void main() {
 
       final replacement = notifier.taskById(replacementId)!;
       expect(replacement.status, TaskStatus.waiting);
+      expect(adapter.calls, hasLength(1));
+    },
+  );
+
+  test(
+    'removing a queued job during earlier staging releases its lazy source',
+    () async {
+      retryFiles.writeEntered = Completer<void>();
+      retryFiles.releaseWrite = Completer<void>();
+      var removedSourceReleased = false;
+      final adapter = _ControlledAdapter();
+      final run = scheduler(
+        adapter,
+        audios: [
+          audio('first.wav'),
+          AsrTaskAudio(
+            bytes: Uint8List(0),
+            name: 'removed-before-staging.wav',
+            onSourceReleased: () => removedSourceReleased = true,
+            loadBytesWithCancellation: (cancelToken) async {
+              throwIfAsrAudioCanceled(cancelToken);
+              return Uint8List.fromList([4, 5, 6]);
+            },
+          ),
+        ],
+      );
+
+      final execution = run.start();
+      await retryFiles.writeEntered!.future.timeout(const Duration(seconds: 5));
+
+      notifier.removeTask(run.taskIds[1]);
+      await notifier.pendingPersistence;
+      expect(removedSourceReleased, isTrue);
+
+      retryFiles.releaseWrite!.complete();
+      await execution.timeout(const Duration(seconds: 5));
+
       expect(adapter.calls, hasLength(1));
     },
   );
@@ -544,7 +799,20 @@ void main() {
     await blockedRoot.writeAsString('not a directory');
     BackgroundTaskNotifier.debugStorageDirectoryOverride = blockedRoot.path;
     final adapter = _ControlledAdapter();
-    final run = scheduler(adapter, audios: [audio('not-durable.wav')]);
+    var sourceReleased = false;
+    var sourceLoads = 0;
+    final selectedAudio = AsrTaskAudio(
+      bytes: Uint8List(0),
+      name: 'not-durable.wav',
+      byteLength: 3,
+      onSourceReleased: () => sourceReleased = true,
+      loadBytesWithCancellation: (cancelToken) async {
+        throwIfAsrAudioCanceled(cancelToken);
+        sourceLoads++;
+        return Uint8List.fromList([1, 2, 3]);
+      },
+    );
+    final run = scheduler(adapter, audios: [selectedAudio]);
 
     await run.start().timeout(const Duration(seconds: 5));
 
@@ -553,6 +821,9 @@ void main() {
     expect(notifier.state.single.error, contains('无法保存 ASR 重试音频'));
     expect(notifier.state.single.retryData, isNull);
     expect(retryFiles.files, isEmpty);
+    expect(sourceReleased, isFalse);
+    expect(await run.audios.single.loadBytes(), orderedEquals([1, 2, 3]));
+    expect(sourceLoads, 2);
   });
 
   test(

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,42 @@ import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/utils/text_manifest.dart';
+
+// ignore: implementation_imports
+import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+
+class _AudioSelectionPicker extends FilePickerPlatform {
+  _AudioSelectionPicker(this.bytes, {this.reportedSize, this.readStream});
+
+  final Uint8List bytes;
+  final int? reportedSize;
+  final Stream<List<int>>? readStream;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+    bool cancelUploadOnWindowBlur = true,
+  }) async {
+    return FilePickerResult([
+      PlatformFile(
+        name: 'mislabelled.wav',
+        size: reportedSize ?? bytes.length,
+        bytes: readStream == null ? bytes : null,
+        readStream: readStream,
+      ),
+    ]);
+  }
+}
 
 class _ControlledAsrService extends AsrService {
   final Future<void> _responseGate;
@@ -60,7 +97,11 @@ class _ControlledAsrService extends AsrService {
   }
 }
 
-class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
+class _MemoryRetryAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStoragePresence,
+        AsrRetryStorageCancellable {
   final Map<String, Uint8List> files = {};
 
   @override
@@ -71,6 +112,20 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
   @override
   Future<Uint8List?> read(String key) async =>
       files[key] == null ? null : Uint8List.fromList(files[key]!);
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    final bytes = await read(key);
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    return bytes;
+  }
+
+  @override
+  Future<bool> contains(String key) async => files.containsKey(key);
 
   @override
   Future<void> delete(String key) async {
@@ -90,6 +145,24 @@ class _DelayedReadRetryAdapter extends _MemoryRetryAdapter {
   Future<Uint8List?> read(String key) async {
     if (holdReads) await readGate.future;
     return super.read(key);
+  }
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (!holdReads) return super.readCancellable(key, cancelToken: cancelToken);
+    return Future.any([
+      read(key),
+      cancelToken.whenCancel.then<Uint8List?>((error) => throw error),
+    ]);
+  }
+
+  @override
+  Future<bool> contains(String key) async {
+    if (holdReads) await readGate.future;
+    return super.contains(key);
   }
 }
 
@@ -250,6 +323,94 @@ void main() {
     }
   }
 
+  test(
+    'cancellable staging rejects a legacy loader before it starts',
+    () async {
+      var sourceLoads = 0;
+      final audio = SelectedAudio(
+        loadBytes: () async {
+          sourceLoads++;
+          return Uint8List.fromList([1, 2, 3]);
+        },
+        name: 'legacy-loader.wav',
+      );
+
+      await expectLater(
+        audio.loadBytesWithCancellation(CancelToken()),
+        throwsStateError,
+      );
+
+      expect(sourceLoads, 0);
+      expect(await audio.loadBytes(), [1, 2, 3]);
+      expect(sourceLoads, 1, reason: 'direct staging remains supported');
+    },
+  );
+
+  test(
+    'selected audio can be staged again after storage write failure',
+    () async {
+      final oneShotController = StreamController<List<int>>();
+      oneShotController.add([1, 2, 3]);
+      unawaited(oneShotController.close());
+      final oneShotSource = oneShotController.stream;
+      var sourceLoads = 0;
+      final audio = SelectedAudio(
+        loadBytes: () async {
+          sourceLoads++;
+          final builder = BytesBuilder(copy: false);
+          await for (final chunk in oneShotSource) {
+            builder.add(chunk);
+          }
+          return builder.takeBytes();
+        },
+        name: 'single-subscription.wav',
+      );
+      var stagingAttempts = 0;
+      final stagedBytes = <Uint8List>[];
+
+      Future<void> stageRetryAudio() async {
+        final bytes = await audio.loadBytes();
+        stagingAttempts++;
+        if (stagingAttempts == 1) {
+          throw StateError('injected retry storage failure');
+        }
+        stagedBytes.add(Uint8List.fromList(bytes));
+      }
+
+      await expectLater(stageRetryAudio(), throwsStateError);
+      await stageRetryAudio();
+
+      expect(stagedBytes, hasLength(1));
+      expect(stagedBytes.single, [1, 2, 3]);
+      expect(sourceLoads, 1);
+      audio.releaseSource();
+      expect(audio.bytes, isEmpty);
+      expect(await audio.loadBytes(), isEmpty);
+    },
+  );
+
+  test(
+    'checkpoint reset preserves the cancellation-aware source loader',
+    () async {
+      final token = CancelToken();
+      CancelToken? receivedToken;
+      final audio = SelectedAudio(
+        loadBytesWithCancellation: (cancelToken) async {
+          receivedToken = cancelToken;
+          return Uint8List.fromList([4, 5, 6]);
+        },
+        name: 'cancel-aware.wav',
+      );
+
+      final resetAudio = audio.copyForChunkCheckpointReset();
+      final bytes = await resetAudio.loadBytesWithCancellation(token);
+
+      expect(resetAudio.resetChunkCheckpoint, isTrue);
+      expect(receivedToken, same(token));
+      expect(bytes, [4, 5, 6]);
+    },
+  );
+
   testWidgets(
     'starting then leaving the page keeps the captured task running',
     (tester) async {
@@ -271,6 +432,76 @@ void main() {
       expect(activeToken?.isCancelled, isNot(true));
       background.cancelTask(background.state.single.id);
       releaseResponse.complete();
+    },
+  );
+
+  testWidgets('updates displayed format after lazy content detection', (
+    tester,
+  ) async {
+    final originalPicker = FilePickerPlatform.instance;
+    FilePickerPlatform.instance = _AudioSelectionPicker(
+      Uint8List.fromList([0x49, 0x44, 0x33, 0x00]),
+    );
+    addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+    await tester.pumpWidget(app(keepPageOpen: true));
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清空'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('音频文件'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('系统音频文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. mislabelled.wav'), findsOneWidget);
+    expect(find.text('WAV  |  4 B'), findsOneWidget);
+    await tester.tap(find.text('开始识别'));
+    await waitForServiceCall(tester);
+    await tester.pump();
+
+    expect(find.text('MP3  |  4 B'), findsOneWidget);
+    expect(serviceCalls, 1);
+    releaseResponse.complete();
+    if (background.state.isNotEmpty) {
+      background.cancelTask(background.state.single.id);
+    }
+  });
+
+  testWidgets(
+    'keeps streamed audio with unknown size and displays its loaded size',
+    (tester) async {
+      final originalPicker = FilePickerPlatform.instance;
+      FilePickerPlatform.instance = _AudioSelectionPicker(
+        Uint8List.fromList([0x49, 0x44, 0x33, 0x00]),
+        reportedSize: 0,
+        readStream: Stream.value([0x49, 0x44, 0x33, 0x00]),
+      );
+      addTearDown(() => FilePickerPlatform.instance = originalPicker);
+
+      await tester.pumpWidget(app(keepPageOpen: true));
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('清空'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('音频文件'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('系统音频文件'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1. mislabelled.wav'), findsOneWidget);
+      expect(find.text('WAV  |  0 B'), findsOneWidget);
+
+      await tester.tap(find.text('开始识别'));
+      await waitForServiceCall(tester);
+      await tester.pump();
+
+      expect(find.text('MP3  |  4 B'), findsOneWidget);
+      expect(serviceCalls, 1);
+      releaseResponse.complete();
+      if (background.state.isNotEmpty) {
+        background.cancelTask(background.state.single.id);
+      }
     },
   );
 
@@ -297,44 +528,42 @@ void main() {
     releaseResponse.complete();
   });
 
-  testWidgets(
-    'retry ignores a non-string save folder while restoring audio',
-    (tester) async {
-      final data = {
-        'audios': [
-          {
-            'bytes': base64Encode([1, 2, 3]),
-            'name': 'recovered.wav',
-            'format': 'wav',
-          },
-        ],
-        'modelReference': {'configId': 'provider', 'modelId': 'model'},
-        'configSnapshot': retryData()['configSnapshot'],
-        'saveFolder': 7,
-      };
-      await tester.pumpWidget(app(initialRetryData: data));
-      await tester.tap(find.text('打开 ASR'));
-      await tester.pumpAndSettle();
+  testWidgets('retry ignores a non-string save folder while restoring audio', (
+    tester,
+  ) async {
+    final data = {
+      'audios': [
+        {
+          'bytes': base64Encode([1, 2, 3]),
+          'name': 'recovered.wav',
+          'format': 'wav',
+        },
+      ],
+      'modelReference': {'configId': 'provider', 'modelId': 'model'},
+      'configSnapshot': retryData()['configSnapshot'],
+      'saveFolder': 7,
+    };
+    await tester.pumpWidget(app(initialRetryData: data));
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('1. recovered.wav'), findsOneWidget);
-      expect(find.text('根目录'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.text('1. recovered.wav'), findsOneWidget);
+    expect(find.text('根目录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
-  testWidgets(
-    'malformed retry data shows an error and finishes loading',
-    (tester) async {
-      await tester.pumpWidget(
-        app(initialRetryData: {'audios': 'not-an-audio-list'}),
-      );
-      await tester.tap(find.text('打开 ASR'));
-      await tester.pumpAndSettle();
+  testWidgets('malformed retry data shows an error and finishes loading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(initialRetryData: {'audios': 'not-an-audio-list'}),
+    );
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
 
-      expect(find.textContaining('重试数据无法读取'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.textContaining('重试数据无法读取'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'retry with a missing chunk status requires reselection instead of replay',
@@ -423,150 +652,169 @@ void main() {
   );
 
   testWidgets(
-      'retry selection follows model identity after reorder and blocks removal',
-      (tester) async {
-    providerEntries.state = ProviderEntriesState(entries: [
-      ProviderEntry(
-        name: 'ASR',
-        type: 'asr',
-        configs: [
-          ProviderConfigItem(
-            id: 'provider',
-            providerName: 'ASR',
-            host: 'https://api.test.com/audio/transcriptions',
-            key: 'test-key',
-            models: [
-              ModelConfig(id: 'model', name: 'Retry target', modelId: 'retry'),
-              ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+    'retry selection follows model identity after reorder and blocks removal',
+    (tester) async {
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Retry target',
+                    modelId: 'retry',
+                  ),
+                  ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+                ],
+              ),
             ],
           ),
         ],
-      ),
-    ]);
-    await tester.pumpWidget(app());
-    await tester.tap(find.text('打开 ASR'));
-    await tester.pumpAndSettle();
-    expect(find.text('Retry target | ASR'), findsOneWidget);
+      );
+      await tester.pumpWidget(app());
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
+      expect(find.text('Retry target | ASR'), findsOneWidget);
 
-    providerEntries.state = ProviderEntriesState(entries: [
-      ProviderEntry(
-        name: 'ASR',
-        type: 'asr',
-        configs: [
-          ProviderConfigItem(
-            id: 'provider',
-            providerName: 'ASR',
-            host: 'https://api.test.com/audio/transcriptions',
-            key: 'test-key',
-            models: [
-              ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
-              ModelConfig(id: 'model', name: 'Retry target', modelId: 'retry'),
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Retry target',
+                    modelId: 'retry',
+                  ),
+                ],
+              ),
             ],
           ),
         ],
-      ),
-    ]);
-    await tester.pumpAndSettle();
-    expect(find.text('Retry target | ASR'), findsOneWidget);
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Retry target | ASR'), findsOneWidget);
 
-    providerEntries.state = ProviderEntriesState(entries: [
-      ProviderEntry(
-        name: 'ASR',
-        type: 'asr',
-        configs: [
-          ProviderConfigItem(
-            id: 'provider',
-            providerName: 'ASR',
-            host: 'https://api.test.com/audio/transcriptions',
-            key: 'test-key',
-            models: [
-              ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+                ],
+              ),
             ],
           ),
         ],
-      ),
-    ]);
-    await tester.pumpAndSettle();
-    expect(find.text('请重新选择模型'), findsOneWidget);
-    await tester.tap(find.text('开始识别'));
-    await tester.pump();
-    expect(serviceCalls, 0);
-    expect(
-      find.text('原识别模型已失效或无法确认，请重新选择识别模型'),
-      findsOneWidget,
-    );
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('请重新选择模型'), findsOneWidget);
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      expect(serviceCalls, 0);
+      expect(find.text('原识别模型已失效或无法确认，请重新选择识别模型'), findsOneWidget);
+    },
+  );
 
   testWidgets(
-      'legacy index retry loads audio but requires model reselection and persists v2 before request',
-      (tester) async {
-    final legacyData = {
-      'audios': [
-        {
-          'bytes': base64Encode([9, 8, 7]),
-          'name': 'legacy.wav',
-          'format': 'wav',
-        },
-      ],
-      'modelIndex': 0,
-      'saveFolder': 'captured-folder',
-    };
-    final sourceTaskId = background.addTask(
-      type: BackgroundTaskType.asr,
-      title: 'legacy retry',
-      retryData: legacyData,
-    );
-    background.failTask(sourceTaskId, error: 'legacy failure');
-    await background.pendingPersistence;
-    providerEntries.state = ProviderEntriesState(entries: [
-      ProviderEntry(
-        name: 'ASR',
-        type: 'asr',
-        configs: [
-          ProviderConfigItem(
-            id: 'provider',
-            providerName: 'ASR',
-            host: 'https://api.test.com/audio/transcriptions',
-            key: 'test-key',
-            models: [
-              ModelConfig(
-                  id: 'model', name: 'Test ASR', modelId: 'whisper-test'),
-              ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+    'legacy index retry loads audio but requires model reselection and persists v2 before request',
+    (tester) async {
+      final legacyData = {
+        'audios': [
+          {
+            'bytes': base64Encode([9, 8, 7]),
+            'name': 'legacy.wav',
+            'format': 'wav',
+          },
+        ],
+        'modelIndex': 0,
+        'saveFolder': 'captured-folder',
+      };
+      final sourceTaskId = background.addTask(
+        type: BackgroundTaskType.asr,
+        title: 'legacy retry',
+        retryData: legacyData,
+      );
+      background.failTask(sourceTaskId, error: 'legacy failure');
+      await background.pendingPersistence;
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Test ASR',
+                    modelId: 'whisper-test',
+                  ),
+                  ModelConfig(id: 'other', name: 'Other', modelId: 'other'),
+                ],
+              ),
             ],
           ),
         ],
-      ),
-    ]);
-    await tester.pumpWidget(app(
-      initialRetryData: legacyData,
-      retryTaskId: sourceTaskId,
-    ));
-    await tester.tap(find.text('打开 ASR'));
-    await tester.pumpAndSettle();
-    expect(find.text('请重新选择模型'), findsOneWidget);
-    expect(find.text('1. legacy.wav'), findsOneWidget);
+      );
+      await tester.pumpWidget(
+        app(initialRetryData: legacyData, retryTaskId: sourceTaskId),
+      );
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
+      expect(find.text('请重新选择模型'), findsOneWidget);
+      expect(find.text('1. legacy.wav'), findsOneWidget);
 
-    await tester.tap(find.byType(DropdownButton<int>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Test ASR | ASR').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('开始识别'));
-    await tester.pump(const Duration(seconds: 1));
-    await waitForServiceCall(tester);
+      await tester.tap(find.byType(DropdownButton<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test ASR | ASR').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始识别'));
+      await tester.pump(const Duration(seconds: 1));
+      await waitForServiceCall(tester);
 
-    expect(serviceCalls, 1);
-    final retry = background.state.first.retryData!;
-    expect(retry['version'], 2);
-    expect(retry, isNot(contains('audios')));
-    expect(jsonEncode(retry), isNot(contains(base64Encode([9, 8, 7]))));
-    expect(jsonEncode(retry), isNot(contains('test-key')));
-    expect(
-        retry['modelReference'], {'configId': 'provider', 'modelId': 'model'});
-    await background.pendingPersistence;
-    expect(background.taskById(sourceTaskId)!.retryData, retry);
-    background.cancelTask(background.state.first.id);
-    releaseResponse.complete();
-  });
+      expect(serviceCalls, 1);
+      final retry = background.state.first.retryData!;
+      expect(retry['version'], 2);
+      expect(retry, isNot(contains('audios')));
+      expect(jsonEncode(retry), isNot(contains(base64Encode([9, 8, 7]))));
+      expect(jsonEncode(retry), isNot(contains('test-key')));
+      expect(retry['modelReference'], {
+        'configId': 'provider',
+        'modelId': 'model',
+      });
+      await background.pendingPersistence;
+      expect(background.taskById(sourceTaskId)!.retryData, retry);
+      background.cancelTask(background.state.first.id);
+      releaseResponse.complete();
+    },
+  );
 
   testWidgets(
     'model reselection invalidates the saved checkpoint before retrying',
@@ -615,34 +863,38 @@ void main() {
         retryData: data,
       );
       background.failTask(sourceTaskId, error: 'previous failure');
-      providerEntries.state = ProviderEntriesState(entries: [
-        ProviderEntry(
-          name: 'ASR',
-          type: 'asr',
-          configs: [
-            ProviderConfigItem(
-              id: 'provider',
-              providerName: 'ASR',
-              host: 'https://changed-api.test.com/audio/transcriptions',
-              key: 'test-key',
-              models: [
-                ModelConfig(
-                  id: 'model',
-                  name: 'Test ASR',
-                  modelId: 'whisper-test',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ]);
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://changed-api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Test ASR',
+                    modelId: 'whisper-test',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
 
-      await tester.pumpWidget(app(
-        initialRetryData: data,
-        retryStoreOverride: store,
-        retryTaskId: sourceTaskId,
-        keepPageOpen: true,
-      ));
+      await tester.pumpWidget(
+        app(
+          initialRetryData: data,
+          retryStoreOverride: store,
+          retryTaskId: sourceTaskId,
+          keepPageOpen: true,
+        ),
+      );
       await tester.tap(find.text('打开 ASR'));
       await tester.pumpAndSettle();
       expect(find.text('请重新选择模型'), findsOneWidget);
@@ -682,32 +934,34 @@ void main() {
       );
       await store.releaseProtection(reference);
       adapter.holdReads = true;
-      providerEntries.state = ProviderEntriesState(entries: [
-        ProviderEntry(
-          name: 'ASR',
-          type: 'asr',
-          configs: [
-            ProviderConfigItem(
-              id: 'provider',
-              providerName: 'ASR',
-              host: 'https://api.test.com/audio/transcriptions',
-              key: 'test-key',
-              models: [
-                ModelConfig(
-                  id: 'model',
-                  name: 'Saved model',
-                  modelId: 'whisper-test',
-                ),
-                ModelConfig(
-                  id: 'other',
-                  name: 'New model',
-                  modelId: 'whisper-other',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ]);
+      providerEntries.state = ProviderEntriesState(
+        entries: [
+          ProviderEntry(
+            name: 'ASR',
+            type: 'asr',
+            configs: [
+              ProviderConfigItem(
+                id: 'provider',
+                providerName: 'ASR',
+                host: 'https://api.test.com/audio/transcriptions',
+                key: 'test-key',
+                models: [
+                  ModelConfig(
+                    id: 'model',
+                    name: 'Saved model',
+                    modelId: 'whisper-test',
+                  ),
+                  ModelConfig(
+                    id: 'other',
+                    name: 'New model',
+                    modelId: 'whisper-other',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
       final data = {
         'version': 2,
         'audioReference': reference.toMap(configuredApiKey: 'test-key'),
@@ -749,39 +1003,41 @@ void main() {
     },
   );
 
-  testWidgets('retry URL snapshot controls the audio picker after live changes',
-      (tester) async {
-    const url = 'https://media.example.test/public/audio.wav';
-    final urlReference = AsrAudioReference(
-      id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      name: url,
-      format: 'url',
-      byteLength: 0,
-      sha256: List.filled(64, '0').join(),
-      url: url,
-    );
-    final urlRetryData = {
-      'version': 2,
-      'audioReference': urlReference.toMap(),
-      'modelReference': {'configId': 'provider', 'modelId': 'model'},
-      'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
-        const AsrConfig(
-          apiKey: 'test-key',
-          host: 'https://api.test.com/audio/transcriptions',
-          model: 'whisper-test',
-          uploadMethod: AudioUploadMethod.url,
-        ),
-      ).toMap(),
-    };
+  testWidgets(
+    'retry URL snapshot controls the audio picker after live changes',
+    (tester) async {
+      const url = 'https://media.example.test/public/audio.wav';
+      final urlReference = AsrAudioReference(
+        id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        name: url,
+        format: 'url',
+        byteLength: 0,
+        sha256: List.filled(64, '0').join(),
+        url: url,
+      );
+      final urlRetryData = {
+        'version': 2,
+        'audioReference': urlReference.toMap(),
+        'modelReference': {'configId': 'provider', 'modelId': 'model'},
+        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
+          const AsrConfig(
+            apiKey: 'test-key',
+            host: 'https://api.test.com/audio/transcriptions',
+            model: 'whisper-test',
+            uploadMethod: AudioUploadMethod.url,
+          ),
+        ).toMap(),
+      };
 
-    await tester.pumpWidget(app(initialRetryData: urlRetryData));
-    await tester.tap(find.text('打开 ASR'));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(app(initialRetryData: urlRetryData));
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('输入公网音频链接'), findsOneWidget);
-    expect(find.text('音频文件'), findsNothing);
-    expect(serviceCalls, 0);
-  });
+      expect(find.text('输入公网音频链接'), findsOneWidget);
+      expect(find.text('音频文件'), findsNothing);
+      expect(serviceCalls, 0);
+    },
+  );
 
   testWidgets(
     'URL retry preserves uncertain prior chunks when its checkpoint is missing',
@@ -813,8 +1069,9 @@ void main() {
         'audioReference': reference.toMap(),
         'chunks': [uncertainChunk.toMap()],
         'modelReference': {'configId': 'provider', 'modelId': 'model'},
-        'configSnapshot':
-            AsrRetryConfigSnapshot.fromConfig(retryConfig).toMap(),
+        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
+          retryConfig,
+        ).toMap(),
         'saveFolder': 'captured-folder',
       };
       final sourceTaskId = background.addTask(
@@ -898,44 +1155,43 @@ void main() {
     },
   );
 
-  testWidgets(
-    'unresolved URL retry keeps the saved URL source mode',
-    (tester) async {
-      const url = 'https://media.example.test/unresolved.wav';
-      final retryData = {
-        'version': 2,
-        'audioReference': AsrAudioReference(
-          id: 'cccccccccccccccccccccccccccccccc',
-          name: url,
-          format: 'url',
-          byteLength: 0,
-          sha256: List.filled(64, '2').join(),
-          url: url,
-        ).toMap(),
-        'modelReference': {
-          'configId': 'removed-provider',
-          'modelId': 'removed-model',
-        },
-        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
-          const AsrConfig(
-            apiKey: 'test-key',
-            host: 'https://api.test.com/audio/transcriptions',
-            model: 'whisper-test',
-            uploadMethod: AudioUploadMethod.url,
-          ),
-        ).toMap(),
-      };
+  testWidgets('unresolved URL retry keeps the saved URL source mode', (
+    tester,
+  ) async {
+    const url = 'https://media.example.test/unresolved.wav';
+    final retryData = {
+      'version': 2,
+      'audioReference': AsrAudioReference(
+        id: 'cccccccccccccccccccccccccccccccc',
+        name: url,
+        format: 'url',
+        byteLength: 0,
+        sha256: List.filled(64, '2').join(),
+        url: url,
+      ).toMap(),
+      'modelReference': {
+        'configId': 'removed-provider',
+        'modelId': 'removed-model',
+      },
+      'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
+        const AsrConfig(
+          apiKey: 'test-key',
+          host: 'https://api.test.com/audio/transcriptions',
+          model: 'whisper-test',
+          uploadMethod: AudioUploadMethod.url,
+        ),
+      ).toMap(),
+    };
 
-      await tester.pumpWidget(app(initialRetryData: retryData));
-      await tester.tap(find.text('打开 ASR'));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(app(initialRetryData: retryData));
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
 
-      expect(find.text('请重新选择模型'), findsOneWidget);
-      expect(find.text('输入公网音频链接'), findsOneWidget);
-      expect(find.text('音频文件'), findsNothing);
-      expect(serviceCalls, 0);
-    },
-  );
+    expect(find.text('请重新选择模型'), findsOneWidget);
+    expect(find.text('输入公网音频链接'), findsOneWidget);
+    expect(find.text('音频文件'), findsNothing);
+    expect(serviceCalls, 0);
+  });
 
   testWidgets(
     'legacy URL retry keeps URL mode while model reselection is required',
@@ -1036,77 +1292,81 @@ void main() {
   );
 
   testWidgets(
-      'retry file snapshot controls the audio picker after live changes',
-      (tester) async {
-    final urlProviderEntries = ProviderEntriesNotifier()
-      ..state = ProviderEntriesState(
-        entries: [
-          ProviderEntry(
-            id: 'asr-entry',
-            name: 'ASR',
-            type: 'asr',
-            configs: [
-              ProviderConfigItem(
-                id: 'provider',
-                providerName: 'ASR',
-                host: 'https://api.test.com/audio/transcriptions',
-                key: 'test-key',
-                typeConfig: {'uploadMethod': 'url'},
-                models: [
-                  ModelConfig(
-                    id: 'model',
-                    name: 'Test ASR',
-                    modelId: 'whisper-test',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+    'retry file snapshot controls the audio picker after live changes',
+    (tester) async {
+      final urlProviderEntries = ProviderEntriesNotifier()
+        ..state = ProviderEntriesState(
+          entries: [
+            ProviderEntry(
+              id: 'asr-entry',
+              name: 'ASR',
+              type: 'asr',
+              configs: [
+                ProviderConfigItem(
+                  id: 'provider',
+                  providerName: 'ASR',
+                  host: 'https://api.test.com/audio/transcriptions',
+                  key: 'test-key',
+                  typeConfig: {'uploadMethod': 'url'},
+                  models: [
+                    ModelConfig(
+                      id: 'model',
+                      name: 'Test ASR',
+                      modelId: 'whisper-test',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        );
+
+      await tester.pumpWidget(
+        app(
+          initialRetryData: retryData(),
+          providerEntriesOverride: urlProviderEntries,
+        ),
       );
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(
-      app(
-        initialRetryData: retryData(),
-        providerEntriesOverride: urlProviderEntries,
-      ),
-    );
-    await tester.tap(find.text('打开 ASR'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('音频文件'), findsOneWidget);
-    expect(find.text('输入公网音频链接'), findsNothing);
-    expect(serviceCalls, 0);
-  });
+      expect(find.text('音频文件'), findsOneWidget);
+      expect(find.text('输入公网音频链接'), findsNothing);
+      expect(serviceCalls, 0);
+    },
+  );
 
   testWidgets(
-      'missing retry source audio shows a clear error without a request',
-      (tester) async {
-    final adapter = _EmptyRetryAdapter();
-    final store = AsrRetryAudioStore(adapter: adapter);
-    final missingReference = AsrAudioReference(
-      id: '00000000000000000000000000000000',
-      name: 'missing.wav',
-      format: 'wav',
-      byteLength: 3,
-      sha256:
-          '0000000000000000000000000000000000000000000000000000000000000000',
-    );
-    await tester.pumpWidget(app(
-      retryStoreOverride: store,
-      initialRetryData: {
-        'version': 2,
-        'audioReference': missingReference.toMap(),
-        'modelReference': {'configId': 'provider', 'modelId': 'model'},
-        'saveFolder': 'captured-folder',
-      },
-    ));
-    await tester.tap(find.text('打开 ASR'));
-    await tester.pumpAndSettle();
+    'missing retry source audio shows a clear error without a request',
+    (tester) async {
+      final adapter = _EmptyRetryAdapter();
+      final store = AsrRetryAudioStore(adapter: adapter);
+      final missingReference = AsrAudioReference(
+        id: '00000000000000000000000000000000',
+        name: 'missing.wav',
+        format: 'wav',
+        byteLength: 3,
+        sha256:
+            '0000000000000000000000000000000000000000000000000000000000000000',
+      );
+      await tester.pumpWidget(
+        app(
+          retryStoreOverride: store,
+          initialRetryData: {
+            'version': 2,
+            'audioReference': missingReference.toMap(),
+            'modelReference': {'configId': 'provider', 'modelId': 'model'},
+            'saveFolder': 'captured-folder',
+          },
+        ),
+      );
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('原始音频文件已丢失'), findsOneWidget);
-    expect(serviceCalls, 0);
-  });
+      expect(find.textContaining('原始音频文件已丢失'), findsOneWidget);
+      expect(serviceCalls, 0);
+    },
+  );
 
   testWidgets(
     'missing versioned multi-audio source blocks submitting a replacement',
@@ -1140,8 +1400,9 @@ void main() {
           {'audioReference': missingReference.toMap(), 'chunks': []},
         ],
         'modelReference': {'configId': 'provider', 'modelId': 'model'},
-        'configSnapshot':
-            AsrRetryConfigSnapshot.fromConfig(retryConfig).toMap(),
+        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
+          retryConfig,
+        ).toMap(),
         'saveFolder': 'captured-folder',
       };
       final sourceTaskId = background.addTask(
@@ -1219,7 +1480,9 @@ void main() {
       );
       await tester.tap(
         find.descendant(
-            of: replacementCard, matching: find.byIcon(Icons.close)),
+          of: replacementCard,
+          matching: find.byIcon(Icons.close),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('输入公网音频链接'));
@@ -1254,37 +1517,92 @@ void main() {
       expect(background.taskById(sourceTaskId)!.status, TaskStatus.failed);
       expect(background.taskById(sourceTaskId)!.retryData, data);
       expect(background.state, hasLength(2));
-      final newTask =
-          background.state.singleWhere((task) => task.id != sourceTaskId);
+      final newTask = background.state.singleWhere(
+        (task) => task.id != sourceTaskId,
+      );
       background.cancelTask(newTask.id);
       releaseResponse.complete();
       expect(tester.takeException(), isNull);
     },
   );
 
+  testWidgets('versioned retry without audio references asks for reselection', (
+    tester,
+  ) async {
+    final retrySnapshots = <Map<String, dynamic>>[
+      {
+        'version': 2,
+        'audioReferences': <dynamic>[],
+        'modelReference': {'configId': 'provider', 'modelId': 'model'},
+        'saveFolder': 'captured-folder',
+      },
+      {
+        'version': 2,
+        'modelReference': {'configId': 'provider', 'modelId': 'model'},
+        'saveFolder': 'captured-folder',
+      },
+    ];
+    for (final retryData in retrySnapshots) {
+      await tester.pumpWidget(app(initialRetryData: retryData));
+      await tester.tap(find.text('打开 ASR'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('暂未选择音频文件'), findsOneWidget);
+      expect(find.textContaining('重新选择音频'), findsOneWidget);
+      expect(serviceCalls, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('legacy retry with no recoverable audio asks for reselection', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      app(
+        initialRetryData: {
+          'audios': [
+            {'name': 'missing.wav', 'format': 'wav'},
+          ],
+        },
+      ),
+    );
+    await tester.tap(find.text('打开 ASR'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂未选择音频文件'), findsOneWidget);
+    expect(find.textContaining('旧版重试音频不可用'), findsOneWidget);
+    expect(find.text('清空'), findsOneWidget);
+    await tester.tap(find.text('清空'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('旧版重试音频不可用'), findsNothing);
+    expect(find.text('暂未选择音频文件'), findsOneWidget);
+    expect(serviceCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'versioned retry without audio references asks for reselection',
+    'legacy retry rejects empty or malformed Base64 before enabling retry',
     (tester) async {
-      final retrySnapshots = <Map<String, dynamic>>[
-        {
-          'version': 2,
-          'audioReferences': <dynamic>[],
-          'modelReference': {'configId': 'provider', 'modelId': 'model'},
-          'saveFolder': 'captured-folder',
-        },
-        {
-          'version': 2,
-          'modelReference': {'configId': 'provider', 'modelId': 'model'},
-          'saveFolder': 'captured-folder',
-        },
-      ];
-      for (final retryData in retrySnapshots) {
-        await tester.pumpWidget(app(initialRetryData: retryData));
+      for (final bytes in ['', '%%%=', 'A']) {
+        await tester.pumpWidget(
+          app(
+            initialRetryData: {
+              'audios': [
+                {'name': 'invalid.wav', 'format': 'wav', 'bytes': bytes},
+              ],
+            },
+          ),
+        );
         await tester.tap(find.text('打开 ASR'));
         await tester.pumpAndSettle();
 
         expect(find.text('暂未选择音频文件'), findsOneWidget);
-        expect(find.textContaining('重新选择音频'), findsOneWidget);
+        expect(find.textContaining('旧版重试音频不可用'), findsOneWidget);
+        await tester.tap(find.text('开始识别'));
+        await tester.pumpAndSettle();
         expect(serviceCalls, 0);
         expect(tester.takeException(), isNull);
         await tester.pageBack();
@@ -1294,46 +1612,22 @@ void main() {
   );
 
   testWidgets(
-    'legacy retry with no recoverable audio asks for reselection',
-    (tester) async {
-      await tester.pumpWidget(app(
-        initialRetryData: {
-          'audios': [
-            {'name': 'missing.wav', 'format': 'wav'},
-          ],
-        },
-      ));
-      await tester.tap(find.text('打开 ASR'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('暂未选择音频文件'), findsOneWidget);
-      expect(find.textContaining('旧版重试音频不可用'), findsOneWidget);
-      expect(find.text('清空'), findsOneWidget);
-      await tester.tap(find.text('清空'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('旧版重试音频不可用'), findsNothing);
-      expect(find.text('暂未选择音频文件'), findsOneWidget);
-      expect(serviceCalls, 0);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
     'legacy retry reports a missing source while retaining restored audio',
     (tester) async {
-      await tester.pumpWidget(app(
-        initialRetryData: {
-          'audios': [
-            {
-              'name': 'restored.wav',
-              'format': 'wav',
-              'bytes': base64Encode([1, 2, 3]),
-            },
-            {'name': 'missing.wav', 'format': 'wav'},
-          ],
-        },
-      ));
+      await tester.pumpWidget(
+        app(
+          initialRetryData: {
+            'audios': [
+              {
+                'name': 'restored.wav',
+                'format': 'wav',
+                'bytes': base64Encode([1, 2, 3]),
+              },
+              {'name': 'missing.wav', 'format': 'wav'},
+            ],
+          },
+        ),
+      );
       await tester.tap(find.text('打开 ASR'));
       await tester.pumpAndSettle();
 
@@ -1368,11 +1662,13 @@ void main() {
       background.failTask(sourceTaskId, error: 'legacy retry');
       await background.pendingPersistence;
 
-      await tester.pumpWidget(app(
-        keepPageOpen: true,
-        initialRetryData: partialLegacyData,
-        retryTaskId: sourceTaskId,
-      ));
+      await tester.pumpWidget(
+        app(
+          keepPageOpen: true,
+          initialRetryData: partialLegacyData,
+          retryTaskId: sourceTaskId,
+        ),
+      );
       await tester.tap(find.text('打开 ASR'));
       await tester.pumpAndSettle();
 
@@ -1388,8 +1684,9 @@ void main() {
     },
   );
 
-  testWidgets('versioned multi-audio retries restore every referenced source',
-      (tester) async {
+  testWidgets('versioned multi-audio retries restore every referenced source', (
+    tester,
+  ) async {
     final adapter = _MemoryRetryAdapter();
     final store = AsrRetryAudioStore(adapter: adapter);
     final first = await store.save(
@@ -1402,24 +1699,26 @@ void main() {
       name: 'two.wav',
       format: 'wav',
     );
-    await tester.pumpWidget(app(
-      retryStoreOverride: store,
-      initialRetryData: {
-        'version': 2,
-        'audioReferences': [
-          {'audioReference': first.toMap(), 'chunks': []},
-          {'audioReference': second.toMap(), 'chunks': []},
-        ],
-        'modelReference': {'configId': 'provider', 'modelId': 'model'},
-        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
-          const AsrConfig(
-            apiKey: 'test-key',
-            host: 'https://api.test.com/audio/transcriptions',
-            model: 'whisper-test',
-          ),
-        ).toMap(),
-      },
-    ));
+    await tester.pumpWidget(
+      app(
+        retryStoreOverride: store,
+        initialRetryData: {
+          'version': 2,
+          'audioReferences': [
+            {'audioReference': first.toMap(), 'chunks': []},
+            {'audioReference': second.toMap(), 'chunks': []},
+          ],
+          'modelReference': {'configId': 'provider', 'modelId': 'model'},
+          'configSnapshot': AsrRetryConfigSnapshot.fromConfig(
+            const AsrConfig(
+              apiKey: 'test-key',
+              host: 'https://api.test.com/audio/transcriptions',
+              model: 'whisper-test',
+            ),
+          ).toMap(),
+        },
+      ),
+    );
     await tester.tap(find.text('打开 ASR'));
     await tester.pumpAndSettle();
 
@@ -1432,7 +1731,11 @@ void main() {
   });
 }
 
-class _EmptyRetryAdapter implements AsrRetryStorageAdapter {
+class _EmptyRetryAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStoragePresence,
+        AsrRetryStorageCancellable {
   @override
   Future<void> delete(String key) async {}
 
@@ -1441,6 +1744,18 @@ class _EmptyRetryAdapter implements AsrRetryStorageAdapter {
 
   @override
   Future<Uint8List?> read(String key) async => null;
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    return null;
+  }
+
+  @override
+  Future<bool> contains(String key) async => false;
 
   @override
   Future<void> write(String key, Uint8List bytes) async {}

@@ -5,12 +5,14 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../models/tts_models.dart';
 import '../utils/atomic_file.dart';
+import '../utils/asr_audio_stream.dart';
 import '../utils/web_file_store.dart';
 import 'storage_service.dart';
 import 'asr_service.dart';
@@ -71,13 +73,84 @@ abstract interface class AsrRetryStorageAdapter {
   Future<List<String>> keysWithPrefix(String prefix);
 }
 
-class _WebAsrRetryStorageAdapter implements AsrRetryStorageAdapter {
+/// Optional metadata-only presence check for adapters that can avoid reading
+/// an entire retry audio payload just to validate its reference.
+abstract interface class AsrRetryStoragePresence {
+  Future<bool> contains(String key);
+}
+
+/// Optional storage capability for stopping large source reads on cancellation.
+abstract interface class AsrRetryStorageCancellable {
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  });
+}
+
+const _retryAudioSha256YieldBatchBytes = 512 * 1024;
+
+class _AsrRetryDigestSink implements Sink<Digest> {
+  Digest? digest;
+
+  @override
+  void add(Digest value) => digest = value;
+
+  @override
+  void close() {}
+}
+
+String _hashAsrRetryAudio(Uint8List bytes) => sha256.convert(bytes).toString();
+
+Future<String> _hashAsrRetryAudioAsync(
+  Uint8List bytes, {
+  CancelToken? cancelToken,
+  void Function(int batchBytes)? onBatchForTesting,
+}) async {
+  throwIfAsrAudioCanceled(cancelToken);
+  if (bytes.length <= _retryAudioSha256YieldBatchBytes) {
+    return _hashAsrRetryAudio(bytes);
+  }
+  final digestSink = _AsrRetryDigestSink();
+  final inputSink = sha256.startChunkedConversion(digestSink);
+  for (var offset = 0;
+      offset < bytes.length;
+      offset += _retryAudioSha256YieldBatchBytes) {
+    throwIfAsrAudioCanceled(cancelToken);
+    final end = math
+        .min(bytes.length, offset + _retryAudioSha256YieldBatchBytes)
+        .toInt();
+    onBatchForTesting?.call(end - offset);
+    inputSink.add(Uint8List.sublistView(bytes, offset, end));
+    if (end < bytes.length) await Future<void>.delayed(Duration.zero);
+  }
+  inputSink.close();
+  throwIfAsrAudioCanceled(cancelToken);
+  final digest = digestSink.digest;
+  if (digest == null) throw StateError('ASR retry audio digest is unavailable');
+  return digest.toString();
+}
+
+class _WebAsrRetryStorageAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStoragePresence,
+        AsrRetryStorageCancellable {
   @override
   Future<void> write(String key, Uint8List bytes) =>
       WebFileStore.write(key, bytes);
 
   @override
   Future<Uint8List?> read(String key) => WebFileStore.read(key);
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) =>
+      WebFileStore.readCancellable(key, cancelToken: cancelToken);
+
+  @override
+  Future<bool> contains(String key) => WebFileStore.exists(key);
 
   @override
   Future<void> delete(String key) => WebFileStore.delete(key);
@@ -87,7 +160,11 @@ class _WebAsrRetryStorageAdapter implements AsrRetryStorageAdapter {
       WebFileStore.keysWithPrefix(prefix);
 }
 
-class _NativeAsrRetryStorageAdapter implements AsrRetryStorageAdapter {
+class _NativeAsrRetryStorageAdapter
+    implements
+        AsrRetryStorageAdapter,
+        AsrRetryStoragePresence,
+        AsrRetryStorageCancellable {
   Future<String> _root() async =>
       p.join(await AppStorage.directory, 'background', 'asr_retry');
 
@@ -115,6 +192,20 @@ class _NativeAsrRetryStorageAdapter implements AsrRetryStorageAdapter {
     if (!await file.exists()) return null;
     return file.readAsBytes();
   }
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    final file = _file(key, await _root());
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    if (!await file.exists()) return null;
+    return readAsrAudioStream(file.openRead(), cancelToken: cancelToken);
+  }
+
+  @override
+  Future<bool> contains(String key) async => _file(key, await _root()).exists();
 
   @override
   Future<void> delete(String key) async {
@@ -740,12 +831,16 @@ class AsrRetryAudioStore {
   static final Map<String, Completer<void>> _atomicTempCleanupInProgress = {};
 
   final AsrRetryStorageAdapter _adapter;
+  final void Function(int batchBytes)? _onHashBatchForTesting;
 
-  AsrRetryAudioStore({AsrRetryStorageAdapter? adapter})
-      : _adapter = adapter ??
+  AsrRetryAudioStore({
+    AsrRetryStorageAdapter? adapter,
+    @visibleForTesting void Function(int batchBytes)? onHashBatchForTesting,
+  })  : _adapter = adapter ??
             (kIsWeb || WebFileStore.isTestMode
                 ? _WebAsrRetryStorageAdapter()
-                : _NativeAsrRetryStorageAdapter());
+                : _NativeAsrRetryStorageAdapter()),
+        _onHashBatchForTesting = onHashBatchForTesting;
 
   /// Returns a display-safe local audio name for task titles and retry refs.
   /// Credential-shaped names are replaced so filenames cannot leak into task
@@ -1176,11 +1271,18 @@ class AsrRetryAudioStore {
     required String format,
     String? configuredApiKey,
     FutureOr<void> Function(AsrAudioReference reference)? onReferenceCreated,
+    CancelToken? cancelToken,
   }) async {
+    throwIfAsrAudioCanceled(cancelToken);
     if (bytes.isEmpty) {
       throw const FormatException('音频数据为空');
     }
     final copy = Uint8List.fromList(bytes);
+    final digest = await _hashAsrRetryAudioAsync(
+      copy,
+      cancelToken: cancelToken,
+      onBatchForTesting: _onHashBatchForTesting,
+    );
     final reference = AsrAudioReference(
       id: const Uuid().v4().replaceAll('-', '').toLowerCase(),
       name: sanitizeAudioName(
@@ -1190,14 +1292,20 @@ class AsrRetryAudioStore {
       ),
       format: _safeAudioFormat(format),
       byteLength: copy.length,
-      sha256: sha256.convert(copy).toString(),
+      sha256: digest,
     );
     _validateReference(reference, configuredApiKey: configuredApiKey);
     await protectUntilReferenced(reference);
     try {
+      throwIfAsrAudioCanceled(cancelToken);
       await _adapter.write(_key(reference.id), copy);
-      final persisted = await _adapter.read(_key(reference.id));
-      if (persisted == null || !_matches(reference, persisted)) {
+      throwIfAsrAudioCanceled(cancelToken);
+      final persisted = await _readAudio(
+        _key(reference.id),
+        cancelToken: cancelToken,
+      );
+      if (persisted == null ||
+          !await _matches(reference, persisted, cancelToken: cancelToken)) {
         throw StateError('无法确认 ASR 重试音频已保存');
       }
       // Keep the source protected until the caller persists its reference,
@@ -1219,19 +1327,41 @@ class AsrRetryAudioStore {
   Future<Uint8List> load(
     AsrAudioReference reference, {
     String? configuredApiKey,
+    CancelToken? cancelToken,
   }) async {
+    throwIfAsrAudioCanceled(cancelToken);
     _validateReference(reference, configuredApiKey: configuredApiKey);
     if (reference.isUrl) {
       throw const FormatException('公网音频链接没有本地音频文件');
     }
-    final bytes = await _adapter.read(_key(reference.id));
+    final bytes = await _readAudio(
+      _key(reference.id),
+      cancelToken: cancelToken,
+    );
     if (bytes == null) {
       throw AsrRetryAudioUnavailableException(reference.name);
     }
-    if (!_matches(reference, bytes)) {
+    if (!await _matches(reference, bytes, cancelToken: cancelToken)) {
       throw AsrRetryAudioUnavailableException(reference.name, corrupt: true);
     }
     return Uint8List.fromList(bytes);
+  }
+
+  /// Checks whether a retry source exists without reading its audio payload.
+  Future<void> verifyPresent(
+    AsrAudioReference reference, {
+    String? configuredApiKey,
+  }) async {
+    _validateReference(reference, configuredApiKey: configuredApiKey);
+    if (reference.isUrl) return;
+    final key = _key(reference.id);
+    final adapter = _adapter;
+    final present = adapter is AsrRetryStoragePresence
+        ? await (adapter as AsrRetryStoragePresence).contains(key)
+        : await adapter.read(key) != null;
+    if (!present) {
+      throw AsrRetryAudioUnavailableException(reference.name);
+    }
   }
 
   /// Ensures a loaded retry source still exists before associating it with a
@@ -1240,10 +1370,11 @@ class AsrRetryAudioStore {
     AsrAudioReference reference,
     Uint8List bytes, {
     String? configuredApiKey,
+    CancelToken? cancelToken,
   }) async {
     _validateReference(reference, configuredApiKey: configuredApiKey);
     if (reference.isUrl) return;
-    if (!_matches(reference, bytes)) {
+    if (!await _matches(reference, bytes, cancelToken: cancelToken)) {
       throw AsrRetryAudioUnavailableException(reference.name, corrupt: true);
     }
     while (true) {
@@ -1264,9 +1395,13 @@ class AsrRetryAudioStore {
     }
     try {
       await _waitForAtomicTempCleanup(reference.id);
-      final current = await _adapter.read(_key(reference.id));
+      throwIfAsrAudioCanceled(cancelToken);
+      final current = await _readAudio(
+        _key(reference.id),
+        cancelToken: cancelToken,
+      );
       if (current != null) {
-        if (!_matches(reference, current)) {
+        if (!await _matches(reference, current, cancelToken: cancelToken)) {
           throw AsrRetryAudioUnavailableException(
             reference.name,
             corrupt: true,
@@ -1274,9 +1409,15 @@ class AsrRetryAudioStore {
         }
         return;
       }
+      throwIfAsrAudioCanceled(cancelToken);
       await _adapter.write(_key(reference.id), bytes);
-      final persisted = await _adapter.read(_key(reference.id));
-      if (persisted == null || !_matches(reference, persisted)) {
+      throwIfAsrAudioCanceled(cancelToken);
+      final persisted = await _readAudio(
+        _key(reference.id),
+        cancelToken: cancelToken,
+      );
+      if (persisted == null ||
+          !await _matches(reference, persisted, cancelToken: cancelToken)) {
         throw AsrRetryAudioUnavailableException(reference.name, corrupt: true);
       }
     } finally {
@@ -1736,9 +1877,40 @@ class AsrRetryAudioStore {
     );
   }
 
-  bool _matches(AsrAudioReference reference, Uint8List bytes) =>
-      bytes.length == reference.byteLength &&
-      sha256.convert(bytes).toString() == reference.sha256;
+  Future<Uint8List?> _readAudio(String key, {CancelToken? cancelToken}) async {
+    throwIfAsrAudioCanceled(cancelToken);
+    final adapter = _adapter;
+    final Uint8List? bytes;
+    if (cancelToken == null) {
+      bytes = await adapter.read(key);
+    } else {
+      if (adapter is! AsrRetryStorageCancellable) {
+        throw UnsupportedError(
+          'ASR retry storage adapter does not support cancellable reads',
+        );
+      }
+      bytes = await (adapter as AsrRetryStorageCancellable).readCancellable(
+        key,
+        cancelToken: cancelToken,
+      );
+    }
+    throwIfAsrAudioCanceled(cancelToken);
+    return bytes;
+  }
+
+  Future<bool> _matches(
+    AsrAudioReference reference,
+    Uint8List bytes, {
+    CancelToken? cancelToken,
+  }) async {
+    if (bytes.length != reference.byteLength) return false;
+    return await _hashAsrRetryAudioAsync(
+          bytes,
+          cancelToken: cancelToken,
+          onBatchForTesting: _onHashBatchForTesting,
+        ) ==
+        reference.sha256;
+  }
 }
 
 String _safeAudioFormat(String format) =>

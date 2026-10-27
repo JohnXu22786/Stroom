@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,6 +16,8 @@ import '../services/asr_service.dart';
 import '../services/asr_retry_storage.dart';
 import '../services/asr_task_scheduler.dart';
 import '../utils/audio_chunker.dart';
+import '../utils/asr_audio_stream.dart';
+import '../utils/asr_legacy_audio.dart';
 import '../utils/audio_utils.dart';
 import '../utils/data_sanitizer.dart';
 import '../utils/file_manifest.dart';
@@ -86,21 +89,105 @@ String? _getFirstAsrEntryId(WidgetRef ref) {
 
 /// Represents a single selected audio file for ASR transcription.
 class SelectedAudio {
-  final Uint8List bytes;
+  Uint8List bytes;
+  Future<Uint8List> Function()? _loadBytes;
+  Future<Uint8List> Function(CancelToken? cancelToken)?
+      _loadBytesWithCancellation;
+  Uint8List? _cachedLoadedBytes;
+  Future<Uint8List>? _loadingBytes;
+  final bool hasCustomLoader;
+  int byteLength;
+  String Function(Uint8List bytes)? resolveFormat;
+  void Function()? _onSourceReleased;
   final String name;
-  final String format;
+  String format;
   final AsrAudioReference? audioReference;
   final List<AsrChunkResult> priorChunks;
   final bool resetChunkCheckpoint;
 
   SelectedAudio({
-    required this.bytes,
+    Uint8List? bytes,
+    Future<Uint8List> Function()? loadBytes,
+    Future<Uint8List> Function(CancelToken? cancelToken)?
+        loadBytesWithCancellation,
+    int? byteLength,
+    this.resolveFormat,
+    void Function()? onSourceReleased,
     required this.name,
     this.format = 'wav',
     this.audioReference,
     List<AsrChunkResult> priorChunks = const [],
     this.resetChunkCheckpoint = false,
-  }) : priorChunks = List.unmodifiable(priorChunks);
+  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+        _loadBytes = loadBytes,
+        _loadBytesWithCancellation = loadBytesWithCancellation,
+        hasCustomLoader =
+            loadBytes != null || loadBytesWithCancellation != null,
+        _onSourceReleased = onSourceReleased,
+        byteLength = byteLength ?? bytes?.length ?? 0,
+        priorChunks = List.unmodifiable(priorChunks);
+
+  Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
+
+  SelectedAudio copyForChunkCheckpointReset() => SelectedAudio(
+        bytes: bytes,
+        loadBytes: hasCustomLoader ? loadBytes : null,
+        loadBytesWithCancellation:
+            hasCustomLoader ? loadBytesWithCancellation : null,
+        byteLength: byteLength,
+        resolveFormat: resolveFormat,
+        onSourceReleased: releaseSource,
+        name: name,
+        format: format,
+        audioReference: audioReference,
+        resetChunkCheckpoint: true,
+      );
+
+  Future<Uint8List> loadBytesWithCancellation(CancelToken? cancelToken) async {
+    throwIfAsrAudioCanceled(cancelToken);
+    final cachedBytes = _cachedLoadedBytes;
+    if (cachedBytes != null) return cachedBytes;
+
+    final loader = _loadBytes;
+    final cancellableLoader = _loadBytesWithCancellation;
+    if (loader != null || cancellableLoader != null) {
+      if (cancelToken != null && cancellableLoader == null) {
+        throw StateError(
+          'A cancellable ASR task requires a cancellation-aware audio loader',
+        );
+      }
+      final pendingLoad = _loadingBytes ??= Future<Uint8List>.sync(
+        () => cancellableLoader?.call(cancelToken) ?? loader!(),
+      );
+      try {
+        final loadedBytes = await pendingLoad;
+        throwIfAsrAudioCanceled(cancelToken);
+        if (identical(_loadingBytes, pendingLoad)) {
+          _cachedLoadedBytes = loadedBytes;
+          _loadingBytes = null;
+        }
+        return loadedBytes;
+      } catch (_) {
+        if (identical(_loadingBytes, pendingLoad)) _loadingBytes = null;
+        rethrow;
+      }
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  /// Release page-owned source buffers when the task scheduler has durably
+  /// staged this input for retry.
+  void releaseSource() {
+    bytes = Uint8List(0);
+    _loadBytes = null;
+    _loadBytesWithCancellation = null;
+    _cachedLoadedBytes = null;
+    _loadingBytes = null;
+    resolveFormat = null;
+    final onSourceReleased = _onSourceReleased;
+    _onSourceReleased = null;
+    onSourceReleased?.call();
+  }
 
   /// True when this entry is a public URL (URL upload mode). In that case
   /// [name] holds the URL and [bytes] is empty.
@@ -140,6 +227,7 @@ class AsrPage extends ConsumerStatefulWidget {
 class _AsrPageState extends ConsumerState<AsrPage> {
   static const _incompleteLegacyRetryMessage = '重试音频不完整，请清空后重新选择全部音频';
 
+  final CancelToken _retryLoadCancelToken = CancelToken();
   final List<SelectedAudio> _selectedAudios = [];
   bool _isProcessing = false;
   bool _retryLoading = false;
@@ -167,6 +255,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     super.initState();
     _retryTaskId = widget.retryTaskId;
     unawaited(_loadRetryData());
+  }
+
+  @override
+  void dispose() {
+    _retryLoadCancelToken.cancel('ASR page disposed');
+    super.dispose();
   }
 
   /// Pre-populate form from retry data if available.
@@ -285,24 +379,34 @@ class _AsrPageState extends ConsumerState<AsrPage> {
             _errorMessage = '旧版重试音频不可用，请重新选择音频';
             continue;
           }
-          try {
-            final bytes = base64Decode(bytesStr);
-            if (bytes.isEmpty) {
-              _retrySourcesIncomplete = true;
-              _errorMessage = '旧版重试音频不可用，请重新选择音频';
-              continue;
-            }
-            _selectedAudios.add(
-              SelectedAudio(
-                bytes: bytes,
-                name: audioData['name'] as String? ?? 'audio',
-                format: audioData['format'] as String? ?? 'wav',
-              ),
-            );
-          } catch (error) {
+          final byteLength = await validateAsrLegacyBase64AudioByteLength(
+            bytesStr,
+            checkCanceled: () => throwIfAsrAudioCanceled(_retryLoadCancelToken),
+          );
+          throwIfAsrAudioCanceled(_retryLoadCancelToken);
+          if (byteLength == null) {
             _retrySourcesIncomplete = true;
-            _errorMessage = '旧版重试音频数据已损坏，请重新选择音频: $error';
+            _errorMessage = '旧版重试音频不可用，请重新选择音频';
+            continue;
           }
+          _selectedAudios.add(
+            SelectedAudio(
+              bytes: Uint8List(0),
+              byteLength: byteLength,
+              loadBytesWithCancellation: (cancelToken) async {
+                throwIfAsrAudioCanceled(cancelToken);
+                final bytes = await decodeAsrLegacyBase64Audio(
+                  bytesStr,
+                  checkCanceled: () => throwIfAsrAudioCanceled(cancelToken),
+                );
+                throwIfAsrAudioCanceled(cancelToken);
+                if (bytes.isEmpty) throw const FormatException('音频数据为空');
+                return bytes;
+              },
+              name: audioData['name'] as String? ?? 'audio',
+              format: audioData['format'] as String? ?? 'wav',
+            ),
+          );
         }
       }
       if (_selectedAudios.isEmpty) {
@@ -310,6 +414,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         _errorMessage ??= '重试音频不可用，请重新选择音频';
       }
     } catch (_) {
+      if (!mounted) return;
       _selectedAudios.clear();
       _retrySourcesIncomplete = true;
       _errorMessage = '重试数据无法读取，请重新选择音频';
@@ -360,11 +465,18 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         audioReference: reference,
       );
     }
+    await _retryAudioStore.verifyPresent(
+      reference,
+      configuredApiKey: configuredApiKey,
+    );
     return SelectedAudio(
-      bytes: await _retryAudioStore.load(
+      bytes: Uint8List(0),
+      loadBytesWithCancellation: (cancelToken) => _retryAudioStore.load(
         reference,
         configuredApiKey: configuredApiKey,
+        cancelToken: cancelToken,
       ),
+      byteLength: reference.byteLength,
       name: reference.name,
       format: reference.format,
       audioReference: reference,
@@ -806,7 +918,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
                           Text(
                             audio.isUrl
                                 ? 'URL  |  公网链接'
-                                : '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.bytes.length)}',
+                                : '${formatDisplayName(audio.format)}  |  ${_formatFileSize(audio.byteLength)}',
                             style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurfaceVariant,
@@ -1137,13 +1249,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   void _clearCompletedChunkCheckpoints() {
     for (var index = 0; index < _selectedAudios.length; index++) {
       final audio = _selectedAudios[index];
-      _selectedAudios[index] = SelectedAudio(
-        bytes: audio.bytes,
-        name: audio.name,
-        format: audio.format,
-        audioReference: audio.audioReference,
-        resetChunkCheckpoint: true,
-      );
+      _selectedAudios[index] = audio.copyForChunkCheckpointReset();
     }
   }
 
@@ -1255,20 +1361,41 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       final result = await FilePicker.pickFiles(
         type: FileType.audio,
         allowMultiple: true,
-        withData: true,
+        withData: false,
+        withReadStream: true,
         initialDirectory: SystemPickDirectories.music(),
       );
       if (result == null || result.files.isEmpty) return;
 
       final newAudios = <SelectedAudio>[];
       for (final file in result.files) {
-        final bytes = file.bytes;
-        if (bytes == null || bytes.isEmpty) continue;
         newAudios.add(
           SelectedAudio(
-            bytes: bytes,
+            bytes: Uint8List(0),
+            byteLength: file.size,
+            loadBytesWithCancellation: (cancelToken) async {
+              final stream = file.readStream;
+              final Uint8List bytes;
+              if (stream != null) {
+                bytes = await readAsrAudioStream(
+                  stream,
+                  cancelToken: cancelToken,
+                );
+              } else if (file.bytes != null) {
+                bytes = Uint8List.fromList(file.bytes!);
+              } else {
+                bytes = await readAsrAudioStream(
+                  file.xFile.openRead(),
+                  cancelToken: cancelToken,
+                );
+              }
+              throwIfAsrAudioCanceled(cancelToken);
+              if (bytes.isEmpty) throw const FormatException('音频数据为空');
+              return bytes;
+            },
             name: file.name,
-            format: _resolveSelectedAudioFormat(
+            format: _detectFormat(file.name),
+            resolveFormat: (bytes) => _resolveSelectedAudioFormat(
               bytes,
               fallbackFormat: _detectFormat(file.name),
             ),
@@ -1302,6 +1429,7 @@ class _AsrPageState extends ConsumerState<AsrPage> {
   /// Show a dialog to pick from in-app audio recordings using the unified
   /// media picker (matching the OCR image picker pattern).
   Future<void> _showInAppAudioPicker() async {
+    List<AudioRecord> selectedRecords = const [];
     final result = await showMediaPickerDialog<AudioRecord>(
       context,
       MediaPickerConfig<AudioRecord>(
@@ -1316,7 +1444,9 @@ class _AsrPageState extends ConsumerState<AsrPage> {
           return ref.read(audioRecordsProvider);
         },
         loadFolders: () => FileManifest.getAllFolders(),
-        readFile: (record) => FileManifest.readFile(record.storagePath),
+        onRecordsPicked: (records) async {
+          selectedRecords = List<AudioRecord>.of(records);
+        },
         displayName: (record) => record.name,
         subtitleBuilder: (record) => Row(
           children: [
@@ -1361,33 +1491,38 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
     if (result == null || result.isEmpty || !mounted) return;
 
-    // Look up records to get correct formats
-    final records = ref.read(audioRecordsProvider);
     final newAudios = <SelectedAudio>[];
     try {
-      for (final entry in result) {
-        String format = 'wav';
-        for (final r in records) {
-          if (r.name == entry.key) {
-            format = r.format;
-            break;
-          }
-        }
+      for (final record in selectedRecords) {
         newAudios.add(
           SelectedAudio(
-            bytes: entry.value,
-            name: entry.key,
-            format: _resolveSelectedAudioFormat(
-              entry.value,
-              fallbackFormat: format,
+            bytes: Uint8List(0),
+            byteLength: record.size,
+            loadBytesWithCancellation: (cancelToken) async {
+              throwIfAsrAudioCanceled(cancelToken);
+              final bytes = await FileManifest.readFileCancellable(
+                record.storagePath,
+                cancelToken: cancelToken,
+              );
+              throwIfAsrAudioCanceled(cancelToken);
+              if (bytes == null || bytes.isEmpty) {
+                throw const FormatException('无法读取音频文件');
+              }
+              return bytes;
+            },
+            name: record.name,
+            format: record.format,
+            resolveFormat: (bytes) => _resolveSelectedAudioFormat(
+              bytes,
+              fallbackFormat: record.format,
             ),
           ),
         );
       }
     } on FormatException catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('选择音频文件失败: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $error')));
       return;
     }
 
@@ -1472,6 +1607,24 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       _selectedAudios.map(
         (audio) => AsrTaskAudio(
           bytes: audio.bytes,
+          loadBytesWithCancellation:
+              audio.hasCustomLoader ? audio.loadBytesWithCancellation : null,
+          byteLength: audio.byteLength,
+          resolveFormat: audio.resolveFormat == null
+              ? null
+              : (bytes) {
+                  final format = audio.resolveFormat!(bytes);
+                  if (audio.format != format ||
+                      audio.byteLength != bytes.length) {
+                    audio.format = format;
+                    audio.byteLength = bytes.length;
+                    if (mounted && _selectedAudios.contains(audio)) {
+                      setState(() {});
+                    }
+                  }
+                  return format;
+                },
+          onSourceReleased: audio.releaseSource,
           name: audio.name,
           format: audio.format,
           audioReference: audio.audioReference,

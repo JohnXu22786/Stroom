@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/services/asr_retry_storage.dart';
 import 'package:stroom/services/asr_service.dart';
 
-class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
+class _MemoryRetryAdapter
+    implements AsrRetryStorageAdapter, AsrRetryStoragePresence {
   final Map<String, Uint8List> files = {};
   Completer<void>? deleteEntered;
   Completer<void>? releaseDelete;
@@ -27,6 +30,9 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
     final bytes = files[key];
     return bytes == null ? null : Uint8List.fromList(bytes);
   }
+
+  @override
+  Future<bool> contains(String key) async => files.containsKey(key);
 
   @override
   Future<void> delete(String key) async {
@@ -50,6 +56,127 @@ class _MemoryRetryAdapter implements AsrRetryStorageAdapter {
     await releaseKeys?.future;
     return files.keys.where((key) => key.startsWith(prefix)).toList();
   }
+}
+
+class _EventLoopProbeRetryAdapter extends _MemoryRetryAdapter {
+  _EventLoopProbeRetryAdapter(this.eventLoopResponded);
+
+  final bool Function() eventLoopResponded;
+  bool? eventLoopRespondedAtAudioWrite;
+
+  @override
+  Future<void> write(String key, Uint8List bytes) async {
+    if (key.endsWith('.audio')) {
+      eventLoopRespondedAtAudioWrite = eventLoopResponded();
+    }
+    await super.write(key, bytes);
+  }
+}
+
+class _CancellableReadRetryAdapter extends _MemoryRetryAdapter
+    implements AsrRetryStorageCancellable {
+  final Completer<void> readEntered = Completer<void>();
+  final Completer<void> releaseRead = Completer<void>();
+  var gateReads = false;
+  var cancellationObserved = false;
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (!gateReads) return read(key);
+    readEntered.complete();
+    try {
+      await Future.any<void>([
+        releaseRead.future,
+        cancelToken.whenCancel.then<void>((error) => throw error),
+      ]);
+      return read(key);
+    } finally {
+      cancellationObserved = cancelToken.isCancelled;
+    }
+  }
+}
+
+class _CancellableVerificationReadRetryAdapter extends _MemoryRetryAdapter
+    implements AsrRetryStorageCancellable {
+  Completer<void> readEntered = Completer<void>();
+  Completer<void> releaseLegacyRead = Completer<void>();
+  var gateAudioReads = false;
+  var gateOnAudioRead = 1;
+  var audioReadCount = 0;
+  var cancellationObserved = false;
+
+  void gateAudioRead({int occurrence = 1}) {
+    gateAudioReads = true;
+    gateOnAudioRead = occurrence;
+    audioReadCount = 0;
+    cancellationObserved = false;
+    readEntered = Completer<void>();
+    releaseLegacyRead = Completer<void>();
+  }
+
+  bool _shouldGate(String key) {
+    if (!gateAudioReads || !key.endsWith('.audio')) return false;
+    audioReadCount++;
+    return audioReadCount == gateOnAudioRead;
+  }
+
+  void _signalReadEntered() {
+    if (!readEntered.isCompleted) readEntered.complete();
+  }
+
+  @override
+  Future<Uint8List?> read(String key) async {
+    if (_shouldGate(key)) {
+      _signalReadEntered();
+      await releaseLegacyRead.future;
+    }
+    return super.read(key);
+  }
+
+  @override
+  Future<Uint8List?> readCancellable(
+    String key, {
+    required CancelToken cancelToken,
+  }) async {
+    if (!_shouldGate(key)) return super.read(key);
+    _signalReadEntered();
+    try {
+      await cancelToken.whenCancel;
+      throw cancelToken.cancelError!;
+    } finally {
+      cancellationObserved = cancelToken.isCancelled;
+    }
+  }
+}
+
+/// Models an adapter written before metadata-only presence checks were added.
+class _LegacyRetryAdapter implements AsrRetryStorageAdapter {
+  final Map<String, Uint8List> files = {};
+  var readCount = 0;
+
+  @override
+  Future<void> write(String key, Uint8List bytes) async {
+    files[key] = Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<Uint8List?> read(String key) async {
+    readCount++;
+    final bytes = files[key];
+    return bytes == null ? null : Uint8List.fromList(bytes);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    files.remove(key);
+  }
+
+  @override
+  Future<List<String>> keysWithPrefix(String prefix) async =>
+      files.keys.where((key) => key.startsWith(prefix)).toList();
 }
 
 class _GatedCheckpointRetryAdapter extends _MemoryRetryAdapter {
@@ -126,6 +253,118 @@ Future<AsrAudioReference> _saveAndRelease(
 }
 
 void main() {
+  test('canceling a retry source stops its storage read', () async {
+    final adapter = _CancellableReadRetryAdapter();
+    final store = AsrRetryAudioStore(adapter: adapter);
+    final audioBytes = Uint8List.fromList([1, 2, 3]);
+    final reference = await store.save(
+      audioBytes,
+      name: 'retry.wav',
+      format: 'wav',
+    );
+    adapter.gateReads = true;
+    final cancelToken = CancelToken();
+    final load = store.load(reference, cancelToken: cancelToken);
+
+    await adapter.readEntered.future;
+    cancelToken.cancel('stop retry load');
+
+    await expectLater(load, throwsA(isA<DioException>()));
+    expect(adapter.cancellationObserved, isTrue);
+  });
+
+  test(
+    'cancellation stops retry save and restore verification reads',
+    () async {
+      final adapter = _CancellableVerificationReadRetryAdapter();
+      final store = AsrRetryAudioStore(adapter: adapter);
+      final bytes = Uint8List.fromList([1, 2, 3]);
+      final reference = await store.save(
+        bytes,
+        name: 'verification.wav',
+        format: 'wav',
+      );
+      await store.releaseProtection(reference);
+
+      adapter.gateAudioRead();
+      final restoreToken = CancelToken();
+      final restoring = store.ensureStored(
+        reference,
+        bytes,
+        cancelToken: restoreToken,
+      );
+      await adapter.readEntered.future;
+      restoreToken.cancel('stop restore verification');
+      adapter.releaseLegacyRead.complete();
+      await expectLater(restoring, throwsA(isA<DioException>()));
+      expect(adapter.cancellationObserved, isTrue);
+
+      adapter.files.remove('background/asr_retry/${reference.id}.audio');
+      adapter.gateAudioRead(occurrence: 2);
+      final repersistToken = CancelToken();
+      final repersisting = store.ensureStored(
+        reference,
+        bytes,
+        cancelToken: repersistToken,
+      );
+      await adapter.readEntered.future;
+      repersistToken.cancel('stop persisted restore verification');
+      adapter.releaseLegacyRead.complete();
+      await expectLater(repersisting, throwsA(isA<DioException>()));
+      expect(adapter.cancellationObserved, isTrue);
+
+      adapter.gateAudioRead();
+      final saveToken = CancelToken();
+      final saving = store.save(
+        bytes,
+        name: 'verification-save.wav',
+        format: 'wav',
+        cancelToken: saveToken,
+      );
+      await adapter.readEntered.future;
+      saveToken.cancel('stop save verification');
+      adapter.releaseLegacyRead.complete();
+      await expectLater(saving, throwsA(isA<DioException>()));
+      expect(adapter.cancellationObserved, isTrue);
+    },
+  );
+
+  test('legacy retry storage adapters remain source-compatible', () async {
+    final adapter = _LegacyRetryAdapter();
+    final store = AsrRetryAudioStore(adapter: adapter);
+    final reference = await store.save(
+      Uint8List.fromList([1, 2, 3, 4]),
+      name: 'capture.wav',
+      format: 'wav',
+    );
+    adapter.readCount = 0;
+
+    await store.verifyPresent(reference);
+
+    expect(adapter.readCount, 1);
+  });
+
+  test('tokened retry loads reject legacy storage reads', () async {
+    final adapter = _LegacyRetryAdapter();
+    final store = AsrRetryAudioStore(adapter: adapter);
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+    final reference = await store.save(
+      bytes,
+      name: 'capture.wav',
+      format: 'wav',
+    );
+    adapter.readCount = 0;
+
+    await expectLater(
+      store.load(reference, cancelToken: CancelToken()),
+      throwsA(isA<UnsupportedError>()),
+    );
+    expect(adapter.readCount, 0);
+
+    expect(await store.load(reference), bytes);
+    expect(adapter.readCount, 1);
+  });
+
   test(
     'versioned retry snapshots redact configured keys from single and multi audio chunks',
     () {
@@ -3758,6 +3997,42 @@ void main() {
     expect(callbackBytes, bytes);
     await store.releaseProtection(reference);
   });
+
+  test(
+    'retry audio staging yields while calculating its content digest',
+    () async {
+      final bytes = Uint8List(8 * 1024 * 1024);
+      var eventLoopResponded = false;
+      final adapter = _EventLoopProbeRetryAdapter(() => eventLoopResponded);
+      final hashBatchSizes = <int>[];
+      final store = AsrRetryAudioStore(
+        adapter: adapter,
+        onHashBatchForTesting: hashBatchSizes.add,
+      );
+      Timer.run(() => eventLoopResponded = true);
+
+      final reference = await store.save(
+        bytes,
+        name: 'large-capture.wav',
+        format: 'wav',
+      );
+
+      expect(adapter.eventLoopRespondedAtAudioWrite, isTrue);
+      var loadEventLoopResponded = false;
+      Timer.run(() => loadEventLoopResponded = true);
+      final restored = await store.load(reference);
+      expect(loadEventLoopResponded, isTrue);
+      expect(restored, bytes);
+      expect(reference.sha256, sha256.convert(bytes).toString());
+      expect(hashBatchSizes, isNotEmpty);
+      expect(hashBatchSizes, everyElement(lessThanOrEqualTo(512 * 1024)));
+      expect(
+        hashBatchSizes.fold<int>(0, (sum, size) => sum + size),
+        bytes.length * 3,
+      );
+      await store.releaseProtection(reference);
+    },
+  );
 
   test('save waits for asynchronous reference persistence', () async {
     final adapter = _MemoryRetryAdapter();

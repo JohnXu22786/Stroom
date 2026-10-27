@@ -1,11 +1,13 @@
 import '../utils/atomic_file.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../utils/file_record.dart';
+import '../utils/asr_audio_stream.dart';
 import '../utils/folder_path_utils.dart';
 import '../utils/image_thumbnail_loader.dart';
 import '../utils/manifest_operations_shared.dart';
@@ -762,6 +764,44 @@ class ManifestOperations<T extends FileRecord> {
       debugPrint('ManifestOperations($manifestKey).readFile error: $e');
       await AppLogService.error(
           'ManifestOperations($manifestKey)', 'readFile failed', e, st);
+      return null;
+    }
+  }
+
+  /// Reads a media file in a way that can stop when its ASR task is canceled.
+  /// Native files use a cancelable stream; Web IndexedDB reads abort their
+  /// transaction when the task token is canceled.
+  Future<Uint8List?> readFileCancellable(
+    String fileName, {
+    required CancelToken cancelToken,
+  }) async {
+    try {
+      throwIfAsrAudioCanceled(cancelToken);
+      if (_useWebFileStore) {
+        return await WebFileStore.readCancellable(
+          _webKey(fileName),
+          cancelToken: cancelToken,
+        );
+      }
+      final dir = await _storageDir;
+      throwIfAsrAudioCanceled(cancelToken);
+      final file = File(p.join(dir, fileName));
+      if (!await file.exists()) return null;
+      return await readAsrAudioStream(
+        file.openRead(),
+        cancelToken: cancelToken,
+      );
+    } catch (error, stackTrace) {
+      if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+      debugPrint(
+        'ManifestOperations($manifestKey).readFileCancellable error: $error',
+      );
+      await AppLogService.error(
+        'ManifestOperations($manifestKey)',
+        'readFileCancellable failed',
+        error,
+        stackTrace,
+      );
       return null;
     }
   }

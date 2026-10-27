@@ -4,11 +4,12 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import '../providers/chat_api_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/audio_codecs.dart';
 import '../utils/audio_chunker.dart';
+import '../utils/cancellable_compute.dart';
 import '../utils/audio_utils.dart';
 import '../utils/format_file_size.dart';
 import '../utils/http_timeout.dart';
@@ -28,6 +29,48 @@ const _asrSupportedFormats = {
   'wav',
   'webm',
 };
+
+void _throwIfAsrCancelled(CancelToken? cancelToken) {
+  final cancelError = cancelToken?.cancelError;
+  if (cancelError != null) throw cancelError;
+}
+
+class _AsrCompressionRequest {
+  final IsolateTransferableBytes wavBytes;
+  final String compression;
+
+  const _AsrCompressionRequest(this.wavBytes, this.compression);
+}
+
+(Uint8List, String) _encodeWavCompressionInBackground(
+  _AsrCompressionRequest request,
+) {
+  final wavBytes = request.wavBytes.materialize();
+  final info = parseWavHeader(wavBytes);
+  var samples = readPcmSamplesFloat(wavBytes, info);
+  if (info.numChannels > 1) {
+    final mono = Float64List(samples.length ~/ info.numChannels);
+    for (var index = 0; index < mono.length; index++) {
+      var sum = 0.0;
+      for (var channel = 0; channel < info.numChannels; channel++) {
+        sum += samples[index * info.numChannels + channel];
+      }
+      mono[index] = sum / info.numChannels;
+    }
+    samples = mono;
+  }
+  final pcm = Int16List(samples.length);
+  for (var index = 0; index < samples.length; index++) {
+    pcm[index] = (samples[index] * 32767).round().clamp(-32768, 32767);
+  }
+  if (request.compression == 'adpcm') {
+    return (
+      adpcmToWav(encodeAdpcm(pcm, AdpcmConfig()), sampleRate: info.sampleRate),
+      'wav',
+    );
+  }
+  return (encodeFlac(pcm, sampleRate: info.sampleRate), 'flac');
+}
 
 /// Stable identity for a complete chunk layout, shared with retry scheduling
 /// when a legacy checkpoint is migrated to this plan.
@@ -570,6 +613,8 @@ class AsrService {
   final AsrConfig config;
   final bool _ownsDio;
   final Dio _dio;
+  final void Function(Uint8List workingBytes)? _beforeCompressionForTesting;
+  final void Function()? _beforeCompressionRequestForTesting;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -598,8 +643,36 @@ class AsrService {
     return '${key.substring(0, 8)}...${key.substring(key.length - 4)}';
   }
 
-  AsrService({required this.config, Dio? dio})
-      : _ownsDio = dio == null,
+  AsrService({required AsrConfig config, Dio? dio})
+      : this._(
+          config: config,
+          dio: dio,
+          beforeCompressionForTesting: null,
+          beforeCompressionRequestForTesting: null,
+        );
+
+  @visibleForTesting
+  AsrService.forTesting({
+    required AsrConfig config,
+    Dio? dio,
+    required void Function(Uint8List workingBytes) beforeCompression,
+    void Function()? beforeCompressionRequest,
+  }) : this._(
+          config: config,
+          dio: dio,
+          beforeCompressionForTesting: beforeCompression,
+          beforeCompressionRequestForTesting: beforeCompressionRequest,
+        );
+
+  AsrService._({
+    required this.config,
+    Dio? dio,
+    required void Function(Uint8List workingBytes)? beforeCompressionForTesting,
+    required void Function()? beforeCompressionRequestForTesting,
+  })  : _beforeCompressionForTesting = beforeCompressionForTesting,
+        _beforeCompressionRequestForTesting =
+            beforeCompressionRequestForTesting,
+        _ownsDio = dio == null,
         _dio = dio ??
             Dio(
               BaseOptions(
@@ -639,9 +712,7 @@ class AsrService {
   /// Dio receive timeout, exposed for diagnostic and testing.
   Duration? get receiveTimeout => _dio.options.receiveTimeout;
 
-  void _failClosedOnUncertainPriorChunks(
-    List<AsrChunkResult> priorChunks,
-  ) {
+  void _failClosedOnUncertainPriorChunks(List<AsrChunkResult> priorChunks) {
     final uncertain = priorChunks
         .where((chunk) => chunk.status == AsrChunkStatus.uncertain)
         .toList();
@@ -718,33 +789,42 @@ class AsrService {
     // bytes keep their existing caller-selected format fallback behavior.
     if (detectedFormat == 'wav') validateDetectedWav(audioBytes);
 
+    final sourceAudioBytesLength = audioBytes.length;
     var workingBytes = audioBytes;
 
     // ── Preprocessing (always applied if configured) ────────────────
     if (config.preprocessing == 'resampleMono' && fmt == 'wav') {
       try {
         final preprocessor = WavPreprocessor();
-        workingBytes = preprocessor.process(workingBytes);
+        workingBytes = await preprocessor.processAsync(
+          workingBytes,
+          checkCancelled: () => _throwIfAsrCancelled(cancelToken),
+          cancellationSignal: cancelToken?.whenCancel,
+        );
         await AppLogService.info(
           'AsrService',
           '预处理完成: ${audioBytes.length} → ${workingBytes.length} 字节',
         );
       } catch (e) {
+        _throwIfAsrCancelled(cancelToken);
         await AppLogService.warning('AsrService', '预处理失败: $e');
       }
     }
+    // Once preprocessing has produced its output, stop retaining the source
+    // snapshot for the remainder of this task.
+    audioBytes = workingBytes;
 
     // Preprocessing is allowed to replace the working bytes, so validate its
     // output before deciding whether to upload, compress, or fall back.
     if (detectedFormat == 'wav') validateDetectedWav(workingBytes);
 
     final processedAudioBytes = workingBytes;
-    final sourceAudioBytesLength = audioBytes.length;
     final rawSourceExceedsLimit =
         sourceAudioBytesLength > config.maxFileSizeBytes &&
             config.uploadMethod != AudioUploadMethod.url;
     final fallback = config.fallbackMethod;
     var encodedAudioBytes = processedAudioBytes;
+    var encodedAudioBytesLength = processedAudioBytes.length;
     var encodedFormat = fmt;
     var encodedAudioPrepared = false;
     var requestBodyBytes = 0;
@@ -754,8 +834,13 @@ class AsrService {
     // whole file in the generic fallback before deciding whether to chunk.
     if (!rawSourceExceedsLimit) {
       if (config.compression != 'none' && fmt == 'wav') {
-        final compressed = _applyCompression(processedAudioBytes, fmt);
+        final compressed = await _applyCompression(
+          processedAudioBytes,
+          fmt,
+          cancelToken: cancelToken,
+        );
         encodedAudioBytes = compressed.$1;
+        encodedAudioBytesLength = encodedAudioBytes.length;
         encodedFormat = compressed.$2;
       }
       encodedAudioPrepared = true;
@@ -880,8 +965,13 @@ class AsrService {
       try {
         if (!encodedAudioPrepared) {
           if (config.compression != 'none' && fmt == 'wav') {
-            final compressed = _applyCompression(processedAudioBytes, fmt);
+            final compressed = await _applyCompression(
+              processedAudioBytes,
+              fmt,
+              cancelToken: cancelToken,
+            );
             encodedAudioBytes = compressed.$1;
+            encodedAudioBytesLength = encodedAudioBytes.length;
             encodedFormat = compressed.$2;
           }
           encodedAudioPrepared = true;
@@ -914,6 +1004,9 @@ class AsrService {
         if (config.chunking != 'none' &&
             fmt == 'wav' &&
             config.uploadMethod != AudioUploadMethod.url) {
+          if (!identical(encodedAudioBytes, processedAudioBytes)) {
+            encodedAudioBytes = Uint8List(0);
+          }
           try {
             // await required: a bare `return future` would deliver the error to
             // the caller without entering this catch.
@@ -973,7 +1066,7 @@ class AsrService {
     throw _uploadSizeLimitException(
       sourceAudioBytesLength: sourceAudioBytesLength,
       processedAudioBytesLength: processedAudioBytes.length,
-      encodedAudioBytesLength: encodedAudioBytes.length,
+      encodedAudioBytesLength: encodedAudioBytesLength,
       requestBodyBytes: requestBodyBytes,
       explanation: explanation,
     );
@@ -987,7 +1080,12 @@ class AsrService {
   /// - 'flac': standalone FLAC file.
   /// 'opus'/'mp3' are experimental pure-Dart encoders whose output cannot
   /// be decoded by providers — they are skipped instead of uploading garbage.
-  (Uint8List, String) _applyCompression(Uint8List workingBytes, String fmt) {
+  Future<(Uint8List, String)> _applyCompression(
+    Uint8List workingBytes,
+    String fmt, {
+    CancelToken? cancelToken,
+  }) async {
+    _throwIfAsrCancelled(cancelToken);
     if (config.compression == 'none' || fmt != 'wav') {
       return (workingBytes, fmt);
     }
@@ -1001,38 +1099,99 @@ class AsrService {
       return (workingBytes, fmt);
     }
     try {
-      final info = parseWavHeader(workingBytes);
-      var samples = readPcmSamplesFloat(workingBytes, info);
-      // All built-in encoders are mono-only. Downmix multichannel audio
-      // first, otherwise interleaved channels would be encoded as mono
-      // and the audio would play back at Nx speed (garbage transcription).
-      if (info.numChannels > 1) {
-        final monoLen = samples.length ~/ info.numChannels;
-        final mono = Float64List(monoLen);
-        for (int i = 0; i < monoLen; i++) {
-          double sum = 0;
-          for (int ch = 0; ch < info.numChannels; ch++) {
-            sum += samples[i * info.numChannels + ch];
-          }
-          mono[i] = sum / info.numChannels;
-        }
-        samples = mono;
+      _beforeCompressionForTesting?.call(workingBytes);
+      if (kIsWeb) {
+        return await _applyCompressionWithEventLoopYield(
+          workingBytes,
+          checkCancelled: () => _throwIfAsrCancelled(cancelToken),
+        );
       }
-      final pcm = Int16List(samples.length);
-      for (int i = 0; i < samples.length; i++) {
-        pcm[i] = (samples[i] * 32767).round().clamp(-32768, 32767);
-      }
-      if (config.compression == 'adpcm') {
-        final adpcm = encodeAdpcm(pcm, AdpcmConfig());
-        // Raw IMA ADPCM nibbles cannot be uploaded directly — wrap them in
-        // a WAV container so providers can decode them.
-        return (adpcmToWav(adpcm, sampleRate: info.sampleRate), 'wav');
-      }
-      return (encodeFlac(pcm, sampleRate: info.sampleRate), 'flac');
-    } catch (e) {
+      final compressed = await computeCancellableWithRequestFactory(
+        _encodeWavCompressionInBackground,
+        () {
+          _beforeCompressionRequestForTesting?.call();
+          return _AsrCompressionRequest(
+            IsolateTransferableBytes(workingBytes),
+            config.compression,
+          );
+        },
+        debugLabel: 'asr-audio-compression',
+        cancellationSignal: cancelToken?.whenCancel,
+      );
+      _throwIfAsrCancelled(cancelToken);
+      return compressed;
+    } on Object catch (e) {
+      if (e is DioException && CancelToken.isCancel(e)) rethrow;
       unawaited(AppLogService.warning('AsrService', '压缩失败: $e'));
     }
     return (workingBytes, fmt);
+  }
+
+  Future<(Uint8List, String)> _applyCompressionWithEventLoopYield(
+    Uint8List workingBytes, {
+    void Function()? onYield,
+    void Function()? checkCancelled,
+  }) async {
+    final info = parseWavHeader(workingBytes);
+    if (info.bitsPerSample != 16 ||
+        info.numChannels <= 0 ||
+        info.sampleRate <= 0 ||
+        info.blockAlign != info.bytesPerFrame ||
+        info.byteRate != info.sampleRate * info.blockAlign ||
+        info.dataSize <= 0 ||
+        info.dataSize % info.blockAlign != 0 ||
+        info.dataOffset < 0 ||
+        info.dataOffset > workingBytes.length ||
+        info.dataSize > workingBytes.length - info.dataOffset) {
+      throw const FormatException('Invalid PCM WAV data range or metadata');
+    }
+    final rawSampleCount = info.dataSize ~/ info.bytesPerSample;
+    final outputSampleCount = rawSampleCount ~/ info.numChannels;
+    final source = workingBytes.buffer.asByteData(
+      workingBytes.offsetInBytes + info.dataOffset,
+      info.dataSize,
+    );
+    final pcm = Int16List(outputSampleCount);
+    const batchSize = 65536;
+    for (var start = 0; start < outputSampleCount; start += batchSize) {
+      checkCancelled?.call();
+      final end = (start + batchSize).clamp(0, outputSampleCount);
+      for (var sample = start; sample < end; sample++) {
+        var value = 0.0;
+        for (var channel = 0; channel < info.numChannels; channel++) {
+          value += source.getInt16(
+                (sample * info.numChannels + channel) * 2,
+                Endian.little,
+              ) /
+              32768.0;
+        }
+        value /= info.numChannels;
+        pcm[sample] = (value * 32767).round().clamp(-32768, 32767);
+      }
+      if (end < outputSampleCount) {
+        onYield?.call();
+        await Future<void>.delayed(Duration.zero);
+        checkCancelled?.call();
+      }
+    }
+    if (config.compression == 'adpcm') {
+      final adpcm = await encodeAdpcmWithEventLoopYield(
+        pcm,
+        AdpcmConfig(),
+        onYield: onYield,
+        checkCancelled: checkCancelled,
+      );
+      return (adpcmToWav(adpcm, sampleRate: info.sampleRate), 'wav');
+    }
+    return (
+      await encodeFlacWithEventLoopYield(
+        pcm,
+        sampleRate: info.sampleRate,
+        onYield: onYield,
+        checkCancelled: checkCancelled,
+      ),
+      'flac',
+    );
   }
 
   /// Get the specific fallback method that differs from primary.
@@ -1730,11 +1889,15 @@ class AsrService {
 
     final wavInfo = parseWavHeader(wavBytes);
     final singlePcmFrame = wavInfo.totalSamples > 1
-        ? splitWavAtFrame(wavBytes, 1).first
+        ? materializeFirstWavFrame(wavBytes)
         : canonicalizePcmWav(wavBytes);
     final encodedSingleFrame = config.compression == 'none'
         ? (singlePcmFrame, audioFormat)
-        : _applyCompression(singlePcmFrame, audioFormat);
+        : await _applyCompression(
+            singlePcmFrame,
+            audioFormat,
+            cancelToken: cancelToken,
+          );
     final singleFrameBodyBytes = _measureUploadRequestBodyBytes(
       encodedSingleFrame.$1,
       encodedSingleFrame.$2,
@@ -1789,68 +1952,114 @@ class AsrService {
     final chunker = AudioChunker(
       config: AudioChunkConfig(maxChunkBytes: maxChunkBytes),
     );
-    final initialChunks = chunker.chunk(
+    final initialChunks = await chunker.planAsync(
       wavBytes,
       chunkMethod,
       maxChunks: maxPreparedChunks,
+      cancellationSignal: cancelToken?.whenCancel,
+      checkCancelled: () => _throwIfAsrCancelled(cancelToken),
     );
-    final preparedChunks =
-        <({Uint8List sourcePcm, Uint8List encodedAudio, String audioFormat})>[];
+    _throwIfAsrCancelled(cancelToken);
+    final preparedChunks = <AudioChunk>[];
 
-    void prepareWithinBudget(Uint8List sourcePcm, int depth) {
+    Future<
+        ({
+          bool fits,
+          int sourceBytes,
+          int encodedBytes,
+          int bodyBytes,
+          int frameCount,
+        })> measureRange(AudioChunk range) async {
+      _throwIfAsrCancelled(cancelToken);
+      final sourcePcm = chunker.materializeChunk(wavBytes, range);
       final encoded = config.compression == 'none'
           ? (sourcePcm, audioFormat)
-          : _applyCompression(sourcePcm, audioFormat);
+          : await _applyCompression(
+              sourcePcm,
+              audioFormat,
+              cancelToken: cancelToken,
+            );
+      _throwIfAsrCancelled(cancelToken);
       final bodyBytes = _measureUploadRequestBodyBytes(
         encoded.$1,
         encoded.$2,
         config.uploadMethod,
       );
-      if (_fitsUploadBudget(encoded.$1, bodyBytes)) {
+      return (
+        fits: _fitsUploadBudget(encoded.$1, bodyBytes),
+        sourceBytes: sourcePcm.length,
+        encodedBytes: encoded.$1.length,
+        bodyBytes: bodyBytes,
+        frameCount: (range.endByte - range.startByte) ~/ wavInfo.bytesPerFrame,
+      );
+    }
+
+    Future<void> prepareWithinBudget(AudioChunk range, int depth) async {
+      _throwIfAsrCancelled(cancelToken);
+      final measured = await measureRange(range);
+      _throwIfAsrCancelled(cancelToken);
+      if (measured.fits) {
         if (preparedChunks.length >= maxPreparedChunks) {
           throw Exception('切块数量超过安全上限 $maxPreparedChunks，已停止上传。');
         }
-        preparedChunks.add((
-          sourcePcm: sourcePcm,
-          encodedAudio: encoded.$1,
-          audioFormat: encoded.$2,
-        ));
+        preparedChunks.add(range);
         return;
       }
 
-      final sourceInfo = parseWavHeader(sourcePcm);
-      if (sourceInfo.totalSamples <= 1) {
+      final frameCount = measured.frameCount;
+      if (frameCount <= 1) {
         throw _uploadSizeLimitException(
           sourceAudioBytesLength: sourceAudioBytesLength,
-          processedAudioBytesLength: sourcePcm.length,
-          encodedAudioBytesLength: encoded.$1.length,
-          requestBodyBytes: bodyBytes,
+          processedAudioBytesLength: measured.sourceBytes,
+          encodedAudioBytesLength: measured.encodedBytes,
+          requestBodyBytes: measured.bodyBytes,
           explanation: '当前预算无法容纳单个 PCM 帧的编码文件及协议开销。',
         );
       }
       if (depth >= maxAdaptiveSplitDepth) {
         throw _uploadSizeLimitException(
           sourceAudioBytesLength: sourceAudioBytesLength,
-          processedAudioBytesLength: sourcePcm.length,
-          encodedAudioBytesLength: encoded.$1.length,
-          requestBodyBytes: bodyBytes,
+          processedAudioBytesLength: measured.sourceBytes,
+          encodedAudioBytesLength: measured.encodedBytes,
+          requestBodyBytes: measured.bodyBytes,
           explanation: '达到 PCM 细分次数上限，已停止上传。',
         );
       }
 
-      final halves = splitWavAtFrame(sourcePcm, sourceInfo.totalSamples ~/ 2);
-      prepareWithinBudget(halves.first, depth + 1);
-      prepareWithinBudget(halves.last, depth + 1);
+      final leftFrames = frameCount ~/ 2;
+      final splitByte = range.startByte + leftFrames * wavInfo.bytesPerFrame;
+      final splitSecond = range.startSecond + leftFrames / wavInfo.sampleRate;
+      await prepareWithinBudget(
+        AudioChunk(
+          startByte: range.startByte,
+          endByte: splitByte,
+          startSecond: range.startSecond,
+          endSecond: splitSecond,
+        ),
+        depth + 1,
+      );
+      await prepareWithinBudget(
+        AudioChunk(
+          startByte: splitByte,
+          endByte: range.endByte,
+          startSecond: splitSecond,
+          endSecond: range.endSecond,
+        ),
+        depth + 1,
+      );
     }
 
-    for (final chunk in initialChunks) {
-      prepareWithinBudget(chunk, 0);
+    for (final range in initialChunks) {
+      _throwIfAsrCancelled(cancelToken);
+      await prepareWithinBudget(range, 0);
     }
 
     final planBounds = <({double startSeconds, double endSeconds})>[];
     var plannedOffsetSeconds = 0.0;
-    for (final chunk in preparedChunks) {
-      final durationSeconds = parseWavHeader(chunk.sourcePcm).durationSeconds;
+    for (final range in preparedChunks) {
+      final durationSeconds = (range.endByte - range.startByte) /
+          wavInfo.bytesPerFrame /
+          wavInfo.sampleRate;
       final endSeconds = plannedOffsetSeconds + durationSeconds;
       planBounds.add((
         startSeconds: plannedOffsetSeconds,
@@ -1920,8 +2129,7 @@ class AsrService {
     }
 
     for (int i = 0; i < preparedChunks.length; i++) {
-      final chunk = preparedChunks[i];
-      final sourceChunk = chunk.sourcePcm;
+      final range = preparedChunks[i];
       final chunkOffset = planBounds[i].startSeconds;
       final chunkEndSeconds = planBounds[i].endSeconds;
 
@@ -1937,10 +2145,7 @@ class AsrService {
             (candidate.endSeconds - chunkEndSeconds).abs() < 0.001,
       );
       if (uncertain.isNotEmpty) {
-        throw AsrChunkedTranscriptionException([
-          ...chunkResults,
-          ...uncertain,
-        ]);
+        throw AsrChunkedTranscriptionException([...chunkResults, ...uncertain]);
       }
 
       final previous = priorChunks.where(
@@ -1970,6 +2175,17 @@ class AsrService {
         continue;
       }
 
+      // Materialize and encode only the next upload. Cached successful chunks
+      // above skip this allocation entirely.
+      final sourceChunk = chunker.materializeChunk(wavBytes, range);
+      final encodedChunk = config.compression == 'none'
+          ? (sourceChunk, audioFormat)
+          : await _applyCompression(
+              sourceChunk,
+              audioFormat,
+              cancelToken: cancelToken,
+            );
+
       // ── Prompt carrying: pass previous chunk's text as prompt ──
       var chunkParams = Map<String, dynamic>.from(sharedParams);
       var chunkCustomParamNames = Set<String>.from(jsonCustomParamNames);
@@ -1993,8 +2209,8 @@ class AsrService {
                 : '$configuredPrompt\n$promptSuffix';
         chunkCustomParamNames.remove('prompt');
         final promptBodyBytes = _measureUploadRequestBodyBytes(
-          chunk.encodedAudio,
-          chunk.audioFormat,
+          encodedChunk.$1,
+          encodedChunk.$2,
           config.uploadMethod,
           sharedParams: chunkParams,
           jsonCustomParamNames: chunkCustomParamNames,
@@ -2007,7 +2223,24 @@ class AsrService {
         }
       }
 
-      final mimeTypeString = getMimeType(chunk.audioFormat);
+      final encodedChunkBodyBytes = _measureUploadRequestBodyBytes(
+        encodedChunk.$1,
+        encodedChunk.$2,
+        config.uploadMethod,
+        sharedParams: chunkParams,
+        jsonCustomParamNames: chunkCustomParamNames,
+      );
+      if (!_fitsUploadBudget(encodedChunk.$1, encodedChunkBodyBytes)) {
+        throw _uploadSizeLimitException(
+          sourceAudioBytesLength: sourceAudioBytesLength,
+          processedAudioBytesLength: sourceChunk.length,
+          encodedAudioBytesLength: encodedChunk.$1.length,
+          requestBodyBytes: encodedChunkBodyBytes,
+          explanation: '重新编码后的片段超过上传预算，已在记录请求尝试前停止上传。',
+        );
+      }
+
+      final mimeTypeString = getMimeType(encodedChunk.$2);
       final mimeType = mimeTypeString.contains('/')
           ? DioMediaType.parse(mimeTypeString)
           : null;
@@ -2029,8 +2262,8 @@ class AsrService {
       try {
         final response = await _sendTranscriptionRequest(
           sharedParams: chunkParams,
-          audioBytes: chunk.encodedAudio,
-          fileName: 'audio.${chunk.audioFormat}',
+          audioBytes: encodedChunk.$1,
+          fileName: 'audio.${encodedChunk.$2}',
           sourceAudioBytesLength: sourceAudioBytesLength,
           processedAudioBytesLength: sourceChunk.length,
           mimeType: mimeType,
