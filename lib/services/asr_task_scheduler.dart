@@ -19,7 +19,7 @@ class AsrTaskAudio {
   Uint8List bytes;
   Future<Uint8List> Function()? _loadBytes;
   Future<Uint8List> Function(CancelToken? cancelToken)?
-      _loadBytesWithCancellation;
+  _loadBytesWithCancellation;
   final bool hasCustomLoader;
   final int byteLength;
   String Function(Uint8List bytes)? resolveFormat;
@@ -34,7 +34,7 @@ class AsrTaskAudio {
     Uint8List? bytes,
     Future<Uint8List> Function()? loadBytes,
     Future<Uint8List> Function(CancelToken? cancelToken)?
-        loadBytesWithCancellation,
+    loadBytesWithCancellation,
     int? byteLength,
     this.resolveFormat,
     void Function()? onSourceReleased,
@@ -43,14 +43,13 @@ class AsrTaskAudio {
     this.audioReference,
     List<AsrChunkResult> priorChunks = const [],
     this.resetChunkCheckpoint = false,
-  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
-        _loadBytes = loadBytes,
-        _loadBytesWithCancellation = loadBytesWithCancellation,
-        hasCustomLoader =
-            loadBytes != null || loadBytesWithCancellation != null,
-        _onSourceReleased = onSourceReleased,
-        byteLength = byteLength ?? bytes?.length ?? 0,
-        priorChunks = List.unmodifiable(priorChunks);
+  }) : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+       _loadBytes = loadBytes,
+       _loadBytesWithCancellation = loadBytesWithCancellation,
+       hasCustomLoader = loadBytes != null || loadBytesWithCancellation != null,
+       _onSourceReleased = onSourceReleased,
+       byteLength = byteLength ?? bytes?.length ?? 0,
+       priorChunks = List.unmodifiable(priorChunks);
 
   Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
 
@@ -113,7 +112,7 @@ class _AsrTaskJob {
   AsrService? service;
 
   _AsrTaskJob(this.taskId, this.taskGeneration, this.audio, this.title)
-      : chunks = List.of(audio.priorChunks);
+    : chunks = List.of(audio.priorChunks);
 }
 
 /// Owns one standalone ASR batch and runs its tasks serially after the page
@@ -147,44 +146,44 @@ class AsrTaskScheduler {
     AsrService Function(AsrConfig)? serviceFactory,
     AsrTextWriter? writeText,
     void Function()? onSaved,
-  })  : config = _snapshotConfig(config),
-        audios = List.unmodifiable(
-          audios.map(
-            (audio) => AsrTaskAudio(
-              bytes: audio.bytes,
-              loadBytesWithCancellation: audio.hasCustomLoader
-                  ? audio.loadBytesWithCancellation
-                  : null,
-              byteLength: audio.byteLength,
-              resolveFormat: audio.resolveFormat,
-              onSourceReleased: audio.releaseSource,
-              name: audio.name,
-              format: audio.format,
-              audioReference: audio.audioReference,
-              priorChunks: audio.priorChunks,
-              resetChunkCheckpoint: audio.resetChunkCheckpoint,
-            ),
-          ),
-        ),
-        modelReference = Map.unmodifiable(modelReference),
-        _retryStore = retryStore ?? AsrRetryAudioStore(),
-        _serviceFactory =
-            serviceFactory ?? ((config) => AsrService(config: config)),
-        _writeText = writeText ?? TextManifest.writeText,
-        _onSaved = onSaved ?? _ignoreSaved;
+  }) : config = _snapshotConfig(config),
+       audios = List.unmodifiable(
+         audios.map(
+           (audio) => AsrTaskAudio(
+             bytes: audio.bytes,
+             loadBytesWithCancellation: audio.hasCustomLoader
+                 ? audio.loadBytesWithCancellation
+                 : null,
+             byteLength: audio.byteLength,
+             resolveFormat: audio.resolveFormat,
+             onSourceReleased: audio.releaseSource,
+             name: audio.name,
+             format: audio.format,
+             audioReference: audio.audioReference,
+             priorChunks: audio.priorChunks,
+             resetChunkCheckpoint: audio.resetChunkCheckpoint,
+           ),
+         ),
+       ),
+       modelReference = Map.unmodifiable(modelReference),
+       _retryStore = retryStore ?? AsrRetryAudioStore(),
+       _serviceFactory =
+           serviceFactory ?? ((config) => AsrService(config: config)),
+       _writeText = writeText ?? TextManifest.writeText,
+       _onSaved = onSaved ?? _ignoreSaved;
 
   static AsrConfig _snapshotConfig(AsrConfig config) => config.copyWith(
-        typeConfig: Map<String, dynamic>.from(
-          jsonDecode(jsonEncode(config.typeConfig)) as Map,
-        ),
-        customParams: config.customParams.map((param) => param.copy()).toList(),
-      );
+    typeConfig: Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(config.typeConfig)) as Map,
+    ),
+    customParams: config.customParams.map((param) => param.copy()).toList(),
+  );
 
   static void _ignoreSaved() {}
 
   List<String> get taskIds => List.unmodifiable(
-        (_jobs ?? const <_AsrTaskJob>[]).map((job) => job.taskId),
-      );
+    (_jobs ?? const <_AsrTaskJob>[]).map((job) => job.taskId),
+  );
 
   /// Creates the waiting tasks once and returns the same execution future for
   /// every later start call.
@@ -295,16 +294,16 @@ class AsrTaskScheduler {
   }
 
   Map<String, dynamic> _buildRetryData(_AsrTaskJob job) => {
-        'type': 'asr',
-        'version': 2,
-        'audioReference': job.audioReference!.toMap(
-          configuredApiKey: config.apiKey,
-        ),
-        'modelReference': modelReference,
-        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(config).toMap(),
-        'chunks': job.chunks.map((chunk) => chunk.toMap()).toList(),
-        'saveFolder': saveFolder,
-      };
+    'type': 'asr',
+    'version': 2,
+    'audioReference': job.audioReference!.toMap(
+      configuredApiKey: config.apiKey,
+    ),
+    'modelReference': modelReference,
+    'configSnapshot': AsrRetryConfigSnapshot.fromConfig(config).toMap(),
+    'chunks': job.chunks.map((chunk) => chunk.toMap()).toList(),
+    'saveFolder': saveFolder,
+  };
 
   Map<String, dynamic> _sanitizeRetryDataForPersistence(
     Map<String, dynamic> retryData,
@@ -334,12 +333,13 @@ class AsrTaskScheduler {
         );
         final requiresReselection =
             AsrRetryConfigSnapshot.urlContainsCredentials(
-                  sourceUrl,
-                  configuredApiKey: config.apiKey,
-                ) ||
-                safeUrl != sourceUrl;
+              sourceUrl,
+              configuredApiKey: config.apiKey,
+            ) ||
+            safeUrl != sourceUrl;
         job.audioReference = AsrAudioReference(
-          id: existingReference?.id ??
+          id:
+              existingReference?.id ??
               const Uuid().v4().replaceAll('-', '').toLowerCase(),
           name: safeUrl,
           format: 'url',
@@ -1072,33 +1072,36 @@ class AsrTaskScheduler {
     final chunk = event.chunkCount > 1
         ? '（片段 ${event.chunkIndex}/${event.chunkCount}）'
         : '';
+    final metrics =
+        ' · 阶段 ${event.phaseElapsedMs}ms · 请求 ${event.completedRequestCount} '
+        '· 已完成片段 ${event.completedChunkCount}/${event.chunkCount}';
     switch (event.phase) {
       case AsrRequestPhase.uploading:
         notifier.updateStep(job.taskId, 0, completed: true);
         final label = event.totalSendBytes > 0
-            ? '上传音频$chunk ${((event.sentBytes * 100) ~/ event.totalSendBytes).clamp(0, 100)}%'
+            ? '上传音频$chunk ${((event.sentBytes * 100) ~/ event.totalSendBytes).clamp(0, 100)}% · ${event.totalSendBytes} bytes$metrics'
             : '上传音频$chunk';
         notifier.updateStep(job.taskId, 1, running: true, label: label);
       case AsrRequestPhase.waiting:
         notifier.updateStep(job.taskId, 0, completed: true);
         notifier.updateStep(job.taskId, 1, completed: true);
         final label = event.chunkCount > 1
-            ? '转写中（片段 ${event.chunkIndex}/${event.chunkCount}）'
-            : '转写中';
+            ? '转写中（片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
+            : '转写中$metrics';
         notifier.updateStep(job.taskId, 2, running: true, label: label);
       case AsrRequestPhase.receiving:
         if (event.chunkIndex == event.chunkCount) {
           notifier.updateStep(job.taskId, 2, completed: true);
           final label = event.totalReceiveBytes > 0
-              ? '接收结果 ${((event.receivedBytes * 100) ~/ event.totalReceiveBytes).clamp(0, 100)}%'
-              : '接收结果';
+              ? '接收结果 ${((event.receivedBytes * 100) ~/ event.totalReceiveBytes).clamp(0, 100)}%$metrics'
+              : '接收结果$metrics';
           notifier.updateStep(job.taskId, 3, running: true, label: label);
         } else {
           notifier.updateStep(
             job.taskId,
             2,
             running: true,
-            label: '转写中（接收片段 ${event.chunkIndex}/${event.chunkCount}）',
+            label: '转写中（接收片段 ${event.chunkIndex}/${event.chunkCount}）$metrics',
           );
         }
       case AsrRequestPhase.responseReceived:
@@ -1108,8 +1111,8 @@ class AsrTaskScheduler {
           notifier.updateStep(job.taskId, 3, running: true, label: '接收结果');
         } else {
           final label = event.phase == AsrRequestPhase.chunkCompleted
-              ? '转写中（已完成片段 ${event.chunkIndex}/${event.chunkCount}）'
-              : '转写中（片段 ${event.chunkIndex}/${event.chunkCount} 已返回）';
+              ? '转写中（已完成片段 ${event.chunkIndex}/${event.chunkCount}）$metrics'
+              : '转写中（片段 ${event.chunkIndex}/${event.chunkCount} 已返回）$metrics';
           notifier.updateStep(job.taskId, 2, running: true, label: label);
         }
     }
