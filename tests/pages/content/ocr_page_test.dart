@@ -394,6 +394,20 @@ class _FailingPickerFile extends XFile {
   Future<Uint8List> readAsBytes() async => throw failure;
 }
 
+class _CompletablePickerFile extends XFile {
+  _CompletablePickerFile({required this.readStarted, required this.finishRead})
+      : super('slow.png');
+
+  final Completer<void> readStarted;
+  final Completer<Uint8List> finishRead;
+
+  @override
+  Future<Uint8List> readAsBytes() {
+    if (!readStarted.isCompleted) readStarted.complete();
+    return finishRead.future;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -476,6 +490,89 @@ void main() {
     expect(find.text('选择图片失败: Bad state: failed to read selected file'),
         findsOneWidget);
   });
+
+  testWidgets(
+    'overlapping gallery imports keep both selections when the second finishes first',
+    (tester) async {
+      final validBytes = _createValidOcrTestImage().bytes;
+      final firstReadStarted = Completer<void>();
+      final finishFirstRead = Completer<Uint8List>();
+      final secondPreparationCompleted = Completer<void>();
+      var gallerySelections = 0;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
+            gallerySelections++;
+            if (gallerySelections == 1) {
+              return [
+                _CompletablePickerFile(
+                  readStarted: firstReadStarted,
+                  finishRead: finishFirstRead,
+                ),
+              ];
+            }
+            return [XFile.fromData(validBytes, name: 'second.png')];
+          },
+          testImagePayloadPreparer: (bytes) async {
+            if (!secondPreparationCompleted.isCompleted) {
+              secondPreparationCompleted.complete();
+            }
+            return prepareOcrImagePayloadSync(bytes);
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> chooseSystemGallery() async {
+        await tester.tap(find.text('相册选择'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('从系统相册选择'));
+        await tester.pump();
+      }
+
+      await chooseSystemGallery();
+      await _pumpUntil(tester, () => firstReadStarted.isCompleted);
+
+      await chooseSystemGallery();
+      await _pumpUntil(tester, () => secondPreparationCompleted.isCompleted);
+      await tester.pump();
+      expect(find.text('已选 1 张图片'), findsNothing);
+      expect(find.text('正在导入图片...'), findsOneWidget);
+
+      finishFirstRead.complete(validBytes);
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 2 张图片').evaluate().isNotEmpty,
+      );
+
+      expect(find.text('已选 2 张图片'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ocr_grid_item_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ocr_grid_item_1')), findsOneWidget);
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_0')),
+            )
+            .image
+            .sourceName,
+        'slow.png',
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_1')),
+            )
+            .image
+            .sourceName,
+        'second.png',
+      );
+      expect(find.text('正在导入图片...'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
