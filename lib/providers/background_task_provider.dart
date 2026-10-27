@@ -1212,6 +1212,16 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
     r'^[,;:]?\s*(?:and|then)\s+(?:please\s+)?([a-z]+)\b',
     caseSensitive: false,
   ).firstMatch(sourcePhraseTail ?? followingText)?.group(1)?.toLowerCase();
+  final isReadCarefullyObjectPhrase = prefix.toLowerCase() == 'read' &&
+      RegExp(
+        r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+        r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+        r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+        r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+        caseSensitive: false,
+        unicode: true,
+      ).hasMatch(followingText);
   final isReadCarefullyFromOcrSource = prefix.toLowerCase() == 'read' &&
       ocrSourcePhrase != null &&
       (sourcePhraseTail!.isEmpty ||
@@ -1231,6 +1241,7 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
         caseSensitive: false,
       ).hasMatch(beforeMatch) &&
       (followingText.isEmpty ||
+          isReadCarefullyObjectPhrase ||
           isReadCarefullyFromOcrSource ||
           isReadCarefullyFollowUp)) {
     // The line break in this ordinary OCR prompt can join the action and
