@@ -521,6 +521,35 @@ class OcrService {
   }
 
   /// Build the standard OpenAI-compatible request body.
+  int _validatedMaxTokens(Object? value) {
+    if (value is! int || value <= 0) {
+      throw ArgumentError.value(
+        value,
+        'maxTokens',
+        'must be a positive integer when enabled',
+      );
+    }
+    return value;
+  }
+
+  double _validatedBoundedParameter(
+    Object? value,
+    String name,
+    double maximum,
+  ) {
+    if (value is! num ||
+        !value.isFinite ||
+        value < 0 ||
+        value > maximum) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'must be between 0 and $maximum when enabled',
+      );
+    }
+    return value.toDouble();
+  }
+
   Map<String, dynamic> _buildRequestBody(
     List<Map<String, dynamic>> contentList,
   ) {
@@ -543,17 +572,18 @@ class OcrService {
 
     // max_tokens (respects enableMaxTokens toggle)
     if (tc['enableMaxTokens'] == true && tc.containsKey('maxTokens')) {
-      body['max_tokens'] = config.effectiveMaxTokens;
+      body['max_tokens'] = _validatedMaxTokens(tc['maxTokens']);
     }
 
     // temperature
     if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
-      body['temperature'] = config.effectiveTemperature;
+      body['temperature'] =
+          _validatedBoundedParameter(tc['temperature'], 'temperature', 2);
     }
 
     // top_p
     if (tc['enableTopP'] == true && tc.containsKey('topP')) {
-      body['top_p'] = (tc['topP'] as num?)?.toDouble();
+      body['top_p'] = _validatedBoundedParameter(tc['topP'], 'topP', 1);
     }
 
     // Apply custom parameters

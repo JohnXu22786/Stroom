@@ -967,6 +967,118 @@ void main() {
         },
       );
 
+      test('enabled invalid built-in parameters fail before dispatch', () async {
+        var requests = 0;
+        final dio = Dio()
+          ..interceptors.add(
+            _InterceptorWithCallback(
+              callback: (options, handler) {
+                requests++;
+                handler.resolve(Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'choices': [
+                      {
+                        'message': {'content': 'test'},
+                      },
+                    ],
+                  },
+                ));
+              },
+            ),
+          );
+        final invalidConfigs = [
+          {'enableMaxTokens': true, 'maxTokens': -1},
+          {'enableMaxTokens': true, 'maxTokens': 3.5},
+          {'enableMaxTokens': true, 'maxTokens': '3'},
+          {'enableTemperature': true, 'temperature': -0.1},
+          {'enableTemperature': true, 'temperature': 2.1},
+          {'enableTemperature': true, 'temperature': '1'},
+          {'enableTopP': true, 'topP': -0.1},
+          {'enableTopP': true, 'topP': 1.1},
+          {'enableTopP': true, 'topP': '0.5'},
+        ];
+
+        for (final typeConfig in invalidConfigs) {
+          final service = OcrService(
+            config: OcrConfig(
+              apiKey: 'key',
+              host: 'https://api.test.com',
+              typeConfig: typeConfig,
+            ),
+            dio: dio,
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsArgumentError,
+          );
+        }
+
+        expect(requests, 0);
+      });
+
+      test('enabled built-in parameter boundaries are sent unchanged', () async {
+        final service = OcrService(
+          config: OcrConfig(
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableMaxTokens': true,
+              'maxTokens': 1,
+              'enableTemperature': true,
+              'temperature': 2,
+              'enableTopP': true,
+              'topP': 0,
+            },
+          ),
+          dio: _mockDioWithSuccess({
+            'choices': [
+              {
+                'message': {'content': 'test'},
+              },
+            ],
+          }),
+        );
+
+        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+        expect(service.lastRequestBody?['max_tokens'], 1);
+        expect(service.lastRequestBody?['temperature'], 2);
+        expect(service.lastRequestBody?['top_p'], 0);
+      });
+
+      test('disabled invalid built-in parameters remain omitted', () async {
+        final service = OcrService(
+          config: OcrConfig(
+            apiKey: 'key',
+            host: 'https://api.test.com',
+            typeConfig: {
+              'enableMaxTokens': false,
+              'maxTokens': 0.5,
+              'enableTemperature': false,
+              'temperature': 3,
+              'enableTopP': false,
+              'topP': -1,
+            },
+          ),
+          dio: _mockDioWithSuccess({
+            'choices': [
+              {
+                'message': {'content': 'test'},
+              },
+            ],
+          }),
+        );
+
+        await service.recognize(imageBytes: Uint8List.fromList([1, 2, 3]));
+
+        expect(service.lastRequestBody?.containsKey('max_tokens'), isFalse);
+        expect(service.lastRequestBody?.containsKey('temperature'), isFalse);
+        expect(service.lastRequestBody?.containsKey('top_p'), isFalse);
+      });
+
       test(
         'single image with userInstruction sends instruction after image',
         () async {
