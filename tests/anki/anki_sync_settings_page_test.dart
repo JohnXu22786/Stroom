@@ -161,6 +161,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ankiSyncProvider.overrideWith(() => _GatedAnkiSyncNotifier(config)),
           ankiSyncSecureStorageProvider.overrideWith(
             (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
           ),
@@ -179,10 +180,66 @@ void main() {
     await tester.tap(find.text('检查服务器状态'));
     await tester.pumpAndSettle();
 
+    expect(find.text('连接成功，服务器状态已读取'), findsOneWidget);
     final status = find.textContaining('结构版本戳');
     await tester.ensureVisible(status.first);
     final statusText = tester.widget<Text>(status.first).data!;
     expect(statusText, contains('修改时间 2023-11-14'));
+  });
+
+  testWidgets('keeps an active sync client open after leaving the page', (
+    tester,
+  ) async {
+    const serverUrl = 'https://sync.example.invalid/sync/';
+    SharedPreferences.setMockInitialValues({
+      'anki_sync_mode': 'selfHosted',
+      'custom_sync_server_enabled': true,
+      'custom_sync_server_collection_url': serverUrl,
+    });
+    final config = AnkiSyncState(
+      mode: AnkiSyncMode.selfHosted,
+      selfHostedUrl: serverUrl,
+      isLoaded: true,
+    );
+    final client = _GatedHttpClient();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncProvider.overrideWith(() => _GatedAnkiSyncNotifier(config)),
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.selfHosted(
+              endpoint: config.selfHostedUrl,
+              client: client,
+              hostKey: hostKey,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('检查服务器状态'));
+    await tester.pump();
+    await client.requestStarted.future;
+
+    Navigator.of(tester.element(find.byType(AnkiSyncSettingsPage)))
+        .pushReplacement<void, void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('other page')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(client.closeCount, 0);
+    client.respondWithMeta();
+    await tester.pumpAndSettle();
+
+    expect(client.closeCount, 1);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('blocks a second sync tap while saving server settings', (
@@ -523,5 +580,46 @@ class _RecordingHttpClient extends http.BaseClient {
       HttpStatus.ok,
       request: request,
     );
+  }
+}
+
+class _GatedHttpClient extends http.BaseClient {
+  final requestStarted = Completer<void>();
+  final _response = Completer<http.StreamedResponse>();
+  int closeCount = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    if (!requestStarted.isCompleted) requestStarted.complete();
+    return _response.future;
+  }
+
+  void respondWithMeta() {
+    _response.complete(
+      http.StreamedResponse(
+        Stream<List<int>>.value(
+          utf8.encode(
+            jsonEncode({
+              'mod': 1,
+              'scm': 1,
+              'usn': 0,
+              'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              'msg': '',
+              'cont': true,
+              'hostNum': 1,
+              'empty': false,
+              'media_usn': 0,
+            }),
+          ),
+        ),
+        HttpStatus.ok,
+      ),
+    );
+  }
+
+  @override
+  void close() {
+    closeCount++;
+    super.close();
   }
 }

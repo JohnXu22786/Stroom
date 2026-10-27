@@ -349,8 +349,7 @@ class ColDao {
           final currentQueue = card['queue'] as int? ?? 0;
           final cardType = card['type'] as int? ?? 0;
           final originalDue = card['odue'] as int? ?? 0;
-          final restoredDue =
-              originalDue != 0 ? originalDue : card['due'] as int? ?? 0;
+          final restoredDue = originalDue;
           final restoredQueue = currentQueue < 0
               ? currentQueue
               : switch (cardType) {

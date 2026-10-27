@@ -1157,11 +1157,19 @@ void main() {
           ..due = -103
           ..original_due = 1700000000
           ..original_deck_id = homeDeck.id;
+    final newCardAtZeroDue =
+        anki.Card.createNew(note_id: note.id, deck_id: filteredDeck.id)
+          ..ctype = anki.CardType.new_
+          ..queue = anki.CardQueue.new_
+          ..due = -104
+          ..original_due = 0
+          ..original_deck_id = homeDeck.id;
     for (final card in [
       reviewCard,
       learningCard,
       suspendedCard,
       dayLearningReviewCard,
+      newCardAtZeroDue,
     ]) {
       await collection.cards.insert(card);
       await collection.revlog.insert(
@@ -1196,12 +1204,19 @@ void main() {
     expect(restoredDayLearningReview.due, 1700000000);
     expect(restoredDayLearningReview.queue, anki.CardQueue.dayLearn);
 
+    final restoredNewCardAtZeroDue =
+        (await collection.cards.get(newCardAtZeroDue.id))!;
+    expect(restoredNewCardAtZeroDue.deck_id, homeDeck.id);
+    expect(restoredNewCardAtZeroDue.due, 0);
+    expect(restoredNewCardAtZeroDue.queue, anki.CardQueue.new_);
+
     expect(await collection.notes.get(note.id), isNotNull);
     for (final card in [
       reviewCard,
       learningCard,
       suspendedCard,
       dayLearningReviewCard,
+      newCardAtZeroDue,
     ]) {
       expect(await collection.revlog.listByCard(card.id), hasLength(1));
     }

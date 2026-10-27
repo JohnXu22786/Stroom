@@ -8,6 +8,7 @@ import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/anki/database/anki_database.dart';
 import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
@@ -627,6 +628,12 @@ void main() {
       final backupBytes = Uint8List.fromList(encoded);
 
       // Full restore (default selection)
+      await AnkiDatabase.closeOpenedInstance().timeout(
+        const Duration(seconds: 5),
+      );
+      await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker().timeout(
+        const Duration(seconds: 5),
+      );
       await BackupService.restoreFromBytesForTest(backupBytes);
 
       // Old image record should be gone, new one should be present

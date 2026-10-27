@@ -31,12 +31,18 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
   AnkiRemoteMeta? _remoteMeta;
   String _status = '';
   bool _busy = false;
+  bool _closeClientWhenIdle = false;
   bool _restoring = false;
   bool _settingsInitialized = false;
 
   @override
   void dispose() {
-    _client?.close();
+    if (_busy) {
+      _closeClientWhenIdle = true;
+    } else {
+      _client?.close();
+      _client = null;
+    }
     _urlController.dispose();
     _certificateController.dispose();
     super.dispose();
@@ -222,6 +228,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted) return;
       setState(() => _status = '登录失败：${_safeMessage(error)}');
     } finally {
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -326,12 +333,14 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted) return;
       setState(() => _status = '状态检查失败：${_safeMessage(error)}');
     } finally {
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _upload(AnkiSyncState config) async {
     if (_busy) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _status = '正在准备上传设置…';
@@ -372,13 +381,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           collectionUploaded ? '服务器 collection 已替换，但媒体同步未完成：' : '上传失败：';
       setState(() => _status = '$prefix${_safeMessage(error)}');
     } finally {
-      if (transferStarted) _invalidateAnkiDatabase();
+      if (transferStarted) _invalidateAnkiDatabase(container);
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _download(AnkiSyncState config) async {
     if (_busy) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _status = '正在准备下载设置…';
@@ -437,13 +448,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (!mounted) return;
       setState(() => _status = '下载失败：${_safeMessage(error)}');
     } finally {
-      if (transferStarted) _invalidateAnkiDatabase();
+      if (transferStarted) _invalidateAnkiDatabase(container);
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _syncBothWays(AnkiSyncState config) async {
     if (_busy) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() {
       _busy = true;
       _status = '正在准备同步…';
@@ -455,14 +468,15 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       config = actionConfig;
       if (mounted) setState(() => _status = '正在合并 collection 变更…');
       final client = _clientFor(config);
-      final database = await ref.read(ankiDatabaseProvider.future);
+      final database = await container.read(ankiDatabaseProvider.future);
       final collectionResult = await AnkiIncrementalSync.sync(database, client);
       collectionComplete = true;
       // The collection transaction has committed, so make its changes visible
       // even if the subsequent media phase fails.
-      ref.read(ankiRefreshProvider.notifier).refresh();
-      if (!mounted) return;
-      setState(() => _status = 'Collection 增量合并完成，正在同步媒体文件…');
+      container.read(ankiRefreshProvider.notifier).refresh();
+      if (mounted) {
+        setState(() => _status = 'Collection 增量合并完成，正在同步媒体文件…');
+      }
       final mediaResult = await AnkiMediaSync.sync(client, database: database);
       if (!mounted) return;
       setState(() {
@@ -480,6 +494,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       final prefix = collectionComplete ? 'Collection 已合并，但媒体同步未完成：' : '同步未完成：';
       setState(() => _status = '$prefix${_safeMessage(error)}');
     } finally {
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -528,17 +543,26 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     } catch (_) {
       if (mounted) setState(() => _status = '无法清除已保存的登录状态');
     } finally {
+      _closeClientIfDisposed();
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  void _invalidateAnkiDatabase() {
-    ref.invalidate(ankiDatabaseProvider);
-    ref.invalidate(ankiColDaoProvider);
-    ref.invalidate(ankiCardDaoProvider);
-    ref.invalidate(ankiNoteDaoProvider);
-    ref.invalidate(ankiDeckListProvider);
-    ref.invalidate(ankiRefreshProvider);
+  void _invalidateAnkiDatabase(ProviderContainer container) {
+    container.invalidate(ankiDatabaseProvider);
+    container.invalidate(ankiColDaoProvider);
+    container.invalidate(ankiCardDaoProvider);
+    container.invalidate(ankiNoteDaoProvider);
+    container.invalidate(ankiDeckListProvider);
+    container.invalidate(ankiRefreshProvider);
+  }
+
+  void _closeClientIfDisposed() {
+    if (!_closeClientWhenIdle) return;
+    _client?.close();
+    _client = null;
+    _clientIdentity = null;
+    _closeClientWhenIdle = false;
   }
 
   String _safeMessage(Object error) => error is AnkiSyncException
