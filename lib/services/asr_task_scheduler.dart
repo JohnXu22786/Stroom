@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../providers/background_task_provider.dart';
 import '../providers/task_provider.dart';
+import '../utils/asr_audio_stream.dart';
 import '../utils/text_manifest.dart';
 import 'asr_result_saver.dart';
 import 'asr_retry_storage.dart';
@@ -15,7 +16,14 @@ import 'asr_service.dart';
 
 /// Input captured from the ASR page before navigation starts.
 class AsrTaskAudio {
-  final Uint8List bytes;
+  Uint8List bytes;
+  Future<Uint8List> Function()? _loadBytes;
+  Future<Uint8List> Function(CancelToken? cancelToken)?
+      _loadBytesWithCancellation;
+  final bool hasCustomLoader;
+  final int byteLength;
+  String Function(Uint8List bytes)? resolveFormat;
+  void Function()? _onSourceReleased;
   final String name;
   final String format;
   final AsrAudioReference? audioReference;
@@ -23,14 +31,69 @@ class AsrTaskAudio {
   final bool resetChunkCheckpoint;
 
   AsrTaskAudio({
-    required Uint8List bytes,
+    Uint8List? bytes,
+    Future<Uint8List> Function()? loadBytes,
+    Future<Uint8List> Function(CancelToken? cancelToken)?
+        loadBytesWithCancellation,
+    int? byteLength,
+    this.resolveFormat,
+    void Function()? onSourceReleased,
     required this.name,
     this.format = 'wav',
     this.audioReference,
     List<AsrChunkResult> priorChunks = const [],
     this.resetChunkCheckpoint = false,
-  })  : bytes = Uint8List.fromList(bytes),
+  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+        _loadBytes = loadBytes,
+        _loadBytesWithCancellation = loadBytesWithCancellation,
+        hasCustomLoader =
+            loadBytes != null || loadBytesWithCancellation != null,
+        _onSourceReleased = onSourceReleased,
+        byteLength = byteLength ?? bytes?.length ?? 0,
         priorChunks = List.unmodifiable(priorChunks);
+
+  Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
+
+  Future<Uint8List> loadBytesWithCancellation(CancelToken? cancelToken) async {
+    throwIfAsrAudioCanceled(cancelToken);
+    final cancellableLoader = _loadBytesWithCancellation;
+    final loader = _loadBytes;
+    if (cancelToken != null && cancellableLoader == null && loader != null) {
+      throw StateError(
+        'A cancellable ASR task requires a cancellation-aware audio loader',
+      );
+    }
+    final pendingLoad = Future<Uint8List>.sync(() {
+      if (cancellableLoader != null) return cancellableLoader(cancelToken);
+      if (loader != null) return loader();
+      return Uint8List.fromList(bytes);
+    });
+    final Uint8List loadedBytes;
+    if (cancelToken == null) {
+      loadedBytes = await pendingLoad;
+    } else {
+      loadedBytes = await Future.any<Uint8List>([
+        pendingLoad,
+        cancelToken.whenCancel.then<Uint8List>((cancelError) {
+          throw cancelError;
+        }),
+      ]);
+      throwIfAsrAudioCanceled(cancelToken);
+    }
+    return loadedBytes;
+  }
+
+  /// Drops both the staged copy and the loader closure after retry audio is
+  /// durable. The callback lets the selection owner release its copy too.
+  void releaseSource() {
+    bytes = Uint8List(0);
+    _loadBytes = null;
+    _loadBytesWithCancellation = null;
+    resolveFormat = null;
+    final onSourceReleased = _onSourceReleased;
+    _onSourceReleased = null;
+    onSourceReleased?.call();
+  }
 
   bool get isUrl => format == 'url';
 }
@@ -43,6 +106,7 @@ class _AsrTaskJob {
   final CancelToken cancelToken = CancelToken();
   Object? cancellationOwner;
   AsrAudioReference? audioReference;
+  String? resolvedFormat;
   bool audioReferencePersisted = false;
   bool completed = false;
   List<AsrChunkResult> chunks;
@@ -88,6 +152,12 @@ class AsrTaskScheduler {
           audios.map(
             (audio) => AsrTaskAudio(
               bytes: audio.bytes,
+              loadBytesWithCancellation: audio.hasCustomLoader
+                  ? audio.loadBytesWithCancellation
+                  : null,
+              byteLength: audio.byteLength,
+              resolveFormat: audio.resolveFormat,
+              onSourceReleased: audio.releaseSource,
               name: audio.name,
               format: audio.format,
               audioReference: audio.audioReference,
@@ -189,27 +259,24 @@ class AsrTaskScheduler {
                   hasSameModelReference(task))
                 ...AsrRetryAudioStore.referencedIds(task.retryData),
           };
-    return [
-      for (final audio in audios)
-        if (audio.audioReference == null ||
-            !completedAudioIds.contains(audio.audioReference!.id))
-          () {
-            final title = audio.isUrl
-                ? 'ASR_${_urlDisplayName(audio.name, config.apiKey)}'
-                : 'ASR_${AsrRetryAudioStore.sanitizeAudioName(audio.name, format: audio.format, configuredApiKey: config.apiKey)}';
-            final taskId = notifier.addTask(
-              type: BackgroundTaskType.asr,
-              title: title,
-              startImmediately: false,
-            );
-            return _AsrTaskJob(
-              taskId,
-              notifier.taskById(taskId)!,
-              audio,
-              title,
-            );
-          }(),
-    ];
+    final jobs = <_AsrTaskJob>[];
+    for (final audio in audios) {
+      if (audio.audioReference != null &&
+          completedAudioIds.contains(audio.audioReference!.id)) {
+        audio.releaseSource();
+        continue;
+      }
+      final title = audio.isUrl
+          ? 'ASR_${_urlDisplayName(audio.name, config.apiKey)}'
+          : 'ASR_${AsrRetryAudioStore.sanitizeAudioName(audio.name, format: audio.format, configuredApiKey: config.apiKey)}';
+      final taskId = notifier.addTask(
+        type: BackgroundTaskType.asr,
+        title: title,
+        startImmediately: false,
+      );
+      jobs.add(_AsrTaskJob(taskId, notifier.taskById(taskId)!, audio, title));
+    }
+    return jobs;
   }
 
   static String _urlDisplayName(String url, String configuredApiKey) {
@@ -282,7 +349,12 @@ class AsrTaskScheduler {
           requiresSourceReselection: requiresReselection,
         );
       } else if (job.audio.audioReference != null) {
+        final bytes = await job.audio.loadBytesWithCancellation(
+          job.cancelToken,
+        );
+        if (!_isCurrentGeneration(job)) return;
         final reference = job.audio.audioReference!;
+        job.resolvedFormat = reference.format;
         job.audioReference = AsrAudioReference(
           version: reference.version,
           id: reference.id,
@@ -301,15 +373,23 @@ class AsrTaskScheduler {
         if (!_isCurrentGeneration(job)) return;
         await _retryStore.ensureStored(
           job.audioReference!,
-          job.audio.bytes,
+          bytes,
           configuredApiKey: config.apiKey,
+          cancelToken: job.cancelToken,
         );
       } else {
+        final bytes = await job.audio.loadBytesWithCancellation(
+          job.cancelToken,
+        );
+        if (!_isCurrentGeneration(job)) return;
+        final format = job.audio.resolveFormat?.call(bytes) ?? job.audio.format;
+        job.resolvedFormat = format;
         job.audioReference = await _retryStore.save(
-          job.audio.bytes,
+          bytes,
           name: job.audio.name,
-          format: job.audio.format,
+          format: format,
           configuredApiKey: config.apiKey,
+          cancelToken: job.cancelToken,
           onReferenceCreated: (reference) {
             job.audioReference = reference;
           },
@@ -689,6 +769,7 @@ class AsrTaskScheduler {
       : Future<void>.value();
 
   Future<void> _cleanupJobAudio(_AsrTaskJob job) async {
+    job.audio.releaseSource();
     final reference = job.audioReference;
     if (!notifier.retryAudioCleanupSafe || reference == null) return;
     await _retryStore.deleteIfUnreferenced(reference, _referencedAudioIds());
@@ -775,9 +856,14 @@ class AsrTaskScheduler {
       if (!_isCurrentGeneration(job)) continue;
       try {
         await _prepareRetryData(job);
+        job.audio.releaseSource();
         if (_isCurrentGeneration(job)) prepared.add(job.taskId);
       } catch (error) {
-        if (!_isCurrentGeneration(job)) continue;
+        if (!_isCurrentGeneration(job)) {
+          job.audio.releaseSource();
+          continue;
+        }
+        if (job.cancelToken.isCancelled) job.audio.releaseSource();
         if (notifier.startTaskIfWaitingForGeneration(
           job.taskId,
           job.taskGeneration,
@@ -846,6 +932,14 @@ class AsrTaskScheduler {
       }
       notifier.updateStep(job.taskId, 0, running: true);
       service = job.service = _serviceFactory(config);
+      final taskAudioBytes = job.audio.isUrl
+          ? null
+          : await _retryStore.load(
+              job.audioReference!,
+              configuredApiKey: config.apiKey,
+              cancelToken: job.cancelToken,
+            );
+      _checkActive(job);
       final result = job.audio.isUrl
           ? await service.transcribeFromUrl(
               job.audio.name,
@@ -856,8 +950,8 @@ class AsrTaskScheduler {
               onProgress: (event) => _reportProgress(job, event),
             )
           : await service.transcribe(
-              audioBytes: job.audio.bytes,
-              audioFormat: job.audio.format,
+              audioBytes: taskAudioBytes!,
+              audioFormat: job.resolvedFormat ?? job.audio.format,
               cancelToken: job.cancelToken,
               priorChunks: job.chunks,
               onChunkAttempt: (attempt) => _markChunkAttempt(job, attempt),

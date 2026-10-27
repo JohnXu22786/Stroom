@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
@@ -227,14 +228,16 @@ Uint8List _buildWaveWithFormatTag({
   required int blockAlign,
   required int bitsPerSample,
   List<int>? formatExtension,
+  int? factSampleCount,
   required Uint8List data,
 }) {
   final fmtSize =
       16 + (formatExtension == null ? 0 : 2 + formatExtension.length);
   final fmtPadding = fmtSize.isOdd ? 1 : 0;
   final dataPadding = data.length.isOdd ? 1 : 0;
+  final factSize = factSampleCount == null ? 0 : 12;
   final fileSize =
-      12 + 8 + fmtSize + fmtPadding + 8 + data.length + dataPadding;
+      12 + 8 + fmtSize + fmtPadding + factSize + 8 + data.length + dataPadding;
   final output = ByteData(fileSize);
   var offset = 0;
 
@@ -272,6 +275,11 @@ Uint8List _buildWaveWithFormatTag({
     }
   }
   if (fmtPadding != 0) output.setUint8(offset++, 0);
+  if (factSampleCount != null) {
+    writeFourCc('fact');
+    writeUint32(4);
+    writeUint32(factSampleCount);
+  }
   writeFourCc('data');
   writeUint32(data.length);
   for (final byte in data) {
@@ -800,6 +808,15 @@ void main() {
 
       expect(gaps, isEmpty);
     });
+
+    test('detects gaps from precomputed dB values', () {
+      const config = AudioChunkConfig(frameSize: 1024, minSilenceDuration: 0.2);
+      final gaps = SilenceDetector(
+        config,
+      ).detectGapsFromDb(Float64List.fromList([-80, -80, 0]), 8000);
+
+      expect(gaps, hasLength(1));
+    });
   });
 
   group('Audio Chunker', () {
@@ -944,6 +961,26 @@ void main() {
   });
 
   group('AudioChunker frame boundaries', () {
+    test('first-frame WAV materialization avoids the discarded tail', () {
+      final wav = _buildWavFromFrames([
+        [120, -240],
+        [360, -480],
+        [600, -720],
+      ]);
+      final materializedRanges = <(int, int)>[];
+
+      final firstFrame = materializeFirstWavFrame(
+        wav,
+        onFrameRangeMaterializedForTesting: (start, end) {
+          materializedRanges.add((start, end));
+        },
+      );
+
+      expect(firstFrame, splitWavAtFrame(wav, 1).first);
+      expect(parseWavHeader(firstFrame).totalSamples, 1);
+      expect(materializedRanges, [(0, 4)]);
+    });
+
     test('adaptive PCM split preserves every source frame without overlap', () {
       final frames = List<List<int>>.generate(
         17,
@@ -1249,6 +1286,88 @@ void main() {
       final chunks = AudioChunker().chunk(wav, AudioChunkMethod.none);
       expect(chunks.length, 1);
     });
+
+    test('plan reports the full source duration', () {
+      final wav = _buildTestWav(segments: [(2.5, 0.5)]);
+      final chunk = AudioChunker().plan(wav, AudioChunkMethod.none).single;
+
+      expect(chunk.startSecond, 0);
+      expect(chunk.endSecond, 2.5);
+      expect(chunk.durationSeconds, 2.5);
+      expect(chunk.startByte, 0);
+      expect(chunk.endByte, wav.length);
+    });
+
+    test('passes through supported non-PCM WAV files unchanged', () {
+      final files = [
+        _buildWaveWithFormatTag(
+          formatTag: 3,
+          sampleRate: 8000,
+          byteRate: 32000,
+          blockAlign: 4,
+          bitsPerSample: 32,
+          data: Uint8List(3200),
+        ),
+        _buildWaveWithFormatTag(
+          formatTag: 7,
+          sampleRate: 8000,
+          byteRate: 8000,
+          blockAlign: 1,
+          bitsPerSample: 8,
+          data: Uint8List(800),
+        ),
+      ];
+
+      for (final wav in files) {
+        final chunk = AudioChunker().plan(wav, AudioChunkMethod.none).single;
+
+        expect(chunk.startByte, 0);
+        expect(chunk.endByte, wav.length);
+        expect(chunk.durationSeconds, closeTo(0.1, 0.000001));
+        expect(
+          AudioChunker().chunk(wav, AudioChunkMethod.none).single,
+          orderedEquals(wav),
+        );
+      }
+    });
+
+    test('pass-through ADPCM duration uses decoded block coverage', () {
+      final msAdpcm = _buildWaveWithFormatTag(
+        formatTag: 2,
+        sampleRate: 8000,
+        byteRate: 21333,
+        blockAlign: 8,
+        bitsPerSample: 4,
+        formatExtension: [
+          3, 0, // Three samples per block.
+          7, 0, // Seven coefficient pairs.
+          ...List<int>.filled(28, 0),
+        ],
+        data: Uint8List(8 * 1000),
+      );
+      final chunk = AudioChunker().plan(msAdpcm, AudioChunkMethod.none).single;
+
+      expect(chunk.durationSeconds, closeTo(3000 / 8000, 1e-10));
+      expect(chunk.endByte, msAdpcm.length);
+    });
+
+    test('pass-through ADPCM duration uses the fact sample count', () {
+      final imaAdpcm = _buildWaveWithFormatTag(
+        formatTag: 0x0011,
+        sampleRate: 8000,
+        byteRate: 7111,
+        blockAlign: 8,
+        bitsPerSample: 4,
+        formatExtension: [9, 0], // Nine samples per block.
+        factSampleCount: 8999,
+        data: Uint8List(8 * 1000),
+      );
+      final imaChunk =
+          AudioChunker().plan(imaAdpcm, AudioChunkMethod.none).single;
+
+      expect(imaChunk.durationSeconds, closeTo(8999 / 8000, 1e-10));
+      expect(imaChunk.endByte, imaAdpcm.length);
+    });
   });
 
   group('WavPreprocessor', () {
@@ -1307,6 +1426,155 @@ void main() {
       ).process(wav);
       expect(processed.length, wav.length);
     });
+
+    test(
+      'async no-op preprocessing observes precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(
+          WavPreprocessor(
+            config: AudioPreprocessConfig.none,
+          ).processAsync(wav, cancellationSignal: cancellation.future),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test(
+      'async no-op preprocessing rechecks callback after yielding',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        var cancellationRequested = false;
+        var checkCount = 0;
+
+        await expectLater(
+          WavPreprocessor(config: AudioPreprocessConfig.none).processAsync(
+            wav,
+            checkCancelled: () {
+              checkCount++;
+              if (checkCount == 1) {
+                scheduleMicrotask(() => cancellationRequested = true);
+              } else if (cancellationRequested) {
+                throw StateError('cancelled');
+              }
+            },
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test(
+      'Web no-op preprocessing observes precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(
+          WavPreprocessor(
+            config: AudioPreprocessConfig.none,
+          ).processWithEventLoopYield(
+            wav,
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test('async preprocessing matches synchronous output', () async {
+      final wav = _buildTestWav(
+        sampleRate: 44100,
+        numChannels: 2,
+        segments: [(2.0, 0.5)],
+      );
+      final preprocessor = WavPreprocessor();
+
+      final processed = await preprocessor.processAsync(wav);
+
+      expect(processed, orderedEquals(preprocessor.process(wav)));
+    });
+
+    test(
+      'Web-compatible preprocessing yields between sample batches',
+      () async {
+        final wav = _buildTestWav(sampleRate: 48000, segments: [(2.0, 0.5)]);
+        final preprocessor = WavPreprocessor();
+        var yieldCount = 0;
+
+        final yielded = await preprocessor.processWithEventLoopYield(
+          wav,
+          onYield: () => yieldCount++,
+        );
+
+        expect(yieldCount, greaterThan(0));
+        expect(yielded, orderedEquals(preprocessor.process(wav)));
+      },
+    );
+
+    test('Web preprocessing checks cancellation between batches', () async {
+      final wav = _buildTestWav(sampleRate: 48000, segments: [(20.0, 0.5)]);
+      var yieldCount = 0;
+
+      await expectLater(
+        WavPreprocessor().processWithEventLoopYield(
+          wav,
+          onYield: () => yieldCount++,
+          checkCancelled: () {
+            if (yieldCount > 0) throw StateError('cancelled');
+          },
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(yieldCount, 1);
+    });
+
+    test(
+      'native preprocessing checks cancellation after its worker returns',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        var checkCount = 0;
+
+        await expectLater(
+          WavPreprocessor().processAsync(
+            wav,
+            checkCancelled: () {
+              checkCount++;
+              if (checkCount > 1) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(checkCount, 2);
+      },
+    );
+
+    test(
+      'native preprocessing aborts when its cancellation signal completes',
+      () async {
+        final wav = _buildTestWav(
+          sampleRate: 44100,
+          numChannels: 2,
+          segments: [(1.0, 0.5)],
+        );
+        final cancellation = Completer<Object?>();
+        final processing = WavPreprocessor().processAsync(
+          wav,
+          cancellationSignal: cancellation.future,
+        );
+        cancellation.complete(StateError('cancelled'));
+
+        await expectLater(processing, throwsA(isA<StateError>()));
+      },
+    );
   });
 
   // ===========================================================================
@@ -1314,6 +1582,26 @@ void main() {
   // ===========================================================================
 
   group('Environment Analyzer', () {
+    test(
+      'Web-compatible environment analysis yields with identical result',
+      () async {
+        final analyzer = EnvironmentAnalyzer();
+        final frameDb = Float64List.fromList([
+          for (var index = 0; index < 4096; index++)
+            index % 7 == 0 ? -90.0 : -18.0 - (index % 31),
+        ]);
+        var yieldCount = 0;
+
+        final yielded = await analyzer.analyzeFromDbWithEventLoopYield(
+          frameDb,
+          onYield: () => yieldCount++,
+        );
+
+        expect(yieldCount, greaterThan(10));
+        expect(yielded, analyzer.analyzeFromDb(frameDb));
+      },
+    );
+
     test('provides environment-adjusted minSilenceDuration', () {
       final analyzer = EnvironmentAnalyzer();
       const baseMs = 500.0;
@@ -1600,8 +1888,600 @@ void main() {
       final originalInfo = parseWavHeader(wav);
       // With 0 overlap, total chunk data ≈ original data
       // (Allow small variance due to rounding at frame boundaries)
-      expect(totalChunkData,
-          closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1));
+      expect(
+        totalChunkData,
+        closeTo(originalInfo.dataSize, originalInfo.dataSize * 0.1),
+      );
+    });
+  });
+
+  group('AudioChunker lazy frame plans', () {
+    test(
+      'native non-silence plans avoid full-audio isolate transfer',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(4.0, 0.5)]);
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            maxChunkBytes: 1024,
+            fixedDurationSeconds: 1.5,
+          ),
+        );
+        var isolateStarts = 0;
+
+        for (final method in [
+          AudioChunkMethod.none,
+          AudioChunkMethod.fixedDuration,
+          AudioChunkMethod.fixedSize,
+        ]) {
+          final asyncPlan = await chunker.planAsync(
+            wav,
+            method,
+            maxChunks: 100,
+            onNativeIsolateStarted: () => isolateStarts++,
+          );
+          final syncPlan = chunker.plan(wav, method, maxChunks: 100);
+
+          expect(
+            asyncPlan.map(
+              (chunk) => (
+                chunk.startByte,
+                chunk.endByte,
+                chunk.startSecond,
+                chunk.endSecond,
+              ),
+            ),
+            syncPlan.map(
+              (chunk) => (
+                chunk.startByte,
+                chunk.endByte,
+                chunk.startSecond,
+                chunk.endSecond,
+              ),
+            ),
+          );
+        }
+
+        expect(isolateStarts, 0);
+      },
+    );
+
+    test(
+      'materialized ranges preserve exact PCM bytes and time offsets',
+      () async {
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(2.25, 0.5), (0.75, 0), (2.5, 0.3)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            maxChunkBytes: 1024 * 1024,
+            fixedDurationSeconds: 1.5,
+          ),
+        );
+
+        final plan = await chunker.planAsync(
+          wav,
+          AudioChunkMethod.fixedDuration,
+        );
+
+        expect(plan.map((chunk) => [chunk.startSecond, chunk.endSecond]), [
+          [0.0, 1.5],
+          [1.5, 3.0],
+          [3.0, 4.5],
+          [4.5, 5.5],
+        ]);
+        final materialized = [
+          for (final chunk in plan) chunker.materializeChunk(wav, chunk),
+        ];
+        final input = parseWavHeader(wav);
+        final expectedPcm = wav.sublist(input.dataOffset);
+        final actualPcm = Uint8List(
+          materialized.fold<int>(
+            0,
+            (length, chunk) => length + parseWavHeader(chunk).dataSize,
+          ),
+        );
+        var offset = 0;
+        for (final chunk in materialized) {
+          final info = parseWavHeader(chunk);
+          actualPcm.setRange(
+            offset,
+            offset + info.dataSize,
+            chunk,
+            info.dataOffset,
+          );
+          offset += info.dataSize;
+        }
+
+        expect(actualPcm, orderedEquals(expectedPcm));
+        expect(offset, input.dataSize);
+      },
+    );
+
+    test('Web-compatible planning yields between analysis batches', () async {
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(6.0, 0.5), (0.75, 0), (6.0, 0.4)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 3.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(yieldCount, greaterThan(0));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        chunker
+            .plan(wav, AudioChunkMethod.silence)
+            .map((range) => (range.startByte, range.endByte)),
+      );
+      var coveredFrames = 0;
+      var coveredPcmBytes = 0;
+      for (final range in plan) {
+        final chunk = chunker.materializeChunk(wav, range);
+        final info = parseWavHeader(chunk);
+        coveredFrames += info.totalSamples;
+        coveredPcmBytes += info.dataSize;
+      }
+      final source = parseWavHeader(wav);
+      expect(coveredFrames, source.totalSamples);
+      expect(coveredPcmBytes, source.dataSize);
+    });
+
+    test('Web silence analysis yields within a large analysis frame', () async {
+      const sampleCount = 1000000;
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(sampleCount / 1000, 0)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: sampleCount,
+          maxChunkBytes: 4 * 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1001,
+          targetChunkDuration: 1001,
+          maxChunkDuration: 1001,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(plan, hasLength(1));
+      expect(yieldCount, greaterThan(0));
+    });
+
+    test('Web no-chunk planning observes precompleted cancellation', () async {
+      final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      cancellation.complete(StateError('cancelled'));
+
+      await expectLater(
+        AudioChunker().planWithEventLoopYield(
+          wav,
+          AudioChunkMethod.none,
+          cancellationSignal: cancellation.future,
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test(
+      'Web planAsync delivers cancellation before a no-chunk return',
+      () async {
+        final wav = _buildTestWav(segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>();
+        Timer.run(
+          () => cancellation.complete(StateError('cancelled in Web path')),
+        );
+
+        await expectLater(
+          AudioChunker().planAsync(
+            wav,
+            AudioChunkMethod.none,
+            cancellationSignal: cancellation.future,
+            forceWebPathForTesting: true,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains('cancelled in Web path'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('Web silence candidate scoring yields within large frames', () async {
+      const sampleRate = 1000;
+      const frameSize = 100000;
+      final wav = _buildTestWav(
+        sampleRate: sampleRate,
+        segments: [(200, 0.5), (100, 0), (200, 0.5)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: frameSize,
+          maxChunkBytes: 4 * 1024 * 1024,
+          minSilenceDuration: 0.5,
+          minChunkDuration: 60,
+          targetChunkDuration: 300,
+          maxChunkDuration: 300,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+
+      expect(plan, hasLength(2));
+      expect(yieldCount, greaterThan(50));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        chunker
+            .plan(wav, AudioChunkMethod.silence)
+            .map((range) => (range.startByte, range.endByte)),
+      );
+    });
+
+    test(
+      'Web planning stops at the next yielding boundary after cancellation',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(20.0, 0.5)]);
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: 32,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.1,
+            minChunkDuration: 1.0,
+            targetChunkDuration: 2.0,
+            maxChunkDuration: 3.0,
+            analysisWindowSeconds: 0.1,
+          ),
+        );
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          chunker.planWithEventLoopYield(
+            wav,
+            AudioChunkMethod.silence,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test(
+      'Web analysis observes cancellation after its event-loop yield',
+      () async {
+        final dbValues = Float64List(200);
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          EnvironmentAnalyzer(frameSize: 1).analyzeFromDbWithEventLoopYield(
+            dbValues,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) {
+                throw StateError('cancelled during Web analysis yield');
+              }
+            },
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains(
+                    'cancelled during Web analysis yield',
+                  ),
+            ),
+          ),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test('native plan aborts when its cancellation signal completes', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(1.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      final planning = AudioChunker().planAsync(
+        wav,
+        AudioChunkMethod.fixedDuration,
+        cancellationSignal: cancellation.future,
+      );
+      cancellation.complete(StateError('cancelled'));
+
+      await expectLater(planning, throwsA(isA<StateError>()));
+    });
+
+    test(
+      'native silence plan skips isolate transfer after precompleted cancellation',
+      () async {
+        final wav = _buildTestWav(sampleRate: 1000, segments: [(1.0, 0.5)]);
+        final cancellation = Completer<Object?>()
+          ..complete(StateError('cancelled before transfer'));
+        var isolateStarts = 0;
+
+        await expectLater(
+          AudioChunker().planAsync(
+            wav,
+            AudioChunkMethod.silence,
+            cancellationSignal: cancellation.future,
+            onNativeIsolateStarted: () => isolateStarts++,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) => error.toString().contains('cancelled before transfer'),
+            ),
+          ),
+        );
+
+        expect(isolateStarts, 0);
+      },
+    );
+
+    test('native fixed plans yield while building many ranges', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(2.0, 0.5)]);
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          maxChunkBytes: 2,
+          fixedDurationSeconds: 0.001,
+        ),
+      );
+
+      for (final method in [
+        AudioChunkMethod.fixedDuration,
+        AudioChunkMethod.fixedSize,
+      ]) {
+        final cancellation = Completer<Object?>();
+        Timer.run(
+          () => cancellation.complete(
+            StateError('cancelled during range planning'),
+          ),
+        );
+
+        await expectLater(
+          chunker.planAsync(
+            wav,
+            method,
+            maxChunks: 300,
+            cancellationSignal: cancellation.future,
+          ),
+          throwsA(
+            predicate<Object>(
+              (error) =>
+                  error.toString().contains('cancelled during range planning'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('range planning checks cancellation after each yield wait', () async {
+      final wav = _buildTestWav(sampleRate: 1000, segments: [(2.0, 0.5)]);
+      final cancellation = Completer<Object?>();
+      var yieldCount = 0;
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          maxChunkBytes: 2,
+          fixedDurationSeconds: 0.001,
+        ),
+      );
+
+      final planning = chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.fixedDuration,
+        maxChunks: 300,
+        cancellationSignal: cancellation.future,
+        onYield: () {
+          yieldCount++;
+          if (yieldCount == 2) {
+            cancellation.complete(
+              StateError('cancelled during second range yield'),
+            );
+          }
+        },
+      );
+
+      await expectLater(
+        planning,
+        throwsA(
+          predicate<Object>(
+            (error) => error.toString().contains(
+                  'cancelled during second range yield',
+                ),
+          ),
+        ),
+      );
+      expect(yieldCount, 2);
+    });
+
+    test('Web silence cut scans yield across dense candidate lists', () async {
+      final segments = <(double, double)>[];
+      for (var index = 0; index < 1000; index++) {
+        segments.add((0.2, 0.5));
+        segments.add((0.2, 0));
+      }
+      final wav = _buildTestWav(sampleRate: 1000, segments: segments);
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 3.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+      final expected = chunker.plan(wav, AudioChunkMethod.silence);
+      final frameCount = parseWavHeader(wav).totalSamples ~/ 32;
+
+      expect(yieldCount, greaterThan((frameCount ~/ 128) * 2));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        expected.map((range) => (range.startByte, range.endByte)),
+      );
+    });
+
+    test(
+      'Web silence range planning yields between one-range selected cuts',
+      () async {
+        const sampleCount = 300;
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(sampleCount / 1000, 0.5)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: 1,
+            silenceDbThreshold: -200,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.001,
+            minChunkDuration: 0.001,
+            targetChunkDuration: 0.002,
+            maxChunkDuration: 0.002,
+            analysisWindowSeconds: 0.001,
+          ),
+        );
+        var yieldCount = 0;
+
+        final plan = await chunker.planWithEventLoopYield(
+          wav,
+          AudioChunkMethod.silence,
+          onYield: () => yieldCount++,
+        );
+        final expected = chunker.plan(wav, AudioChunkMethod.silence);
+        final frameCount = parseWavHeader(wav).totalSamples;
+
+        expect(plan, hasLength(150));
+        expect(yieldCount, greaterThan((frameCount - 1) ~/ 128 * 3));
+        expect(
+          plan.map((range) => (range.startByte, range.endByte)),
+          expected.map((range) => (range.startByte, range.endByte)),
+        );
+      },
+    );
+
+    test(
+      'Web silence selector yields and checks cancellation across forced cuts',
+      () async {
+        const sampleCount = 3000;
+        final wav = _buildTestWav(
+          sampleRate: 1000,
+          segments: [(sampleCount / 1000, 0.5)],
+        );
+        final chunker = AudioChunker(
+          config: const AudioChunkConfig(
+            frameSize: sampleCount,
+            silenceDbThreshold: -200,
+            maxChunkBytes: 1024 * 1024,
+            minSilenceDuration: 0.001,
+            minChunkDuration: 0.001,
+            targetChunkDuration: 0.001,
+            maxChunkDuration: 0.001,
+            analysisWindowSeconds: 0.001,
+          ),
+        );
+        var cancelled = false;
+        var yieldCount = 0;
+
+        await expectLater(
+          chunker.planWithEventLoopYield(
+            wav,
+            AudioChunkMethod.silence,
+            // Stop range planning before it can mask selector yields.
+            maxChunks: 1,
+            onYield: () {
+              yieldCount++;
+              cancelled = true;
+            },
+            checkCancelled: () {
+              if (cancelled) throw StateError('cancelled');
+            },
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(yieldCount, 1);
+      },
+    );
+
+    test('Web silence gap scan yields across long frame lists', () async {
+      const durationSeconds = 524.3;
+      final wav = _buildTestWav(
+        sampleRate: 1000,
+        segments: [(durationSeconds, 0.5)],
+      );
+      final chunker = AudioChunker(
+        config: const AudioChunkConfig(
+          frameSize: 32,
+          maxChunkBytes: 2 * 1024 * 1024,
+          minSilenceDuration: 0.1,
+          minChunkDuration: 1.0,
+          targetChunkDuration: 2.0,
+          maxChunkDuration: 600.0,
+          analysisWindowSeconds: 0.1,
+        ),
+      );
+      var yieldCount = 0;
+
+      final plan = await chunker.planWithEventLoopYield(
+        wav,
+        AudioChunkMethod.silence,
+        onYield: () => yieldCount++,
+      );
+      final expected = chunker.plan(wav, AudioChunkMethod.silence);
+      final frameCount = parseWavHeader(wav).totalSamples ~/ 32;
+
+      expect(yieldCount, greaterThan((frameCount ~/ 128) * 3));
+      expect(
+        plan.map((range) => (range.startByte, range.endByte)),
+        expected.map((range) => (range.startByte, range.endByte)),
+      );
     });
   });
 }

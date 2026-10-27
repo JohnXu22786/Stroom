@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'web_file_store.dart';
 import 'file_record.dart';
@@ -589,6 +590,13 @@ class FileManifest {
 
   static Future<Uint8List?> readFile(String fileName) =>
       _ops.readFile(fileName);
+  static Future<Uint8List?> readFileCancellable(
+    String fileName, {
+    CancelToken? cancelToken,
+  }) =>
+      cancelToken == null
+          ? _ops.readFile(fileName)
+          : _ops.readFileCancellable(fileName, cancelToken: cancelToken);
   static Future<String?> readFilePath(String fileName) =>
       _ops.readFilePath(fileName);
   static Future<bool> deleteFile(String fileName) {
