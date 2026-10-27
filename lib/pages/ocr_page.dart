@@ -141,6 +141,7 @@ class OcrPage extends ConsumerStatefulWidget {
     this.testCameraPicker,
     this.testGalleryPicker,
     this.testImagePayloadPreparer,
+    this.testRequestSizePreflight,
     this.testOcrServiceFactory,
     this.testRetryImageRestorer,
     this.testRetrySnapshotCacher,
@@ -162,6 +163,9 @@ class OcrPage extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<OcrImagePayload> Function(Uint8List bytes)?
       testImagePayloadPreparer;
+  @visibleForTesting
+  final Future<int?> Function(OcrConfig config, List<SelectedImage> images)?
+      testRequestSizePreflight;
   @visibleForTesting
   final OcrService Function(OcrConfig config)? testOcrServiceFactory;
   @visibleForTesting
@@ -2634,8 +2638,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Inject the selected generic instruction into the request (service
     // reads typeConfig['userInstruction']); unselected = images-only.
     final instructions = ref.read(ocrInstructionsProvider);
-    if (_retryInstructionSnapshot != null) {
-      final content = _retryInstructionSnapshot!.trim();
+    final selectedInstructionIndex = _selectedInstructionIndex;
+    final retryInstructionSnapshot = _retryInstructionSnapshot;
+    final instructionContent = retryInstructionSnapshot ??
+        selectedOcrInstructionContent(instructions, selectedInstructionIndex);
+    if (retryInstructionSnapshot != null) {
+      final content = retryInstructionSnapshot.trim();
       if (content.isEmpty) {
         effectiveConfig.typeConfig.remove('userInstruction');
       } else {
@@ -2645,14 +2653,15 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       applySelectedOcrInstruction(
         effectiveConfig.typeConfig,
         instructions,
-        _selectedInstructionIndex,
+        selectedInstructionIndex,
       );
     }
 
-    final effectiveBudgetBytes = await _preflightRequestSize(
-      effectiveConfig,
-      images,
-    );
+    final effectiveBudgetBytes = await (widget.testRequestSizePreflight?.call(
+          effectiveConfig,
+          images,
+        ) ??
+        _preflightRequestSize(effectiveConfig, images));
     if (!mounted) return;
     if (effectiveBudgetBytes == null) {
       _ocrStarting = false;
@@ -2680,8 +2689,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final imageNameList = images.map((img) => img.sourceName).toList();
     // Save the exact instruction and destination along with the stable model
     // reference so later list edits cannot change this retry's request.
-    final instructionContent = _retryInstructionSnapshot ??
-        selectedOcrInstructionContent(instructions, _selectedInstructionIndex);
     // Store the retry images before publishing the task or starting its
     // request. A failed request can then never expose a retry action while its
     // snapshot is still being written.
