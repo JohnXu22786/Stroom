@@ -80,6 +80,34 @@ void main() {
     }
   });
 
+  test('access and subscription key headers exclude echoed diagnostics', () {
+    for (final entry in [
+      ('X-Access-Key', 'opaque-access-value-193'),
+      ('Ocp-Apim-Subscription-Key', 'opaque-subscription-value-193'),
+    ]) {
+      final credentialValues =
+          OcrDiagnosticSnapshot.credentialValuesFromRequest({
+        'headers': {entry.$1: entry.$2},
+      });
+      final response = OcrDiagnosticSnapshot.sanitizeResponse(
+        {
+          'statusCode': 401,
+          'requestId': entry.$2,
+          'data': {'id': entry.$2},
+        },
+        excludedValues: credentialValues,
+      )!;
+      final legacyError = OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR识别失败: provider echoed ${entry.$2}',
+        excludedValues: credentialValues,
+      );
+
+      expect(credentialValues, contains(entry.$2), reason: entry.$1);
+      expect(response, {'statusCode': 401}, reason: entry.$1);
+      expect(legacyError, isNot(contains(entry.$2)), reason: entry.$1);
+    }
+  });
+
   test(
     'sanitized diagnostics keep request metadata but drop bodies and keys',
     () {
