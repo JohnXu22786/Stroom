@@ -57,15 +57,51 @@ void main() {
         defaultValue: '{"format":"new"}',
       );
 
+      final model = ModelConfig(
+        name: 'Model',
+        modelId: 'model-id',
+        customParams: [savedModelParam],
+      );
+      final savedModel = ModelConfig.fromMap(model.toMap());
       final reopened = mergeCustomParams(
         [currentProviderParam],
-        [CustomParam.fromMap(savedModelParam.toMap())],
+        savedModel.customParams,
       ).single;
 
       expect(reopened.type, 'json');
       expect(reopened.defaultValue, '{"format":"new"}');
       expect(reopened.options, ['compact']);
       expect(reopened.optionOrder, ['expanded', 'compact']);
+    });
+
+    test('reopening preserves an explicit model type and default override', () {
+      final model = ModelConfig(
+        name: 'Model',
+        modelId: 'model-id',
+        customParams: [
+          CustomParam(
+            paramName: 'response_options',
+            type: 'json',
+            defaultValue: '{"format":"model"}',
+            typeDefaultOverridden: true,
+          ),
+        ],
+      );
+      final savedModel = ModelConfig.fromMap(model.toMap());
+      final currentProviderParam = CustomParam(
+        paramName: 'response_options',
+        type: 'string',
+        defaultValue: 'provider-updated',
+      );
+
+      final reopened = mergeCustomParams(
+        [currentProviderParam],
+        savedModel.customParams,
+      ).single;
+
+      expect(reopened.type, 'json');
+      expect(reopened.defaultValue, '{"format":"model"}');
+      expect(reopened.toMap()['typeDefaultOverridden'], isTrue);
     });
 
     test('empty-name params are skipped', () {
