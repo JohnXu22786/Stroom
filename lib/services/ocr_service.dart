@@ -337,7 +337,9 @@ class OcrService {
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: 1,
         isComplete: parsed.finishReason != 'length' &&
-            parsed.finishReason != 'content_filter',
+            parsed.finishReason != 'content_filter' &&
+            parsed.finishReason != 'tool_calls' &&
+            parsed.finishReason != 'function_call',
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
@@ -425,7 +427,9 @@ class OcrService {
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: imageBytesList.length,
         isComplete: parsed.finishReason != 'length' &&
-            parsed.finishReason != 'content_filter',
+            parsed.finishReason != 'content_filter' &&
+            parsed.finishReason != 'tool_calls' &&
+            parsed.finishReason != 'function_call',
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
