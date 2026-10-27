@@ -22,9 +22,19 @@ class IndexedDbConversationRepository implements ConversationRepository {
       '$_messageIndexPrefix${_key(id)}/';
   String _orderedMessageKey(String conversationId, StroomMessage message) =>
       '${_messagePrefixFor(conversationId)}'
-      '${message.sequence.toString().padLeft(12, '0')}/${_key(message.id)}';
+      '${_sortableSequence(message.sequence)}/${_key(message.id)}';
   String _messageIndexKey(String conversationId, String messageId) =>
       '${_messageIndexPrefixFor(conversationId)}${_key(messageId)}';
+
+  static String _sortableSequence(int sequence) {
+    final digits = BigInt.from(sequence).abs().toString().padLeft(20, '0');
+    if (sequence >= 0) return '1$digits';
+    final inverted = digits
+        .split('')
+        .map((digit) => (9 - int.parse(digit)).toString())
+        .join();
+    return '0$inverted';
+  }
 
   static String _key(String value) => Uri.encodeComponent(value);
   static Uint8List _encode(Object value) =>

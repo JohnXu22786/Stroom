@@ -13,7 +13,9 @@ import 'package:stroom/services/attachment_storage.dart';
 import 'package:stroom/services/conversation_migration_service.dart';
 import 'package:stroom/services/conversation_record_adapter.dart';
 import 'package:stroom/services/conversation_repository.dart';
+import 'package:stroom/services/conversation_repository_indexed_db.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
+import 'package:stroom/utils/web_file_store.dart';
 
 class _TestPathProvider extends PathProviderPlatform {
   _TestPathProvider(this.root);
@@ -421,6 +423,34 @@ void main() {
         await restored.close();
       },
     );
+  });
+
+  test('IndexedDB pages preserve signed numeric sequence order', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final repository = IndexedDbConversationRepository();
+    await repository.initialize();
+    await repository.upsertConversation(
+      StroomConversation(id: 'indexeddb-order', title: 'Sequence order'),
+    );
+    await repository.replaceMessages('indexeddb-order', [
+      _message('negative-two', -2),
+      _message('negative-one', -1),
+      _message('zero', 0),
+      _message('large-before', 999999999999),
+      _message('large-after', 1000000000000),
+    ]);
+
+    final messages = await repository.getMessages('indexeddb-order');
+
+    expect(messages.map((message) => message.id), [
+      'negative-two',
+      'negative-one',
+      'zero',
+      'large-before',
+      'large-after',
+    ]);
+    await repository.close();
   });
 
   group('ConversationMigrationService', () {
