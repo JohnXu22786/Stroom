@@ -1190,6 +1190,18 @@ const _legacyOcrNaturalCarefulInstructionActions = {
   'write',
 };
 
+bool _legacyOcrIsReadCarefullyObjectPhrase(String prefix, String text) =>
+    prefix.toLowerCase() == 'read' &&
+    RegExp(
+      r'^(?:the|this|that|these|those|a|an|my|your|our|their|his|her|its)\s+'
+      r'(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*'
+      r'(?:\s+(?!authorization\b|auth\b|api[\s_-]*key\b|keys?\b|credentials?\b|tokens?\b|secrets?\b|passwords?\b)'
+      r'[\p{L}\p{M}\p{N}]+(?:[-_][\p{L}\p{M}\p{N}]+)*)*[.!?]?$',
+      caseSensitive: false,
+      unicode: true,
+    ).hasMatch(text);
+
 bool _legacyOcrHasNaturalConnectorAfterLineBreak(
   String text,
   Match match,
@@ -1212,6 +1224,8 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
     r'^[,;:]?\s*(?:and|then)\s+(?:please\s+)?([a-z]+)\b',
     caseSensitive: false,
   ).firstMatch(sourcePhraseTail ?? followingText)?.group(1)?.toLowerCase();
+  final isReadCarefullyObjectPhrase =
+      _legacyOcrIsReadCarefullyObjectPhrase(prefix, followingText);
   final isReadCarefullyFromOcrSource = prefix.toLowerCase() == 'read' &&
       ocrSourcePhrase != null &&
       (sourcePhraseTail!.isEmpty ||
@@ -1231,6 +1245,7 @@ bool _legacyOcrHasNaturalConnectorAfterLineBreak(
         caseSensitive: false,
       ).hasMatch(beforeMatch) &&
       (followingText.isEmpty ||
+          isReadCarefullyObjectPhrase ||
           isReadCarefullyFromOcrSource ||
           isReadCarefullyFollowUp)) {
     // The line break in this ordinary OCR prompt can join the action and
@@ -1600,7 +1615,14 @@ bool _legacyOcrTextContainsMaskedCredential(
                     ).hasMatch(
                       textWithoutPartMarkers.substring(0, match.start).trim(),
                     );
-            if (isLineBrokenCarefulActionEcho) return true;
+            final isReadCarefullyObjectPhrase =
+                _legacyOcrIsReadCarefullyObjectPhrase(
+              prefix,
+              textWithoutPartMarkers.substring(match.end).trimLeft(),
+            );
+            if (isLineBrokenCarefulActionEcho && !isReadCarefullyObjectPhrase) {
+              return true;
+            }
             if (_legacyOcrHasNaturalConnectorAfterLineBreak(
               textWithoutPartMarkers,
               match,

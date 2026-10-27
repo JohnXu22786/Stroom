@@ -11311,6 +11311,49 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves a line-broken read noun phrase and redacts echoed credentials',
+      () {
+        const prompt = 'Please read\ncarefully the receipt text';
+        const echoedCredential = 'readrealCredentialSecret987';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-read-carefully-noun-phrase',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer read…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text': 'Authorization: Bearer $echoedCredential',
+                    },
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(migratedInstruction, contains(prompt));
+        expect(persisted, contains(jsonEncode(prompt)));
+        expect(migratedInstruction, isNot(contains(echoedCredential)));
+        expect(persisted, isNot(contains(echoedCredential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration sanitizes a line-broken read carefully prompt from a receipt',
       () {
         const prompt = 'Please read\ncarefully from the receipt.';
