@@ -2282,7 +2282,36 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final rawRequest = map['rawRequest'];
   final request =
       rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
-  return _unavailableRetryDataFromLegacyRequest(taskId, request) ??
+  final unavailableRetryData =
+      _unavailableRetryDataFromLegacyRequest(taskId, request);
+  if (unavailableRetryData != null && malformedRetryData != null) {
+    final malformedSnapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
+    final unavailableSnapshot = OcrRetrySnapshot.fromMap(unavailableRetryData);
+    final unavailableImages = unavailableRetryData['images'] as List;
+    final imageCount =
+        malformedSnapshot.imageEntryCount > unavailableImages.length
+            ? malformedSnapshot.imageEntryCount
+            : unavailableImages.length;
+    final retryData = OcrRetryStorage.unavailableSnapshotForCount(
+      taskId: taskId,
+      imageCount: imageCount,
+      modelId: unavailableSnapshot.modelId,
+      instructionContent: unavailableSnapshot.instructionContent,
+    );
+    final images = retryData['images'] as List;
+    for (var index = 0; index < malformedSnapshot.images.length; index++) {
+      final image = malformedSnapshot.images[index];
+      final imageIndex = malformedSnapshot.imageEntryIndices[index];
+      images[imageIndex] = {
+        if (image.bytes != null) 'bytes': base64Encode(image.bytes!),
+        if (image.storageRef != null) 'storageRef': image.storageRef,
+        'format': image.format,
+        if (image.name != null) 'name': image.name,
+      };
+    }
+    return retryData;
+  }
+  return unavailableRetryData ??
       malformedRetryData ??
       (rawRetryData == null
           ? null
