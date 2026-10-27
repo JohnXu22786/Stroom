@@ -537,10 +537,7 @@ class OcrService {
     String name,
     double maximum,
   ) {
-    if (value is! num ||
-        !value.isFinite ||
-        value < 0 ||
-        value > maximum) {
+    if (value is! num || !value.isFinite || value < 0 || value > maximum) {
       throw ArgumentError.value(
         value,
         name,
@@ -571,18 +568,18 @@ class OcrService {
     final tc = config.typeConfig;
 
     // max_tokens (respects enableMaxTokens toggle)
-    if (tc['enableMaxTokens'] == true && tc.containsKey('maxTokens')) {
+    if (tc['enableMaxTokens'] == true) {
       body['max_tokens'] = _validatedMaxTokens(tc['maxTokens']);
     }
 
     // temperature
-    if (tc['enableTemperature'] == true && tc.containsKey('temperature')) {
+    if (tc['enableTemperature'] == true) {
       body['temperature'] =
           _validatedBoundedParameter(tc['temperature'], 'temperature', 2);
     }
 
     // top_p
-    if (tc['enableTopP'] == true && tc.containsKey('topP')) {
+    if (tc['enableTopP'] == true) {
       body['top_p'] = _validatedBoundedParameter(tc['topP'], 'topP', 1);
     }
 

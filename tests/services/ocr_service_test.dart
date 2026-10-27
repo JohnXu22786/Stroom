@@ -967,7 +967,8 @@ void main() {
         },
       );
 
-      test('enabled invalid built-in parameters fail before dispatch', () async {
+      test('enabled invalid built-in parameters fail before dispatch',
+          () async {
         var requests = 0;
         final dio = Dio()
           ..interceptors.add(
@@ -989,12 +990,15 @@ void main() {
             ),
           );
         final invalidConfigs = [
+          {'enableMaxTokens': true},
           {'enableMaxTokens': true, 'maxTokens': -1},
           {'enableMaxTokens': true, 'maxTokens': 3.5},
           {'enableMaxTokens': true, 'maxTokens': '3'},
+          {'enableTemperature': true},
           {'enableTemperature': true, 'temperature': -0.1},
           {'enableTemperature': true, 'temperature': 2.1},
           {'enableTemperature': true, 'temperature': '1'},
+          {'enableTopP': true},
           {'enableTopP': true, 'topP': -0.1},
           {'enableTopP': true, 'topP': 1.1},
           {'enableTopP': true, 'topP': '0.5'},
@@ -1019,7 +1023,8 @@ void main() {
         expect(requests, 0);
       });
 
-      test('enabled built-in parameter boundaries are sent unchanged', () async {
+      test('enabled built-in parameter boundaries are sent unchanged',
+          () async {
         final service = OcrService(
           config: OcrConfig(
             apiKey: 'key',
