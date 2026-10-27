@@ -3019,7 +3019,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
   }
 
   /// Persist the explicit user choice to save an incomplete OCR result.
-  void markPartialResultSaveRequested(String taskId) {
+  Future<bool> markPartialResultSaveRequested(String taskId) {
     state = state
         .map(
           (task) => task.id == taskId
@@ -3027,7 +3027,7 @@ class BackgroundTaskNotifier extends StateNotifier<List<BackgroundTask>> {
               : task,
         )
         .toList();
-    _persistTasks();
+    return _persistTasks();
   }
 
   /// Reopen the save step for a failed OCR task whose result is still present.
