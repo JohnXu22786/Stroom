@@ -927,7 +927,6 @@ class AnkiIncrementalSync {
   }
 
   static List<int> _graveIds(Object? value, String type) {
-    if (value == null) return const <int>[];
     if (value is! List) {
       throw AnkiSyncException('同步服务器 graves $type 数据无法解析');
     }

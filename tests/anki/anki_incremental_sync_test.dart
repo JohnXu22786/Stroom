@@ -1862,6 +1862,45 @@ void main() {
     }
   });
 
+  test('rejects missing or null remote grave lists', () async {
+    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+    await AnkiIncrementalSync.sync(collection, client);
+
+    for (final key in ['cards', 'notes', 'decks']) {
+      for (final omitKey in [false, true]) {
+        final before = (await collection.db.query('col')).single;
+        final remoteGraves = <String, dynamic>{
+          'cards': <dynamic>[],
+          'notes': <dynamic>[],
+          'decks': <dynamic>[],
+        };
+        if (omitKey) {
+          remoteGraves.remove(key);
+        } else {
+          remoteGraves[key] = null;
+        }
+        await _queueCollectionSync(
+          fakeHttp,
+          collection,
+          sanityStatus: 'ok',
+          remoteModified: (before['mod'] as int) - 1,
+          remoteGraves: remoteGraves,
+        );
+
+        await expectLater(
+          AnkiIncrementalSync.sync(collection, client),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fakeHttp.requests.last.url.path, '/sync/abort');
+        final after = (await collection.db.query('col')).single;
+        expect(after['mod'], before['mod']);
+        expect(after['usn'], before['usn']);
+        fakeHttp.responses.clear();
+      }
+    }
+  });
+
   test(
     'remote graves remove history and remain pending for another sync',
     () async {

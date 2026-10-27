@@ -305,7 +305,7 @@ void main() {
     );
 
     test(
-      'skips empty and oversized local files while syncing other media',
+      'fails before syncing when a new empty or oversized file exists',
       () async {
         final workDir = await Directory.systemTemp.createTemp(
           'stroom_anki_media_unavailable_local_test_',
@@ -318,36 +318,25 @@ void main() {
         await oversized.truncate(100 * 1024 * 1024 + 1);
         await oversized.close();
         await File('${mediaDir.path}/keep.png').writeAsBytes([1, 2, 3]);
-        final fake = _QueueHttpClient()
-          ..responses.addAll([
-            _jsonResponse({
-              'data': {'usn': 0, 'sk': 'test-host-key'},
-              'err': '',
-            }),
-            _jsonResponse({
-              'data': [1, 1],
-              'err': '',
-            }),
-            _jsonResponse({'data': 'OK', 'err': ''}),
-          ]);
+        final fake = _QueueHttpClient();
         final client = AnkiSyncProtocolClient.ankiWeb(
           client: fake,
           hostKey: 'test-host-key',
         );
 
         try {
-          final result = await AnkiMediaSync.sync(
-            client,
-            syncIdentity: 'ankiweb:skip-invalid-local-media',
-            documentsPath: workDir.path,
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: 'ankiweb:reject-invalid-local-media',
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
           );
-
-          expect(result.uploadedFiles, 1);
-          expect(fake.paths, [
-            '/msync/begin',
-            '/msync/uploadChanges',
-            '/msync/mediaSanity',
-          ]);
+          expect(fake.paths, isEmpty);
+          expect(await File('${mediaDir.path}/empty.bin').exists(), isTrue);
+          expect(await File('${mediaDir.path}/oversized.bin').exists(), isTrue);
+          expect(await File('${mediaDir.path}/keep.png').exists(), isTrue);
         } finally {
           client.close();
           fake.close();
@@ -563,7 +552,7 @@ void main() {
     );
 
     test(
-      'does not let skipped files block later pending media uploads',
+      'rejects invalid files before later pending media uploads',
       () async {
         final workDir = await Directory.systemTemp.createTemp(
           'stroom_anki_media_skip_batch_test_',
@@ -594,43 +583,26 @@ void main() {
           ],
         );
 
-        List<Object?>? uploadedMetadata;
-        final fake = _QueueHttpClient()
-          ..responses.addAll([
-            _jsonResponse({
-              'data': {'usn': 0, 'sk': 'test-host-key'},
-              'err': '',
-            }),
-            _jsonResponse({'data': 'OK', 'err': ''}),
-          ]);
-        fake.responseFor = (request, body) async {
-          if (request.url.path != '/msync/uploadChanges') return null;
-          final fields = _multipartFields(request, body);
-          final archive = ZipDecoder().decodeBytes(fields['data']!);
-          uploadedMetadata = jsonDecode(
-            utf8.decode(archive.findFile('_meta')!.content as List<int>),
-          ) as List<Object?>;
-          return _jsonResponse({
-            'data': [1, 1],
-            'err': '',
-          });
-        };
+        final fake = _QueueHttpClient();
         final client = AnkiSyncProtocolClient.ankiWeb(
           client: fake,
           hostKey: 'test-host-key',
         );
 
         try {
-          final result = await AnkiMediaSync.sync(
-            client,
-            syncIdentity: identity,
-            documentsPath: workDir.path,
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
           );
-
-          expect(result.uploadedFiles, 1);
-          expect(uploadedMetadata, [
-            ['z-valid.png', '0'],
-          ]);
+          expect(fake.paths, isEmpty);
+          for (final name in skippedNames) {
+            expect(await File('${mediaDir.path}/$name').exists(), isTrue);
+          }
+          expect(await File('${mediaDir.path}/z-valid.png').exists(), isTrue);
         } finally {
           client.close();
           fake.close();
@@ -1980,6 +1952,85 @@ void main() {
         }
       },
     );
+
+    test('rejects a non-string media filename without deleting local files',
+        () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_invalid_name_test_',
+      );
+      const identity = 'ankiweb:invalid-media-name';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      const localBytes = [1, 2, 3];
+      await File('${mediaDir.path}/123').writeAsBytes(localBytes);
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        files: [
+          {
+            'fname': '123',
+            'sha1': sha1.convert(localBytes).toString(),
+            'usn': 0,
+            'sync_required': 0,
+          },
+        ],
+      );
+      final fake = _QueueHttpClient();
+      fake.responseFor = (request, body) async {
+        switch (request.url.path) {
+          case '/msync/begin':
+            return _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            });
+          case '/msync/mediaChanges':
+            return _jsonResponse({
+              'data': [
+                [123, 1, ''],
+              ],
+              'err': '',
+            });
+          default:
+            return _jsonResponse({'data': 'OK', 'err': ''});
+        }
+      };
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(await File('${mediaDir.path}/123').readAsBytes(), localBytes);
+        expect(fake.paths, ['/msync/begin', '/msync/mediaChanges']);
+        final indexHash = sha256.convert(utf8.encode(identity)).toString();
+        final index = await sqflite.openDatabase(
+          '${workDir.path}/collection.media.sync.$indexHash.db',
+          version: 1,
+        );
+        final metadata = await index.query('media_meta');
+        final trackedFile = await index.query(
+          'media_files',
+          where: 'fname = ?',
+          whereArgs: ['123'],
+        );
+        await index.close();
+        expect(metadata.single['last_sync_usn'], 0);
+        expect(trackedFile.single['sha1'], sha1.convert(localBytes).toString());
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
 
     test('does not tombstone a tracked local file named _meta', () async {
       final workDir = await Directory.systemTemp.createTemp(

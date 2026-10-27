@@ -623,7 +623,10 @@ class AnkiMediaSync {
     if (raw is! List || raw.length < 3) {
       throw const AnkiSyncException('媒体变更记录无法解析');
     }
-    final name = raw[0]?.toString() ?? '';
+    final name = raw[0];
+    if (name is! String) {
+      throw const AnkiSyncException('媒体变更记录无法解析');
+    }
     _validateFilename(name);
     final sha1 = raw[2];
     if (sha1 is! String) {

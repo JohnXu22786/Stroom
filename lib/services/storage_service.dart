@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:path_provider/path_provider.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'app_log_service.dart';
 
 /// Static utility that provides a cached, resilient path to the application
@@ -21,8 +21,7 @@ class AppStorage {
   ///
   /// Resolution order:
   /// 1. [getApplicationDocumentsDirectory] (native or test override)
-  /// 2. In Flutter tests, if the platform channel does not respond within one
-  ///    second → [Directory.systemTemp]
+  /// 2. In Flutter tests without a platform override → [Directory.systemTemp]
   /// 3. If [MissingPluginException] is thrown:
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
@@ -42,15 +41,16 @@ class AppStorage {
 
     await AppLogService.info('AppStorage', '获取应用文档目录');
 
-    try {
-      final directoryFuture = getApplicationDocumentsDirectory();
-      final dir = isFlutterTest
-          ? await directoryFuture.timeout(const Duration(seconds: 1))
-          : await directoryFuture;
-      _resolved = dir.path;
-    } on TimeoutException {
-      if (!isFlutterTest) rethrow;
+    if (isFlutterTest &&
+        PathProviderPlatform.instance.runtimeType.toString() ==
+            'MethodChannelPathProvider') {
       _resolved = _safeTempPath();
+      return _resolved!;
+    }
+
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _resolved = dir.path;
     } on MissingPluginException {
       _resolved = _fallbackPath();
     }
