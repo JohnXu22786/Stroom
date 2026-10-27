@@ -2288,10 +2288,10 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
     final malformedSnapshot = OcrRetrySnapshot.fromMap(malformedRetryData);
     final unavailableSnapshot = OcrRetrySnapshot.fromMap(unavailableRetryData);
     final unavailableImages = unavailableRetryData['images'] as List;
-    final imageCount = malformedSnapshot.imageEntryCount >
-            unavailableImages.length
-        ? malformedSnapshot.imageEntryCount
-        : unavailableImages.length;
+    final imageCount =
+        malformedSnapshot.imageEntryCount > unavailableImages.length
+            ? malformedSnapshot.imageEntryCount
+            : unavailableImages.length;
     final retryData = OcrRetryStorage.unavailableSnapshotForCount(
       taskId: taskId,
       imageCount: imageCount,
