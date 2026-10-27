@@ -737,7 +737,8 @@ void main() {
       }
     });
 
-    test('keeps invalid pending media uploads pending and fails sync', () async {
+    test('keeps invalid pending media uploads pending and fails sync',
+        () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_pending_invalid_test_',
       );
@@ -1621,7 +1622,8 @@ void main() {
             await File('${mediaDir.path}/first.png').readAsBytes(),
             originalBytes,
           );
-          expect(await Directory('${mediaDir.path}/second.png').exists(), isTrue);
+          expect(
+              await Directory('${mediaDir.path}/second.png').exists(), isTrue);
           final indexHash = sha256.convert(utf8.encode(identity)).toString();
           final index = await sqflite.openDatabase(
             '${workDir.path}/collection.media.sync.$indexHash.db',
@@ -1646,7 +1648,6 @@ void main() {
         }
       },
     );
-
 
     test('downloads a remote change over a pending local deletion', () async {
       final workDir = await Directory.systemTemp.createTemp(
@@ -2206,8 +2207,7 @@ void main() {
         AppStorage.resetCache();
         const identity = 'ankiweb:media-clear-failure-test';
         final indexHash = sha256.convert(utf8.encode(identity)).toString();
-        final indexPath =
-            '${workDir.path}/collection.media.sync.$indexHash.db';
+        final indexPath = '${workDir.path}/collection.media.sync.$indexHash.db';
         final mediaDir = Directory('${workDir.path}/collection.media');
         try {
           await mediaDir.create();

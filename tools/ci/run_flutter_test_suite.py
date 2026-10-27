@@ -89,6 +89,7 @@ FUNCTIONAL_SUITES: dict[str, tuple[str, ...]] = {
     "files-data": (
         "data_*_test.dart",
         "services/attachment_storage_test.dart",
+        "services/storage_service_test.dart",
         "services/backup*_test.dart",
         "services/data_*_test.dart",
         "services/manifest*_test.dart",

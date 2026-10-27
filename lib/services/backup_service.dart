@@ -5573,7 +5573,8 @@ class BackupService {
       if (selection.includeMediaFiles &&
           (completeFileInventories == null ||
               completeFileInventories.contains(DataParts.anki))) {
-        final mediaDirectoryDeleted = await _deleteDirectory('collection.media');
+        final mediaDirectoryDeleted =
+            await _deleteDirectory('collection.media');
         if (!mediaDirectoryDeleted) deleteFailed = true;
         if (mediaDirectoryDeleted && !kIsWeb && !WebFileStore.isTestMode) {
           try {
