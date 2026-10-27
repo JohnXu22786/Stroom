@@ -362,10 +362,7 @@ class AsrRequestProgress {
 dynamic _sanitizeAsrDiagnosticValue(dynamic value, String apiKey) {
   bool isSensitiveField(String? field) {
     if (field == null) return false;
-    final normalized = field.toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9]'),
-      '',
-    );
+    final normalized = field.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
     return const {
           'authorization',
           'setcookie',
@@ -414,14 +411,28 @@ dynamic _sanitizeAsrDiagnosticValue(dynamic value, String apiKey) {
   return sanitize(value);
 }
 
+Map<String, List<String>> _sanitizeAsrDiagnosticHeaders(
+  Map<String, List<String>> headers,
+  String apiKey,
+) {
+  final safeHeaders = <String, List<String>>{};
+  for (final entry in headers.entries) {
+    final sanitizedMap =
+        _sanitizeAsrDiagnosticValue({entry.key: entry.value}, apiKey) as Map;
+    final value = sanitizedMap[entry.key];
+    safeHeaders[entry.key] = value is List
+        ? value.map((item) => item.toString()).toList()
+        : [value?.toString() ?? ''];
+  }
+  return safeHeaders;
+}
+
 String _sanitizeAsrDiagnosticText(String value, {String? apiKey}) {
   try {
     final decoded = jsonDecode(value);
     if (decoded is List) return '[PAYLOAD REDACTED]';
     if (decoded is Map) {
-      return jsonEncode(
-        _sanitizeAsrDiagnosticValue(decoded, apiKey ?? ''),
-      );
+      return jsonEncode(_sanitizeAsrDiagnosticValue(decoded, apiKey ?? ''));
     }
   } on FormatException {
     // Non-JSON provider bodies are scrubbed as ordinary text below.
@@ -3271,10 +3282,10 @@ class AsrService {
                   )
                 : '[PAYLOAD REDACTED]',
           };
-    lastResponseHeaders = _sanitizeAsrDiagnosticValue(
+    lastResponseHeaders = _sanitizeAsrDiagnosticHeaders(
       response.headers.map,
       config.apiKey,
-    ) as Map<String, List<String>>;
+    );
   }
 
   /// Capture response-level diagnostic fields from a [DioException].
@@ -3297,8 +3308,7 @@ class AsrService {
     lastResponseStatusCode = e.response?.statusCode;
     lastResponseHeaders = e.response == null
         ? null
-        : _sanitizeAsrDiagnosticValue(e.response!.headers.map, config.apiKey)
-              as Map<String, List<String>>;
+        : _sanitizeAsrDiagnosticHeaders(e.response!.headers.map, config.apiKey);
   }
 
   /// Parse a parameter value string into its proper type.
@@ -3386,7 +3396,8 @@ class AsrService {
     if (response['error'] != null) {
       final error = response['error'];
       final detail = error is Map
-          ? error['message'] ?? _sanitizeAsrDiagnosticValue(error, config.apiKey)
+          ? error['message'] ??
+                _sanitizeAsrDiagnosticValue(error, config.apiKey)
           : error;
       throw _AsrProviderErrorResponseException(
         '音频转写 API 返回错误: ${sanitizeAsrDiagnostic('$detail', apiKey: config.apiKey)}',
