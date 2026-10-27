@@ -30,6 +30,25 @@ void main() {
       expect(yielded, orderedEquals(encodeAdpcm(pcm, AdpcmConfig())));
     });
 
+    test('yielding encoder observes pre-cancellation for a short input',
+        () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeAdpcmWithEventLoopYield(
+          _sineWave(128),
+          AdpcmConfig(),
+          checkCancelled: () {
+            checks++;
+            throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 1);
+    });
+
     test('yielding encoder stops when cancellation is observed', () async {
       var checks = 0;
 
@@ -115,6 +134,24 @@ void main() {
 
       expect(yieldCount, greaterThan(0));
       expect(yielded, orderedEquals(encodeFlac(pcm, sampleRate: 16000)));
+    });
+
+    test('yielding encoder observes pre-cancellation for empty input',
+        () async {
+      var checks = 0;
+
+      await expectLater(
+        encodeFlacWithEventLoopYield(
+          Int16List(0),
+          checkCancelled: () {
+            checks++;
+            throw StateError('cancelled');
+          },
+        ),
+        throwsStateError,
+      );
+
+      expect(checks, 1);
     });
 
     test('yielding encoder stops when cancellation is observed', () async {

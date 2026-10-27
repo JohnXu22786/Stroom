@@ -232,6 +232,7 @@ Future<Uint8List> encodeAdpcmWithEventLoopYield(
   if (yieldEveryBlocks <= 0) {
     throw ArgumentError.value(yieldEveryBlocks, 'yieldEveryBlocks');
   }
+  checkCancelled?.call();
   final output = BytesBuilder(copy: false);
   final blockCount = pcmSamples.length ~/ config.blockSize;
   for (var firstBlock = 0;
@@ -367,6 +368,7 @@ Future<Uint8List> encodeFlacWithEventLoopYield(
   if (yieldEveryFrames <= 0) {
     throw ArgumentError.value(yieldEveryFrames, 'yieldEveryFrames');
   }
+  checkCancelled?.call();
   final totalSamples = pcmSamples.length;
   final frameCount = (totalSamples + _flacBlockSize - 1) ~/ _flacBlockSize;
   final output = BytesOutput();
