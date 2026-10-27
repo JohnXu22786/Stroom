@@ -641,7 +641,11 @@ class AnkiMediaSync {
     }
     final name = raw[0]?.toString() ?? '';
     _validateFilename(name);
-    return _MediaChange(name, _int(raw[1]), raw[2]?.toString() ?? '');
+    final sha1 = raw[2];
+    if (sha1 is! String) {
+      throw const AnkiSyncException('媒体变更记录无法解析');
+    }
+    return _MediaChange(name, _int(raw[1]), sha1);
   }
 
   static _MediaActionKind _requiredAction(

@@ -93,6 +93,29 @@ void main() {
   );
 
   test(
+    'removes a first-time collection when full-download rollback has no backup',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'stroom_anki_transfer_first_download_rollback_',
+      );
+      final collectionFile = File('${documents.path}/collection.anki2');
+      await collectionFile.writeAsBytes([4, 5, 6]);
+
+      try {
+        await AnkiCollectionTransfer.restoreLocalCollectionBackup(
+          '',
+          documentsPath: documents.path,
+        );
+
+        expect(await collectionFile.exists(), isFalse);
+      } finally {
+        await AnkiDatabase.closeOpenedInstance();
+        await documents.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
     'rejects an integrity-valid but incomplete schema 11 download',
     () async {
       final documents = await Directory.systemTemp.createTemp(

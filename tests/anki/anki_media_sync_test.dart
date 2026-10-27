@@ -1780,6 +1780,92 @@ void main() {
       }
     });
 
+    test(
+      'rejects a missing media SHA without deleting local files',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_invalid_sha_test_',
+        );
+        const identity = 'ankiweb:invalid-media-sha';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const localBytes = [1, 2, 3];
+        await File('${mediaDir.path}/tracked.png').writeAsBytes(localBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'tracked.png',
+              'sha1': sha1.convert(localBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final fake = _QueueHttpClient();
+        fake.responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 1, 'sk': 'test-host-key'},
+                'err': '',
+              });
+            case '/msync/mediaChanges':
+              return _jsonResponse({
+                'data': [
+                  ['tracked.png', 1, null],
+                ],
+                'err': '',
+              });
+            default:
+              return _jsonResponse({'data': 'OK', 'err': ''});
+          }
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
+          );
+
+          expect(
+            await File('${mediaDir.path}/tracked.png').readAsBytes(),
+            localBytes,
+          );
+          final indexHash = sha256.convert(utf8.encode(identity)).toString();
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.$indexHash.db',
+            version: 1,
+          );
+          final metadata = await index.query('media_meta');
+          final trackedFile = await index.query(
+            'media_files',
+            where: 'fname = ?',
+            whereArgs: ['tracked.png'],
+          );
+          await index.close();
+          expect(metadata.single['last_sync_usn'], 0);
+          expect(
+            trackedFile.single['sha1'],
+            sha1.convert(localBytes).toString(),
+          );
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
     test('does not tombstone a tracked local file named _meta', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_meta_tombstone_test_',

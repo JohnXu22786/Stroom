@@ -384,6 +384,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       _status = '正在准备下载设置…';
     });
     var backupPath = '';
+    var collectionReplaced = false;
     AnkiMediaDownloadReset? mediaReset;
     var transferStarted = false;
     try {
@@ -408,6 +409,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           await AnkiCollectionTransfer.downloadAndReplaceLocalCollection(
         client,
       );
+      collectionReplaced = true;
       final media = await AnkiMediaSync.sync(client);
       await mediaReset.commit();
       if (!mounted) return;
@@ -420,7 +422,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
             '\n请重新检查服务器状态。';
       });
     } catch (error) {
-      if (backupPath.isNotEmpty) {
+      if (collectionReplaced) {
         try {
           await AnkiCollectionTransfer.restoreLocalCollectionBackup(backupPath);
         } catch (_) {
