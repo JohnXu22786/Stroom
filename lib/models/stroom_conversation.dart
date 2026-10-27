@@ -36,9 +36,9 @@ class StroomMessageDiagnostics {
       );
 
   Map<String, dynamic> toMap() => {
-    if (rawRequest != null) 'rawRequest': rawRequest,
-    if (rawResponse != null) 'rawResponse': rawResponse,
-  };
+        if (rawRequest != null) 'rawRequest': rawRequest,
+        if (rawResponse != null) 'rawResponse': rawResponse,
+      };
 
   static StroomMessageDiagnostics _bounded(
     Map<String, dynamic>? request,
@@ -62,14 +62,15 @@ class StroomMessageDiagnostics {
   static int _serializedSize(
     Map<String, dynamic>? request,
     Map<String, dynamic>? response,
-  ) => utf8
-      .encode(
-        jsonEncode({
-          if (request != null) 'rawRequest': request,
-          if (response != null) 'rawResponse': response,
-        }),
-      )
-      .length;
+  ) =>
+      utf8
+          .encode(
+            jsonEncode({
+              if (request != null) 'rawRequest': request,
+              if (response != null) 'rawResponse': response,
+            }),
+          )
+          .length;
 
   static Map<String, dynamic>? _redactJson(Map<String, dynamic>? input) {
     if (input == null) return null;
@@ -133,22 +134,22 @@ class StroomConversation {
     List<StroomMessage> messages = const [],
     Map<String, dynamic> extensions = const {},
     Map<String, dynamic> extraFields = const {},
-  }) : createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now(),
-       messages = List.unmodifiable(messages),
-       extensions = Map.unmodifiable(extensions),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now(),
+        messages = List.unmodifiable(messages),
+        extensions = Map.unmodifiable(extensions),
+        extraFields = Map.unmodifiable(extraFields);
 
   Map<String, dynamic> toMap() => {
-    ...extraFields,
-    'schemaVersion': schemaVersion,
-    'id': id,
-    'title': title,
-    'createdAt': createdAt.toIso8601String(),
-    'updatedAt': updatedAt.toIso8601String(),
-    'messages': messages.map((message) => message.toMap()).toList(),
-    'extensions': extensions,
-  };
+        ...extraFields,
+        'schemaVersion': schemaVersion,
+        'id': id,
+        'title': title,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'messages': messages.map((message) => message.toMap()).toList(),
+        'extensions': extensions,
+      };
 
   String toJson() => jsonEncode(toMap());
 
@@ -176,12 +177,12 @@ class StroomConversation {
       updatedAt: _date(map['updatedAt']),
       messages: map['messages'] is List
           ? (map['messages'] as List)
-                .whereType<Map>()
-                .map(
-                  (item) =>
-                      StroomMessage.fromMap(Map<String, dynamic>.from(item)),
-                )
-                .toList()
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    StroomMessage.fromMap(Map<String, dynamic>.from(item)),
+              )
+              .toList()
           : const [],
       extensions: extensionRaw is Map
           ? Map<String, dynamic>.from(extensionRaw)
@@ -237,24 +238,24 @@ class StroomMessage {
     Map<String, dynamic> extensions = const {},
     Map<String, dynamic> extraFields = const {},
     this.diagnostics,
-  }) : content = List.unmodifiable(content),
-       usage = usage == null ? null : Map.unmodifiable(usage),
-       extensions = Map.unmodifiable(extensions),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : content = List.unmodifiable(content),
+        usage = usage == null ? null : Map.unmodifiable(usage),
+        extensions = Map.unmodifiable(extensions),
+        extraFields = Map.unmodifiable(extraFields);
 
   Map<String, dynamic> toMap() => {
-    ...extraFields,
-    'id': id,
-    'role': role,
-    'sequence': sequence,
-    'createdAt': createdAt.toIso8601String(),
-    'content': content.map((part) => part.toMap()).toList(),
-    if (status != null) 'status': status,
-    if (finishReason != null) 'finishReason': finishReason,
-    if (usage != null) 'usage': usage,
-    if (extensions.isNotEmpty) 'extensions': extensions,
-    if (diagnostics != null) 'diagnostics': diagnostics!.toMap(),
-  };
+        ...extraFields,
+        'id': id,
+        'role': role,
+        'sequence': sequence,
+        'createdAt': createdAt.toIso8601String(),
+        'content': content.map((part) => part.toMap()).toList(),
+        if (status != null) 'status': status,
+        if (finishReason != null) 'finishReason': finishReason,
+        if (usage != null) 'usage': usage,
+        if (extensions.isNotEmpty) 'extensions': extensions,
+        if (diagnostics != null) 'diagnostics': diagnostics!.toMap(),
+      };
 
   factory StroomMessage.fromMap(Map<String, dynamic> map) {
     final rawContent = map['content'];
@@ -280,18 +281,17 @@ class StroomMessage {
       createdAt: StroomConversation._date(map['createdAt']),
       content: rawContent is List
           ? rawContent
-                .whereType<Map>()
-                .map(
-                  (part) => StroomContentPart.fromMap(
-                    Map<String, dynamic>.from(part),
-                  ),
-                )
-                .toList()
+              .whereType<Map>()
+              .map(
+                (part) => StroomContentPart.fromMap(
+                  Map<String, dynamic>.from(part),
+                ),
+              )
+              .toList()
           : const [],
       status: map['status'] is String ? map['status'] as String : null,
-      finishReason: map['finishReason'] is String
-          ? map['finishReason'] as String
-          : null,
+      finishReason:
+          map['finishReason'] is String ? map['finishReason'] as String : null,
       usage: rawUsage is Map ? Map<String, dynamic>.from(rawUsage) : null,
       extensions: rawExtensions is Map
           ? Map<String, dynamic>.from(rawExtensions)
@@ -353,21 +353,21 @@ class StroomMessage {
       final reasoningSections = message.reasoningSections?.isNotEmpty == true
           ? message.reasoningSections!
           : message.reasoningContent == null
-          ? const <String>[]
-          : [message.reasoningContent!];
+              ? const <String>[]
+              : [message.reasoningContent!];
       final textSections =
           message.textSections?.any((text) => text.isNotEmpty) == true
-          ? message.textSections!
-          : message.content.isEmpty
-          ? const <String>[]
-          : [message.content];
+              ? message.textSections!
+              : message.content.isEmpty
+                  ? const <String>[]
+                  : [message.content];
       final toolCalls = message.toolCalls ?? const [];
       final roundStarts = message.toolCallRoundStarts ?? const [];
       final roundCount = roundStarts.isNotEmpty
           ? roundStarts.length
           : toolCalls.isEmpty
-          ? 0
-          : 1;
+              ? 0
+              : 1;
 
       void appendRound(int index) {
         if (index < reasoningSections.length) {
@@ -387,11 +387,9 @@ class StroomMessage {
         final end = roundStarts.isNotEmpty && index + 1 < roundStarts.length
             ? roundStarts[index + 1]
             : toolCalls.length;
-        for (
-          var callIndex = start;
-          callIndex < end && callIndex < toolCalls.length;
-          callIndex++
-        ) {
+        for (var callIndex = start;
+            callIndex < end && callIndex < toolCalls.length;
+            callIndex++) {
           final call = toolCalls[callIndex];
           content.add(
             StroomContentPart.toolCall(
@@ -478,8 +476,8 @@ class StroomContentPart {
     required this.type,
     required Map<String, dynamic> data,
     Map<String, dynamic> extraFields = const {},
-  }) : data = Map.unmodifiable(data),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : data = Map.unmodifiable(data),
+        extraFields = Map.unmodifiable(extraFields);
 
   factory StroomContentPart.text(String text) =>
       StroomContentPart(type: 'text', data: {'text': text});
@@ -496,21 +494,23 @@ class StroomContentPart {
   factory StroomContentPart.structuredOutput({
     required String format,
     required dynamic value,
-  }) => StroomContentPart(
-    type: 'structured_output',
-    data: {'format': format, 'value': value},
-  );
+  }) =>
+      StroomContentPart(
+        type: 'structured_output',
+        data: {'format': format, 'value': value},
+      );
 
   factory StroomContentPart.toolCall({
     required String id,
     required String name,
     required Map<String, dynamic> arguments,
     Map<String, dynamic> extraFields = const {},
-  }) => StroomContentPart(
-    type: 'tool_call',
-    data: {'id': id, 'name': name, 'arguments': arguments},
-    extraFields: extraFields,
-  );
+  }) =>
+      StroomContentPart(
+        type: 'tool_call',
+        data: {'id': id, 'name': name, 'arguments': arguments},
+        extraFields: extraFields,
+      );
 
   factory StroomContentPart.toolResult({
     required String toolCallId,
@@ -518,89 +518,96 @@ class StroomContentPart {
     required dynamic result,
     bool isError = false,
     Map<String, dynamic> extraFields = const {},
-  }) => StroomContentPart(
-    type: 'tool_result',
-    data: {
-      'toolCallId': toolCallId,
-      if (name != null) 'name': name,
-      'result': result,
-      'isError': isError,
-    },
-    extraFields: extraFields,
-  );
+  }) =>
+      StroomContentPart(
+        type: 'tool_result',
+        data: {
+          'toolCallId': toolCallId,
+          if (name != null) 'name': name,
+          'result': result,
+          'isError': isError,
+        },
+        extraFields: extraFields,
+      );
 
   factory StroomContentPart.image({
     required String reference,
     String? mimeType,
     String? detail,
-  }) => StroomContentPart._media(
-    'image',
-    reference,
-    mimeType: mimeType,
-    detail: detail,
-  );
+  }) =>
+      StroomContentPart._media(
+        'image',
+        reference,
+        mimeType: mimeType,
+        detail: detail,
+      );
 
   factory StroomContentPart.audio({
     required String reference,
     String? mimeType,
     String? transcript,
-  }) => StroomContentPart(
-    type: 'audio',
-    data: {
-      'reference': reference,
-      if (mimeType != null) 'mimeType': mimeType,
-      if (transcript != null) 'transcript': transcript,
-    },
-  );
+  }) =>
+      StroomContentPart(
+        type: 'audio',
+        data: {
+          'reference': reference,
+          if (mimeType != null) 'mimeType': mimeType,
+          if (transcript != null) 'transcript': transcript,
+        },
+      );
 
   factory StroomContentPart.video({
     required String reference,
     String? mimeType,
     DateTime? timestamp,
-  }) => StroomContentPart(
-    type: 'video',
-    data: {
-      'reference': reference,
-      if (mimeType != null) 'mimeType': mimeType,
-      if (timestamp != null) 'timestamp': timestamp.toIso8601String(),
-    },
-  );
+  }) =>
+      StroomContentPart(
+        type: 'video',
+        data: {
+          'reference': reference,
+          if (mimeType != null) 'mimeType': mimeType,
+          if (timestamp != null) 'timestamp': timestamp.toIso8601String(),
+        },
+      );
 
   factory StroomContentPart.file({
     required String reference,
     String? fileName,
     String? mimeType,
-  }) => StroomContentPart(
-    type: 'file',
-    data: {
-      'reference': reference,
-      if (fileName != null) 'fileName': fileName,
-      if (mimeType != null) 'mimeType': mimeType,
-    },
-  );
+  }) =>
+      StroomContentPart(
+        type: 'file',
+        data: {
+          'reference': reference,
+          if (fileName != null) 'fileName': fileName,
+          if (mimeType != null) 'mimeType': mimeType,
+        },
+      );
 
   factory StroomContentPart.transcription({
     required String text,
     List<Map<String, dynamic>> segments = const [],
-  }) => StroomContentPart(
-    type: 'transcription',
-    data: {'text': text, 'segments': segments},
-  );
+  }) =>
+      StroomContentPart(
+        type: 'transcription',
+        data: {'text': text, 'segments': segments},
+      );
 
   factory StroomContentPart.citation({
     required String uri,
     String? title,
     int? startIndex,
     int? endIndex,
-  }) => StroomContentPart(
-    type: 'citation',
-    data: {
-      'uri': uri,
-      if (title != null) 'title': title,
-      if (startIndex != null) 'startIndex': startIndex,
-      if (endIndex != null) 'endIndex': endIndex,
-    },
-  );
+  }) =>
+      StroomContentPart(
+        type: 'citation',
+        data: {
+          'uri': uri,
+          if (title != null) 'title': title,
+          if (startIndex != null) 'startIndex': startIndex,
+          if (endIndex != null) 'endIndex': endIndex,
+        },
+      );
 
   factory StroomContentPart.error(String message) =>
       StroomContentPart(type: 'error', data: {'message': message});
@@ -610,14 +617,15 @@ class StroomContentPart {
     String reference, {
     String? mimeType,
     String? detail,
-  }) => StroomContentPart(
-    type: type,
-    data: {
-      'reference': reference,
-      if (mimeType != null) 'mimeType': mimeType,
-      if (detail != null) 'detail': detail,
-    },
-  );
+  }) =>
+      StroomContentPart(
+        type: type,
+        data: {
+          'reference': reference,
+          if (mimeType != null) 'mimeType': mimeType,
+          if (detail != null) 'detail': detail,
+        },
+      );
 
   Map<String, dynamic> toMap() => {...extraFields, 'type': type, 'data': data};
 

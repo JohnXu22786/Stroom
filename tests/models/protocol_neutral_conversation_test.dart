@@ -377,9 +377,12 @@ void main() {
           expect(decoded.extensions.single.extraFields, {
             'futureEnvelopeKey': 'keep',
           });
-          expect(bridge.encode(decoded)['futureTopLevelField'], {
-            'keep': 'all',
-          }, reason: bridge.protocolId);
+          expect(
+              bridge.encode(decoded)['futureTopLevelField'],
+              {
+                'keep': 'all',
+              },
+              reason: bridge.protocolId);
         }
       },
     );
@@ -673,7 +676,9 @@ void main() {
       expect(parsed.content[1].type, 'image');
       expect(
         parsed.content[1].extraFields['openai.chat_completions.image_url'],
-        {'future_image_config': {'keep': true}},
+        {
+          'future_image_config': {'keep': true}
+        },
       );
       final translated = source.serializeMessage(edited);
 
@@ -1212,7 +1217,9 @@ void main() {
         content: [
           StroomContentPart(
             type: 'inline_media',
-            data: {'futureShape': {'opaque': true}},
+            data: {
+              'futureShape': {'opaque': true}
+            },
           ),
         ],
       );
@@ -1273,7 +1280,7 @@ void main() {
           final result = bridge.serializeMessage(message);
           final targetRole = bridge is GeminiBridge
               ? ((result.targetPayload!['contents'] as List).single
-                    as Map)['role']
+                  as Map)['role']
               : result.targetPayload!['role'];
           expect(targetRole, 'user', reason: '${bridge.protocolId}:$role');
           expect(
@@ -1343,7 +1350,8 @@ void main() {
       expect(result.targetPayload?['tool_call_id'], 'call_1');
     });
 
-    test('Chat tool messages stringify structured results and report partial', () {
+    test('Chat tool messages stringify structured results and report partial',
+        () {
       final message = StroomMessage(
         id: 'chat-structured-tool-result',
         role: 'tool',
@@ -1461,7 +1469,7 @@ void main() {
         final result = bridge.serializeMessage(message);
         final role = bridge is GeminiBridge
             ? ((result.targetPayload!['contents'] as List).single
-                  as Map)['role']
+                as Map)['role']
             : result.targetPayload!['role'];
         expect(role, 'user', reason: bridge.protocolId);
         expect(
@@ -1595,7 +1603,8 @@ void main() {
       expect(translated.targetPayload?['content'], isA<List>());
     });
 
-    test('same-protocol mapping selects its extension among multiple formats', () {
+    test('same-protocol mapping selects its extension among multiple formats',
+        () {
       final anthropic = AnthropicMessagesBridge().parseMessage(
         {
           'role': 'assistant',

@@ -23,32 +23,33 @@ class _RejectRawDiagnosticWrites extends InMemorySharedPreferencesStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('Tier 2 save keeps schema versions and unknown conversation fields', () async {
+  test('Tier 2 save keeps schema versions and unknown conversation fields',
+      () async {
     final originalStore = SharedPreferencesStorePlatform.instance;
     SharedPreferencesStorePlatform.instance =
         InMemorySharedPreferencesStore.withData({
-          'flutter.conversations': jsonEncode([
+      'flutter.conversations': jsonEncode([
+        {
+          'id': 'future-conversation',
+          'title': 'Old title',
+          'createdAt': '2025-01-01T00:00:00.000Z',
+          'updatedAt': '2025-01-01T00:00:00.000Z',
+          'schemaVersion': 7,
+          'futureConversationField': {'keep': true},
+          'messages': [
             {
-              'id': 'future-conversation',
-              'title': 'Old title',
-              'createdAt': '2025-01-01T00:00:00.000Z',
-              'updatedAt': '2025-01-01T00:00:00.000Z',
-              'schemaVersion': 7,
-              'futureConversationField': {'keep': true},
-              'messages': [
-                {
-                  'id': 'future-message',
-                  'role': 'assistant',
-                  'content': 'answer',
-                  'createdAt': '2025-01-01T00:01:00.000Z',
-                  'schemaVersion': 8,
-                  'futureMessageField': 'keep',
-                  'rawRequest': {'body': 'drop this only in tier two'},
-                },
-              ],
+              'id': 'future-message',
+              'role': 'assistant',
+              'content': 'answer',
+              'createdAt': '2025-01-01T00:01:00.000Z',
+              'schemaVersion': 8,
+              'futureMessageField': 'keep',
+              'rawRequest': {'body': 'drop this only in tier two'},
             },
-          ]),
-        });
+          ],
+        },
+      ]),
+    });
     final container = ProviderContainer();
     try {
       final prefs = await SharedPreferences.getInstance();

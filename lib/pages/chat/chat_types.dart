@@ -140,8 +140,7 @@ List<MessageSegment> _buildWithRounds(
       segments.add(
         ReasoningSegment(
           sectionIndex: i,
-          isStreaming:
-              isLastReasoningStreaming &&
+          isStreaming: isLastReasoningStreaming &&
               i == _lastNonEmptyIndex(reasoningSections),
         ),
       );
@@ -161,17 +160,14 @@ List<MessageSegment> _buildWithRounds(
   }
 
   // Remaining reasoning and text after all tool rounds
-  for (
-    int i = numRounds;
-    i < reasoningSections.length || i < textChunks.length;
-    i++
-  ) {
+  for (int i = numRounds;
+      i < reasoningSections.length || i < textChunks.length;
+      i++) {
     if (i < reasoningSections.length && reasoningSections[i].isNotEmpty) {
       segments.add(
         ReasoningSegment(
           sectionIndex: i,
-          isStreaming:
-              isLastReasoningStreaming &&
+          isStreaming: isLastReasoningStreaming &&
               i == _lastNonEmptyIndex(reasoningSections),
         ),
       );
@@ -208,8 +204,7 @@ List<MessageSegment> _buildLegacy(
       segments.add(
         ReasoningSegment(
           sectionIndex: i,
-          isStreaming:
-              isLastReasoningStreaming &&
+          isStreaming: isLastReasoningStreaming &&
               i == _lastNonEmptyIndex(reasoningSections),
         ),
       );
@@ -265,13 +260,13 @@ List<MessageSegment> blocksToSegments(List<MessageBlock> blocks) {
           ),
         );
       case ToolCallBlock(
-        :final id,
-        :final name,
-        :final arguments,
-        :final status,
-        :final result,
-        :final compactedAt,
-      ):
+          :final id,
+          :final name,
+          :final arguments,
+          :final status,
+          :final result,
+          :final compactedAt,
+        ):
         segs.add(
           ToolCallSegment(
             ToolCallData(
@@ -322,8 +317,8 @@ List<MessageBlock> legacyToBlocks({
     final start = toolCallRoundStarts.isNotEmpty ? toolCallRoundStarts[i] : i;
     final end =
         i + 1 < toolCallRoundStarts.length && toolCallRoundStarts.isNotEmpty
-        ? toolCallRoundStarts[i + 1]
-        : toolCalls.length;
+            ? toolCallRoundStarts[i + 1]
+            : toolCalls.length;
     for (var j = start; j < end && j < toolCalls.length; j++) {
       final tc = toolCalls[j];
       blocks.add(
