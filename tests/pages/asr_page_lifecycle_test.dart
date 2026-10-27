@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,9 +20,6 @@ import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/providers/task_provider.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
-// ignore: implementation_imports
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
-
 class _AudioSelectionPicker extends FilePickerPlatform {
   _AudioSelectionPicker(this.bytes, {this.reportedSize, this.readStream});
 
@@ -30,28 +28,69 @@ class _AudioSelectionPicker extends FilePickerPlatform {
   final Stream<List<int>>? readStream;
 
   @override
-  Future<FilePickerResult?> pickFiles({
+  Future<List<PlatformFile>> pickFiles({
     String? dialogTitle,
     String? initialDirectory,
     FileType type = FileType.any,
     List<String>? allowedExtensions,
     Function(FilePickerStatus)? onFileLoading,
     int compressionQuality = 0,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
-    bool cancelUploadOnWindowBlur = true,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
   }) async {
-    return FilePickerResult([
-      PlatformFile(
-        name: 'mislabelled.wav',
-        size: reportedSize ?? bytes.length,
-        bytes: readStream == null ? bytes : null,
+    return [
+      _AudioSelectionFile(
+        bytes,
+        reportedSize: reportedSize,
         readStream: readStream,
       ),
-    ]);
+    ];
+  }
+}
+
+final class _AudioSelectionFile extends PlatformFile {
+  _AudioSelectionFile(
+    this.bytes, {
+    this.reportedSize,
+    this.readStream,
+  })  : name = 'mislabelled.wav',
+        uri = Uri.dataFromBytes(bytes);
+
+  final Uint8List bytes;
+  final int? reportedSize;
+  final Stream<List<int>>? readStream;
+
+  @override
+  final String name;
+
+  @override
+  final Uri uri;
+
+  @override
+  XFile get xFile => XFile.fromData(bytes, name: name);
+
+  @override
+  int? lengthSync() => reportedSize ?? bytes.length;
+
+  @override
+  Future<int?> length() async => lengthSync();
+
+  @override
+  Future<Uint8List> readAsBytes() async => bytes;
+
+  @override
+  Stream<Uint8List> readAsByteStream() async* {
+    final source = readStream;
+    if (source == null) {
+      yield bytes;
+      return;
+    }
+    await for (final chunk in source) {
+      yield Uint8List.fromList(chunk);
+    }
   }
 }
 

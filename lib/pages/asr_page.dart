@@ -1360,9 +1360,6 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.audio,
-        allowMultiple: true,
-        withData: false,
-        withReadStream: true,
         initialDirectory: SystemPickDirectories.music(),
       );
       if (files.isEmpty) return;
@@ -1372,23 +1369,12 @@ class _AsrPageState extends ConsumerState<AsrPage> {
         newAudios.add(
           SelectedAudio(
             bytes: Uint8List(0),
-            byteLength: file.size,
+            byteLength: file.lengthSync() ?? 0,
             loadBytesWithCancellation: (cancelToken) async {
-              final stream = file.readStream;
-              final Uint8List bytes;
-              if (stream != null) {
-                bytes = await readAsrAudioStream(
-                  stream,
-                  cancelToken: cancelToken,
-                );
-              } else if (file.bytes != null) {
-                bytes = Uint8List.fromList(file.bytes!);
-              } else {
-                bytes = await readAsrAudioStream(
-                  file.xFile.openRead(),
-                  cancelToken: cancelToken,
-                );
-              }
+              final bytes = await readAsrAudioStream(
+                file.readAsByteStream(),
+                cancelToken: cancelToken,
+              );
               throwIfAsrAudioCanceled(cancelToken);
               if (bytes.isEmpty) throw const FormatException('音频数据为空');
               return bytes;
