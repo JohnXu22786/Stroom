@@ -224,8 +224,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
 
     // 保存前规范化：boolean 类型无参数值（清空 options，与模型页一致）
     for (final p in _customParams) {
-      if (p.type == 'boolean' && p.options.isNotEmpty) {
+      if (p.type == 'boolean') {
         p.options.clear();
+        p.defaultValue = '';
       }
     }
     for (final p in _reasoningParams) {

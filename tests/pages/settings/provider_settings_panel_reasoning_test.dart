@@ -584,8 +584,30 @@ void main() {
           saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
       expect(verbose.type, 'boolean');
       expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
-      expect(verbose.defaultValue, isEmpty,
-          reason: 'boolean 类型保存时清空旧类型的默认值');
+      expect(verbose.defaultValue, isEmpty, reason: 'boolean 类型保存时清空旧类型的默认值');
+    });
+
+    testWidgets('saving an existing boolean param clears a stale default',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: 'high',
+            type: 'boolean',
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      final verbose =
+          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      expect(verbose.defaultValue, isEmpty);
     });
 
     testWidgets('duplicate reasoning param name shows inline error',
