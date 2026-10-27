@@ -156,8 +156,7 @@ void main() {
       final localHeaderSignature = [0x50, 0x4b, 0x03, 0x04];
       final localOffset = _indexOf(bytes, localHeaderSignature, 0);
       expect(localOffset, isNonNegative);
-      final compressedOffset =
-          localOffset +
+      final compressedOffset = localOffset +
           30 +
           bytes[localOffset + 26] +
           bytes[localOffset + 27] * 256;
@@ -357,7 +356,9 @@ void main() {
       },
     );
 
-    test('fails before syncing when an indexed media file exceeds the upload limit', () async {
+    test(
+        'fails before syncing when an indexed media file exceeds the upload limit',
+        () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_indexed_oversized_test_',
       );
@@ -459,7 +460,9 @@ void main() {
       }
     });
 
-    test('fails visibly before syncing an unindexed local filename Anki cannot upload', () async {
+    test(
+        'fails visibly before syncing an unindexed local filename Anki cannot upload',
+        () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_invalid_local_name_test_',
       );
@@ -1740,10 +1743,10 @@ void main() {
         final indexHash = sha256.convert(utf8.encode(identity)).toString();
         final indexPath = '${workDir.path}/collection.media.sync.$indexHash.db';
         Future<sqflite.Database> openIndex() => sqflite.openDatabase(
-          indexPath,
-          version: 1,
-          onCreate: (db, _) async {
-            await db.execute('''
+              indexPath,
+              version: 1,
+              onCreate: (db, _) async {
+                await db.execute('''
                 CREATE TABLE media_files (
                   fname TEXT PRIMARY KEY,
                   sha1 TEXT,
@@ -1751,15 +1754,15 @@ void main() {
                   sync_required INTEGER NOT NULL DEFAULT 1
                 )
               ''');
-            await db.execute('''
+                await db.execute('''
                 CREATE TABLE media_meta (
                   id INTEGER PRIMARY KEY CHECK (id = 1),
                   last_sync_usn INTEGER NOT NULL DEFAULT 0
                 )
               ''');
-            await db.insert('media_meta', {'id': 1, 'last_sync_usn': 7});
-          },
-        );
+                await db.insert('media_meta', {'id': 1, 'last_sync_usn': 7});
+              },
+            );
         final oldIndex = await openIndex();
         await oldIndex.insert('media_files', {
           'fname': 'local.png',

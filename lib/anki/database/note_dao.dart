@@ -59,18 +59,14 @@ class NoteDao {
   Future<int> replaceMediaReferences(Map<String, String> replacements) async {
     if (replacements.isEmpty) return 0;
 
-    final replacementNames = replacements.keys
-        .where((filename) => filename.isNotEmpty)
-        .toList();
+    final replacementNames =
+        replacements.keys.where((filename) => filename.isNotEmpty).toList();
     final matchingIds = <int>{};
-    for (
-      var offset = 0;
-      offset < replacementNames.length;
-      offset += _mediaReferenceSearchBatchSize
-    ) {
-      final batch = replacementNames
-          .skip(offset)
-          .take(_mediaReferenceSearchBatchSize);
+    for (var offset = 0;
+        offset < replacementNames.length;
+        offset += _mediaReferenceSearchBatchSize) {
+      final batch =
+          replacementNames.skip(offset).take(_mediaReferenceSearchBatchSize);
       final searchableValues = <String>{};
       for (final filename in batch) {
         searchableValues
@@ -166,9 +162,9 @@ class NoteDao {
   }
 
   Future<void> _touchCollection() => _db.rawUpdate(
-    'UPDATE col SET mod = ? WHERE id = 1',
-    [DateTime.now().millisecondsSinceEpoch],
-  );
+        'UPDATE col SET mod = ? WHERE id = 1',
+        [DateTime.now().millisecondsSinceEpoch],
+      );
 
   Future<List<Note>> all() async {
     final rows = await _db.query('notes');

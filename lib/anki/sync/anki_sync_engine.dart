@@ -24,11 +24,11 @@ class SyncHeader {
   }) : sessionKey = sessionKey ?? _randomSessionId();
 
   Map<String, dynamic> toJson() => {
-    'sync_version': syncVersion,
-    'sync_key': syncKey,
-    'client_ver': clientVer,
-    'session_key': sessionKey,
-  };
+        'sync_version': syncVersion,
+        'sync_key': syncKey,
+        'client_ver': clientVer,
+        'session_key': sessionKey,
+      };
 
   static String _randomSessionId() {
     const chars =
@@ -52,35 +52,32 @@ class SyncChunk {
     List<CardEntry>? cards,
     List<NoteEntry>? notes,
     List<RevlogEntry>? revlog,
-  }) : cards = cards ?? [],
-       notes = notes ?? [],
-       revlog = revlog ?? [];
+  })  : cards = cards ?? [],
+        notes = notes ?? [],
+        revlog = revlog ?? [];
 
   Map<String, dynamic> toJson() => {
-    'done': done,
-    if (cards.isNotEmpty) 'cards': cards.map((c) => c.toJson()).toList(),
-    if (notes.isNotEmpty) 'notes': notes.map((n) => n.toJson()).toList(),
-    if (revlog.isNotEmpty) 'revlog': revlog.map((r) => r.toJson()).toList(),
-  };
+        'done': done,
+        if (cards.isNotEmpty) 'cards': cards.map((c) => c.toJson()).toList(),
+        if (notes.isNotEmpty) 'notes': notes.map((n) => n.toJson()).toList(),
+        if (revlog.isNotEmpty) 'revlog': revlog.map((r) => r.toJson()).toList(),
+      };
 
   factory SyncChunk.fromJson(Map<String, dynamic> json) => SyncChunk(
-    done: json['done'] as bool? ?? false,
-    cards:
-        (json['cards'] as List?)
-            ?.map((c) => CardEntry.fromJson(c as List<dynamic>))
-            .toList() ??
-        [],
-    notes:
-        (json['notes'] as List?)
-            ?.map((n) => NoteEntry.fromJson(n as List<dynamic>))
-            .toList() ??
-        [],
-    revlog:
-        (json['revlog'] as List?)
-            ?.map((r) => RevlogEntry.fromJson(r as List<dynamic>))
-            .toList() ??
-        [],
-  );
+        done: json['done'] as bool? ?? false,
+        cards: (json['cards'] as List?)
+                ?.map((c) => CardEntry.fromJson(c as List<dynamic>))
+                .toList() ??
+            [],
+        notes: (json['notes'] as List?)
+                ?.map((n) => NoteEntry.fromJson(n as List<dynamic>))
+                .toList() ??
+            [],
+        revlog: (json['revlog'] as List?)
+                ?.map((r) => RevlogEntry.fromJson(r as List<dynamic>))
+                .toList() ??
+            [],
+      );
 }
 
 /// Mirror of Rust's CardEntry (from sync/collection/chunks.rs)
@@ -126,46 +123,46 @@ class CardEntry {
   });
 
   List<dynamic> toJson() => [
-    id,
-    nid,
-    did,
-    ord,
-    mtime,
-    usn,
-    ctype,
-    queue,
-    due,
-    ivl,
-    factor,
-    reps,
-    lapses,
-    left,
-    odue,
-    odid,
-    flags,
-    data,
-  ];
+        id,
+        nid,
+        did,
+        ord,
+        mtime,
+        usn,
+        ctype,
+        queue,
+        due,
+        ivl,
+        factor,
+        reps,
+        lapses,
+        left,
+        odue,
+        odid,
+        flags,
+        data,
+      ];
 
   factory CardEntry.fromJson(List<dynamic> j) => CardEntry(
-    id: j[0] as int,
-    nid: j[1] as int,
-    did: j[2] as int,
-    ord: (j[3] as num).toInt(),
-    mtime: (j[4] as num).toInt(),
-    usn: (j[5] as num).toInt(),
-    ctype: (j[6] as num).toInt(),
-    queue: (j[7] as num).toInt(),
-    due: (j[8] as num).toInt(),
-    ivl: (j[9] as num).toInt(),
-    factor: (j[10] as num).toInt(),
-    reps: (j[11] as num).toInt(),
-    lapses: (j[12] as num).toInt(),
-    left: (j[13] as num).toInt(),
-    odue: (j[14] as num).toInt(),
-    odid: (j[15] as num).toInt(),
-    flags: (j[16] as num).toInt(),
-    data: j[17] as String? ?? '',
-  );
+        id: j[0] as int,
+        nid: j[1] as int,
+        did: j[2] as int,
+        ord: (j[3] as num).toInt(),
+        mtime: (j[4] as num).toInt(),
+        usn: (j[5] as num).toInt(),
+        ctype: (j[6] as num).toInt(),
+        queue: (j[7] as num).toInt(),
+        due: (j[8] as num).toInt(),
+        ivl: (j[9] as num).toInt(),
+        factor: (j[10] as num).toInt(),
+        reps: (j[11] as num).toInt(),
+        lapses: (j[12] as num).toInt(),
+        left: (j[13] as num).toInt(),
+        odue: (j[14] as num).toInt(),
+        odid: (j[15] as num).toInt(),
+        flags: (j[16] as num).toInt(),
+        data: j[17] as String? ?? '',
+      );
 }
 
 /// Mirror of Rust's NoteEntry (from sync/collection/chunks.rs)
@@ -197,32 +194,32 @@ class NoteEntry {
   });
 
   List<dynamic> toJson() => [
-    id,
-    guid,
-    mid,
-    mtime,
-    usn,
-    tags,
-    fields,
-    sfld,
-    csum,
-    flags,
-    data,
-  ];
+        id,
+        guid,
+        mid,
+        mtime,
+        usn,
+        tags,
+        fields,
+        sfld,
+        csum,
+        flags,
+        data,
+      ];
 
   factory NoteEntry.fromJson(List<dynamic> j) => NoteEntry(
-    id: j[0] as int,
-    guid: j[1] as String,
-    mid: j[2] as int,
-    mtime: (j[3] as num).toInt(),
-    usn: (j[4] as num).toInt(),
-    tags: j[5] as String? ?? '',
-    fields: j[6] as String? ?? '',
-    sfld: j[7] as String? ?? '',
-    csum: j[8] as String? ?? '',
-    flags: j[9] as int? ?? 0,
-    data: j[10] as String? ?? '',
-  );
+        id: j[0] as int,
+        guid: j[1] as String,
+        mid: j[2] as int,
+        mtime: (j[3] as num).toInt(),
+        usn: (j[4] as num).toInt(),
+        tags: j[5] as String? ?? '',
+        fields: j[6] as String? ?? '',
+        sfld: j[7] as String? ?? '',
+        csum: j[8] as String? ?? '',
+        flags: j[9] as int? ?? 0,
+        data: j[10] as String? ?? '',
+      );
 }
 
 /// Mirror of Rust's RevlogEntry (simplified)
@@ -250,27 +247,27 @@ class RevlogEntry {
   });
 
   List<dynamic> toJson() => [
-    id,
-    cid,
-    usn,
-    ease,
-    ivl,
-    lastIvl,
-    factor,
-    time,
-    type_,
-  ];
+        id,
+        cid,
+        usn,
+        ease,
+        ivl,
+        lastIvl,
+        factor,
+        time,
+        type_,
+      ];
   factory RevlogEntry.fromJson(List<dynamic> j) => RevlogEntry(
-    id: j[0] as int,
-    cid: j[1] as int,
-    usn: j[2] as int? ?? -1,
-    ease: j[3] as int,
-    ivl: j[4] as int,
-    lastIvl: j[5] as int? ?? 0,
-    factor: j[6] as int? ?? 2500,
-    time: j[7] as int? ?? 0,
-    type_: j[8] as int? ?? 0,
-  );
+        id: j[0] as int,
+        cid: j[1] as int,
+        usn: j[2] as int? ?? -1,
+        ease: j[3] as int,
+        ivl: j[4] as int,
+        lastIvl: j[5] as int? ?? 0,
+        factor: j[6] as int? ?? 2500,
+        time: j[7] as int? ?? 0,
+        type_: j[8] as int? ?? 0,
+      );
 }
 
 /// Mirror of Rust's SyncMeta (from sync/collection/meta.rs)
@@ -282,11 +279,11 @@ class SyncMeta {
   SyncMeta();
 
   Map<String, dynamic> toJson() => {
-    'usn': usn,
-    'ts': ts,
-    'scm': 0,
-    'server_message_index': serverMessageIndex,
-  };
+        'usn': usn,
+        'ts': ts,
+        'scm': 0,
+        'server_message_index': serverMessageIndex,
+      };
   factory SyncMeta.fromJson(Map<String, dynamic> j) => SyncMeta()
     ..usn = j['usn'] as int? ?? 0
     ..ts = j['ts'] as int? ?? 0
@@ -307,7 +304,7 @@ class AnkiSyncEngine {
   AnkiSyncProtocolClient? _client;
 
   AnkiSyncEngine({String? endpoint})
-    : _endpoint = endpoint ?? 'https://sync.ankiweb.net/sync/';
+      : _endpoint = endpoint ?? 'https://sync.ankiweb.net/sync/';
 
   Future<String> login(String email, String password) async {
     final client = _clientForKey();
@@ -336,7 +333,8 @@ class AnkiSyncEngine {
   Future<Map<String, dynamic>> sanityCheck(
     int clientCount,
     int serverCount,
-  ) async => _incrementalSyncUnsupported();
+  ) async =>
+      _incrementalSyncUnsupported();
 
   Future<int> finish() async => _incrementalSyncUnsupported();
 

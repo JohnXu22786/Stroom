@@ -456,10 +456,9 @@ void main() {
       try {
         await local.open();
         await local.col.load();
-        final localCreated =
-            ((await local.db.query('col', columns: ['crt'])).single['crt']
-                    as num)
-                .toInt();
+        final localCreated = ((await local.db.query('col', columns: ['crt']))
+                .single['crt'] as num)
+            .toInt();
         await local.close();
         final localFile = File('${documents.path}/collection.anki2');
         final originalBytes = await localFile.readAsBytes();
@@ -491,9 +490,9 @@ void main() {
         try {
           final backupPath =
               await AnkiCollectionTransfer.downloadAndReplaceLocalCollection(
-                client,
-                documentsPath: documents.path,
-              );
+            client,
+            documentsPath: documents.path,
+          );
 
           expect(await File(backupPath).readAsBytes(), originalBytes);
           expect(await localFile.exists(), isTrue);
@@ -514,7 +513,8 @@ void main() {
             'notes',
             where: 'id = ?',
             whereArgs: [note.id],
-          )).single;
+          ))
+              .single;
           expect(migratedNote['sfld'], 'downloaded front');
           expect(
             migratedNote['csum'],

@@ -168,7 +168,9 @@ class AnkiDatabase {
     final existingIds = (await db.query(
       'deck_config',
       columns: ['id'],
-    )).map((row) => (row['id'] as num).toInt()).toSet();
+    ))
+        .map((row) => (row['id'] as num).toInt())
+        .toSet();
     final colRows = await db.query('col', columns: ['dconf'], where: 'id = 1');
     if (colRows.isEmpty) return;
     try {
@@ -182,13 +184,16 @@ class AnkiDatabase {
         final config = Map<String, dynamic>.from(entry.value as Map)
           ..remove('id')
           ..remove('name');
-        await db.insert('deck_config', {
-          'id': id,
-          'name': entry.value['name']?.toString() ?? 'Default',
-          'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          'usn': -1,
-          'config': jsonEncode(config),
-        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        await db.insert(
+            'deck_config',
+            {
+              'id': id,
+              'name': entry.value['name']?.toString() ?? 'Default',
+              'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              'usn': -1,
+              'config': jsonEncode(config),
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
         existingIds.add(id);
       }
     } on FormatException {
@@ -216,8 +221,8 @@ class AnkiDatabase {
       final sortField = models == null
           ? null
           : sortFieldIndex >= 0 && sortFieldIndex < fields.length
-          ? Note.stripHtml(fields[sortFieldIndex])
-          : '';
+              ? Note.stripHtml(fields[sortFieldIndex])
+              : '';
       final checksum = Note.computeChecksum(fields.first);
       final oldChecksum = (row['csum'] as num?)?.toInt();
       final changes = <String, Object?>{};

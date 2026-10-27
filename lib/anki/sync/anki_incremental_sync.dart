@@ -38,8 +38,7 @@ class AnkiIncrementalSync {
     final localSchema = _int(local['scm']);
     final localUsn = _int(local['usn']);
     final hasPending = await _hasPendingChanges(db);
-    final needsCollectionSync =
-        localModified != remote.modified ||
+    final needsCollectionSync = localModified != remote.modified ||
         localUsn != remote.usn ||
         hasPending;
 
@@ -125,11 +124,14 @@ class AnkiIncrementalSync {
         }
         final finishedAt = finish.toInt();
         final nextUsn = remote.usn + 1;
-        await txn.update('col', {
-          'ls': finishedAt,
-          'usn': nextUsn,
-          'mod': finishedAt,
-        }, where: 'id = 1');
+        await txn.update(
+            'col',
+            {
+              'ls': finishedAt,
+              'usn': nextUsn,
+              'mod': finishedAt,
+            },
+            where: 'id = 1');
         await AnkiSyncDestinationState.mark(txn, destination);
         return AnkiCollectionSyncResult(
           changedCards: receivedCards + sent.cards,
@@ -170,9 +172,8 @@ class AnkiIncrementalSync {
     int serverUsn,
   ) async {
     final localRows = await txn.query('graves', where: 'usn = -1');
-    final sentGraves = localRows
-        .map((row) => (_int(row['type']), _int(row['oid'])))
-        .toSet();
+    final sentGraves =
+        localRows.map((row) => (_int(row['type']), _int(row['oid']))).toSet();
     if (localRows.isNotEmpty) {
       await txn.update('graves', {'usn': serverUsn}, where: 'usn = -1');
     }
@@ -261,19 +262,22 @@ class AnkiIncrementalSync {
       final currentDeckId = deckIdFrom(collectionConfig['curDeck']);
       final selectedDeckId =
           currentDeckId != null && survivingDeckIds.contains(currentDeckId)
-          ? currentDeckId
-          : activeDecks.isNotEmpty
-          ? activeDecks.first
-          : fallbackDeckId;
+              ? currentDeckId
+              : activeDecks.isNotEmpty
+                  ? activeDecks.first
+                  : fallbackDeckId;
       if (selectedDeckId != null && !activeDecks.contains(selectedDeckId)) {
         activeDecks.add(selectedDeckId);
       }
       collectionConfig['curDeck'] = selectedDeckId ?? 0;
       collectionConfig['activeDecks'] = activeDecks;
-      await txn.update('col', {
-        'decks': jsonEncode(deckMap),
-        'conf': jsonEncode(collectionConfig),
-      }, where: 'id = 1');
+      await txn.update(
+          'col',
+          {
+            'decks': jsonEncode(deckMap),
+            'conf': jsonEncode(collectionConfig),
+          },
+          where: 'id = 1');
     }
   }
 
@@ -389,11 +393,14 @@ class AnkiIncrementalSync {
       await txn.update('config', {'usn': serverUsn});
     }
 
-    await txn.update('col', {
-      'models': jsonEncode(models),
-      'decks': jsonEncode(decks),
-      'tags': jsonEncode(tags),
-    }, where: 'id = 1');
+    await txn.update(
+        'col',
+        {
+          'models': jsonEncode(models),
+          'decks': jsonEncode(decks),
+          'tags': jsonEncode(tags),
+        },
+        where: 'id = 1');
 
     final response = await client.requestJson('applyChanges', {
       'changes': localChanges,
@@ -406,12 +413,12 @@ class AnkiIncrementalSync {
     final remoteDecksPayload = _list(remote['decks']);
     final remoteDecks =
         remoteDecksPayload.isNotEmpty && remoteDecksPayload.first is List
-        ? _list(remoteDecksPayload.first)
-        : remoteDecksPayload;
+            ? _list(remoteDecksPayload.first)
+            : remoteDecksPayload;
     final remoteDeckConfigs =
         remoteDecksPayload.length > 1 && remoteDecksPayload[1] is List
-        ? _list(remoteDecksPayload[1])
-        : const <dynamic>[];
+            ? _list(remoteDecksPayload[1])
+            : const <dynamic>[];
 
     for (final model in remoteModels) {
       if (model is! Map) continue;
@@ -487,12 +494,15 @@ class AnkiIncrementalSync {
         ..addAll(remoteConfig);
       await txn.delete('config');
       for (final entry in remoteConfig.entries) {
-        await txn.insert('config', {
-          'key': entry.key,
-          'usn': serverUsn,
-          'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          'config': jsonEncode(entry.value),
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        await txn.insert(
+            'config',
+            {
+              'key': entry.key,
+              'usn': serverUsn,
+              'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              'config': jsonEncode(entry.value),
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
       }
     }
     final updates = <String, Object?>{
@@ -554,22 +564,25 @@ class AnkiIncrementalSync {
       final sortField = sortIndex >= 0 && sortIndex < noteFields.length
           ? noteFields[sortIndex]
           : firstField;
-      await txn.insert('notes', {
-        'id': id,
-        'guid': guid,
-        'mid': modelId,
-        'mod': remoteMtime,
-        'usn': remoteUsn,
-        'tags': tags,
-        'flds': fields,
-        // Anki's NoteEntry leaves these two tuple values empty. Derive
-        // them from the stored fields and notetype instead of trusting
-        // the placeholders.
-        'sfld': Note.stripHtml(sortField),
-        'csum': _checksum(firstField),
-        'flags': flags,
-        'data': data,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(
+          'notes',
+          {
+            'id': id,
+            'guid': guid,
+            'mid': modelId,
+            'mod': remoteMtime,
+            'usn': remoteUsn,
+            'tags': tags,
+            'flds': fields,
+            // Anki's NoteEntry leaves these two tuple values empty. Derive
+            // them from the stored fields and notetype instead of trusting
+            // the placeholders.
+            'sfld': Note.stripHtml(sortField),
+            'csum': _checksum(firstField),
+            'flags': flags,
+            'data': data,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       applied++;
     }
     return applied;
@@ -613,26 +626,29 @@ class AnkiIncrementalSync {
           _int(existing.first['mod']) >= remoteMtime) {
         continue;
       }
-      await txn.insert('cards', {
-        'id': id,
-        'nid': noteId,
-        'did': deckId,
-        'ord': ordinal,
-        'mod': remoteMtime,
-        'usn': remoteUsn,
-        'type': type,
-        'queue': queue,
-        'due': due,
-        'ivl': interval,
-        'factor': factor,
-        'reps': reps,
-        'lapses': lapses,
-        'left': left,
-        'odue': originalDue,
-        'odid': originalDeckId,
-        'flags': flags,
-        'data': e[17]?.toString() ?? '',
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(
+          'cards',
+          {
+            'id': id,
+            'nid': noteId,
+            'did': deckId,
+            'ord': ordinal,
+            'mod': remoteMtime,
+            'usn': remoteUsn,
+            'type': type,
+            'queue': queue,
+            'due': due,
+            'ivl': interval,
+            'factor': factor,
+            'reps': reps,
+            'lapses': lapses,
+            'left': left,
+            'odue': originalDue,
+            'odid': originalDeckId,
+            'flags': flags,
+            'data': e[17]?.toString() ?? '',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       applied++;
     }
     return applied;
@@ -657,17 +673,20 @@ class AnkiIncrementalSync {
       final factor = _tupleInt(e[6], 'review');
       final time = _tupleInt(e[7], 'review');
       final type = _tupleInt(e[8], 'review');
-      final inserted = await txn.insert('revlog', {
-        'id': id,
-        'cid': cardId,
-        'usn': remoteUsn,
-        'ease': ease,
-        'ivl': interval,
-        'lastIvl': lastInterval,
-        'factor': factor,
-        'time': time,
-        'type': type,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      final inserted = await txn.insert(
+          'revlog',
+          {
+            'id': id,
+            'cid': cardId,
+            'usn': remoteUsn,
+            'ease': ease,
+            'ivl': interval,
+            'lastIvl': lastInterval,
+            'factor': factor,
+            'time': time,
+            'type': type,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
       if (inserted != 0) applied++;
     }
     return applied;
@@ -786,14 +805,16 @@ class AnkiIncrementalSync {
           'col',
           columns: ['models'],
           where: 'id = 1',
-        )).first['models'],
+        ))
+            .first['models'],
       ).length,
       _decodeObject(
         (await txn.query(
           'col',
           columns: ['decks'],
           where: 'id = 1',
-        )).first['decks'],
+        ))
+            .first['decks'],
       ).length,
       await _count(txn, 'deck_config'),
     ];
@@ -828,7 +849,8 @@ class AnkiIncrementalSync {
       'col',
       columns: ['models', 'decks', 'tags'],
       where: 'id = 1',
-    )).first;
+    ))
+        .first;
     for (final values in [
       _decodeObject(col['models']).values,
       _decodeObject(col['decks']).values,

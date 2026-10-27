@@ -350,7 +350,8 @@ void main() {
         'notes',
         where: 'id = ?',
         whereArgs: [note.id],
-      )).single;
+      ))
+          .single;
       final colBefore = (await collection.db.query('col')).single;
       final remoteTuple = <dynamic>[
         note.id,
@@ -387,7 +388,8 @@ void main() {
         'notes',
         where: 'id = ?',
         whereArgs: [note.id],
-      )).single;
+      ))
+          .single;
       for (final field in ['guid', 'tags', 'flds', 'data', 'usn', 'mod']) {
         expect(after[field], before[field], reason: 'field $field changed');
       }
@@ -410,9 +412,8 @@ void main() {
       final changesRequest = fakeHttp.requests.singleWhere(
         (request) => request.url.path == '/sync/applyChanges',
       );
-      final changes =
-          _decodedRequestData(changesRequest)['changes']
-              as Map<String, dynamic>;
+      final changes = _decodedRequestData(changesRequest)['changes']
+          as Map<String, dynamic>;
       final models = (changes['models'] as List).cast<Map<String, dynamic>>();
       final basic = models.singleWhere((model) => model['name'] == 'Basic');
       final cloze = models.singleWhere((model) => model['name'] == 'Cloze');
@@ -651,9 +652,12 @@ void main() {
     modelJson
       ..['mod'] = 1
       ..['usn'] = 0;
-    await collection.db.update('col', {
-      'models': jsonEncode(models),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'models': jsonEncode(models),
+        },
+        where: 'id = 1');
     await collection.col.reload();
 
     final model = collection.col.modelList.first;
@@ -710,7 +714,9 @@ void main() {
     },
   );
 
-  test('addCard falls back to an available note type when the placeholder is stale', () async {
+  test(
+      'addCard falls back to an available note type when the placeholder is stale',
+      () async {
     final availableModelId = collection.col.modelList.first.id;
     expect(availableModelId, isNot(1));
 
@@ -863,14 +869,18 @@ void main() {
       'col',
       columns: ['dconf'],
       where: 'id = 1',
-    )).single;
+    ))
+        .single;
     final configs = jsonDecode(row['dconf'] as String) as Map<String, dynamic>;
     configs['2'] = Map<String, dynamic>.from(configs['1'] as Map)
       ..['id'] = 2
       ..['name'] = 'Second';
-    await collection.db.update('col', {
-      'dconf': jsonEncode(configs),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'dconf': jsonEncode(configs),
+        },
+        where: 'id = 1');
     await collection.db.delete('deck_config');
     await collection.db.execute('''
       CREATE TRIGGER fail_second_deck_config
@@ -924,7 +934,8 @@ void main() {
       'notes',
       where: 'id = ?',
       whereArgs: [note.id],
-    )).single;
+    ))
+        .single;
     expect(row['mod'], preservedLegacyMillis);
     expect(row['usn'], 7);
     expect(row['sfld'], 'intentionally stale after migration');
@@ -963,13 +974,15 @@ void main() {
         [0],
       ]
       ..['usn'] = 0;
-    await collection.db.update('col', {
-      'models': jsonEncode(models),
-    }, where: 'id = 1');
-    final created =
-        ((await collection.db.query('col', columns: ['crt'])).single['crt']
-                as num)
-            .toInt();
+    await collection.db.update(
+        'col',
+        {
+          'models': jsonEncode(models),
+        },
+        where: 'id = 1');
+    final created = ((await collection.db.query('col', columns: ['crt']))
+            .single['crt'] as num)
+        .toInt();
     final migrationMarker = File(
       '${workDir.path}${Platform.pathSeparator}'
       'collection.anki2.stroom-sync-metadata-migration',
@@ -1035,9 +1048,12 @@ void main() {
           ((await collection.db.query('col', columns: ['crt'])).single['crt']
                   as num)
               .toInt();
-      await collection.db.update('col', {
-        'crt': originalCollectionCreated + 1,
-      }, where: 'id = 1');
+      await collection.db.update(
+          'col',
+          {
+            'crt': originalCollectionCreated + 1,
+          },
+          where: 'id = 1');
 
       await collection.close();
       collection = AnkiDatabase(basePath: workDir.path);
@@ -1047,7 +1063,8 @@ void main() {
         'notes',
         where: 'id = ?',
         whereArgs: [note.id],
-      )).single;
+      ))
+          .single;
       expect(row['sfld'], 'replacement front');
       expect(row['csum'], Note.computeChecksum('replacement front'));
     },
@@ -1356,9 +1373,12 @@ void main() {
       where: 'id = ?',
       whereArgs: [note.id],
     );
-    await collection.db.update('col', {
-      'mod': collectionModifiedMs,
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'mod': collectionModifiedMs,
+        },
+        where: 'id = 1');
     await _removeSyncMetadataMigrationMarker(workDir);
 
     await collection.close();
@@ -1369,7 +1389,8 @@ void main() {
       'notes',
       where: 'id = ?',
       whereArgs: [note.id],
-    )).single;
+    ))
+        .single;
     expect(migrated['mod'], noteModifiedSecs);
     expect(migrated['sfld'], 'legacy');
     expect(migrated['csum'], Note.computeChecksum('legacy'));
@@ -1387,7 +1408,8 @@ void main() {
       'col',
       columns: ['crt', 'decks'],
       where: 'id = 1',
-    )).single;
+    ))
+        .single;
     final collectionCreated = (collectionRow['crt'] as num).toInt();
     final decks =
         jsonDecode(collectionRow['decks'] as String) as Map<String, dynamic>;
@@ -1397,9 +1419,12 @@ void main() {
       ..['crt'] = legacyDeckCreationMillis
       ..['usn'] = 7;
     decks[deckKey] = legacyDeck;
-    await collection.db.update('col', {
-      'decks': jsonEncode(decks),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'decks': jsonEncode(decks),
+        },
+        where: 'id = 1');
     // Simulate an installation that already ran migration v1, which did not
     // normalize deck creation timestamps.
     await File(
@@ -1427,8 +1452,8 @@ void main() {
         _decodedRequestData(changesRequest)['changes'] as Map<String, dynamic>;
     final syncedDecks = (changes['decks'] as List)[0] as List<dynamic>;
     final syncedDeck = syncedDecks.cast<Map<String, dynamic>>().singleWhere(
-      (deck) => deck['id'] == deckId,
-    );
+          (deck) => deck['id'] == deckId,
+        );
     expect(syncedDeck['crt'], legacyDeckCreationMillis ~/ 1000);
   });
 
@@ -1438,7 +1463,8 @@ void main() {
       'col',
       columns: ['models', 'decks'],
       where: 'id = 1',
-    )).single;
+    ))
+        .single;
     final originalModels = collectionRow['models'] as String;
     final decks =
         jsonDecode(collectionRow['decks'] as String) as Map<String, dynamic>;
@@ -1446,10 +1472,13 @@ void main() {
       ..['crt'] = legacyDeckCreationMillis
       ..['usn'] = 4;
     decks[decks.keys.single] = deck;
-    await collection.db.update('col', {
-      'models': '{malformed',
-      'decks': jsonEncode(decks),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'models': '{malformed',
+          'decks': jsonEncode(decks),
+        },
+        where: 'id = 1');
     await _removeSyncMetadataMigrationMarker(workDir);
 
     await collection.close();
@@ -1460,7 +1489,8 @@ void main() {
       'col',
       columns: ['models', 'decks'],
       where: 'id = 1',
-    )).single;
+    ))
+        .single;
     expect(migrated['models'], '{malformed');
     final migratedDecks =
         jsonDecode(migrated['decks'] as String) as Map<String, dynamic>;
@@ -1523,9 +1553,12 @@ void main() {
         ..['curDeck'] = deletedDeck.id
         ..['activeDecks'] = [deletedDeck.id];
       collection.col.confJson = jsonEncode(config);
-      await collection.db.update('col', {
-        'conf': collection.col.confJson,
-      }, where: 'id = 1');
+      await collection.db.update(
+          'col',
+          {
+            'conf': collection.col.confJson,
+          },
+          where: 'id = 1');
 
       await collection.col.removeDeck(deletedDeck.id);
 
@@ -1608,9 +1641,12 @@ void main() {
 
   test('remote collection config removes keys deleted on the server', () async {
     final localConfig = {'removedOnServer': 'stale', 'serverUpdated': 'old'};
-    await collection.db.update('col', {
-      'conf': jsonEncode(localConfig),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'conf': jsonEncode(localConfig),
+        },
+        where: 'id = 1');
     for (final entry in localConfig.entries) {
       await collection.db.insert('config', {
         'key': entry.key,
@@ -1695,9 +1731,12 @@ void main() {
       final originalConfig =
           jsonDecode(collection.col.confJson) as Map<String, dynamic>;
       final localConfig = {...originalConfig, 'reviewLimit': 42};
-      await collection.db.update('col', {
-        'conf': jsonEncode(localConfig),
-      }, where: 'id = 1');
+      await collection.db.update(
+          'col',
+          {
+            'conf': jsonEncode(localConfig),
+          },
+          where: 'id = 1');
       expect(await collection.db.query('config'), isEmpty);
       await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
 
@@ -1706,9 +1745,8 @@ void main() {
       final changesRequest = fakeHttp.requests.singleWhere(
         (request) => request.url.path == '/sync/applyChanges',
       );
-      final changes =
-          _decodedRequestData(changesRequest)['changes']
-              as Map<String, dynamic>;
+      final changes = _decodedRequestData(changesRequest)['changes']
+          as Map<String, dynamic>;
       expect(changes['conf'], localConfig);
     },
   );
@@ -1739,10 +1777,8 @@ void main() {
     final storedRemote = anki_deck.Deck.fromJson(
       Map<String, dynamic>.from(decks[remoteDeck.id.toString()] as Map),
     );
-    final names = decks.values
-        .cast<Map>()
-        .map((deck) => deck['name'] as String)
-        .toList();
+    final names =
+        decks.values.cast<Map>().map((deck) => deck['name'] as String).toList();
 
     expect(storedRemote.id, remoteDeck.id);
     expect(storedRemote.name, isNot(localDeck.name));
@@ -1759,9 +1795,12 @@ void main() {
     final config = jsonDecode(collection.col.confJson) as Map<String, dynamic>
       ..['curDeck'] = deletedDeck.id
       ..['activeDecks'] = [deletedDeck.id];
-    await collection.db.update('col', {
-      'conf': jsonEncode(config),
-    }, where: 'id = 1');
+    await collection.db.update(
+        'col',
+        {
+          'conf': jsonEncode(config),
+        },
+        where: 'id = 1');
 
     await _queueCollectionSync(
       fakeHttp,
@@ -1856,9 +1895,8 @@ void main() {
       final applyGravesRequest = fakeHttp.requests.lastWhere(
         (request) => request.url.path == '/sync/applyGraves',
       );
-      final sentGraves =
-          _decodedRequestData(applyGravesRequest)['chunk']
-              as Map<String, dynamic>;
+      final sentGraves = _decodedRequestData(applyGravesRequest)['chunk']
+          as Map<String, dynamic>;
       expect(sentGraves['cards'], contains(cardOnlyDeleted.id));
       expect(sentGraves['notes'], contains(deletedNote.id));
     },
@@ -1947,9 +1985,8 @@ Map<String, dynamic> _decodedRequestData(_CapturedRequest request) {
 }
 
 Map<String, List<int>> _multipartFields(_CapturedRequest request) {
-  final boundary = RegExp(r'boundary=(.+)$')
-      .firstMatch(request.contentType)!
-      .group(1)!;
+  final boundary =
+      RegExp(r'boundary=(.+)$').firstMatch(request.contentType)!.group(1)!;
   final delimiter = ascii.encode('--$boundary\r\n');
   final nextPart = ascii.encode('\r\n--$boundary');
   final output = <String, List<int>>{};

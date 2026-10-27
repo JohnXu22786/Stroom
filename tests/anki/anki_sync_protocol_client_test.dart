@@ -108,16 +108,16 @@ void main() {
       await client.login('test@example.invalid', 'test-only');
 
       Map<String, dynamic> validMetadata() => {
-        'mod': 1700000000000,
-        'scm': 1600000000000,
-        'usn': 7,
-        'ts': 1700000000,
-        'msg': '',
-        'cont': true,
-        'hostNum': 1,
-        'empty': false,
-        'media_usn': 3,
-      };
+            'mod': 1700000000000,
+            'scm': 1600000000000,
+            'usn': 7,
+            'ts': 1700000000,
+            'msg': '',
+            'cont': true,
+            'hostNum': 1,
+            'empty': false,
+            'media_usn': 3,
+          };
 
       final invalidCases = <String>[];
       for (final field in [
@@ -223,10 +223,10 @@ void main() {
           zoneSpecification: ZoneSpecification(
             createTimer: (self, parent, zone, duration, callback) =>
                 parent.createTimer(
-                  zone,
-                  Duration(milliseconds: duration.inMilliseconds ~/ 1000),
-                  callback,
-                ),
+              zone,
+              Duration(milliseconds: duration.inMilliseconds ~/ 1000),
+              callback,
+            ),
           ),
         );
 
@@ -460,7 +460,9 @@ void main() {
       );
     });
 
-    test('streams raw collection bytes to a file through the authenticated endpoint', () async {
+    test(
+        'streams raw collection bytes to a file through the authenticated endpoint',
+        () async {
       final collectionBytes = [0, 1, 2, 255];
       final directory = await Directory.systemTemp.createTemp(
         'stroom-anki-protocol-download_',
@@ -720,9 +722,12 @@ void main() {
         httpClient.omitNextContentLength = true;
 
         await expectLater(
-          client.requestMediaData('downloadFiles', {
-            'files': ['image.jpg'],
-          }, maxResponseBytes: 3),
+          client.requestMediaData(
+              'downloadFiles',
+              {
+                'files': ['image.jpg'],
+              },
+              maxResponseBytes: 3),
           throwsA(isA<AnkiSyncException>()),
         );
       },
@@ -915,11 +920,9 @@ class _ControlledUploadHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final abortTrigger = request is http.Abortable
-        ? request.abortTrigger
-        : null;
-    final abortedRequest =
-        abortTrigger?.then<void>((_) {
+    final abortTrigger =
+        request is http.Abortable ? request.abortTrigger : null;
+    final abortedRequest = abortTrigger?.then<void>((_) {
           aborted = true;
           throw http.RequestAbortedException(request.url);
         }) ??

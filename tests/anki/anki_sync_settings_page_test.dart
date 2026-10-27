@@ -373,7 +373,8 @@ class _FakeSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async => null;
+  }) async =>
+      null;
 }
 
 class _UnloadedAnkiSyncNotifier extends AnkiSyncNotifier {
@@ -395,7 +396,8 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async => values[key];
+  }) async =>
+      values[key];
 }
 
 class _GatedAnkiSyncNotifier extends AnkiSyncNotifier {

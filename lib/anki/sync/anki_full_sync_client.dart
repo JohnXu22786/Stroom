@@ -12,7 +12,7 @@ class AnkiFullSyncClient {
   final AnkiSyncProtocolClient Function() _clientFactory;
 
   AnkiFullSyncClient({AnkiSyncProtocolClient Function()? clientFactory})
-    : _clientFactory = clientFactory ?? AnkiSyncProtocolClient.ankiWeb;
+      : _clientFactory = clientFactory ?? AnkiSyncProtocolClient.ankiWeb;
 
   Future<SyncAuth> login(String email, String password) async {
     final client = _clientFactory();

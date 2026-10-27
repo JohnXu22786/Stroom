@@ -36,9 +36,9 @@ enum CardType {
   const CardType(this.value);
 
   static CardType fromValue(int v) => CardType.values.firstWhere(
-    (e) => e.value == v,
-    orElse: () => CardType.new_,
-  );
+        (e) => e.value == v,
+        orElse: () => CardType.new_,
+      );
 }
 
 /// Card queue mirroring `CardQueue` in anki rslib.
@@ -67,9 +67,9 @@ enum CardQueue {
   const CardQueue(this.value);
 
   static CardQueue fromValue(int v) => CardQueue.values.firstWhere(
-    (e) => e.value == v,
-    orElse: () => CardQueue.new_,
-  );
+        (e) => e.value == v,
+        orElse: () => CardQueue.new_,
+      );
 }
 
 // ─── FSRS memory state ────────────────────────────────────────────────────
@@ -88,14 +88,14 @@ class FsrsMemoryState {
   double get normalizedDifficulty => (difficulty - 1.0) / 9.0;
 
   Map<String, dynamic> toJson() => {
-    'stability': stability,
-    'difficulty': difficulty,
-  };
+        'stability': stability,
+        'difficulty': difficulty,
+      };
 
   factory FsrsMemoryState.fromJson(Map<String, dynamic> j) => FsrsMemoryState(
-    stability: (j['stability'] as num).toDouble(),
-    difficulty: (j['difficulty'] as num).toDouble(),
-  );
+        stability: (j['stability'] as num).toDouble(),
+        difficulty: (j['difficulty'] as num).toDouble(),
+      );
 }
 
 // ─── Card ─────────────────────────────────────────────────────────────────
@@ -183,9 +183,9 @@ class Card {
     this.decay,
     this.last_review_time,
     this.custom_data = '',
-  }) : id = id ?? _nextId(),
-       ctype = ctype ?? CardType.new_,
-       queue = queue ?? CardQueue.new_;
+  })  : id = id ?? _nextId(),
+        ctype = ctype ?? CardType.new_,
+        queue = queue ?? CardQueue.new_;
 
   /// Creates a new card linked to [noteId] in deck [deckId].
   factory Card.createNew({
@@ -380,47 +380,47 @@ class Card {
 
   /// Serialize to DB column map (short names).
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'nid': note_id,
-    'did': deck_id,
-    'ord': template_idx,
-    'mod': mtime,
-    'usn': usn,
-    'type': ctype.value,
-    'queue': queue.value,
-    'due': due,
-    'ivl': interval,
-    'factor': ease_factor,
-    'reps': reps,
-    'lapses': lapses,
-    'left': remaining_steps,
-    'odue': original_due,
-    'odid': original_deck_id,
-    'flags': flags,
-    'data': custom_data,
-  };
+        'id': id,
+        'nid': note_id,
+        'did': deck_id,
+        'ord': template_idx,
+        'mod': mtime,
+        'usn': usn,
+        'type': ctype.value,
+        'queue': queue.value,
+        'due': due,
+        'ivl': interval,
+        'factor': ease_factor,
+        'reps': reps,
+        'lapses': lapses,
+        'left': remaining_steps,
+        'odue': original_due,
+        'odid': original_deck_id,
+        'flags': flags,
+        'data': custom_data,
+      };
 
   /// Deserialize from DB column map (short names).
   factory Card.fromMap(Map<String, dynamic> m) => Card(
-    id: m['id'] as int,
-    note_id: m['nid'] as int,
-    deck_id: m['did'] as int,
-    template_idx: m['ord'] as int? ?? 0,
-    mtime: m['mod'] as int? ?? 0,
-    usn: m['usn'] as int? ?? -1,
-    ctype: CardType.fromValue(m['type'] as int? ?? 0),
-    queue: CardQueue.fromValue(m['queue'] as int? ?? 0),
-    due: m['due'] as int? ?? 0,
-    interval: m['ivl'] as int? ?? 0,
-    ease_factor: m['factor'] as int? ?? 2500,
-    reps: m['reps'] as int? ?? 0,
-    lapses: m['lapses'] as int? ?? 0,
-    remaining_steps: m['left'] as int? ?? 0,
-    original_due: m['odue'] as int? ?? 0,
-    original_deck_id: m['odid'] as int? ?? 0,
-    flags: m['flags'] as int? ?? 0,
-    custom_data: m['data'] as String? ?? '',
-  );
+        id: m['id'] as int,
+        note_id: m['nid'] as int,
+        deck_id: m['did'] as int,
+        template_idx: m['ord'] as int? ?? 0,
+        mtime: m['mod'] as int? ?? 0,
+        usn: m['usn'] as int? ?? -1,
+        ctype: CardType.fromValue(m['type'] as int? ?? 0),
+        queue: CardQueue.fromValue(m['queue'] as int? ?? 0),
+        due: m['due'] as int? ?? 0,
+        interval: m['ivl'] as int? ?? 0,
+        ease_factor: m['factor'] as int? ?? 2500,
+        reps: m['reps'] as int? ?? 0,
+        lapses: m['lapses'] as int? ?? 0,
+        remaining_steps: m['left'] as int? ?? 0,
+        original_due: m['odue'] as int? ?? 0,
+        original_deck_id: m['odid'] as int? ?? 0,
+        flags: m['flags'] as int? ?? 0,
+        custom_data: m['data'] as String? ?? '',
+      );
 
   static int _counter = 0;
   static int _nextId() {
