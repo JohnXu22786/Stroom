@@ -535,6 +535,7 @@ void main() {
             paramName: 'verbose',
             defaultValue: 'high',
             type: 'string',
+            options: ['high', 'low'],
           ),
         ],
       );
@@ -583,6 +584,8 @@ void main() {
           saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
       expect(verbose.type, 'boolean');
       expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
+      expect(verbose.defaultValue, isEmpty,
+          reason: 'boolean 类型保存时清空旧类型的默认值');
     });
 
     testWidgets('duplicate reasoning param name shows inline error',

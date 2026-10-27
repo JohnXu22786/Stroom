@@ -193,6 +193,32 @@ void chatServiceRequestGroup3() {
       expect(extraParams['stream_options'], isFalse,
           reason: 'boolean type param should be sent as bool');
     });
+
+    test('provider boolean custom param with no stale value defaults to true',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'Test provider',
+        customParams: [
+          CustomParam(paramName: 'verbose', type: 'boolean'),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _CapturingProvider();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(provider.capturedExtraParams?['verbose'], isTrue);
+    });
   });
 
   group('ChatService - saved empty model option selection', () {
