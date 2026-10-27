@@ -1328,6 +1328,51 @@ void main() {
     });
 
     test(
+      'malformed OCR retry data preserves valid images over legacy request fallback',
+      () {
+        final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+        final task = BackgroundTask.fromMap({
+          'id': 'malformed-ocr-retry-with-images',
+          'type': 'ocr',
+          'title': 'OCR retry with partially parseable data',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'retryData': {
+            'type': 'ocr',
+            'version': 2,
+            'images': [
+              {'bytes': base64Encode(imageBytes), 'format': 'png'},
+            ],
+            'apiKey': 'malformed-retry-secret-72',
+          },
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': 'Read the document carefully'},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+
+        expect(snapshot.images, hasLength(1));
+        expect(snapshot.images.single.bytes, imageBytes);
+        expect(
+          jsonEncode(task.toMap()),
+          isNot(contains('malformed-retry-secret-72')),
+        );
+      },
+    );
+
+    test(
       'current OCR retry snapshots drop unknown fields before later writes',
       () async {
         WebFileStore.enableTestMode();
