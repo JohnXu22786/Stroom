@@ -2189,6 +2189,72 @@ void main() {
         await workDir.delete(recursive: true);
       }
     });
+
+    test(
+      'keeps media sync indexes when media directory deletion fails',
+      () async {
+        if (!Platform.isLinux) return;
+        final uid = await Process.run('id', ['-u']);
+        if (uid.stdout.toString().trim() == '0') return;
+
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_clear_failure_test_',
+        );
+        final previousPathProvider = PathProviderPlatform.instance;
+        PathProviderPlatform.instance =
+            _TestDocumentsPathProvider(workDir.path);
+        AppStorage.resetCache();
+        const identity = 'ankiweb:media-clear-failure-test';
+        final indexHash = sha256.convert(utf8.encode(identity)).toString();
+        final indexPath =
+            '${workDir.path}/collection.media.sync.$indexHash.db';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        try {
+          await mediaDir.create();
+          await File('${mediaDir.path}/synced.png').writeAsBytes([1, 2, 3]);
+          await _seedMediaIndex(
+            workDir,
+            identity,
+            files: [
+              {
+                'fname': 'synced.png',
+                'sha1': sha1.convert([1, 2, 3]).toString(),
+                'usn': 7,
+                'sync_required': 0,
+              },
+            ],
+          );
+          final chmodResult =
+              await Process.run('chmod', ['0555', mediaDir.path]);
+          expect(chmodResult.exitCode, 0);
+
+          await expectLater(
+            BackupService.clearSelectedData(
+              const BackupSelection(
+                chatRecordsAndAttachments: false,
+                settings: false,
+                pictures: false,
+                audio: false,
+                videos: false,
+                texts: false,
+                tasks: false,
+                ankiData: true,
+                browserCookies: false,
+              ),
+            ),
+            throwsA(isA<Exception>()),
+          );
+
+          expect(await mediaDir.exists(), isTrue);
+          expect(await File(indexPath).exists(), isTrue);
+        } finally {
+          await Process.run('chmod', ['0755', mediaDir.path]);
+          PathProviderPlatform.instance = previousPathProvider;
+          AppStorage.resetCache();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
   });
 }
 
