@@ -547,60 +547,77 @@ class AnkiMediaSync {
     final staging = await folder.createTemp('.stroom-sync-install-');
     var preserveStaging = false;
     var sequence = 0;
+    final installed = <(File, File, bool)>[];
     try {
-      for (final entry in downloaded.entries) {
-        _validateFilename(entry.key);
-        final content = await entry.value.readAsBytes();
-        if (content.isEmpty || content.length > _maxMediaFileBytes) {
-          throw const AnkiSyncException('下载的媒体文件为空或超过 100 MB');
-        }
-        final normalizedFilename = _normalizeFilename(entry.key);
-        if (normalizedFilename.isEmpty ||
-            normalizedFilename == '.' ||
-            normalizedFilename == '..') {
-          throw const AnkiSyncException('媒体文件名无法安全归一化');
-        }
-        final localFilename = await _availableNormalizedFilename(
-          folder,
-          entry.key,
-          normalizedFilename,
-          content,
-        );
-        localFilenames[entry.key] = localFilename;
-        final destination = File(p.join(folder.path, localFilename));
-        if (localFilename != entry.key && await destination.exists()) {
-          final existingHash = sha1.convert(await destination.readAsBytes());
-          if (existingHash == sha1.convert(content)) continue;
-        }
-        final stagingId = sequence++;
-        final temp = File(p.join(staging.path, 'download-$stagingId'));
-        final displaced = File(p.join(staging.path, 'original-$stagingId'));
-        await temp.writeAsBytes(content, flush: true);
-        final hadOriginal = await destination.exists();
-        if (hadOriginal) await destination.rename(displaced.path);
-        var installed = false;
-        try {
-          await temp.rename(destination.path);
-          installed = true;
-          if (hadOriginal && await displaced.exists()) await displaced.delete();
-        } catch (_) {
-          if (hadOriginal && await displaced.exists()) {
-            try {
-              if (installed && await destination.exists()) {
-                await destination.delete();
-              }
-              if (await destination.exists()) {
-                preserveStaging = true;
-              } else {
-                await displaced.rename(destination.path);
-              }
-            } catch (_) {
-              preserveStaging = true;
-            }
+      try {
+        for (final entry in downloaded.entries) {
+          _validateFilename(entry.key);
+          final content = await entry.value.readAsBytes();
+          if (content.isEmpty || content.length > _maxMediaFileBytes) {
+            throw const AnkiSyncException('下载的媒体文件为空或超过 100 MB');
           }
-          rethrow;
-        } finally {
-          if (await temp.exists()) await temp.delete();
+          final normalizedFilename = _normalizeFilename(entry.key);
+          if (normalizedFilename.isEmpty ||
+              normalizedFilename == '.' ||
+              normalizedFilename == '..') {
+            throw const AnkiSyncException('媒体文件名无法安全归一化');
+          }
+          final localFilename = await _availableNormalizedFilename(
+            folder,
+            entry.key,
+            normalizedFilename,
+            content,
+          );
+          localFilenames[entry.key] = localFilename;
+          final destination = File(p.join(folder.path, localFilename));
+          if (localFilename != entry.key && await destination.exists()) {
+            final existingHash = sha1.convert(await destination.readAsBytes());
+            if (existingHash == sha1.convert(content)) continue;
+          }
+          final stagingId = sequence++;
+          final temp = File(p.join(staging.path, 'download-$stagingId'));
+          final displaced = File(p.join(staging.path, 'original-$stagingId'));
+          await temp.writeAsBytes(content, flush: true);
+          final hadOriginal = await destination.exists();
+          if (hadOriginal) await destination.rename(displaced.path);
+          try {
+            await temp.rename(destination.path);
+            installed.add((destination, displaced, hadOriginal));
+          } catch (_) {
+            if (hadOriginal && await displaced.exists()) {
+              try {
+                await displaced.rename(destination.path);
+              } catch (_) {
+                preserveStaging = true;
+              }
+            }
+            rethrow;
+          } finally {
+            if (await temp.exists()) await temp.delete();
+          }
+        }
+      } catch (_) {
+        for (final record in installed.reversed) {
+          final (destination, displaced, hadOriginal) = record;
+          try {
+            if (await destination.exists()) await destination.delete();
+            if (hadOriginal && await displaced.exists()) {
+              await displaced.rename(destination.path);
+            }
+          } catch (_) {
+            preserveStaging = true;
+          }
+        }
+        rethrow;
+      }
+
+      for (final record in installed) {
+        final (_, displaced, hadOriginal) = record;
+        if (!hadOriginal || !await displaced.exists()) continue;
+        try {
+          await displaced.delete();
+        } catch (_) {
+          preserveStaging = true;
         }
       }
       return localFilenames;

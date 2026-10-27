@@ -1417,6 +1417,123 @@ void main() {
       }
     });
 
+    test(
+      'restores earlier files when a later download cannot be installed',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_install_rollback_test_',
+        );
+        const identity = 'ankiweb:media-install-rollback';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const originalBytes = [1, 2, 3];
+        const replacementBytes = [4, 5, 6];
+        await File('${mediaDir.path}/first.png').writeAsBytes(originalBytes);
+        await Directory('${mediaDir.path}/second.png').create();
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'first.png',
+              'sha1': sha1.convert(originalBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final files = <String, List<int>>{
+          'first.png': replacementBytes,
+          'second.png': [7, 8, 9],
+        };
+        var sentChanges = false;
+        final fake = _QueueHttpClient();
+        fake.responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 2, 'sk': 'test-host-key'},
+                'err': '',
+              });
+            case '/msync/mediaChanges':
+              if (sentChanges) return _jsonResponse({'data': [], 'err': ''});
+              sentChanges = true;
+              return _jsonResponse({
+                'data': [
+                  [
+                    'first.png',
+                    1,
+                    sha1.convert(files['first.png']!).toString(),
+                  ],
+                  [
+                    'second.png',
+                    2,
+                    sha1.convert(files['second.png']!).toString(),
+                  ],
+                ],
+                'err': '',
+              });
+            case '/msync/downloadFiles':
+              final fields = _multipartFields(request, body);
+              final payload =
+                  jsonDecode(utf8.decode(gzip.decode(fields['data']!))) as Map;
+              final name = (payload['files'] as List).cast<String>().single;
+              final archive = Archive()
+                ..addFile(ArchiveFile('0', files[name]!.length, files[name]!))
+                ..addFile(
+                  ArchiveFile.string('_meta', jsonEncode({'0': name})),
+                );
+              return http.Response.bytes(ZipEncoder().encode(archive), 200);
+            default:
+              return _jsonResponse({'data': 'OK', 'err': ''});
+          }
+        };
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<FileSystemException>()),
+          );
+
+          expect(
+            await File('${mediaDir.path}/first.png').readAsBytes(),
+            originalBytes,
+          );
+          expect(await Directory('${mediaDir.path}/second.png').exists(), isTrue);
+          final indexHash = sha256.convert(utf8.encode(identity)).toString();
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.$indexHash.db',
+            version: 1,
+          );
+          final metadata = await index.query('media_meta');
+          final firstFile = await index.query(
+            'media_files',
+            where: 'fname = ?',
+            whereArgs: ['first.png'],
+          );
+          await index.close();
+          expect(metadata.single['last_sync_usn'], 0);
+          expect(
+            firstFile.single['sha1'],
+            sha1.convert(originalBytes).toString(),
+          );
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
+
     test('downloads a remote change over a pending local deletion', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_delete_conflict_',
