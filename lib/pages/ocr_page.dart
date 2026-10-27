@@ -1887,6 +1887,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       importPending = true;
       final newImages = <SelectedImage>[];
       String? firstError;
+      Object? firstFileFailure;
       for (final file in files) {
         if (!mounted || importGeneration != _imageImportGeneration) return;
         try {
@@ -1911,6 +1912,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           );
         } on FormatException catch (error) {
           firstError ??= error.message;
+        } catch (error) {
+          firstFileFailure ??= error;
         }
         if (!mounted || importGeneration != _imageImportGeneration) return;
       }
@@ -1930,6 +1933,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(firstError)));
+      }
+      if (firstFileFailure != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择图片失败: $firstFileFailure')),
+        );
       }
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {

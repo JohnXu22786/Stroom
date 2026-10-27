@@ -385,6 +385,15 @@ class _UnreadPickerFile extends XFile {
   }
 }
 
+class _FailingPickerFile extends XFile {
+  final Object failure;
+
+  _FailingPickerFile(this.failure, {String name = 'failed.png'}) : super(name);
+
+  @override
+  Future<Uint8List> readAsBytes() async => throw failure;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -437,6 +446,36 @@ void main() {
       },
     );
   }
+
+  testWidgets('gallery keeps valid files when a later file read fails', (
+    tester,
+  ) async {
+    final validBytes = _createValidOcrTestImage().bytes;
+    await tester.pumpWidget(
+      _buildTestApp(
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async => [
+          XFile.fromData(validBytes, name: 'valid.png'),
+          _FailingPickerFile(const FormatException('corrupt image')),
+          _FailingPickerFile(StateError('failed to read selected file')),
+        ],
+        testImagePayloadPreparer: (_) async =>
+            prepareOcrImagePayloadSync(validBytes),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从系统相册选择'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选 1 张图片'), findsOneWidget);
+    expect(find.text('corrupt image'), findsWidgets);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('选择图片失败: Bad state: failed to read selected file'),
+        findsOneWidget);
+  });
 
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
