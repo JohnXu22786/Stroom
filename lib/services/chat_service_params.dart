@@ -406,12 +406,12 @@ extension _ChatServiceParamsExt on ChatService {
         result,
         cp.paramName,
         value,
-        replaceExistingMap: replaceFlatJsonMapNames?.contains(cp.paramName) ==
-                true &&
-            (cp.type == 'json' ||
-                !customParams.any(
-                  (other) => other.paramName.startsWith('${cp.paramName}.'),
-                )),
+        replaceExistingMap:
+            replaceFlatJsonMapNames?.contains(cp.paramName) == true &&
+                (cp.type == 'json' ||
+                    !customParams.any(
+                      (other) => other.paramName.startsWith('${cp.paramName}.'),
+                    )),
       );
       if (cp.type == 'json' && value is Map && value.isEmpty) {
         emptyJsonParents.add(cp.paramName);
