@@ -1845,6 +1845,20 @@ String _legacyOcrRedactMaskedCredentialEchoes(
     sanitized = sanitized.replaceAllMapped(extendedPrefix, (match) {
       final boundaryLength = match.group(0)!.length - match.group(1)!.length;
       final beforeEcho = sanitized.substring(0, match.start + boundaryLength);
+      final afterEcho = sanitized.substring(match.end);
+      final naturalAuthenticationDocumentationInstruction =
+          prefix.toLowerCase() == 'document' &&
+              RegExp(
+                r'^\s*read\s+the\s+$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) &&
+              RegExp(
+                r'^\s+on\s+authentication[.!?]?\s*$',
+                caseSensitive: false,
+              ).hasMatch(afterEcho);
+      if (naturalAuthenticationDocumentationInstruction) {
+        return match.group(0)!;
+      }
       final naturalCarefulInstructionLead =
           _legacyOcrNaturalCarefulInstructionActions
                   .contains(prefix.toLowerCase()) &&
@@ -1927,7 +1941,6 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               );
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
-      final afterEcho = sanitized.substring(match.end);
       final hasAuthorizationConnectorAfterEcho = RegExp(
         r'^\s+as\s+',
         caseSensitive: false,

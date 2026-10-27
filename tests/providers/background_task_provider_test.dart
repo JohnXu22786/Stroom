@@ -13607,6 +13607,42 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves authentication documentation prompts',
+      () {
+        const instruction = 'Read the documentation on authentication.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-authentication-documentation-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer document…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(migratedInstruction, instruction);
+        expect(persisted, contains(instruction));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves colon prompts around echoed keys',
       () {
         const apiKey = 'opaque-user-secret-87';
