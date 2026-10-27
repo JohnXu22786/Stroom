@@ -700,6 +700,83 @@ void main() {
       },
     );
 
+    test('keeps invalid pending media uploads pending and fails sync', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_pending_invalid_test_',
+      );
+      const identity = 'ankiweb:pending-invalid-media';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
+      final oversized = await File('${mediaDir.path}/oversized.bin')
+          .open(mode: FileMode.write);
+      await oversized.truncate(100 * 1024 * 1024 + 1);
+      await oversized.close();
+      final emptyHash = sha1.convert([1, 2, 3]).toString();
+      final oversizedHash = sha1.convert([4, 5, 6]).toString();
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        files: [
+          {
+            'fname': 'empty.bin',
+            'sha1': emptyHash,
+            'usn': -1,
+            'sync_required': 1,
+          },
+          {
+            'fname': 'oversized.bin',
+            'sha1': oversizedHash,
+            'usn': -1,
+            'sync_required': 1,
+          },
+        ],
+      );
+      final fake = _QueueHttpClient()
+        ..responseFor = (request, body) async {
+          switch (request.url.path) {
+            case '/msync/begin':
+              return _jsonResponse({
+                'data': {'usn': 0, 'sk': 'pending-invalid-host-key'},
+                'err': '',
+              });
+            case '/msync/mediaSanity':
+              return _jsonResponse({'data': 'OK', 'err': ''});
+            default:
+              return _jsonResponse({'data': null, 'err': ''});
+          }
+        };
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'pending-invalid-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
+        );
+
+        expect(fake.paths, isNot(contains('/msync/uploadChanges')));
+        final indexHash = sha256.convert(utf8.encode(identity)).toString();
+        final index = await sqflite.openDatabase(
+          '${workDir.path}/collection.media.sync.$indexHash.db',
+          version: 1,
+        );
+        final files = await index.query('media_files', orderBy: 'fname');
+        await index.close();
+        expect(files.map((file) => file['sync_required']), [1, 1]);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
+
     test(
       'normalizes unsafe remote filenames before writing and syncing them',
       () async {

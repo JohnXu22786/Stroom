@@ -264,7 +264,6 @@ class AnkiMediaSync {
         );
         if (pending.isEmpty) break;
         final batch = <AnkiMediaUploadEntry>[];
-        final deferredNames = <String>[];
         var batchBytes = 0;
         for (final row in pending) {
           if (batch.isNotEmpty && batchBytes > _targetZipBytes) break;
@@ -281,25 +280,13 @@ class AnkiMediaSync {
           }
           final length = await file.length();
           if (length == 0 || length > _maxMediaFileBytes) {
-            deferredNames.add(name);
-            continue;
+            throw const AnkiSyncException(
+              '待上传媒体文件为空或超过 100 MB，请修复后重试同步',
+            );
           }
           final bytes = await file.readAsBytes();
           batch.add(AnkiMediaUploadEntry(name, bytes));
           batchBytes += bytes.length;
-        }
-        if (deferredNames.isNotEmpty) {
-          await index.update(
-            'media_files',
-            {'sync_required': 0},
-            where:
-                'fname IN (${List.filled(deferredNames.length, '?').join(',')})',
-            whereArgs: deferredNames,
-          );
-        }
-        if (batch.isEmpty) {
-          if (deferredNames.isEmpty) break;
-          continue;
         }
         final reply = await client.uploadMediaZip(encodeUploadArchive(batch));
         final processed = _int(reply['processed']);
