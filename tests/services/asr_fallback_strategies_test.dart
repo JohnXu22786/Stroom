@@ -344,7 +344,7 @@ void main() {
         expect(
           chunkFailure.chunks.single.error,
           allOf(
-            contains('localProcessing'),
+            contains('sizeLimit'),
             contains('encoding'),
             contains('chunk 1/'),
           ),

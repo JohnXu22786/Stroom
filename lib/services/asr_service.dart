@@ -251,20 +251,21 @@ class AsrConfig {
     String? chunking,
     String? compression,
     String? fallbackMethod,
-  }) => AsrConfig(
-    model: model ?? this.model,
-    apiKey: apiKey ?? this.apiKey,
-    host: host ?? this.host,
-    language: language ?? this.language,
-    typeConfig: typeConfig ?? this.typeConfig,
-    customParams: customParams ?? this.customParams,
-    uploadMethod: uploadMethod ?? this.uploadMethod,
-    maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
-    preprocessing: preprocessing ?? this.preprocessing,
-    chunking: chunking ?? this.chunking,
-    compression: compression ?? this.compression,
-    fallbackMethod: fallbackMethod ?? this.fallbackMethod,
-  );
+  }) =>
+      AsrConfig(
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        host: host ?? this.host,
+        language: language ?? this.language,
+        typeConfig: typeConfig ?? this.typeConfig,
+        customParams: customParams ?? this.customParams,
+        uploadMethod: uploadMethod ?? this.uploadMethod,
+        maxFileSizeBytes: maxFileSizeBytes ?? this.maxFileSizeBytes,
+        preprocessing: preprocessing ?? this.preprocessing,
+        chunking: chunking ?? this.chunking,
+        compression: compression ?? this.compression,
+        fallbackMethod: fallbackMethod ?? this.fallbackMethod,
+      );
 }
 
 // ============================================================================
@@ -288,10 +289,10 @@ class AsrTranscriptSegment {
   });
 
   Map<String, dynamic> toMap() => {
-    if (startSeconds != null) 'startSeconds': startSeconds,
-    if (endSeconds != null) 'endSeconds': endSeconds,
-    'text': text,
-  };
+        if (startSeconds != null) 'startSeconds': startSeconds,
+        if (endSeconds != null) 'endSeconds': endSeconds,
+        'text': text,
+      };
 
   factory AsrTranscriptSegment.fromMap(Map<String, dynamic> map) =>
       AsrTranscriptSegment(
@@ -377,7 +378,6 @@ dynamic _sanitizeAsrDiagnosticValue(dynamic value, String apiKey) {
           'payload',
           'data',
           'raw',
-          'file',
         }.contains(normalized) ||
         normalized.endsWith('apikey') ||
         normalized.endsWith('token') ||
@@ -389,6 +389,21 @@ dynamic _sanitizeAsrDiagnosticValue(dynamic value, String apiKey) {
   }
 
   dynamic sanitize(dynamic item, {String? field}) {
+    if (field?.toLowerCase() == 'file') {
+      if (item is String) {
+        final value = item.trim();
+        final isPublicFileReference =
+            value.startsWith('http://') || value.startsWith('https://');
+        final isFileMetadata = RegExp(
+          r'^audio\.(?:wav|mp3|m4a|ogg|webm|flac|aac|opus|mp4|mpeg|mpga)(?: \([0-9]+ (?:encoded )?bytes(?:, (?:base64|[a-z0-9.+-]+/[a-z0-9.+-]+))?\))?$',
+          caseSensitive: false,
+        ).hasMatch(value);
+        if (isPublicFileReference || isFileMetadata) {
+          return sanitizeAsrDiagnostic(value, apiKey: apiKey);
+        }
+      }
+      return '[PAYLOAD REDACTED]';
+    }
     if (isSensitiveField(field)) return '[PAYLOAD REDACTED]';
     if (item is String) {
       return sanitizeAsrDiagnostic(item, apiKey: apiKey);
@@ -506,10 +521,11 @@ class AsrFailureDiagnostic implements Exception {
     final rawMessage = responseData == null
         ? error.toString()
         : responseData is String
-        ? _sanitizeAsrDiagnosticText(responseData, apiKey: apiKey)
-        : responseData is List
-        ? '[PAYLOAD REDACTED]'
-        : _sanitizeAsrDiagnosticValue(responseData, apiKey ?? '').toString();
+            ? _sanitizeAsrDiagnosticText(responseData, apiKey: apiKey)
+            : responseData is List
+                ? '[PAYLOAD REDACTED]'
+                : _sanitizeAsrDiagnosticValue(responseData, apiKey ?? '')
+                    .toString();
     final messageLower = rawMessage.toLowerCase();
     final category = switch (status) {
       401 || 403 => AsrFailureCategory.authentication,
@@ -555,12 +571,17 @@ class AsrFailureDiagnostic implements Exception {
         AsrFailureCategory.localProcessing,
       _ => AsrFailureCategory.unknown,
     };
+    final safeMessage = status == null
+        ? dioError != null && _isNetworkFailure(dioError)
+            ? '请求失败: $rawMessage'
+            : rawMessage
+        : 'HTTP $status: $rawMessage';
     return AsrFailureDiagnostic(
       category: category,
       stage: stage,
       chunkIndex: chunkIndex,
       chunkCount: chunkCount,
-      message: sanitizeAsrDiagnostic(rawMessage, apiKey: apiKey),
+      message: sanitizeAsrDiagnostic(safeMessage, apiKey: apiKey),
     );
   }
 
@@ -574,14 +595,15 @@ class AsrFailureDiagnostic implements Exception {
 }
 
 bool _isNetworkFailure(DioException error) => switch (error.type) {
-  DioExceptionType.connectionTimeout ||
-  DioExceptionType.sendTimeout ||
-  DioExceptionType.receiveTimeout ||
-  DioExceptionType.connectionError ||
-  DioExceptionType.badCertificate => true,
-  DioExceptionType.unknown => _isWrappedNetworkFailure(error.error),
-  _ => false,
-};
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.connectionError ||
+      DioExceptionType.badCertificate =>
+        true,
+      DioExceptionType.unknown => _isWrappedNetworkFailure(error.error),
+      _ => false,
+    };
 
 bool _isWrappedNetworkFailure(Object? cause) {
   if (cause == null) return false;
@@ -616,6 +638,7 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
     ),
     (match) => '${match.group(1)}[REDACTED]',
   );
+  final urls = <String>[];
   safe = safe.replaceAllMapped(RegExp(r"""https?://[^\s<>"']+"""), (match) {
     final uri = Uri.tryParse(match.group(0)!);
     if (uri == null) return '[URL REDACTED]';
@@ -635,8 +658,7 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
       'sks',
       'skv',
     };
-    final signed =
-        uri.userInfo.isNotEmpty ||
+    final signed = uri.userInfo.isNotEmpty ||
         uri.queryParameters.keys.any(
           (key) =>
               RegExp(
@@ -645,9 +667,13 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
               ).hasMatch(key) ||
               azureSasParameters.contains(key.toLowerCase()),
         );
-    return signed
-        ? '${uri.scheme}://${uri.host}/[SIGNED URL REDACTED]'
+    final sanitizedUrl = signed
+        ? '${uri.scheme}://${uri.host}${uri.path}'
+            '${uri.hasQuery ? '?[SIGNED URL REDACTED]' : ''}'
         : match.group(0)!;
+    final marker = '\u0000${urls.length}\u0000';
+    urls.add(sanitizedUrl);
+    return marker;
   });
   safe = safe.replaceAll(
     RegExp(
@@ -671,10 +697,31 @@ String sanitizeAsrDiagnostic(String value, {String? apiKey}) {
     RegExp(r'(?<![A-Za-z0-9])(?=[A-Z]{2,}[a-z])[A-Za-z]{4,}(?![A-Za-z0-9])'),
     '[PAYLOAD REDACTED]',
   );
+  safe = safe.replaceAllMapped(
+    RegExp(r'(?<![A-Za-z0-9])[A-Z]{4,}(?![A-Za-z0-9])'),
+    (match) => const {
+      'HTTP',
+      'HTTPS',
+      'JSON',
+      'URL',
+      'ASR',
+      'WAV',
+      'PCM',
+      'UTF8',
+      'GET',
+      'POST',
+      'MIME',
+    }.contains(match.group(0))
+        ? match.group(0)!
+        : '[PAYLOAD REDACTED]',
+  );
   safe = safe.replaceAll(
     RegExp(r'(?<![A-Za-z0-9])[A-Za-z0-9+/=_-]{32,}'),
     '[PAYLOAD REDACTED]',
   );
+  for (var index = 0; index < urls.length; index++) {
+    safe = safe.replaceAll('\u0000$index\u0000', urls[index]);
+  }
   if (safe.length > 500) safe = '${safe.substring(0, 500)}…';
   return safe;
 }
@@ -685,12 +732,13 @@ typedef _AsrRequestFailureCallback = Future<void> Function(
 );
 
 class _AsrChunkCallbackException implements Exception {
-  const _AsrChunkCallbackException(this.cause);
+  _AsrChunkCallbackException(Object cause, String apiKey)
+      : safeMessage = sanitizeAsrDiagnostic('$cause', apiKey: apiKey);
 
-  final Object cause;
+  final String safeMessage;
 
   @override
-  String toString() => '$cause';
+  String toString() => safeMessage;
 }
 
 bool _isInvalidHttpClientEndpointArgumentError(DioException error) {
@@ -737,9 +785,8 @@ bool _isOutcomeUncertain(DioException error) {
   final causeDescription = cause?.toString().toLowerCase() ?? '';
   final isSocketConnectionError =
       error.type == DioExceptionType.connectionError &&
-      causeDescription.contains('socketexception');
-  final connectionCouldNotReachProvider =
-      isSocketConnectionError &&
+          causeDescription.contains('socketexception');
+  final connectionCouldNotReachProvider = isSocketConnectionError &&
       [
         'connection refused',
         'failed host lookup',
@@ -788,18 +835,18 @@ class AsrChunkResult {
   /// Retry persistence omits provider error text, which may contain request
   /// data, while retaining successful transcript text and timing offsets.
   Map<String, dynamic> toMap() => {
-    'index': index,
-    'startSeconds': startSeconds,
-    'endSeconds': endSeconds,
-    if (totalChunks != null) 'totalChunks': totalChunks,
-    if (planFingerprint != null) 'planFingerprint': planFingerprint,
-    'status': status.name,
-    if (text != null) 'text': text,
-    if (subtitle != null) 'subtitle': subtitle,
-    if (segments != null)
-      'segments': segments!.map((segment) => segment.toMap()).toList(),
-    if (words != null) 'words': words!.map((word) => word.toMap()).toList(),
-  };
+        'index': index,
+        'startSeconds': startSeconds,
+        'endSeconds': endSeconds,
+        if (totalChunks != null) 'totalChunks': totalChunks,
+        if (planFingerprint != null) 'planFingerprint': planFingerprint,
+        'status': status.name,
+        if (text != null) 'text': text,
+        if (subtitle != null) 'subtitle': subtitle,
+        if (segments != null)
+          'segments': segments!.map((segment) => segment.toMap()).toList(),
+        if (words != null) 'words': words!.map((word) => word.toMap()).toList(),
+      };
 
   factory AsrChunkResult.fromMap(Map<String, dynamic> map) {
     final status = AsrChunkStatus.values.firstWhere(
@@ -848,8 +895,8 @@ class AsrChunkedTranscriptionException implements Exception {
     Iterable<AsrChunkResult> chunks, {
     Iterable<AsrChunkResult>? recoveryChunks,
     this.cause,
-  }) : chunks = List.unmodifiable(chunks),
-       recoveryChunks = List.unmodifiable(recoveryChunks ?? chunks);
+  })  : chunks = List.unmodifiable(chunks),
+        recoveryChunks = List.unmodifiable(recoveryChunks ?? chunks);
 
   bool get isPartial =>
       recoveryChunks.any((chunk) => chunk.status == AsrChunkStatus.succeeded);
@@ -873,26 +920,24 @@ class AsrChunkedTranscriptionException implements Exception {
     final succeededCount = recoveryChunks
         .where((chunk) => chunk.status == AsrChunkStatus.succeeded)
         .length;
-    final details = recoveryChunks
-        .map((chunk) {
-          final state = switch (chunk.status) {
-            AsrChunkStatus.succeeded => '成功: ${chunk.text ?? ''}',
-            AsrChunkStatus.failed => '失败: ${chunk.error}',
-            AsrChunkStatus.uncertain => '结果不确定: ${chunk.error}',
-          };
-          return '片段 ${chunk.index + 1} (${chunk.startSeconds.toStringAsFixed(3)}–${chunk.endSeconds.toStringAsFixed(3)}s) $state';
-        })
-        .join('; ');
+    final details = recoveryChunks.map((chunk) {
+      final state = switch (chunk.status) {
+        AsrChunkStatus.succeeded => '成功: ${chunk.text ?? ''}',
+        AsrChunkStatus.failed => '失败: ${chunk.error}',
+        AsrChunkStatus.uncertain => '结果不确定: ${chunk.error}',
+      };
+      return '片段 ${chunk.index + 1} (${chunk.startSeconds.toStringAsFixed(3)}–${chunk.endSeconds.toStringAsFixed(3)}s) $state';
+    }).join('; ');
     final summary = succeededCount == 0
         ? '切块转写全部失败（$totalChunkCount 个片段均未成功）'
         : '切块转写不完整（$succeededCount/$totalChunkCount 个片段成功）';
-    final checkpointFailure = cause == null ? '' : '; 保存切块状态失败';
+    final checkpointFailure =
+        cause == null ? '' : '; 保存切块状态失败: ${sanitizeAsrDiagnostic('$cause')}';
     final uncertainOutcome = recoveryChunks.any(
       (chunk) => chunk.status == AsrChunkStatus.uncertain,
     );
-    final recoveryGuidance = uncertainOutcome
-        ? '; 请求结果不确定，已停止重试以避免重复提交。请重新选择音频后新建任务。'
-        : '';
+    final recoveryGuidance =
+        uncertainOutcome ? '; 请求结果不确定，已停止重试以避免重复提交。请重新选择音频后新建任务。' : '';
     return '$summary: $details$checkpointFailure$recoveryGuidance';
   }
 }
@@ -915,13 +960,15 @@ class _AsrPreDispatchException implements Exception {
   String toString() => 'ASR localProcessing at request: $message';
 }
 
-class _AsrUploadSizeLimitException implements Exception {
-  final String message;
-
-  const _AsrUploadSizeLimitException(this.message);
-
-  @override
-  String toString() => 'ASR sizeLimit at request: $message';
+class _AsrUploadSizeLimitException extends AsrFailureDiagnostic {
+  const _AsrUploadSizeLimitException(
+    String message, {
+    AsrFailureStage stage = AsrFailureStage.request,
+  }) : super(
+          category: AsrFailureCategory.sizeLimit,
+          stage: stage,
+          message: message,
+        );
 }
 
 // ============================================================================
@@ -972,12 +1019,12 @@ class AsrService {
   int? lastResponseStatusCode;
 
   AsrService({required AsrConfig config, Dio? dio})
-    : this._(
-        config: config,
-        dio: dio,
-        beforeCompressionForTesting: null,
-        beforeCompressionRequestForTesting: null,
-      );
+      : this._(
+          config: config,
+          dio: dio,
+          beforeCompressionForTesting: null,
+          beforeCompressionRequestForTesting: null,
+        );
 
   @visibleForTesting
   AsrService.forTesting({
@@ -986,33 +1033,33 @@ class AsrService {
     required void Function(Uint8List workingBytes) beforeCompression,
     void Function()? beforeCompressionRequest,
   }) : this._(
-         config: config,
-         dio: dio,
-         beforeCompressionForTesting: beforeCompression,
-         beforeCompressionRequestForTesting: beforeCompressionRequest,
-       );
+          config: config,
+          dio: dio,
+          beforeCompressionForTesting: beforeCompression,
+          beforeCompressionRequestForTesting: beforeCompressionRequest,
+        );
 
   AsrService._({
     required this.config,
     Dio? dio,
     required void Function(Uint8List workingBytes)? beforeCompressionForTesting,
     required void Function()? beforeCompressionRequestForTesting,
-  }) : _beforeCompressionForTesting = beforeCompressionForTesting,
-       _beforeCompressionRequestForTesting = beforeCompressionRequestForTesting,
-       _ownsDio = dio == null,
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               headers: {
-                 if (config.apiKey.isNotEmpty)
-                   'Authorization': 'Bearer ${config.apiKey}',
-                 ...openRouterAppHeaders,
-               },
-               connectTimeout: connectTimeoutDefault,
-               receiveTimeout: receiveTimeoutFallback,
-             ),
-           ) {
+  })  : _beforeCompressionForTesting = beforeCompressionForTesting,
+        _beforeCompressionRequestForTesting =
+            beforeCompressionRequestForTesting,
+        _ownsDio = dio == null,
+        _dio = dio ??
+            Dio(
+              BaseOptions(
+                headers: {
+                  if (config.apiKey.isNotEmpty)
+                    'Authorization': 'Bearer ${config.apiKey}',
+                  ...openRouterAppHeaders,
+                },
+                connectTimeout: connectTimeoutDefault,
+                receiveTimeout: receiveTimeoutFallback,
+              ),
+            ) {
     _dio.options.connectTimeout ??= connectTimeoutDefault;
     _dio.options.receiveTimeout ??= receiveTimeoutFallback;
   }
@@ -1045,19 +1092,19 @@ class AsrService {
     required AsrFailureStage stage,
     int? chunkIndex,
     int? chunkCount,
-  }) => AsrFailureDiagnostic.fromError(
-    error,
-    stage: stage,
-    chunkIndex: chunkIndex,
-    chunkCount: chunkCount,
-    statusCode:
-        error is! DioException &&
-            (stage == AsrFailureStage.response ||
-                stage == AsrFailureStage.parsing)
-        ? lastResponseStatusCode
-        : null,
-    apiKey: config.apiKey,
-  ).toString();
+  }) =>
+      AsrFailureDiagnostic.fromError(
+        error,
+        stage: stage,
+        chunkIndex: chunkIndex,
+        chunkCount: chunkCount,
+        statusCode: error is! DioException &&
+                (stage == AsrFailureStage.response ||
+                    stage == AsrFailureStage.parsing)
+            ? lastResponseStatusCode
+            : null,
+        apiKey: config.apiKey,
+      ).toString();
 
   Never _throwLocalValidation(String message) {
     throw AsrFailureDiagnostic.fromError(
@@ -1218,7 +1265,7 @@ class AsrService {
     final processedAudioBytes = workingBytes;
     final rawSourceExceedsLimit =
         sourceAudioBytesLength > config.maxFileSizeBytes &&
-        config.uploadMethod != AudioUploadMethod.url;
+            config.uploadMethod != AudioUploadMethod.url;
     final fallback = config.fallbackMethod;
     var encodedAudioBytes = processedAudioBytes;
     var encodedAudioBytesLength = processedAudioBytes.length;
@@ -1297,16 +1344,14 @@ class AsrService {
           specificMethod,
         );
         if (!_fitsUploadBudget(processedAudioBytes, specificRequestBodyBytes)) {
-          final nonWavExplanation = fmt != 'wav'
-              ? '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。'
-              : '';
+          final nonWavExplanation =
+              fmt != 'wav' ? '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。' : '';
           specificFallbackFailure = _uploadSizeLimitException(
             sourceAudioBytesLength: sourceAudioBytesLength,
             processedAudioBytesLength: processedAudioBytes.length,
             encodedAudioBytesLength: processedAudioBytes.length,
             requestBodyBytes: specificRequestBodyBytes,
-            explanation:
-                'Base64 与 JSON 字段开销计入请求体预算。'
+            explanation: 'Base64 与 JSON 字段开销计入请求体预算。'
                 '$nonWavExplanation',
           );
           await AppLogService.warning(
@@ -1457,8 +1502,7 @@ class AsrService {
     }
 
     // ── All fallbacks exhausted — reject ────────────────────────────
-    final isOverBudgetNonWav =
-        fmt != 'wav' &&
+    final isOverBudgetNonWav = fmt != 'wav' &&
         (processedAudioBytes.length > config.maxFileSizeBytes ||
             requestBodyBytes > config.maxFileSizeBytes);
     const nonWavExplanation = '非 WAV 音频不能安全切分；压缩与切块兜底仅支持 PCM WAV。';
@@ -1476,14 +1520,14 @@ class AsrService {
           };
     final specificFallbackExplanation =
         fallback == 'all' && specificFallbackFailure != null
-        ? '特定兜底失败: $specificFallbackFailure。'
-        : fallback == 'all' && specificFallbackUnavailable
-        ? '当前上传方式没有可用的特定兜底。'
-        : '';
+            ? '特定兜底失败: $specificFallbackFailure。'
+            : fallback == 'all' && specificFallbackUnavailable
+                ? '当前上传方式没有可用的特定兜底。'
+                : '';
     final genericFallbackFailureExplanation =
         fallback == 'all' && genericFallbackFailure != null
-        ? '通用兜底失败: $genericFallbackFailure。'
-        : '';
+            ? '通用兜底失败: $genericFallbackFailure。'
+            : '';
     final explanation =
         '$specificFallbackExplanation$genericFallbackFailureExplanation'
         '$fallbackExplanation';
@@ -1588,8 +1632,7 @@ class AsrService {
       for (var sample = start; sample < end; sample++) {
         var value = 0.0;
         for (var channel = 0; channel < info.numChannels; channel++) {
-          value +=
-              source.getInt16(
+          value += source.getInt16(
                 (sample * info.numChannels + channel) * 2,
                 Endian.little,
               ) /
@@ -1658,8 +1701,7 @@ class AsrService {
     if (method == AudioUploadMethod.url) return 0;
 
     final customParamNames = jsonCustomParamNames ?? <String>{};
-    final params =
-        sharedParams ??
+    final params = sharedParams ??
         _buildSharedParams(jsonCustomParamNames: customParamNames);
     final mimeTypeString = getMimeType(fmt);
     final mimeType = mimeTypeString.contains('/')
@@ -1731,6 +1773,7 @@ class AsrService {
     required int encodedAudioBytesLength,
     required int requestBodyBytes,
     required String explanation,
+    AsrFailureStage stage = AsrFailureStage.request,
   }) {
     final limit = config.maxFileSizeBytes;
     final exceededMeasurements = [
@@ -1748,6 +1791,7 @@ class AsrService {
       '处理后音频 $processedAudioBytesLength 字节，'
       '编码文件 $encodedAudioBytesLength 字节，'
       '请求体 $requestBodyBytes 字节；$exceededSummary。$explanation',
+      stage: stage,
     );
   }
 
@@ -1821,29 +1865,30 @@ class AsrService {
       AsrChunkStatus status, {
       Object? error,
       AsrFailureStage stage = AsrFailureStage.request,
-    }) => AsrChunkResult(
-      index: 0,
-      startSeconds: 0,
-      endSeconds: durationSeconds,
-      totalChunks: 1,
-      planFingerprint: planFingerprint,
-      status: status,
-      error: _diagnosticError(
-        error ?? Exception('未知错误'),
-        stage: stage,
-        chunkIndex: 1,
-        chunkCount: 1,
-      ),
-    );
+    }) =>
+        AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: durationSeconds,
+          totalChunks: 1,
+          planFingerprint: planFingerprint,
+          status: status,
+          error: _diagnosticError(
+            error ?? Exception('未知错误'),
+            stage: stage,
+            chunkIndex: 1,
+            chunkCount: 1,
+          ),
+        );
 
     List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
-      for (final prior in priorChunks)
-        if (prior.index != chunk.index &&
-            prior.planFingerprint == planFingerprint &&
-            prior.totalChunks == 1)
-          prior,
-      chunk,
-    ]..sort((left, right) => left.index.compareTo(right.index));
+          for (final prior in priorChunks)
+            if (prior.index != chunk.index &&
+                prior.planFingerprint == planFingerprint &&
+                prior.totalChunks == 1)
+              prior,
+          chunk,
+        ]..sort((left, right) => left.index.compareTo(right.index));
 
     Future<void> reportChunk(AsrChunkResult chunk) async {
       try {
@@ -1853,7 +1898,7 @@ class AsrService {
         throw AsrChunkedTranscriptionException(
           recovered,
           recoveryChunks: recovered,
-          cause: _AsrChunkCallbackException(error),
+          cause: _AsrChunkCallbackException(error, config.apiKey),
         );
       }
     }
@@ -1864,7 +1909,7 @@ class AsrService {
     } catch (error) {
       throw AsrChunkedTranscriptionException(
         priorChunks,
-        cause: _AsrChunkCallbackException(error),
+        cause: _AsrChunkCallbackException(error, config.apiKey),
       );
     }
 
@@ -2012,8 +2057,8 @@ class AsrService {
       final stage = response == null
           ? AsrFailureStage.request
           : e is _AsrProviderErrorResponseException
-          ? AsrFailureStage.response
-          : AsrFailureStage.parsing;
+              ? AsrFailureStage.response
+              : AsrFailureStage.parsing;
       final diagnostic = AsrFailureDiagnostic.fromError(
         e,
         stage: stage,
@@ -2064,25 +2109,26 @@ class AsrService {
       AsrChunkStatus status, {
       Object? error,
       AsrFailureStage stage = AsrFailureStage.request,
-    }) => AsrChunkResult(
-      index: 0,
-      startSeconds: 0,
-      endSeconds: 0,
-      totalChunks: 1,
-      status: status,
-      error: _diagnosticError(
-        error ?? Exception('未知错误'),
-        stage: stage,
-        chunkIndex: 1,
-        chunkCount: 1,
-      ),
-    );
+    }) =>
+        AsrChunkResult(
+          index: 0,
+          startSeconds: 0,
+          endSeconds: 0,
+          totalChunks: 1,
+          status: status,
+          error: _diagnosticError(
+            error ?? Exception('未知错误'),
+            stage: stage,
+            chunkIndex: 1,
+            chunkCount: 1,
+          ),
+        );
 
     List<AsrChunkResult> planWith(AsrChunkResult chunk) => [
-      for (final prior in priorChunks)
-        if (prior.index != chunk.index) prior,
-      chunk,
-    ]..sort((left, right) => left.index.compareTo(right.index));
+          for (final prior in priorChunks)
+            if (prior.index != chunk.index) prior,
+          chunk,
+        ]..sort((left, right) => left.index.compareTo(right.index));
 
     Future<void> reportChunk(AsrChunkResult chunk) async {
       try {
@@ -2092,7 +2138,7 @@ class AsrService {
         throw AsrChunkedTranscriptionException(
           recovered,
           recoveryChunks: recovered,
-          cause: _AsrChunkCallbackException(error),
+          cause: _AsrChunkCallbackException(error, config.apiKey),
         );
       }
     }
@@ -2167,7 +2213,7 @@ class AsrService {
     } catch (error) {
       throw AsrChunkedTranscriptionException(
         priorChunks,
-        cause: _AsrChunkCallbackException(error),
+        cause: _AsrChunkCallbackException(error, config.apiKey),
       );
     }
 
@@ -2321,8 +2367,8 @@ class AsrService {
       final granularities = rawGranularities is List
           ? rawGranularities.whereType<String>().toList()
           : rawGranularities is String && rawGranularities.isNotEmpty
-          ? [rawGranularities]
-          : <String>[];
+              ? [rawGranularities]
+              : <String>[];
       if (granularities.isNotEmpty) {
         params['timestamp_granularities'] = granularities;
       }
@@ -2457,15 +2503,13 @@ class AsrService {
     final preparedChunks = <AudioChunk>[];
 
     Future<
-      ({
-        bool fits,
-        int sourceBytes,
-        int encodedBytes,
-        int bodyBytes,
-        int frameCount,
-      })
-    >
-    measureRange(AudioChunk range) async {
+        ({
+          bool fits,
+          int sourceBytes,
+          int encodedBytes,
+          int bodyBytes,
+          int frameCount,
+        })> measureRange(AudioChunk range) async {
       _throwIfAsrCancelled(cancelToken);
       final sourcePcm = chunker.materializeChunk(wavBytes, range);
       final encoded = config.compression == 'none'
@@ -2553,8 +2597,7 @@ class AsrService {
     final planBounds = <({double startSeconds, double endSeconds})>[];
     var plannedOffsetSeconds = 0.0;
     for (final range in preparedChunks) {
-      final durationSeconds =
-          (range.endByte - range.startByte) /
+      final durationSeconds = (range.endByte - range.startByte) /
           wavInfo.bytesPerFrame /
           wavInfo.sampleRate;
       final endSeconds = plannedOffsetSeconds + durationSeconds;
@@ -2617,9 +2660,8 @@ class AsrService {
             startSeconds: word.startSeconds == null
                 ? null
                 : word.startSeconds! + chunkOffset,
-            endSeconds: word.endSeconds == null
-                ? null
-                : word.endSeconds! + chunkOffset,
+            endSeconds:
+                word.endSeconds == null ? null : word.endSeconds! + chunkOffset,
             text: word.text,
           ),
         );
@@ -2746,12 +2788,12 @@ class AsrService {
         final configuredPrompt = configuredPromptValue is String
             ? configuredPromptValue
             : configuredPromptValue == null
-            ? null
-            : jsonEncode(configuredPromptValue);
+                ? null
+                : jsonEncode(configuredPromptValue);
         chunkParams['prompt'] =
             configuredPrompt == null || configuredPrompt.isEmpty
-            ? promptSuffix
-            : '$configuredPrompt\n$promptSuffix';
+                ? promptSuffix
+                : '$configuredPrompt\n$promptSuffix';
         chunkCustomParamNames.remove('prompt');
         final promptBodyBytes = _measureUploadRequestBodyBytes(
           encodedChunk.$1,
@@ -2782,6 +2824,7 @@ class AsrService {
           encodedAudioBytesLength: encodedChunk.$1.length,
           requestBodyBytes: encodedChunkBodyBytes,
           explanation: '重新编码后的片段超过上传预算，已在记录请求尝试前停止上传。',
+          stage: AsrFailureStage.encoding,
         );
         final failure = AsrChunkResult(
           index: i,
@@ -2894,19 +2937,18 @@ class AsrService {
         final failureStage = e is _AsrProviderErrorResponseException
             ? AsrFailureStage.response
             : responseReceived
-            ? AsrFailureStage.parsing
-            : AsrFailureStage.request;
+                ? AsrFailureStage.parsing
+                : AsrFailureStage.request;
         await AppLogService.warning(
           'AsrService',
           '切块 ${i + 1}/${preparedChunks.length} 转写失败: ${_diagnosticError(e, stage: failureStage, chunkIndex: i + 1, chunkCount: preparedChunks.length)}',
         );
-        final publicStatus = responseReceived
-            ? AsrChunkStatus.failed
-            : AsrChunkStatus.uncertain;
+        final publicStatus =
+            responseReceived ? AsrChunkStatus.failed : AsrChunkStatus.uncertain;
         final recoveryStatus =
             responseReceived && e is! _AsrProviderErrorResponseException
-            ? AsrChunkStatus.uncertain
-            : publicStatus;
+                ? AsrChunkStatus.uncertain
+                : publicStatus;
         final failedChunk = AsrChunkResult(
           index: i,
           startSeconds: chunkOffset,
@@ -2979,7 +3021,7 @@ class AsrService {
         _responseFormat == 'srt' || _responseFormat == 'vtt';
     final subtitle = isSubtitleFormat
         ? _formatSubtitle(segments, _responseFormat) ??
-              (_responseFormat == 'vtt' ? 'WEBVTT' : '')
+            (_responseFormat == 'vtt' ? 'WEBVTT' : '')
         : null;
     return AsrResult(
       text: texts.join(' '),
@@ -3397,7 +3439,7 @@ class AsrService {
       final error = response['error'];
       final detail = error is Map
           ? error['message'] ??
-                _sanitizeAsrDiagnosticValue(error, config.apiKey)
+              _sanitizeAsrDiagnosticValue(error, config.apiKey)
           : error;
       throw _AsrProviderErrorResponseException(
         '音频转写 API 返回错误: ${sanitizeAsrDiagnostic('$detail', apiKey: config.apiKey)}',
@@ -3507,8 +3549,7 @@ class AsrService {
       final endSeconds = segment.endSeconds!;
       final startMilliseconds = (startSeconds * 1000).round();
       final roundedEndMilliseconds = (endSeconds * 1000).round();
-      final endMilliseconds =
-          endSeconds > startSeconds &&
+      final endMilliseconds = endSeconds > startSeconds &&
               roundedEndMilliseconds <= startMilliseconds
           ? startMilliseconds + 1
           : roundedEndMilliseconds;

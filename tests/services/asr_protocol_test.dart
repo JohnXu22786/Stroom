@@ -58,7 +58,7 @@ class _ProtocolAdapter implements HttpClientAdapter {
 }
 
 Future<({AsrResult result, AsrService service, _ProtocolAdapter adapter})>
-_transcribe({
+    _transcribe({
   required String responseBody,
   String responseContentType = Headers.jsonContentType,
   String responseFormat = 'json',
@@ -252,7 +252,8 @@ void main() {
       },
     );
 
-    test('redacts keys, signed URLs, and encoded audio from visible details', () {
+    test('redacts keys, signed URLs, and encoded audio from visible details',
+        () {
       const secret = 'sk-test-very-secret-key';
       final diagnostic = AsrFailureDiagnostic.fromError(
         Exception(
@@ -635,8 +636,7 @@ void main() {
     });
 
     test('keeps SRT cues while exposing plain transcript text', () async {
-      const srt =
-          '1\n'
+      const srt = '1\n'
           '00:00:00,000 --> 00:00:01,200\n'
           'Hello\n\n'
           '2\n'
@@ -658,8 +658,7 @@ void main() {
     });
 
     test('keeps VTT cues while exposing plain transcript text', () async {
-      const vtt =
-          'WEBVTT\n\n'
+      const vtt = 'WEBVTT\n\n'
           '00:00:00.000 --> 00:00:01.500 align:start\n'
           'Welcome to Stroom.';
       final call = await _transcribe(
@@ -916,13 +915,13 @@ void main() {
             responseBody: format == 'srt'
                 ? ''
                 : '\uFEFFWEBVTT\nKind: captions\nLanguage: en\n'
-                      'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
+                    'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
             responseBodies: List.filled(
               3,
               format == 'srt'
                   ? ''
                   : '\uFEFFWEBVTT\nKind: captions\nLanguage: en\n'
-                        'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
+                      'X-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:0\n\n',
             ),
             responseContentType: format == 'srt'
                 ? 'text/plain; charset=utf-8'

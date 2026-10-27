@@ -19,7 +19,7 @@ class AsrTaskAudio {
   Uint8List bytes;
   Future<Uint8List> Function()? _loadBytes;
   Future<Uint8List> Function(CancelToken? cancelToken)?
-  _loadBytesWithCancellation;
+      _loadBytesWithCancellation;
   final bool hasCustomLoader;
   final int byteLength;
   String Function(Uint8List bytes)? resolveFormat;
@@ -34,7 +34,7 @@ class AsrTaskAudio {
     Uint8List? bytes,
     Future<Uint8List> Function()? loadBytes,
     Future<Uint8List> Function(CancelToken? cancelToken)?
-    loadBytesWithCancellation,
+        loadBytesWithCancellation,
     int? byteLength,
     this.resolveFormat,
     void Function()? onSourceReleased,
@@ -43,13 +43,14 @@ class AsrTaskAudio {
     this.audioReference,
     List<AsrChunkResult> priorChunks = const [],
     this.resetChunkCheckpoint = false,
-  }) : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
-       _loadBytes = loadBytes,
-       _loadBytesWithCancellation = loadBytesWithCancellation,
-       hasCustomLoader = loadBytes != null || loadBytesWithCancellation != null,
-       _onSourceReleased = onSourceReleased,
-       byteLength = byteLength ?? bytes?.length ?? 0,
-       priorChunks = List.unmodifiable(priorChunks);
+  })  : bytes = Uint8List.fromList(bytes ?? Uint8List(0)),
+        _loadBytes = loadBytes,
+        _loadBytesWithCancellation = loadBytesWithCancellation,
+        hasCustomLoader =
+            loadBytes != null || loadBytesWithCancellation != null,
+        _onSourceReleased = onSourceReleased,
+        byteLength = byteLength ?? bytes?.length ?? 0,
+        priorChunks = List.unmodifiable(priorChunks);
 
   Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
 
@@ -112,7 +113,7 @@ class _AsrTaskJob {
   AsrService? service;
 
   _AsrTaskJob(this.taskId, this.taskGeneration, this.audio, this.title)
-    : chunks = List.of(audio.priorChunks);
+      : chunks = List.of(audio.priorChunks);
 }
 
 /// Owns one standalone ASR batch and runs its tasks serially after the page
@@ -146,44 +147,44 @@ class AsrTaskScheduler {
     AsrService Function(AsrConfig)? serviceFactory,
     AsrTextWriter? writeText,
     void Function()? onSaved,
-  }) : config = _snapshotConfig(config),
-       audios = List.unmodifiable(
-         audios.map(
-           (audio) => AsrTaskAudio(
-             bytes: audio.bytes,
-             loadBytesWithCancellation: audio.hasCustomLoader
-                 ? audio.loadBytesWithCancellation
-                 : null,
-             byteLength: audio.byteLength,
-             resolveFormat: audio.resolveFormat,
-             onSourceReleased: audio.releaseSource,
-             name: audio.name,
-             format: audio.format,
-             audioReference: audio.audioReference,
-             priorChunks: audio.priorChunks,
-             resetChunkCheckpoint: audio.resetChunkCheckpoint,
-           ),
-         ),
-       ),
-       modelReference = Map.unmodifiable(modelReference),
-       _retryStore = retryStore ?? AsrRetryAudioStore(),
-       _serviceFactory =
-           serviceFactory ?? ((config) => AsrService(config: config)),
-       _writeText = writeText ?? TextManifest.writeText,
-       _onSaved = onSaved ?? _ignoreSaved;
+  })  : config = _snapshotConfig(config),
+        audios = List.unmodifiable(
+          audios.map(
+            (audio) => AsrTaskAudio(
+              bytes: audio.bytes,
+              loadBytesWithCancellation: audio.hasCustomLoader
+                  ? audio.loadBytesWithCancellation
+                  : null,
+              byteLength: audio.byteLength,
+              resolveFormat: audio.resolveFormat,
+              onSourceReleased: audio.releaseSource,
+              name: audio.name,
+              format: audio.format,
+              audioReference: audio.audioReference,
+              priorChunks: audio.priorChunks,
+              resetChunkCheckpoint: audio.resetChunkCheckpoint,
+            ),
+          ),
+        ),
+        modelReference = Map.unmodifiable(modelReference),
+        _retryStore = retryStore ?? AsrRetryAudioStore(),
+        _serviceFactory =
+            serviceFactory ?? ((config) => AsrService(config: config)),
+        _writeText = writeText ?? TextManifest.writeText,
+        _onSaved = onSaved ?? _ignoreSaved;
 
   static AsrConfig _snapshotConfig(AsrConfig config) => config.copyWith(
-    typeConfig: Map<String, dynamic>.from(
-      jsonDecode(jsonEncode(config.typeConfig)) as Map,
-    ),
-    customParams: config.customParams.map((param) => param.copy()).toList(),
-  );
+        typeConfig: Map<String, dynamic>.from(
+          jsonDecode(jsonEncode(config.typeConfig)) as Map,
+        ),
+        customParams: config.customParams.map((param) => param.copy()).toList(),
+      );
 
   static void _ignoreSaved() {}
 
   List<String> get taskIds => List.unmodifiable(
-    (_jobs ?? const <_AsrTaskJob>[]).map((job) => job.taskId),
-  );
+        (_jobs ?? const <_AsrTaskJob>[]).map((job) => job.taskId),
+      );
 
   /// Creates the waiting tasks once and returns the same execution future for
   /// every later start call.
@@ -294,16 +295,16 @@ class AsrTaskScheduler {
   }
 
   Map<String, dynamic> _buildRetryData(_AsrTaskJob job) => {
-    'type': 'asr',
-    'version': 2,
-    'audioReference': job.audioReference!.toMap(
-      configuredApiKey: config.apiKey,
-    ),
-    'modelReference': modelReference,
-    'configSnapshot': AsrRetryConfigSnapshot.fromConfig(config).toMap(),
-    'chunks': job.chunks.map((chunk) => chunk.toMap()).toList(),
-    'saveFolder': saveFolder,
-  };
+        'type': 'asr',
+        'version': 2,
+        'audioReference': job.audioReference!.toMap(
+          configuredApiKey: config.apiKey,
+        ),
+        'modelReference': modelReference,
+        'configSnapshot': AsrRetryConfigSnapshot.fromConfig(config).toMap(),
+        'chunks': job.chunks.map((chunk) => chunk.toMap()).toList(),
+        'saveFolder': saveFolder,
+      };
 
   Map<String, dynamic> _sanitizeRetryDataForPersistence(
     Map<String, dynamic> retryData,
@@ -333,13 +334,12 @@ class AsrTaskScheduler {
         );
         final requiresReselection =
             AsrRetryConfigSnapshot.urlContainsCredentials(
-              sourceUrl,
-              configuredApiKey: config.apiKey,
-            ) ||
-            safeUrl != sourceUrl;
+                  sourceUrl,
+                  configuredApiKey: config.apiKey,
+                ) ||
+                safeUrl != sourceUrl;
         job.audioReference = AsrAudioReference(
-          id:
-              existingReference?.id ??
+          id: existingReference?.id ??
               const Uuid().v4().replaceAll('-', '').toLowerCase(),
           name: safeUrl,
           format: 'url',

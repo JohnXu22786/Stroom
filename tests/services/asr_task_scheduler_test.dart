@@ -367,7 +367,8 @@ void main() {
     expect(notifier.state.single.title, 'ASR_captured.wav');
     expect(notifier.state.single.status, TaskStatus.running);
     expect(notifier.state.single.steps[2].status, BgStepStatus.running);
-    expect(notifier.state.single.steps[2].label, '转写中');
+    expect(notifier.state.single.steps[2].label, startsWith('转写中'));
+    expect(notifier.state.single.steps[2].label, contains('已完成片段'));
     expect(notifier.state.single.steps[2].label, isNot(contains('%')));
 
     adapter.releaseResponse.complete();
