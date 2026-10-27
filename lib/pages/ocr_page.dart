@@ -2183,12 +2183,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         (_hasReusablePageResults && !_retryImagesUnavailable)) {
       return;
     }
-    final resetReusableResults =
-        _retryImagesUnavailable && _hasReusablePageResults;
+    final resetRetryResults = _retryImagesUnavailable;
     _imageImportGeneration++;
     setState(() {
       _selectedImages.clear();
-      if (resetReusableResults) _retryPageOutcomes.clear();
+      // Replacement images may have a different order, so saved page outcomes
+      // cannot safely be reused by their old image indices.
+      if (resetRetryResults) _retryPageOutcomes.clear();
       _retryImageCountUnknown = false;
       _isRetryImageReselectionPending = _requiredRetryImageCount != null;
       _retryImagesUnavailable = _isRetryImageReselectionPending;

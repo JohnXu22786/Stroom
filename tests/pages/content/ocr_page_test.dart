@@ -1487,7 +1487,7 @@ void main() {
       (tester) async {
         final replacementBytes = _createValidOcrTestImage().bytes;
         final notifier = _InspectableBackgroundTaskNotifier();
-        var gallerySelections = 0;
+        final adapter = _CapturingOcrAdapter();
 
         try {
           await tester.pumpWidget(
@@ -1531,16 +1531,23 @@ void main() {
                 missingImageCount: 1,
               ),
               testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async {
-                gallerySelections++;
                 return [
                   XFile.fromData(
                     replacementBytes,
-                    name: 'replacement-$gallerySelections.png',
+                    name: 'replacement-second.png',
+                  ),
+                  XFile.fromData(
+                    replacementBytes,
+                    name: 'replacement-first.png',
                   ),
                 ];
               },
               testImagePayloadPreparer: (_) async =>
                   prepareOcrImagePayloadSync(replacementBytes),
+              testOcrServiceFactory: (config) => OcrService(
+                config: config,
+                dio: Dio()..httpClientAdapter = adapter,
+              ),
             ),
           );
           await tester.pumpAndSettle();
@@ -1557,8 +1564,6 @@ void main() {
           }
 
           await selectOneImage();
-          expect(find.text('已选 1 张图片'), findsOneWidget);
-          await selectOneImage();
           expect(find.text('已选 2 张图片'), findsOneWidget);
           expect(
             tester
@@ -1566,7 +1571,16 @@ void main() {
                 .onPressed,
             isNotNull,
           );
-          expect(notifier.tasksForTest, isEmpty);
+          await tester.tap(find.text('开始识别'));
+          await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);
+          await _pumpUntil(tester, () => adapter.requests.length == 2);
+          expect(
+            adapter.requests,
+            hasLength(2),
+            reason:
+                'reselected images in a different order must not reuse the '
+                'saved result for old image index 0',
+          );
         } finally {
           await tester.pumpWidget(const SizedBox.shrink());
           notifier.dispose();
