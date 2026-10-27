@@ -88,6 +88,7 @@ extension _ChatServiceParamsExt on ChatService {
     Map<String, String> reasoningParamValues = const {},
   }) {
     final result = <String, dynamic>{};
+    final providerFlatJsonMaps = <String>{};
     // Discover explicit empty JSON parents across both custom-param layers
     // before applying either layer. Provider and model params are assembled
     // separately below, but an invalid descendant in either layer must not
@@ -145,6 +146,7 @@ extension _ChatServiceParamsExt on ChatService {
         _providerConfig!.customParams,
         emptyJsonParents: emptyJsonParents,
         source: 'provider',
+        flatJsonMapNames: providerFlatJsonMaps,
       );
 
       // Provider-level reasoning params:
@@ -249,6 +251,7 @@ extension _ChatServiceParamsExt on ChatService {
       _modelConfig!.customParams,
       emptyJsonParents: emptyJsonParents,
       source: 'model',
+      replaceFlatJsonMapNames: providerFlatJsonMaps,
     );
 
     // Model-level reasoning params:
@@ -364,6 +367,8 @@ extension _ChatServiceParamsExt on ChatService {
     List<CustomParam> customParams, {
     required Set<String> emptyJsonParents,
     required String source,
+    Set<String>? flatJsonMapNames,
+    Set<String>? replaceFlatJsonMapNames,
   }) {
     bool isJsonParent(CustomParam param) =>
         param.type == 'json' &&
@@ -401,9 +406,22 @@ extension _ChatServiceParamsExt on ChatService {
         result,
         cp.paramName,
         value,
+        replaceExistingMap: cp.type == 'json' &&
+            replaceFlatJsonMapNames?.contains(cp.paramName) == true,
       );
       if (cp.type == 'json' && value is Map && value.isEmpty) {
         emptyJsonParents.add(cp.paramName);
+      }
+      if (cp.type == 'json' &&
+          value is Map &&
+          !cp.paramName.contains('.') &&
+          !customParams.any(
+            (other) => other.paramName.startsWith('${cp.paramName}.'),
+          )) {
+        // A model JSON object may replace a provider JSON object with the same
+        // flat key. Maps assembled from dotted descendants keep nested-path
+        // precedence and are deliberately excluded.
+        flatJsonMapNames?.add(cp.paramName);
       }
     }
   }
