@@ -19,16 +19,16 @@ class ProtocolExtension {
     required this.type,
     required Map<String, dynamic> data,
     Map<String, dynamic> extraFields = const {},
-  }) : data = Map.unmodifiable(data),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : data = Map.unmodifiable(data),
+        extraFields = Map.unmodifiable(extraFields);
 
   Map<String, dynamic> toJson() => {
-    ...extraFields,
-    'protocolId': protocolId,
-    'version': version,
-    'type': type,
-    'data': data,
-  };
+        ...extraFields,
+        'protocolId': protocolId,
+        'version': version,
+        'type': type,
+        'data': data,
+      };
 
   factory ProtocolExtension.fromJson(Map<String, dynamic> json) {
     const knownFields = {'protocolId', 'version', 'type', 'data'};
@@ -59,15 +59,15 @@ class ProtocolStreamEvent {
     required this.sequence,
     required Map<String, dynamic> payload,
     Map<String, dynamic> extraFields = const {},
-  }) : payload = Map.unmodifiable(payload),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : payload = Map.unmodifiable(payload),
+        extraFields = Map.unmodifiable(extraFields);
 
   Map<String, dynamic> toJson() => {
-    ...extraFields,
-    'type': type,
-    'sequence': sequence,
-    'payload': payload,
-  };
+        ...extraFields,
+        'type': type,
+        'sequence': sequence,
+        'payload': payload,
+      };
 
   factory ProtocolStreamEvent.fromJson(Map<String, dynamic> json) {
     const knownFields = {'type', 'sequence', 'payload'};
@@ -106,10 +106,10 @@ class ProtocolBridgeExchange {
     List<ProtocolStreamEvent> events = const [],
     List<ProtocolExtension> extensions = const [],
     Map<String, dynamic> extraFields = const {},
-  }) : payload = Map.unmodifiable(payload),
-       events = List.unmodifiable(events),
-       extensions = List.unmodifiable(extensions),
-       extraFields = Map.unmodifiable(extraFields);
+  })  : payload = Map.unmodifiable(payload),
+        events = List.unmodifiable(events),
+        extensions = List.unmodifiable(extensions),
+        extraFields = Map.unmodifiable(extraFields);
 }
 
 /// Serialization contract implemented independently by each generic chat API.
@@ -279,19 +279,18 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
     final sourceExtension = targetProtocolExtensions.isNotEmpty
         ? targetProtocolExtensions.first
         : sourceExtensions.isEmpty
-        ? null
-        : sourceExtensions.first;
-    final sourceExtensionMatches =
-        sourceExtension != null &&
+            ? null
+            : sourceExtensions.first;
+    final sourceExtensionMatches = sourceExtension != null &&
         sourceExtension.protocolId == protocolId &&
         _matchesNeutralSnapshot(message, sourceExtension);
     final sameProtocolRoundTrip = sourceExtensionMatches;
     final lostTypes = sameProtocolRoundTrip
         ? <String>{}
         : message.content
-              .map((part) => part.type)
-              .where((type) => !supportedContentTypes.contains(type))
-              .toSet();
+            .map((part) => part.type)
+            .where((type) => !supportedContentTypes.contains(type))
+            .toSet();
     final lostMetadata = <String>[];
     if (!sameProtocolRoundTrip) {
       if (message.status != null && !supportedMetadata.contains('status')) {
@@ -593,8 +592,9 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
             protocolId != 'anthropic.messages' &&
             rawMessage['content'] is List &&
             (rawMessage['content'] as List).whereType<Map>().any(
-              (part) => part['type'] == 'thinking' && part['signature'] != null,
-            )) {
+                  (part) =>
+                      part['type'] == 'thinking' && part['signature'] != null,
+                )) {
           details.add(
             'Anthropic thinking signature is retained in its source extension '
             'but not mapped to $protocolId',
@@ -604,9 +604,8 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
     }
     return ProtocolMappingResult(
       targetPayload: payload,
-      fidelity: details.isEmpty
-          ? MappingFidelity.exact
-          : MappingFidelity.partial,
+      fidelity:
+          details.isEmpty ? MappingFidelity.exact : MappingFidelity.partial,
       details: details,
       direction:
           '${sourceExtension?.protocolId ?? 'stroom.conversation'}->$protocolId',
@@ -622,16 +621,15 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
 
   @override
   Map<String, dynamic> encode(ProtocolBridgeExchange exchange) => {
-    ...exchange.extraFields,
-    'bridgeSchemaVersion': exchange.bridgeSchemaVersion,
-    'protocolId': protocolId,
-    'contractVersion': exchange.contractVersion,
-    'payload': exchange.payload,
-    'events': exchange.events.map((event) => event.toJson()).toList(),
-    'extensions': exchange.extensions
-        .map((extension) => extension.toJson())
-        .toList(),
-  };
+        ...exchange.extraFields,
+        'bridgeSchemaVersion': exchange.bridgeSchemaVersion,
+        'protocolId': protocolId,
+        'contractVersion': exchange.contractVersion,
+        'payload': exchange.payload,
+        'events': exchange.events.map((event) => event.toJson()).toList(),
+        'extensions':
+            exchange.extensions.map((extension) => extension.toJson()).toList(),
+      };
 
   @override
   ProtocolBridgeExchange decode(Map<String, dynamic> envelope) {
@@ -661,23 +659,23 @@ abstract base class _JsonProtocolBridge implements ProtocolBridge {
       payload: payload is Map ? Map<String, dynamic>.from(payload) : const {},
       events: rawEvents is List
           ? rawEvents
-                .whereType<Map>()
-                .map(
-                  (event) => ProtocolStreamEvent.fromJson(
-                    Map<String, dynamic>.from(event),
-                  ),
-                )
-                .toList()
+              .whereType<Map>()
+              .map(
+                (event) => ProtocolStreamEvent.fromJson(
+                  Map<String, dynamic>.from(event),
+                ),
+              )
+              .toList()
           : const [],
       extensions: rawExtensions is List
           ? rawExtensions
-                .whereType<Map>()
-                .map(
-                  (extension) => ProtocolExtension.fromJson(
-                    Map<String, dynamic>.from(extension),
-                  ),
-                )
-                .toList()
+              .whereType<Map>()
+              .map(
+                (extension) => ProtocolExtension.fromJson(
+                  Map<String, dynamic>.from(extension),
+                ),
+              )
+              .toList()
           : const [],
       extraFields: Map<String, dynamic>.fromEntries(
         envelope.entries.where((entry) => !knownFields.contains(entry.key)),
@@ -791,8 +789,7 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
       createdAt: createdAt,
       content: parts,
       status: message['status'] as String?,
-      finishReason:
-          message['finish_reason'] as String? ??
+      finishReason: message['finish_reason'] as String? ??
           message['finishReason'] as String?,
       usage: message['usage'] is Map
           ? Map<String, dynamic>.from(message['usage'] as Map)
@@ -806,8 +803,7 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
     final supported = <String>{'text', 'tool_call', 'tool_result', 'refusal'};
     final supportsImages = message.role == 'user' &&
         message.content.any(
-          (part) =>
-              part.type == 'image' && part.data['reference'] is String,
+          (part) => part.type == 'image' && part.data['reference'] is String,
         );
     if (supportsImages) supported.add('image');
     if (original != null) {
@@ -828,12 +824,10 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
       } else if (supportsImages &&
           part.type == 'image' &&
           part.data['reference'] is String) {
-        final imageUrlExtras = part.extraFields[
-          'openai.chat_completions.image_url'
-        ];
-        final contentPartExtras = part.extraFields[
-          'openai.chat_completions.content_part'
-        ];
+        final imageUrlExtras =
+            part.extraFields['openai.chat_completions.image_url'];
+        final contentPartExtras =
+            part.extraFields['openai.chat_completions.content_part'];
         orderedContent.add({
           if (contentPartExtras is Map)
             ...Map<String, dynamic>.from(contentPartExtras),
@@ -861,8 +855,8 @@ final class OpenAiChatCompletionsBridge extends _JsonProtocolBridge {
       'content': message.role == 'tool' && toolResults.isNotEmpty
           ? _chatToolResultContent(toolResults.first.data['result'])
           : supportsImages
-          ? orderedContent
-          : textContent,
+              ? orderedContent
+              : textContent,
       if (message.role == 'tool' && toolResults.isNotEmpty)
         'tool_call_id': toolResults.first.data['toolCallId'],
       if (message.finishReason != null) 'finish_reason': message.finishReason,
@@ -1246,12 +1240,11 @@ final class GeminiBridge extends _JsonProtocolBridge {
     final candidates = message['candidates'];
     final candidate =
         candidates is List && candidates.isNotEmpty && candidates.first is Map
-        ? Map<String, dynamic>.from(candidates.first as Map)
-        : message;
+            ? Map<String, dynamic>.from(candidates.first as Map)
+            : message;
     final content = candidate['content'];
-    final role = content is Map
-        ? (content['role'] as String? ?? 'model')
-        : 'model';
+    final role =
+        content is Map ? (content['role'] as String? ?? 'model') : 'model';
     final parts = <StroomContentPart>[];
     if (content is Map && content['parts'] is List) {
       for (final rawPart in (content['parts'] as List).whereType<Map>()) {
@@ -1294,20 +1287,18 @@ final class GeminiBridge extends _JsonProtocolBridge {
           final response = Map<String, dynamic>.from(
             part['functionResponse'] as Map,
           );
-          final extraFields =
+          final extraFields = Map<String, dynamic>.fromEntries(
+            part.entries.where((entry) => entry.key != 'functionResponse'),
+          )..addAll(
               Map<String, dynamic>.fromEntries(
-                part.entries.where((entry) => entry.key != 'functionResponse'),
-              )..addAll(
-                Map<String, dynamic>.fromEntries(
-                  response.entries.where(
-                    (entry) => !{'id', 'name', 'response'}.contains(entry.key),
-                  ),
+                response.entries.where(
+                  (entry) => !{'id', 'name', 'response'}.contains(entry.key),
                 ),
-              );
+              ),
+            );
           parts.add(
             StroomContentPart.toolResult(
-              toolCallId:
-                  response['id'] as String? ??
+              toolCallId: response['id'] as String? ??
                   response['name'] as String? ??
                   '',
               name: response['name'] as String?,
@@ -1395,11 +1386,9 @@ final class GeminiBridge extends _JsonProtocolBridge {
       } else if ((part.type == 'inline_media' || part.type == 'file') &&
           (part.data['inlineData'] is Map || part.data['fileData'] is Map)) {
         parts.add(part.data);
-      } else if (
-        {'image', 'audio', 'video', 'file'}.contains(part.type) &&
-        part.data['reference'] is String &&
-        part.data['mimeType'] is String
-      ) {
+      } else if ({'image', 'audio', 'video', 'file'}.contains(part.type) &&
+          part.data['reference'] is String &&
+          part.data['mimeType'] is String) {
         parts.add({
           'fileData': {
             'mimeType': part.data['mimeType'],
@@ -1491,20 +1480,21 @@ class ProtocolMappingResult {
     this.direction,
     this.sourceProtocolId,
     this.targetProtocolId,
-  }) : details = List.unmodifiable(details),
-       sourceExtensionData = Map.unmodifiable(sourceExtensionData);
+  })  : details = List.unmodifiable(details),
+        sourceExtensionData = Map.unmodifiable(sourceExtensionData);
 
   Map<String, dynamic> toJson() => {
-    'fidelity': fidelity.name,
-    'details': details,
-    if (targetPayload != null) 'targetPayload': targetPayload,
-    if (direction != null) 'direction': direction,
-    if (sourceProtocolId != null) 'sourceProtocolId': sourceProtocolId,
-    if (targetProtocolId != null) 'targetProtocolId': targetProtocolId,
-    if (sourceExtension != null) 'sourceExtension': sourceExtension!.toJson(),
-    if (sourceExtensionData.isNotEmpty)
-      'sourceExtensionData': sourceExtensionData,
-  };
+        'fidelity': fidelity.name,
+        'details': details,
+        if (targetPayload != null) 'targetPayload': targetPayload,
+        if (direction != null) 'direction': direction,
+        if (sourceProtocolId != null) 'sourceProtocolId': sourceProtocolId,
+        if (targetProtocolId != null) 'targetProtocolId': targetProtocolId,
+        if (sourceExtension != null)
+          'sourceExtension': sourceExtension!.toJson(),
+        if (sourceExtensionData.isNotEmpty)
+          'sourceExtensionData': sourceExtensionData,
+      };
 
   factory ProtocolMappingResult.fromJson(Map<String, dynamic> json) =>
       ProtocolMappingResult(
@@ -1518,9 +1508,8 @@ class ProtocolMappingResult {
         details: json['details'] is List
             ? (json['details'] as List).whereType<String>().toList()
             : const [],
-        direction: json['direction'] is String
-            ? json['direction'] as String
-            : null,
+        direction:
+            json['direction'] is String ? json['direction'] as String : null,
         sourceProtocolId: json['sourceProtocolId'] is String
             ? json['sourceProtocolId'] as String
             : null,
