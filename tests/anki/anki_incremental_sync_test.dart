@@ -710,29 +710,23 @@ void main() {
     },
   );
 
-  test(
-    'addCard falls back to an available note type when the placeholder is stale',
-    () async {
-      final availableModelId = collection.col.modelList.first.id;
-      expect(availableModelId, isNot(1));
+  test('addCard falls back to an available note type when the placeholder is stale', () async {
+    final availableModelId = collection.col.modelList.first.id;
+    expect(availableModelId, isNot(1));
 
-      final container = ProviderContainer(
-        overrides: [
-          ankiColDaoProvider.overrideWith((ref) async => collection.col),
-        ],
-      );
-      addTearDown(container.dispose);
+    final container = ProviderContainer(
+      overrides: [
+        ankiColDaoProvider.overrideWith((ref) async => collection.col),
+      ],
+    );
+    addTearDown(container.dispose);
 
-      final noteId = await container
-          .read(ankiActionsProvider)
-          .addCard(1, 'new front', 'new back', modelId: 1);
+    final noteId = await container
+        .read(ankiActionsProvider)
+        .addCard(1, 'new front', 'new back', modelId: 1);
 
-      expect(
-        (await collection.notes.get(noteId))!.notetype_id,
-        availableModelId,
-      );
-    },
-  );
+    expect((await collection.notes.get(noteId))!.notetype_id, availableModelId);
+  });
 
   test('decodes named and numeric HTML entities in note fields', () {
     expect(Note.stripHtml('<b>&copy; &#65; &amp;&nbsp;</b>'), '© A & ');
@@ -896,9 +890,9 @@ void main() {
     await maintenanceDatabase.close();
 
     await collection.open();
-    final seededIds = (await collection.db.query(
-      'deck_config',
-    )).map((config) => config['id']).toSet();
+    final seededIds = (await collection.db.query('deck_config'))
+        .map((config) => config['id'])
+        .toSet();
     expect(seededIds, containsAll([1, 2]));
   });
 
@@ -949,15 +943,10 @@ void main() {
     final basic = collection.col.modelList.firstWhere(
       (model) => model.type == 0,
     );
-    final models =
-        jsonDecode(
-              (await collection.db.query(
-                    'col',
-                    columns: ['models'],
-                  )).single['models']
-                  as String,
-            )
-            as Map<String, dynamic>;
+    final models = jsonDecode(
+      (await collection.db.query('col', columns: ['models'])).single['models']
+          as String,
+    ) as Map<String, dynamic>;
     for (final model in [basic, cloze]) {
       final json = models[model.id.toString()] as Map<String, dynamic>;
       json['req'] = [
@@ -1421,15 +1410,10 @@ void main() {
     collection = AnkiDatabase(basePath: workDir.path);
     await collection.open();
 
-    final migratedDecks =
-        jsonDecode(
-              (await collection.db.query(
-                    'col',
-                    columns: ['decks'],
-                  )).single['decks']
-                  as String,
-            )
-            as Map<String, dynamic>;
+    final migratedDecks = jsonDecode(
+      (await collection.db.query('col', columns: ['decks'])).single['decks']
+          as String,
+    ) as Map<String, dynamic>;
     final migratedDeck = migratedDecks[deckKey] as Map<String, dynamic>;
     expect(migratedDeck['crt'], legacyDeckCreationMillis ~/ 1000);
     expect(migratedDeck['usn'], -1);
@@ -1545,15 +1529,10 @@ void main() {
 
       await collection.col.removeDeck(deletedDeck.id);
 
-      final storedConfig =
-          jsonDecode(
-                (await collection.db.query(
-                      'col',
-                      columns: ['conf'],
-                    )).single['conf']
-                    as String,
-              )
-              as Map<String, dynamic>;
+      final storedConfig = jsonDecode(
+        (await collection.db.query('col', columns: ['conf'])).single['conf']
+            as String,
+      ) as Map<String, dynamic>;
       expect(storedConfig['curDeck'], survivor.id);
       expect(storedConfig['activeDecks'], [survivor.id]);
     },
@@ -1653,15 +1632,10 @@ void main() {
 
     await AnkiIncrementalSync.sync(collection, client);
 
-    final storedConfig =
-        jsonDecode(
-              (await collection.db.query(
-                    'col',
-                    columns: ['conf'],
-                  )).single['conf']
-                  as String,
-            )
-            as Map<String, dynamic>;
+    final storedConfig = jsonDecode(
+      (await collection.db.query('col', columns: ['conf'])).single['conf']
+          as String,
+    ) as Map<String, dynamic>;
     expect(storedConfig, remoteConfig);
 
     final configRows = await collection.db.query('config');
@@ -1973,9 +1947,9 @@ Map<String, dynamic> _decodedRequestData(_CapturedRequest request) {
 }
 
 Map<String, List<int>> _multipartFields(_CapturedRequest request) {
-  final boundary = RegExp(
-    r'boundary=(.+)$',
-  ).firstMatch(request.contentType)!.group(1)!;
+  final boundary = RegExp(r'boundary=(.+)$')
+      .firstMatch(request.contentType)!
+      .group(1)!;
   final delimiter = ascii.encode('--$boundary\r\n');
   final nextPart = ascii.encode('\r\n--$boundary');
   final output = <String, List<int>>{};

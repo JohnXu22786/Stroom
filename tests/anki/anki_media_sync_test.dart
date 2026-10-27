@@ -314,9 +314,8 @@ void main() {
         final mediaDir = Directory('${workDir.path}/collection.media');
         await mediaDir.create();
         await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
-        final oversized = await File(
-          '${mediaDir.path}/oversized.bin',
-        ).open(mode: FileMode.write);
+        final oversized = await File('${mediaDir.path}/oversized.bin')
+            .open(mode: FileMode.write);
         await oversized.truncate(100 * 1024 * 1024 + 1);
         await oversized.close();
         await File('${mediaDir.path}/keep.png').writeAsBytes([1, 2, 3]);
@@ -358,65 +357,61 @@ void main() {
       },
     );
 
-    test(
-      'fails before syncing when an indexed media file exceeds the upload limit',
-      () async {
-        final workDir = await Directory.systemTemp.createTemp(
-          'stroom_anki_media_indexed_oversized_test_',
-        );
-        const identity = 'ankiweb:indexed-oversized-media';
-        final mediaDir = Directory('${workDir.path}/collection.media');
-        await mediaDir.create();
-        final oversized = await File(
-          '${mediaDir.path}/oversized.bin',
-        ).open(mode: FileMode.write);
-        await oversized.truncate(100 * 1024 * 1024 + 1);
-        await oversized.close();
-        await _seedMediaIndex(
-          workDir,
-          identity,
-          files: [
-            {
-              'fname': 'oversized.bin',
-              'sha1': sha1.convert([7, 8, 9]).toString(),
-              'usn': 0,
-              'sync_required': 0,
-            },
-          ],
-        );
-        final fake = _QueueHttpClient()
-          ..responses.addAll([
-            _jsonResponse({
-              'data': {'usn': 1, 'sk': 'test-host-key'},
-              'err': '',
-            }),
-            _jsonResponse({'data': [], 'err': ''}),
-            _jsonResponse({'data': 'OK', 'err': ''}),
-          ]);
-        final client = AnkiSyncProtocolClient.ankiWeb(
-          client: fake,
-          hostKey: 'test-host-key',
+    test('fails before syncing when an indexed media file exceeds the upload limit', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_indexed_oversized_test_',
+      );
+      const identity = 'ankiweb:indexed-oversized-media';
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      final oversized = await File('${mediaDir.path}/oversized.bin')
+          .open(mode: FileMode.write);
+      await oversized.truncate(100 * 1024 * 1024 + 1);
+      await oversized.close();
+      await _seedMediaIndex(
+        workDir,
+        identity,
+        files: [
+          {
+            'fname': 'oversized.bin',
+            'sha1': sha1.convert([7, 8, 9]).toString(),
+            'usn': 0,
+            'sync_required': 0,
+          },
+        ],
+      );
+      final fake = _QueueHttpClient()
+        ..responses.addAll([
+          _jsonResponse({
+            'data': {'usn': 1, 'sk': 'test-host-key'},
+            'err': '',
+          }),
+          _jsonResponse({'data': [], 'err': ''}),
+          _jsonResponse({'data': 'OK', 'err': ''}),
+        ]);
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: identity,
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
         );
 
-        try {
-          await expectLater(
-            AnkiMediaSync.sync(
-              client,
-              syncIdentity: identity,
-              documentsPath: workDir.path,
-            ),
-            throwsA(isA<AnkiSyncException>()),
-          );
-
-          expect(fake.paths, isEmpty);
-          expect(await File('${mediaDir.path}/oversized.bin').exists(), isTrue);
-        } finally {
-          client.close();
-          fake.close();
-          await workDir.delete(recursive: true);
-        }
-      },
-    );
+        expect(fake.paths, isEmpty);
+        expect(await File('${mediaDir.path}/oversized.bin').exists(), isTrue);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
 
     test('does not upload Finder or Explorer metadata files', () async {
       final workDir = await Directory.systemTemp.createTemp(
@@ -464,46 +459,43 @@ void main() {
       }
     });
 
-    test(
-      'fails visibly before syncing an unindexed local filename Anki cannot upload',
-      () async {
-        final workDir = await Directory.systemTemp.createTemp(
-          'stroom_anki_media_invalid_local_name_test_',
-        );
-        final mediaDir = Directory('${workDir.path}/collection.media');
-        await mediaDir.create();
-        await File('${mediaDir.path}/a:b.png').writeAsBytes([1, 2, 3]);
-        final fake = _QueueHttpClient()
-          ..responses.addAll([
-            _jsonResponse({
-              'data': {'usn': 0, 'sk': 'test-host-key'},
-              'err': '',
-            }),
-            _jsonResponse({'data': 'OK', 'err': ''}),
-          ]);
-        final client = AnkiSyncProtocolClient.ankiWeb(
-          client: fake,
-          hostKey: 'test-host-key',
+    test('fails visibly before syncing an unindexed local filename Anki cannot upload', () async {
+      final workDir = await Directory.systemTemp.createTemp(
+        'stroom_anki_media_invalid_local_name_test_',
+      );
+      final mediaDir = Directory('${workDir.path}/collection.media');
+      await mediaDir.create();
+      await File('${mediaDir.path}/a:b.png').writeAsBytes([1, 2, 3]);
+      final fake = _QueueHttpClient()
+        ..responses.addAll([
+          _jsonResponse({
+            'data': {'usn': 0, 'sk': 'test-host-key'},
+            'err': '',
+          }),
+          _jsonResponse({'data': 'OK', 'err': ''}),
+        ]);
+      final client = AnkiSyncProtocolClient.ankiWeb(
+        client: fake,
+        hostKey: 'test-host-key',
+      );
+
+      try {
+        await expectLater(
+          AnkiMediaSync.sync(
+            client,
+            syncIdentity: 'ankiweb:invalid-local-media-name',
+            documentsPath: workDir.path,
+          ),
+          throwsA(isA<AnkiSyncException>()),
         );
 
-        try {
-          await expectLater(
-            AnkiMediaSync.sync(
-              client,
-              syncIdentity: 'ankiweb:invalid-local-media-name',
-              documentsPath: workDir.path,
-            ),
-            throwsA(isA<AnkiSyncException>()),
-          );
-
-          expect(fake.paths, isEmpty);
-        } finally {
-          client.close();
-          fake.close();
-          await workDir.delete(recursive: true);
-        }
-      },
-    );
+        expect(fake.paths, isEmpty);
+      } finally {
+        client.close();
+        fake.close();
+        await workDir.delete(recursive: true);
+      }
+    });
 
     test(
       'does not tombstone an existing file with a non-normalized name',
@@ -612,13 +604,9 @@ void main() {
           if (request.url.path != '/msync/uploadChanges') return null;
           final fields = _multipartFields(request, body);
           final archive = ZipDecoder().decodeBytes(fields['data']!);
-          uploadedMetadata =
-              jsonDecode(
-                    utf8.decode(
-                      archive.findFile('_meta')!.content as List<int>,
-                    ),
-                  )
-                  as List<Object?>;
+          uploadedMetadata = jsonDecode(
+            utf8.decode(archive.findFile('_meta')!.content as List<int>),
+          ) as List<Object?>;
           return _jsonResponse({
             'data': [1, 1],
             'err': '',
@@ -658,9 +646,8 @@ void main() {
         final mediaDir = Directory('${workDir.path}/collection.media');
         await mediaDir.create();
         await File('${mediaDir.path}/empty.bin').writeAsBytes([]);
-        final oversized = await File(
-          '${mediaDir.path}/oversized.bin',
-        ).open(mode: FileMode.write);
+        final oversized = await File('${mediaDir.path}/oversized.bin')
+            .open(mode: FileMode.write);
         await oversized.truncate(100 * 1024 * 1024 + 1);
         await oversized.close();
         await _seedMediaIndex(
@@ -981,9 +968,8 @@ void main() {
         final incomingBytes = [4, 5, 6];
         final mediaDir = Directory('${workDir.path}/collection.media');
         await mediaDir.create();
-        await File(
-          '${mediaDir.path}/$existingName',
-        ).writeAsBytes(existingBytes);
+        await File('${mediaDir.path}/$existingName')
+            .writeAsBytes(existingBytes);
         await _seedMediaIndex(
           workDir,
           identity,
@@ -1499,9 +1485,8 @@ void main() {
         expect(result.downloadedFiles, 1);
         expect(result.uploadedFiles, 0);
         expect(
-          await File(
-            '${workDir.path}/collection.media/remote.png',
-          ).readAsBytes(),
+          await File('${workDir.path}/collection.media/remote.png')
+              .readAsBytes(),
           content,
         );
         expect(fake.paths, [
@@ -1630,13 +1615,9 @@ void main() {
             case '/msync/uploadChanges':
               final fields = _multipartFields(request, body);
               final archive = ZipDecoder().decodeBytes(fields['data']!);
-              uploadedMetadata =
-                  jsonDecode(
-                        utf8.decode(
-                          archive.findFile('_meta')!.content as List<int>,
-                        ),
-                      )
-                      as List<Object?>;
+              uploadedMetadata = jsonDecode(
+                utf8.decode(archive.findFile('_meta')!.content as List<int>),
+              ) as List<Object?>;
               uploadedBytes = List<int>.from(
                 archive.findFile('0')!.content as List<int>,
               );
@@ -1964,9 +1945,9 @@ Map<String, List<int>> _multipartFields(
   http.BaseRequest request,
   List<int> body,
 ) {
-  final boundary = RegExp(
-    r'boundary=(.+)$',
-  ).firstMatch(request.headers['content-type']!)!.group(1)!;
+  final boundary = RegExp(r'boundary=(.+)$')
+      .firstMatch(request.headers['content-type']!)!
+      .group(1)!;
   final delimiter = ascii.encode('--$boundary\r\n');
   final nextPart = ascii.encode('\r\n--$boundary');
   final output = <String, List<int>>{};

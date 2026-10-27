@@ -36,18 +36,16 @@ class Notetype {
     this.defaultDeckId = 1,
     List<NoteField>? fields,
     List<NoteTemplate>? templates,
-    this.css =
-        '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n',
+    this.css = '.card {\n  font-family: arial;\n  font-size: 20px;\n  text-align: center;\n  color: black;\n  background-color: white;\n}\n',
     List<dynamic>? req,
     List<String>? tags,
-    this.latexPre =
-        r'\documentclass[12pt]{article}\usepackage{amsmath}\usepackage{amssymb}\usepackage[utf8]{inputenc}\usepackage{pgfpages}\pagestyle{empty}\setlength{\parindent}{0pt}\begin{document}',
+    this.latexPre = r'\documentclass[12pt]{article}\usepackage{amsmath}\usepackage{amssymb}\usepackage[utf8]{inputenc}\usepackage{pgfpages}\pagestyle{empty}\setlength{\parindent}{0pt}\begin{document}',
     this.latexPost = r'\end{document}',
     this.latex = 'dvipng',
-  })  : fields = fields ?? [],
-        templates = templates ?? [],
-        req = req ?? [],
-        tags = tags ?? [];
+  }) : fields = fields ?? [],
+       templates = templates ?? [],
+       req = req ?? [],
+       tags = tags ?? [];
 
   factory Notetype.createBasic() {
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -71,7 +69,7 @@ class Notetype {
         [
           0,
           'all',
-          [0]
+          [0],
         ],
       ],
       sortFieldIndex: 0,
@@ -102,7 +100,7 @@ class Notetype {
         [
           0,
           'any',
-          [0]
+          [0],
         ],
       ],
       sortFieldIndex: 0,
@@ -110,45 +108,47 @@ class Notetype {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type,
-        'mod': mtime,
-        'usn': usn,
-        'sortf': sortFieldIndex,
-        'did': defaultDeckId,
-        'flds': fields.map((f) => f.toJson()).toList(),
-        'tmpls': templates.map((t) => t.toJson()).toList(),
-        'css': css,
-        'req': req,
-        'tags': tags,
-        'latexPre': latexPre,
-        'latexPost': latexPost,
-        'latex': latex,
-      };
+    'id': id,
+    'name': name,
+    'type': type,
+    'mod': mtime,
+    'usn': usn,
+    'sortf': sortFieldIndex,
+    'did': defaultDeckId,
+    'flds': fields.map((f) => f.toJson()).toList(),
+    'tmpls': templates.map((t) => t.toJson()).toList(),
+    'css': css,
+    'req': req,
+    'tags': tags,
+    'latexPre': latexPre,
+    'latexPost': latexPost,
+    'latex': latex,
+  };
 
   factory Notetype.fromJson(Map<String, dynamic> j) => Notetype(
-        id: j['id'] as int,
-        name: j['name'] as String,
-        type: j['type'] as int? ?? 0,
-        mtime: j['mod'] as int? ?? 0,
-        usn: j['usn'] as int? ?? -1,
-        sortFieldIndex: j['sortf'] as int? ?? 0,
-        defaultDeckId: j['did'] as int? ?? 1,
-        fields: (j['flds'] as List?)
-                ?.map((f) => NoteField.fromJson(f as Map<String, dynamic>))
-                .toList() ??
-            [],
-        templates: (j['tmpls'] as List?)
-                ?.map((t) => NoteTemplate.fromJson(t as Map<String, dynamic>))
-                .toList() ??
-            [],
-        css: j['css'] as String? ?? '',
-        req: j['req'] as List<dynamic>? ?? [],
-        tags: (j['tags'] as List?)?.cast<String>() ?? [],
-        latexPre: j['latexPre'] as String? ?? '',
-        latexPost: j['latexPost'] as String? ?? '',
-      );
+    id: j['id'] as int,
+    name: j['name'] as String,
+    type: j['type'] as int? ?? 0,
+    mtime: j['mod'] as int? ?? 0,
+    usn: j['usn'] as int? ?? -1,
+    sortFieldIndex: j['sortf'] as int? ?? 0,
+    defaultDeckId: j['did'] as int? ?? 1,
+    fields:
+        (j['flds'] as List?)
+            ?.map((f) => NoteField.fromJson(f as Map<String, dynamic>))
+            .toList() ??
+        [],
+    templates:
+        (j['tmpls'] as List?)
+            ?.map((t) => NoteTemplate.fromJson(t as Map<String, dynamic>))
+            .toList() ??
+        [],
+    css: j['css'] as String? ?? '',
+    req: j['req'] as List<dynamic>? ?? [],
+    tags: (j['tags'] as List?)?.cast<String>() ?? [],
+    latexPre: j['latexPre'] as String? ?? '',
+    latexPost: j['latexPost'] as String? ?? '',
+  );
 }
 
 /// A field within a note type (was: ModelField).
@@ -172,24 +172,24 @@ class NoteField {
   }) : media = media ?? [];
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'ord': ord,
-        'font': font,
-        'size': size,
-        'sticky': sticky,
-        'rtl': rtl,
-        'media': media,
-      };
+    'name': name,
+    'ord': ord,
+    'font': font,
+    'size': size,
+    'sticky': sticky,
+    'rtl': rtl,
+    'media': media,
+  };
 
   factory NoteField.fromJson(Map<String, dynamic> j) => NoteField(
-        name: j['name'] as String,
-        ord: j['ord'] as int? ?? 0,
-        font: j['font'] as String? ?? 'Arial',
-        size: j['size'] as int? ?? 20,
-        sticky: j['sticky'] as bool? ?? false,
-        rtl: j['rtl'] as bool? ?? false,
-        media: (j['media'] as List?)?.cast<String>() ?? [],
-      );
+    name: j['name'] as String,
+    ord: j['ord'] as int? ?? 0,
+    font: j['font'] as String? ?? 'Arial',
+    size: j['size'] as int? ?? 20,
+    sticky: j['sticky'] as bool? ?? false,
+    rtl: j['rtl'] as bool? ?? false,
+    media: (j['media'] as List?)?.cast<String>() ?? [],
+  );
 }
 
 /// A card template within a note type (was: ModelTemplate).
@@ -213,22 +213,22 @@ class NoteTemplate {
   });
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'ord': ord,
-        'qfmt': qfmt,
-        'afmt': afmt,
-        if (bqfmt.isNotEmpty) 'bqfmt': bqfmt,
-        if (bafmt.isNotEmpty) 'bafmt': bafmt,
-        if (deckId != null) 'did': deckId,
-      };
+    'name': name,
+    'ord': ord,
+    'qfmt': qfmt,
+    'afmt': afmt,
+    if (bqfmt.isNotEmpty) 'bqfmt': bqfmt,
+    if (bafmt.isNotEmpty) 'bafmt': bafmt,
+    if (deckId != null) 'did': deckId,
+  };
 
   factory NoteTemplate.fromJson(Map<String, dynamic> j) => NoteTemplate(
-        name: j['name'] as String,
-        ord: j['ord'] as int? ?? 0,
-        qfmt: j['qfmt'] as String? ?? '',
-        afmt: j['afmt'] as String? ?? '',
-        bqfmt: j['bqfmt'] as String? ?? '',
-        bafmt: j['bafmt'] as String? ?? '',
-        deckId: j['did'] as int?,
-      );
+    name: j['name'] as String,
+    ord: j['ord'] as int? ?? 0,
+    qfmt: j['qfmt'] as String? ?? '',
+    afmt: j['afmt'] as String? ?? '',
+    bqfmt: j['bqfmt'] as String? ?? '',
+    bafmt: j['bafmt'] as String? ?? '',
+    deckId: j['did'] as int?,
+  );
 }

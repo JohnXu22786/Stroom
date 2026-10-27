@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+
 import '../models/card.dart';
 
 /// Data access object for the `cards` table.
@@ -117,9 +118,9 @@ class CardDao {
   }
 
   Future<void> _touchCollection() => _db.rawUpdate(
-        'UPDATE col SET mod = ? WHERE id = 1',
-        [DateTime.now().millisecondsSinceEpoch],
-      );
+    'UPDATE col SET mod = ? WHERE id = 1',
+    [DateTime.now().millisecondsSinceEpoch],
+  );
 
   Future<int> totalCount(int deckId) async {
     final result = await _db.rawQuery(

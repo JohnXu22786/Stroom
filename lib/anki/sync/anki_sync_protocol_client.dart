@@ -42,28 +42,27 @@ class AnkiSyncProtocolClient {
     required Duration requestTimeout,
     required bool allowAnkiWebMetaRedirect,
     String? hostKey,
-  })  : _configuredSyncRoot = syncRoot,
-        _client = client,
-        _ownsClient = ownsClient,
-        _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
-        _sessionKey = sessionKey,
-        _requestTimeout = requestTimeout,
-        _hostKey = hostKey;
+  }) : _configuredSyncRoot = syncRoot,
+       _client = client,
+       _ownsClient = ownsClient,
+       _allowAnkiWebMetaRedirect = allowAnkiWebMetaRedirect,
+       _sessionKey = sessionKey,
+       _requestTimeout = requestTimeout,
+       _hostKey = hostKey;
 
   factory AnkiSyncProtocolClient.ankiWeb({
     http.Client? client,
     String? hostKey,
     Duration requestTimeout = _timeout,
-  }) =>
-      AnkiSyncProtocolClient._(
-        syncRoot: ankiWebSyncRoot,
-        client: client ?? http.Client(),
-        ownsClient: client == null,
-        sessionKey: _newSessionKey(),
-        requestTimeout: requestTimeout,
-        allowAnkiWebMetaRedirect: true,
-        hostKey: hostKey,
-      );
+  }) => AnkiSyncProtocolClient._(
+    syncRoot: ankiWebSyncRoot,
+    client: client ?? http.Client(),
+    ownsClient: client == null,
+    sessionKey: _newSessionKey(),
+    requestTimeout: requestTimeout,
+    allowAnkiWebMetaRedirect: true,
+    hostKey: hostKey,
+  );
 
   factory AnkiSyncProtocolClient.selfHosted({
     required String endpoint,
@@ -271,12 +270,9 @@ class AnkiSyncProtocolClient {
   }
 
   Future<List<int>> downloadMediaZip(List<String> filenames) async {
-    return requestMediaData(
-        'downloadFiles',
-        {
-          'files': filenames,
-        },
-        maxResponseBytes: maxMediaArchiveBytes);
+    return requestMediaData('downloadFiles', {
+      'files': filenames,
+    }, maxResponseBytes: maxMediaArchiveBytes);
   }
 
   Future<List<int>> _send(
@@ -302,15 +298,16 @@ class AnkiSyncProtocolClient {
       });
     }
 
-    final request = _ProgressAwareMultipartRequest(
-      _endpointFor(method),
-      abortTrigger: abortRequest.future,
-      onProgress: resetRequestTimer,
-    )
-      ..followRedirects = false
-      ..fields['c'] = compress ? '1' : '0'
-      ..fields['k'] = hostKey ?? _hostKey ?? ''
-      ..fields['s'] = _sessionKey;
+    final request =
+        _ProgressAwareMultipartRequest(
+            _endpointFor(method),
+            abortTrigger: abortRequest.future,
+            onProgress: resetRequestTimer,
+          )
+          ..followRedirects = false
+          ..fields['c'] = compress ? '1' : '0'
+          ..fields['k'] = hostKey ?? _hostKey ?? ''
+          ..fields['s'] = _sessionKey;
     final requestBytes = precompressedPayloadFile == null
         ? (compress ? gzip.encode(payload) : payload)
         : null;
@@ -473,15 +470,17 @@ class AnkiSyncProtocolClient {
 
   Uri _endpointFor(String method) {
     final isMediaEndpoint = method.startsWith('../msync/');
-    final endpointName =
-        isMediaEndpoint ? method.substring('../msync/'.length) : method;
+    final endpointName = isMediaEndpoint
+        ? method.substring('../msync/'.length)
+        : method;
     if (!RegExp(r'^[A-Za-z][A-Za-z0-9]*$').hasMatch(endpointName)) {
       throw const AnkiSyncException('同步请求路径无效');
     }
 
     final endpoint = syncRoot.resolve(method);
-    final endpointRoot =
-        isMediaEndpoint ? syncRoot.resolve('../msync/') : syncRoot;
+    final endpointRoot = isMediaEndpoint
+        ? syncRoot.resolve('../msync/')
+        : syncRoot;
     if (endpoint.origin != syncRoot.origin ||
         !endpoint.path.startsWith(endpointRoot.path)) {
       throw const AnkiSyncException('同步请求路径无效');
@@ -535,7 +534,8 @@ class AnkiSyncProtocolClient {
     }
     final host = uri.host.toLowerCase();
     final address = InternetAddress.tryParse(host);
-    final isLoopback = host == 'localhost' ||
+    final isLoopback =
+        host == 'localhost' ||
         host.endsWith('.localhost') ||
         address?.isLoopback == true;
     if (uri.scheme == 'http' && !isLoopback) {

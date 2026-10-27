@@ -24,13 +24,10 @@ class AnkiSyncDestinationState {
   }
 
   static Future<void> mark(DatabaseExecutor db, String destination) async {
-    await db.insert(
-        'stroom_sync_destination',
-        {
-          'id': 1,
-          'identity': destination,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('stroom_sync_destination', {
+      'id': 1,
+      'identity': destination,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Record a confirmed destination in a closed collection file.

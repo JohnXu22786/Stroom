@@ -592,9 +592,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                     const SizedBox(height: 3),
                     Text(
                       '登录状态按服务分别保存。切换方式不会合并或覆盖数据。',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: colors.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -655,9 +654,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   Text(
                     '自建远程服务器需使用 HTTPS；本机地址可使用 HTTP。'
                     '服务器需支持 Anki sync v10，证书验证默认开启。',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   Material(
@@ -694,9 +692,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
             const SizedBox(height: 16),
             Text(
               '使用官方 AnkiWeb 同步服务。密码只在登录时发送，不会保存在 Stroom。',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
           const SizedBox(height: 22),
@@ -800,9 +797,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
           Text(
             '双向同步会合并 collection 的增量变更并传输媒体文件；结构戳不一致时，请选择完整上传或下载。'
             '完整下载失败会尝试恢复原 collection 和媒体目录。',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: colors.onSurfaceVariant),
           ),
         ],
       ),
@@ -844,9 +840,10 @@ class _RemoteStatus extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final modified = meta.modified <= 0
         ? '未知'
-        : DateTime.fromMillisecondsSinceEpoch(
-            meta.modified,
-          ).toLocal().toString().substring(0, 16);
+        : DateTime.fromMillisecondsSinceEpoch(meta.modified)
+              .toLocal()
+              .toString()
+              .substring(0, 16);
     return _QuietSection(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -867,17 +864,15 @@ class _RemoteStatus extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '结构版本戳 ${meta.schema} · USN ${meta.usn} · 修改时间 $modified',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: colors.onSurfaceVariant),
           ),
           if (meta.message.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
               meta.message,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: colors.onSurfaceVariant),
             ),
           ],
         ],

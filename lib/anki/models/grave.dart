@@ -19,9 +19,6 @@ class Grave {
 
   Map<String, dynamic> toMap() => {'usn': usn, 'oid': oid, 'type': type};
 
-  factory Grave.fromMap(Map<String, dynamic> m) => Grave(
-        usn: m['usn'] as int,
-        oid: m['oid'] as int,
-        type: m['type'] as int,
-      );
+  factory Grave.fromMap(Map<String, dynamic> m) =>
+      Grave(usn: m['usn'] as int, oid: m['oid'] as int, type: m['type'] as int);
 }

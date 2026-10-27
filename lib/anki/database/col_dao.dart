@@ -1,5 +1,7 @@
 import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
+
 import '../models/deck.dart';
 import '../models/model.dart';
 import '../models/note.dart';
@@ -170,17 +172,14 @@ class ColDao {
           ..usn = -1;
       }
     }
-    await _db.update(
-        'col',
-        {
-          'mod': modified,
-          'dty': dirty,
-          'conf': confJson,
-          'models': jsonEncode(_modelsToJson()),
-          'decks': jsonEncode(_decksToJson()),
-          'tags': tagsJson,
-        },
-        where: 'id = 1');
+    await _db.update('col', {
+      'mod': modified,
+      'dty': dirty,
+      'conf': confJson,
+      'models': jsonEncode(_modelsToJson()),
+      'decks': jsonEncode(_decksToJson()),
+      'tags': tagsJson,
+    }, where: 'id = 1');
     _savedDecks = _decks.map((id, value) => MapEntry(id, value.toJson()));
     _savedModels = _snapshotModels();
   }
@@ -228,22 +227,21 @@ class ColDao {
 
     if (modelsChanged) {
       modified = DateTime.now().millisecondsSinceEpoch;
-      await _db.update(
-        'col',
-        {'mod': modified, 'models': jsonEncode(_modelsToJson())},
-        where: 'id = 1',
-      );
+      await _db.update('col', {
+        'mod': modified,
+        'models': jsonEncode(_modelsToJson()),
+      }, where: 'id = 1');
       _savedModels = _snapshotModels();
     }
     return updatedNotes;
   }
 
   Map<int, Map<String, dynamic>> _snapshotModels() => _models.map(
-        (id, value) => MapEntry(
-          id,
-          jsonDecode(jsonEncode(value.toJson())) as Map<String, dynamic>,
-        ),
-      );
+    (id, value) => MapEntry(
+      id,
+      jsonDecode(jsonEncode(value.toJson())) as Map<String, dynamic>,
+    ),
+  );
 
   // ── Decks ────────────────────────────────────────────────
 
@@ -268,8 +266,9 @@ class ColDao {
       for (final entry in _decks.entries)
         if (entry.key != id) entry.key.toString(): entry.value.toJson(),
     };
-    final survivingDecks =
-        _decks.entries.where((entry) => entry.key != id).toList();
+    final survivingDecks = _decks.entries
+        .where((entry) => entry.key != id)
+        .toList();
     final survivingDeckIds = survivingDecks.map((entry) => entry.key).toSet();
     MapEntry<int, Deck>? fallbackDeck;
     for (final entry in survivingDecks) {
@@ -306,10 +305,10 @@ class ColDao {
     final currentDeckId = deckIdFrom(nextConfig['curDeck']);
     final selectedDeckId =
         currentDeckId != null && survivingDeckIds.contains(currentDeckId)
-            ? currentDeckId
-            : activeDecks.isNotEmpty
-                ? activeDecks.first
-                : fallbackDeck?.key;
+        ? currentDeckId
+        : activeDecks.isNotEmpty
+        ? activeDecks.first
+        : fallbackDeck?.key;
     if (selectedDeckId != null && !activeDecks.contains(selectedDeckId)) {
       activeDecks.add(selectedDeckId);
     }
@@ -345,8 +344,9 @@ class ColDao {
           final currentQueue = card['queue'] as int? ?? 0;
           final cardType = card['type'] as int? ?? 0;
           final originalDue = card['odue'] as int? ?? 0;
-          final restoredDue =
-              originalDue != 0 ? originalDue : card['due'] as int? ?? 0;
+          final restoredDue = originalDue != 0
+              ? originalDue
+              : card['due'] as int? ?? 0;
           final restoredQueue = currentQueue < 0
               ? currentQueue
               : switch (cardType) {
@@ -398,14 +398,11 @@ class ColDao {
         }
       }
       await txn.insert('graves', {'usn': -1, 'oid': id, 'type': 2});
-      await txn.update(
-          'col',
-          {
-            'decks': jsonEncode(decksJson),
-            'conf': nextConfJson,
-            'mod': nowMs,
-          },
-          where: 'id = 1');
+      await txn.update('col', {
+        'decks': jsonEncode(decksJson),
+        'conf': nextConfJson,
+        'mod': nowMs,
+      }, where: 'id = 1');
     });
 
     _decks.remove(id);
@@ -468,12 +465,12 @@ class ColDao {
   }
 
   Map<String, dynamic> _decksToJson() => {
-        for (final e in _decks.entries) e.key.toString(): e.value.toJson(),
-      };
+    for (final e in _decks.entries) e.key.toString(): e.value.toJson(),
+  };
 
   Map<String, dynamic> _modelsToJson() => {
-        for (final e in _models.entries) e.key.toString(): e.value.toJson(),
-      };
+    for (final e in _models.entries) e.key.toString(): e.value.toJson(),
+  };
 }
 
 /// Deck statistics.

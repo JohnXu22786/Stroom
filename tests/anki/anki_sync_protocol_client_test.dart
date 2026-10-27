@@ -39,8 +39,9 @@ void main() {
       final fields = _multipartFields(request);
       expect(utf8.decode(fields['c']!), '1');
       expect(utf8.decode(fields['k']!), '');
-      final loginData = jsonDecode(utf8.decode(gzip.decode(fields['data']!)))
-          as Map<String, dynamic>;
+      final loginData = jsonDecode(
+        utf8.decode(gzip.decode(fields['data']!)),
+      ) as Map<String, dynamic>;
       expect(loginData, {'u': 'test@example.invalid', 'p': 'test-only'});
     });
 
@@ -71,8 +72,9 @@ void main() {
       final request = httpClient.requests.last;
       final fields = _multipartFields(request);
       expect(utf8.decode(fields['k']!), 'host-key');
-      final payload = jsonDecode(utf8.decode(gzip.decode(fields['data']!)))
-          as Map<String, dynamic>;
+      final payload = jsonDecode(
+        utf8.decode(gzip.decode(fields['data']!)),
+      ) as Map<String, dynamic>;
       expect(payload['v'], 10);
       expect(payload['cv'], startsWith('stroom:'));
     });
@@ -106,16 +108,16 @@ void main() {
       await client.login('test@example.invalid', 'test-only');
 
       Map<String, dynamic> validMetadata() => {
-            'mod': 1700000000000,
-            'scm': 1600000000000,
-            'usn': 7,
-            'ts': 1700000000,
-            'msg': '',
-            'cont': true,
-            'hostNum': 1,
-            'empty': false,
-            'media_usn': 3,
-          };
+        'mod': 1700000000000,
+        'scm': 1600000000000,
+        'usn': 7,
+        'ts': 1700000000,
+        'msg': '',
+        'cont': true,
+        'hostNum': 1,
+        'empty': false,
+        'media_usn': 3,
+      };
 
       final invalidCases = <String>[];
       for (final field in [
@@ -221,10 +223,10 @@ void main() {
           zoneSpecification: ZoneSpecification(
             createTimer: (self, parent, zone, duration, callback) =>
                 parent.createTimer(
-              zone,
-              Duration(milliseconds: duration.inMilliseconds ~/ 1000),
-              callback,
-            ),
+                  zone,
+                  Duration(milliseconds: duration.inMilliseconds ~/ 1000),
+                  callback,
+                ),
           ),
         );
 
@@ -350,45 +352,49 @@ void main() {
       );
       final retryFields = _multipartFields(httpClient.requests[2]);
       expect(utf8.decode(retryFields['k']!), 'host-key');
-      expect(httpClient.requests.map((request) => request.followRedirects),
-          everyElement(isFalse));
-    });
-
-    test('rejects unapproved AnkiWeb redirect targets before retrying',
-        () async {
-      httpClient.responses.add(_jsonResponse({'key': 'host-key'}));
-      await client.login('test@example.invalid', 'test-only');
-      final unapprovedTargets = [
-        'https://attacker.example/collect',
-        'https://sync16.ankiweb.net.attacker.example/',
-        'http://sync16.ankiweb.net/',
-        'https://user@sync16.ankiweb.net/',
-        'https://sync16.ankiweb.net:444/',
-        'https://sync16.ankiweb.net/other/',
-      ];
-
-      for (final target in unapprovedTargets) {
-        httpClient.responses.add(
-          http.Response(
-            '',
-            HttpStatus.permanentRedirect,
-            headers: {'location': target},
-          ),
-        );
-        await expectLater(
-          client.checkStatus(),
-          throwsA(isA<AnkiSyncException>()),
-          reason: target,
-        );
-      }
-
-      expect(httpClient.requests, hasLength(unapprovedTargets.length + 1));
       expect(
-        httpClient.requests.skip(1).map((request) => request.url.host),
-        everyElement('sync.ankiweb.net'),
+        httpClient.requests.map((request) => request.followRedirects),
+        everyElement(isFalse),
       );
-      expect(client.syncRoot, AnkiSyncProtocolClient.ankiWebSyncRoot);
     });
+
+    test(
+      'rejects unapproved AnkiWeb redirect targets before retrying',
+      () async {
+        httpClient.responses.add(_jsonResponse({'key': 'host-key'}));
+        await client.login('test@example.invalid', 'test-only');
+        final unapprovedTargets = [
+          'https://attacker.example/collect',
+          'https://sync16.ankiweb.net.attacker.example/',
+          'http://sync16.ankiweb.net/',
+          'https://user@sync16.ankiweb.net/',
+          'https://sync16.ankiweb.net:444/',
+          'https://sync16.ankiweb.net/other/',
+        ];
+
+        for (final target in unapprovedTargets) {
+          httpClient.responses.add(
+            http.Response(
+              '',
+              HttpStatus.permanentRedirect,
+              headers: {'location': target},
+            ),
+          );
+          await expectLater(
+            client.checkStatus(),
+            throwsA(isA<AnkiSyncException>()),
+            reason: target,
+          );
+        }
+
+        expect(httpClient.requests, hasLength(unapprovedTargets.length + 1));
+        expect(
+          httpClient.requests.skip(1).map((request) => request.url.host),
+          everyElement('sync.ankiweb.net'),
+        );
+        expect(client.syncRoot, AnkiSyncProtocolClient.ankiWebSyncRoot);
+      },
+    );
 
     test('does not follow AnkiWeb redirects on self-hosted servers', () async {
       httpClient.responses.add(
@@ -412,7 +418,9 @@ void main() {
 
       expect(httpClient.requests, hasLength(1));
       expect(
-          httpClient.requests.single.url.host, 'self-hosted.example.invalid');
+        httpClient.requests.single.url.host,
+        'self-hosted.example.invalid',
+      );
     });
 
     test('does not retry a second AnkiWeb meta redirect', () async {
@@ -452,40 +460,37 @@ void main() {
       );
     });
 
-    test(
-      'streams raw collection bytes to a file through the authenticated endpoint',
-      () async {
-        final collectionBytes = [0, 1, 2, 255];
-        final directory = await Directory.systemTemp.createTemp(
-          'stroom-anki-protocol-download_',
-        );
-        final destination = File('${directory.path}/collection.anki2');
-        httpClient.responses.add(_jsonResponse({'key': 'host-key'}));
-        httpClient.streamedResponses.add(
-          http.StreamedResponse(
-            Stream<List<int>>.fromIterable([
-              collectionBytes.sublist(0, 2),
-              collectionBytes.sublist(2),
-            ]),
-            HttpStatus.ok,
-          ),
-        );
+    test('streams raw collection bytes to a file through the authenticated endpoint', () async {
+      final collectionBytes = [0, 1, 2, 255];
+      final directory = await Directory.systemTemp.createTemp(
+        'stroom-anki-protocol-download_',
+      );
+      final destination = File('${directory.path}/collection.anki2');
+      httpClient.responses.add(_jsonResponse({'key': 'host-key'}));
+      httpClient.streamedResponses.add(
+        http.StreamedResponse(
+          Stream<List<int>>.fromIterable([
+            collectionBytes.sublist(0, 2),
+            collectionBytes.sublist(2),
+          ]),
+          HttpStatus.ok,
+        ),
+      );
 
-        try {
-          await client.login('test@example.invalid', 'test-only');
-          await client.downloadCollectionToFile(destination);
+      try {
+        await client.login('test@example.invalid', 'test-only');
+        await client.downloadCollectionToFile(destination);
 
-          expect(await destination.readAsBytes(), collectionBytes);
-          final request = httpClient.requests.last;
-          expect(request.url.path, '/sync/download');
-          final fields = _multipartFields(request);
-          expect(utf8.decode(fields['k']!), 'host-key');
-          expect(gzip.decode(fields['data']!), utf8.encode('{}'));
-        } finally {
-          await directory.delete(recursive: true);
-        }
-      },
-    );
+        expect(await destination.readAsBytes(), collectionBytes);
+        final request = httpClient.requests.last;
+        expect(request.url.path, '/sync/download');
+        final fields = _multipartFields(request);
+        expect(utf8.decode(fields['k']!), 'host-key');
+        expect(gzip.decode(fields['data']!), utf8.encode('{}'));
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
 
     test(
       'rejects a collection response larger than the supported limit',
@@ -715,12 +720,9 @@ void main() {
         httpClient.omitNextContentLength = true;
 
         await expectLater(
-          client.requestMediaData(
-              'downloadFiles',
-              {
-                'files': ['image.jpg'],
-              },
-              maxResponseBytes: 3),
+          client.requestMediaData('downloadFiles', {
+            'files': ['image.jpg'],
+          }, maxResponseBytes: 3),
           throwsA(isA<AnkiSyncException>()),
         );
       },
@@ -913,9 +915,11 @@ class _ControlledUploadHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    final abortTrigger =
-        request is http.Abortable ? request.abortTrigger : null;
-    final abortedRequest = abortTrigger?.then<void>((_) {
+    final abortTrigger = request is http.Abortable
+        ? request.abortTrigger
+        : null;
+    final abortedRequest =
+        abortTrigger?.then<void>((_) {
           aborted = true;
           throw http.RequestAbortedException(request.url);
         }) ??

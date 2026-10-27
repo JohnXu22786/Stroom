@@ -47,8 +47,8 @@ class Note {
     this.checksum,
     this.flags = 0,
     this.custom_data = '',
-  })  : id = id ?? _nextId(),
-        tags = tags ?? [];
+  }) : id = id ?? _nextId(),
+       tags = tags ?? [];
 
   /// Creates a new note from a notetype id and field values.
   factory Note.createNew({
@@ -75,8 +75,9 @@ class Note {
     required String flds,
     String tagsStr = '',
   }) {
-    final fields =
-        flds.isEmpty ? <String>[] : flds.split(String.fromCharCode(0x1f));
+    final fields = flds.isEmpty
+        ? <String>[]
+        : flds.split(String.fromCharCode(0x1f));
     return Note.createNew(
       notetype_id: notetype_id,
       fields: fields,
@@ -120,23 +121,24 @@ class Note {
   // ── Serialization ─────────────────────────────────────────────────────
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'guid': guid,
-        'mid': notetype_id,
-        'mod': mtime,
-        'usn': usn,
-        'tags': tagsForDb,
-        'flds': fldsForDb,
-        'sfld': sfldForDb,
-        'csum': csumForDb,
-        'flags': flags,
-        'data': custom_data,
-      };
+    'id': id,
+    'guid': guid,
+    'mid': notetype_id,
+    'mod': mtime,
+    'usn': usn,
+    'tags': tagsForDb,
+    'flds': fldsForDb,
+    'sfld': sfldForDb,
+    'csum': csumForDb,
+    'flags': flags,
+    'data': custom_data,
+  };
 
   factory Note.fromMap(Map<String, dynamic> m) {
     final fldsStr = m['flds'] as String? ?? '';
-    final fields =
-        fldsStr.isEmpty ? <String>[] : fldsStr.split(String.fromCharCode(0x1f));
+    final fields = fldsStr.isEmpty
+        ? <String>[]
+        : fldsStr.split(String.fromCharCode(0x1f));
     final tagsStr = m['tags'] as String? ?? '';
     final tags = tagsStr.trim().isEmpty
         ? <String>[]
@@ -205,8 +207,8 @@ class Note {
       final filename = source?.isNotEmpty == true
           ? source
           : data?.isNotEmpty == true
-              ? data
-              : null;
+          ? data
+          : null;
       if (filename == null) return tag;
 
       // Attribute values are already entity-decoded by the HTML parser. Escape
@@ -244,12 +246,18 @@ class Note {
     final fragment = parseFragment(withSoundReferences);
     void rewriteNode(Node node) {
       if (node is Element &&
-          const {'img', 'audio', 'video', 'object', 'source'}
-              .contains(node.localName)) {
+          const {
+            'img',
+            'audio',
+            'video',
+            'object',
+            'source',
+          }.contains(node.localName)) {
         for (final attribute in const ['src', 'data']) {
           final oldFilename = node.attributes[attribute];
-          final newFilename =
-              oldFilename == null ? null : replacements[oldFilename];
+          final newFilename = oldFilename == null
+              ? null
+              : replacements[oldFilename];
           if (newFilename != null && newFilename != oldFilename) {
             node.attributes[attribute] = newFilename;
             changed = true;
@@ -277,11 +285,12 @@ class Note {
       final quote = match.group(1) != null
           ? '"'
           : match.group(2) != null
-              ? "'"
-              : '';
+          ? "'"
+          : '';
       final oldFilename = match.group(1) ?? match.group(2) ?? match.group(3);
-      final newFilename =
-          oldFilename == null ? null : replacements[oldFilename];
+      final newFilename = oldFilename == null
+          ? null
+          : replacements[oldFilename];
       if (newFilename == null || newFilename == oldFilename) {
         return match.group(0)!;
       }

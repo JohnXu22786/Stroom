@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../database/col_dao.dart';
 import '../database/card_dao.dart';
 import '../database/note_dao.dart';
@@ -55,8 +56,13 @@ class AnkiActions {
 
   // ── Notes / Cards ──────────────────────────────────────
 
-  Future<int> addCard(int did, String front, String back,
-      {int? modelId, String tags = ''}) async {
+  Future<int> addCard(
+    int did,
+    String front,
+    String back, {
+    int? modelId,
+    String tags = '',
+  }) async {
     final col = await _col;
     final models = col.modelList;
     final int mid;
@@ -117,8 +123,13 @@ class AnkiActions {
   Future<void> answerCard(int cid, int rating, {int duration = 0}) async {
     final col = await _col;
     final cardDao = await _cardDao;
-    await _scheduler.answerCard(col, cardDao, cid, rating,
-        reviewDuration: duration);
+    await _scheduler.answerCard(
+      col,
+      cardDao,
+      cid,
+      rating,
+      reviewDuration: duration,
+    );
     _refresh();
   }
 

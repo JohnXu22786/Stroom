@@ -8,21 +8,21 @@ class AnkiSchema {
 
   /// Returns the complete CREATE TABLE SQL.
   static List<String> get createStatements => [
-        _createCol,
-        _createNotes,
-        _createCards,
-        _createRevlog,
-        _createGraves,
-        ...localSupportStatements,
-      ];
+    _createCol,
+    _createNotes,
+    _createCards,
+    _createRevlog,
+    _createGraves,
+    ...localSupportStatements,
+  ];
 
   /// App-local tables that are not present in an official schema 11 download.
   /// They are created when a collection is opened by Stroom.
   static List<String> get localSupportStatements => [
-        _createDeckConfig,
-        _createConfig,
-        syncDestinationStatement,
-      ];
+    _createDeckConfig,
+    _createConfig,
+    syncDestinationStatement,
+  ];
 
   // ─── col ─────────────────────────────────────────────────────
   // Stores collection-level metadata and JSON config blobs.

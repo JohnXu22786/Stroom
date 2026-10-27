@@ -1,4 +1,5 @@
 import 'package:sqflite/sqflite.dart';
+
 import '../models/revlog.dart';
 
 class RevlogDao {

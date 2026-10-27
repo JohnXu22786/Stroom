@@ -38,24 +38,24 @@ class DeckCommon {
   });
 
   Map<String, dynamic> toJson() => {
-        'studyCollapsed': studyCollapsed,
-        'browserCollapsed': browserCollapsed,
-        'lastDayStudied': lastDayStudied,
-        'newStudied': newStudied,
-        'reviewStudied': reviewStudied,
-        'millisecondsStudied': millisecondsStudied,
-        'learningStudied': learningStudied,
-      };
+    'studyCollapsed': studyCollapsed,
+    'browserCollapsed': browserCollapsed,
+    'lastDayStudied': lastDayStudied,
+    'newStudied': newStudied,
+    'reviewStudied': reviewStudied,
+    'millisecondsStudied': millisecondsStudied,
+    'learningStudied': learningStudied,
+  };
 
   factory DeckCommon.fromJson(Map<String, dynamic> j) => DeckCommon(
-        studyCollapsed: j['studyCollapsed'] as bool? ?? false,
-        browserCollapsed: j['browserCollapsed'] as bool? ?? false,
-        lastDayStudied: j['lastDayStudied'] as int? ?? 0,
-        newStudied: j['newStudied'] as int? ?? 0,
-        reviewStudied: j['reviewStudied'] as int? ?? 0,
-        millisecondsStudied: j['millisecondsStudied'] as int? ?? 0,
-        learningStudied: j['learningStudied'] as int? ?? 0,
-      );
+    studyCollapsed: j['studyCollapsed'] as bool? ?? false,
+    browserCollapsed: j['browserCollapsed'] as bool? ?? false,
+    lastDayStudied: j['lastDayStudied'] as int? ?? 0,
+    newStudied: j['newStudied'] as int? ?? 0,
+    reviewStudied: j['reviewStudied'] as int? ?? 0,
+    millisecondsStudied: j['millisecondsStudied'] as int? ?? 0,
+    learningStudied: j['learningStudied'] as int? ?? 0,
+  );
 }
 
 // ─── Normal deck info ─────────────────────────────────────────────────────
@@ -83,26 +83,26 @@ class NormalDeckInfo {
   });
 
   Map<String, dynamic> toJson() => {
-        'configId': configId,
-        'extendNew': extendNew,
-        'extendReview': extendReview,
-        'description': description,
-        'markdownDescription': markdownDescription,
-        if (reviewLimit != null) 'reviewLimit': reviewLimit,
-        if (newLimit != null) 'newLimit': newLimit,
-        if (desiredRetention != null) 'desiredRetention': desiredRetention,
-      };
+    'configId': configId,
+    'extendNew': extendNew,
+    'extendReview': extendReview,
+    'description': description,
+    'markdownDescription': markdownDescription,
+    if (reviewLimit != null) 'reviewLimit': reviewLimit,
+    if (newLimit != null) 'newLimit': newLimit,
+    if (desiredRetention != null) 'desiredRetention': desiredRetention,
+  };
 
   factory NormalDeckInfo.fromJson(Map<String, dynamic> j) => NormalDeckInfo(
-        configId: j['configId'] as int? ?? 1,
-        extendNew: j['extendNew'] as int? ?? 0,
-        extendReview: j['extendReview'] as int? ?? 0,
-        description: j['description'] as String? ?? '',
-        markdownDescription: j['markdownDescription'] as bool? ?? false,
-        reviewLimit: j['reviewLimit'] as int?,
-        newLimit: j['newLimit'] as int?,
-        desiredRetention: (j['desiredRetention'] as num?)?.toDouble(),
-      );
+    configId: j['configId'] as int? ?? 1,
+    extendNew: j['extendNew'] as int? ?? 0,
+    extendReview: j['extendReview'] as int? ?? 0,
+    description: j['description'] as String? ?? '',
+    markdownDescription: j['markdownDescription'] as bool? ?? false,
+    reviewLimit: j['reviewLimit'] as int?,
+    newLimit: j['newLimit'] as int?,
+    desiredRetention: (j['desiredRetention'] as num?)?.toDouble(),
+  );
 }
 
 // ─── Deck ─────────────────────────────────────────────────────────────────
@@ -205,21 +205,21 @@ class Deck {
   // ── Anki-compatible JSON (legacy schema11 format) ─────────────────────
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'desc': normalInfo?.description ?? '',
-        'mod': mtimeSecs,
-        'usn': usn,
-        'dyn': kind == DeckKind.filtered ? 1 : 0,
-        'conf': normalInfo?.configId ?? 1,
-        'crt': creationDate,
-        'lrnToday': [common.learningStudied, common.lastDayStudied],
-        'revToday': [common.reviewStudied, common.lastDayStudied],
-        'newToday': [common.newStudied, common.lastDayStudied],
-        'timeToday': [common.millisecondsStudied, common.lastDayStudied],
-        'collapsed': common.studyCollapsed,
-        'browserCollapsed': common.browserCollapsed,
-      };
+    'id': id,
+    'name': name,
+    'desc': normalInfo?.description ?? '',
+    'mod': mtimeSecs,
+    'usn': usn,
+    'dyn': kind == DeckKind.filtered ? 1 : 0,
+    'conf': normalInfo?.configId ?? 1,
+    'crt': creationDate,
+    'lrnToday': [common.learningStudied, common.lastDayStudied],
+    'revToday': [common.reviewStudied, common.lastDayStudied],
+    'newToday': [common.newStudied, common.lastDayStudied],
+    'timeToday': [common.millisecondsStudied, common.lastDayStudied],
+    'collapsed': common.studyCollapsed,
+    'browserCollapsed': common.browserCollapsed,
+  };
 
   factory Deck.fromJson(Map<String, dynamic> j) {
     final lrnToday = (j['lrnToday'] as List?)?.cast<int>() ?? [0, 0];

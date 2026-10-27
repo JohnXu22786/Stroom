@@ -28,8 +28,8 @@ class AnkiSyncNotifier extends Notifier<AnkiSyncState> {
     final savedMode = prefs.getString(_keyMode);
     final migratedMode = savedMode == null
         ? ((prefs.getBool(_keyEnabled) ?? false)
-            ? AnkiSyncMode.selfHosted
-            : AnkiSyncMode.ankiWeb)
+              ? AnkiSyncMode.selfHosted
+              : AnkiSyncMode.ankiWeb)
         : AnkiSyncMode.values.firstWhere(
             (mode) => mode.name == savedMode,
             orElse: () => AnkiSyncMode.ankiWeb,
@@ -109,23 +109,24 @@ class AnkiSyncState {
     String? selfHostedUrl,
     String? certificate,
     bool? isLoaded,
-  }) =>
-      AnkiSyncState(
-        mode: mode ?? this.mode,
-        selfHostedUrl: selfHostedUrl ?? this.selfHostedUrl,
-        certificate: certificate ?? this.certificate,
-        isLoaded: isLoaded ?? this.isLoaded,
-      );
+  }) => AnkiSyncState(
+    mode: mode ?? this.mode,
+    selfHostedUrl: selfHostedUrl ?? this.selfHostedUrl,
+    certificate: certificate ?? this.certificate,
+    isLoaded: isLoaded ?? this.isLoaded,
+  );
 }
 
 String _normalizedSelfHostedIdentity(String value) {
   final uri = Uri.tryParse(value.trim());
   if (uri == null || !uri.hasAuthority) return value.trim();
-  return uri.replace(
-    userInfo: '',
-    fragment: '',
-    queryParameters: const <String, String>{},
-  ).toString();
+  return uri
+      .replace(
+        userInfo: '',
+        fragment: '',
+        queryParameters: const <String, String>{},
+      )
+      .toString();
 }
 
 final ankiSyncProvider = NotifierProvider<AnkiSyncNotifier, AnkiSyncState>(
@@ -143,11 +144,12 @@ typedef AnkiSyncProtocolClientFactory = AnkiSyncProtocolClient Function(
 
 final ankiSyncProtocolClientFactoryProvider =
     Provider<AnkiSyncProtocolClientFactory>(
-  (ref) => (config, hostKey) => config.mode == AnkiSyncMode.ankiWeb
-      ? AnkiSyncProtocolClient.ankiWeb(hostKey: hostKey)
-      : AnkiSyncProtocolClient.selfHosted(
-          endpoint: config.selfHostedUrl,
-          certificate: config.certificate,
-          hostKey: hostKey,
-        ),
-);
+      (ref) =>
+          (config, hostKey) => config.mode == AnkiSyncMode.ankiWeb
+          ? AnkiSyncProtocolClient.ankiWeb(hostKey: hostKey)
+          : AnkiSyncProtocolClient.selfHosted(
+              endpoint: config.selfHostedUrl,
+              certificate: config.certificate,
+              hostKey: hostKey,
+            ),
+    );

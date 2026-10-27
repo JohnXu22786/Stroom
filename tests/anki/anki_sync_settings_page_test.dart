@@ -136,10 +136,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final preferences = await SharedPreferences.getInstance();
-    expect(
-      preferences.getString('custom_sync_server_collection_url'),
-      newUrl,
-    );
+    expect(preferences.getString('custom_sync_server_collection_url'), newUrl);
     expect(factoryUrls, [oldUrl]);
     expect(requests, isEmpty);
     expect(find.text('登录自建同步服务器'), findsOneWidget);
@@ -165,15 +162,13 @@ void main() {
           ankiSyncSecureStorageProvider.overrideWith(
             (_) => _StoredSecureStorage({config.secureStorageKey: 'saved-key'}),
           ),
-          ankiSyncProtocolClientFactoryProvider.overrideWithValue((
-            config,
-            hostKey,
-          ) =>
-              AnkiSyncProtocolClient.selfHosted(
-                endpoint: config.selfHostedUrl,
-                client: _RecordingHttpClient(requests),
-                hostKey: hostKey,
-              )),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.selfHosted(
+              endpoint: config.selfHostedUrl,
+              client: _RecordingHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
           ankiDatabaseProvider.overrideWith((ref) async {
             throw StateError('Stop before touching a collection in this test');
           }),
@@ -234,50 +229,52 @@ void main() {
     expect(find.textContaining('设置未保存：服务器地址须为 HTTPS'), findsOneWidget);
   });
 
-  testWidgets('restores the newly selected mode after an old key read finishes',
-      (
-    tester,
-  ) async {
-    const selfHostedUrl = 'https://sync.example.invalid/sync/';
-    SharedPreferences.setMockInitialValues({
-      'anki_sync_mode': 'ankiWeb',
-      'custom_sync_server_collection_url': selfHostedUrl,
-    });
-    final oldKey = const AnkiSyncState(isLoaded: true).secureStorageKey;
-    final newKey = AnkiSyncState(
-      mode: AnkiSyncMode.selfHosted,
-      selfHostedUrl: selfHostedUrl,
-      isLoaded: true,
-    ).secureStorageKey;
-    final storage = _DelayedSecureStorage({
-      oldKey: 'ankiweb-key',
-      newKey: 'self-hosted-key',
-    });
+  testWidgets(
+    'restores the newly selected mode after an old key read finishes',
+    (tester) async {
+      const selfHostedUrl = 'https://sync.example.invalid/sync/';
+      SharedPreferences.setMockInitialValues({
+        'anki_sync_mode': 'ankiWeb',
+        'custom_sync_server_collection_url': selfHostedUrl,
+      });
+      final oldKey = const AnkiSyncState(isLoaded: true).secureStorageKey;
+      final newKey = AnkiSyncState(
+        mode: AnkiSyncMode.selfHosted,
+        selfHostedUrl: selfHostedUrl,
+        isLoaded: true,
+      ).secureStorageKey;
+      final storage = _DelayedSecureStorage({
+        oldKey: 'ankiweb-key',
+        newKey: 'self-hosted-key',
+      });
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [ankiSyncSecureStorageProvider.overrideWith((_) => storage)],
-        child: const MaterialApp(home: AnkiSyncSettingsPage()),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(storage.reads, [oldKey]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ankiSyncSecureStorageProvider.overrideWith((_) => storage),
+          ],
+          child: const MaterialApp(home: AnkiSyncSettingsPage()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(storage.reads, [oldKey]);
 
-    await tester.tap(find.text('自建服务器').first);
-    await tester.pump();
-    await tester.pump();
-    storage.complete(oldKey);
-    await tester.runAsync(() async {
-      await Future<void>.delayed(Duration.zero);
-    });
+      await tester.tap(find.text('自建服务器').first);
+      await tester.pump();
+      await tester.pump();
+      storage.complete(oldKey);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(Duration.zero);
+      });
 
-    expect(storage.reads, [oldKey, newKey]);
-    storage.complete(newKey);
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('检查服务器状态'), findsOneWidget);
-  });
+      expect(storage.reads, [oldKey, newKey]);
+      storage.complete(newKey);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('检查服务器状态'), findsOneWidget);
+    },
+  );
 
   testWidgets('rejects HTTP for remote self-hosted servers', (tester) async {
     SharedPreferences.setMockInitialValues({
@@ -294,18 +291,18 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ankiSyncSecureStorageProvider.overrideWith((_) =>
-              _StoredSecureStorage({oldConfig.secureStorageKey: 'saved-key'})),
-          ankiSyncProtocolClientFactoryProvider.overrideWithValue((
-            config,
-            hostKey,
-          ) =>
-              AnkiSyncProtocolClient.selfHosted(
-                endpoint: config.selfHostedUrl,
-                certificate: config.certificate,
-                client: _RecordingHttpClient(requests),
-                hostKey: hostKey,
-              )),
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) =>
+                _StoredSecureStorage({oldConfig.secureStorageKey: 'saved-key'}),
+          ),
+          ankiSyncProtocolClientFactoryProvider.overrideWithValue(
+            (config, hostKey) => AnkiSyncProtocolClient.selfHosted(
+              endpoint: config.selfHostedUrl,
+              certificate: config.certificate,
+              client: _RecordingHttpClient(requests),
+              hostKey: hostKey,
+            ),
+          ),
         ],
         child: const MaterialApp(home: AnkiSyncSettingsPage()),
       ),
@@ -338,8 +335,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          ankiSyncSecureStorageProvider.overrideWith((_) =>
-              _StoredSecureStorage({oldConfig.secureStorageKey: 'saved-key'})),
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) =>
+                _StoredSecureStorage({oldConfig.secureStorageKey: 'saved-key'}),
+          ),
         ],
         child: const MaterialApp(home: AnkiSyncSettingsPage()),
       ),
@@ -353,8 +352,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      (await SharedPreferences.getInstance())
-          .getString('custom_sync_server_collection_url'),
+      (await SharedPreferences.getInstance()).getString(
+        'custom_sync_server_collection_url',
+      ),
       localUrl,
     );
     expect(find.textContaining('须为 HTTPS'), findsNothing);
@@ -373,8 +373,7 @@ class _FakeSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async =>
-      null;
+  }) async => null;
 }
 
 class _UnloadedAnkiSyncNotifier extends AnkiSyncNotifier {
@@ -396,8 +395,7 @@ class _StoredSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
-  }) async =>
-      values[key];
+  }) async => values[key];
 }
 
 class _GatedAnkiSyncNotifier extends AnkiSyncNotifier {
