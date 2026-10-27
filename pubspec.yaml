@@ -113,8 +113,6 @@ dev_dependencies:
   visibility_detector: ^0.4.0+2
   cross_file: ^0.3.5+5
   file_picker_platform_interface: ^4.2.0
-  # Math editor compatibility tests compare against the evaluator function set.
-  function_tree: ^0.9.1
 
 dependency_overrides:
   # Newer AVFoundation plugin releases use an isolation argument unavailable in
