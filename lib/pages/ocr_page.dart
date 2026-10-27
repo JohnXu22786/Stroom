@@ -214,6 +214,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   bool _isRetryImagesLoading = false;
   int _pendingImageImports = 0;
   bool get _isImageImportPending => _pendingImageImports > 0;
+  // File reads may overlap, but batches are committed in selection order.
+  Future<void> _systemGalleryCommitTail = Future<void>.value();
   bool get _hasReusablePageResults =>
       _retryPageOutcomes.any((outcome) => outcome.canReuseResult);
   bool get _isImageSelectionLocked =>
@@ -266,6 +268,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   void _finishImageImport() {
     if (!mounted) return;
     setState(() => _pendingImageImports--);
+  }
+
+  int _invalidateImageImports() {
+    _systemGalleryCommitTail = Future<void>.value();
+    return ++_imageImportGeneration;
   }
 
   OcrImageImportMode get _imageImportMode => _useOriginalImageQuality
@@ -1826,7 +1833,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      importGeneration = ++_imageImportGeneration;
+      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
       final bytes = await file.readAsBytes();
@@ -1860,6 +1867,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromSystemGallery() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
+    final previousGalleryCommit = _systemGalleryCommitTail;
+    final galleryCommit = Completer<void>();
+    _systemGalleryCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
@@ -1882,7 +1892,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return;
       }
 
-      importGeneration = ++_imageImportGeneration;
+      // Overlapping gallery selections share a generation so the later batch
+      // cannot invalidate images still being read by the earlier batch.
       _beginImageImport();
       importPending = true;
       final newImages = <SelectedImage>[];
@@ -1919,6 +1930,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       if (!mounted || importGeneration != _imageImportGeneration) return;
+      await previousGalleryCommit;
+      if (!mounted || importGeneration != _imageImportGeneration) return;
       setState(() {
         _selectedImages.addAll(newImages);
         _errorMessage = firstError ??
@@ -1946,6 +1959,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     } finally {
+      if (!galleryCommit.isCompleted) {
+        galleryCommit.complete();
+      }
       if (importPending) _finishImageImport();
     }
   }
@@ -1962,7 +1978,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
           importGeneration != _imageImportGeneration) {
         return;
       }
-      importGeneration = ++_imageImportGeneration;
+      importGeneration = _invalidateImageImports();
       _beginImageImport();
       importPending = true;
       var loadedCount = 0;
@@ -2185,7 +2201,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     }
     final resetReusableResults =
         _retryImagesUnavailable && _hasReusablePageResults;
-    _imageImportGeneration++;
+    _invalidateImageImports();
     setState(() {
       _selectedImages.clear();
       if (resetReusableResults) _retryPageOutcomes.clear();
