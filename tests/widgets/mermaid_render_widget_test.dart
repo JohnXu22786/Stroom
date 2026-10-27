@@ -22,6 +22,7 @@ import 'package:stroom/utils/mermaid_web_url_stub.dart'
     if (dart.library.html) 'package:stroom/utils/mermaid_web_url_web.dart'
     as platform;
 import 'package:stroom/utils/text_manifest.dart';
+import 'package:stroom/widgets/code_block_source_widget.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
 import 'package:stroom/widgets/mermaid_render_widget.dart';
 
@@ -29,6 +30,261 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MermaidRenderWidget - web overlay pointer routing', () {
+    testWidgets('large Mermaid sources use session storage before navigation',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      final code = 'graph TD\n${'A-->B\n' * 2000}';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        webView.controller.evaluatedScripts.single,
+        startsWith('window.sessionStorage.setItem('),
+      );
+      final url = Uri.parse(webView.controller.loadedUrls.single.toString());
+      expect(url.toString().length, lessThan(512));
+      expect(url.queryParameters.keys, contains('sourceKey'));
+      expect(url.queryParameters, isNot(contains('code')));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
+    testWidgets('failed large-source navigation removes its storage entry',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      final code = 'graph TD\n${'A-->B\n' * 2000}';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.controller.loadUrlError = StateError('navigation failed');
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      await tester.pump();
+
+      final setScript = webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript = webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
+    testWidgets('asynchronous web navigation errors remove large-source key',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      final code = 'graph TD\n${'A-->B\n' * 2000}';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MermaidRenderWidget(mermaidCode: code)),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      await tester.pump();
+
+      final url = webView.controller.loadedUrls.single;
+      webView.params.onReceivedError!(
+        controller,
+        WebResourceRequest(url: url, isForMainFrame: true),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'document request failed',
+        ),
+      );
+      await tester.pump();
+
+      final setScript = webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.setItem('),
+      );
+      final removeScript = webView.controller.evaluatedScripts.singleWhere(
+        (script) => script.startsWith('window.sessionStorage.removeItem('),
+      );
+      String sourceKeyIn(String script) {
+        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      expect(sourceKeyIn(removeScript), sourceKeyIn(setScript));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
+    testWidgets('superseded large sources remove their storage entry',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      String diagram(String node) {
+        return 'graph TD\n${'$node-->B\n' * 2000}';
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('A')),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      final evaluationGate = Completer<void>();
+      webView.controller.evaluateJavascriptGate = evaluationGate;
+      webView.params.onWebViewCreated!(controller);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('C')),
+          ),
+        ),
+      );
+      evaluationGate.complete();
+      await tester.pump();
+      await tester.pump();
+
+      final setScripts = webView.controller.evaluatedScripts
+          .where(
+              (script) => script.startsWith('window.sessionStorage.setItem('))
+          .toList();
+      final removeScripts = webView.controller.evaluatedScripts
+          .where((script) =>
+              script.startsWith('window.sessionStorage.removeItem('))
+          .toList();
+      expect(setScripts, hasLength(2));
+      expect(removeScripts, hasLength(1));
+
+      String sourceKeyIn(String script) {
+        return RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1)!;
+      }
+
+      final staleKey = sourceKeyIn(setScripts.first);
+      final currentKey = sourceKeyIn(setScripts.last);
+      expect(sourceKeyIn(removeScripts.single), staleKey);
+      expect(
+        Uri.parse(webView.controller.loadedUrls.single.toString())
+            .queryParameters['sourceKey'],
+        currentKey,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
+    testWidgets('late error from superseded navigation removes its key',
+        (tester) async {
+      final previousPlatform = InAppWebViewPlatform.instance;
+      final platform = _MermaidWebViewPlatform();
+      InAppWebViewPlatform.instance = platform;
+      addTearDown(() => InAppWebViewPlatform.instance =
+          previousPlatform ?? _MermaidWebViewPlatform());
+
+      String diagram(String node) {
+        return 'graph TD\n${'$node-->B\n' * 2000}';
+      }
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('A')),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final webView = platform.webView!;
+      final controller = webView.controllerFromPlatform<InAppWebViewController>(
+        webView.controller,
+      );
+      webView.params.onWebViewCreated!(controller);
+      await tester.pump();
+      await tester.pump();
+      final staleUrl = webView.controller.loadedUrls.single;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MermaidRenderWidget(mermaidCode: diagram('C')),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final currentUrl = webView.controller.loadedUrls.last;
+      final staleKey =
+          Uri.parse(staleUrl.toString()).queryParameters['sourceKey'];
+      expect(Uri.parse(currentUrl.toString()).queryParameters['sourceKey'],
+          isNot(staleKey));
+
+      webView.params.onReceivedError!(
+        controller,
+        WebResourceRequest(url: staleUrl, isForMainFrame: true),
+        WebResourceError(
+          type: WebResourceErrorType.UNKNOWN,
+          description: 'stale document request failed',
+        ),
+      );
+      await tester.pump();
+
+      final removeScripts = webView.controller.evaluatedScripts
+          .where((script) =>
+              script.startsWith('window.sessionStorage.removeItem('))
+          .toList();
+      final removedKeys = removeScripts
+          .map((script) => RegExp(r'\("([^"]+)"').firstMatch(script)!.group(1))
+          .toList();
+      expect(removedKeys, contains(staleKey));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }, skip: !kIsWeb);
+
     testWidgets(
       'inline toolbar intercepts the iframe without blocking diagram gestures',
       (tester) async {
@@ -312,13 +568,13 @@ void main() {
       // so URLSearchParams could not find the code and the template showed
       // the empty-code placeholder instead of the diagram.
       final url = MermaidRenderWidget.buildWebAssetUrl('graph TD\nA-->B');
-      expect(url, contains('mermaid_render.html?v=17&code='));
+      expect(url, contains('mermaid_render.html?v=18&code='));
       expect(url, isNot(contains('?code')));
-      expect(url, isNot(contains('v=17?')));
+      expect(url, isNot(contains('v=18?')));
       // The code must be percent-encoded inside the query string.
       expect(url, contains('graph+TD'));
       expect(Uri.parse(url).queryParameters, {
-        'v': '17',
+        'v': '18',
         'code': 'graph TD\nA-->B',
       });
 
@@ -342,7 +598,30 @@ void main() {
       );
       // Empty code -> version parameter only, no dangling '&'.
       final empty = MermaidRenderWidget.buildWebAssetUrl('   ');
-      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=17');
+      expect(empty, '${MermaidRenderWidget.webAssetTemplateUrl}?v=18');
+    });
+
+    test('large source uses a bounded storage-key URL', () async {
+      final code = 'graph TD\n${'A-->B\n' * 2000}';
+      final storedSources = <MapEntry<String, String>>[];
+
+      expect(
+        () => MermaidRenderWidget.buildWebAssetUrl(code),
+        throwsArgumentError,
+      );
+
+      final url = await MermaidRenderWidget.prepareWebAssetUrl(
+        code,
+        (key, source) async => storedSources.add(MapEntry(key, source)),
+      );
+
+      expect(url.length, lessThan(512));
+      final query = Uri.parse(url).queryParameters;
+      expect(query.keys, containsAll(['v', 'sourceKey']));
+      expect(query['v'], '18');
+      expect(query['sourceKey'], storedSources.single.key);
+      expect(storedSources.single.value, code.trim());
+      expect(url, isNot(contains(Uri.encodeQueryComponent(code))));
     });
 
     test('uses the platform base URI when resolving without an override', () {
@@ -512,7 +791,9 @@ void main() {
       expect(html, contains('onTransformChanged'));
       expect(
         html,
-        contains("callHandler('onTransformChanged', zoomLevel, panX, panY);"),
+        contains(
+          "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);",
+        ),
       );
     });
 
@@ -790,10 +1071,12 @@ void main() {
       expect(html, isNot(contains('cdn.jsdelivr.net')));
     });
 
-    test('reads the diagram code from the ?code= query parameter', () async {
+    test('reads large diagram code from same-origin session storage', () async {
       final html = await loadAssetTemplate();
       expect(html, contains('URLSearchParams'));
-      expect(html, contains("params.get('code')"));
+      expect(html, contains("params.get('sourceKey')"));
+      expect(html, contains('window.sessionStorage.getItem'));
+      expect(html, contains('window.sessionStorage.removeItem'));
     });
 
     test('caches the decompressed library in CacheStorage for repeat renders',
@@ -809,7 +1092,7 @@ void main() {
       // in sync with the ?v= in buildWebAssetUrl.
       final templateVersion =
           RegExp(r"TEMPLATE_VERSION = '(v\d+)'").firstMatch(html)?.group(1);
-      expect(templateVersion, 'v17');
+      expect(templateVersion, 'v18');
       final urlVersion = templateVersion!.substring(1);
       final populatedUrl = MermaidRenderWidget.buildWebAssetUrl('graph TD');
       final emptyUrl = MermaidRenderWidget.buildWebAssetUrl('  ');
@@ -1082,6 +1365,80 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets(
+      'native toolbar retains pre-fit zoom taps after cached zoom reaches maximum',
+      (tester) async {
+        final previousPlatform = InAppWebViewPlatform.instance;
+        final platform = _MermaidWebViewPlatform();
+        InAppWebViewPlatform.instance = platform;
+        addTearDown(() => InAppWebViewPlatform.instance =
+            previousPlatform ?? _MermaidWebViewPlatform());
+
+        final webView = await _mountReadyMermaidWidget(
+          tester,
+          platform,
+          const MermaidRenderWidget(
+            mermaidCode: 'graph TD\nA-->B',
+            showZoomControls: true,
+          ),
+          supportsJavaScriptHandlers: true,
+        );
+        final fakeController = webView.controller;
+
+        for (var tap = 0; tap < 100; tap++) {
+          await tester.tap(find.byIcon(Icons.zoom_in));
+        }
+
+        fakeController.simulateTransformChanged(
+          10,
+          0,
+          0,
+          fitComplete: false,
+          documentGeneration: 0,
+        );
+
+        for (var tap = 0; tap < 20; tap++) {
+          await tester.tap(find.byIcon(Icons.zoom_in));
+        }
+
+        expect(
+          fakeController.evaluatedScripts
+              .where(
+                  (script) => script == 'window.applyZoomDeltasAfterFit([0.1])')
+              .length,
+          120,
+          reason:
+              'all toolbar deltas must reach JavaScript before the first fit',
+        );
+
+        fakeController.simulateJsFitToViewport(0.45);
+        expect(
+          fakeController.zoomLevel,
+          10.0,
+          reason: 'queued taps should be applied to fit zoom and capped at 10',
+        );
+
+        await tester.tap(find.byIcon(Icons.zoom_in));
+        await tester.pump();
+        expect(
+          fakeController.zoomLevel,
+          10.0,
+          reason: 'a post-fit toolbar tap must remain capped at 10',
+        );
+        expect(
+          fakeController.evaluatedScripts
+              .where(
+                  (script) => script == 'window.applyZoomDeltasAfterFit([0.1])')
+              .length,
+          120,
+          reason: 'the native zoom cache should still suppress post-fit no-ops',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+      skip: kIsWeb,
+    );
 
     testWidgets(
         'Ctrl+wheel zoom before fit survives auto-fit and does not scroll parent',
@@ -2159,7 +2516,7 @@ void main() {
         expect(
           controller.loadedDataDocuments.last,
           contains(
-            "callHandler('onTransformChanged', zoomLevel, panX, panY, 1);",
+            "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete, 1);",
           ),
         );
         expect(tester.takeException(), isNull);
@@ -4199,6 +4556,98 @@ void main() {
   });
 
   group('MermaidRenderWidget - source code mode (test-only)', () {
+    testWidgets(
+      'expanded web source fills a loose-height wide split panel',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: MermaidRenderWidget(
+                        mermaidCode: 'graph TD',
+                        expand: true,
+                        testOnlyShowSourceCode: true,
+                      ),
+                    ),
+                    Expanded(child: SizedBox.shrink()),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final previewSize = tester.getSize(find.byType(MermaidRenderWidget));
+        final sourceSize = tester.getSize(find.byType(CodeBlockSourceView));
+        expect(
+          previewSize.height,
+          greaterThan(700),
+          reason: 'test preview should have room for the short source block',
+        );
+        expect(
+          sourceSize.height,
+          previewSize.height,
+          reason:
+              'expanded source (${sourceSize.height}) should fill the preview panel (${previewSize.height})',
+        );
+      },
+      skip: !kIsWeb,
+    );
+
+    testWidgets('expanded web source still fills a tight-height preview',
+        (tester) async {
+      tester.view.physicalSize = const Size(600, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: MermaidRenderWidget(
+                      mermaidCode: 'graph TD',
+                      expand: true,
+                      testOnlyShowSourceCode: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final previewSize = tester.getSize(find.byType(MermaidRenderWidget));
+      final sourceSize = tester.getSize(find.byType(CodeBlockSourceView));
+      expect(
+        previewSize.height,
+        greaterThan(700),
+        reason: 'test preview should have room for the short source block',
+      );
+      expect(
+        sourceSize.height,
+        previewSize.height,
+        reason:
+            'expanded source (${sourceSize.height}) should fill the preview panel (${previewSize.height})',
+      );
+    }, skip: !kIsWeb);
+
     testWidgets('shows source code view with code text', (tester) async {
       const mermaidCode = 'graph TD\nA-->B';
       const widget = MermaidRenderWidget(
@@ -4929,6 +5378,8 @@ class _MermaidWebView extends PlatformInAppWebViewWidget {
 
 class _MermaidWebViewController extends PlatformInAppWebViewController {
   final evaluatedScripts = <String>[];
+  Completer<void>? evaluateJavascriptGate;
+  Object? loadUrlError;
   final List<({double delta, double? centerX, double? centerY})>
       _pendingZoomOperations = [];
   final gestureTransformCalls = <({
@@ -4961,12 +5412,14 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     double zoom,
     double panX,
     double panY, {
+    bool fitComplete = true,
     required int documentGeneration,
   }) {
     _javascriptHandlers['onTransformChanged']?.call([
       zoom,
       panX,
       panY,
+      fitComplete,
       documentGeneration,
     ]);
   }
@@ -4989,6 +5442,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
       zoomLevel,
       panX,
       panY,
+      true,
       documentGeneration,
     ]);
   }
@@ -5071,6 +5525,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     Uri? iosAllowingReadAccessTo,
     WebUri? allowingReadAccessTo,
   }) async {
+    if (loadUrlError != null) throw loadUrlError!;
     final url = urlRequest.url;
     if (url != null) {
       loadedUrls.add(
@@ -5111,6 +5566,7 @@ class _MermaidWebViewController extends PlatformInAppWebViewController {
     ContentWorld? contentWorld,
   }) async {
     evaluatedScripts.add(source);
+    await evaluateJavascriptGate?.future;
     final zoomOperations = RegExp(
       r'window\.applyZoomOperationsAfterFit\((\[[\s\S]*\])\)',
     ).firstMatch(source);

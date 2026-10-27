@@ -482,5 +482,61 @@ void main() {
         reason: '松手后 a 应停在槽位指示的落点（预览即最终排布）',
       );
     });
+
+    testWidgets('release animation hides only the moved duplicate value',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(
+            values: ['same', 'same', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('same').first),
+      );
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(155, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await gesture.up();
+      await tester.pump();
+
+      final hiddenGridItems = find
+          .byType(Opacity)
+          .evaluate()
+          .where((element) => (element.widget as Opacity).opacity == 0)
+          .length;
+      expect(reorders, [(0, 1)]);
+      expect(hiddenGridItems, 1,
+          reason:
+              'only the released card should be hidden under its overlay copy');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'ending a drag after its grid is removed does not access context',
+        (tester) async {
+      final reorders = <(int, int)>[];
+      await tester.pumpWidget(
+        wrap(
+            values: ['a', 'b', 'c', 'd'],
+            onReorder: (f, t) => reorders.add((f, t))),
+      );
+      await tester.pumpAndSettle();
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.text('a')));
+      await tester.pump(const Duration(milliseconds: 600));
+      await gesture.moveBy(const Offset(155, 0));
+      await tester.pump();
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(reorders, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

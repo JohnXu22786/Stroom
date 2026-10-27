@@ -22,8 +22,11 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       final pn = param.paramName.trim();
       // boolean 类型无参数值（聊天/请求默认发送 true），只需参数名
       final hasValue = param.type == 'boolean' ||
-          param.options.any((o) => o.trim().isNotEmpty) ||
-          param.defaultValue.trim().isNotEmpty;
+          (param.type == 'json'
+              ? param.defaultValue.trim().isNotEmpty
+              : param.options.isNotEmpty
+                  ? param.options.first.trim().isNotEmpty
+                  : param.defaultValue.trim().isNotEmpty);
       if (pn.isEmpty || !hasValue) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -64,6 +67,27 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
             ),
           );
           return false;
+        }
+      }
+      if (param.type == 'number') {
+        final values =
+            param.options.isNotEmpty ? param.options : [param.defaultValue];
+        for (final value in values) {
+          if (value.trim().isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('参数 "$pn" 的数值选项不能为空')),
+            );
+            return false;
+          }
+          final number = double.tryParse(value);
+          if (number == null || !number.isFinite) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('参数 "$pn" 的值不是合法数字：$value'),
+              ),
+            );
+            return false;
+          }
         }
       }
     }
@@ -200,8 +224,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
 
     // 保存前规范化：boolean 类型无参数值（清空 options，与模型页一致）
     for (final p in _customParams) {
-      if (p.type == 'boolean' && p.options.isNotEmpty) {
+      if (p.type == 'boolean') {
         p.options.clear();
+        p.defaultValue = '';
       }
     }
     for (final p in _reasoningParams) {
@@ -218,7 +243,9 @@ extension _ProviderSettingsPanelSaveExt on _ProviderSettingsPanelState {
       key: _keyController.text.trim(),
       models: widget.config.models.map((m) => m.copy()).toList(),
       typeConfig: typeConfig,
-      customParams: _customParams.map((p) => p.copy()).toList(),
+      customParams: _customParams
+          .map((p) => p.copy()..paramName = p.paramName.trim())
+          .toList(),
       reasoningParams: _reasoningParams.map((p) => p.copy()).toList(),
       endpointType: _endpointType,
     );

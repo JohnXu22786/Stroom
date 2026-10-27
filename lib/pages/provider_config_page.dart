@@ -876,42 +876,22 @@ class _McpPageIntro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Icon(
-            Icons.hub_outlined,
-            color: colorScheme.onPrimaryContainer,
-          ),
+        Text(
+          '服务与工具',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: colorScheme.onSurface,
+              ),
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '服务与工具',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface,
-                    ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ),
+        const SizedBox(height: 4),
+        Text(
+          '管理 MCP 服务器、HTTP 搜索和 Stroom 内置工具。',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -1091,17 +1071,15 @@ class _McpConfigCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // 统一卡片配色（对齐 LLM 供应商页）：中性背景 + 柔和描边。
+    // Keep provider rows neutral and consistent with the rest of settings.
     final Color backgroundColor =
         isDark ? cs.surfaceContainerHigh : cs.surfaceContainerLow;
-    final Color borderColor = cs.outlineVariant.withValues(alpha: 0.5);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor, width: 0.5),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -1119,22 +1097,12 @@ class _McpConfigCard extends StatelessWidget {
                 children: [
                   dragHandle,
                   const SizedBox(width: 8),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: isMcp
-                          ? cs.primaryContainer
-                          : cs.primaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      leadIcon,
-                      color: isMcp ? cs.onPrimaryContainer : iconColor,
-                      size: 22,
-                    ),
+                  Icon(
+                    leadIcon,
+                    color: isMcp ? cs.primary : iconColor,
+                    size: 22,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1155,53 +1123,21 @@ class _McpConfigCard extends StatelessWidget {
                             ),
                             if (isVendor) ...[
                               const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isMcp
-                                      ? cs.surfaceContainerHighest
-                                      : cs.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '内置',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isMcp
-                                        ? cs.onSurfaceVariant
-                                        : cs.primary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              Text(
+                                '内置',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
                             ],
                             if (integrationType.isNotEmpty) ...[
                               const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isMcp
-                                      ? cs.secondaryContainer
-                                      : cs.tertiaryContainer.withValues(
-                                          alpha: 0.55,
-                                        ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  integrationType,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isMcp
-                                        ? cs.onSecondaryContainer
-                                        : cs.onTertiaryContainer,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              Text(
+                                integrationType,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -1362,9 +1298,8 @@ class _McpGroupHeaderCard extends StatelessWidget {
                         Text(
                           '内置',
                           style: TextStyle(
-                            fontSize: 10,
-                            color: cs.primary,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -1448,19 +1383,12 @@ class _McpMasterSwitchCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.power_settings_new,
-                      color: cs.onPrimaryContainer,
-                    ),
+                  Icon(
+                    Icons.power_settings_new,
+                    color: cs.onSurfaceVariant,
+                    size: 22,
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1514,19 +1442,11 @@ class _McpStatusLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: enabled ? cs.primaryContainer : cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        enabled ? '已启用' : '已停用',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: enabled ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
+    return Text(
+      enabled ? '已启用' : '已停用',
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
     );
   }
 }

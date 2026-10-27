@@ -423,8 +423,16 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     final releases = response.data as List<dynamic>;
     final currentVersionStr = debugAppVersionOverride ?? appVersion;
 
-    final prefs = await SharedPreferences.getInstance();
-    final skippedVersion = prefs.getString(_kSkippedVersionKey);
+    SharedPreferences? prefs;
+    String? skippedVersion;
+    try {
+      prefs = await SharedPreferences.getInstance();
+      skippedVersion = prefs.getString(_kSkippedVersionKey);
+    } catch (e) {
+      // Skipping a version is optional; an unavailable preference store must
+      // not prevent users from checking for updates from the recovery page.
+      debugPrint('读取已跳过版本失败，继续检查更新: $e');
+    }
 
     // 优先使用 CD 构建时写入的发布时间（appReleaseTime）作为比较基准：
     // 该时间就是当前二进制对应的 release 发布时间，直接与 release 页面
@@ -646,7 +654,11 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           'release_notes': first.releaseNotes,
           'download_url': first.downloadUrl,
         });
-        await prefs.setString(_kUpdateAvailableKey, updateData);
+        try {
+          await prefs?.setString(_kUpdateAvailableKey, updateData);
+        } catch (e) {
+          debugPrint('保存可用更新信息失败: $e');
+        }
 
         state = UpdateState(
           acceptPreRelease: state.acceptPreRelease,

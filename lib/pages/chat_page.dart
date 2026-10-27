@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, setEquals, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -15,12 +16,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../widgets/markdown_extensions.dart';
 import '../widgets/message_attachment_preview.dart';
 import '../widgets/temporary_countdown_capsule.dart';
 import '../widgets/transform_stretch_overscroll.dart';
 import '../services/attachment_storage.dart';
 import '../utils/model_order.dart';
+import '../utils/file_picker_utils.dart';
 import '../utils/system_pick_utils.dart';
 import '../utils/text_manifest.dart';
 
@@ -285,6 +288,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// gate for the next growth. Reset when the list is replaced (conversation
   /// switch, view clear) — the extent belongs to the previous list.
   double? _lastFollowContentExtent;
+
+  /// True when content grew and its follow has not landed yet. If the growth
+  /// arrives during a non-user scroll animation, later metrics only report
+  /// pixels, so this flag carries the consumed request to the idle frame.
+  bool _pendingContentGrowthFollow = false;
+
+  /// Ensures pending growth checks run at most once per frame while a scroll
+  /// animation is active.
+  bool _contentGrowthFollowRetryScheduled = false;
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
@@ -351,8 +363,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Minimum display duration of the top load-more indicator. The spinner
   /// must stay up for at least this long even when the page loads
   /// instantly, otherwise it flashes for a single frame.
-  static const Duration _loadMoreMinDisplayDuration =
-      Duration(milliseconds: 500);
+  static const Duration _loadMoreMinDisplayDuration = Duration(
+    milliseconds: 500,
+  );
 
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from

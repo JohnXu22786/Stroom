@@ -370,13 +370,39 @@ void main() {
       );
     });
 
-    test('json type with empty string returns null (no-op, not sentinel)', () {
-      final result = ChatService.coerceCustomParamForTest(
-        paramName: 'cfg',
+    test('blank json defaults are omitted from custom params', () {
+      final blank = ChatService.coerceCustomParamForTest(
+        paramName: 'blank',
         type: 'json',
         defaultValue: '',
       );
-      expect(result, isNull);
+      final whitespace = ChatService.coerceCustomParamForTest(
+        paramName: 'whitespace',
+        type: 'json',
+        defaultValue: ' \n\t ',
+      );
+
+      final result = ChatService.stripOmittedForTest({
+        'blank': blank,
+        'whitespace': whitespace,
+      });
+
+      expect(result, isEmpty,
+          reason: 'Blank JSON defaults are no-ops, so neither key is sent.');
+    });
+
+    test('explicit JSON null remains in custom params', () {
+      final explicitNull = ChatService.coerceCustomParamForTest(
+        paramName: 'nullable',
+        type: 'json',
+        defaultValue: 'null',
+      );
+
+      final result = ChatService.stripOmittedForTest({
+        'nullable': explicitNull,
+      });
+
+      expect(result, containsPair('nullable', isNull));
     });
   });
 

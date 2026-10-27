@@ -386,8 +386,9 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      final browserWebsiteDataCleared =
-          await BackupService.clearSelectedData(selection);
+      final browserWebsiteDataCleared = await BackupService.clearSelectedData(
+        selection,
+      );
       // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -466,13 +467,12 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
   }
 
   Future<void> _onAnkiImport() async {
-    final picked = await FilePicker.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.any,
-      allowMultiple: false,
       initialDirectory: SystemPickDirectories.documents(),
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final path = picked.files.single.path;
+    if (picked == null) return;
+    final path = picked.path;
     if (path == null || !path.endsWith('.apkg')) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -635,10 +635,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
           // === Anki 闪卡 .apkg 导出/导入 ===
           _buildSectionHeader(
             'Anki闪卡牌组',
-            onInfoPressed: () => _showInfoDialog(
-              'Anki 闪卡牌组导入/导出',
-              '只包含卡片信息，不包含媒体内容',
-            ),
+            onInfoPressed: () =>
+                _showInfoDialog('Anki 闪卡牌组导入/导出', '只包含卡片信息，不包含媒体内容'),
           ),
           Card(
             child: Padding(

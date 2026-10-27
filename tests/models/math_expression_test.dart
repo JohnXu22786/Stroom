@@ -1,7 +1,7 @@
 import 'dart:math' as dart_math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_expression.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -385,5 +385,313 @@ void chatServiceRequestGroup4() {
           reason: 'response_format should be a Map in the final JSON body');
       expect((responseFormat as Map)['type'], equals('json_object'));
     });
+
+    test('model JSON object overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider","provider_only":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'fallback',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"model","model_only":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'fallback',
+            defaultValue: '["model"]',
+            type: 'json',
+          ),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(
+        parsedBody['options'],
+        equals({'mode': 'model', 'model_only': true}),
+      );
+      expect(parsedBody['fallback'], equals(['model']));
+    });
+
+    test('model string overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(paramName: 'options', defaultValue: 'model-value'),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], equals('model-value'));
+    });
+
+    test('model number overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '7.5',
+            type: 'number',
+          ),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], equals(7.5));
+    });
+
+    test('model boolean overrides provider JSON object with same name',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: '{"mode":"provider"}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'options',
+            defaultValue: 'true',
+            type: 'boolean',
+          ),
+        ],
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final parsedBody = jsonDecode(provider.capturedJsonBody!) as Map;
+      expect(parsedBody['options'], isTrue);
+    });
+
+    test(
+        'dotted provider param before JSON object preserves object fields and wins collisions',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: 'path-value',
+          ),
+          CustomParam(
+            paramName: 'provider',
+            defaultValue:
+                '{"sort":"object-value","order":["deepinfra"],"allow_fallbacks":true}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      expect(providerField['sort'], equals('path-value'));
+      expect(providerField['order'], equals(['deepinfra']));
+      expect(providerField['allow_fallbacks'], isTrue);
+    });
+
+    test(
+        'JSON object before dotted provider param preserves object fields and lets path win collisions',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider',
+            defaultValue:
+                '{"sort":"object-value","order":["deepinfra"],"allow_fallbacks":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: 'path-value',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      expect(providerField['sort'], equals('path-value'));
+      expect(providerField['order'], equals(['deepinfra']));
+      expect(providerField['allow_fallbacks'], isTrue);
+    });
+
+    test(
+        'nested JSON provider parent before dotted descendant preserves both fields',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: '{"direction":"asc","enabled":true}',
+            type: 'json',
+          ),
+          CustomParam(
+            paramName: 'provider.sort.direction',
+            defaultValue: 'desc',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      final sort = providerField['sort'] as Map;
+      expect(sort['direction'], equals('desc'));
+      expect(sort['enabled'], isTrue);
+    });
+
+    test(
+        'dotted provider descendant before nested JSON parent preserves both fields',
+        () async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'OpenRouter',
+        customParams: [
+          CustomParam(
+            paramName: 'provider.sort.direction',
+            defaultValue: 'desc',
+          ),
+          CustomParam(
+            paramName: 'provider.sort',
+            defaultValue: '{"direction":"asc","enabled":true}',
+            type: 'json',
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+      );
+      final provider = _ProviderJsonBodyCapture();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      await for (final _ in service.sendStream('Hi', history: [])) {}
+
+      final providerField = provider.capturedExtraParams!['provider'] as Map;
+      final sort = providerField['sort'] as Map;
+      expect(sort['direction'], equals('desc'));
+      expect(sort['enabled'], isTrue);
+    });
   });
 }

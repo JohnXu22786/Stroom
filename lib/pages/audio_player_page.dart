@@ -28,11 +28,7 @@ class AudioPlayerPage extends ConsumerStatefulWidget {
   final String filePath;
   final String? displayName;
 
-  const AudioPlayerPage({
-    super.key,
-    required this.filePath,
-    this.displayName,
-  });
+  const AudioPlayerPage({super.key, required this.filePath, this.displayName});
 
   @override
   ConsumerState<AudioPlayerPage> createState() => _AudioPlayerPageState();
@@ -166,10 +162,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               const SizedBox(height: 24),
               Text(
                 '选择源文本来源',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -247,9 +242,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(result.first.value);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('选择文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('选择文本失败: $e')));
       }
     }
   }
@@ -257,22 +252,19 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   /// 从设备文件系统中选择源文本文件
   Future<void> _pickSourceTextFromSystem() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['txt'],
-        allowMultiple: false,
-        withData: true,
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (file == null) return;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('无法读取文本文件')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('无法读取文本文件')));
         }
         return;
       }
@@ -280,9 +272,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _applySourceTextContent(bytes);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('上传源文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('上传源文本失败: $e')));
       }
     }
   }
@@ -291,9 +283,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
   Future<void> _applySourceTextContent(Uint8List bytes) async {
     if (bytes.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文本内容为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文本内容为空')));
       }
       return;
     }
@@ -307,9 +299,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     if (textContent.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('文本内容为空')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文本内容为空')));
       }
       return;
     }
@@ -318,9 +310,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
       await _saveSourceText(textContent);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存源文本失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存源文本失败: $e')));
       }
       return;
     }
@@ -551,9 +543,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               final opt = models[index];
               return ListTile(
                 title: Text(opt.model.name),
-                subtitle: Text(opt.configItem.providerName.isNotEmpty
-                    ? opt.configItem.providerName
-                    : '供应商'),
+                subtitle: Text(
+                  opt.configItem.providerName.isNotEmpty
+                      ? opt.configItem.providerName
+                      : '供应商',
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _startStreamingPlayback(text, opt);
@@ -595,10 +589,7 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          fileName,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(fileName, overflow: TextOverflow.ellipsis),
         centerTitle: true,
       ),
       body: _buildBody(),
@@ -673,7 +664,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Theme.of(context)
                                         .colorScheme
@@ -687,9 +680,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.upload_file,
                                         size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -697,9 +690,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                       ),
                                     ],
@@ -717,7 +710,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Theme.of(context)
                                         .colorScheme
@@ -731,9 +726,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                       Icon(
                                         Icons.edit,
                                         size: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
@@ -741,9 +736,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w500,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
                                       ),
                                     ],
@@ -754,7 +749,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                               Text(
                                 '${_fontSize.toInt()}',
                                 style: TextStyle(
-                                    fontSize: 12, color: Colors.grey[600]),
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
                               ),
                               const SizedBox(width: 6),
                               InkWell(
@@ -908,16 +905,21 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.audio_file,
-                  size: 18, color: theme.colorScheme.primary),
+              child: Icon(
+                Icons.audio_file,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(width: 12),
             // 文件名
             Expanded(
               child: Text(
                 widget.displayName ?? path.basename(widget.filePath),
-                style:
-                    const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -938,8 +940,11 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             // 展开箭头
             Padding(
               padding: const EdgeInsets.only(right: 4),
-              child: Icon(Icons.keyboard_arrow_up,
-                  size: 28, color: Colors.grey[500]),
+              child: Icon(
+                Icons.keyboard_arrow_up,
+                size: 28,
+                color: Colors.grey[500],
+              ),
             ),
           ],
         ),
@@ -959,14 +964,19 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
           Row(
             children: [
               const SizedBox(width: 16),
-              Icon(Icons.audio_file,
-                  size: 18, color: theme.colorScheme.primary),
+              Icon(
+                Icons.audio_file,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   widget.displayName ?? path.basename(widget.filePath),
                   style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -988,10 +998,14 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_formatDuration(_position),
-                    style: const TextStyle(fontSize: 12)),
-                Text(_formatDuration(_duration),
-                    style: const TextStyle(fontSize: 12)),
+                Text(
+                  _formatDuration(_position),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  _formatDuration(_duration),
+                  style: const TextStyle(fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -1003,8 +1017,10 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
               GestureDetector(
                 onTap: _showSpeedPopup,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(6),
@@ -1062,7 +1078,9 @@ class _AudioPlayerPageState extends ConsumerState<AudioPlayerPage> {
                 Text(
                   '${temp.toStringAsFixed(1)}x',
                   style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold),
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Expanded(
                   child: Slider(

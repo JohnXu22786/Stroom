@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -54,6 +55,287 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
     ImageManifest.invalidateCache();
+    beforeAppAlbumPickerReadForTesting = null;
+  });
+
+  tearDown(() {
+    beforeAppAlbumPickerReadForTesting = null;
+  });
+
+  Future<
+      ({
+        Completer<void> readStarted,
+        Completer<void> releaseRead,
+        List<MapEntry<String, Uint8List>>? Function() result,
+      })> openPickerWithBlockedRead(WidgetTester tester) async {
+    final png = await tester.runAsync(_createEnginePng);
+    await tester.runAsync(() async {
+      await ImageManifest.writeFile('pending-read.png', png!);
+      await ImageManifest.addRecord(
+        ImageRecord(
+          id: 'pending-read',
+          name: 'pending-read',
+          hash: 'pending-read',
+          format: 'png',
+          createdAt: DateTime.now(),
+          size: png.length,
+          folder: '',
+        ),
+      );
+    });
+
+    List<MapEntry<String, Uint8List>>? pickerResult;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async {
+                pickerResult = await showAppAlbumPickerDialog(context);
+              },
+              child: const Text('Open Album'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open Album'));
+    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () => find.text('pending-read.png').evaluate().isNotEmpty,
+    );
+
+    final readStarted = Completer<void>();
+    final releaseRead = Completer<void>();
+    beforeAppAlbumPickerReadForTesting = (fileName) async {
+      if (fileName == 'pending-read.png' && !readStarted.isCompleted) {
+        readStarted.complete();
+        await releaseRead.future;
+      }
+    };
+    await tester.tap(find.text('pending-read.png'));
+    await tester.pump();
+    expect(
+      readStarted.isCompleted,
+      isTrue,
+      reason: 'the selection read should be paused deterministically',
+    );
+
+    return (
+      readStarted: readStarted,
+      releaseRead: releaseRead,
+      result: () => pickerResult,
+    );
+  }
+
+  group('AppAlbumPickerDialog pending-read lifecycle', () {
+    testWidgets(
+      'preview and confirmation preserve tap order when reads complete '
+      'in reverse',
+      (tester) async {
+        final png = await tester.runAsync(_createEnginePng);
+        await tester.runAsync(() async {
+          for (final name in ['tap-first', 'tap-second']) {
+            await ImageManifest.writeFile('$name-hash.png', png!);
+            await ImageManifest.addRecord(
+              ImageRecord(
+                id: name,
+                name: name,
+                hash: '$name-hash',
+                format: 'png',
+                createdAt: DateTime.now(),
+                size: png.length,
+                folder: '',
+              ),
+            );
+          }
+        });
+
+        List<MapEntry<String, Uint8List>>? pickerResult;
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    pickerResult = await showAppAlbumPickerDialog(context);
+                  },
+                  child: const Text('Open Album'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('Open Album'));
+        await tester.pump();
+        await _pumpUntil(
+          tester,
+          () =>
+              find.text('tap-first.png').evaluate().isNotEmpty &&
+              find.text('tap-second.png').evaluate().isNotEmpty,
+        );
+
+        final readStarted = {
+          'tap-first-hash.png': Completer<void>(),
+          'tap-second-hash.png': Completer<void>(),
+        };
+        final releaseRead = {
+          'tap-first-hash.png': Completer<void>(),
+          'tap-second-hash.png': Completer<void>(),
+        };
+        beforeAppAlbumPickerReadForTesting = (fileName) async {
+          readStarted[fileName]!.complete();
+          await releaseRead[fileName]!.future;
+        };
+
+        await tester.tap(find.text('tap-first.png'));
+        await tester.pump();
+        await tester.tap(find.text('tap-second.png'));
+        await tester.pump();
+        expect(
+          readStarted.values.every((started) => started.isCompleted),
+          isTrue,
+        );
+
+        releaseRead['tap-second-hash.png']!.complete();
+        await _pumpUntil(
+          tester,
+          () => find.byType(AlbumPreviewChip).evaluate().length == 1,
+        );
+        expect(
+          tester
+              .widget<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+              .fileName,
+          'tap-second.png',
+        );
+
+        releaseRead['tap-first-hash.png']!.complete();
+        await _pumpUntil(
+          tester,
+          () => find.byType(AlbumPreviewChip).evaluate().length == 2,
+        );
+        expect(
+          tester
+              .widgetList<AlbumPreviewChip>(find.byType(AlbumPreviewChip))
+              .map((chip) => chip.fileName),
+          ['tap-first.png', 'tap-second.png'],
+        );
+
+        await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+        await _pumpUntil(tester, () => pickerResult != null);
+        expect(
+          pickerResult!.map((entry) => entry.key),
+          ['tap-first.png', 'tap-second.png'],
+        );
+      },
+    );
+
+    testWidgets('confirm waits for a pending selection and returns its image', (
+      tester,
+    ) async {
+      final picker = await openPickerWithBlockedRead(tester);
+
+      expect(find.text('已选择 1 张图片'), findsOneWidget);
+      expect(
+        tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+      await tester.pump();
+      expect(
+        find.text('应用内相册'),
+        findsOneWidget,
+        reason: 'confirm must not close while the selected file is unread',
+      );
+      expect(picker.result(), isNull);
+
+      picker.releaseRead.complete();
+      await _pumpUntil(tester, () => picker.result() != null);
+      expect(picker.result()!.single.key, 'pending-read.png');
+      expect(picker.result()!.single.value, isNotEmpty);
+    });
+
+    testWidgets('confirm resumes when its pending selection is toggled off', (
+      tester,
+    ) async {
+      final picker = await openPickerWithBlockedRead(tester);
+
+      await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+      await tester.pump();
+      expect(picker.result(), isNull);
+
+      await tester.tap(find.text('pending-read.png'));
+      await tester.pump();
+      await _pumpUntil(tester, () => picker.result() != null);
+      expect(picker.result(), isEmpty);
+
+      picker.releaseRead.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('clearing while a read is pending ignores its late result', (
+      tester,
+    ) async {
+      final picker = await openPickerWithBlockedRead(tester);
+
+      await tester.tap(find.byKey(const Key('album_picker_clear_btn')));
+      await tester.pump();
+      picker.releaseRead.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key('album_picker_preview_bar')), findsNothing);
+      expect(find.byKey(const Key('album_picker_clear_btn')), findsNothing);
+      expect(
+        tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+        isFalse,
+      );
+    });
+
+    testWidgets(
+      'toggling off a pending read stays deselected after completion',
+      (tester) async {
+        final picker = await openPickerWithBlockedRead(tester);
+
+        await tester.tap(find.text('pending-read.png'));
+        await tester.pump();
+        expect(
+          tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+          isFalse,
+        );
+        picker.releaseRead.complete();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(find.byKey(const Key('album_picker_preview_bar')), findsNothing);
+        expect(
+          tester.widget<Checkbox>(find.byType(Checkbox).first).value,
+          isFalse,
+        );
+      },
+    );
+
+    testWidgets('closing during a read does not update disposed state', (
+      tester,
+    ) async {
+      final picker = await openPickerWithBlockedRead(tester);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      picker.releaseRead.complete();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(picker.result(), isNull);
+    });
   });
 
   // ====================================================================

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/block_type_definition.dart';
 import '../models/task_flow_definition.dart';
+import '../models/flow_temporary_output.dart';
 import '../utils/block_param_display.dart';
 import 'io_type_indicator.dart';
 
@@ -31,6 +32,7 @@ class FlowBlockCard extends ConsumerWidget {
   final VoidCallback? onInsertAfter;
   final String? validationMessage;
   final bool selected;
+  final ValueChanged<bool>? onTemporaryOutputChanged;
 
   const FlowBlockCard({
     super.key,
@@ -50,12 +52,15 @@ class FlowBlockCard extends ConsumerWidget {
     this.onInsertAfter,
     this.validationMessage,
     this.selected = false,
+    this.onTemporaryOutputChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final def = block.getDefinition();
+    final temporaryOutput =
+        !isLast && hasFileOutput(block) && isFlowTemporaryOutputEnabled(block);
 
     if (def == null) {
       return _buildUnknownBlock(cs);
@@ -66,6 +71,9 @@ class FlowBlockCard extends ConsumerWidget {
       final paramDef = def.params.where((p) => p.key == e.key).firstOrNull;
       if (paramDef == null) return false;
       if (e.value == null) return false;
+      if (temporaryOutput && paramDef.type == BlockParamType.filePath) {
+        return false;
+      }
       // Folder params (saveFolder / videoFolder / audioFolder) ALWAYS
       // show — including the root folder (''), which is a meaningful
       // "save to root" config, not an unset value.
@@ -145,6 +153,30 @@ class FlowBlockCard extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (!readOnly &&
+                          !isLast &&
+                          hasFileOutput(block) &&
+                          onTemporaryOutputChanged != null)
+                        Tooltip(
+                          message: '临时文件（下一步成功后清理）',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: temporaryOutput,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    onTemporaryOutputChanged!(value);
+                                  }
+                                },
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              const Text('临时', style: TextStyle(fontSize: 10)),
+                            ],
+                          ),
+                        ),
                       // Settings button (hidden in readOnly)
                       if (!readOnly)
                         IconButton(

@@ -204,6 +204,8 @@ def _validated_fixtures(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         if len(set(normalized_anchors)) != len(normalized_anchors):
             raise EvaluationError(f"{fixture_id}: reading_order anchors must be unique")
         normalized_gold = normalize_text(fixture["gold_text"])
+        if not normalized_gold and "blank" not in categories:
+            raise EvaluationError(f"{fixture_id}: gold_text must not be empty")
         if any(anchor not in normalized_gold for anchor in normalized_anchors):
             raise EvaluationError(
                 f"{fixture_id}: every reading_order anchor must occur in gold_text"
@@ -865,7 +867,8 @@ def _strip_latex_markup(value: str) -> str:
         text,
     )
     fraction_command = re.compile(r"\\(?:dfrac|tfrac|frac)(?![A-Za-z])\s*")
-    square_root_pattern = re.compile(r"\\sqrt\s*\{([^{}]+)\}")
+    root_command = re.compile(r"\\sqrt\s*(?:\[(\d+)\])?\s*")
+    indexed_root_symbols = {"3": "∛", "4": "∜"}
 
     def has_binary_operator(operand: str) -> bool:
         return re.search(r"\S\s*[-−+*/·×=<>≤≥]\s*\S", operand) is not None
@@ -933,18 +936,41 @@ def _strip_latex_markup(value: str) -> str:
             index = end_index
         return "".join(output)
 
-    def square_root_text(match: re.Match[str]) -> str:
-        operand = match.group(1).strip()
-        if has_binary_operator(operand) and not (
-            operand.startswith("(") and operand.endswith(")")
-        ):
-            operand = f"({operand})"
-        return f"√{operand}"
+    def replace_roots(value: str) -> str:
+        output = []
+        index = 0
+        while index < len(value):
+            match = root_command.match(value, index)
+            if match is None:
+                output.append(value[index])
+                index += 1
+                continue
+
+            root_symbol = (
+                "√"
+                if match.group(1) is None
+                else indexed_root_symbols.get(match.group(1))
+            )
+            operand_group = braced_group(value, match.end())
+            if root_symbol is None or operand_group is None:
+                output.append(value[index : match.end()])
+                index = match.end()
+                continue
+
+            operand, end_index = operand_group
+            operand = replace_roots(replace_fractions(operand)).strip()
+            if has_binary_operator(operand) and not (
+                operand.startswith("(") and operand.endswith(")")
+            ):
+                operand = f"({operand})"
+            output.append(f"{root_symbol}{operand}")
+            index = end_index
+        return "".join(output)
 
     while True:
         previous = text
         text = replace_fractions(text)
-        text = square_root_pattern.sub(square_root_text, text)
+        text = replace_roots(text)
         if text == previous:
             break
 

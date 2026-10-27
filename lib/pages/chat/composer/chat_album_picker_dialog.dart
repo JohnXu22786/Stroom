@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -26,6 +28,10 @@ Future<List<MapEntry<String, Uint8List>>?> showAppAlbumPickerDialog(
   );
 }
 
+/// Pauses file reads initiated by the picker in focused async lifecycle tests.
+@visibleForTesting
+Future<void> Function(String fileName)? beforeAppAlbumPickerReadForTesting;
+
 class _AppAlbumPickerDialog extends ConsumerStatefulWidget {
   const _AppAlbumPickerDialog();
 
@@ -42,6 +48,12 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
 
   // 多选状态: key = recordId, value = (fileName, bytes)
   final Map<String, MapEntry<String, Uint8List>> _selectedItems = {};
+  final List<String> _selectionOrder = [];
+  final Map<String, Object> _pendingSelections = {};
+  final Map<String, Future<void>> _pendingReads = {};
+  Completer<void> _pendingSelectionChanged = Completer<void>();
+  bool _confirmingSelection = false;
+  bool _isClosing = false;
 
   /// Track temp file paths created during edit for cleanup on dialog close.
   final List<String> _tempEditFiles = [];
@@ -116,49 +128,132 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
     setState(() => _currentFolder = parent);
   }
 
-  bool _isSelected(String recordId) => _selectedItems.containsKey(recordId);
+  bool _isSelected(String recordId) =>
+      _selectedItems.containsKey(recordId) ||
+      _pendingSelections.containsKey(recordId);
+
+  int get _selectionCount => _selectedItems.length + _pendingSelections.length;
+
+  List<MapEntry<String, MapEntry<String, Uint8List>>>
+      get _orderedSelectedItems {
+    return [
+      for (final key in _selectionOrder)
+        if (_selectedItems.containsKey(key))
+          MapEntry(key, _selectedItems[key]!),
+    ];
+  }
+
+  void _notifyPendingSelectionChanged() {
+    final changed = _pendingSelectionChanged;
+    _pendingSelectionChanged = Completer<void>();
+    changed.complete();
+  }
 
   Future<void> _toggleSelection(ImageRecord record) async {
     final key = record.id;
     if (_selectedItems.containsKey(key)) {
-      setState(() => _selectedItems.remove(key));
+      setState(() {
+        _selectedItems.remove(key);
+        _selectionOrder.remove(key);
+      });
+      return;
+    }
+    if (_pendingSelections.containsKey(key)) {
+      setState(() {
+        _pendingSelections.remove(key);
+        _pendingReads.remove(key);
+        _selectionOrder.remove(key);
+      });
+      _notifyPendingSelectionChanged();
       return;
     }
 
-    // 读取文件数据
+    final token = Object();
+    setState(() {
+      _pendingSelections[key] = token;
+      _selectionOrder.add(key);
+    });
+    _notifyPendingSelectionChanged();
+    final read = _readSelection(record, token);
+    _pendingReads[key] = read;
+    await read;
+  }
+
+  Future<void> _readSelection(ImageRecord record, Object token) async {
     Uint8List? data;
     try {
+      await beforeAppAlbumPickerReadForTesting?.call(record.storagePath);
       data = await ImageManifest.readFile(record.storagePath);
     } catch (_) {}
-    if (data == null || data.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取文件')),
-        );
-      }
+
+    if (!mounted ||
+        _isClosing ||
+        !identical(_pendingSelections[record.id], token)) {
       return;
     }
 
-    final fileName = '${record.name}.${record.format}';
+    final hasData = data != null && data.isNotEmpty;
     setState(() {
-      _selectedItems[key] = MapEntry(fileName, data!);
+      _pendingSelections.remove(record.id);
+      _pendingReads.remove(record.id);
+      if (hasData) {
+        _selectedItems[record.id] = MapEntry(
+          '${record.name}.${record.format}',
+          data!,
+        );
+      } else {
+        _selectionOrder.remove(record.id);
+      }
     });
+    _notifyPendingSelectionChanged();
+    if (!hasData && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法读取文件')),
+      );
+    }
   }
 
   void _clearSelection() {
     _cleanupTempFiles();
-    setState(() => _selectedItems.clear());
+    setState(() {
+      _selectedItems.clear();
+      _selectionOrder.clear();
+      _pendingSelections.clear();
+      _pendingReads.clear();
+    });
+    _notifyPendingSelectionChanged();
+  }
+
+  Future<void> _confirmSelection() async {
+    if (_confirmingSelection) return;
+    setState(() => _confirmingSelection = true);
+    while (_pendingReads.isNotEmpty) {
+      await Future.any<void>([
+        Future.wait<void>(List<Future<void>>.of(_pendingReads.values)),
+        _pendingSelectionChanged.future,
+      ]);
+      if (!mounted || _isClosing) return;
+    }
+    if (!mounted || _isClosing) return;
+    Navigator.of(context).pop(
+      _orderedSelectedItems.map((entry) => entry.value).toList(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasSelection = _selectedItems.isNotEmpty;
+    final hasSelection = _selectionCount > 0;
 
     return PopScope(
       canPop: _isRoot,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_isRoot) {
+        if (didPop) {
+          _isClosing = true;
+          _pendingSelections.clear();
+          _pendingReads.clear();
+          _notifyPendingSelectionChanged();
+        } else if (!_isRoot) {
           _navigateBack();
         }
       },
@@ -177,7 +272,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 key: const Key('album_picker_clear_btn'),
                 onPressed: _clearSelection,
                 child: Text(
-                  '清除 (${_selectedItems.length})',
+                  '清除 ($_selectionCount)',
                   style: const TextStyle(color: Colors.red),
                 ),
               ),
@@ -231,13 +326,9 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                 ),
                 child: FilledButton.icon(
                   key: const Key('album_picker_confirm_btn'),
-                  onPressed: () {
-                    final result = _selectedItems.values.toList();
-                    Navigator.of(context).pop(result);
-                  },
+                  onPressed: _confirmingSelection ? null : _confirmSelection,
                   icon: const Icon(Icons.check, size: 18),
-                  label: Text(
-                      hasSelection ? '确定 (${_selectedItems.length})' : '确定'),
+                  label: Text(hasSelection ? '确定 ($_selectionCount)' : '确定'),
                 ),
               ),
             ),
@@ -455,7 +546,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
   // ====================================================================
 
   Widget _buildPreviewBar(ColorScheme cs) {
-    final items = _selectedItems.entries.toList();
+    final items = _orderedSelectedItems;
 
     return Container(
       key: const Key('album_picker_preview_bar'),
@@ -473,7 +564,7 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
             child: Text(
-              '已选择 ${items.length} 张图片',
+              '已选择 $_selectionCount 张图片',
               style: TextStyle(
                 fontSize: 11,
                 color: cs.onSurfaceVariant,
@@ -493,7 +584,10 @@ class _AppAlbumPickerDialogState extends ConsumerState<_AppAlbumPickerDialog> {
                   fileName: entry.key,
                   bytes: entry.value,
                   onRemove: () {
-                    setState(() => _selectedItems.remove(mapEntry.key));
+                    setState(() {
+                      _selectedItems.remove(mapEntry.key);
+                      _selectionOrder.remove(mapEntry.key);
+                    });
                   },
                   onTap: () =>
                       _onPreviewChipTap(mapEntry.key, entry.key, entry.value),

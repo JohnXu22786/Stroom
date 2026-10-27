@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_3d_tool.dart';
-import 'package:stroom/widgets/math_3d_toolbar.dart';
-import 'package:stroom/widgets/math_canvas_3d.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   testWidgets(

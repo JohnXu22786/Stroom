@@ -16,6 +16,8 @@ import '../../utils/file_manifest.dart';
 import '../models/catcatch_task.dart';
 import '../models/media_kind.dart';
 import '../models/media_resource.dart';
+import '../../task_flow/models/flow_payload.dart';
+import '../../task_flow/services/flow_temporary_artifact_storage.dart';
 import 'ev1_decoder.dart';
 import 'executor_utils.dart';
 import 'native_blob_replace_stub.dart'
@@ -77,6 +79,38 @@ Future<String> executeSave({
       throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
     }
     _throwIfCancelled(cancelled);
+
+    void finishStep() {
+      _throwIfCancelled(cancelled);
+      markExecutorStep(steps, 7, done: true);
+      onUpdate(
+          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
+    }
+
+    final temporaryExecutionId = task.metadata[flowTemporaryExecutionIdKey];
+    final temporaryBlockId = task.metadata[flowTemporaryBlockIdKey];
+    if (temporaryExecutionId != null && temporaryBlockId != null) {
+      final temporaryPath = await FlowTemporaryArtifactStorage.copyNativeFile(
+        sourcePath: sourcePath,
+        executionId: temporaryExecutionId,
+        blockId: temporaryBlockId,
+        cancelled: cancelled,
+      );
+      try {
+        finishStep();
+        return temporaryPath;
+      } catch (_) {
+        await FlowTemporaryArtifactStorage.deleteArtifact(
+          FlowTemporaryArtifact(
+            executionId: temporaryExecutionId,
+            blockId: temporaryBlockId,
+            reference: temporaryPath,
+          ),
+        );
+        rethrow;
+      }
+    }
+
     final appDirPath = await AppStorage.directory;
     _throwIfCancelled(cancelled);
     final saveDir = Directory(p.join(appDirPath, 'catcatch', 'completed'));
@@ -96,13 +130,6 @@ Future<String> executeSave({
       throw const FormatException('无法验证下载文件的音视频类型，请检查媒体文件');
     }
     _throwIfCancelled(cancelled);
-
-    void finishStep() {
-      _throwIfCancelled(cancelled);
-      markExecutorStep(steps, 7, done: true);
-      onUpdate(
-          task.copyWith(steps: steps, progress: calcExecutorProgress(steps)));
-    }
 
     if (kIsWeb) {
       finishStep();

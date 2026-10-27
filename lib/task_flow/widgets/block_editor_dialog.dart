@@ -16,6 +16,7 @@ import '../../utils/video_manifest.dart';
 import '../../widgets/folder_picker_dialog.dart';
 import '../models/task_flow_definition.dart';
 import '../models/block_type_definition.dart';
+import '../models/flow_temporary_output.dart';
 import '../models/io_type.dart';
 
 /// Which gallery's folders a block's save-folder param lists.
@@ -50,6 +51,7 @@ FlowFolderSource flowFolderSourceFor(BlockType typeKey, String paramKey) {
 Future<TaskFlowBlock?> showBlockEditorDialog(
   BuildContext context, {
   required TaskFlowBlock block,
+  bool allowTemporaryOutput = false,
 }) {
   return showModalBottomSheet<TaskFlowBlock>(
     context: context,
@@ -67,15 +69,18 @@ Future<TaskFlowBlock?> showBlockEditorDialog(
       padding: EdgeInsets.only(
         bottom: MediaQuery.viewInsetsOf(ctx).bottom,
       ),
-      child: _BlockEditorDialog(block: block),
+      child: _BlockEditorDialog(
+          block: block, allowTemporaryOutput: allowTemporaryOutput),
     ),
   );
 }
 
 class _BlockEditorDialog extends ConsumerStatefulWidget {
   final TaskFlowBlock block;
+  final bool allowTemporaryOutput;
 
-  const _BlockEditorDialog({required this.block});
+  const _BlockEditorDialog(
+      {required this.block, required this.allowTemporaryOutput});
 
   @override
   ConsumerState<_BlockEditorDialog> createState() => _BlockEditorDialogState();
@@ -166,6 +171,8 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
         def.typeKey == BlockType.catcatch && _params['audioOutput'] == true
             ? IOType.audio
             : def.outputType;
+    final temporaryOutput = widget.allowTemporaryOutput &&
+        isFlowTemporaryOutputEnabled(widget.block);
 
     // Floor the min drag size in pixels: minChildSize is a fraction of
     // the (keyboard-reduced) available height, and the fixed chrome
@@ -274,6 +281,19 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                       ],
                     ),
                   ),
+                if (temporaryOutput)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '此步骤会输出到任务流的临时空间，下一个步骤成功保存结果后自动清理。原保存文件夹会保留，关闭临时模式后恢复。',
+                      style: TextStyle(fontSize: 12, color: cs.primary),
+                    ),
+                  ),
                 if (def.params.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -288,7 +308,11 @@ class _BlockEditorDialogState extends ConsumerState<_BlockEditorDialog> {
                     ),
                   )
                 else
-                  ...def.params.map((param) => _buildParamField(param, cs)),
+                  ...def.params
+                      .where((param) =>
+                          !temporaryOutput ||
+                          param.type != BlockParamType.filePath)
+                      .map((param) => _buildParamField(param, cs)),
                 const SizedBox(height: 8),
                 // Actions live INSIDE the scrollable list so the sheet can
                 // shrink below the fixed chrome (handle + header) when the

@@ -2362,6 +2362,44 @@ void main() {
       );
 
       testWidgets(
+        'file rename reports a format conversion failure',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildTestApp(
+              buildBatchFM(
+                records: [
+                  _TestFileRecord(id: 'f1', name: 'diagram', format: 'txt'),
+                ],
+                folders: {},
+                renameFormatOptions: const ['txt', 'md', 'mmd'],
+                onRenameFileWithFormat: (_, __, ___) async {
+                  throw Exception('无法读取原文件内容，格式转换未完成');
+                },
+              ),
+            ),
+          );
+
+          await tester.tap(find.byKey(const Key('fm_file_popup_f1')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('重命名'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byType(DropdownButtonFormField<String>));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('mmd').last);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('fm_rename_confirm_btn')));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text(
+              '重命名失败: Exception: 无法读取原文件内容，格式转换未完成',
+            ),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets(
         'file rename hides the format dropdown for formats not in the list',
         (tester) async {
           await tester.pumpWidget(

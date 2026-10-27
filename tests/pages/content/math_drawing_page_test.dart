@@ -3,10 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/pages/math_drawing_page.dart';
-import 'package:stroom/widgets/math_canvas.dart';
-import 'package:stroom/widgets/math_formula_field.dart';
-import 'package:stroom/widgets/math_parameter_controls.dart';
+import 'package:visual_math/visual_math.dart';
 
 Widget _buildTestApp({String? initialExpression}) {
   return MaterialApp(

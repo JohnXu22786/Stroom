@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/services/background_service.dart' as background_service;
 import 'package:stroom/services/desktop_app_service.dart';
-import 'package:tray_manager/tray_manager.dart' show trayManager;
+import 'package:tray_manager/legacy.dart' show Menu, TrayListener;
 import 'package:window_manager/window_manager.dart' show windowManager;
 
 /// Records method calls made on a mocked platform channel.
@@ -16,6 +16,7 @@ class RecordingChannelMock {
   final List<MethodCall> calls = [];
   Object? throwError;
   String? throwOnMethod;
+  bool hasListeners = false;
 
   Future<Object?> handler(MethodCall call) async {
     calls.add(call);
@@ -24,6 +25,52 @@ class RecordingChannelMock {
       throw throwError!;
     }
     return true;
+  }
+}
+
+class _RecordingTrayAdapter implements DesktopTrayAdapter {
+  _RecordingTrayAdapter(this.mock);
+
+  final RecordingChannelMock mock;
+
+  void _record(String method, [Object? arguments]) {
+    mock.calls.add(MethodCall(method, arguments));
+    if (mock.throwError != null &&
+        (mock.throwOnMethod == null || mock.throwOnMethod == method)) {
+      throw mock.throwError!;
+    }
+  }
+
+  @override
+  Future<void> setIcon(String iconPath) async =>
+      _record('setIcon', {'iconPath': iconPath});
+
+  @override
+  Future<void> setToolTip(String toolTip) async =>
+      _record('setToolTip', {'toolTip': toolTip});
+
+  @override
+  Future<void> setContextMenu(Menu menu) async =>
+      _record('setContextMenu', {'menu': menu.toJson()});
+
+  @override
+  Future<void> popUpContextMenu() async => _record('popUpContextMenu');
+
+  @override
+  Future<void> destroy() async => _record('destroy');
+
+  @override
+  void addListener(TrayListener listener) {
+    mock.hasListeners = true;
+    _record('addListener');
+  }
+
+  @override
+  void removeListener(TrayListener listener) {
+    mock.hasListeners = false;
+    // Listener cleanup must not replay a tray failure deliberately injected
+    // into operational calls by an error-path test.
+    mock.calls.add(const MethodCall('removeListener'));
   }
 }
 
@@ -60,9 +107,8 @@ Map<String, RecordingChannelMock> registerChannelMocks() {
     const MethodChannel('window_manager'),
     mocks['window_manager']!.handler,
   );
-  messenger.setMockMethodCallHandler(
-    const MethodChannel('tray_manager'),
-    mocks['tray_manager']!.handler,
+  DesktopAppService.instance.setTrayAdapterForTesting(
+    _RecordingTrayAdapter(mocks['tray_manager']!),
   );
   return mocks;
 }
@@ -350,7 +396,7 @@ void main() {
       );
       expect(windowManager.listeners.contains(DesktopAppService.instance),
           isFalse);
-      expect(trayManager.hasListeners, isFalse);
+      expect(mocks['tray_manager']!.hasListeners, isFalse);
     });
 
     test('pending close is replayed when tray setup fails', () async {

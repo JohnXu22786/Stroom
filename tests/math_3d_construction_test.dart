@@ -1,9 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:stroom/models/math_3d_construction.dart';
-import 'package:stroom/models/math_3d_object.dart';
-import 'package:stroom/models/math_3d_scene.dart';
-import 'package:stroom/models/math_3d_tool.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   group('3D construction geometry', () {

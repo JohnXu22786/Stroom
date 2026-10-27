@@ -17,17 +17,19 @@ Future<ProviderConfigItem?> _openAndSave(
   ProviderConfigItem? saved;
   await tester.pumpWidget(
     MaterialApp(
-      home: Builder(
-        builder: (context) => Center(
-          child: ElevatedButton(
-            onPressed: () async {
-              saved = await showProviderSettingsPanel(
-                context: context,
-                config: config,
-                providerType: 'llm',
-              );
-            },
-            child: const Text('打开供应商设置'),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => Center(
+            child: ElevatedButton(
+              onPressed: () async {
+                saved = await showProviderSettingsPanel(
+                  context: context,
+                  config: config,
+                  providerType: 'llm',
+                );
+              },
+              child: const Text('打开供应商设置'),
+            ),
           ),
         ),
       ),
@@ -55,6 +57,141 @@ ProviderConfigItem _baseConfig() => ProviderConfigItem(
 
 void main() {
   group('ProviderSettingsPanel reasoning section (ported from model page)', () {
+    testWidgets('trims surrounding whitespace from saved custom-param names',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: '  response_format  ',
+            defaultValue: 'json',
+            type: 'string',
+            options: ['json', 'text'],
+            optionOrder: ['text', 'json', 'yaml'],
+          ),
+          CustomParam(paramName: 'second', defaultValue: 'value'),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      expect(
+        saved!.customParams.map((param) => param.paramName),
+        ['response_format', 'second'],
+      );
+      final firstParam = saved.customParams.first;
+      expect(firstParam.defaultValue, 'json');
+      expect(firstParam.type, 'string');
+      expect(firstParam.options, ['json', 'text']);
+      expect(firstParam.optionOrder, ['text', 'json', 'yaml']);
+    });
+
+    testWidgets('rejects a blank first custom-param option', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            options: ['', 'json'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'the first option is sent as the effective default');
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget);
+    });
+
+    testWidgets('rejects invalid numeric custom-param options', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['10', 'oops'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'every selectable numeric option must parse before saving');
+      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+    });
+
+    testWidgets('rejects blank numeric custom-param options', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['1', ''],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull,
+          reason: 'blank numeric options are not valid values to coerce');
+      expect(find.text('参数 "top_k" 的数值选项不能为空'), findsOneWidget);
+    });
+
+    testWidgets('rejects an invalid numeric default value', (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            defaultValue: 'oops',
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNull);
+      expect(find.text('参数 "top_k" 的值不是合法数字：oops'), findsOneWidget);
+    });
+
+    testWidgets('preserves valid integer and decimal custom-param options',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'top_k',
+            type: 'number',
+            options: ['10', '0.25'],
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['10', '0.25']);
+    });
+
     testWidgets('shows toggle, effort and additional param sections',
         (tester) async {
       await _openAndSave(tester, config: _baseConfig(), tapSave: false);
@@ -398,6 +535,7 @@ void main() {
             paramName: 'verbose',
             defaultValue: 'high',
             type: 'string',
+            options: ['high', 'low'],
           ),
         ],
       );
@@ -446,6 +584,30 @@ void main() {
           saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
       expect(verbose.type, 'boolean');
       expect(verbose.options, isEmpty, reason: 'boolean 类型保存时清空残留 options');
+      expect(verbose.defaultValue, isEmpty, reason: 'boolean 类型保存时清空旧类型的默认值');
+    });
+
+    testWidgets('saving an existing boolean param clears a stale default',
+        (tester) async {
+      final config = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'verbose',
+            defaultValue: 'high',
+            type: 'boolean',
+          ),
+        ],
+      );
+
+      final saved = await _openAndSave(tester, config: config);
+
+      expect(saved, isNotNull);
+      final verbose =
+          saved!.customParams.firstWhere((p) => p.paramName == 'verbose');
+      expect(verbose.defaultValue, isEmpty);
     });
 
     testWidgets('duplicate reasoning param name shows inline error',

@@ -1599,6 +1599,198 @@ void main() {
     });
   });
 
+  group('LlmModelConfigPage model custom param option editing', () {
+    testWidgets(
+      'editing an option preserves order and selection; cancel is inert',
+      (tester) async {
+        final model = ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          customParams: [
+            CustomParam(
+              paramName: 'voice_style',
+              type: 'string',
+              options: ['warm', 'cool'],
+              optionOrder: ['warm', 'cool'],
+            ),
+          ],
+        );
+
+        final saved = await _pumpAndSave(
+          tester,
+          model: model,
+          beforeSave: (tester) async {
+            await _scrollToReasoning(tester, find.text('自定义参数'));
+            await tester.ensureVisible(find.text('warm'));
+            await tester.pumpAndSettle();
+            expect(find.byIcon(Icons.edit), findsNWidgets(2));
+            await tester.tap(find.text('warm'));
+            await tester.pumpAndSettle();
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            expect(find.text('编辑选项值'), findsOneWidget);
+            expect(find.byType(TextField).last, findsOneWidget);
+            expect(
+              (tester
+                      .widget<TextField>(find.byType(TextField).last)
+                      .controller)!
+                  .text,
+              'warm',
+            );
+            await tester.enterText(find.byType(TextField).last, '   ');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'unused');
+            await tester.tap(find.text('取消').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+            expect(find.text('unused'), findsNothing);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'cool');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsOneWidget);
+            expect(find.text('cool'), findsOneWidget);
+
+            await tester.tap(find.byIcon(Icons.edit).first);
+            await tester.pumpAndSettle();
+            await tester.enterText(find.byType(TextField).last, 'cozy');
+            await tester.tap(find.text('保存').last);
+            await tester.pumpAndSettle();
+            expect(find.text('warm'), findsNothing);
+            expect(find.text('cozy'), findsOneWidget);
+            expect(find.text('cool'), findsOneWidget);
+          },
+        );
+
+        expect(saved, isNotNull);
+        expect(saved!.customParams.single.options, ['cool']);
+        expect(saved.customParams.single.optionOrder, ['cozy', 'cool']);
+      },
+    );
+  });
+
+  group('LlmModelConfigPage JSON custom param save validation', () {
+    testWidgets('stale options do not satisfy a blank JSON default',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            type: 'json',
+            options: ['legacy-option'],
+            optionOrder: ['legacy-option'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(tester, model: model);
+
+      expect(saved, isNull,
+          reason: 'An empty JSON default must prevent the page from saving.');
+      expect(find.text('自定义参数的参数名和值不能为空'), findsOneWidget,
+          reason:
+              'A stale non-JSON option must not satisfy JSON value validation.');
+    });
+
+    testWidgets('valid JSON default saves even when stale options remain',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'test-model',
+        modelId: 'test-model',
+        typeConfig: {'context': 4096},
+        customParams: [
+          CustomParam(
+            paramName: 'response_format',
+            type: 'json',
+            defaultValue: '{"type":"json_object"}',
+            options: ['legacy-option'],
+            optionOrder: ['legacy-option'],
+          ),
+        ],
+      );
+
+      final saved = await _pumpAndSave(tester, model: model);
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.defaultValue, '{"type":"json_object"}');
+      expect(saved.customParams.single.options, ['legacy-option']);
+    });
+  });
+
+  group('LlmModelConfigPage number custom param save validation', () {
+    ModelConfig modelWithNumberParam({
+      required String defaultValue,
+      List<String> options = const [],
+    }) =>
+        ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+          customParams: [
+            CustomParam(
+              paramName: 'top_p',
+              type: 'number',
+              defaultValue: defaultValue,
+              options: options,
+            ),
+          ],
+        );
+
+    for (final invalidValue in ['not-a-number', 'NaN', 'Infinity']) {
+      testWidgets('rejects $invalidValue number options', (tester) async {
+        final saved = await _pumpAndSave(
+          tester,
+          model: modelWithNumberParam(
+            defaultValue: '0.5',
+            options: [invalidValue],
+          ),
+        );
+
+        expect(saved, isNull, reason: '$invalidValue must not be saved');
+        expect(
+          find.text('参数 "top_p" 的选项值必须是有限数字：$invalidValue'),
+          findsOneWidget,
+        );
+      });
+    }
+
+    testWidgets('rejects invalid legacy number default', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: modelWithNumberParam(defaultValue: 'NaN'),
+      );
+
+      expect(saved, isNull);
+      expect(find.text('参数 "top_p" 的选项值必须是有限数字：NaN'), findsOneWidget);
+    });
+
+    testWidgets('saves integer and decimal option values', (tester) async {
+      final saved = await _pumpAndSave(
+        tester,
+        model: modelWithNumberParam(
+          defaultValue: '1.5',
+          options: ['1', '0.25'],
+        ),
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, ['1', '0.25']);
+      expect(saved.customParams.single.defaultValue, '1.5');
+    });
+  });
+
   group('LlmModelConfigPage provider custom params inheritance', () {
     ProviderConfigItem providerWithCustomParams({
       List<String> options = const ['warm', 'cool'],
@@ -1689,6 +1881,62 @@ void main() {
       final warmText = tester.widget<Text>(find.text('warm'));
       expect(warmText.style?.fontWeight, FontWeight.normal,
           reason: '重开后 warm 应保持未勾选');
+    });
+
+    testWidgets(
+        'provider custom param with all options unchecked stays unchecked '
+        'on reopen', (tester) async {
+      final provider = ProviderConfigItem(
+        providerName: 'Test Provider',
+        host: 'https://api.example.com/v1',
+        key: 'sk-test',
+        customParams: [
+          CustomParam(
+            paramName: 'voice_style',
+            type: 'string',
+            defaultValue: 'fallback',
+            options: ['warm', 'cool'],
+          ),
+        ],
+      );
+      final saved = await _pumpAndSave(
+        tester,
+        model: ModelConfig(
+          name: 'test-model',
+          modelId: 'test-model',
+          typeConfig: {'context': 4096},
+        ),
+        provider: provider,
+        beforeSave: (tester) async {
+          await scrollToCustomValue(tester, 'warm');
+          await tester.tap(find.text('warm'));
+          await tester.tap(find.text('cool'));
+          await tester.pumpAndSettle();
+        },
+      );
+
+      expect(saved, isNotNull);
+      expect(saved!.customParams.single.options, isEmpty);
+      expect(saved.customParams.single.optionOrder, ['warm', 'cool']);
+
+      final reopened = await _pumpAndSave(
+        tester,
+        model: saved,
+        provider: provider,
+        beforeSave: (tester) async {
+          await scrollToCustomValue(tester, 'warm');
+          for (final value in ['warm', 'cool']) {
+            expect(find.text(value), findsOneWidget,
+                reason: 'unchecked provider candidates must remain visible');
+            final text = tester.widget<Text>(find.text(value));
+            expect(text.style?.fontWeight, FontWeight.normal,
+                reason: '$value should remain unchecked after reopening');
+          }
+        },
+      );
+      expect(reopened, isNotNull);
+      expect(reopened!.customParams.single.options, isEmpty);
+      expect(reopened.customParams.single.optionOrder, ['warm', 'cool']);
     });
 
     testWidgets(

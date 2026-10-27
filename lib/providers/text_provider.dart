@@ -102,17 +102,60 @@ class TextRecordsNotifier extends StateNotifier<List<TextRecord>> {
         final content = oldStoragePath == newStoragePath
             ? null
             : await TextManifest.readFile(oldStoragePath);
-        // The loaded record may be stale; guard file conversion and metadata
-        // publication with both the current and destination hashes.
-        await TextManifest.withRecordSaveLocks(r.id, updated.hash, () async {
-          if (content != null) {
-            await TextManifest.writeFile(newStoragePath, content);
+        // The record and content may change while the source bytes are read.
+        // A missing initial read may also be stale if a concurrent save has
+        // already repointed the record and removed its old file. The lock
+        // helper includes the current hash and retries if it changes while
+        // locks are being acquired, so validate and reread under those locks.
+        var sourceReadFailed = false;
+        await TextManifest.withRecordSaveLocks(r.id, r.hash, () async {
+          final currentRecords = await TextManifest.loadRecordsUncached();
+          TextRecord? current;
+          for (final record in currentRecords) {
+            if (record.id == r.id) {
+              current = record;
+              break;
+            }
           }
-          await TextManifest.updateRecord(updated);
-          if (content != null) {
-            await TextManifest.deleteFileIfUnreferenced(r.hash, oldStoragePath);
+
+          if (current == null) return;
+
+          final currentUpdated =
+              current.copyWithName(newName).copyWithFormat(format);
+          final currentStoragePath = current.storageFileName;
+          final currentNewStoragePath = currentUpdated.storageFileName;
+          var currentContent = content;
+          if (currentStoragePath == currentNewStoragePath) {
+            currentContent = null;
+          } else if (currentContent == null ||
+              currentStoragePath != oldStoragePath ||
+              current.hash != r.hash) {
+            currentContent = await TextManifest.readFile(currentStoragePath);
+          }
+          if (currentStoragePath != currentNewStoragePath &&
+              currentContent == null) {
+            sourceReadFailed = true;
+            return;
+          }
+
+          if (currentContent != null) {
+            await TextManifest.writeFile(
+              currentNewStoragePath,
+              currentContent,
+            );
+          }
+          await TextManifest.updateRecord(currentUpdated);
+          if (currentContent != null) {
+            await TextManifest.deleteFileIfUnreferenced(
+              current.hash,
+              currentStoragePath,
+            );
           }
         });
+        if (sourceReadFailed) {
+          await loadRecords();
+          throw Exception('无法读取原文件内容，格式转换未完成');
+        }
       }
     }
     await loadRecords();

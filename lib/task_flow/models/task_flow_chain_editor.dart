@@ -1,6 +1,7 @@
 import 'block_type_definition.dart';
 import 'io_type.dart';
 import 'task_flow_definition.dart';
+import 'flow_temporary_output.dart';
 
 /// A connection that must be repaired before the chain can be saved or run.
 class TaskFlowChainIssue {
@@ -149,6 +150,26 @@ class TaskFlowChainEditor {
         typeKey: block.typeKey,
         params: _copyValue(params) as Map<String, dynamic>,
       );
+    _validate();
+    return true;
+  }
+
+  /// Applies the master temporary-output switch as one undoable edit.
+  bool setTemporaryOutputs(bool enabled) {
+    final updated = [..._blocks];
+    var changed = false;
+    for (var index = 0; index < updated.length; index++) {
+      if (!isFlowTemporaryOutputEligible(updated, index) ||
+          isFlowTemporaryOutputEnabled(updated[index]) == enabled) {
+        continue;
+      }
+      final block = updated[index];
+      updated[index] = block.copyWithParam(flowTemporaryOutputParam, enabled);
+      changed = true;
+    }
+    if (!changed) return false;
+    _remember();
+    _blocks = updated;
     _validate();
     return true;
   }

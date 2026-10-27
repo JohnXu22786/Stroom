@@ -2,10 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_3d_object.dart';
-import 'package:stroom/models/math_3d_scene.dart';
-import 'package:stroom/models/math_3d_tool.dart';
-import 'package:stroom/widgets/math_canvas_3d.dart';
+import 'package:visual_math/visual_math.dart';
 
 const _solid = Object3D.polyhedron(
   vertices: [

@@ -590,8 +590,8 @@ class MermaidTemplates {
       'Z': r'[+-]\d{2}:\d{2}',
     };
     final tokenPattern = RegExp(
-      r'\[[^\]]*\]|dddd|ddd|dd|d|'
-      r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+      r'\[[^\]]*\]|dddd|ddd|dd|Do|d|'
+      r'YYYY|MMMM|MMM|YY|MM|M|DD|D|'
       r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
     );
     final pattern = StringBuffer('^');
@@ -738,8 +738,8 @@ class MermaidTemplates {
     };
     return dateFormat.replaceAllMapped(
       RegExp(
-        r'\[[^\]]*\]|dddd|ddd|dd|d|'
-        r'YYYY|MMMM|MMM|YY|MM|M|Do|DD|D|'
+        r'\[[^\]]*\]|dddd|ddd|dd|Do|d|'
+        r'YYYY|MMMM|MMM|YY|MM|M|DD|D|'
         r'HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|a|A',
       ),
       (match) {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/widgets/math_canvas_webview.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

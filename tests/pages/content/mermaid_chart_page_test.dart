@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/mermaid_chart_page.dart';
 import 'package:stroom/services/manifest_database.dart';
+import 'package:stroom/utils/mermaid_folder_name_lock.dart';
 import 'package:stroom/utils/mermaid_templates.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/widgets/folder_picker_dialog.dart';
@@ -114,6 +115,33 @@ Widget _buildSavedChartNavigationTestApp({
   );
 }
 
+Widget _buildNewChartNavigationTestApp() {
+  return ProviderScope(
+    child: MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => const MermaidChartPage(
+                    initialShowPreview: false,
+                  ),
+                ),
+              ),
+              child: const Text('Open new chart'),
+            ),
+          ),
+        ),
+      ),
+      localizationsDelegates: [
+        DefaultMaterialLocalizations.delegate,
+        DefaultWidgetsLocalizations.delegate,
+      ],
+    ),
+  );
+}
+
 Future<TextRecord> _addSavedMermaidChart(String content) async {
   final bytes = Uint8List.fromList(utf8.encode(content));
   final record = TextRecord(
@@ -149,6 +177,119 @@ void main() {
   });
 
   group('MermaidChartPage', () {
+    testWidgets('new-chart app-bar back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('new-chart system back can stay editing or discard draft', (
+      tester,
+    ) async {
+      const draft = 'graph TD\n  A-->Unsaved';
+
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, draft);
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller?.text,
+        draft,
+      );
+
+      await _simulateSystemBack(tester);
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('放弃'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('unmodified new chart still pops without confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+    });
+
+    testWidgets('saving a new chart exits without discard confirmation', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildNewChartNavigationTestApp());
+      await tester.tap(find.text('Open new chart'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->Saved',
+      );
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('已保存到文本储存区:'), findsOneWidget);
+      expect(find.text('Open new chart'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsNothing);
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        hasLength(1),
+      );
+    });
+
     testWidgets('app-bar back can stay editing or discard the draft', (
       tester,
     ) async {
@@ -542,6 +683,10 @@ void main() {
           textField.controller?.text,
           contains('后续任务 :after dependencyTask1, 5d'),
         );
+        expect(
+          textField.controller?.text,
+          isNot(contains('依赖基准任务 :')),
+        );
       },
     );
 
@@ -855,6 +1000,147 @@ void main() {
           await TextManifest.readText(savedRecord.storagePath),
           editedContent,
         );
+      },
+    );
+
+    testWidgets(
+      'system back cannot discard a chart while its save is committing',
+      (tester) async {
+        const originalContent = 'graph TD\n  A-->Original';
+        const capturedContent = 'graph TD\n  A-->Captured';
+        final record = await _addSavedMermaidChart(originalContent);
+        final saveReachedPublication = Completer<void>();
+        final releaseSave = Completer<void>();
+        addTearDown(() {
+          if (!releaseSave.isCompleted) releaseSave.complete();
+        });
+
+        await tester.pumpWidget(
+          _buildSavedChartNavigationTestApp(
+            record: record,
+            content: originalContent,
+            testOnlyAfterChartNameAllocation: (_) async {
+              saveReachedPublication.complete();
+              await releaseSave.future;
+            },
+          ),
+        );
+        await tester.tap(find.text('Open saved chart'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField).first, capturedContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedPublication.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The save has captured the editor content and is paused before it
+        // updates the existing record. A back action must not offer discard.
+        // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('放弃修改？'), findsNothing);
+        expect(find.byType(MermaidChartPage), findsOneWidget);
+        expect(
+          await TextManifest.readText(record.storagePath),
+          originalContent,
+        );
+
+        releaseSave.complete();
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).single;
+        expect(savedRecord.id, record.id);
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(capturedContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          capturedContent,
+        );
+        expect(find.text('Open saved chart'), findsOneWidget);
+        expect(find.byType(MermaidChartPage), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'save preserves editor content while waiting for the folder name lock',
+      (tester) async {
+        const initialContent = 'graph TD\n  A-->BeforeLock';
+        const editedContent = 'graph TD\n  A-->DuringLock';
+        final lockHeld = Completer<void>();
+        final releaseLock = Completer<void>();
+        final saveReachedLock = Completer<void>();
+        addTearDown(() {
+          if (!releaseLock.isCompleted) releaseLock.complete();
+        });
+
+        final heldLock = MermaidFolderNameLock.withLock('', () async {
+          lockHeld.complete();
+          await releaseLock.future;
+        });
+        await lockHeld.future;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            initialCode: initialContent,
+            initialShowPreview: false,
+            testOnlyBeforeChartFolderNameLock: () => saveReachedLock.complete(),
+          ),
+        );
+        await tester.pump();
+        final editor = find.byType(TextField).first;
+        final editorController = tester.widget<TextField>(editor).controller!;
+        await tester.enterText(editor, initialContent);
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.save));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('根目录'));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pump();
+        await saveReachedLock.future.timeout(const Duration(seconds: 5));
+        await tester.pump();
+
+        // The real folder lock is still held, so the save cannot publish yet.
+        // If the editor remains enabled, reproduce the user's late edit.
+        final field = tester.widget<TextField>(editor);
+        final editorCanChange = (field.enabled ?? true) && !field.readOnly;
+        if (editorCanChange) {
+          await tester.enterText(editor, editedContent);
+          await tester.pump();
+        }
+        final finalEditorContent = editorController.text;
+
+        releaseLock.complete();
+        await heldLock;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+
+        final savedRecord = (await TextManifest.loadRecords()).singleWhere(
+          (record) => record.format == 'mmd',
+        );
+        expect(
+          savedRecord.hash,
+          computeTextHash(Uint8List.fromList(utf8.encode(finalEditorContent))),
+        );
+        expect(
+          await TextManifest.readText(savedRecord.storagePath),
+          finalEditorContent,
+        );
+        expect(find.byType(MermaidChartPage), findsNothing);
       },
     );
 
@@ -1290,6 +1576,42 @@ void main() {
         expect(savedRecord.name, 'chart-流程图');
       },
     );
+
+    testWidgets('new chart filename containing only mmd suffix is rejected', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildTestApp());
+      await tester.pump();
+
+      await tester.enterText(
+        find.byType(TextField).first,
+        'graph TD\n  A-->B',
+      );
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.save));
+      await tester.pumpAndSettle();
+
+      final fileNameField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == '输入文件名（自动添加 .mmd 后缀）',
+      );
+      await tester.enterText(fileNameField, '.mmd');
+      await tester.tap(find.text('根目录'));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('文件名不能为空'), findsOneWidget);
+      expect(find.byType(MermaidChartPage), findsOneWidget);
+      expect(
+        (await TextManifest.loadRecords()).where(
+          (record) => record.format == 'mmd',
+        ),
+        isEmpty,
+      );
+    });
 
     testWidgets('save with empty filename shows error, does not save', (
       tester,

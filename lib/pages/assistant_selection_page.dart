@@ -107,15 +107,13 @@ class AssistantSelectionPage extends ConsumerWidget {
                     gridCrossAxisSpacing: 12,
                     gridMainAxisSpacing: 12,
                     gridChildAspectRatio: 0.85,
-                    dragDelay: const Duration(milliseconds: 800),
+                    dragDelay: const Duration(milliseconds: 600),
                     dragHighlightColor: dragHighlightColor,
                     draggedItemOpacity: 0.88,
                     values: [for (final a in assistants) a.id],
-                    onReorder: (from, to) =>
-                        ref.read(assistantProvider.notifier).reorderAssistant(
-                              from,
-                              to,
-                            ),
+                    onReorder: (from, to) => ref
+                        .read(assistantProvider.notifier)
+                        .reorderAssistant(from, to),
                     itemBuilder: (context, index, id) {
                       final assistant = assistants[index];
                       return AssistantCard(

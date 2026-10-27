@@ -14,22 +14,21 @@ extension _ChatPageBuildersExt on _ChatPageState {
       // The metrics notification fires for every scroll frame AND when the
       // content grows (streaming message, mermaid auto-fit, sliver extent
       // estimate corrections) AND when the viewport resizes (keyboard,
-      // composer, window). _followContentGrowth ignores the scrolling
-      // cases and only re-pins when auto-scroll is engaged; the overlay
+      // composer, window). _followContentGrowth re-pins when auto-scroll is
+      // engaged, deferring growth consumed by an active programmatic scroll
+      // animation until it settles; the overlay
       // buttons recompute their visibility from the CURRENT metrics on
       // every notification — a viewport-only change moves the at-bottom
       // relationship without firing a scroll event, and only this
       // notification carries it (an idle ScrollPosition does not notify
       // its controller listeners).
       onNotification: (_) {
-        // Re-pin first: the follow's post-frame jump must run BEFORE the
-        // overlay recompute, otherwise a content growth would read as "not
-        // at the bottom" and flash the button on for a frame until the
-        // follow's jump lands and the overlay hides it again. Both
-        // callbacks are registered in this order and run in that order
-        // post-frame: _followContentGrowth registers its post-frame jump
-        // synchronously here, and the tick's listener (which registers the
-        // overlay's post-frame recompute) runs immediately after.
+        // Re-pin first: when the list is idle, the follow's post-frame jump
+        // runs BEFORE the overlay recompute, otherwise content growth would
+        // read as "not at the bottom" and flash the button until the follow
+        // lands. During a scroll animation the follow defers its jump until
+        // settling; in that case the overlay reads the current metrics and
+        // will be recomputed after the eventual jump as usual.
         _followContentGrowth();
         _overlayMetricsTick.value++;
         return false;

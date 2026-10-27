@@ -5,7 +5,8 @@ import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, visibleForTesting, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../catcatch/models/media_kind.dart';
@@ -26,12 +27,14 @@ import '../models/task_flow_definition.dart';
 import '../models/task_flow_execution.dart';
 import '../models/flow_launch_snapshot.dart';
 import '../models/flow_payload.dart';
+import '../models/flow_temporary_output.dart';
 import '../../utils/web_file_store.dart';
 import '../../utils/provider_models.dart';
 import '../models/task_flow_exception.dart';
 import '../providers/task_flow_execution_provider.dart';
 import '../providers/task_flow_provider.dart';
 import 'block_executors/block_executors.dart';
+import 'flow_temporary_artifact_storage.dart';
 import 'task_flow_scheduler.dart';
 import 'task_flow_validator.dart';
 
@@ -419,6 +422,12 @@ class TaskFlowExecutionService {
     if (_disposed) {
       return;
     }
+    try {
+      await FlowTemporaryArtifactStorage.cleanupOrphanedExecutions(
+          _notifier.executions.map((execution) => execution.id));
+    } catch (error) {
+      debugPrint('[TaskFlow] Failed to clean orphaned temporary files: $error');
+    }
     final waiting = _notifier.executions
         .where((e) =>
             e.status == FlowExecutionStatus.waiting ||
@@ -529,7 +538,7 @@ class TaskFlowExecutionService {
       return;
     }
     try {
-      if (kIsWeb) {
+      if (kIsWeb || WebFileStore.isTestMode) {
         if ((await WebFileStore.read(path))?.isNotEmpty != true) {
           throw const FileSystemException();
         }
@@ -560,11 +569,17 @@ class TaskFlowExecutionService {
     await _ref.read(assistantProvider.notifier).ready;
     current = _currentControl(id, revision);
     if (current == null) return;
+    await _reconcileTemporaryArtifacts(id, current.snapshot!.flow,
+        allowPausedOrFailed: true);
+    current = _currentControl(id, revision);
+    if (current == null) return;
     for (final step in current.subTasks) {
       if (step.outcome != FlowStepOutcome.succeeded || step.result == null) {
         break;
       }
-      await _readable(step.result!, current.flowId);
+      if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned) {
+        await _readable(step.result!, current.flowId);
+      }
       if (_currentControl(id, revision) == null) return;
     }
     current = _currentControl(id, revision);
@@ -850,6 +865,121 @@ class TaskFlowExecutionService {
     return false;
   }
 
+  Future<void> _reconcileTemporaryArtifacts(
+    String executionId,
+    TaskFlowDefinition flow, {
+    bool allowPausedOrFailed = false,
+  }) async {
+    final initial = _execution(executionId);
+    if (initial == null) return;
+    for (var index = 0;
+        index + 1 < flow.blocks.length && index + 1 < initial.subTasks.length;
+        index++) {
+      final execution = _execution(executionId);
+      if (execution == null) return;
+      final canClean = allowPausedOrFailed ||
+          execution.status == FlowExecutionStatus.running ||
+          execution.status == FlowExecutionStatus.waiting;
+      if (!canClean) return;
+      final previous = execution.subTasks[index];
+      final next = execution.subTasks[index + 1];
+      if (previous.outcome != FlowStepOutcome.succeeded ||
+          previous.result?.temporaryArtifact == null ||
+          next.outcome != FlowStepOutcome.succeeded ||
+          next.result == null) {
+        continue;
+      }
+      await _cleanupTemporaryArtifact(
+        executionId,
+        flow.blocks[index].id,
+        previous,
+        allowPausedOrFailed: allowPausedOrFailed,
+      );
+    }
+  }
+
+  Future<void> _cleanupTemporaryArtifact(
+    String executionId,
+    String expectedBlockId,
+    FlowSubTask step, {
+    bool allowPausedOrFailed = false,
+  }) async {
+    final controlRevision = _controlRevisions[executionId];
+    bool mayDelete(TaskFlowExecution? execution) {
+      if (execution == null ||
+          execution.status == FlowExecutionStatus.completed ||
+          execution.status == FlowExecutionStatus.cancelled) {
+        return false;
+      }
+      return allowPausedOrFailed ||
+          execution.status == FlowExecutionStatus.running ||
+          execution.status == FlowExecutionStatus.waiting;
+    }
+
+    final result = step.result;
+    final artifact = result?.temporaryArtifact;
+    if (result?.fileReference == null ||
+        artifact == null ||
+        artifact.executionId != executionId ||
+        artifact.blockId != expectedBlockId ||
+        artifact.reference != result!.fileReference) {
+      throw const TaskFlowPersistenceException('临时步骤文件的所有权无法验证，已保留文件');
+    }
+    if (step.artifactCleanupStatus == FlowArtifactCleanupStatus.cleaned) return;
+
+    if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.pending &&
+        !await _notifier.setArtifactCleanupStatus(
+            executionId, step.id, FlowArtifactCleanupStatus.pending)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件清理状态');
+    }
+
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
+
+    if (!await _clearTemporaryTaskFileReference(step)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件引用清理状态，原文件已保留');
+    }
+    if (_controlRevisions[executionId] != controlRevision ||
+        !mayDelete(_execution(executionId))) {
+      return;
+    }
+    bool mayDeleteNow() =>
+        _controlRevisions[executionId] == controlRevision &&
+        mayDelete(_execution(executionId));
+
+    if (!await FlowTemporaryArtifactStorage.deleteArtifact(
+      artifact,
+      shouldDelete: mayDeleteNow,
+    )) {
+      if (!mayDeleteNow()) return;
+      throw const TaskFlowPersistenceException('临时步骤文件的存储位置无法验证，已保留文件');
+    }
+    if (!await _notifier.setArtifactCleanupStatus(
+        executionId, step.id, FlowArtifactCleanupStatus.cleaned)) {
+      throw const TaskFlowPersistenceException('无法保存临时文件已清理状态');
+    }
+  }
+
+  Future<bool> _clearTemporaryTaskFileReference(FlowSubTask step) async {
+    for (final taskId in step.temporaryFileReferenceTaskIdsToClear) {
+      final cleared = switch (step.subTaskType) {
+        'catcatch' => await _ref
+            .read(catcatchTasksProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+        'synthesis' => await _ref
+            .read(taskListProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+        _ => await _ref
+            .read(backgroundTasksProvider.notifier)
+            .clearDownloadedFilePath(taskId),
+      };
+      if (!cleared) return false;
+    }
+    return true;
+  }
+
   Future<void> _runSaved(String id) async {
     if (!_live(id)) {
       return;
@@ -872,6 +1002,8 @@ class TaskFlowExecutionService {
     final scheduler = _ref.read(taskFlowSchedulerProvider);
     String? activeStepId;
     try {
+      await _reconcileTemporaryArtifacts(id, flow);
+      if (!_live(id)) return;
       for (var i = 0; i < flow.blocks.length; i++) {
         await _waitUnpaused(id);
         if (!_live(id)) {
@@ -879,7 +1011,9 @@ class TaskFlowExecutionService {
         }
         final step = _execution(id)!.subTasks[i];
         if (step.outcome == FlowStepOutcome.succeeded && step.result != null) {
-          await _readable(step.result!, flow.id);
+          if (step.artifactCleanupStatus != FlowArtifactCleanupStatus.cleaned) {
+            await _readable(step.result!, flow.id);
+          }
           current = step.result!;
           continue;
         }
@@ -904,6 +1038,7 @@ class TaskFlowExecutionService {
           return;
         }
         final runner = _ref.read(taskFlowBlockRunnerProvider);
+        final temporaryOutput = isFlowBlockTemporary(flow.blocks, i);
         final FlowPayload result;
         _activeBlockTypes[id] = def.typeKey;
         try {
@@ -920,7 +1055,8 @@ class TaskFlowExecutionService {
                   inputDurationSec: original.inputDurationSec,
                   nextInputType: i + 1 < flow.blocks.length
                       ? flow.blocks[i + 1].getDefinition()?.inputType
-                      : null);
+                      : null,
+                  temporaryOutput: temporaryOutput);
         } finally {
           _activeBlockTypes.remove(id);
           _manualCatCatchWaits
@@ -930,10 +1066,34 @@ class TaskFlowExecutionService {
         if (!_live(id)) {
           return;
         }
-        if (!await _notifier.saveStepResult(id, step.id, result)) {
+        var savedResult = result;
+        if (temporaryOutput) {
+          final reference = result.fileReference;
+          if (reference == null ||
+              !await FlowTemporaryArtifactStorage.ownsReference(
+                executionId: id,
+                blockId: block.id,
+                reference: reference,
+              )) {
+            throw BlockExecutionException(
+              '临时文件未写入任务流专属存储',
+              blockType: def.typeKey.name,
+              blockTitle: def.label,
+            );
+          }
+          savedResult = result.withTemporaryArtifact(FlowTemporaryArtifact(
+            executionId: id,
+            blockId: block.id,
+            reference: reference,
+          ));
+        }
+        if (!await _notifier.saveStepResult(id, step.id, savedResult)) {
           throw const TaskFlowPersistenceException('无法保存步骤结果，后续步骤尚未运行');
         }
-        current = result;
+        current = savedResult;
+        if (_execution(id)?.status == FlowExecutionStatus.running) {
+          await _reconcileTemporaryArtifacts(id, flow);
+        }
       }
       await _waitUnpaused(id);
       if (!_live(id)) {
@@ -1019,6 +1179,7 @@ class TaskFlowExecutionService {
     required ProviderEntriesState providerEntries,
     int inputDurationSec = 0,
     IOType? nextInputType,
+    bool temporaryOutput = false,
   }) async {
     final manager = def.typeKey == BlockType.chat
         ? _ref.read(chatStreamManagerProvider)
@@ -1061,6 +1222,7 @@ class TaskFlowExecutionService {
         providerEntries: providerEntries,
         inputDurationSec: inputDurationSec,
         nextInputType: nextInputType,
+        temporaryOutput: temporaryOutput,
       );
     } finally {
       _activeRequestCancelTokens.remove(execId);
@@ -1082,6 +1244,7 @@ class TaskFlowExecutionService {
     required ProviderEntriesState providerEntries,
     int inputDurationSec = 0,
     IOType? nextInputType,
+    bool temporaryOutput = false,
   }) async {
     if (!def.acceptsInput(input.type)) {
       execNotifier.updateSubTaskStatus(
@@ -1104,8 +1267,9 @@ class TaskFlowExecutionService {
           execNotifier: execNotifier,
           flowSubTask: flowSubTask,
           catcatchNotifier: catcatchNotifier,
-          videoFolder: block.params['videoFolder'] ?? '',
-          audioFolder: block.params['audioFolder'] ?? '',
+          videoFolder: temporaryOutput ? '' : block.params['videoFolder'] ?? '',
+          audioFolder: temporaryOutput ? '' : block.params['audioFolder'] ?? '',
+          temporaryOutput: temporaryOutput,
           // Per-run duration from the run-mode input box wins over the
           // block's configured duration (0 = use the configured value).
           durationSecOverride: inputDurationSec,
@@ -1125,6 +1289,7 @@ class TaskFlowExecutionService {
               execNotifier: execNotifier,
               flowSubTask: flowSubTask,
               bgNotifier: bgNotifier,
+              temporaryOutput: temporaryOutput,
             ),
             def.outputType);
       case BlockType.asr:
@@ -1166,6 +1331,7 @@ class TaskFlowExecutionService {
               flowSubTask: flowSubTask,
               taskListNotifier: taskListNotifier,
               providerEntries: providerEntries,
+              temporaryOutput: temporaryOutput,
             ),
             def.outputType);
       case BlockType.chat:

@@ -248,6 +248,10 @@ extension _ProviderSettingsPanelCustomParamsExt on _ProviderSettingsPanelState {
                                   if (v == 'string' || v == 'number') {
                                     param.defaultValue = '';
                                   }
+                                  if (v == 'boolean') {
+                                    param.defaultValue = '';
+                                    param.options.clear();
+                                  }
                                   _validateJsonField(i, param);
                                 });
                               }

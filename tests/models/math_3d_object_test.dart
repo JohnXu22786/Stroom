@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_3d_object.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   group('Point3D', () {

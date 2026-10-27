@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,12 +22,14 @@ import 'package:stroom/services/storage_service.dart';
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/flow_launch_snapshot.dart';
 import 'package:stroom/task_flow/models/flow_payload.dart';
+import 'package:stroom/task_flow/models/flow_temporary_output.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
 import 'package:stroom/task_flow/models/task_flow_definition.dart';
 import 'package:stroom/task_flow/models/task_flow_execution.dart';
 import 'package:stroom/task_flow/providers/task_flow_execution_provider.dart';
 import 'package:stroom/task_flow/providers/task_flow_provider.dart';
 import 'package:stroom/task_flow/services/task_flow_execution_service.dart';
+import 'package:stroom/task_flow/services/flow_temporary_artifact_storage.dart';
 import 'package:stroom/task_flow/services/task_flow_scheduler.dart';
 import 'package:stroom/task_flow/services/task_flow_validator.dart';
 import 'package:stroom/utils/provider_models.dart';
@@ -59,6 +62,8 @@ class _ManualDownloads extends CatCatchNotifier {
   final confirmed = <String>[];
   void Function(String)? onSelect;
   void Function(String)? onConfirm;
+  void setTasksForTest(List<catcatch.CatCatchTask> tasks) => state = tasks;
+  List<catcatch.CatCatchTask> get tasksForTest => state;
 
   @override
   String addTask(String url, int expectedDurationSec,
@@ -178,6 +183,39 @@ class _Tasks extends TaskListNotifier {
   @override
   void removeTask(String taskId) {
     state = state.where((t) => t.id != taskId).toList();
+  }
+}
+
+class _BlockingClearTasks extends _Tasks {
+  _BlockingClearTasks(super.ref);
+
+  final clearEntered = Completer<void>();
+  final releaseClear = Completer<void>();
+
+  @override
+  Future<bool> clearDownloadedFilePath(String taskId) async {
+    if (!clearEntered.isCompleted) clearEntered.complete();
+    await releaseClear.future;
+    return super.clearDownloadedFilePath(taskId);
+  }
+}
+
+/// Pause cleanup after the child task state changes but before the caller can
+/// remove the execution record.
+class _PostClearGatedTasks extends _Tasks {
+  _PostClearGatedTasks(super.ref);
+
+  final clearEntered = Completer<void>();
+  final releaseClear = Completer<void>();
+
+  @override
+  Future<bool> clearDownloadedFilePath(String taskId) async {
+    final clearing = super.clearDownloadedFilePath(taskId);
+    if (!clearEntered.isCompleted) {
+      clearEntered.complete();
+      await releaseClear.future;
+    }
+    return clearing;
   }
 }
 
@@ -542,6 +580,62 @@ void main() {
             .execution(ids.last)!
             .status,
         FlowExecutionStatus.completed);
+  });
+
+  test(
+      'resume cleanup retains completed temporary child ids until references clear',
+      () async {
+    final clearedTaskIds = <String>[];
+    final notifier = TaskFlowExecutionNotifier();
+    final temporaryFlow = TaskFlowDefinition(inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+          typeKey: BlockType.tts, params: {flowTemporaryOutputParam: true}),
+      TaskFlowBlock(typeKey: BlockType.asr),
+    ]);
+    final snapshot = FlowLaunchSnapshot.capture(
+      temporaryFlow,
+      const ProviderEntriesState(),
+      const [],
+    );
+    await notifier.addExecutions([
+      TaskFlowExecution(
+        id: 'resume-reference-cleanup',
+        flowId: 'flow',
+        flowName: 'F',
+        status: FlowExecutionStatus.paused,
+        inputText: 'input',
+        snapshot: snapshot,
+        subTasks: [
+          FlowSubTask(
+            id: 'temporary-step',
+            blockTypeKey: 'tts',
+            blockLabel: 'TTS',
+            subTaskId: 'completed-child',
+            subTaskType: 'synthesis',
+            status: TaskStatus.completed,
+            outcome: FlowStepOutcome.running,
+          ),
+          _step('asr'),
+        ],
+      ),
+    ]);
+
+    notifier.prepareResume('resume-reference-cleanup');
+    expect(await notifier.persist(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    notifier.dispose();
+
+    final restoredNotifier = TaskFlowExecutionNotifier(
+      clearTemporaryTaskFileReference: (step) async {
+        clearedTaskIds.add(step.subTaskId);
+        return true;
+      },
+    );
+    expect(await restoredNotifier.restore(), isTrue);
+    await restoredNotifier.removeExecution('resume-reference-cleanup');
+    restoredNotifier.dispose();
+
+    expect(clearedTaskIds, contains('completed-child'));
   });
 
   test('snapshot preserves assistants whose display names are credential words',
@@ -1464,5 +1558,251 @@ void main() {
         {'voice': 'launch-voice', 'speed': '1.2'});
     expect(tasks.state.single.folder, 'launch-folder');
     tasks.removeTask('child');
+  });
+
+  test('clearing temporary child paths releases execution routing metadata',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    late _Tasks tasks;
+    late _ManualDownloads downloads;
+    final container = make(
+      tasks: (ref) => tasks = _Tasks(ref),
+      downloads: (ref) => downloads = _ManualDownloads(ref),
+    );
+    container.read(taskListProvider);
+    container.read(catcatchTasksProvider);
+    tasks.state = [
+      SynthesisTask(
+        id: 'tts-child',
+        title: 'Temporary speech',
+        text: 'input',
+        status: TaskStatus.completed,
+        providerConfig: ttsProviders.entries.single.configs.single,
+        modelConfig: ttsProviders.entries.single.configs.single.models.single,
+        customParams: {
+          'voice': 'launch-voice',
+          flowTemporaryExecutionIdKey: 'deleted-execution',
+          flowTemporaryBlockIdKey: 'temporary-block',
+        },
+        downloadedFilePath: 'temporary-output.wav',
+      ),
+    ];
+    downloads.setTasksForTest([
+      catcatch.CatCatchTask(
+        id: 'catcatch-child',
+        url: 'https://example.invalid/audio',
+        expectedDurationSec: 10,
+        status: catcatch.TaskStatus.completed,
+        createdAt: DateTime(2026),
+        metadata: {
+          'audioFolder': 'saved-folder',
+          flowTemporaryExecutionIdKey: 'deleted-execution',
+          flowTemporaryBlockIdKey: 'temporary-block',
+        },
+        downloadedFilePath: 'temporary-output.mp3',
+      ),
+    ]);
+
+    expect(await tasks.clearDownloadedFilePath('tts-child'), isTrue);
+    expect(await downloads.clearDownloadedFilePath('catcatch-child'), isTrue);
+
+    expect(tasks.state.single.downloadedFilePath, isNull);
+    expect(tasks.state.single.customParams, {'voice': 'launch-voice'});
+    final catcatchTask = downloads.tasksForTest.single;
+    expect(catcatchTask.downloadedFilePath, isNull);
+    expect(catcatchTask.metadata, {'audioFolder': 'saved-folder'});
+  });
+
+  test('removing an execution stops temporary output writes before clearing',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    final asrProviders = _providers('asr', 'recognize');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        ...ttsProviders.entries.map((entry) => entry.toMap()),
+        ...asrProviders.entries.map((entry) => entry.toMap()),
+      ]),
+    );
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {
+          'modelRef': _reference('voice'),
+          flowTemporaryOutputParam: true,
+        },
+      ),
+      TaskFlowBlock(
+        typeKey: BlockType.asr,
+        params: {'modelRef': _reference('recognize')},
+      ),
+    ]);
+    late _PostClearGatedTasks tasks;
+    late TaskFlowExecutionNotifier notifier;
+    final runnerStarted = Completer<void>();
+    final runnerReleased = Completer<void>();
+    final runnerFinished = Completer<void>();
+    String? temporaryReference;
+    final container = make(
+      tasks: (ref) => tasks = _PostClearGatedTasks(ref),
+      runner: (block, input, executionId, step) async {
+        if (block.typeKey == BlockType.tts) {
+          tasks.state = [
+            SynthesisTask(
+              id: step.subTaskId,
+              title: 'Temporary speech',
+              text: input.value,
+              status: TaskStatus.running,
+              providerConfig: ttsProviders.entries.single.configs.single,
+              modelConfig:
+                  ttsProviders.entries.single.configs.single.models.single,
+              customParams: {
+                flowTemporaryExecutionIdKey: executionId,
+                flowTemporaryBlockIdKey: block.id,
+              },
+            ),
+          ];
+          runnerStarted.complete();
+          await runnerReleased.future;
+          if (notifier.execution(executionId)?.isTerminal == false) {
+            temporaryReference = await FlowTemporaryArtifactStorage.writeBytes(
+              executionId: executionId,
+              blockId: block.id,
+              fileName: 'speech.wav',
+              bytes: Uint8List.fromList([1, 2, 3]),
+            );
+            tasks.state = [
+              SynthesisTask(
+                id: step.subTaskId,
+                title: 'Temporary speech',
+                text: input.value,
+                status: TaskStatus.completed,
+                providerConfig: ttsProviders.entries.single.configs.single,
+                modelConfig:
+                    ttsProviders.entries.single.configs.single.models.single,
+                customParams: {
+                  flowTemporaryExecutionIdKey: executionId,
+                  flowTemporaryBlockIdKey: block.id,
+                },
+                downloadedFilePath: temporaryReference,
+              ),
+            ];
+          }
+          runnerFinished.complete();
+          return FlowPayload.file(
+            fileReference: temporaryReference ?? 'stopped-before-write',
+            type: IOType.audio,
+            fileName: 'speech.wav',
+          );
+        }
+        return const FlowPayload.text('recognized');
+      },
+    );
+    container.read(taskListProvider);
+    container.read(taskFlowExecutionServiceProvider);
+    notifier = container.read(taskFlowExecutionsProvider.notifier);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final executionId = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'speak this')],
+    ))
+        .single;
+
+    await runnerStarted.future.timeout(_dispatchWait);
+    final removal = notifier.removeExecution(executionId);
+    await tasks.clearEntered.future.timeout(_dispatchWait);
+    runnerReleased.complete();
+    await runnerFinished.future.timeout(_dispatchWait);
+    tasks.releaseClear.complete();
+    await removal;
+
+    expect(tasks.state.single.downloadedFilePath, isNull);
+    expect(notifier.execution(executionId), isNull);
+    if (temporaryReference != null) {
+      expect(await File(temporaryReference!).exists(), isFalse);
+    }
+  });
+
+  test('pause during task-reference persistence retains the temp artifact',
+      () async {
+    final ttsProviders = _providers('tts', 'voice');
+    final asrProviders = _providers('asr', 'recognize');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'provider_entries',
+      jsonEncode([
+        ...ttsProviders.entries.map((entry) => entry.toMap()),
+        ...asrProviders.entries.map((entry) => entry.toMap()),
+      ]),
+    );
+    flow = TaskFlowDefinition(id: 'flow', inputType: IOType.text, blocks: [
+      TaskFlowBlock(
+        typeKey: BlockType.tts,
+        params: {
+          'modelRef': _reference('voice'),
+          flowTemporaryOutputParam: true,
+        },
+      ),
+      TaskFlowBlock(
+        typeKey: BlockType.asr,
+        params: {'modelRef': _reference('recognize')},
+      ),
+    ]);
+    late _BlockingClearTasks tasks;
+    late String temporaryReference;
+    final container = make(
+      tasks: (ref) => tasks = _BlockingClearTasks(ref),
+      runner: (block, input, executionId, step) async {
+        if (block.typeKey == BlockType.tts) {
+          temporaryReference = await FlowTemporaryArtifactStorage.writeBytes(
+            executionId: executionId,
+            blockId: block.id,
+            fileName: 'speech.wav',
+            bytes: Uint8List.fromList([1, 2, 3]),
+          );
+          tasks.state = [
+            SynthesisTask(
+              id: step.subTaskId,
+              title: 'Temporary speech',
+              text: input.value,
+              status: TaskStatus.completed,
+              providerConfig: ttsProviders.entries.single.configs.single,
+              modelConfig:
+                  ttsProviders.entries.single.configs.single.models.single,
+              downloadedFilePath: temporaryReference,
+            ),
+          ];
+          return FlowPayload.file(
+            fileReference: temporaryReference,
+            type: IOType.audio,
+            fileName: 'speech.wav',
+          );
+        }
+        return const FlowPayload.text('recognized');
+      },
+    );
+    container.read(taskListProvider);
+    final service = container.read(taskFlowExecutionServiceProvider);
+    final executionId = (await service.launchFlowMany(
+      'flow',
+      [const FlowRunInput(text: 'speak this')],
+    ))
+        .single;
+
+    await tasks.clearEntered.future.timeout(_dispatchWait);
+    await service.pauseExecution(executionId);
+    tasks.releaseClear.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(
+      container
+          .read(taskFlowExecutionsProvider.notifier)
+          .execution(executionId)
+          ?.status,
+      FlowExecutionStatus.paused,
+    );
+    expect(await File(temporaryReference).exists(), isTrue);
+    await service.cancelExecution(executionId);
   });
 }

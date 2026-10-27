@@ -41,6 +41,12 @@ const reportErrorTargets = [
   ['web', webTemplateSource],
 ];
 
+test('web renderer resolves large Mermaid source from session storage', () => {
+  assert.match(webTemplateSource, /params\.get\('sourceKey'\)/);
+  assert.match(webTemplateSource, /window\.sessionStorage\.getItem/);
+  assert.match(webTemplateSource, /window\.sessionStorage\.removeItem/);
+});
+
 const generationScopedResourceErrorListener = dartSource.match(
   /skeleton\.replaceFirst\(\s*'\/\*MERMAID_GENERATION_SCOPED_RESOURCE_ERROR_LISTENER\*\/',\s*'''([\s\S]*?)''',\s*\);/,
 );
@@ -131,6 +137,7 @@ function createMouseGestureHarness(mouseGestureScript) {
   const parentListeners = new Map();
   const timers = new Map();
   const panUpdates = [];
+  const transformNotifications = [];
   let nextTimerId = 0;
   let mermaidTargetClicks = 0;
   const parentWindow = {
@@ -165,7 +172,7 @@ function createMouseGestureHarness(mouseGestureScript) {
     panY: 0,
     zoomLevel: 1,
     updateTransform: () => panUpdates.push([context.panX, context.panY]),
-    notifyTransform: () => {},
+    notifyTransform: () => transformNotifications.push([context.panX, context.panY]),
     setTimeout: (callback, delay) => {
       const id = ++nextTimerId;
       timers.set(id, {callback, delay});
@@ -224,6 +231,8 @@ function createMouseGestureHarness(mouseGestureScript) {
     dispatchOutside,
     get mermaidTargetClicks() { return mermaidTargetClicks; },
     panUpdates,
+    transformNotifications,
+    get pan() { return [context.panX, context.panY]; },
     runPendingTimers() {
       for (const [id, {callback}] of [...timers]) {
         timers.delete(id);
@@ -1588,7 +1597,7 @@ const webReportError = webTemplateSource.match(
 );
 assert.ok(webReportError, 'Could not find the web reportError function');
 
-function createWebLibraryLoaderHarness(fetch) {
+function createWebLibraryLoaderHarness(fetch, {cacheHit} = {}) {
   const timers = new Map();
   const scripts = [];
   const bridgeCalls = [];
@@ -1596,6 +1605,13 @@ function createWebLibraryLoaderHarness(fetch) {
   let nextTimerId = 0;
   const loadingHint = {style: {display: 'block'}};
   const codeElement = {textContent: ''};
+  let renderCount = 0;
+  const cacheStorage = {
+    open: async () => ({
+      match: async () => ({blob: async () => cacheHit}),
+      put: async () => {},
+    }),
+  };
   const viewport = {
     children: [],
     set textContent(value) {
@@ -1609,6 +1625,10 @@ function createWebLibraryLoaderHarness(fetch) {
   const context = {
     window: {
       location: {search: '?code=graph%20TD'},
+      ...(cacheHit ? {
+        caches: cacheStorage,
+        fitToViewport: () => {},
+      } : {}),
       flutter_inappwebview: {
         callHandler: (...args) => bridgeCalls.push(args),
       },
@@ -1631,6 +1651,26 @@ function createWebLibraryLoaderHarness(fetch) {
     },
     fetch,
     URLSearchParams,
+    URL: {
+      createObjectURL: (blob) => `blob:${blob.name}`,
+    },
+    ...(cacheHit ? {
+      caches: cacheStorage,
+      Response: class {
+        constructor(blob) {
+          this.blobValue = blob;
+        }
+
+        blob() {
+          return Promise.resolve(this.blobValue);
+        }
+      },
+      DecompressionStream: class {},
+      mermaid: {
+        initialize() {},
+        run: async () => { renderCount++; },
+      },
+    } : {}),
     setTimeout: (callback, delay) => {
       const id = ++nextTimerId;
       timers.set(id, {callback, delay});
@@ -1650,6 +1690,7 @@ function createWebLibraryLoaderHarness(fetch) {
     loadingHint,
     scripts,
     timers,
+    get renderCount() { return renderCount; },
   };
 }
 
@@ -1708,6 +1749,66 @@ test('stalled raw-library fallback reports a bounded library-load error', async 
   ]);
 });
 
+test('a failed cached Mermaid script reloads gzip and renders', async () => {
+  const cachedBlob = {name: 'cached'};
+  const refreshedBlob = {
+    name: 'refreshed',
+    stream: () => ({pipeThrough: () => ({name: 'refreshed'})}),
+  };
+  let fetchCount = 0;
+  const harness = createWebLibraryLoaderHarness(() => {
+    fetchCount++;
+    return Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(refreshedBlob),
+    });
+  }, {cacheHit: cachedBlob});
+  await flushLoaderPromises();
+
+  assert.equal(harness.scripts.length, 1);
+  assert.equal(harness.scripts[0].src, 'blob:cached');
+  harness.scripts[0].onerror();
+  await flushLoaderPromises();
+
+  assert.equal(fetchCount, 1);
+  assert.equal(harness.scripts.length, 2);
+  assert.equal(harness.scripts[1].src, 'blob:refreshed');
+  harness.scripts[1].onload();
+  await flushLoaderPromises();
+
+  assert.equal(harness.renderCount, 1);
+  assert.equal(harness.loadingHint.style.display, 'none');
+});
+
+test('a failed refreshed gzip script falls back to raw once', async () => {
+  const cachedBlob = {name: 'cached'};
+  const refreshedBlob = {
+    name: 'refreshed',
+    stream: () => ({pipeThrough: () => ({name: 'refreshed'})}),
+  };
+  let fetchCount = 0;
+  const harness = createWebLibraryLoaderHarness(() => {
+    fetchCount++;
+    return Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(refreshedBlob),
+    });
+  }, {cacheHit: cachedBlob});
+  await flushLoaderPromises();
+  harness.scripts[0].onerror();
+  await flushLoaderPromises();
+  harness.scripts[1].onerror();
+
+  assert.equal(fetchCount, 1);
+  assert.equal(harness.scripts.length, 3);
+  assert.equal(harness.scripts[2].src, 'mermaid.min.js');
+  harness.scripts[2].onerror();
+
+  assert.equal(harness.scripts.length, 3);
+  assert.equal(harness.errorElements[0].textContent,
+    'Mermaid 资源加载失败: mermaid.min.js');
+});
+
 for (const [templateName, templateSource] of mouseGestureTargets) {
   const mouseGestureScript = extractMouseGestureScript(
     templateName,
@@ -1748,6 +1849,32 @@ for (const [templateName, templateSource] of mouseGestureTargets) {
       propagationStopped: false,
     }, 'suppression must be consumed exactly once');
     assert.equal(harness.mermaidTargetClicks, 3);
+  });
+
+  test(`${templateName} mouse jitter below drag slop does not pan`, () => {
+    const harness = createMouseGestureHarness(mouseGestureScript);
+
+    for (let click = 0; click < 3; click++) {
+      harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+      harness.dispatch('mousemove', {clientX: 11, clientY: 20});
+      harness.dispatch('mousemove', {clientX: 10, clientY: 22});
+      harness.dispatch('mouseup');
+
+      assert.deepEqual(harness.pan, [0, 0], 'jitter must not change pan');
+      assert.deepEqual(harness.panUpdates, [], 'jitter must not update the rendered transform');
+      assert.deepEqual(harness.transformNotifications, [], 'jitter must not publish a transform');
+      assert.deepEqual(harness.dispatch('click'), {
+        defaultPrevented: false,
+        propagationStopped: false,
+      }, 'a below-slop click must reach Mermaid');
+    }
+
+    harness.dispatch('mousedown', {clientX: 10, clientY: 20});
+    harness.dispatch('mousemove', {clientX: 15, clientY: 20});
+
+    assert.deepEqual(harness.pan, [5, 0], 'movement beyond slop must pan');
+    assert.deepEqual(harness.panUpdates, [[5, 0]]);
+    assert.deepEqual(harness.transformNotifications, [[5, 0]]);
   });
 
   test(`${templateName} expires pan suppression if its click never arrives`, () => {

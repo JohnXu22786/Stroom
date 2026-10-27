@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/providers/image_provider.dart';
@@ -1058,6 +1061,181 @@ void main() {
         );
         expect(await TextManifest.readText(renamed.storageFileName), subtitle);
         expect(await TextManifest.readText(original.storageFileName), isNull);
+      },
+    );
+
+    testWidgets(
+      'format rename retries when content changes after its source read',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_concurrent_edit',
+          name: 'diagram',
+          hash: 'hash_fmt_concurrent_edit',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 11,
+        );
+        const staleContent = 'old content';
+        const latestContent = 'latest edit';
+        await TextManifest.writeText(original.storageFileName, staleContent);
+        await TextManifest.addRecord(original);
+
+        var firstRead = true;
+        TextManifest.readFileOverrideForTesting = (_) async {
+          if (!firstRead) return null;
+          firstRead = false;
+          TextManifest.readFileOverrideForTesting = null;
+          await TextManifest.updateTextRecord(
+            TextRecord(
+              id: original.id,
+              name: original.name,
+              hash: 'hash_fmt_concurrent_edit_latest',
+              format: original.format,
+              createdAt: original.createdAt,
+              size: latestContent.length,
+            ),
+            latestContent,
+          );
+          await TextManifest.deleteFileIfUnreferenced(
+            original.hash,
+            original.storageFileName,
+          );
+          return Uint8List.fromList(utf8.encode(staleContent));
+        };
+
+        await notifier.renameRecord(original.id, 'diagram', format: 'mmd');
+
+        final converted = (await TextManifest.loadRecords())
+            .singleWhere((record) => record.id == original.id);
+        expect(converted.format, 'mmd');
+        expect(converted.hash, 'hash_fmt_concurrent_edit_latest');
+        expect(
+          await TextManifest.readText(converted.storageFileName),
+          latestContent,
+        );
+        expect(await TextManifest.readText(original.storageFileName), isNull);
+      },
+    );
+
+    testWidgets(
+      'format rename retries when initial source read misses a concurrent save',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_initial_read_miss',
+          name: 'diagram',
+          hash: 'hash_fmt_initial_read_miss',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 11,
+        );
+        const latestContent = 'latest edit';
+        await TextManifest.writeText(original.storageFileName, 'old content');
+        await TextManifest.addRecord(original);
+
+        TextManifest.readFileOverrideForTesting = (_) async {
+          TextManifest.readFileOverrideForTesting = null;
+          await TextManifest.updateTextRecord(
+            TextRecord(
+              id: original.id,
+              name: original.name,
+              hash: 'hash_fmt_initial_read_miss_latest',
+              format: original.format,
+              createdAt: original.createdAt,
+              size: latestContent.length,
+            ),
+            latestContent,
+          );
+          await TextManifest.deleteFileIfUnreferenced(
+            original.hash,
+            original.storageFileName,
+          );
+          return null;
+        };
+
+        await notifier.renameRecord(original.id, 'diagram', format: 'mmd');
+
+        final converted = (await TextManifest.loadRecords())
+            .singleWhere((record) => record.id == original.id);
+        expect(converted.format, 'mmd');
+        expect(converted.hash, 'hash_fmt_initial_read_miss_latest');
+        expect(
+          await TextManifest.readText(converted.storageFileName),
+          latestContent,
+        );
+        expect(await TextManifest.readText(original.storageFileName), isNull);
+      },
+    );
+
+    testWidgets(
+      'format rename keeps the original record when reading content fails',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_read_error',
+          name: 'diagram',
+          hash: 'hash_fmt_read_error',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 20,
+        );
+        const content = 'graph TD\n  A-->B';
+        await TextManifest.writeText(original.storageFileName, content);
+        await TextManifest.addRecord(original);
+
+        TextManifest.readFileOverrideForTesting = (_) async => null;
+        try {
+          await expectLater(
+            notifier.renameRecord(
+              original.id,
+              'diagram',
+              format: 'mmd',
+            ),
+            throwsA(isA<Exception>()),
+          );
+        } finally {
+          TextManifest.readFileOverrideForTesting = null;
+        }
+
+        final fromDb = (await TextManifest.loadRecords())
+            .firstWhere((record) => record.id == original.id);
+        expect(fromDb.format, 'srt');
+        expect(fromDb.storageFileName, original.storageFileName);
+        expect(await TextManifest.readText(original.storageFileName), content);
+        expect(await TextManifest.readText('hash_fmt_read_error.txt'), isNull);
+      },
+    );
+
+    testWidgets(
+      'format rename keeps the original format when source is missing',
+      (WidgetTester t) async {
+        final notifier = TextRecordsNotifier();
+        await notifier.loadRecords();
+        final original = TextRecord(
+          id: 'txt_fmt_missing_source',
+          name: 'diagram',
+          hash: 'hash_fmt_missing_source',
+          format: 'srt',
+          createdAt: DateTime.now(),
+          size: 0,
+        );
+        await TextManifest.addRecord(original);
+
+        await expectLater(
+          notifier.renameRecord(original.id, 'diagram', format: 'mmd'),
+          throwsA(isA<Exception>()),
+        );
+
+        final fromDb = (await TextManifest.loadRecords())
+            .firstWhere((record) => record.id == original.id);
+        expect(fromDb.format, 'srt');
+        expect(fromDb.storageFileName, original.storageFileName);
+        expect(
+            await TextManifest.readText('hash_fmt_missing_source.txt'), isNull);
       },
     );
 

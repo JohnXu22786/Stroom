@@ -186,6 +186,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 50),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 5),
+      );
 
       expect(find.text('数据格式升级完成'), findsNothing);
       // 启动页（含 tagline）已从树中移除 → 主应用可见。

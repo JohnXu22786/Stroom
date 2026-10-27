@@ -7,12 +7,16 @@ void registerBundledAssetLicenses() {
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks(
       const ['MathLive 0.111.0'],
-      await rootBundle.loadString('assets/vendor/mathlive/LICENSE.txt'),
+      await rootBundle.loadString(
+        'packages/visual_math/assets/vendor/mathlive/LICENSE.txt',
+      ),
     );
 
     yield LicenseEntryWithLineBreaks(
       const ['KaTeX fonts (katex 0.16.22)'],
-      await rootBundle.loadString('assets/vendor/mathlive/fonts/LICENSE.txt'),
+      await rootBundle.loadString(
+        'packages/visual_math/assets/vendor/mathlive/fonts/LICENSE.txt',
+      ),
     );
 
     yield LicenseEntryWithLineBreaks(

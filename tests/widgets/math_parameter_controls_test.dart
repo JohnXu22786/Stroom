@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_parameter.dart';
-import 'package:stroom/widgets/math_parameter_controls.dart';
+import 'package:visual_math/visual_math.dart';
 
 Finder field(String label) => find.widgetWithText(TextFormField, label);
 

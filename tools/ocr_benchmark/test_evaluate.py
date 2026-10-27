@@ -58,6 +58,35 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_empty_gold_is_rejected_for_nonblank_fixture_but_blank_is_valid(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "english",
+                    "gold_text": " \n ",
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        with self.assertRaisesRegex(EvaluationError, "gold_text must not be empty"):
+            evaluate_predictions(
+                manifest,
+                predictions(
+                    [{"fixture_id": "english", "text": "hallucination"}]
+                ),
+            )
+
+        blank_report = evaluate_predictions(
+            {
+                "fixtures": [
+                    {"id": "blank", "gold_text": "", "categories": ["blank"]}
+                ]
+            },
+            predictions([{"fixture_id": "blank", "text": ""}]),
+        )
+        self.assertEqual(blank_report["metrics"]["page_omission_rate"]["value"], 0)
+
     def test_cli_reports_invalid_utf8_prediction_without_traceback(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2028,6 +2057,32 @@ class EvaluateTests(unittest.TestCase):
 
         self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
         self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
+
+    def test_latex_indexed_roots_match_unicode_root_symbols(self):
+        for fixture_id, formula, prediction in (
+            ("cube-root", "∛(x+1)", r"$\sqrt[3]{x+1}$"),
+            ("fourth-root", "∜x", r"$\sqrt[4]{x}$"),
+        ):
+            with self.subTest(fixture_id=fixture_id):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": fixture_id,
+                            "gold_text": formula,
+                            "formula_text": formula,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [{"fixture_id": fixture_id, "text": prediction}]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                self.assertEqual(report["metrics"]["formula_fidelity"]["value"], 1)
+                self.assertEqual(report["metrics"]["character_error_rate"]["value"], 0)
 
     def test_nested_square_root_fraction_is_scored_against_its_display_text(self):
         manifest = {

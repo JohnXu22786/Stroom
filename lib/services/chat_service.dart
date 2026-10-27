@@ -539,6 +539,7 @@ class ChatService {
       case 'boolean':
         return defaultValue.toLowerCase() == 'true';
       case 'json':
+        if (defaultValue.trim().isEmpty) return const _OmittedSentinel();
         try {
           return parseJsonValue(defaultValue);
         } on FormatException catch (e) {

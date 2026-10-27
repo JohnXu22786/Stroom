@@ -31,6 +31,7 @@ Future<String> executeCatCatchBlock({
   required CatCatchNotifier catcatchNotifier,
   String videoFolder = '',
   String audioFolder = '',
+  bool temporaryOutput = false,
 
   /// Per-run duration (seconds) from the run-mode input box. When > 0 it
   /// overrides the block's configured `durationSec`; 0 = use the block's
@@ -46,20 +47,57 @@ Future<String> executeCatCatchBlock({
   void Function(FlowPayload payload)? onOutputPayload,
 }) async {
   final taskId = const Uuid().v4();
-  execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
-  execNotifier.updateSubTaskStatus(execId, flowSubTask.id, TaskStatus.running);
+  if (temporaryOutput) {
+    if (!await execNotifier.updateSubTaskIdPersisted(
+      execId,
+      flowSubTask.id,
+      taskId,
+    )) {
+      throw BlockExecutionException(
+        '无法保存临时任务标识',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+    if (!execNotifier.startSubTaskIfActive(
+      execId,
+      flowSubTask.id,
+      taskId,
+    )) {
+      throw BlockExecutionException(
+        '任务流已暂停或结束，未启动临时下载任务',
+        blockType: def.typeKey.name,
+        blockTitle: def.label,
+      );
+    }
+  } else {
+    execNotifier.updateSubTaskId(execId, flowSubTask.id, taskId);
+    execNotifier.updateSubTaskStatus(
+        execId, flowSubTask.id, TaskStatus.running);
+  }
   final durationSec = durationSecOverride > 0
       ? durationSecOverride
       : asIntParam(block.params, 'durationSec', 0);
   final automatic = block.params['automaticResourceSelection'] == true;
-  catcatchNotifier.addTask(
-    input,
-    durationSec,
-    taskId: taskId,
-    videoFolder: videoFolder,
-    audioFolder: audioFolder,
-    deferSingleResourceSelection: automatic,
-  );
+  if (temporaryOutput) {
+    catcatchNotifier.addTemporaryTask(
+      input,
+      durationSec,
+      taskId: taskId,
+      executionId: execId,
+      blockId: block.id,
+      deferSingleResourceSelection: automatic,
+    );
+  } else {
+    catcatchNotifier.addTask(
+      input,
+      durationSec,
+      taskId: taskId,
+      videoFolder: videoFolder,
+      audioFolder: audioFolder,
+      deferSingleResourceSelection: automatic,
+    );
+  }
 
   // Stall detection instead of a wall-clock deadline: a large download or
   // long conversion updates step progress continuously, so a healthy task
@@ -197,8 +235,9 @@ Future<String> executeCatCatchBlock({
       // Native saves have already registered this exact completed path.
       // Legacy and mocked tasks still use the cancellation-aware fallback.
       CompletedMediaRegistration? registration;
-      if (task.metadata[catcatch.CatCatchTask.nativeRegisteredPathKey] !=
-          path) {
+      if (!temporaryOutput &&
+          task.metadata[catcatch.CatCatchTask.nativeRegisteredPathKey] !=
+              path) {
         try {
           onFallbackRegistration?.call();
           registration = await registerFlowCatCatchOutput(path, task,

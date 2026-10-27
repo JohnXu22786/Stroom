@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:function_tree/src/defs.dart' as engine;
-import 'package:stroom/models/math_expression.dart';
-import 'package:stroom/models/math_input_catalog.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   test('explicit logarithm shortcuts keep their bases and exponential grouping',
@@ -16,10 +15,12 @@ void main() {
       'power': 4,
       'power2': 4,
       'power10': 100,
-      'reciprocal': 0.5,
-      'negativePower': 0.25,
-      'scientific': 200,
     };
+    final shortcutNames = mathExponentialInputs.map((key) => key.name).toSet();
+    expect(
+      shortcutNames.intersection({'reciprocal', 'negativePower', 'scientific'}),
+      isEmpty,
+    );
     for (final key in mathExponentialInputs) {
       final latex = key.latex
           .replaceAll('#0', '2')

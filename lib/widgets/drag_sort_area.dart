@@ -70,6 +70,12 @@ class DragSortArea extends StatefulWidget {
   /// 胶囊布局：点击回调（勾选/取消）。
   final void Function(String value)? onTap;
 
+  /// 胶囊布局：是否可编辑（在删除按钮前显示编辑按钮）。
+  final bool Function(String value)? editable;
+
+  /// 胶囊布局：编辑回调。
+  final void Function(String value)? onEdit;
+
   /// 胶囊布局：删除回调。
   final void Function(String value)? onDelete;
 
@@ -98,6 +104,8 @@ class DragSortArea extends StatefulWidget {
     this.selected,
     this.deletable,
     this.onTap,
+    this.editable,
+    this.onEdit,
     this.onDelete,
     this.itemBuilder,
     required this.onReorder,
@@ -143,10 +151,7 @@ class DragSortRowHandle extends StatelessWidget {
       onDraggableCanceled: (velocity, offset) => controller.dragCanceled(),
       // 反馈在 Overlay 上以松散约束布局，必须限定宽度（行内 Expanded
       // 需要有界宽度，否则整行会被撑满屏幕）。
-      feedback: SizedBox(
-        width: controller.maxWidth,
-        child: feedback,
-      ),
+      feedback: SizedBox(width: controller.maxWidth, child: feedback),
       childWhenDragging: Opacity(opacity: 1.0, child: child),
       child: child,
     );
@@ -196,6 +201,10 @@ class _DragSortAreaState extends State<DragSortArea> {
 
   /// 最近一次拖拽指针的全局坐标（边缘滚动时重新计算插入点）。
   Offset? _lastDragGlobal;
+
+  /// 网格项松手后飞向槽位的副本；源项保持隐藏直到动画结束。
+  OverlayEntry? _releaseOverlayEntry;
+  int? _releaseIndex;
 
   /// 条目之间的横向间隙（网格用列间距，其余 8）。
   double get _itemGap => widget.grid ? widget.gridCrossAxisSpacing : 8;
@@ -263,15 +272,21 @@ class _DragSortAreaState extends State<DragSortArea> {
     // dispose——必须停掉自动滚动，否则其内部循环会对已销毁的 ScrollPosition
     // 继续滚动、并回调 _onScrollDuringDrag 对已销毁的 State 调用 setState。
     _stopAutoScroll();
+    _releaseOverlayEntry?.remove();
+    _releaseOverlayEntry?.dispose();
     super.dispose();
   }
 
-  void dragEnd() {
+  void dragEnd([DraggableDetails? details]) {
     _stopAutoScroll();
+    // The owning page can be removed while a drag avatar is active. Do not
+    // access this State's context or commit a reorder after disposal.
+    if (!mounted) return;
     final d = _dragIndex;
     final t = _insertIndex;
-    // 页面已在拖拽中被移除（返回上级等）：不更新 UI，也不提交排序
-    if (!mounted) return;
+    if (widget.grid && details != null && d != null && t != null) {
+      _animateGridRelease(d, t, details.offset);
+    }
     setState(() {
       _dragIndex = null;
       _insertIndex = null;
@@ -279,6 +294,70 @@ class _DragSortAreaState extends State<DragSortArea> {
     if (d == null || t == null || d == t) return;
     // _insertIndex 已是「移除后插入」索引
     widget.onReorder(d, t);
+  }
+
+  void _animateGridRelease(int from, int to, Offset globalOffset) {
+    final areaBox = context.findRenderObject() as RenderBox?;
+    final overlay = Overlay.maybeOf(context);
+    final overlayBox = overlay?.context.findRenderObject() as RenderBox?;
+    if (areaBox == null ||
+        overlay == null ||
+        overlayBox == null ||
+        !areaBox.hasSize ||
+        !overlayBox.hasSize) {
+      return;
+    }
+
+    final targetRect = _layoutPreview(to, from)[to];
+    final targetGlobal = areaBox.localToGlobal(targetRect.topLeft);
+    // DraggableDetails.offset is already the feedback's global top-left
+    // (the pointer's drag anchor has been subtracted by Draggable).
+    final begin = overlayBox.globalToLocal(globalOffset);
+    final end = overlayBox.globalToLocal(targetGlobal);
+    final value = widget.values[from];
+    final releasedChild = _withDragHighlight(
+      widget.itemBuilder!(context, from, value),
+    );
+
+    _releaseOverlayEntry?.remove();
+    _releaseOverlayEntry?.dispose();
+    // Reordering moves the source to [to] before the next build. Hide only
+    // that slot, so duplicate values elsewhere remain visible.
+    _releaseIndex = to;
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (overlayContext) => TweenAnimationBuilder<Offset>(
+        tween: Tween<Offset>(begin: begin, end: end),
+        duration: const Duration(milliseconds: 190),
+        curve: Curves.easeOutBack,
+        onEnd: () {
+          if (!identical(_releaseOverlayEntry, entry)) return;
+          entry.remove();
+          entry.dispose();
+          _releaseOverlayEntry = null;
+          if (mounted) {
+            setState(() => _releaseIndex = null);
+          }
+        },
+        builder: (context, position, child) => Positioned(
+          left: position.dx,
+          top: position.dy,
+          width: targetRect.width,
+          height: targetRect.height,
+          child: IgnorePointer(child: child),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: releasedChild,
+          ),
+        ),
+      ),
+    );
+    _releaseOverlayEntry = entry;
+    overlay.insert(entry);
   }
 
   void dragCanceled() {
@@ -349,8 +428,10 @@ class _DragSortAreaState extends State<DragSortArea> {
     return kPrime < t ? kPrime : kPrime + 1;
   }
 
-  List<Rect> _layoutRects(List<double> widths,
-      [List<double> minWidths = const []]) {
+  List<Rect> _layoutRects(
+    List<double> widths, [
+    List<double> minWidths = const [],
+  ]) {
     final rects = <Rect>[];
     var x = 0.0, y = 0.0, rowBottom = 0.0;
     final itemHeight = widget.grid
@@ -361,7 +442,7 @@ class _DragSortAreaState extends State<DragSortArea> {
     for (var i = 0; i < widths.length; i++) {
       var w = widths[i];
       if (w > _maxWidth) w = _maxWidth;
-      // 可删除胶囊不能低于其最小宽度（padding + 边框 + 固定 24px 按钮），
+      // 带操作按钮的胶囊不能低于其最小宽度（padding + 边框 + 按钮），
       // 否则内部 Row 溢出抛异常。父级过窄时轻微超出布局宽度（Stack
       // clipBehavior 为 none，可正常绘制）。
       if (i < minWidths.length && w < minWidths[i]) w = minWidths[i];
@@ -376,13 +457,15 @@ class _DragSortAreaState extends State<DragSortArea> {
     return rects;
   }
 
-  /// 可删除胶囊的最小宽度（水平 padding 20 + 边框 + 删除按钮 24）。
+  /// 可操作胶囊的最小宽度（水平 padding 20 + 边框 + 每个操作按钮 24）。
   double _minWidthOf(int k) {
     if (!widget.wrap) return 0;
     final value = widget.values[k];
-    if (!(widget.deletable?.call(value) ?? false)) return 0;
+    final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
+    if (!deletable && !editable) return 0;
     final selected = widget.selected?.call(value) ?? false;
-    return 20 + (selected ? 3.0 : 2.0) + _kPillDeleteWidth;
+    return 20 + (selected ? 3.0 : 2.0) + _kPillDeleteWidth * (editable ? 2 : 1);
   }
 
   double _widthOf(int k) {
@@ -409,10 +492,12 @@ class _DragSortAreaState extends State<DragSortArea> {
     // 胶囊会横向溢出 1px。
     final border = selected ? 3.0 : 2.0;
     final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
+    final hasActions = deletable || editable;
     return painter.width +
-        (deletable ? 20 : 24) +
+        (hasActions ? 20 : 24) +
         border +
-        (deletable ? _kPillDeleteWidth : 0);
+        _kPillDeleteWidth * ((deletable ? 1 : 0) + (editable ? 1 : 0));
   }
 
   bool get _uniqueValues =>
@@ -444,8 +529,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       ignoringFeedbackPointer: true,
       onDragStarted: () => dragStarted(k),
       onDragUpdate: (d) => dragUpdate(d.globalPosition),
-      onDragEnd: (details) => dragEnd(),
-      onDraggableCanceled: (velocity, offset) => dragCanceled(),
+      onDragEnd: dragEnd,
       feedback: Container(
         width: _gridCellWidth,
         height: _gridCellHeight,
@@ -531,6 +615,7 @@ class _DragSortAreaState extends State<DragSortArea> {
   Widget _pillVisual(String value, ColorScheme cs) {
     final selected = widget.selected?.call(value) ?? false;
     final deletable = widget.deletable?.call(value) ?? false;
+    final editable = widget.editable?.call(value) ?? false;
     final text = Text(
       value,
       maxLines: 1,
@@ -542,7 +627,7 @@ class _DragSortAreaState extends State<DragSortArea> {
       ),
     );
     final chip = Container(
-      padding: EdgeInsets.fromLTRB(12, 6, deletable ? 8 : 12, 6),
+      padding: EdgeInsets.fromLTRB(12, 6, deletable || editable ? 8 : 12, 6),
       decoration: BoxDecoration(
         // 与聊天推理面板的 OptionChip 一致：选中 = 主色淡底 + 主色边框
         color: selected ? cs.primaryContainer : Colors.transparent,
@@ -556,11 +641,26 @@ class _DragSortAreaState extends State<DragSortArea> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(child: text),
+          if (editable) _editControl(value, cs),
           if (deletable) _deleteControl(value, cs),
         ],
       ),
     );
     return chip;
+  }
+
+  /// 胶囊右侧的编辑按钮：位于删除按钮之前。
+  Widget _editControl(String value, ColorScheme cs) {
+    return GestureDetector(
+      onTap: widget.onEdit == null ? null : () => widget.onEdit!(value),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: _kPillDeleteWidth,
+        height: _kPillHeight - 12 - 3,
+        alignment: Alignment.center,
+        child: Icon(Icons.edit, size: 14, color: cs.onSurfaceVariant),
+      ),
+    );
   }
 
   /// 胶囊右侧的删除按钮：与文字标签同一行、等高（整行高度都可点），
@@ -587,11 +687,13 @@ class _DragSortAreaState extends State<DragSortArea> {
       height: size.height,
       decoration: BoxDecoration(
         color: cs.primaryContainer.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(widget.wrap
-            ? 20
-            : widget.grid
-                ? 16
-                : 8),
+        borderRadius: BorderRadius.circular(
+          widget.wrap
+              ? 20
+              : widget.grid
+                  ? 16
+                  : 8,
+        ),
         border: Border.all(
           color: cs.primary.withValues(alpha: 0.7),
           width: 1.5,
@@ -658,10 +760,7 @@ class _DragSortAreaState extends State<DragSortArea> {
               _keyOf(d),
               rects[t],
               !widget.wrap
-                  ? Opacity(
-                      opacity: widget.draggedItemOpacity,
-                      child: _item(d),
-                    )
+                  ? Opacity(opacity: widget.draggedItemOpacity, child: _item(d))
                   : _item(d),
             ));
           } else {
@@ -671,10 +770,15 @@ class _DragSortAreaState extends State<DragSortArea> {
             );
             for (var k = 0; k < n; k++) {
               final child = _item(k);
+              final releasing = widget.grid && _releaseIndex == k;
               entries.add((
                 _keyOf(k),
                 rects[k],
-                !widget.wrap ? Opacity(opacity: 1.0, child: child) : child,
+                releasing
+                    ? Opacity(opacity: 0, child: child)
+                    : !widget.wrap
+                        ? Opacity(opacity: 1.0, child: child)
+                        : child,
               ));
             }
           }

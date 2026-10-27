@@ -4,6 +4,7 @@ import '../models/block_type_definition.dart';
 import '../models/io_type.dart';
 import '../models/task_flow_definition.dart';
 import '../models/task_flow_chain_editor.dart';
+import '../models/flow_temporary_output.dart';
 import 'flow_block_card.dart';
 import 'io_type_indicator.dart';
 
@@ -19,6 +20,8 @@ class BlockChainEditor extends StatelessWidget {
   final void Function(int index)? onDuplicateBlock;
   final void Function(int index, int destination)? onMoveBlock;
   final String? selectedBlockId;
+  final ValueChanged<bool>? onTemporaryOutputsChanged;
+  final void Function(int index, bool enabled)? onTemporaryOutputChanged;
 
   const BlockChainEditor({
     super.key,
@@ -33,6 +36,8 @@ class BlockChainEditor extends StatelessWidget {
     this.onDuplicateBlock,
     this.onMoveBlock,
     this.selectedBlockId,
+    this.onTemporaryOutputsChanged,
+    this.onTemporaryOutputChanged,
   });
 
   /// The types users can pick for the initial input — text/audio/image/
@@ -43,6 +48,20 @@ class BlockChainEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final issues = TaskFlowChainEditor.validateConnections(blocks, inputType);
+    final temporaryOutputIndices = [
+      for (var index = 0; index < blocks.length; index++)
+        if (isFlowTemporaryOutputEligible(blocks, index)) index,
+    ];
+    final temporaryOutputCount = temporaryOutputIndices
+        .where((index) => isFlowTemporaryOutputEnabled(blocks[index]))
+        .length;
+    final bool? allTemporary = temporaryOutputIndices.isEmpty
+        ? false
+        : temporaryOutputCount == temporaryOutputIndices.length
+            ? true
+            : temporaryOutputCount == 0
+                ? false
+                : null;
     return Column(
       children: [
         Expanded(
@@ -64,6 +83,11 @@ class BlockChainEditor extends StatelessWidget {
                       index: displayIndex,
                       isFirst: index == 0,
                       isLast: isLast,
+                      onTemporaryOutputChanged:
+                          isFlowTemporaryOutputEligible(blocks, index)
+                              ? (enabled) =>
+                                  onTemporaryOutputChanged?.call(index, enabled)
+                              : null,
                       selected: selectedBlockId == block.id,
                       validationMessage: issues
                           .where((issue) => issue.blockId == block.id)
@@ -97,8 +121,34 @@ class BlockChainEditor extends StatelessWidget {
             ],
           ),
         ),
-        _buildBottomBar(context),
+        _buildBottomBar(
+          context,
+          allTemporary,
+          showTemporaryOutputControl: temporaryOutputIndices.isNotEmpty,
+        ),
       ],
+    );
+  }
+
+  Widget _buildTemporaryOutputControl(BuildContext context, bool? value) {
+    return Tooltip(
+      message: '下一个步骤成功保存结果后清理；最终步骤始终保留',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Checkbox(
+            tristate: true,
+            value: value,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onChanged: onTemporaryOutputsChanged == null
+                ? null
+                : (_) =>
+                    onTemporaryOutputsChanged!(value == true ? false : true),
+          ),
+          const Text('临时中间文件', style: TextStyle(fontSize: 11)),
+        ],
+      ),
     );
   }
 
@@ -225,7 +275,11 @@ class BlockChainEditor extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomBar(BuildContext context) {
+  Widget _buildBottomBar(
+    BuildContext context,
+    bool? allTemporary, {
+    required bool showTemporaryOutputControl,
+  }) {
     final cs = Theme.of(context).colorScheme;
 
     return SafeArea(
@@ -237,19 +291,28 @@ class BlockChainEditor extends StatelessWidget {
           color: cs.surface,
           border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.5)),
         ),
-        child: SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton.icon(
-            onPressed: () => _showAddBlockSheet(context),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('添加功能块', style: TextStyle(fontSize: 14)),
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+        child: Row(
+          children: [
+            if (showTemporaryOutputControl) ...[
+              _buildTemporaryOutputControl(context, allTemporary),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: SizedBox(
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showAddBlockSheet(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('添加功能块', style: TextStyle(fontSize: 14)),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

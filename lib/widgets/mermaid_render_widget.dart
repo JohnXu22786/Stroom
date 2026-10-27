@@ -245,8 +245,8 @@ class MermaidRenderWidget extends StatefulWidget {
     }
     if (transformDocumentGeneration != null) {
       skeleton = skeleton.replaceFirst(
-        "callHandler('onTransformChanged', zoomLevel, panX, panY);",
-        "callHandler('onTransformChanged', zoomLevel, panX, panY, "
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);",
+        "callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete, "
             "$transformDocumentGeneration);",
       );
     }
@@ -419,21 +419,53 @@ class MermaidRenderWidget extends StatefulWidget {
 
   /// Web-only: builds the full template URL for [code]. The ?v= query
   /// forces a fresh template fetch (a stale browser/iframe cache of the
-  /// old template would otherwise keep failing after an app update), and
-  /// the code travels as its own &code= parameter — both must share one
-  /// query string, or URLSearchParams cannot find the code and the
-  /// template renders the empty-code placeholder.
+  /// old template would otherwise keep failing after an app update).
+  /// Small sources travel in the query string; large sources use same-origin
+  /// session storage so chart data does not grow the navigation URL.
   ///
   /// Bump ?v= whenever assets/vendor/mermaid_render.html changes (and keep
   /// the template's TEMPLATE_VERSION in sync: it keys the decompressed
   /// library's CacheStorage entry, so a stale version would serve the
   /// previous library forever).
-  static String buildWebAssetUrl(String code) {
-    final base = '$webAssetTemplateUrl?v=17';
+  static const _webCodeQueryEncodedLimit = 1500;
+  static int _webSourceStorageGeneration = 0;
+
+  static String buildWebAssetUrl(String code, {String? sourceKey}) {
+    final base = '$webAssetTemplateUrl?v=18';
     final trimmed = code.trim();
-    return trimmed.isEmpty
-        ? base
-        : '$base&code=${Uri.encodeQueryComponent(trimmed)}';
+    if (trimmed.isEmpty) return base;
+
+    final encodedCode = Uri.encodeQueryComponent(trimmed);
+    if (encodedCode.length > _webCodeQueryEncodedLimit) {
+      if (sourceKey != null && sourceKey.isNotEmpty) {
+        return '$base&sourceKey=${Uri.encodeQueryComponent(sourceKey)}';
+      }
+      throw ArgumentError.value(
+        code,
+        'code',
+        'Large Mermaid sources must be prepared for web storage first.',
+      );
+    }
+    return '$base&code=$encodedCode';
+  }
+
+  /// Stores long source outside the navigation URL, then returns a template
+  /// URL that reads it from session storage. [storeSource] runs in the
+  /// web view's same-origin browsing context.
+  static Future<String> prepareWebAssetUrl(
+    String code,
+    Future<void> Function(String key, String source) storeSource,
+  ) async {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty ||
+        Uri.encodeQueryComponent(trimmed).length <= _webCodeQueryEncodedLimit) {
+      return buildWebAssetUrl(trimmed);
+    }
+
+    final storageKey =
+        'mermaid-${DateTime.now().microsecondsSinceEpoch}-${++_webSourceStorageGeneration}';
+    await storeSource(storageKey, trimmed);
+    return buildWebAssetUrl(trimmed, sourceKey: storageKey);
   }
 
   /// Load-once cache of the bundled mermaid.js source, shared by every
@@ -669,7 +701,7 @@ MERMAID_CODE_PLACEHOLDER
     function notifyTransform() {
       try {
         if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
-          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY);
+          window.flutter_inappwebview.callHandler('onTransformChanged', zoomLevel, panX, panY, fitComplete);
         }
       } catch(_) {}
     }
@@ -859,8 +891,8 @@ MERMAID_CODE_PLACEHOLDER
       activeNativeGestureId = null;
       nativeGestureZoomLevel = zoomLevel;
       updateTransform();
-      notifyTransform();
       fitComplete = true;
+      notifyTransform();
       if (typeof replayPendingZoomOperations === 'function') {
         replayPendingZoomOperations();
       }
@@ -952,10 +984,12 @@ MERMAID_LOADER_PLACEHOLDER
         if (deltaX * deltaX + deltaY * deltaY > dragSlop * dragSlop) {
           hasDragged = true;
         }
-        panX = panStartX + deltaX;
-        panY = panStartY + deltaY;
-        updateTransform();
-        notifyTransform();
+        if (hasDragged) {
+          panX = panStartX + deltaX;
+          panY = panStartY + deltaY;
+          updateTransform();
+          notifyTransform();
+        }
         e.preventDefault();
       }
     });
@@ -1140,6 +1174,9 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
 
   /// Current zoom level tracked on the Flutter side.
   double _zoomLevel = 1.0;
+
+  /// Whether this native document has reported a JavaScript transform.
+  bool _hasReceivedNativeTransform = false;
 
   /// Zoom inputs made before the WebView is ready to accept commands.
   final List<
@@ -1354,9 +1391,10 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
   }
 
   void _loadMermaidCode() {
-    _mermaidDocumentGeneration++;
+    final generation = ++_mermaidDocumentGeneration;
     _hasLoadedPage = false;
     _canApplyZoomCommands = false;
+    _hasReceivedNativeTransform = false;
     final code = widget.mermaidCode.trim();
 
     if (!kIsWeb &&
@@ -1375,25 +1413,14 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     if (ctrl == null) return;
 
     if (kIsWeb) {
-      // Web: load the bundled asset template (same origin, no CDN request)
-      // with the code as a query parameter. A data: URL cannot be used
+      // Web: load the bundled asset template (same origin, no CDN request).
+      // Large sources use session storage to keep the navigation URL small.
+      // A data: URL cannot be used
       // here — Chromium truncates data: URLs at ~1MB, and the bundled
       // mermaid.min.js cannot be reached from a data: page (opaque origin).
       // The iframe manages its own initial loading state; retained-view
       // retries arm a Flutter fallback separately in [_retry].
-      final baseUrl = MermaidRenderWidget.buildWebAssetUrl(code);
-      final isTrackedRetry =
-          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
-      final url = isTrackedRetry
-          ? '$baseUrl&attempt=${++_webRetryGeneration}'
-          : _webLoadUrl != null
-              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
-              : baseUrl;
-      _webLoadUrl = _resolveWebUrl(url);
-      if (isTrackedRetry) {
-        _webRetryUrl = _webLoadUrl;
-      }
-      ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+      unawaited(_loadWebMermaidCode(ctrl, code, generation));
       return;
     }
 
@@ -1432,6 +1459,68 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       encoding: 'utf8',
       baseUrl: nativeLoadBaseUrl,
     );
+  }
+
+  Future<void> _loadWebMermaidCode(
+    InAppWebViewController ctrl,
+    String code,
+    int generation,
+  ) async {
+    String? preparedSourceKey;
+    try {
+      final baseUrl = await MermaidRenderWidget.prepareWebAssetUrl(
+        code,
+        (key, source) async {
+          await ctrl.evaluateJavascript(
+            source:
+                'window.sessionStorage.setItem(${jsonEncode(key)}, ${jsonEncode(source)});',
+          );
+        },
+      );
+      preparedSourceKey = Uri.parse(baseUrl).queryParameters['sourceKey'];
+      if (!mounted || generation != _mermaidDocumentGeneration) {
+        if (preparedSourceKey != null) {
+          await _removeStoredWebSource(ctrl, preparedSourceKey);
+          preparedSourceKey = null;
+        }
+        return;
+      }
+
+      final isTrackedRetry =
+          _readyFallbackTimer?.isActive == true || _webRetryUrl != null;
+      final url = isTrackedRetry
+          ? '$baseUrl&attempt=${++_webRetryGeneration}'
+          : _webLoadUrl != null
+              ? '$baseUrl&sourceUpdate=${++_webSourceUpdateGeneration}'
+              : baseUrl;
+      _webLoadUrl = _resolveWebUrl(url);
+      if (isTrackedRetry) {
+        _webRetryUrl = _webLoadUrl;
+      }
+      await ctrl.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    } catch (error) {
+      if (preparedSourceKey != null) {
+        await _removeStoredWebSource(ctrl, preparedSourceKey);
+      }
+      if (!mounted || generation != _mermaidDocumentGeneration) return;
+      debugPrint('[MermaidRenderWidget] Failed to prepare web source: $error');
+      setState(() => _errorMessage = '图表代码加载失败，请重试');
+    }
+  }
+
+  Future<void> _removeStoredWebSource(
+    InAppWebViewController ctrl,
+    String sourceKey,
+  ) async {
+    try {
+      await ctrl.evaluateJavascript(
+        source: 'window.sessionStorage.removeItem(${jsonEncode(sourceKey)});',
+      );
+    } catch (error) {
+      debugPrint(
+        '[MermaidRenderWidget] Failed to remove stored web source: $error',
+      );
+    }
   }
 
   void _retry() {
@@ -1822,16 +1911,16 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
       return;
     }
 
-    // Keep native-side state current for Flutter gesture handling, but let
-    // JavaScript apply the toolbar delta to its live zoom. The web platform
-    // has no JS handler bridge, so Flutter's cached level may not reflect
-    // auto-fit or JS gesture changes.
+    // JavaScript applies the toolbar delta to its live zoom. Keep the native
+    // cache current for gesture handling, but don't discard input based on a
+    // stale limit before this document reports its initial transform: fit can
+    // reset JS zoom before the queued toolbar deltas are replayed.
     if (!kIsWeb) {
       final target = _clampManualZoom(
         _zoomLevel + delta,
         currentZoom: _zoomLevel,
       );
-      if (target == _zoomLevel) return;
+      if (_hasReceivedNativeTransform && target == _zoomLevel) return;
       _zoomLevel = target;
     }
 
@@ -2124,7 +2213,18 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
     // reliably cover it. Unmount the iframe while showing source; returning
     // to preview starts a new render attempt with a fresh creation fallback.
     if (_showSourceCode && kIsWeb) {
-      return _buildSourceCodeView(cs, isDark, effectiveHeight);
+      final sourceView = _buildSourceCodeView(cs, isDark, effectiveHeight);
+      if (!widget.expand) return sourceView;
+
+      // A Row gives its children loose height constraints. Keep expanded
+      // previews full-height in that layout while retaining adaptive source
+      // height when no bounded preview height is available.
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (!constraints.hasBoundedHeight) return sourceView;
+          return SizedBox(height: constraints.maxHeight, child: sourceView);
+        },
+      );
     }
 
     // ---- Render layer + source-code overlay (stable root) ----
@@ -2297,10 +2397,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                         return;
                       }
                       if (!kIsWeb) {
-                        final generation = args.length < 4
+                        final generation = args.length < 5
                             ? null
-                            : int.tryParse(args[3].toString());
+                            : int.tryParse(args[4].toString());
                         if (generation != _mermaidDocumentGeneration) return;
+                        if (args[3] == true) _hasReceivedNativeTransform = true;
                       }
                       final zoom = double.tryParse(args[0].toString());
                       final px = double.tryParse(args[1].toString());
@@ -2372,6 +2473,11 @@ class _MermaidRenderWidgetState extends State<MermaidRenderWidget> {
                 }
                 if (kIsWeb && request.isForMainFrame == true) {
                   final requestUrl = _resolveWebUrl(request.url.toString());
+                  final sourceKey =
+                      Uri.tryParse(requestUrl)?.queryParameters['sourceKey'];
+                  if (sourceKey != null) {
+                    unawaited(_removeStoredWebSource(controller, sourceKey));
+                  }
                   if ((_webLoadUrl != null && requestUrl != _webLoadUrl) ||
                       (_webRetryUrl != null && requestUrl != _webRetryUrl)) {
                     return;

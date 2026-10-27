@@ -81,6 +81,8 @@ Widget _buildTestApp({
   List<OcrInstruction> ocrInstructions = const [],
   BackgroundTaskNotifier? backgroundTasksNotifier,
   Future<OcrImagePayload> Function(Uint8List bytes)? testImagePayloadPreparer,
+  Future<int?> Function(OcrConfig config, List<SelectedImage> images)?
+      testRequestSizePreflight,
   OcrService Function(OcrConfig config)? testOcrServiceFactory,
   Future<OcrRetryRestoreResult> Function(OcrRetrySnapshot snapshot)?
       testRetryImageRestorer,
@@ -129,6 +131,7 @@ Widget _buildTestApp({
         testCameraPicker: testCameraPicker,
         testGalleryPicker: testGalleryPicker,
         testImagePayloadPreparer: testImagePayloadPreparer,
+        testRequestSizePreflight: testRequestSizePreflight,
         testRetryImageRestorer: testRetryImageRestorer,
         testRetrySnapshotCacher: testRetrySnapshotCacher,
       ),
@@ -382,6 +385,15 @@ class _UnreadPickerFile extends XFile {
   }
 }
 
+class _FailingPickerFile extends XFile {
+  final Object failure;
+
+  _FailingPickerFile(this.failure, {String name = 'failed.png'}) : super(name);
+
+  @override
+  Future<Uint8List> readAsBytes() async => throw failure;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -434,6 +446,36 @@ void main() {
       },
     );
   }
+
+  testWidgets('gallery keeps valid files when a later file read fails', (
+    tester,
+  ) async {
+    final validBytes = _createValidOcrTestImage().bytes;
+    await tester.pumpWidget(
+      _buildTestApp(
+        testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async => [
+          XFile.fromData(validBytes, name: 'valid.png'),
+          _FailingPickerFile(const FormatException('corrupt image')),
+          _FailingPickerFile(StateError('failed to read selected file')),
+        ],
+        testImagePayloadPreparer: (_) async =>
+            prepareOcrImagePayloadSync(validBytes),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从系统相册选择'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已选 1 张图片'), findsOneWidget);
+    expect(find.text('corrupt image'), findsWidgets);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('选择图片失败: Bad state: failed to read selected file'),
+        findsOneWidget);
+  });
 
   group('OcrPage - model selector', () {
     testWidgets('shows model selector when OCR provider has models', (
@@ -2137,6 +2179,89 @@ void main() {
   });
 
   group('OcrPage - instruction selector', () {
+    testWidgets(
+      'keeps the submitted instruction when selection changes during preflight',
+      (tester) async {
+        final preflightStarted = Completer<void>();
+        final finishPreflight = Completer<int?>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        final adapter = _CapturingOcrAdapter();
+        OcrConfig? preflightConfig;
+        OcrConfig? serviceConfig;
+        OcrRetrySnapshot? cachedSnapshot;
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [_createValidOcrTestImage()],
+            backgroundTasksNotifier: notifier,
+            ocrInstructions: const [
+              OcrInstruction(name: 'Instruction A', content: 'original prompt'),
+              OcrInstruction(name: 'Instruction B', content: 'changed prompt'),
+            ],
+            testRequestSizePreflight: (config, _) {
+              preflightConfig = config;
+              preflightStarted.complete();
+              return finishPreflight.future;
+            },
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cachedSnapshot = snapshot;
+              return Future.value(
+                OcrRetryStorage.unavailableSnapshot(
+                  taskId: taskId,
+                  snapshot: snapshot,
+                ),
+              );
+            },
+            testOcrServiceFactory: (config) {
+              serviceConfig = config;
+              return OcrService(
+                config: config,
+                dio: Dio()..httpClientAdapter = adapter,
+              );
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Instruction A').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preflightStarted.future;
+
+        await tester.tap(find.text('Instruction A'));
+        // The OCR progress indicator remains active while preflight is held,
+        // so pump a fixed duration instead of waiting for global settlement.
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.tap(find.text('Instruction B').last);
+        await tester.pump(const Duration(milliseconds: 500));
+
+        finishPreflight.complete(defaultOcrRequestSizeBudgetBytes);
+        await _pumpUntil(tester, () => notifier.tasksForTest.isNotEmpty);
+        await _pumpUntil(tester, () => serviceConfig != null);
+
+        expect(
+          preflightConfig?.typeConfig['userInstruction'],
+          'original prompt',
+        );
+        expect(
+          serviceConfig?.typeConfig['userInstruction'],
+          'original prompt',
+        );
+        expect(cachedSnapshot?.instructionContent, 'original prompt');
+        expect(
+          OcrRetrySnapshot.fromMap(notifier.tasksForTest.single.retryData!)
+              .instructionContent,
+          'original prompt',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
     testWidgets('always shown even without any configured instructions', (
       tester,
     ) async {
@@ -2810,6 +2935,43 @@ void main() {
         await tester.pumpAndSettle();
       }
     });
+
+    testWidgets(
+      'deleting an earlier instruction preserves the selected prompt',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        const instructions = [
+          OcrInstruction(name: '发票提取', content: '提取发票号码和金额'),
+          OcrInstruction(name: '表格提取', content: '提取表格内容'),
+          OcrInstruction(name: '备注提取', content: '提取备注内容'),
+          OcrInstruction(name: '日期提取', content: '提取日期内容'),
+        ];
+        await tester.pumpWidget(
+          _buildTestApp(entries: [entry], ocrInstructions: instructions),
+        );
+        await tester.pumpAndSettle();
+
+        // Select the third instruction, then delete the first. Its former
+        // index remains valid after deletion but now points at another prompt.
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('备注提取').last);
+        await tester.pumpAndSettle();
+        expect(find.text('备注提取'), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('删除指令').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('备注提取'), findsOneWidget);
+        await tester.tap(find.text('备注提取'));
+        await tester.pumpAndSettle();
+        expect(find.text('日期提取'), findsWidgets);
+      },
+    );
 
     testWidgets('save is disabled while the instruction content is blank', (
       tester,

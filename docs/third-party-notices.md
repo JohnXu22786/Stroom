@@ -6,23 +6,37 @@ Stroom's application license is AGPL-3.0; see the root [`LICENSE`](../LICENSE).
 
 About > Open Source Licenses uses Flutter's `showLicensePage` and
 `LicenseRegistry` to show licenses from the package graph resolved for the
-build. This repository does not track `pubspec.lock`, so the exact direct and
-transitive package versions cannot be reconstructed from `pubspec.yaml` alone.
-This note does not duplicate or claim to enumerate that graph.
+build. The repository tracks `pubspec.lock`, which records the resolved direct
+and transitive Dart package versions. The Flutter SDK itself also supplies
+packages, so the graph can vary with the Flutter version used for a build.
+This note does not duplicate or claim to enumerate that graph. The committed
+lock was generated with Flutter 3.47.8; CI and release workflows use that same
+SDK version when enforcing the lock.
 
-`fvp: ^0.37.3` is declared by Stroom. The [`fvp` 0.37.3 package archive](https://pub.dev/packages/fvp/versions/0.37.3)
+The lock currently resolves `function_tree` 0.9.1, its last published release
+as checked on 2026-10-24. Pub.dev marks it discontinued and names Dendrocas as
+its replacement. Stroom retains it because the current math evaluator exposes
+syntax that the rewrite does not support directly; a replacement needs a
+separate compatibility review. `cupertino_icons` remains at 1.0.9 because the
+latest Chewie release (1.17.4) requires `cupertino_icons ^1.0.9`, which excludes
+the newer 2.0.0 release. The test-only `cross_file` dependency remains at
+0.3.5+5 because `file_picker_platform_interface` 4.2.0 requires `^0.3.5+4`,
+which excludes `cross_file` 0.4.0.
+
+`fvp: ^0.39.1` is declared by Stroom. The [`fvp` 0.39.1 package archive](https://pub.dev/packages/fvp/versions/0.39.1)
 is BSD-3-Clause licensed, and Flutter's generated package registry shows that
 package license on the in-app page. That package license is separate from the
 native runtime downloaded by FVP.
 
-FVP 0.37.3's [CMake setup](https://github.com/wang-bin/fvp/blob/41dfb5487f835ba321cb73471c2a0a4e62382a6d/cmake/deps.cmake)
+FVP 0.39.1's [CMake setup](https://pub.dev/packages/fvp/versions/0.39.1)
 downloads MDK SDK archives from SourceForge's mutable
 [`nightly` directory](https://sourceforge.net/projects/mdk-sdk/files/nightly/)
 unless `FVP_DEPS_URL` is set; for Windows x64 it selects
 `mdk-sdk-windows-x64.7z`. Stroom's release workflow does not set that override,
-and this repository does not track `pubspec.lock`. The notices below describe
-runtime packages inspected on 2026-10-11; they do not identify every future
-release artifact or make the downloaded runtime reproducible.
+and this repository tracks `pubspec.lock` for Dart package versions, but that
+lockfile does not pin FVP's downloaded native runtime. The notices below
+describe runtime packages inspected on 2026-10-11; they do not identify every
+future release artifact or make the downloaded runtime reproducible.
 
 | Native component | Observed runtime scope | License and retained text |
 | --- | --- | --- |
@@ -211,8 +225,9 @@ the 62 identified artifacts and `androidx.arch.core:core-runtime`. Flutter's
 `NOTICES.Z` does not enumerate these Maven dependencies.
 
 This notice group describes only the dependencies observed in APK
-`v0.5.0-rc.1`; the repository tracks neither a Gradle lockfile nor
-`pubspec.lock`, so it does not claim to cover future build graphs. On newer
+`v0.5.0-rc.1`; the repository does not track a Gradle lockfile. Its
+`pubspec.lock` records Dart/Flutter package versions, but does not enumerate
+Android Maven resolution or claim to cover future APK contents. On newer
 `main`, `wechat_assets_picker` 10.1.3 has a root Apache-2.0 license already
 collected by Flutter. Its `photo_manager` dependency declares no Android Maven
 runtime dependency and is not part of this observed APK group.
@@ -242,8 +257,9 @@ It contains generic libwebp BSD notices, but does not attribute them to the
 native `libwebp` 1.6.0 framework; the explicit entry supplies that link.
 
 This is evidence from the named IPA only. That release contains FVP 0.36.1 and
-MDK 0.39.0, separate from the FVP 0.37.3 / MDK CocoaPods 0.36.0 evidence above.
-It does not identify current or future iOS build graphs.
+MDK 0.39.0, separate from the FVP 0.39.1 dependency currently declared by
+Stroom and the MDK CocoaPods 0.36.0 evidence above. It does not identify current
+or future iOS build graphs.
 
 ## CatCatch behavior reference
 

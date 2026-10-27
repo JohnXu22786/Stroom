@@ -1358,17 +1358,17 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
   Future<void> _pickAudioFile() async {
     try {
-      final result = await FilePicker.pickFiles(
+      final files = await FilePicker.pickFiles(
         type: FileType.audio,
         allowMultiple: true,
         withData: false,
         withReadStream: true,
         initialDirectory: SystemPickDirectories.music(),
       );
-      if (result == null || result.files.isEmpty) return;
+      if (files.isEmpty) return;
 
       final newAudios = <SelectedAudio>[];
-      for (final file in result.files) {
+      for (final file in files) {
         newAudios.add(
           SelectedAudio(
             bytes: Uint8List(0),

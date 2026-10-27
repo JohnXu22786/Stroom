@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stroom/models/math_expression.dart';
+import 'package:visual_math/visual_math.dart';
 
 void main() {
   test('rendered letter boundaries discover the coefficient and retain x', () {

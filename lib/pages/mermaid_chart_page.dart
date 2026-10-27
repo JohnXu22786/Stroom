@@ -134,7 +134,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
     _codeController.addListener(_onCodeChanged);
   }
 
-  bool get _hasUnsavedChanges => widget.existingRecord != null && _isCodeDirty;
+  bool get _hasUnsavedChanges => _isCodeDirty;
 
   /// 从 Mermaid 代码中检测图表类型
   ///
@@ -191,8 +191,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
 
   void _onCodeChanged() {
     final detectedTypeId = _detectTypeFromCode(_codeController.text);
-    final hasUnsavedChanges =
-        widget.existingRecord != null && _codeController.text != _originalCode;
+    final hasUnsavedChanges = _codeController.text != _originalCode;
     if (detectedTypeId != _selectedTypeId ||
         hasUnsavedChanges != _isCodeDirty) {
       setState(() {
@@ -353,14 +352,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final folders = await TextManifest.getAllFolders();
       if (!mounted) return;
 
-      // Keep this snapshot after folder lookup so edits made while it loads
-      // remain included in the save.
-      final content = _codeController.text;
-      if (content.trim().isEmpty) {
-        _showEmptyChartError();
-        return;
-      }
-
       // Local controller - will be garbage collected after _saveChart completes.
       // Not explicitly disposed because the dialog's dismiss animation still
       // references it after showDialog returns.
@@ -394,7 +385,28 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
         return;
       }
 
+      final baseName = existingRecord == null && userFileName.endsWith('.mmd')
+          ? userFileName.substring(0, userFileName.length - '.mmd'.length)
+          : userFileName;
+      if (baseName.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('文件名不能为空')));
+        return;
+      }
+
       setState(() => _isSaving = true);
+
+      // Freeze editing and snapshot only after the user confirms the save.
+      // The following lock waits must not let newer editor text be lost when
+      // this page closes after publishing the snapshot.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      final content = _codeController.text;
+      if (content.trim().isEmpty) {
+        _showEmptyChartError();
+        return;
+      }
 
       final typeLabel = MermaidTemplates.getAllTypes()
           .firstWhere((t) => t.id == _selectedTypeId)
@@ -405,9 +417,6 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       final storageFileName = '$hash.txt';
 
       // Use user-provided filename (without extension for storage consistency)
-      final baseName = existingRecord == null && userFileName.endsWith('.mmd')
-          ? userFileName.substring(0, userFileName.length - '.mmd'.length)
-          : userFileName;
       final saveName =
           existingRecord == null ? '$baseName-$typeLabel' : baseName;
       widget.testOnlyBeforeChartFolderNameLock?.call();
@@ -625,7 +634,9 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           ),
                         ),
                         avatar: Icon(type.icon, size: 16),
-                        onSelected: (_) => _selectDiagramType(type.id),
+                        onSelected: _isSaving
+                            ? null
+                            : (_) => _selectDiagramType(type.id),
                         showCheckmark: false,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -657,45 +668,48 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
                           label,
                           style: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () {
-                          if (_selectedTypeId == 'gantt' && label == '添加依赖任务') {
-                            _insertGanttDependencyTask();
-                          } else {
-                            if (_selectedTypeId == 'requirement' &&
-                                (label == '添加关联' || label == '添加验证')) {
-                              final currentSnippet =
-                                  MermaidTemplates.getSnippets(
-                                'requirement',
-                                code: _codeController.text,
-                              )
-                                      .firstWhere(
-                                        (item) => item.$1 == label,
-                                        orElse: () => (label, ''),
-                                      )
-                                      .$2;
-                              if (currentSnippet.isNotEmpty) {
-                                _insertSnippet(currentSnippet);
-                              }
-                            } else {
-                              final snippetToInsert =
-                                  _selectedTypeId == 'gitGraph' &&
-                                          label == '合并分支'
-                                      ? MermaidTemplates.getSnippets(
-                                          'gitGraph',
-                                          code: _codeController.text,
-                                        )
-                                          .firstWhere(
-                                            (item) => item.$1 == label,
-                                            orElse: () => (label, ''),
-                                          )
-                                          .$2
-                                      : snippet;
-                              if (snippetToInsert.isNotEmpty) {
-                                _insertSnippet(snippetToInsert);
-                              }
-                            }
-                          }
-                        },
+                        onPressed: _isSaving
+                            ? null
+                            : () {
+                                if (_selectedTypeId == 'gantt' &&
+                                    label == '添加依赖任务') {
+                                  _insertGanttDependencyTask();
+                                } else {
+                                  if (_selectedTypeId == 'requirement' &&
+                                      (label == '添加关联' || label == '添加验证')) {
+                                    final currentSnippet =
+                                        MermaidTemplates.getSnippets(
+                                      'requirement',
+                                      code: _codeController.text,
+                                    )
+                                            .firstWhere(
+                                              (item) => item.$1 == label,
+                                              orElse: () => (label, ''),
+                                            )
+                                            .$2;
+                                    if (currentSnippet.isNotEmpty) {
+                                      _insertSnippet(currentSnippet);
+                                    }
+                                  } else {
+                                    final snippetToInsert =
+                                        _selectedTypeId == 'gitGraph' &&
+                                                label == '合并分支'
+                                            ? MermaidTemplates.getSnippets(
+                                                'gitGraph',
+                                                code: _codeController.text,
+                                              )
+                                                .firstWhere(
+                                                  (item) => item.$1 == label,
+                                                  orElse: () => (label, ''),
+                                                )
+                                                .$2
+                                            : snippet;
+                                    if (snippetToInsert.isNotEmpty) {
+                                      _insertSnippet(snippetToInsert);
+                                    }
+                                  }
+                                }
+                              },
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                       ),
@@ -711,9 +725,11 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       ),
     );
     return PopScope(
-      canPop: !_hasUnsavedChanges,
+      canPop: !_isSaving && !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop || !_hasUnsavedChanges) return;
+        // Once the user confirms a save, let its transaction finish instead
+        // of offering to discard the same captured content while it commits.
+        if (didPop || _isSaving || !_hasUnsavedChanges) return;
 
         final discard = await showDialog<bool>(
           context: context,
@@ -893,6 +909,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
             child: TextField(
               controller: _codeController,
+              enabled: !_isSaving,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -925,6 +942,7 @@ class _MermaidChartPageState extends State<MermaidChartPage> {
       padding: const EdgeInsets.all(12),
       child: TextField(
         controller: _codeController,
+        enabled: !_isSaving,
         decoration: InputDecoration(
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           contentPadding: const EdgeInsets.all(12),

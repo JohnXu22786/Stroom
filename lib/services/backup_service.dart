@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:archive/archive.dart' hide ZLibDecoder;
 import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +18,7 @@ import 'backup_service_shared.dart';
 import 'browser_cookie_service.dart';
 import 'browser_profile_service.dart';
 import 'data_migration_service.dart';
+import '../utils/file_picker_utils.dart';
 import 'manifest_database.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
@@ -33,6 +35,7 @@ import '../providers/background_task_provider.dart' show BackgroundTask;
 import '../providers/task_provider_shared.dart' show SynthesisTask;
 import '../task_flow/models/task_flow_definition.dart' show TaskFlowDefinition;
 import '../task_flow/models/task_flow_execution.dart' show TaskFlowExecution;
+import '../task_flow/models/flow_payload.dart' show FlowPayload;
 
 /// Exception thrown when a backup operation is cancelled.
 class BackupCancelledException implements Exception {
@@ -195,8 +198,10 @@ class BackupSelection {
 class BackupService {
   static int? _lastBackupFileTimestampSeconds;
   static const _audioDraftsDirectory = 'audio_drafts';
-  static final _audioRecordingDraftFileName =
-      RegExp(r'^recording_\d+\.m4a$', caseSensitive: false);
+  static final _audioRecordingDraftFileName = RegExp(
+    r'^recording_\d+\.m4a$',
+    caseSensitive: false,
+  );
   static const _catCatchRuntimeSubdirectories = [
     'downloads',
     '.progress',
@@ -420,9 +425,10 @@ class BackupService {
           }
         }
 
-        final values = await StartupPreferences.getValues(
-          {...chatKeys, ...settingsKeys},
-        );
+        final values = await StartupPreferences.getValues({
+          ...chatKeys,
+          ...settingsKeys,
+        });
         final encoded = _isBackupFlutterTest
             ? _encodeBackupPreferenceGroups(values, chatKeys, settingsKeys)
             : await Isolate.run(
@@ -551,6 +557,13 @@ class BackupService {
             useStreaming: useStreaming,
           );
         }
+        await _addDirectoryPlanFiles(
+          diskFiles,
+          memoryFiles,
+          archivePrefix: 'task_flow_temporary',
+          sourcePath: p.join(appDir, 'task_flow_temporary'),
+          useStreaming: useStreaming,
+        );
       }
       await _addTaskStatePlanFile(
         diskFiles,
@@ -824,10 +837,7 @@ class BackupService {
             ? await Isolate.run(() => jsonEncode(mediaManifest))
             : jsonEncode(mediaManifest);
 
-    final plannedArchivePaths = {
-      ...jsonFiles.keys,
-      ...memoryFiles.keys,
-    };
+    final plannedArchivePaths = {...jsonFiles.keys, ...memoryFiles.keys};
     diskFiles.removeWhere((entry) => !plannedArchivePaths.add(entry.first));
     final manifest = Map<String, dynamic>.from(
       jsonDecode(jsonFiles['manifest.json']!) as Map,
@@ -971,8 +981,9 @@ class BackupService {
         final name = p.basename(entity.path);
         final existingPath = pathsByName[name];
         if (existingPath == null ||
-            (await entity.lastModified())
-                .isAfter(await File(existingPath).lastModified())) {
+            (await entity.lastModified()).isAfter(
+              await File(existingPath).lastModified(),
+            )) {
           pathsByName[name] = entity.path;
         }
       }
@@ -1047,6 +1058,7 @@ class BackupService {
         return [
           'task_state/',
           'task_flow_attachments/',
+          'task_flow_temporary/',
           'catcatch/completed/',
           for (final directory in _catCatchRuntimeSubdirectories)
             'catcatch/$directory/',
@@ -1074,9 +1086,7 @@ class BackupService {
         return _isAudioRecordingDraft(relativePath);
       }
       if (category == DataParts.tasks && prefix.startsWith('catcatch/')) {
-        return _isCatCatchMediaPath(
-          archivePath.substring('catcatch/'.length),
-        );
+        return _isCatCatchMediaPath(archivePath.substring('catcatch/'.length));
       }
       return true;
     }
@@ -1149,9 +1159,7 @@ class BackupService {
     return inventories;
   }
 
-  static Map<String, int> _plannedFileSizes(
-    Map<String, String> jsonFiles,
-  ) {
+  static Map<String, int> _plannedFileSizes(Map<String, String> jsonFiles) {
     final expectedSizes = <String, int>{};
     final manifestJson = jsonFiles['manifest.json'];
     if (manifestJson != null) {
@@ -1191,12 +1199,7 @@ class BackupService {
     final inventories = _newFileInventories(selection);
     for (final file in archive.files) {
       if (file.isFile) {
-        _addFileInventoryEntry(
-          inventories,
-          selection,
-          file.name,
-          file.size,
-        );
+        _addFileInventoryEntry(inventories, selection, file.name, file.size);
       }
     }
     _sortFileInventories(inventories);
@@ -1430,10 +1433,7 @@ class BackupService {
       }
       if (archivePrefix == 'attachments') {
         for (final key in await WebFileStore.keysWithPrefix('temp_edited/')) {
-          await addStoredFile(
-            'attachments/${p.posix.basename(key)}',
-            key,
-          );
+          await addStoredFile('attachments/${p.posix.basename(key)}', key);
         }
       }
       return;
@@ -1503,10 +1503,15 @@ class BackupService {
       if (restoring && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         if (!_isSafeRelativeArchivePath(relative)) return value;
+        if (kIsWeb || WebFileStore.isTestMode) return relative;
         return p.joinAll([appDir, ...relative.split('/')]);
       }
       if (!restoring) {
         if (value.startsWith('attachments/')) {
+          return '$_portableAppDataPathPrefix$value';
+        }
+        if (value.startsWith('task_flow_temporary/') &&
+            _isSafeRelativeArchivePath(value)) {
           return '$_portableAppDataPathPrefix$value';
         }
         if (value.startsWith('temp_edited/')) {
@@ -1526,22 +1531,20 @@ class BackupService {
     }
     if (value is List) {
       return value
-          .map((child) => _mapPortableTaskPaths(
-                child,
-                appDir: appDir,
-                restoring: restoring,
-              ))
+          .map(
+            (child) => _mapPortableTaskPaths(
+              child,
+              appDir: appDir,
+              restoring: restoring,
+            ),
+          )
           .toList();
     }
     if (value is Map) {
       return value.map(
         (key, child) => MapEntry(
           key,
-          _mapPortableTaskPaths(
-            child,
-            appDir: appDir,
-            restoring: restoring,
-          ),
+          _mapPortableTaskPaths(child, appDir: appDir, restoring: restoring),
         ),
       );
     }
@@ -1552,8 +1555,9 @@ class BackupService {
     BackupSelection selection, {
     required Set<String> taskFilesToRestore,
   }) async {
-    if (!selection.tasks || kIsWeb || WebFileStore.isTestMode) return;
-    final appDir = await AppStorage.directory;
+    if (!selection.tasks) return;
+    final isWebStore = kIsWeb || WebFileStore.isTestMode;
+    final appDir = isWebStore ? '' : await AppStorage.directory;
     for (final relativePath in const [
       'synthesis/tasks.json',
       'catcatch/tasks.json',
@@ -1562,18 +1566,31 @@ class BackupService {
       'task_flows/executions.json',
     ]) {
       if (!taskFilesToRestore.contains(relativePath)) continue;
-      final file = File(
-        p.joinAll([appDir, ...relativePath.split('/')]),
-      );
-      if (!await file.exists()) continue;
       try {
-        final decoded = jsonDecode(await file.readAsString());
+        final file = isWebStore
+            ? null
+            : File(p.joinAll([appDir, ...relativePath.split('/')]));
+        final data = isWebStore
+            ? await WebFileStore.read(relativePath)
+            : file != null && await file.exists()
+                ? await file.readAsBytes()
+                : null;
+        if (data == null) continue;
+        final decoded = jsonDecode(utf8.decode(data));
         final restored = _mapPortableTaskPaths(
           decoded,
           appDir: appDir,
           restoring: true,
         );
-        await AtomicFile.writeString(file, jsonEncode(restored));
+        final restoredJson = jsonEncode(restored);
+        if (isWebStore) {
+          await WebFileStore.write(
+            relativePath,
+            Uint8List.fromList(utf8.encode(restoredJson)),
+          );
+        } else {
+          await AtomicFile.writeString(file!, restoredJson);
+        }
       } catch (e) {
         throw Exception('恢复任务文件路径失败：$relativePath ($e)');
       }
@@ -1870,6 +1887,11 @@ class BackupService {
             archive,
             archivePrefix: 'catcatch/completed',
             sourcePath: p.join(appDir, 'catcatch', 'completed'),
+          );
+          await _addDirectoryToArchive(
+            archive,
+            archivePrefix: 'task_flow_temporary',
+            sourcePath: p.join(appDir, 'task_flow_temporary'),
           );
         }
         await _addTaskStateFileToArchive(
@@ -2172,9 +2194,7 @@ class BackupService {
       try {
         await BrowserProfileService.prepareForRestore();
       } catch (e) {
-        throw DataManagementPreflightException(
-          '请先重启应用，完成上一次内置浏览器数据操作后再导入：$e',
-        );
+        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再导入：$e');
       }
     }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
@@ -2329,10 +2349,7 @@ class BackupService {
         trustEmptyLegacyTaskPayloads: trustEmptyLegacyTaskPayloads,
       );
       final restoreSelection = metadata.restoreSelection;
-      _validateZipEntryChecksumsBeforeRestore(
-        reader,
-        restoreSelection,
-      );
+      _validateZipEntryChecksumsBeforeRestore(reader, restoreSelection);
       await _preflightBrowserCookieMerge(
         restoreSelection,
         metadata.browserCookiesData,
@@ -2761,9 +2778,7 @@ class BackupService {
           );
     if (!skipMissingCategories && declaredSelection != null) {
       final missingDeclaredCategories = selection.selectedLabels
-          .where(
-            (label) => !declaredSelection.selectedLabels.contains(label),
-          )
+          .where((label) => !declaredSelection.selectedLabels.contains(label))
           .toList();
       if (missingDeclaredCategories.isNotEmpty) {
         throw BackupValidationException(
@@ -2865,9 +2880,7 @@ class BackupService {
             jsonDecode(utf8.decode(browserCookiesData)),
           );
         } catch (e) {
-          throw BackupValidationException(
-            '无效的备份文件：内置浏览器 Cookies 数据损坏 ($e)',
-          );
+          throw BackupValidationException('无效的备份文件：内置浏览器 Cookies 数据损坏 ($e)');
         }
       }
     }
@@ -3001,8 +3014,9 @@ class BackupService {
 
   static bool _isCatCatchMediaPath(String relativePath) =>
       relativePath.startsWith('completed/') ||
-      _catCatchRuntimeSubdirectories
-          .any((directory) => relativePath.startsWith('$directory/'));
+      _catCatchRuntimeSubdirectories.any(
+        (directory) => relativePath.startsWith('$directory/'),
+      );
 
   static void _validateArchiveEntryChecksums(
     Archive archive,
@@ -3011,10 +3025,7 @@ class BackupService {
   ) {
     for (final file in archive) {
       if (!file.isFile ||
-          !_shouldValidateArchiveEntryChecksum(
-            file.name,
-            selection,
-          )) {
+          !_shouldValidateArchiveEntryChecksum(file.name, selection)) {
         continue;
       }
       final expected = file.crc32;
@@ -3034,10 +3045,7 @@ class BackupService {
     BackupSelection selection,
   ) {
     for (final entry in reader.entries) {
-      if (!_shouldValidateArchiveEntryChecksum(
-        entry.name,
-        selection,
-      )) {
+      if (!_shouldValidateArchiveEntryChecksum(entry.name, selection)) {
         continue;
       }
       try {
@@ -3354,19 +3362,72 @@ class BackupService {
     required Set<String> archiveEntries,
   }) {
     final entries = archiveEntries
-        .map((entry) => entry.startsWith('files/')
-            ? entry.substring('files/'.length)
-            : entry)
+        .map(
+          (entry) => entry.startsWith('files/')
+              ? entry.substring('files/'.length)
+              : entry,
+        )
         .toSet();
     var allPresent = true;
 
-    void inspect(Object? value) {
+    bool hasPortableTemporaryFlowResult(
+      Object? value, {
+      required String executionId,
+      required String expectedBlockId,
+    }) {
+      if (value is! Map) return false;
+      final reference = value['fileReference'];
+      final artifact = value['temporaryArtifact'];
+      final artifactExecutionId =
+          artifact is Map ? artifact['executionId'] : null;
+      final artifactBlockId = artifact is Map ? artifact['blockId'] : null;
+      if (reference is! String ||
+          artifact is! Map ||
+          executionId.isEmpty ||
+          artifactExecutionId is! String ||
+          artifactExecutionId.isEmpty ||
+          artifactExecutionId != executionId ||
+          artifactBlockId is! String ||
+          artifactBlockId.isEmpty ||
+          artifactBlockId != expectedBlockId ||
+          artifact['reference'] != reference ||
+          !reference.startsWith(_portableAppDataPathPrefix)) {
+        return false;
+      }
+      final relative = reference.substring(_portableAppDataPathPrefix.length);
+      if (!_isSafeRelativeArchivePath(relative)) return false;
+      final pathSegments = relative.split('/');
+      return pathSegments.length == 4 &&
+          pathSegments[0] == 'task_flow_temporary' &&
+          pathSegments[1] ==
+              sha256.convert(utf8.encode(artifactExecutionId)).toString() &&
+          pathSegments[2] ==
+              sha256.convert(utf8.encode(artifactBlockId)).toString() &&
+          pathSegments[3].isNotEmpty;
+    }
+
+    bool hasPersistableFlowPayload(Object? value) {
+      if (value is! Map) return false;
+      try {
+        FlowPayload.fromMap(Map<String, dynamic>.from(value));
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    void inspect(Object? value, {bool skipResult = false}) {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
         final isCatCatchFile = relative.startsWith('catcatch/') &&
             _isCatCatchMediaPath(relative.substring('catcatch/'.length));
-        if (!isTaskAttachment && !isCatCatchFile) return;
+        final isTemporaryFlowArtifact = relative.startsWith(
+          'task_flow_temporary/',
+        );
+        if (!isTaskAttachment && !isCatCatchFile && !isTemporaryFlowArtifact) {
+          return;
+        }
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
                 '${relative.substring('attachments/'.length)}'
@@ -3376,8 +3437,74 @@ class BackupService {
           allPresent = false;
         }
       } else if (value is Map) {
-        for (final child in value.values) {
-          inspect(child);
+        final skipOwnResult = skipResult;
+        final rawSteps = value['subTasks'];
+        if (rawSteps is Iterable) {
+          final steps = rawSteps.toList();
+          for (var index = 0; index < steps.length; index++) {
+            final step = steps[index];
+            final successor =
+                index + 1 < steps.length ? steps[index + 1] : null;
+            final executionId = value['id'];
+            final cleanupStatus =
+                step is Map ? step['artifactCleanupStatus'] : null;
+            final result = step is Map ? step['result'] : null;
+            final snapshot = value['snapshot'];
+            final snapshotFlow = snapshot is Map ? snapshot['flow'] : null;
+            final snapshotBlocks =
+                snapshotFlow is Map ? snapshotFlow['blocks'] : null;
+            final snapshotBlock =
+                snapshotBlocks is List && index < snapshotBlocks.length
+                    ? snapshotBlocks[index]
+                    : null;
+            final expectedBlockId =
+                snapshotBlock is Map && snapshotBlock['id'] is String
+                    ? snapshotBlock['id'] as String
+                    : '';
+            final hasTemporaryArtifact =
+                result is Map && result.containsKey('temporaryArtifact');
+            final hasValidTemporaryArtifact = hasPortableTemporaryFlowResult(
+              result,
+              executionId: executionId is String ? executionId : '',
+              expectedBlockId: expectedBlockId,
+            );
+            final hasSuccessfulSuccessor = successor is Map &&
+                successor['outcome'] == 'succeeded' &&
+                hasPersistableFlowPayload(successor['result']);
+            // Validate ownership even when the archive contains the referenced
+            // path. A portable file alone cannot prove that this execution
+            // owns it or that cleanup/resume may safely skip it.
+            if ((hasTemporaryArtifact ||
+                    cleanupStatus == 'pending' ||
+                    cleanupStatus == 'cleaned') &&
+                !hasValidTemporaryArtifact) {
+              allPresent = false;
+            }
+            final hasCleanupCheckpoint =
+                hasValidTemporaryArtifact && hasSuccessfulSuccessor;
+            if ((cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                !hasCleanupCheckpoint) {
+              allPresent = false;
+            }
+            final cleanupCanSkip =
+                (cleanupStatus == 'pending' || cleanupStatus == 'cleaned') &&
+                    hasCleanupCheckpoint;
+            // Deletion is idempotent and resume reconciles a pending cleanup
+            // after its successor result was durably saved. A crash after the
+            // file delete but before persisting `cleaned` can leave this ref
+            // pointing at a file that is already gone.
+            inspect(step, skipResult: cleanupCanSkip);
+          }
+        }
+        for (final entry in value.entries) {
+          // A cleaned flow result keeps its historical reference so execution
+          // resume can skip that step. Its owned file is intentionally gone
+          // and therefore is not a required backup entry.
+          if ((skipOwnResult && entry.key == 'result') ||
+              (rawSteps is Iterable && entry.key == 'subTasks')) {
+            continue;
+          }
+          inspect(entry.value);
         }
       } else if (value is Iterable) {
         for (final child in value) {
@@ -3829,8 +3956,9 @@ class BackupService {
         archivePath = archivePath.substring('files/'.length);
       }
       if (selection.tasks && archivePath.startsWith('task_flow_attachments/')) {
-        final relativePath =
-            archivePath.substring('task_flow_attachments/'.length);
+        final relativePath = archivePath.substring(
+          'task_flow_attachments/'.length,
+        );
         if (_isSafeRelativeArchivePath(relativePath)) {
           archivedAttachmentKeys.add('attachments/$relativePath');
           sourcePaths.add(rawArchivePath);
@@ -3961,10 +4089,7 @@ class BackupService {
     if (!selection.browserCookies || cookieData == null) return;
 
     await BrowserCookieService.runExclusiveRetentionOperation(() async {
-      final previousFileData = await readBackupFile(
-        '',
-        'browser_cookies.json',
-      );
+      final previousFileData = await readBackupFile('', 'browser_cookies.json');
       final previousRestorePending =
           await BrowserCookieService.hasBackupRestorePending();
       try {
@@ -3985,11 +4110,7 @@ class BackupService {
             ),
           ),
         );
-        await writeBackupFile(
-          '',
-          'browser_cookies.json',
-          cookieDataToWrite,
-        );
+        await writeBackupFile('', 'browser_cookies.json', cookieDataToWrite);
         await BrowserCookieService.markBackupRestorePending();
         if (!WebFileStore.isTestMode &&
             !await BrowserCookieService.restoreCookiesFromFileChecked(
@@ -4600,11 +4721,9 @@ class BackupService {
     }
 
     String fileNameFor(int seconds) {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
-          .toIso8601String()
-          .split('.')
-          .first
-          .replaceAll(':', '-');
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(
+        seconds * 1000,
+      ).toIso8601String().split('.').first.replaceAll(':', '-');
       return 'backup_$timestamp.zip';
     }
 
@@ -4621,6 +4740,9 @@ class BackupService {
 
   /// 导出备份：弹出保存文件对话框，创建 zip。
   ///
+  /// Returns `true` only after the backup was saved; cancellation or failure
+  /// returns `false`.
+  ///
   /// [onProgress] 可选回调，报告备份构建进度（0.0 ~ 1.0）。
   /// [selection] 控制哪些数据类别包含在备份中。默认全量。
   ///
@@ -4631,7 +4753,7 @@ class BackupService {
   ///   TransactionTooLargeException），iOS/桌面 dart:io 直接复制。
   /// - 桌面：先让用户选择保存位置（`saveFile` 不传 bytes 只返回路径），
   ///   再流式写入该路径。
-  static Future<void> exportBackup(
+  static Future<bool> exportBackup(
     BuildContext context, {
     void Function(double progress)? onProgress,
     BackupSelection selection = BackupSelection.all,
@@ -4647,10 +4769,12 @@ class BackupService {
           onProgress: onProgress,
           selection: selection,
         );
-        savedLocation = await FilePicker.saveFile(
+        final savedUri = await saveFileWithType(
+          extensions: ['zip'],
           fileName: defaultName,
           bytes: bytes,
         );
+        savedLocation = savedUri?.toString();
       } else if (Platform.isAndroid || Platform.isIOS) {
         // Android/iOS：流式构建到系统临时文件，再写入备份位置
         final tempPath = p.join(Directory.systemTemp.path, defaultName);
@@ -4673,17 +4797,20 @@ class BackupService {
         savedLocation =
             displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
       } else {
-        // 桌面：先选保存位置（不传 bytes → 只返回路径，不写文件），
-        // 再流式写入 —— 峰值内存不随备份体积增长。
-        final outputPath = await FilePicker.saveFile(
-          fileName: defaultName,
+        // 桌面：先选择保存位置，再流式写入，避免把整个备份留在内存中。
+        final saveLocation = await getSaveLocation(
+          acceptedTypeGroups: [
+            XTypeGroup(extensions: ['zip'])
+          ],
+          suggestedName: defaultName,
           initialDirectory: SystemPickDirectories.documents(),
         );
-        if (outputPath == null) {
+        if (saveLocation == null) {
           // 用户取消保存
           await AppLogService.info('BackupService', 'exportBackup: 用户取消');
-          return;
+          return false;
         }
+        final outputPath = saveLocation.path;
         var destinationPath = outputPath;
         if (await File(destinationPath).exists()) {
           final uniqueName = await _nextBackupFileName(
@@ -4710,11 +4837,14 @@ class BackupService {
         savedLocation = destinationPath;
       }
 
-      if (savedLocation != null && context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
+      if (savedLocation == null) return false;
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('备份已保存到: $savedLocation')));
       }
       await AppLogService.info('BackupService', 'exportBackup: success');
+      return true;
     } catch (e) {
       await AppLogService.error('BackupService', 'exportBackup: 失败', e);
       if (context.mounted) {
@@ -4722,6 +4852,7 @@ class BackupService {
           SnackBar(content: Text('备份失败: $e'), backgroundColor: Colors.red),
         );
       }
+      return false;
     }
   }
 
@@ -4737,31 +4868,53 @@ class BackupService {
   }) async {
     await AppLogService.info('BackupService', 'importBackup: start');
     try {
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['zip'],
         initialDirectory: SystemPickDirectories.documents(),
       );
-      if (result == null || result.files.isEmpty) return false;
+      if (file == null) return false;
 
-      final file = result.files.first;
-      final bytes = file.bytes;
       final List<String> skippedCategories;
 
-      if (bytes != null) {
-        skippedCategories = await _restoreFromBytes(
-          bytes,
-          selection: selection,
-          skipMissingCategories: true,
-        );
-      } else if (file.path != null) {
+      if (file.path != null) {
         skippedCategories = await _restoreFromZipFile(
           file.path!,
           selection: selection,
           skipMissingCategories: true,
         );
+      } else if (kIsWeb) {
+        final bytes = await file.readAsBytes();
+        skippedCategories = await _restoreFromBytes(
+          bytes,
+          selection: selection,
+          skipMissingCategories: true,
+        );
       } else {
-        return false;
+        final tempPath = p.join(
+          Directory.systemTemp.path,
+          'stroom-import-${DateTime.now().microsecondsSinceEpoch}.zip',
+        );
+        try {
+          final sink = File(tempPath).openWrite();
+          try {
+            await for (final chunk in file.readAsByteStream()) {
+              sink.add(chunk);
+            }
+            await sink.flush();
+          } finally {
+            await sink.close();
+          }
+          skippedCategories = await _restoreFromZipFile(
+            tempPath,
+            selection: selection,
+            skipMissingCategories: true,
+          );
+        } finally {
+          try {
+            await File(tempPath).delete();
+          } catch (_) {}
+        }
       }
 
       onSkippedCategories?.call(skippedCategories);
@@ -4806,9 +4959,7 @@ class BackupService {
       try {
         await BrowserProfileService.prepareForRestore();
       } catch (e) {
-        throw DataManagementPreflightException(
-          '请先重启应用，完成上一次内置浏览器数据操作后再清除：$e',
-        );
+        throw DataManagementPreflightException('请先重启应用，完成上一次内置浏览器数据操作后再清除：$e');
       }
     }
     final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
@@ -5059,9 +5210,7 @@ class BackupService {
         continue;
       }
       if (!_isSafeRelativeArchivePath(relativePath)) {
-        throw const DataManagementPreflightException(
-          '任务流包含无效附件路径，已取消备份。',
-        );
+        throw const DataManagementPreflightException('任务流包含无效附件路径，已取消备份。');
       }
       final file = File(
         p.joinAll([appDir, 'attachments', ...relativePath.split('/')]),
@@ -5350,8 +5499,11 @@ class BackupService {
             ...taskFlowAttachmentKeys,
           }.map(_comparableAttachmentPath).toSet();
           final taskOnlyAttachments = oldTaskAttachments
-              .where((key) => !protectedAttachments
-                  .contains(_comparableAttachmentPath(key)))
+              .where(
+                (key) => !protectedAttachments.contains(
+                  _comparableAttachmentPath(key),
+                ),
+              )
               .toSet();
           if (!await _deleteAttachmentKeys(taskOnlyAttachments)) {
             deleteFailed = true;
@@ -5802,6 +5954,7 @@ const List<String> _restoreKnownDirs = [
   'anki',
   'task_state',
   'task_flow_attachments',
+  'task_flow_temporary',
 ];
 
 /// 根据 selection 决定哪些目录需要恢复。
@@ -5828,6 +5981,7 @@ bool _shouldRestoreDir(String dir, BackupSelection selection) {
     case 'task_state':
       return selection.tasks;
     case 'task_flow_attachments':
+    case 'task_flow_temporary':
       return selection.tasks && selection.includeMediaFiles;
     case 'attachments':
       return selection.chatRecordsAndAttachments && selection.includeMediaFiles;
