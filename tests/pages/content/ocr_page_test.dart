@@ -499,8 +499,6 @@ void main() {
       final finishFirstRead = Completer<Uint8List>();
       final secondPreparationCompleted = Completer<void>();
       var gallerySelections = 0;
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-      addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
       await tester.pumpWidget(
         _buildTestApp(
@@ -525,6 +523,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
+      await tester.pump();
 
       Future<void> chooseSystemGallery() async {
         await tester.tap(find.text('相册选择'));
@@ -570,6 +570,74 @@ void main() {
         'second.png',
       );
       expect(find.text('正在导入图片...'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'overlapping gallery imports preserve invocation order when pickers resolve out of order',
+    (tester) async {
+      final validBytes = _createValidOcrTestImage().bytes;
+      final firstPickerResult = Completer<List<XFile>>();
+      var gallerySelections = 0;
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) {
+            gallerySelections++;
+            if (gallerySelections == 1) return firstPickerResult.future;
+            return Future.value([
+              XFile.fromData(validBytes, name: 'second.png'),
+            ]);
+          },
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ocr_high_detail_switch')));
+      await tester.pump();
+
+      Future<void> chooseSystemGallery() async {
+        await tester.tap(find.text('相册选择'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('从系统相册选择'));
+        await tester.pump();
+      }
+
+      await chooseSystemGallery();
+      await chooseSystemGallery();
+      await _pumpUntil(
+        tester,
+        () => find.text('正在导入图片...').evaluate().isNotEmpty,
+      );
+      expect(find.text('已选 1 张图片'), findsNothing);
+
+      firstPickerResult.complete([
+        XFile.fromData(validBytes, name: 'first.png'),
+      ]);
+      await _pumpUntil(
+        tester,
+        () => find.text('已选 2 张图片').evaluate().isNotEmpty,
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_0')),
+            )
+            .image
+            .sourceName,
+        'first.png',
+      );
+      expect(
+        tester
+            .widget<ImageGridItem>(
+              find.byKey(const ValueKey('ocr_grid_item_1')),
+            )
+            .image
+            .sourceName,
+        'second.png',
+      );
       expect(tester.takeException(), isNull);
     },
   );

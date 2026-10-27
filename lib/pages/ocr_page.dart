@@ -1867,8 +1867,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   Future<void> _pickFromSystemGallery() async {
     var importGeneration = _imageImportGeneration;
     var importPending = false;
-    Future<void>? previousGalleryCommit;
-    Completer<void>? galleryCommit;
+    final previousGalleryCommit = _systemGalleryCommitTail;
+    final galleryCommit = Completer<void>();
+    _systemGalleryCommitTail = galleryCommit.future;
     try {
       final mode = _imageImportMode;
       // 原生移动端打开应用内相册选择器，
@@ -1893,9 +1894,6 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
       // Overlapping gallery selections share a generation so the later batch
       // cannot invalidate images still being read by the earlier batch.
-      previousGalleryCommit = _systemGalleryCommitTail;
-      galleryCommit = Completer<void>();
-      _systemGalleryCommitTail = galleryCommit.future;
       _beginImageImport();
       importPending = true;
       final newImages = <SelectedImage>[];
@@ -1961,7 +1959,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ).showSnackBar(SnackBar(content: Text('选择图片失败: $e')));
       }
     } finally {
-      if (galleryCommit != null && !galleryCommit.isCompleted) {
+      if (!galleryCommit.isCompleted) {
         galleryCommit.complete();
       }
       if (importPending) _finishImageImport();
