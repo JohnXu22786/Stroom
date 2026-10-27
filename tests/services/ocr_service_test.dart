@@ -1680,6 +1680,115 @@ void main() {
         expect(service.lastResponseStatusCode, equals(200));
       });
 
+      test(
+        'recognize preserves cancellation exceptions and diagnostics',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.cancel,
+                      message: 'request cancelled',
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<DioException>().having(
+                (error) => error.type,
+                'type',
+                DioExceptionType.cancel,
+              ),
+            ),
+          );
+
+          expect(service.diagnosticResponse()['errorType'], 'cancel');
+        },
+      );
+
+      test(
+        'recognizeBatch preserves cancellation exceptions and diagnostics',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.cancel,
+                      message: 'batch request cancelled',
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognizeBatch(
+              imageBytesList: [(Uint8List.fromList([1, 2, 3]), 'jpeg')],
+            ),
+            throwsA(
+              isA<DioException>().having(
+                (error) => error.type,
+                'type',
+                DioExceptionType.cancel,
+              ),
+            ),
+          );
+
+          expect(service.diagnosticResponse()['errorType'], 'cancel');
+        },
+      );
+
+      test(
+        'recognize keeps wrapping non-cancellation Dio failures',
+        () async {
+          final service = OcrService(
+            config: _testOcrConfig,
+            dio: Dio()
+              ..interceptors.add(
+                _InterceptorWithCallback(
+                  callback: (options, handler) => handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      type: DioExceptionType.badResponse,
+                      response: Response(
+                        requestOptions: options,
+                        statusCode: 503,
+                        data: {'error': {'message': 'service unavailable'}},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          );
+
+          await expectLater(
+            service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
+            throwsA(
+              isA<Exception>().having(
+                (error) => error.toString(),
+                'message',
+                allOf(contains('HTTP 503'), contains('service unavailable')),
+              ),
+            ),
+          );
+
+          expect(service.lastResponseStatusCode, 503);
+          expect(service.diagnosticResponse()['errorType'], 'badResponse');
+        },
+      );
+
       test('recognize captures non-map response body in diagnostics', () async {
         const responseBody = 'unexpected OCR response body';
         final service = OcrService(
