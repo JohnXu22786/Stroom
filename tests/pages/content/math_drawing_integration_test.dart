@@ -12,19 +12,23 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: HomePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
+    try {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(home: HomePage()),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final mathModule = find.text('数学绘图');
-    await tester.ensureVisible(mathModule);
-    await tester.tap(mathModule);
-    await tester.pumpAndSettle();
+      final mathModule = find.text('数学绘图');
+      await tester.ensureVisible(mathModule);
+      await tester.tap(mathModule);
+      await tester.pumpAndSettle();
 
-    expect(find.byType(MathDrawingPage), findsOneWidget);
-    expect(tester.takeException(), isNull);
+      expect(find.byType(MathDrawingPage), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }
