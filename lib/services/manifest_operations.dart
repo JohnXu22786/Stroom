@@ -29,6 +29,9 @@ class ManifestOperations<T extends FileRecord> {
   final bool useAppSupportDir; // false = app documents dir
   final T Function(Map<String, dynamic>) fromMap;
 
+  @visibleForTesting
+  final Future<bool> Function(File file)? fileExistsForTesting;
+
   /// Optional extra cleanup when entity files are deleted (e.g. .txt sidecar).
   final Future<void> Function(T record)? onExtraDelete;
 
@@ -46,6 +49,7 @@ class ManifestOperations<T extends FileRecord> {
     required this.storageDirName,
     this.useAppSupportDir = false,
     required this.fromMap,
+    this.fileExistsForTesting,
     this.onExtraDelete,
     required this.tableName,
     required this.toMap,
@@ -786,7 +790,9 @@ class ManifestOperations<T extends FileRecord> {
       final dir = await _storageDir;
       throwIfAsrAudioCanceled(cancelToken);
       final file = File(p.join(dir, fileName));
-      if (!await file.exists()) return null;
+      final exists = await (fileExistsForTesting?.call(file) ?? file.exists());
+      throwIfAsrAudioCanceled(cancelToken);
+      if (!exists) return null;
       return await readAsrAudioStream(
         file.openRead(),
         cancelToken: cancelToken,

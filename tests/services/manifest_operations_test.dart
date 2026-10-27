@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/services/manifest_operations.dart';
@@ -12,6 +15,15 @@ import 'package:stroom/utils/image_thumbnail_loader.dart';
 import 'package:stroom/utils/text_manifest.dart';
 import 'package:stroom/utils/video_manifest.dart';
 import 'package:stroom/utils/web_file_store.dart';
+
+class _DocumentsDirectory extends PathProviderPlatform {
+  _DocumentsDirectory(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +45,46 @@ void main() {
 
   tearDown(() {
     ManifestDatabase.beforeWebDataReadForTesting = null;
+  });
+
+  test('cancellable native read reports cancellation after file existence wait',
+      () async {
+    final originalPathProvider = PathProviderPlatform.instance;
+    final directory = await Directory.systemTemp.createTemp(
+      'manifest-cancel-test-',
+    );
+    PathProviderPlatform.instance = _DocumentsDirectory(directory.path);
+    WebFileStore.disableTestMode();
+    addTearDown(() async {
+      PathProviderPlatform.instance = originalPathProvider;
+      WebFileStore.enableTestMode();
+      await directory.delete(recursive: true);
+    });
+
+    final existenceStarted = Completer<void>();
+    final existenceResult = Completer<bool>();
+    final operations = ManifestOperations<AudioRecord>(
+      manifestKey: 'audio_manifest',
+      storageDirName: 'audio',
+      fromMap: AudioRecord.fromMap,
+      tableName: 'audio_records',
+      toMap: (record) => record.toMap(),
+      fileExistsForTesting: (_) {
+        existenceStarted.complete();
+        return existenceResult.future;
+      },
+    );
+    final cancelToken = CancelToken();
+    final read = operations.readFileCancellable(
+      'missing.wav',
+      cancelToken: cancelToken,
+    );
+
+    await existenceStarted.future;
+    cancelToken.cancel('cancel while checking existence');
+    existenceResult.complete(false);
+
+    await expectLater(read, throwsA(same(cancelToken.cancelError)));
   });
 
   // ====================================================================
