@@ -394,6 +394,19 @@ class _FailingPickerFile extends XFile {
   Future<Uint8List> readAsBytes() async => throw failure;
 }
 
+class _NamedPickerFile extends XFile {
+  _NamedPickerFile(this._name, this._bytes) : super(_name);
+
+  final String _name;
+  final Uint8List _bytes;
+
+  @override
+  String get name => _name;
+
+  @override
+  Future<Uint8List> readAsBytes() async => _bytes;
+}
+
 class _CompletablePickerFile extends XFile {
   _CompletablePickerFile({required this.readStarted, required this.finishRead})
       : super('slow.png');
@@ -512,7 +525,7 @@ void main() {
                 ),
               ];
             }
-            return [XFile.fromData(validBytes, name: 'second.png')];
+            return [_NamedPickerFile('second.png', validBytes)];
           },
           testImagePayloadPreparer: (bytes) async {
             if (!secondPreparationCompleted.isCompleted) {
@@ -587,7 +600,7 @@ void main() {
             gallerySelections++;
             if (gallerySelections == 1) return firstPickerResult.future;
             return Future.value([
-              XFile.fromData(validBytes, name: 'second.png'),
+              _NamedPickerFile('second.png', validBytes),
             ]);
           },
           testImagePayloadPreparer: (bytes) async =>
@@ -613,9 +626,7 @@ void main() {
       );
       expect(find.text('已选 1 张图片'), findsNothing);
 
-      firstPickerResult.complete([
-        XFile.fromData(validBytes, name: 'first.png'),
-      ]);
+      firstPickerResult.complete([_NamedPickerFile('first.png', validBytes)]);
       await _pumpUntil(
         tester,
         () => find.text('已选 2 张图片').evaluate().isNotEmpty,
