@@ -406,8 +406,12 @@ extension _ChatServiceParamsExt on ChatService {
         result,
         cp.paramName,
         value,
-        replaceExistingMap: cp.type == 'json' &&
-            replaceFlatJsonMapNames?.contains(cp.paramName) == true,
+        replaceExistingMap:
+            replaceFlatJsonMapNames?.contains(cp.paramName) == true &&
+                (cp.type == 'json' ||
+                    !customParams.any(
+                      (other) => other.paramName.startsWith('${cp.paramName}.'),
+                    )),
       );
       if (cp.type == 'json' && value is Map && value.isEmpty) {
         emptyJsonParents.add(cp.paramName);
