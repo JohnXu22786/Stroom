@@ -970,6 +970,31 @@ void main() {
     final restored = ConversationRecordAdapter.messageToLegacyMap(message);
     expect(restored['rawRequest'], {'safeField': 'preserved'});
   });
+
+  test('preserves base64 fields in unknown legacy extension data', () {
+    final conversation = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'opaque-extension',
+      'title': 'Opaque extension',
+      'vendorState': {
+        'base64Data': 'opaque-value',
+        'nested': [
+          {'base64Data': 'another-opaque-value'},
+        ],
+      },
+    });
+
+    final restored = ConversationRecordAdapter.toLegacyMap(
+      conversation,
+      const [],
+    );
+
+    expect(restored['vendorState'], {
+      'base64Data': 'opaque-value',
+      'nested': [
+        {'base64Data': 'another-opaque-value'},
+      ],
+    });
+  });
 }
 
 StroomMessage _message(String id, int sequence, [String text = 'text']) =>

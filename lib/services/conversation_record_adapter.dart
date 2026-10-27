@@ -81,9 +81,11 @@ class ConversationRecordAdapter {
         if (map['extensions'] is Map)
           ...Map<String, dynamic>.from(map['extensions'] as Map),
         legacyConversationNamespace: {
-          ..._withoutInlineMediaBytes(Map<String, dynamic>.fromEntries(
-            map.entries.where((entry) => !known.contains(entry.key)),
-          )),
+          ..._withoutInlineDraftAttachmentBytes(
+            Map<String, dynamic>.fromEntries(
+              map.entries.where((entry) => !known.contains(entry.key)),
+            ),
+          ),
         },
       },
     );
@@ -160,21 +162,19 @@ class ConversationRecordAdapter {
     return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
-  static Map<String, dynamic> _withoutInlineMediaBytes(
+  static Map<String, dynamic> _withoutInlineDraftAttachmentBytes(
     Map<String, dynamic> source,
   ) {
-    Object? clean(Object? value) {
-      if (value is Map) {
-        return <String, dynamic>{
-          for (final entry in value.entries)
-            if (entry.key.toString() != 'base64Data')
-              entry.key.toString(): clean(entry.value),
-        };
-      }
-      if (value is List) return value.map(clean).toList();
-      return value;
+    // Only the known draft-attachment collection owns inline media payloads;
+    // similarly named vendor extension fields remain opaque.
+    final result = Map<String, dynamic>.from(source);
+    final attachments = result['draftAttachments'];
+    if (attachments is List) {
+      result['draftAttachments'] = attachments.map((raw) {
+        if (raw is! Map) return raw;
+        return Map<String, dynamic>.from(raw)..remove('base64Data');
+      }).toList();
     }
-
-    return Map<String, dynamic>.from(clean(source) as Map);
+    return result;
   }
 }
