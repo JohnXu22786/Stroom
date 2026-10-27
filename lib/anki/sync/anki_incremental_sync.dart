@@ -78,7 +78,11 @@ class AnkiIncrementalSync {
           throw const AnkiSyncException('同步服务器 start 响应无法解析');
         }
 
-        final incomingGraves = _map(start);
+        final rawGraves = start['graves'];
+        if (rawGraves is! Map) {
+          throw const AnkiSyncException('同步服务器 start 响应缺少有效的 graves');
+        }
+        final incomingGraves = _map(rawGraves);
         await _sendAndApplyGraves(txn, client, incomingGraves, remote.usn);
         await _exchangeUnchunkedChanges(
           txn,

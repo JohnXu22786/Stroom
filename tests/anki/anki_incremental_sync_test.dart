@@ -1965,7 +1965,9 @@ Future<void> _queueCollectionSync(
       'empty': false,
       'media_usn': 0,
     }),
-    _json(remoteGraves ?? {'cards': [], 'notes': [], 'decks': []}),
+    _json({
+      'graves': remoteGraves ?? {'cards': [], 'notes': [], 'decks': []},
+    }),
     _json(changes),
     _json(remoteChunk ?? {'done': true}),
     _json(null),
