@@ -1735,7 +1735,9 @@ void main() {
 
           await expectLater(
             service.recognizeBatch(
-              imageBytesList: [(Uint8List.fromList([1, 2, 3]), 'jpeg')],
+              imageBytesList: [
+                (Uint8List.fromList([1, 2, 3]), 'jpeg')
+              ],
             ),
             throwsA(
               isA<DioException>().having(
@@ -1765,7 +1767,9 @@ void main() {
                       response: Response(
                         requestOptions: options,
                         statusCode: 503,
-                        data: {'error': {'message': 'service unavailable'}},
+                        data: {
+                          'error': {'message': 'service unavailable'}
+                        },
                       ),
                     ),
                   ),
