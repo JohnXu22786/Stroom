@@ -19,15 +19,27 @@ class AppStorage {
   /// Returns the path to the application documents directory.
   ///
   /// Resolution order:
-  /// 1. [getApplicationDocumentsDirectory] (native)
-  /// 2. If [MissingPluginException] is thrown:
-  ///    - `FLUTTER_TEST` environment is set → [Directory.systemTemp]
+  /// 1. `FLUTTER_TEST` environment is set → [Directory.systemTemp]
+  /// 2. [getApplicationDocumentsDirectory] (native)
+  /// 3. If [MissingPluginException] is thrown:
   ///    - [Platform.isWindows] → `<cwd>/stroom_data`
   ///    - otherwise → [Directory.systemTemp]
   ///
   /// The result is cached after the first successful resolution.
   static Future<String> get directory async {
     if (_resolved != null) return _resolved!;
+
+    if (!kIsWeb) {
+      try {
+        if (Platform.environment['FLUTTER_TEST'] == 'true') {
+          _resolved = _safeTempPath();
+          return _resolved!;
+        }
+      } catch (e) {
+        AppLogService.warning('AppStorage', '检查 FLUTTER_TEST 环境变量失败: $e');
+      }
+    }
+
     await AppLogService.info('AppStorage', '获取应用文档目录');
 
     try {
