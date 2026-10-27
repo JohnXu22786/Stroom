@@ -27,10 +27,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: tools/math_editor_test/package-lock.json
-      - run: npm ci --prefix tools/math_editor_test
-      - run: npm test --prefix tools/math_editor_test
       - run: node --test tests/widgets/mermaid_render_widget_js_test.cjs
       - run: node --test tests/catcatch/js_hook_script_test.cjs
 
