@@ -195,6 +195,81 @@ void chatServiceRequestGroup3() {
     });
   });
 
+  group('ChatService - saved empty model option selection', () {
+    Future<Map<String, dynamic>?> captureParams(CustomParam modelParam) async {
+      final providerConfig = ProviderConfigItem(
+        providerName: 'Test provider',
+        customParams: [
+          CustomParam(
+            paramName: modelParam.paramName,
+            defaultValue: modelParam.defaultValue,
+            type: modelParam.type,
+          ),
+        ],
+      );
+      final modelConfig = ModelConfig(
+        modelId: 'test-model',
+        name: 'Test',
+        typeConfig: {'context': 4096},
+        customParams: [modelParam],
+      );
+      final provider = _CapturingProvider();
+      final service = ChatService(
+        provider: provider,
+        modelConfig: modelConfig,
+        providerConfig: providerConfig,
+      );
+
+      service.sendStream('Hi', history: []).listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+      return provider.capturedExtraParams;
+    }
+
+    test('omits inherited string default after all options are unchecked',
+        () async {
+      final params = await captureParams(
+        CustomParam(
+          paramName: 'route',
+          defaultValue: 'provider-route',
+          options: const [],
+          optionOrder: const ['fast', 'accurate'],
+        ),
+      );
+
+      expect(params, isNotNull);
+      expect(params!.containsKey('route'), isFalse);
+    });
+
+    test('omits inherited number default after all options are unchecked',
+        () async {
+      final params = await captureParams(
+        CustomParam(
+          paramName: 'top_k',
+          defaultValue: '32',
+          type: 'number',
+          options: const [],
+          optionOrder: const ['16', '32'],
+        ),
+      );
+
+      expect(params, isNotNull);
+      expect(params!.containsKey('top_k'), isFalse);
+    });
+
+    test('uses legacy default when no explicit empty selection was saved',
+        () async {
+      final params = await captureParams(
+        CustomParam(
+          paramName: 'route',
+          defaultValue: 'provider-route',
+        ),
+      );
+
+      expect(params, isNotNull);
+      expect(params!['route'], 'provider-route');
+    });
+  });
+
   group('ChatService._lastRequestBody - parameter ordering', () {
     test('extraParams are after standard params in _lastRequestBody', () async {
       final modelConfig = ModelConfig(

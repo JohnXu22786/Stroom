@@ -387,6 +387,17 @@ extension _ChatServiceParamsExt on ChatService {
       ...customParams.where((param) => !isJsonParent(param)),
     ];
     for (final cp in orderedParams) {
+      if (source == 'model' &&
+          cp.options.isEmpty &&
+          cp.optionOrder.isNotEmpty &&
+          (cp.type == 'string' || cp.type == 'number')) {
+        // An explicit saved option order distinguishes an intentional
+        // all-unchecked selection from legacy params that have no options.
+        // Replace any provider-layer value with an omission marker so the
+        // inherited default is removed from the final request as well.
+        setNestedParam(result, cp.paramName, const _OmittedSentinel());
+        continue;
+      }
       final value = ChatService._coerceCustomParam(
         cp.paramName,
         cp.type,
