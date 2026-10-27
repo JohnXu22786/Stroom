@@ -13,6 +13,7 @@ import 'revlog_dao.dart';
 import 'grave_dao.dart';
 import 'col_dao.dart';
 import '../models/note.dart';
+import '../../services/storage_service.dart';
 
 /// Manages the SQLite connection to collection.anki2.
 ///
@@ -50,8 +51,7 @@ class AnkiDatabase {
   static Future<void> invalidateLegacySyncMetadataMigrationMarker({
     String? basePath,
   }) async {
-    final directory =
-        basePath ?? (await getApplicationDocumentsDirectory()).path;
+    final directory = basePath ?? await AppStorage.directory;
     final marker = File(
       '${p.join(directory, 'collection.anki2')}'
       '.stroom-sync-metadata-migration',
