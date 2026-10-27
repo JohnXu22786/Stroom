@@ -427,8 +427,7 @@ extension _ChatServiceParamsExt on ChatService {
           result,
           cp.paramName,
           nestedValues.isEmpty ? const _OmittedSentinel() : nestedValues,
-          replaceExistingMap:
-              jsonMapNames?.contains(cp.paramName) == true,
+          replaceExistingMap: jsonMapNames?.contains(cp.paramName) == true,
         );
         continue;
       }
@@ -455,8 +454,7 @@ extension _ChatServiceParamsExt on ChatService {
             replaceFlatJsonMapNames?.contains(cp.paramName) == true &&
                 (cp.type == 'json' ||
                     !customParams.any(
-                      (other) =>
-                          other.paramName.startsWith('${cp.paramName}.'),
+                      (other) => other.paramName.startsWith('${cp.paramName}.'),
                     )),
       );
       if (cp.type == 'json' && value is Map && value.isEmpty) {

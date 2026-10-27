@@ -289,8 +289,7 @@ void chatServiceRequestGroup3() {
       expect(params!.containsKey('top_k'), isFalse);
     });
 
-    test('omits provider JSON object for an empty string selection',
-        () async {
+    test('omits provider JSON object for an empty string selection', () async {
       final params = await captureParams(
         CustomParam(
           paramName: 'route',
@@ -305,8 +304,7 @@ void chatServiceRequestGroup3() {
       expect(params!.containsKey('route'), isFalse);
     });
 
-    test('omits provider JSON object for an empty number selection',
-        () async {
+    test('omits provider JSON object for an empty number selection', () async {
       final params = await captureParams(
         CustomParam(
           paramName: 'top_k',
@@ -377,7 +375,8 @@ void chatServiceRequestGroup3() {
       });
     });
 
-    test('preserves model dotted descendants while omitting a provider JSON map',
+    test(
+        'preserves model dotted descendants while omitting a provider JSON map',
         () async {
       final providerConfig = ProviderConfigItem(
         providerName: 'Test provider',
