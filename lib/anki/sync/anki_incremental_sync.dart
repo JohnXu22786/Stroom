@@ -198,9 +198,9 @@ class AnkiIncrementalSync {
       await client.requestJson('applyGraves', {'chunk': chunk});
     }
 
-    final cards = _intList(remote['cards']);
-    final notes = _intList(remote['notes']);
-    final decks = _intList(remote['decks']);
+    final cards = _graveIds(remote['cards'], 'cards');
+    final notes = _graveIds(remote['notes'], 'notes');
+    final decks = _graveIds(remote['decks'], 'decks');
     for (final id in cards) {
       await _retainRemoteGrave(txn, id, 0, sentGraves);
       await txn.delete('revlog', where: 'cid = ?', whereArgs: [id]);
@@ -926,7 +926,19 @@ class AnkiIncrementalSync {
     throw AnkiSyncException('同步服务器 chunk $key 数据无法解析');
   }
 
-  static List<int> _intList(Object? value) => _list(value).map(_int).toList();
+  static List<int> _graveIds(Object? value, String type) {
+    if (value == null) return const <int>[];
+    if (value is! List) {
+      throw AnkiSyncException('同步服务器 graves $type 数据无法解析');
+    }
+    return value.map((raw) {
+      final id = _tupleInt(raw, 'grave $type');
+      if (id <= 0) {
+        throw AnkiSyncException('同步服务器 graves $type 数据包含无效 ID');
+      }
+      return id;
+    }).toList();
+  }
 
   static int _int(Object? value) =>
       value is num ? value.toInt() : int.tryParse('$value') ?? 0;

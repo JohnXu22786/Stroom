@@ -1828,6 +1828,40 @@ void main() {
     expect(storedConfig['activeDecks'], [survivor.id]);
   });
 
+  test('rejects malformed remote grave IDs without advancing the collection',
+      () async {
+    await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
+    await AnkiIncrementalSync.sync(collection, client);
+
+    for (final key in ['cards', 'notes', 'decks']) {
+      final before = (await collection.db.query('col')).single;
+      await _queueCollectionSync(
+        fakeHttp,
+        collection,
+        sanityStatus: 'ok',
+        remoteModified: (before['mod'] as int) - 1,
+        remoteGraves: {
+          'cards': <dynamic>[],
+          'notes': <dynamic>[],
+          'decks': <dynamic>[],
+          key: ['invalid-id'],
+        },
+      );
+
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncException>()),
+      );
+
+      expect(fakeHttp.requests.last.url.path, '/sync/abort');
+      expect(await collection.db.query('graves', where: 'oid = 0'), isEmpty);
+      final after = (await collection.db.query('col')).single;
+      expect(after['mod'], before['mod']);
+      expect(after['usn'], before['usn']);
+      fakeHttp.responses.clear();
+    }
+  });
+
   test(
     'remote graves remove history and remain pending for another sync',
     () async {
