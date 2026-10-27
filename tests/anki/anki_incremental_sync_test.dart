@@ -1194,7 +1194,7 @@ void main() {
         (await collection.cards.get(dayLearningReviewCard.id))!;
     expect(restoredDayLearningReview.deck_id, homeDeck.id);
     expect(restoredDayLearningReview.due, 1700000000);
-    expect(restoredDayLearningReview.queue, anki.CardQueue.learn);
+    expect(restoredDayLearningReview.queue, anki.CardQueue.dayLearn);
 
     expect(await collection.notes.get(note.id), isNotNull);
     for (final card in [

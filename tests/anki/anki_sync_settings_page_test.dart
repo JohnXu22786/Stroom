@@ -179,7 +179,10 @@ void main() {
     await tester.tap(find.text('检查服务器状态'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('修改时间 2023-11-14'), findsOneWidget);
+    final status = find.textContaining('结构版本戳');
+    await tester.scrollUntilVisible(status, 300);
+    final statusText = tester.widget<Text>(status).data!;
+    expect(statusText, contains('修改时间 2023-11-14'));
   });
 
   testWidgets('blocks a second sync tap while saving server settings', (

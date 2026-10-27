@@ -99,13 +99,14 @@ class AppStorage {
     return _safeTempPath();
   }
 
-  /// Returns [Directory.systemTemp.path] safely, or a fallback if unavailable.
+  /// Returns a Stroom-specific path under the system temp directory safely.
   static String _safeTempPath() {
     try {
-      return Directory.systemTemp.path;
+      return '${Directory.systemTemp.path}'
+          '${Platform.pathSeparator}stroom_data';
     } catch (e) {
       AppLogService.warning('AppStorage', '获取系统临时目录失败，使用 /tmp 回退: $e');
-      return '/tmp';
+      return '/tmp/stroom_data';
     }
   }
 

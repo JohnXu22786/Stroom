@@ -33,7 +33,10 @@ void main() {
       AppStorage.resetCache();
       final path = await AppStorage.directory;
 
-      expect(path, Directory.systemTemp.path);
+      expect(
+        path,
+        '${Directory.systemTemp.path}${Platform.pathSeparator}stroom_data',
+      );
     },
   );
 
