@@ -129,6 +129,26 @@ class SelectedAudio {
 
   Future<Uint8List> loadBytes() => loadBytesWithCancellation(null);
 
+  /// Validate the selected source format while keeping custom-loaded audio
+  /// transient. Picker validation is sequential, so a batch does not retain
+  /// every file just to preserve the existing immediate error feedback.
+  Future<void> validateFormatAndReleaseLoadedBytes({
+    Future<Uint8List> Function()? loadForValidation,
+  }) async {
+    try {
+      final loadedBytes = await (loadForValidation?.call() ?? loadBytes());
+      if (loadedBytes.isEmpty) {
+        throw const FormatException('音频数据为空');
+      }
+      resolveFormat?.call(loadedBytes);
+    } finally {
+      if (hasCustomLoader) {
+        _cachedLoadedBytes = null;
+        _loadingBytes = null;
+      }
+    }
+  }
+
   SelectedAudio copyForChunkCheckpointReset() => SelectedAudio(
         bytes: bytes,
         loadBytes: hasCustomLoader ? loadBytes : null,
@@ -1266,9 +1286,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     // duplicate text records).
     if (_selectedAudios.any((a) => a.isUrl && a.name == url)) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('该链接已在列表中')));
       }
       return;
     }
@@ -1308,9 +1327,10 @@ class _AsrPageState extends ConsumerState<AsrPage> {
               const SizedBox(height: 24),
               Text(
                 '选择音频来源',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
               Column(
@@ -1366,34 +1386,35 @@ class _AsrPageState extends ConsumerState<AsrPage> {
 
       final newAudios = <SelectedAudio>[];
       for (final file in files) {
-        newAudios.add(
-          SelectedAudio(
-            bytes: Uint8List(0),
-            byteLength: file.lengthSync() ?? 0,
-            loadBytesWithCancellation: (cancelToken) async {
-              final bytes = await readAsrAudioStream(
-                file.readAsByteStream(),
-                cancelToken: cancelToken,
-              );
-              throwIfAsrAudioCanceled(cancelToken);
-              if (bytes.isEmpty) throw const FormatException('音频数据为空');
-              return bytes;
-            },
-            name: file.name,
-            format: _detectFormat(file.name),
-            resolveFormat: (bytes) => _resolveSelectedAudioFormat(
-              bytes,
-              fallbackFormat: _detectFormat(file.name),
-            ),
+        final audio = SelectedAudio(
+          bytes: Uint8List(0),
+          byteLength: file.lengthSync() ?? 0,
+          loadBytesWithCancellation: (cancelToken) async {
+            final bytes = await readAsrAudioStream(
+              file.readAsByteStream(),
+              cancelToken: cancelToken,
+            );
+            throwIfAsrAudioCanceled(cancelToken);
+            if (bytes.isEmpty) throw const FormatException('音频数据为空');
+            return bytes;
+          },
+          name: file.name,
+          format: _detectFormat(file.name),
+          resolveFormat: (bytes) => _resolveSelectedAudioFormat(
+            bytes,
+            fallbackFormat: _detectFormat(file.name),
           ),
         );
+        await audio.validateFormatAndReleaseLoadedBytes(
+          loadForValidation: file.readAsBytes,
+        );
+        newAudios.add(audio);
       }
 
       if (newAudios.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('无法读取音频文件')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('无法读取音频文件')));
         }
         return;
       }
@@ -1405,9 +1426,8 @@ class _AsrPageState extends ConsumerState<AsrPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择音频文件失败: $e')));
       }
     }
   }
@@ -1480,38 +1500,38 @@ class _AsrPageState extends ConsumerState<AsrPage> {
     final newAudios = <SelectedAudio>[];
     try {
       for (final record in selectedRecords) {
-        newAudios.add(
-          SelectedAudio(
-            bytes: Uint8List(0),
-            byteLength: record.size,
-            loadBytesWithCancellation: (cancelToken) async {
-              throwIfAsrAudioCanceled(cancelToken);
-              final bytes = await FileManifest.readFileCancellable(
-                record.storagePath,
-                cancelToken: cancelToken,
-              );
-              throwIfAsrAudioCanceled(cancelToken);
-              if (bytes == null || bytes.isEmpty) {
-                throw const FormatException('无法读取音频文件');
-              }
-              return bytes;
-            },
-            name: record.name,
-            format: record.format,
-            resolveFormat: (bytes) => _resolveSelectedAudioFormat(
-              bytes,
-              fallbackFormat: record.format,
-            ),
-          ),
+        final audio = SelectedAudio(
+          bytes: Uint8List(0),
+          byteLength: record.size,
+          loadBytesWithCancellation: (cancelToken) async {
+            throwIfAsrAudioCanceled(cancelToken);
+            final bytes = await FileManifest.readFileCancellable(
+              record.storagePath,
+              cancelToken: cancelToken,
+            );
+            throwIfAsrAudioCanceled(cancelToken);
+            if (bytes == null || bytes.isEmpty) {
+              throw const FormatException('无法读取音频文件');
+            }
+            return bytes;
+          },
+          name: record.name,
+          format: record.format,
+          resolveFormat: (bytes) =>
+              _resolveSelectedAudioFormat(bytes, fallbackFormat: record.format),
         );
+        await audio.validateFormatAndReleaseLoadedBytes();
+        newAudios.add(audio);
       }
-    } on FormatException catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('选择音频文件失败: $error')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('选择音频文件失败: $error')));
+      }
       return;
     }
 
+    if (!mounted) return;
     setState(() {
       _selectedAudios.addAll(newAudios);
       _errorMessage = null;
