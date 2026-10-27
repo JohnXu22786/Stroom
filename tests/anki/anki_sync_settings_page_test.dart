@@ -181,8 +181,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('连接成功，服务器状态已读取'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -800));
+    await tester.pumpAndSettle();
     final status = find.textContaining('结构版本戳');
-    await tester.ensureVisible(status.first);
+    expect(status, findsOneWidget);
     final statusText = tester.widget<Text>(status.first).data!;
     expect(statusText, contains('修改时间 2023-11-14'));
   });
@@ -234,9 +236,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('other page'), findsOneWidget);
     expect(client.closeCount, 0);
     client.respondWithMeta();
-    await tester.pumpAndSettle();
+    await client.closed.future.timeout(const Duration(seconds: 2));
 
     expect(client.closeCount, 1);
     expect(tester.takeException(), isNull);
@@ -585,6 +588,7 @@ class _RecordingHttpClient extends http.BaseClient {
 
 class _GatedHttpClient extends http.BaseClient {
   final requestStarted = Completer<void>();
+  final closed = Completer<void>();
   final _response = Completer<http.StreamedResponse>();
   int closeCount = 0;
 
@@ -620,6 +624,7 @@ class _GatedHttpClient extends http.BaseClient {
   @override
   void close() {
     closeCount++;
+    if (!closed.isCompleted) closed.complete();
     super.close();
   }
 }
