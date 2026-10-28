@@ -2346,6 +2346,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
 
       if (encodedBytes <= budgetBytes) return budgetBytes;
+      final budgetBeforeDialog = _requestSizeBudgetMiBController.text;
       final choice = await _showRequestSizeLimitDialog(
         encodedBytes: encodedBytes,
         budgetBytes: budgetBytes,
@@ -2355,6 +2356,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       );
       if (!mounted) return null;
       if (choice == null) {
+        _requestSizeBudgetMiBController.text = budgetBeforeDialog;
         setState(() => _errorMessage = '本次识别已取消；可切换识别方式或提高请求上限后重试。');
         return null;
       }

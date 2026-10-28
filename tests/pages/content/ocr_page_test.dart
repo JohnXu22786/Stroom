@@ -3977,6 +3977,88 @@ void main() {
         expect(taskNotifier.tasksForTest, isEmpty);
       },
     );
+
+    testWidgets(
+      'cancelling an edited oversized request restores the previous budget',
+      (tester) async {
+        final bytes = Uint8List.fromList(List<int>.generate(300, (i) => i));
+        final imagePayload = OcrImagePayload(
+          bytes: bytes,
+          format: 'png',
+          width: 1,
+          height: 1,
+        );
+        final taskNotifier = _InspectableBackgroundTaskNotifier();
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry()],
+            testImages: [
+              SelectedImage.fromPayload(
+                payload: imagePayload,
+                sourceName: 'oversized.png',
+              ),
+            ],
+            backgroundTasksNotifier: taskNotifier,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        Future<void> pumpDialogTransition() async {
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+
+        await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
+        await pumpDialogTransition();
+        await tester.enterText(
+          find.byKey(const Key('ocr_request_budget_editor_mib')),
+          '0.0001',
+        );
+        await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
+        await pumpDialogTransition();
+
+        await tester.tap(find.text('开始识别'));
+        await pumpDialogTransition();
+        expect(
+          tester
+              .widget<TextField>(
+                find.byKey(const Key('ocr_request_budget_dialog_mib')),
+              )
+              .controller!
+              .text,
+          '0.0001',
+        );
+
+        await tester.enterText(
+          find.byKey(const Key('ocr_request_budget_dialog_mib')),
+          '0.0002',
+        );
+        await tester.tap(find.text('取消').last);
+        await pumpDialogTransition();
+
+        expect(find.byTooltip('请求 JSON 上限：0.0001 MiB'), findsOneWidget);
+        expect(
+          find.text('本次识别已取消；可切换识别方式或提高请求上限后重试。'),
+          findsOneWidget,
+        );
+        expect(taskNotifier.tasksForTest, isEmpty);
+
+        await tester.tap(find.text('开始识别'));
+        await pumpDialogTransition();
+        expect(
+          tester
+              .widget<TextField>(
+                find.byKey(const Key('ocr_request_budget_dialog_mib')),
+              )
+              .controller!
+              .text,
+          '0.0001',
+        );
+        await tester.tap(find.text('取消').last);
+        await pumpDialogTransition();
+        expect(taskNotifier.tasksForTest, isEmpty);
+      },
+    );
   });
 
   // ====================================================================
