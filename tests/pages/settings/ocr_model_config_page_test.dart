@@ -371,16 +371,11 @@ void main() {
       );
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await _enterField(tester, 0, 'Edited OCR model');
       await _scrollTo(tester, find.text('最大 Token 数'));
       await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.byType(Switch).last);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byType(TextField).first,
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await _enterField(tester, 0, 'Edited OCR model');
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
