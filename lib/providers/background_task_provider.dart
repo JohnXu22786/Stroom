@@ -1990,7 +1990,8 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
               !hasSafeInstructionAfterEcho &&
-              !safeCredentialValueActionLead) ||
+              !safeCredentialValueActionLead &&
+              !hasCredentialUseContext) ||
           echo.length <= prefix.length ||
           (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
               !hasCredentialUseContext &&
