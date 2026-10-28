@@ -12756,6 +12756,59 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves documentation under an open mask and redacts credential echoes',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer docu*'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const safeInstruction = 'Please review the documentation carefully.';
+        final safeTask = taskFor(
+          'legacy-ocr-documentation-open-mask',
+          safeInstruction,
+        );
+        final safePersisted = jsonEncode(safeTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          safeInstruction,
+        );
+        expect(safePersisted, contains(safeInstruction));
+
+        const echoedCredential = 'docu7Qw9Lm2';
+        final credentialTask = taskFor(
+          'legacy-ocr-documentation-open-mask-credential-echo',
+          'Use $echoedCredential to process the receipt.',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        final migratedCredentialInstruction = OcrRetrySnapshot.fromMap(
+          credentialTask.retryData!,
+        ).instructionContent;
+        expect(migratedCredentialInstruction, isNot(contains(echoedCredential)));
+        expect(credentialPersisted, isNot(contains(echoedCredential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves prompts with short masked keys',
       () {
         final task = BackgroundTask.fromMap({
