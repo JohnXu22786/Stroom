@@ -2392,7 +2392,8 @@ void main() {
           ),
           testImagePayloadPreparer: (bytes) async =>
               prepareOcrImagePayloadSync(bytes),
-          testRetrySnapshotCacher: ({required taskId, required snapshot}) async {
+          testRetrySnapshotCacher: (
+              {required taskId, required snapshot}) async {
             throw StateError('cache write failed');
           },
           retryData: {
