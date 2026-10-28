@@ -252,8 +252,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// when the generic list is later edited or the entry is deleted.
   String? _retryInstructionSnapshot;
 
-  /// Whether [_startOcr] is inside its retry-instruction resolve await —
-  /// blocks a second tap from starting a duplicate OCR during that gap.
+  /// Whether [_startOcr] is waiting on image preparation or retry-instruction
+  /// restoration, blocking a second tap from starting duplicate OCR work.
   bool _ocrStarting = false;
 
   Future<OcrImagePayload> _prepareImagePayload(Uint8List bytes) =>
@@ -1636,6 +1636,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               height: 48,
               child: FilledButton.icon(
                 onPressed: _selectedImages.isEmpty ||
+                        _ocrStarting ||
                         _isProcessing ||
                         _isImageImportPending ||
                         _isRetryImagesLoading ||
@@ -1643,7 +1644,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         _retryImageCountMismatch
                     ? null
                     : _startOcr,
-                icon: _isProcessing
+                icon: _ocrStarting || _isProcessing
                     ? const SizedBox(
                         width: 18,
                         height: 18,
@@ -1654,15 +1655,17 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                       )
                     : const Icon(Icons.text_snippet, size: 20),
                 label: Text(
-                  _isProcessing
-                      ? _isPreparingRetryData
-                          ? '保存重试图片...'
-                          : '识别中...'
-                      : _isRetryImagesLoading
-                          ? '读取重试图片...'
-                          : _isImageImportPending
-                              ? '正在导入图片...'
-                              : '开始识别',
+                  _ocrStarting
+                      ? '准备图片中...'
+                      : _isProcessing
+                          ? _isPreparingRetryData
+                              ? '保存重试图片...'
+                              : '识别中...'
+                          : _isRetryImagesLoading
+                              ? '读取重试图片...'
+                              : _isImageImportPending
+                                  ? '正在导入图片...'
+                                  : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -2518,7 +2521,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return;
     }
 
-    _ocrStarting = true;
+    setState(() {
+      _ocrStarting = true;
+      _errorMessage = null;
+    });
     final sourceImages = List<SelectedImage>.of(_selectedImages);
     final images = <SelectedImage>[];
     try {
@@ -2535,15 +2541,26 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         }
       }
     } on FormatException catch (error) {
-      _ocrStarting = false;
       if (mounted) {
-        final retryImageCount = widget.retryData == null
-            ? 0
-            : OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+        var retryImageCount = 0;
+        try {
+          if (widget.retryData != null) {
+            retryImageCount =
+                OcrRetrySnapshot.fromMap(widget.retryData!).imageEntryCount;
+          }
+        } catch (retryDataError) {
+          debugPrint(
+            '[OCR] Failed to read retry image count: ${retryDataError.runtimeType}',
+          );
+        }
         if (widget.retryData == null && widget.retryTaskId == null) {
-          setState(() => _errorMessage = error.message);
+          setState(() {
+            _ocrStarting = false;
+            _errorMessage = error.message;
+          });
         } else {
           setState(() {
+            _ocrStarting = false;
             _retryImagesUnavailable = true;
             _retryImageCountUnknown = retryImageCount == 0;
             _requiredRetryImageCount =
@@ -2557,9 +2574,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
       return;
     } catch (error) {
-      _ocrStarting = false;
       if (mounted) {
-        setState(() => _errorMessage = '处理 OCR 图片失败，请重试');
+        setState(() {
+          _ocrStarting = false;
+          _errorMessage = '处理 OCR 图片失败，请重试';
+        });
       }
       debugPrint('[OCR] Image preparation failed: ${error.runtimeType}');
       return;
@@ -2575,16 +2594,18 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       }
     }
     if (selectionChanged) {
-      _ocrStarting = false;
-      setState(() => _errorMessage = '图片列表已变化，请重新开始识别。');
+      setState(() {
+        _ocrStarting = false;
+        _errorMessage = '图片列表已变化，请重新开始识别。';
+      });
       return;
     }
     final requestModelOptions = _getOcrModelOptions(ref);
     final requestModelIndex = _selectedModelOptionIndex(requestModelOptions);
     if (requestModelOptions.isEmpty || requestModelIndex == null) {
-      _ocrStarting = false;
       if (mounted) {
         setState(() {
+          _ocrStarting = false;
           _errorMessage = requestModelOptions.isEmpty
               ? '请先在设置中配置 OCR 供应商和模型'
               : _modelSelectionMessage(requestModelIndex) ?? '请重新选择 OCR 供应商和模型';
@@ -2597,6 +2618,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         ..clear()
         ..addAll(images);
       _errorMessage = null;
+      _ocrStarting = false;
       _isProcessing = true;
       _isPreparingRetryData = true;
     });
@@ -2614,9 +2636,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _requestSizeBudgetMiBController.text,
     );
     if (requestSizeBudgetBytes == null) {
-      _ocrStarting = false;
       if (mounted) {
         setState(() {
+          _ocrStarting = false;
           _isProcessing = false;
           _isPreparingRetryData = false;
           _errorMessage = '请求上限必须是大于 0 的 MiB 数值';
@@ -2642,9 +2664,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       try {
         await _resolvePendingRetryInstruction();
       } catch (error) {
-        _ocrStarting = false;
         if (mounted) {
           setState(() {
+            _ocrStarting = false;
             _isProcessing = false;
             _isPreparingRetryData = false;
             _errorMessage = '读取识别指令失败，请重试';
@@ -2688,8 +2710,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         _preflightRequestSize(effectiveConfig, images));
     if (!mounted) return;
     if (effectiveBudgetBytes == null) {
-      _ocrStarting = false;
       setState(() {
+        _ocrStarting = false;
         _isProcessing = false;
         _isPreparingRetryData = false;
       });
@@ -2762,7 +2784,16 @@ class _OcrPageState extends ConsumerState<OcrPage> {
         return true;
       },
     );
-    if (!taskPublished) return;
+    if (!taskPublished) {
+      if (mounted) {
+        setState(() {
+          _ocrStarting = false;
+          _isProcessing = false;
+          _isPreparingRetryData = false;
+        });
+      }
+      return;
+    }
 
     final runner = OcrTaskRunner(
       taskId: taskId,
