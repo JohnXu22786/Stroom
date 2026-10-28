@@ -95,6 +95,8 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     final m = widget.model;
     _nameController = TextEditingController(text: m?.name ?? '');
     _modelIdController = TextEditingController(text: m?.modelId ?? '');
+    _nameController.addListener(_handleControllerChanged);
+    _modelIdController.addListener(_handleControllerChanged);
 
     // Initialize OCR-specific params from typeConfig
     _temperature = (m?.typeConfig['temperature'] as num?)?.toDouble() ?? 0.0;
@@ -109,6 +111,7 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     _maxTokensController = TextEditingController(
       text: maxTokens != null ? maxTokens.toString() : '',
     );
+    _maxTokensController.addListener(_handleControllerChanged);
 
     _customParams = (m?.customParams ?? []).map((p) => p.copy()).toList();
     // Initialize JSON validation for existing params
@@ -117,8 +120,15 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     }
   }
 
+  void _handleControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _nameController.removeListener(_handleControllerChanged);
+    _modelIdController.removeListener(_handleControllerChanged);
+    _maxTokensController.removeListener(_handleControllerChanged);
     _nameController.dispose();
     _modelIdController.dispose();
     _maxTokensController.dispose();
