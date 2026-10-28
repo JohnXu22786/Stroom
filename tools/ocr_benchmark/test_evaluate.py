@@ -2,6 +2,8 @@ import hashlib
 import json
 import shutil
 import struct
+import subprocess
+import sys
 import unittest
 import zlib
 from contextlib import redirect_stderr, redirect_stdout
@@ -67,6 +69,51 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def _run_cli_with_output(self, directory, output_path):
+        directory_path = Path(directory)
+        manifest_path = directory_path / "manifest.json"
+        predictions_path = directory_path / "predictions.json"
+        manifest_path.write_text(json.dumps(small_manifest()), encoding="utf-8")
+        predictions_path.write_text(json.dumps(predictions([])), encoding="utf-8")
+
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "evaluate.py"),
+                "--manifest",
+                str(manifest_path),
+                "--predictions",
+                str(predictions_path),
+                "--output",
+                str(output_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_cli_output_write_failure_is_reported_without_traceback(self):
+        with TemporaryDirectory() as directory:
+            output_directory = Path(directory) / "output"
+            output_directory.mkdir()
+
+            result = self._run_cli_with_output(directory, output_directory)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertRegex(result.stderr, r"^evaluation error: cannot write .*output")
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_output_file_contains_json(self):
+        with TemporaryDirectory() as directory:
+            output_path = Path(directory) / "report.json"
+
+            result = self._run_cli_with_output(directory, output_path)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            report = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["status"], "pending")
+
     def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
         manifest = {
             "fixtures": [
