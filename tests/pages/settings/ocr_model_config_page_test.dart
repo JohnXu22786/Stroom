@@ -157,6 +157,38 @@ void main() {
     });
   });
 
+  group('OcrModelConfigPage unsaved custom params', () {
+    testWidgets(
+        'system Back prompts when a blank-name param default is edited and '
+        'cancel keeps the edit', (tester) async {
+      await _pumpConfigPage(tester);
+
+      await _scrollTo(tester, find.text('添加参数'));
+      await tester.tap(find.text('添加参数'));
+      await tester.pumpAndSettle();
+
+      final defaultField = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '默认参数值',
+      );
+      await _scrollTo(tester, defaultField);
+      await tester.enterText(defaultField, 'edited default');
+      await tester.pump();
+
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        tester.widget<TextField>(defaultField).controller!.text,
+        'edited default',
+      );
+    });
+  });
+
   group('OcrModelConfigPage custom parameter validation', () {
     testWidgets('rejects an invalid numeric default when saving',
         (tester) async {

@@ -46,7 +46,11 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
       // New model: check if any field is non-empty or any param changed
       if (_nameController.text.isNotEmpty) return true;
       if (_modelIdController.text.isNotEmpty) return true;
-      if (_customParams.any((p) => p.paramName.isNotEmpty)) return true;
+      if (_customParams.any(
+        (p) => p.paramName.isNotEmpty || p.defaultValue.isNotEmpty,
+      )) {
+        return true;
+      }
       if (_enableTemperature || _enableTopP || _enableMaxTokens) {
         return true;
       }
