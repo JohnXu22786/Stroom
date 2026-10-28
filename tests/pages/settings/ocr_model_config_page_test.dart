@@ -53,6 +53,15 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
   await tester.pump();
 }
 
+Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
+  final field = find.byWidgetPredicate(
+    (widget) =>
+        widget is TextField && widget.decoration?.hintText == '如 4096',
+  );
+  await tester.enterText(field, text);
+  await tester.pump();
+}
+
 Future<void> _simulateSystemBack(WidgetTester tester) async {
   // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
   await tester.binding.handlePopRoute();
@@ -364,7 +373,7 @@ void main() {
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
       await _scrollTo(tester, find.text('最大 Token 数'));
-      await _enterField(tester, 2, 'not an integer');
+      await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.byType(Switch).last);
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -393,7 +402,7 @@ void main() {
 
       await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
       await _scrollTo(tester, find.text('最大 Token 数'));
-      await _enterField(tester, 2, 'not an integer');
+      await _enterMaxTokens(tester, 'not an integer');
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
