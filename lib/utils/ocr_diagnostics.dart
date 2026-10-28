@@ -124,7 +124,39 @@ class OcrDiagnosticSnapshot {
       ...credentialValuesFromHeaders(rawRequest['headers']),
       ...credentialValuesFromUrl(rawRequest['url']),
       ...credentialValuesFromUrl(rawRequest['host']),
+      ..._credentialValuesFromBody(rawRequest['body']),
     }.toList(growable: false);
+  }
+
+  static List<String> _credentialValuesFromBody(dynamic rawBody) {
+    final values = <String>{};
+
+    void collect(dynamic value, {bool credentialField = false}) {
+      if (credentialField && value is String) {
+        final credential = value.trim();
+        if (credential.isNotEmpty && credential.length <= 512) {
+          values.add(credential);
+        }
+      }
+      if (value is Map) {
+        for (final entry in value.entries) {
+          if (entry.key is String) {
+            collect(
+              entry.value,
+              credentialField:
+                  _credentialQueryParameter.hasMatch(entry.key as String),
+            );
+          }
+        }
+      } else if (value is List) {
+        for (final item in value) {
+          collect(item, credentialField: credentialField);
+        }
+      }
+    }
+
+    collect(rawBody);
+    return values.toList(growable: false);
   }
 
   static List<String> credentialValuesFromHeaders(dynamic rawHeaders) {
