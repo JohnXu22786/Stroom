@@ -1988,8 +1988,10 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final bareSecretBasedUseContext =
           prefix.toLowerCase() == 'secret' &&
               echoSuffix.toLowerCase() == '-based' &&
-              RegExp(r'\b(?:use|using)$', caseSensitive: false)
-                  .hasMatch(beforeEcho.trimRight()) &&
+              RegExp(
+                r'\b(?:use|using)$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho.trimRight()) &&
               RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
