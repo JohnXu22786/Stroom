@@ -315,6 +315,7 @@ final providerEntriesProvider =
 
 class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final LlmCredentialStore _credentialStore;
+  final Future<AiGatewayFacade> Function() _gatewayFactory;
   bool _providerEntriesSourceUnreadable = false;
   bool _reloadBeforeNextMutation = false;
   bool _lastLoadSucceeded = false;
@@ -322,8 +323,11 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   final Map<String, String> _conflictedEntryUpdateFingerprints = {};
   String? _loadedProviderEntriesSourceJson;
 
-  ProviderEntriesNotifier({LlmCredentialStore? credentialStore})
-      : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
+  ProviderEntriesNotifier({
+    LlmCredentialStore? credentialStore,
+    Future<AiGatewayFacade> Function()? gatewayFactory,
+  })  : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
+        _gatewayFactory = gatewayFactory ?? AiGateway.sharedPlatform,
         super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
@@ -597,14 +601,10 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
   Future<void> _appendLlmModelGroupConfigs(
     List<ProviderEntry> entries,
   ) async {
-    final gateway = await AiGateway.sharedPlatform();
+    final gateway = await _gatewayFactory();
     final accountManagement = gateway.accountManagement;
-    final results = await Future.wait([
-      accountManagement.listAccounts(),
-      accountManagement.listModelGroups(),
-    ]);
-    final accounts = results[0] as List<AiGatewayAccount>;
-    final groups = results[1] as List<AiGatewayModelGroup>;
+    final accounts = await accountManagement.listAccounts();
+    final groups = await accountManagement.listModelGroups();
 
     var llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
     if (llmEntryIndex < 0 && groups.isEmpty) return;

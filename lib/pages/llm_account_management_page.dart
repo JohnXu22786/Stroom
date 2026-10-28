@@ -220,8 +220,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (updated == null || !mounted) return;
     try {
       final gateway = await _gatewayFuture;
-      await gateway.accountManagement
-          .saveModelGroup(updated);
+      await gateway.accountManagement.saveModelGroup(updated);
       await _reload();
     } catch (_) {
       _showError('模型组保存失败。请确认成员账号中存在对应的上游模型。');
@@ -775,7 +774,8 @@ class _ModelGroupCard extends StatelessWidget {
   }
 }
 
-List<String> _quotaRows(Map<AiGatewayUsageWindow, AiGatewayUsageWindowState> usage) {
+List<String> _quotaRows(
+    Map<AiGatewayUsageWindow, AiGatewayUsageWindowState> usage) {
   const labels = {
     AiGatewayUsageWindow.fiveHour: '5 小时',
     AiGatewayUsageWindow.day: '每日',
@@ -856,7 +856,8 @@ String _statusLabel(AiGatewayAccountStatus status) => switch (status) {
       AiGatewayAccountStatus.needsAttention => '需要重新认证',
     };
 
-String _connectionExplanation(AiGatewayAccountStatus status) => switch (status) {
+String _connectionExplanation(AiGatewayAccountStatus status) =>
+    switch (status) {
       AiGatewayAccountStatus.unknown => '连接状态未知；路由仍可尝试请求，请根据请求结果更新状态。',
       AiGatewayAccountStatus.ready => '账号可参与其模型组路由。',
       AiGatewayAccountStatus.paused => '账号已暂停，不会参与路由。',
@@ -943,7 +944,8 @@ String _fallbackLabel(AiGatewayFallbackScope scope) => switch (scope) {
       AiGatewayFallbackScope.modelGroup => '当前模型组',
     };
 
-String _strategyLabel(AiGatewaySelectionStrategy strategy) => switch (strategy) {
+String _strategyLabel(AiGatewaySelectionStrategy strategy) =>
+    switch (strategy) {
       AiGatewaySelectionStrategy.leastUsed => '最少使用',
       AiGatewaySelectionStrategy.roundRobin => '轮询',
       AiGatewaySelectionStrategy.balanceHigher => '优先较高余额',
@@ -1122,9 +1124,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   labelText: _authType == 'none' || _authType == 'relay'
                       ? '该认证方式无需凭据'
                       : '凭据',
-                  hintText: !widget.hasCredential
-                      ? '保存在平台安全存储中'
-                      : '留空以保留当前安全凭据',
+                  hintText:
+                      !widget.hasCredential ? '保存在平台安全存储中' : '留空以保留当前安全凭据',
                 ),
                 onChanged: (_) => setState(() => _draftChanged = true),
               ),
@@ -1235,7 +1236,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();
-    final previousModels = widget.account?.models ?? const <AiGatewayUpstreamModel>[];
+    final previousModels =
+        widget.account?.models ?? const <AiGatewayUpstreamModel>[];
     final existingModelsByUpstream = <String, List<AiGatewayUpstreamModel>>{};
     for (final model in previousModels) {
       existingModelsByUpstream
@@ -1477,8 +1479,9 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
           .where((item) => item.id == member.accountId)
           .firstOrNull;
       if (account == null) continue;
-      final endpoint =
-          widget.providerCatalog.findProvider(account.connectorType)?.chatProtocolId;
+      final endpoint = widget.providerCatalog
+          .findProvider(account.connectorType)
+          ?.chatProtocolId;
       if (endpoint == null) continue;
       final localModelId = member.localModelId ?? widget.group.id;
       final existing = endpointByLocalModel[localModelId];
@@ -1951,7 +1954,8 @@ class _RoutingPolicyEditorDialogState
                   controller: draft.unit,
                   enabled: draft.kind == AiGatewayLimitKind.fixed,
                   decoration: InputDecoration(
-                    labelText: draft.kind == AiGatewayLimitKind.fixed ? '单位' : '%',
+                    labelText:
+                        draft.kind == AiGatewayLimitKind.fixed ? '单位' : '%',
                   ),
                 ),
               ),

@@ -99,8 +99,7 @@ class ChatStreamManager {
   ChatStreamManager([Ref? ref])
       : _ref = ref,
         _adapter = ChatAdapter(
-          routingRuntime:
-              ref == null ? null : AiGateway.sharedPlatform(),
+          routingRuntime: ref == null ? null : AiGateway.sharedPlatform(),
         );
 
   // ── 公开 getter ──

@@ -236,8 +236,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
   required List<LlmModelGroup> groups,
   AiGatewayProviderCatalog? providerCatalog,
 }) {
-  final catalog =
-      providerCatalog ?? AiGateway.defaultProviderCatalog;
+  final catalog = providerCatalog ?? AiGateway.defaultProviderCatalog;
   final accountById = {for (final account in accounts) account.id: account};
   final configs = <ProviderConfigItem>[];
 

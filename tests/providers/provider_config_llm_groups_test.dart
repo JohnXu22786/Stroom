@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/llm_routing_service.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/provider_models.dart';
 
@@ -88,6 +91,7 @@ void main() {
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(
               credentialStore: _MemoryCredentialStore(),
+              gatewayFactory: _createTestGateway,
             ),
           ),
         ],
@@ -264,6 +268,7 @@ void main() {
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(
               credentialStore: _MemoryCredentialStore(),
+              gatewayFactory: _createTestGateway,
             ),
           ),
         ],
@@ -335,4 +340,32 @@ class _GatewayProviderCatalog implements AiGatewayProviderCatalog {
     }
     return null;
   }
+}
+
+Future<AiGatewayFacade> _createTestGateway() async {
+  final preferences = await SharedPreferences.getInstance();
+  final accountService = LlmAccountConnectorService(
+    preferences: _SharedPreferencesLlmAccountPreferences(preferences),
+    credentialStore: _MemoryCredentialStore(),
+  );
+  return LlmChatRoutingRuntime(
+    accountService: accountService,
+    routingService: LlmRoutingService(accountService: accountService),
+  );
+}
+
+class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
+  final SharedPreferences _preferences;
+
+  const _SharedPreferencesLlmAccountPreferences(this._preferences);
+
+  @override
+  Future<String?> getString(String key) async => _preferences.getString(key);
+
+  @override
+  Future<bool> remove(String key) => _preferences.remove(key);
+
+  @override
+  Future<bool> setString(String key, String value) =>
+      _preferences.setString(key, value);
 }

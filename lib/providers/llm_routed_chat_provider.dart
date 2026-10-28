@@ -666,8 +666,9 @@ AiGatewayConnectorObservation _mergeGatewayObservations(
   AiGatewayConnectorObservation second,
 ) =>
     AiGatewayConnectorObservation(
-      requestUsage:
-          second.requestUsage.isKnown ? second.requestUsage : first.requestUsage,
+      requestUsage: second.requestUsage.isKnown
+          ? second.requestUsage
+          : first.requestUsage,
       remainingQuota: second.remainingQuota.isKnown
           ? second.remainingQuota
           : first.remainingQuota,

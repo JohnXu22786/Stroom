@@ -487,8 +487,7 @@ abstract interface class AiGatewayRouting {
     required Future<T> Function(
       AiGatewayRouteCandidate candidate,
       AiGatewayRouteProgress progress,
-    )
-    request,
+    ) request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,

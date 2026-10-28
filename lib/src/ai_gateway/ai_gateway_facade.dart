@@ -2,13 +2,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'ai_gateway_contracts.dart';
-import '../models/llm_account.dart';
-import '../services/llm_account_migration_service.dart';
-import '../services/llm_connector_service.dart';
-import '../services/llm_connector_http_client.dart';
-import '../services/llm_credential_store.dart';
-import '../services/llm_routing_service.dart';
+import '../../ai_gateway/ai_gateway_contracts.dart';
+import '../../models/llm_account.dart';
+import '../../services/llm_account_migration_service.dart';
+import '../../services/llm_connector_service.dart';
+import '../../services/llm_connector_http_client.dart';
+import '../../services/llm_credential_store.dart';
+import '../../services/llm_routing_service.dart';
 
 /// Reproduces M1's stable identity for a legacy account/model reference.
 String stableLlmModelGroupId(String accountId, String localModelId) {
@@ -32,7 +32,8 @@ String? stableLlmModelGroupLocalModelId(String groupId) {
   if (accountEnd >= groupId.length) return null;
   final localLengthEnd = groupId.indexOf(':', accountEnd);
   if (localLengthEnd < 0) return null;
-  final localLength = int.tryParse(groupId.substring(accountEnd, localLengthEnd));
+  final localLength =
+      int.tryParse(groupId.substring(accountEnd, localLengthEnd));
   if (localLength == null || localLength < 1) return null;
   final localStart = localLengthEnd + 1;
   final localEnd = localStart + localLength;
@@ -54,14 +55,17 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
       _LlmGatewayProviderCatalog();
 
   final LlmAccountConnectorService _accountService;
+  @override
   final AiGatewayAccountManagement accountManagement;
+  @override
   late final AiGatewayProviderCatalog providerCatalog = defaultProviderCatalog;
+  @override
   late final AiGatewayModelDiscovery modelDiscovery =
       _LlmGatewayModelDiscovery(_accountService);
   final LlmRoutingService _routingService;
   final LlmConnectorHttpClient _connectorClient;
-  late final AiGatewayExecutor executor =
-      _LlmGatewayExecutor(_connectorClient);
+  @override
+  late final AiGatewayExecutor executor = _LlmGatewayExecutor(_connectorClient);
 
   LlmChatRoutingRuntime({
     required LlmAccountConnectorService accountService,
@@ -73,6 +77,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
         _connectorClient = connectorClient ??
             LlmConnectorHttpClient(accountService: accountService);
 
+  @override
   Future<AiGatewayRoutingSnapshot> loadRoutingState() async {
     final state =
         await LlmRoutingStateStore(preferences: _accountService.preferences)
@@ -250,6 +255,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   /// exact stable group before its first routed request. The generated account
   /// ID is namespaced by [llmOcrAccountIdForConfig] so it cannot collide with
   /// an ordinary account that happens to reuse the provider config ID.
+  @override
   Future<void> ensureLegacyOcrModelGroup({
     required String accountId,
     required String groupId,
@@ -296,6 +302,7 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     }
   }
 
+  @override
   Future<void> synchronizeLegacyOcrModelSet({
     required String accountId,
     required Set<String> localModelIds,
@@ -837,8 +844,7 @@ AiGatewayUpstreamModel _gatewayModel(LlmUpstreamModel model) =>
       config: model.config,
     );
 
-LlmUpstreamModel _legacyModel(AiGatewayUpstreamModel model) =>
-    LlmUpstreamModel(
+LlmUpstreamModel _legacyModel(AiGatewayUpstreamModel model) => LlmUpstreamModel(
       id: model.id,
       upstreamModelId: model.upstreamModelId,
       displayName: model.displayName,
@@ -922,7 +928,8 @@ AiGatewayLimitThreshold? _gatewayThreshold(LlmLimitThreshold? threshold) =>
         ? null
         : threshold.kind == LlmLimitKind.percentage
             ? AiGatewayLimitThreshold.percentage(threshold.value)
-            : AiGatewayLimitThreshold.fixed(threshold.value, unit: threshold.unit);
+            : AiGatewayLimitThreshold.fixed(threshold.value,
+                unit: threshold.unit);
 
 LlmLimitThreshold? _legacyThreshold(AiGatewayLimitThreshold? threshold) =>
     threshold == null

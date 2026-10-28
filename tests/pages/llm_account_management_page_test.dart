@@ -6,7 +6,7 @@ import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/pages/llm_account_management_page.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/ai_gateway/ai_gateway.dart';
-import 'package:stroom/ai_gateway/ai_gateway_facade.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
@@ -74,7 +74,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -127,7 +128,8 @@ void main() {
         jsonEncode(accountsEnvelope);
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -144,7 +146,8 @@ void main() {
       credentialStore: _MemoryCredentialStore(),
     );
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -201,7 +204,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -264,7 +268,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -334,7 +339,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('模型组'));
@@ -405,7 +411,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -467,7 +474,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -522,7 +530,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -585,7 +594,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -654,7 +664,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -753,7 +764,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -838,7 +850,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -890,7 +903,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
 
@@ -931,7 +945,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -981,7 +996,8 @@ void main() {
       preferences.values[LlmRoutingStateStore.preferenceKey] = '{malformed';
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
 
@@ -1070,7 +1086,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1110,7 +1127,8 @@ void main() {
     final stateStore = LlmRoutingStateStore(preferences: preferences);
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无本地记录（最近 62 天）'), findsOneWidget);
@@ -1156,7 +1174,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -1214,7 +1233,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(gateway: _testGateway(service))),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 

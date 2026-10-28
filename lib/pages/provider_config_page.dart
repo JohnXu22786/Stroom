@@ -811,8 +811,9 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
 
   Future<void> _syncLegacyLlmAccountConfig(AiGatewayAccount account) async {
     final gateway = await AiGateway.sharedPlatform();
-    final chatProtocolId =
-        gateway.providerCatalog.findProvider(account.connectorType)?.chatProtocolId;
+    final chatProtocolId = gateway.providerCatalog
+        .findProvider(account.connectorType)
+        ?.chatProtocolId;
     final state = ref.read(providerEntriesProvider);
     final entry = state.entries.where((item) => item.type == 'llm').firstOrNull;
     if (entry == null ||
