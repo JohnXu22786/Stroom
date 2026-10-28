@@ -201,6 +201,49 @@ void main() {
     });
 
     test(
+      'uses the configured inactivity timeout for stalled response bodies',
+      () async {
+        var cancelled = false;
+        final body = StreamController<List<int>>(
+          onCancel: () => cancelled = true,
+        );
+        final timeoutClient = AnkiSyncProtocolClient.ankiWeb(
+          client: httpClient,
+          hostKey: 'host-key',
+          requestTimeout: const Duration(milliseconds: 100),
+        );
+        httpClient.streamedResponses.add(
+          http.StreamedResponse(body.stream, HttpStatus.ok),
+        );
+        final stopwatch = Stopwatch()..start();
+
+        try {
+          await runZoned(
+            () => expectLater(
+              timeoutClient.checkStatus(),
+              throwsA(isA<AnkiSyncException>()),
+            ),
+            zoneSpecification: ZoneSpecification(
+              createTimer: (self, parent, zone, duration, callback) =>
+                  parent.createTimer(
+                zone,
+                Duration(milliseconds: duration.inMilliseconds ~/ 100),
+                callback,
+              ),
+            ),
+          );
+
+          expect(cancelled, isTrue);
+          expect(
+              stopwatch.elapsed, lessThan(const Duration(milliseconds: 300)));
+        } finally {
+          timeoutClient.close();
+          await body.close();
+        }
+      },
+    );
+
+    test(
       'allows a media response to continue making progress past 45 seconds',
       () async {
         httpClient.responses.add(_jsonResponse({'key': 'host-key'}));

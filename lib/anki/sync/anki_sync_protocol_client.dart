@@ -423,9 +423,9 @@ class AnkiSyncProtocolClient {
     void resetResponseTimeout() {
       timeout?.cancel();
       timeout = Timer(
-        _timeout,
+        _requestTimeout,
         () => completed.completeError(
-          TimeoutException('HTTP response timed out', _timeout),
+          TimeoutException('HTTP response timed out', _requestTimeout),
         ),
       );
     }
