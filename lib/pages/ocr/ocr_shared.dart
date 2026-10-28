@@ -47,13 +47,14 @@ class SelectedImage {
         isPrepared = true,
         _selectionIdentity = Object();
 
-  SelectedImage._edited({
-    required OcrImagePayload payload,
-    required this.sourceName,
-    required this._selectionIdentity,
-  })  : bytes = payload.bytes,
+  SelectedImage._edited(
+    OcrImagePayload payload,
+    this.sourceName,
+    Object selectionIdentity,
+  )   : bytes = payload.bytes,
         format = payload.format,
-        isPrepared = true;
+        isPrepared = true,
+        _selectionIdentity = selectionIdentity;
 
   /// True when [other] is the same selected image, even after an edit replaces
   /// this immutable value with an updated payload.
@@ -63,11 +64,7 @@ class SelectedImage {
   /// Creates an edited image with MIME derived from its output bytes while
   /// retaining the imported filename and selection identity.
   SelectedImage withEditedPayload(OcrImagePayload payload) =>
-      SelectedImage._edited(
-        payload: payload,
-        sourceName: sourceName,
-        _selectionIdentity: _selectionIdentity,
-      );
+      SelectedImage._edited(payload, sourceName, _selectionIdentity);
 }
 
 // ============================================================================
