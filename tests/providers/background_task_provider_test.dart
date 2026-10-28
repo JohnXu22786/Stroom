@@ -12751,7 +12751,7 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration redacts a terminal line-broken review key',
+      'legacy OCR instruction migration preserves a terminal line-broken review prompt',
       () {
         const prompt = 'Please review\ncarefully.';
         final task = BackgroundTask.fromMap({
@@ -12782,12 +12782,88 @@ void main() {
         ).instructionContent!;
         final compactInstruction =
             migratedInstruction.replaceAll(RegExp(r'\s+'), '');
-        final compactPersisted = persisted.replaceAll(RegExp(r'\s+'), '');
 
-        expect(migratedInstruction, 'Please review [redacted].');
-        expect(persisted, contains(jsonEncode('Please review [redacted].')));
-        expect(compactInstruction, isNot(contains('reviewcarefully')));
-        expect(compactPersisted, isNot(contains('reviewcarefully')));
+        expect(migratedInstruction, prompt);
+        expect(persisted, contains(jsonEncode(prompt)));
+        expect(compactInstruction, contains('reviewcarefully'));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration preserves a line-broken check carefully prompt under its matching open mask',
+      () {
+        const prompt = 'Please check\ncarefully the receipt total';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-check-carefully-open-mask-natural-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer Check…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': prompt},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final serializedRetryData = (jsonDecode(persisted)
+            as Map<String, dynamic>)['retryData'] as Map<String, dynamic>;
+
+        expect(
+          OcrRetrySnapshot.fromMap(task.retryData!).instructionContent,
+          prompt,
+        );
+        expect(serializedRetryData['instructionContent'], prompt);
+        expect(persisted, contains(jsonEncode(prompt)));
+      },
+    );
+
+    test(
+      'legacy OCR instruction migration redacts a credential echo matching a short open mask',
+      () {
+        const credentialEcho = 'Check7Qw9Lm2';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-check-open-mask-credential-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer Check…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {
+                      'type': 'text',
+                      'text': 'Use $credentialEcho to process the receipt.',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(migratedInstruction, isNot(contains(credentialEcho)));
+        expect(persisted, isNot(contains(credentialEcho)));
       },
     );
 
