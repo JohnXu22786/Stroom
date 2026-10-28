@@ -2005,6 +2005,19 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
           authenticateWithToProcessContext;
+      final naturalReadInstructionsPrompt =
+          _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
+              RegExp(
+                r'\b(?:please\s+)?read\s*$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) &&
+              RegExp(
+                r'^instructions?\b',
+                caseSensitive: false,
+              ).hasMatch(afterEcho);
+      final ordinaryNaturalPromptContext =
+          naturalReadInstructionsPrompt && !hasCredentialUseContext;
+      if (ordinaryNaturalPromptContext) return match.group(0)!;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(

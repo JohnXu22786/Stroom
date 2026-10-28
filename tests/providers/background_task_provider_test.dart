@@ -5983,6 +5983,29 @@ void main() {
         );
         expect(tokenizingPersisted, contains(tokenizingKey));
 
+        const tokenizingCredentialEcho =
+            'Please use $tokenizingKey for the request';
+        final tokenizingCredentialTask = taskFor(
+          'legacy-ocr-tokenizing-prompt-with-credential-echo',
+          [safePrompt, tokenizingPrompt, tokenizingCredentialEcho],
+          credentialPrefix: 'token',
+        );
+        final tokenizingCredentialPersisted = jsonEncode(
+          tokenizingCredentialTask.toMap(),
+        );
+        const instructionWithRedactedTokenizingEcho =
+            '$safePrompt\n$tokenizingPrompt\nPlease use [redacted] for the request';
+        expect(
+          OcrRetrySnapshot.fromMap(
+            tokenizingCredentialTask.retryData!,
+          ).instructionContent,
+          instructionWithRedactedTokenizingEcho,
+        );
+        expect(
+          tokenizingCredentialPersisted,
+          contains(instructionWithRedactedTokenizingEcho),
+        );
+
         const tokenizePrompt = 'Please tokenize the receipt';
         final tokenizeTask = taskFor(
           'legacy-ocr-short-token-word-verb-completion',
