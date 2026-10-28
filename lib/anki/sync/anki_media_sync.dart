@@ -119,6 +119,15 @@ class AnkiMediaSync {
             final local = await _find(index, remote.filename);
             final localSha = local?['sha1'] as String? ?? '';
             final pending = _int(local?['sync_required']) == 1;
+            if (pending &&
+                localSha.isNotEmpty &&
+                remote.sha1.isNotEmpty &&
+                localSha != remote.sha1) {
+              throw AnkiSyncException(
+                '本地和服务器同时修改了媒体文件「${remote.filename}」，'
+                '为避免覆盖本地内容，请先备份并手动解决同名冲突后重试同步',
+              );
+            }
             final action = _requiredAction(localSha, remote.sha1, pending);
             actions.add(_MediaAction(remote, action));
           }

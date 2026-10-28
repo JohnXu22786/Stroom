@@ -1621,6 +1621,95 @@ void main() {
       },
     );
 
+    test(
+      'keeps local bytes when both sides changed the same media file',
+      () async {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_change_conflict_',
+        );
+        const identity = 'ankiweb:pending-change-conflict';
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        const localBytes = [1, 2, 3];
+        const previousBytes = [7, 8, 9];
+        const remoteBytes = [4, 5, 6];
+        final localSha = sha1.convert(localBytes).toString();
+        final remoteSha = sha1.convert(remoteBytes).toString();
+        await File('${mediaDir.path}/tracked.png').writeAsBytes(localBytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          files: [
+            {
+              'fname': 'tracked.png',
+              'sha1': sha1.convert(previousBytes).toString(),
+              'usn': 0,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final fake = _QueueHttpClient()
+          ..responses.addAll([
+            _jsonResponse({
+              'data': {'usn': 1, 'sk': 'test-host-key'},
+              'err': '',
+            }),
+            _jsonResponse({
+              'data': [
+                ['tracked.png', 1, remoteSha],
+              ],
+              'err': '',
+            }),
+          ]);
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'test-host-key',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(
+              isA<AnkiSyncException>().having(
+                (error) => error.message,
+                'message',
+                contains('tracked.png'),
+              ),
+            ),
+          );
+
+          expect(fake.paths, ['/msync/begin', '/msync/mediaChanges']);
+          expect(
+            await File('${mediaDir.path}/tracked.png').readAsBytes(),
+            localBytes,
+          );
+          final indexHash = sha256.convert(utf8.encode(identity)).toString();
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.$indexHash.db',
+            version: 1,
+          );
+          final trackedFile = await index.query(
+            'media_files',
+            where: 'fname = ?',
+            whereArgs: ['tracked.png'],
+          );
+          final metadata = await index.query('media_meta');
+          await index.close();
+          expect(trackedFile.single['sha1'], localSha);
+          expect(trackedFile.single['sync_required'], 1);
+          expect(metadata.single['last_sync_usn'], 0);
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      },
+    );
+
     test('downloads a remote change over a pending local deletion', () async {
       final workDir = await Directory.systemTemp.createTemp(
         'stroom_anki_media_delete_conflict_',

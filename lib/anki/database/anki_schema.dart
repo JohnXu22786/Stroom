@@ -55,7 +55,7 @@ class AnkiSchema {
       usn       INTEGER NOT NULL,
       tags      TEXT NOT NULL,
       flds      TEXT NOT NULL,
-      sfld      INTEGER NOT NULL,
+      sfld      TEXT NOT NULL,
       csum      INTEGER NOT NULL,
       flags     INTEGER NOT NULL,
       data      TEXT NOT NULL

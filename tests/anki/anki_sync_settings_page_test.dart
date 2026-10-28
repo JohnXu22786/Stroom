@@ -189,7 +189,7 @@ void main() {
     expect(statusText, contains('修改时间 2023-11-14'));
   });
 
-  testWidgets('keeps an active sync client open after leaving the page', (
+  testWidgets('keeps an active status request alive after leaving the page', (
     tester,
   ) async {
     const serverUrl = 'https://sync.example.invalid/sync/';
@@ -240,10 +240,12 @@ void main() {
     expect(client.closeCount, 0);
     client.respondWithMeta();
     await tester.runAsync(
-      () => client.closed.future.timeout(const Duration(seconds: 2)),
+      () => client.responseConsumed.future.timeout(const Duration(seconds: 2)),
     );
 
-    expect(client.closeCount, 1);
+    // The injected transport belongs to the test; the page-owned protocol
+    // client must not close it, and the in-flight response must be consumed.
+    expect(client.closeCount, 0);
     expect(tester.takeException(), isNull);
   });
 
@@ -590,7 +592,7 @@ class _RecordingHttpClient extends http.BaseClient {
 
 class _GatedHttpClient extends http.BaseClient {
   final requestStarted = Completer<void>();
-  final closed = Completer<void>();
+  final responseConsumed = Completer<void>();
   final _response = Completer<http.StreamedResponse>();
   int closeCount = 0;
 
@@ -601,23 +603,30 @@ class _GatedHttpClient extends http.BaseClient {
   }
 
   void respondWithMeta() {
+    final response = StreamController<List<int>>(
+      onDone: () {
+        if (!responseConsumed.isCompleted) responseConsumed.complete();
+      },
+    );
+    response.add(
+      utf8.encode(
+        jsonEncode({
+          'mod': 1,
+          'scm': 1,
+          'usn': 0,
+          'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          'msg': '',
+          'cont': true,
+          'hostNum': 1,
+          'empty': false,
+          'media_usn': 0,
+        }),
+      ),
+    );
+    unawaited(response.close());
     _response.complete(
       http.StreamedResponse(
-        Stream<List<int>>.value(
-          utf8.encode(
-            jsonEncode({
-              'mod': 1,
-              'scm': 1,
-              'usn': 0,
-              'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              'msg': '',
-              'cont': true,
-              'hostNum': 1,
-              'empty': false,
-              'media_usn': 0,
-            }),
-          ),
-        ),
+        response.stream,
         HttpStatus.ok,
       ),
     );
@@ -626,7 +635,6 @@ class _GatedHttpClient extends http.BaseClient {
   @override
   void close() {
     closeCount++;
-    if (!closed.isCompleted) closed.complete();
     super.close();
   }
 }

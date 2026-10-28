@@ -37,6 +37,11 @@ class AnkiIncrementalSync {
     final localModified = _int(local['mod']);
     final localSchema = _int(local['scm']);
     final localUsn = _int(local['usn']);
+    if (remote.isEmpty) {
+      throw const AnkiSyncFullTransferRequired(
+        '服务器 collection 为空，请先选择完整上传或下载',
+      );
+    }
     final hasPending = await _hasPendingChanges(db);
     final needsCollectionSync = localModified != remote.modified ||
         localUsn != remote.usn ||
@@ -133,7 +138,6 @@ class AnkiIncrementalSync {
             {
               'ls': finishedAt,
               'usn': nextUsn,
-              'mod': finishedAt,
             },
             where: 'id = 1');
         await AnkiSyncDestinationState.mark(txn, destination);

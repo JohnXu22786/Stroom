@@ -127,7 +127,7 @@ class AnkiDatabase {
     final columns = await db.rawQuery('PRAGMA table_info(notes)');
     final sortField = columns.where((column) => column['name'] == 'sfld');
     if (sortField.isEmpty ||
-        sortField.first['type'].toString().toUpperCase() == 'INTEGER') {
+        sortField.first['type'].toString().toUpperCase() == 'TEXT') {
       return;
     }
 
@@ -145,7 +145,7 @@ class AnkiDatabase {
           usn INTEGER NOT NULL,
           tags TEXT NOT NULL,
           flds TEXT NOT NULL,
-          sfld INTEGER NOT NULL,
+          sfld TEXT NOT NULL,
           csum INTEGER NOT NULL,
           flags INTEGER NOT NULL,
           data TEXT NOT NULL
@@ -153,7 +153,8 @@ class AnkiDatabase {
       ''');
       await txn.execute('''
         INSERT INTO notes_sfld_migration
-        SELECT id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data
+        SELECT id, guid, mid, mod, usn, tags, flds, CAST(sfld AS TEXT),
+          csum, flags, data
         FROM notes
       ''');
       await txn.execute('DROP TABLE notes');
@@ -337,29 +338,42 @@ class AnkiDatabase {
 
   bool _normalizeLegacyNotetypeRequirement(Map value) {
     final req = value['req'];
-    if (req is! List ||
-        req.length != 3 ||
-        req[0] is! num ||
-        req[1] is! num ||
-        req[2] is! List) {
-      return false;
-    }
-
+    if (req is! List) return false;
+    final legacyRequirements = req.length == 3 && req[0] is num
+        ? <dynamic>[req]
+        : req;
     final type = value['type'];
-    final legacyKind = (req[1] as num).toInt();
-    final requirementKind = switch (legacyKind) {
-      0 => type is num && type.toInt() == 1 ? 'any' : 'all',
-      1 => 'any',
-      _ => null,
-    };
-    if (requirementKind == null) return false;
-    value['req'] = [
-      [
-        (req[0] as num).toInt(),
+    var changed = false;
+    final normalized = <dynamic>[];
+    for (final rawRequirement in legacyRequirements) {
+      if (rawRequirement is! List ||
+          rawRequirement.length != 3 ||
+          rawRequirement[0] is! num ||
+          rawRequirement[2] is! List) {
+        return false;
+      }
+      final rawKind = rawRequirement[1];
+      if (rawKind is String) {
+        normalized.add(rawRequirement);
+        continue;
+      }
+      if (rawKind is! num) return false;
+      final requirementKind = switch (rawKind.toInt()) {
+        0 => type is num && type.toInt() == 1 ? 'any' : 'all',
+        1 => 'any',
+        2 => 'none',
+        _ => null,
+      };
+      if (requirementKind == null) return false;
+      normalized.add([
+        (rawRequirement[0] as num).toInt(),
         requirementKind,
-        List<dynamic>.from(req[2] as List),
-      ],
-    ];
+        List<dynamic>.from(rawRequirement[2] as List),
+      ]);
+      changed = true;
+    }
+    if (!changed) return false;
+    value['req'] = normalized;
     value['mod'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     value['usn'] = -1;
     return true;

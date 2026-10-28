@@ -20,7 +20,7 @@ class Notetype {
   List<NoteField> fields; // (was: flds)
   List<NoteTemplate> templates; // (was: tmpls)
   String css;
-  List<dynamic> req; // [[ord, "all"|"any", [field ords...]], ...]
+  List<dynamic> req; // [[ord, "all"|"any"|"none", [field ords...]], ...]
   List<String> tags;
   String latexPre;
   String latexPost;

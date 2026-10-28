@@ -62,6 +62,8 @@ void main() {
     await collection.notes.insert(note);
     final card = anki.Card.createNew(note_id: note.id, deck_id: 1);
     await collection.cards.insert(card);
+    final originalCollectionMod =
+        (await collection.db.query('col')).single['mod'];
 
     await _queueCollectionSync(fakeHttp, collection, sanityStatus: 'ok');
     final result = await AnkiIncrementalSync.sync(collection, client);
@@ -73,6 +75,7 @@ void main() {
     final col = (await collection.db.query('col')).single;
     expect(col['usn'], 1);
     expect(col['ls'], greaterThan(0));
+    expect(col['mod'], originalCollectionMod);
 
     final applyChunkRequest = fakeHttp.requests.singleWhere(
       (request) => request.url.path == '/sync/applyChunk',
@@ -460,6 +463,38 @@ void main() {
     },
   );
 
+  test('requires a full transfer when the server collection is empty', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['existing local note', 'back'],
+    )..usn = 0;
+    await collection.notes.insert(note);
+    await collection.db.update(
+      'notes',
+      {'usn': 0},
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
+    final local = (await collection.db.query('col')).single;
+    fakeHttp.responses.add(_json({
+      'mod': local['mod'],
+      'scm': local['scm'],
+      'usn': local['usn'],
+      'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'msg': '',
+      'cont': true,
+      'hostNum': 1,
+      'empty': true,
+      'media_usn': 0,
+    }));
+
+    await expectLater(
+      AnkiIncrementalSync.sync(collection, client),
+      throwsA(isA<AnkiSyncFullTransferRequired>()),
+    );
+    expect(fakeHttp.requests.map((request) => request.url.path), ['/sync/meta']);
+  });
+
   test('requires a full transfer before changing sync destinations', () async {
     final note = Note.createNew(
       notetype_id: collection.col.modelList.first.id,
@@ -778,6 +813,79 @@ void main() {
     expect(note.csumForDb, Note.computeChecksum('© A'));
   });
 
+  test('note DAO preserves leading zeros in sort fields', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['001', 'back'],
+    );
+
+    await collection.notes.insert(note);
+
+    expect(
+      (await collection.db.query(
+        'notes',
+        columns: ['sfld'],
+        where: 'id = ?',
+        whereArgs: [note.id],
+      )).single['sfld'],
+      '001',
+    );
+  });
+
+  test('migrates integer-affinity sort fields back to text', () async {
+    final note = Note.createNew(
+      notetype_id: collection.col.modelList.first.id,
+      fields: ['001', 'back'],
+    );
+    await collection.notes.insert(note);
+    await collection.close();
+
+    final legacyDatabase = await sqflite.openDatabase(
+      '${workDir.path}/collection.anki2',
+    );
+    await legacyDatabase.execute('ALTER TABLE notes RENAME TO notes_before');
+    await legacyDatabase.execute('''
+      CREATE TABLE notes (
+        id INTEGER PRIMARY KEY,
+        guid TEXT NOT NULL,
+        mid INTEGER NOT NULL,
+        mod INTEGER NOT NULL,
+        usn INTEGER NOT NULL,
+        tags TEXT NOT NULL,
+        flds TEXT NOT NULL,
+        sfld INTEGER NOT NULL,
+        csum INTEGER NOT NULL,
+        flags INTEGER NOT NULL,
+        data TEXT NOT NULL
+      )
+    ''');
+    await legacyDatabase.execute('''
+      INSERT INTO notes
+      SELECT id, guid, mid, mod, usn, tags, flds, CAST(sfld AS INTEGER),
+        csum, flags, data
+      FROM notes_before
+    ''');
+    await legacyDatabase.execute('DROP TABLE notes_before');
+    await legacyDatabase.close();
+
+    collection = AnkiDatabase(basePath: workDir.path);
+    await collection.open();
+    final stored = (await collection.notes.get(note.id))!..fields[0] = '001';
+    await collection.notes.update(stored);
+
+    final sortField = (await collection.db.query(
+      'notes',
+      columns: ['sfld'],
+      where: 'id = ?',
+      whereArgs: [note.id],
+    )).single['sfld'];
+    final column = (await collection.db.rawQuery(
+      'PRAGMA table_info(notes)',
+    )).singleWhere((column) => column['name'] == 'sfld');
+    expect(column['type'], 'TEXT');
+    expect(sortField, '001');
+  });
+
   test(
     'note DAO refreshes sort field and checksum when fields change',
     () async {
@@ -948,6 +1056,22 @@ void main() {
     final customAny = Notetype.createBasic()
       ..id = cloze.id + 1
       ..name = 'Custom any';
+    customAny.templates.add(
+      NoteTemplate(
+        name: 'Card 2',
+        ord: 1,
+        qfmt: '{{Front}}',
+        afmt: '{{Back}}',
+      ),
+    );
+    customAny.templates.add(
+      NoteTemplate(
+        name: 'Card 3',
+        ord: 2,
+        qfmt: '{{Back}}',
+        afmt: '{{Front}}',
+      ),
+    );
     collection.col.addModel(customAny);
     await collection.col.save();
 
@@ -958,20 +1082,41 @@ void main() {
       (await collection.db.query('col', columns: ['models'])).single['models']
           as String,
     ) as Map<String, dynamic>;
-    for (final model in [basic, cloze]) {
-      final json = models[model.id.toString()] as Map<String, dynamic>;
-      json['req'] = [
-        0,
-        0,
-        [0],
-      ];
-      json['usn'] = 0;
-    }
-    models[customAny.id.toString()] as Map<String, dynamic>
+    final basicJson = models[basic.id.toString()] as Map<String, dynamic>;
+    basicJson
       ..['req'] = [
         0,
-        1,
+        0,
         [0],
+      ]
+      ..['usn'] = 0;
+    final clozeJson = models[cloze.id.toString()] as Map<String, dynamic>;
+    clozeJson
+      ..['req'] = [
+        [
+          0,
+          0,
+          [0],
+        ],
+      ]
+      ..['usn'] = 0;
+    models[customAny.id.toString()] as Map<String, dynamic>
+      ..['req'] = [
+        [
+          0,
+          1,
+          [0],
+        ],
+        [
+          1,
+          0,
+          [1],
+        ],
+        [
+          2,
+          2,
+          [1],
+        ],
       ]
       ..['usn'] = 0;
     await collection.db.update(
@@ -1024,6 +1169,16 @@ void main() {
         0,
         'any',
         [0],
+      ],
+      [
+        1,
+        'all',
+        [1],
+      ],
+      [
+        2,
+        'none',
+        [1],
       ],
     ]);
     expect(migratedCustomAny.usn, -1);

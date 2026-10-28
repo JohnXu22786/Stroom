@@ -149,16 +149,19 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     final oldIdentity = config.secureStorageKey;
     await notifier.setSyncUrl(rawUrl);
     await notifier.setCertificate(_certificateController.text.trim());
+    if (!mounted) return;
     final updated = ref.read(ankiSyncProvider);
     if (updated.secureStorageKey != oldIdentity) {
       _client?.close();
       _client = null;
-      setState(() {
-        _hostKey = null;
-        _remoteMeta = null;
-        _status = '';
-        _loadedIdentity = null;
-      });
+      if (mounted) {
+        setState(() {
+          _hostKey = null;
+          _remoteMeta = null;
+          _status = '';
+          _loadedIdentity = null;
+        });
+      }
     } else if (updated.certificate != config.certificate) {
       _client?.close();
       _client = null;
@@ -173,6 +176,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
       if (mounted) setState(() => _status = '设置未保存：${_safeMessage(error)}');
       return null;
     }
+    if (!mounted) return null;
     final updated = ref.read(ankiSyncProvider);
     if (_hostKey == null || _loadedIdentity != updated.secureStorageKey) {
       if (mounted) {
@@ -187,6 +191,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     if (config.mode == AnkiSyncMode.selfHosted) {
       try {
         await _saveSelfHostedSettings();
+        if (!mounted) return;
         config = ref.read(ankiSyncProvider);
       } catch (error) {
         if (mounted) setState(() => _status = _safeMessage(error));
@@ -195,7 +200,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     }
 
     final credentials = await _showLoginDialog(config.mode);
-    if (credentials == null) return;
+    if (!mounted || credentials == null) return;
     setState(() {
       _busy = true;
       _status = '正在验证登录…';
@@ -315,7 +320,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     });
     try {
       final actionConfig = await _prepareActionConfig(config);
-      if (actionConfig == null) return;
+      if (!mounted || actionConfig == null) return;
       config = actionConfig;
       setState(() {
         _status = '正在读取服务器 collection 状态…';
@@ -350,7 +355,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     var transferStarted = false;
     try {
       final actionConfig = await _prepareActionConfig(config);
-      if (actionConfig == null) return;
+      if (!mounted || actionConfig == null) return;
       config = actionConfig;
       if (_remoteMeta == null || !_remoteMeta!.shouldContinue) return;
       final confirmed = await _confirmDestructiveAction(
@@ -400,7 +405,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     var transferStarted = false;
     try {
       final actionConfig = await _prepareActionConfig(config);
-      if (actionConfig == null) return;
+      if (!mounted || actionConfig == null) return;
       config = actionConfig;
       final meta = _remoteMeta;
       if (meta == null || !meta.shouldContinue || meta.isEmpty) return;
@@ -464,7 +469,7 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
     var collectionComplete = false;
     try {
       final actionConfig = await _prepareActionConfig(config);
-      if (actionConfig == null) return;
+      if (!mounted || actionConfig == null) return;
       config = actionConfig;
       if (mounted) setState(() => _status = '正在合并 collection 变更…');
       final client = _clientFor(config);
