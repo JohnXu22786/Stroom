@@ -1985,14 +1985,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
-      final bareSecretBasedUseContext =
-          prefix.toLowerCase() == 'secret' &&
-              echoSuffix.toLowerCase() == '-based' &&
-              RegExp(
-                r'\b(?:use|using)$',
-                caseSensitive: false,
-              ).hasMatch(beforeEcho.trimRight()) &&
-              RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
+      final bareSecretBasedUseContext = prefix.toLowerCase() == 'secret' &&
+          echoSuffix.toLowerCase() == '-based' &&
+          RegExp(
+            r'\b(?:use|using)$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho.trimRight()) &&
+          RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -2003,10 +2002,9 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             prefix,
             echoSuffix,
           );
-      final hasCredentialUseContext =
-          splitEchoHasCredentialUseContext ||
-              bareSecretBasedUseContext ||
-              authenticateWithToProcessContext;
+      final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
+          bareSecretBasedUseContext ||
+          authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
