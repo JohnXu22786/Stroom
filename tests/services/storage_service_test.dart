@@ -27,19 +27,16 @@ void main() {
     AppStorage.resetCache();
   });
 
-  testWidgets(
-    'uses the test storage fallback without a platform override',
-    (WidgetTester _) async {
-      AppStorage.resetCache();
-      final path = await AppStorage.directory;
+  test('uses the test storage fallback without a platform override', () async {
+    AppStorage.resetCache();
+    final path = await AppStorage.directory;
 
-      expect(
-        path,
-        '${Directory.systemTemp.path}${Platform.pathSeparator}stroom_data',
-      );
-      expect(await Directory(path).exists(), isTrue);
-    },
-  );
+    expect(
+      path,
+      '${Directory.systemTemp.path}${Platform.pathSeparator}stroom_data',
+    );
+    expect(await Directory(path).exists(), isTrue);
+  });
 
   test('uses an available Path Provider directory in Flutter tests', () async {
     final documents = await Directory.systemTemp.createTemp('app_storage_');
