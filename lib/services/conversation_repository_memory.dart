@@ -264,6 +264,9 @@ class MemoryConversationRepository implements ConversationRepository {
       }
       messages[conversationId]![message.id] = message;
     }
+    final rawMigrationSourceHash = data['migrationSourceHash'];
+    final migrationSourceHash =
+        rawMigrationSourceHash is String ? rawMigrationSourceHash : null;
     _conversations
       ..clear()
       ..addAll(conversations);
@@ -279,7 +282,7 @@ class MemoryConversationRepository implements ConversationRepository {
     _messages
       ..clear()
       ..addAll(messages);
-    _migrationSourceHash = data['migrationSourceHash'] as String?;
+    _migrationSourceHash = migrationSourceHash;
   }
 
   @override

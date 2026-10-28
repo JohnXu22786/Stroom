@@ -3,13 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/pages/backup_restore_page.dart';
+import 'package:stroom/services/backup_service.dart' show BackupSelection;
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 
-Widget createTestApp() {
-  return const ProviderScope(
+Widget createTestApp({
+  Future<bool> Function(BackupSelection selection)? clearDataForTest,
+}) {
+  return ProviderScope(
     child: MaterialApp(
-      home: BackupRestorePage(),
+      home: BackupRestorePage(clearDataForTest: clearDataForTest),
     ),
   );
 }
@@ -69,7 +72,15 @@ void main() {
 
     testWidgets('clear flow unlocks confirmation after the countdown',
         (tester) async {
-      await tester.pumpWidget(createTestApp());
+      var clearWasCalled = false;
+      await tester.pumpWidget(
+        createTestApp(
+          clearDataForTest: (_) async {
+            clearWasCalled = true;
+            return false;
+          },
+        ),
+      );
       await tester.pump();
 
       await tester.scrollUntilVisible(
@@ -88,6 +99,7 @@ void main() {
 
       // Button-based restart prompt (mirrors the startup migration dialog),
       // no countdown digits
+      expect(clearWasCalled, isTrue);
       expect(find.text('部分数据已清除'), findsOneWidget);
       expect(find.text('立即重启'), findsOneWidget);
       expect(find.text('退出应用'), findsOneWidget);

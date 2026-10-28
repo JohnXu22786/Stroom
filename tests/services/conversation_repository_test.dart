@@ -732,6 +732,31 @@ void main() {
         await restored.close();
       },
     );
+
+    test('memory restore normalizes a malformed migration source hash',
+        () async {
+      await repository.upsertConversation(
+        StroomConversation(id: 'restore-before', title: 'Before restore'),
+      );
+      await repository.setMigrationSourceHash('previous-source');
+
+      await repository.restoreData({
+        'schemaVersion': 1,
+        'migrationSourceHash': 42,
+        'conversationOrder': ['restore-after'],
+        'conversations': [
+          StroomConversation(id: 'restore-after', title: 'After restore')
+              .toMap(),
+        ],
+        'messages': const [],
+      });
+
+      expect(
+        (await repository.listSummaries()).map((summary) => summary.id),
+        ['restore-after'],
+      );
+      expect(await repository.migrationSourceHash(), isNull);
+    });
   });
 
   test('IndexedDB backup restore preserves empty migration marker', () async {
@@ -913,6 +938,90 @@ void main() {
     expect(messages.single.sequence, 1);
     expect(messages.single.content.single.data['text'], 'latest');
     expect(summaries.single.messageCount, 1);
+    await repository.close();
+  });
+
+  test('IndexedDB snapshot writes collapse duplicate message ids', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final repository = IndexedDbConversationRepository();
+    await repository.initialize();
+    final conversation = StroomConversation(
+      id: 'indexeddb-snapshot-duplicate-id',
+      title: 'Snapshot duplicate',
+    );
+    final older = _message('same-id', 0, 'older');
+    final latest = _message('same-id', 1, 'latest');
+    await repository.upsertConversation(conversation);
+
+    await repository.applyConversationChanges(
+      conversation,
+      upsertMessages: [older, latest],
+    );
+    var messages = await repository.getMessages(conversation.id);
+    expect(messages, hasLength(1));
+    expect(messages.single.sequence, 1);
+    expect(messages.single.content.single.data['text'], 'latest');
+
+    await repository.applySnapshotChanges(
+      changes: [
+        ConversationRepositoryChange(
+          conversation: conversation,
+          upsertMessages: [older],
+        ),
+        ConversationRepositoryChange(
+          conversation: conversation,
+          upsertMessages: [latest],
+        ),
+      ],
+      conversationOrder: [conversation.id],
+      deleteConversationIds: const [],
+    );
+    messages = await repository.getMessages(conversation.id);
+    expect(messages, hasLength(1));
+    expect(messages.single.sequence, 1);
+    expect((await repository.listSummaries()).single.messageCount, 1);
+
+    await repository.importConversation(
+      StroomConversation(
+        id: conversation.id,
+        title: conversation.title,
+        messages: [older, latest],
+      ),
+    );
+    messages = await repository.getMessages(conversation.id);
+    expect(messages, hasLength(1));
+    expect(messages.single.sequence, 1);
+    expect((await repository.listSummaries()).single.messageCount, 1);
+
+    final stagedDelete = _message('staged-delete-id', 2, 'staged delete');
+    await repository.applySnapshotChanges(
+      changes: [
+        ConversationRepositoryChange(
+          conversation: conversation,
+          upsertMessages: [stagedDelete],
+        ),
+        ConversationRepositoryChange(
+          conversation: conversation,
+          deleteMessageIds: [stagedDelete.id],
+        ),
+      ],
+      conversationOrder: [conversation.id],
+      deleteConversationIds: const [],
+    );
+    expect(
+      (await repository.getMessages(conversation.id))
+          .any((message) => message.id == stagedDelete.id),
+      isFalse,
+    );
+    expect(
+      await WebFileStore.keysWithPrefix(
+        'conversation_repository/message_ids/'
+        '${Uri.encodeComponent(conversation.id)}/'
+        '${Uri.encodeComponent(stagedDelete.id)}',
+      ),
+      isEmpty,
+    );
     await repository.close();
   });
 
@@ -3360,6 +3469,25 @@ void main() {
     expect(storedRecord, isNot(contains('rawRequest')));
     final restored = ConversationRecordAdapter.messageToLegacyMap(message);
     expect(restored['rawRequest'], {'safeField': 'preserved'});
+  });
+
+  test('legacy adapter exports diagnostics without a retained record', () {
+    final message = StroomMessage(
+      id: 'new-diagnostic-message',
+      role: 'assistant',
+      sequence: 0,
+      createdAt: DateTime.utc(2026),
+      diagnostics: StroomMessageDiagnostics.fromMap({
+        'rawRequest': {'apiKey': 'secret-value', 'safeField': 'request'},
+        'rawResponse': {'safeField': 'response'},
+      }),
+    );
+
+    final restored = ConversationRecordAdapter.messageToLegacyMap(message);
+
+    expect(restored['rawRequest'], {'safeField': 'request'});
+    expect(restored['rawResponse'], {'safeField': 'response'});
+    expect(jsonEncode(restored), isNot(contains('secret-value')));
   });
 
   test('preserves base64 fields in unknown legacy extension data', () {

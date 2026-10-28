@@ -46,6 +46,10 @@ class IndexedDbConversationRepository implements ConversationRepository {
       Uint8List.fromList(utf8.encode(jsonEncode(value)));
   static Map<String, dynamic> _decode(Uint8List bytes) =>
       Map<String, dynamic>.from(jsonDecode(utf8.decode(bytes)) as Map);
+  static Map<String, StroomMessage> _latestMessagesById(
+    Iterable<StroomMessage> messages,
+  ) =>
+      {for (final message in messages) message.id: message};
 
   static Future<T> _serializeMutation<T>(Future<T> Function() mutation) {
     final result = _mutationQueue.then((_) => mutation());
@@ -173,6 +177,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
     List<String> deleteMessageIds = const [],
   }) =>
       _serializeMutation(() async {
+        final uniqueMessages = _latestMessagesById(upsertMessages);
         final writes = <String, Uint8List>{
           _conversationKey(conversation.id): _encode(
             _withoutMessages(conversation).toMap(),
@@ -182,8 +187,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
         final indexKeys = <String>{
           ...deleteMessageIds
               .map((id) => _messageIndexKey(conversation.id, id)),
-          ...upsertMessages.map(
-            (message) => _messageIndexKey(conversation.id, message.id),
+          ...uniqueMessages.keys.map(
+            (id) => _messageIndexKey(conversation.id, id),
           ),
         };
         for (final indexKey in indexKeys) {
@@ -193,7 +198,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
         for (final id in deleteMessageIds) {
           deletes.add(_messageIndexKey(conversation.id, id));
         }
-        for (final message in upsertMessages) {
+        for (final message in uniqueMessages.values) {
           final rowKey = _orderedMessageKey(conversation.id, message);
           writes[rowKey] = _encode(message.toMap());
           writes[_messageIndexKey(conversation.id, message.id)] =
@@ -212,7 +217,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
       _serializeMutation(() async {
         final writes = <String, Uint8List>{};
         final deletes = <String>{};
+        final stagedMessageRowsByIndex = <String, String>{};
         for (final change in changes) {
+          final uniqueMessages = _latestMessagesById(change.upsertMessages);
           final conversation = change.conversation;
           writes[_conversationKey(conversation.id)] = _encode(
             _withoutMessages(conversation).toMap(),
@@ -221,22 +228,33 @@ class IndexedDbConversationRepository implements ConversationRepository {
             ...change.deleteMessageIds.map(
               (id) => _messageIndexKey(conversation.id, id),
             ),
-            ...change.upsertMessages.map(
-              (message) => _messageIndexKey(conversation.id, message.id),
+            ...uniqueMessages.keys.map(
+              (id) => _messageIndexKey(conversation.id, id),
             ),
           };
           for (final indexKey in indexKeys) {
-            final existing = await WebFileStore.read(indexKey);
-            if (existing != null) deletes.add(utf8.decode(existing));
+            final staged = stagedMessageRowsByIndex[indexKey];
+            final existing = staged == null
+                ? await WebFileStore.read(indexKey)
+                : Uint8List.fromList(utf8.encode(staged));
+            if (existing != null) {
+              final existingRowKey = utf8.decode(existing);
+              deletes.add(existingRowKey);
+              writes.remove(existingRowKey);
+            }
           }
           for (final id in change.deleteMessageIds) {
-            deletes.add(_messageIndexKey(conversation.id, id));
+            final indexKey = _messageIndexKey(conversation.id, id);
+            deletes.add(indexKey);
+            writes.remove(indexKey);
+            stagedMessageRowsByIndex.remove(indexKey);
           }
-          for (final message in change.upsertMessages) {
+          for (final message in uniqueMessages.values) {
             final rowKey = _orderedMessageKey(conversation.id, message);
             writes[rowKey] = _encode(message.toMap());
-            writes[_messageIndexKey(conversation.id, message.id)] =
-                Uint8List.fromList(utf8.encode(rowKey));
+            final indexKey = _messageIndexKey(conversation.id, message.id);
+            writes[indexKey] = Uint8List.fromList(utf8.encode(rowKey));
+            stagedMessageRowsByIndex[indexKey] = rowKey;
             deletes.remove(rowKey);
           }
         }
@@ -267,7 +285,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
             _withoutMessages(conversation).toMap(),
           ),
         };
-        for (final message in conversation.messages) {
+        final uniqueMessages = _latestMessagesById(conversation.messages);
+        for (final message in uniqueMessages.values) {
           final rowKey = _orderedMessageKey(conversation.id, message);
           writes[rowKey] = _encode(message.toMap());
           writes[_messageIndexKey(conversation.id, message.id)] =

@@ -326,6 +326,7 @@ class ConversationRecordAdapter {
         'extensions': ordinaryExtensions
       else if (hasRawLegacyExtensions)
         'extensions': rawLegacyExtensions,
+      ...(message.diagnostics?.toMap() ?? const {}),
     };
   }
 

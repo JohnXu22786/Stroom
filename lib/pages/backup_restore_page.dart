@@ -2,7 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart'
-    show debugPrint, defaultTargetPlatform, TargetPlatform, kIsWeb;
+    show
+        debugPrint,
+        defaultTargetPlatform,
+        TargetPlatform,
+        kIsWeb,
+        visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +20,10 @@ import '../anki/apkg/apkg_importer.dart';
 import '../utils/system_pick_utils.dart';
 
 class BackupRestorePage extends ConsumerStatefulWidget {
-  const BackupRestorePage({super.key});
+  const BackupRestorePage({super.key, this.clearDataForTest});
+
+  @visibleForTesting
+  final Future<bool> Function(BackupSelection selection)? clearDataForTest;
 
   @override
   ConsumerState<BackupRestorePage> createState() => _BackupRestorePageState();
@@ -386,8 +394,8 @@ class _BackupRestorePageState extends ConsumerState<BackupRestorePage> {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      final browserWebsiteDataCleared =
-          await BackupService.clearSelectedData(selection);
+      final browserWebsiteDataCleared = await (widget.clearDataForTest ??
+          BackupService.clearSelectedData)(selection);
       // 先关闭进度弹窗，再展示重启提示弹窗，避免弹窗叠放
       if (mounted && progressShown) {
         Navigator.of(context, rootNavigator: true).pop();
