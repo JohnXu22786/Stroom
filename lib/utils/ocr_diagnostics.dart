@@ -19,6 +19,7 @@ class OcrDiagnosticSnapshot {
   static const _knownFinishReasons = {
     'stop',
     'length',
+    'max_tokens',
     'content_filter',
     'function_call',
     'tool_calls',

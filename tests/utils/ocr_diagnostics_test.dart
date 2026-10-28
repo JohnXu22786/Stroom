@@ -351,13 +351,42 @@ void main() {
           ],
         },
       })!;
+      final maxTokens = OcrDiagnosticSnapshot.sanitizeResponse({
+        'data': {
+          'choices': [
+            {'finish_reason': 'max_tokens'},
+          ],
+        },
+      })!;
+      final excludedMaxTokens = OcrDiagnosticSnapshot.sanitizeResponse(
+        {'finishReason': 'max_tokens'},
+        excludedValues: ['max_tokens'],
+      )!;
 
       expect(unsafe, {'durationMs': 842});
       expect(jsonEncode(unsafe), isNot(contains(providerText)));
       expect(safe, {'finishReason': 'stop', 'durationMs': 842});
       expect(truncated, {'finishReason': 'length'});
+      expect(maxTokens, {'finishReason': 'max_tokens'});
+      expect(excludedMaxTokens, isEmpty);
     },
   );
+
+  test('stored OCR task errors retain the safe max_tokens finish reason', () {
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 返回了不完整结果（finish_reason=max_tokens）',
+      ),
+      'OCR 返回了不完整结果（finish_reason=max_tokens）',
+    );
+    expect(
+      OcrDiagnosticSnapshot.sanitizeStoredTaskError(
+        'OCR 返回了不完整结果（finish_reason=max_tokens）',
+        excludedValues: ['max_tokens'],
+      ),
+      'OCR 错误详情已隐藏',
+    );
+  });
 
   test('request IDs reject prose from generic provider id fields', () {
     final response = OcrDiagnosticSnapshot.sanitizeResponse({
