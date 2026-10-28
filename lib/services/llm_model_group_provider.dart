@@ -1,7 +1,6 @@
 import '../models/llm_account.dart';
 import '../models/tts_models.dart';
-import 'llm_chat_runtime.dart';
-import 'llm_connector_service.dart';
+import '../ai_gateway/ai_gateway.dart';
 
 /// Namespaced account identity for an OCR provider config that predates
 /// account/model-group routing.
@@ -53,12 +52,41 @@ LlmModelGroupMemberReference? llmModelGroupMemberReferenceForModelId(
 /// in account management, but these rows must not offer a direct chat path.
 List<ProviderConfigItem> markUnsupportedLegacyLlmConfigs(
   Iterable<ProviderConfigItem> configs,
-  Iterable<LlmAccount> accounts,
-) {
+  Iterable<LlmAccount> accounts, {
+  AiGatewayProviderCatalog? providerCatalog,
+}) =>
+    _markUnsupportedLlmConfigs(
+      configs,
+      accounts.map(
+        (account) => (id: account.id, connectorType: account.connectorType),
+      ),
+      providerCatalog: providerCatalog,
+    );
+
+List<ProviderConfigItem> markUnsupportedGatewayLlmConfigs(
+  Iterable<ProviderConfigItem> configs,
+  Iterable<AiGatewayAccount> accounts, {
+  AiGatewayProviderCatalog? providerCatalog,
+}) =>
+    _markUnsupportedLlmConfigs(
+      configs,
+      accounts.map(
+        (account) => (id: account.id, connectorType: account.connectorType),
+      ),
+      providerCatalog: providerCatalog,
+    );
+
+List<ProviderConfigItem> _markUnsupportedLlmConfigs(
+  Iterable<ProviderConfigItem> configs,
+  Iterable<({String id, String connectorType})> accounts, {
+  AiGatewayProviderCatalog? providerCatalog,
+}) {
+  final catalog = providerCatalog ?? AiGateway.defaultProviderCatalog;
   final unsupportedIds = accounts
       .where(
         (account) =>
-            llmChatEndpointTypeForConnector(account.connectorType) == null,
+            catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+            true,
       )
       .map((account) => account.id)
       .toSet();
@@ -90,7 +118,7 @@ bool isUnsupportedLegacyLlmSelectorConfig(ProviderConfigItem config) =>
 /// Persists an OCR provider's namespaced account and stable model groups while
 /// its source config still contains the endpoint and credential.
 Future<void> ensureLegacyOcrProviderConfigGroups({
-  required LlmChatRoutingRuntime runtime,
+  required AiGatewayFacade runtime,
   required ProviderConfigItem config,
   ProviderConfigItem? previousConfig,
 }) async {
@@ -146,13 +174,70 @@ String? llmModelGroupIdForConfig(ProviderConfigItem config) {
 bool isLlmModelGroupProviderConfig(ProviderConfigItem config) =>
     llmModelGroupIdForConfig(config) != null;
 
+/// Projects Gateway-owned account and group data into the legacy provider
+/// selector shape. The adapter carries only fields used by that projection;
+/// account secrets and stored credential references are never copied.
+List<ProviderConfigItem> buildGatewayModelGroupProviderConfigs({
+  required List<AiGatewayAccount> accounts,
+  required List<AiGatewayModelGroup> groups,
+  AiGatewayProviderCatalog? providerCatalog,
+}) =>
+    buildLlmModelGroupProviderConfigs(
+      accounts: accounts
+          .map(
+            (account) => LlmAccount.fromMap({
+              'id': account.id,
+              'connectorType': account.connectorType,
+              'authType': account.authType,
+              'displayName': account.displayName,
+              'status': account.status.name,
+              'endpointConfig': account.endpointConfig,
+              'models': [
+                for (final model in account.models)
+                  {
+                    'id': model.id,
+                    'upstreamModelId': model.upstreamModelId,
+                    'displayName': model.displayName,
+                    'capabilities': model.capabilities,
+                    'config': model.config,
+                  },
+              ],
+            }),
+          )
+          .toList(growable: false),
+      groups: groups
+          .map(
+            (group) => LlmModelGroup.fromMap({
+              'id': group.id,
+              'displayName': group.displayName,
+              'members': [
+                for (final member in group.members)
+                  {
+                    'accountId': member.accountId,
+                    'upstreamModelId': member.upstreamModelId,
+                    'priorityTier': member.priorityTier,
+                    if (member.localModelId != null)
+                      'localModelId': member.localModelId,
+                  },
+              ],
+              'legacyModelId': group.legacyModelId,
+              'legacyProviderName': group.legacyProviderName,
+            }),
+          )
+          .toList(growable: false),
+      providerCatalog: providerCatalog,
+    );
+
 /// Builds selector-compatible model configs for groups that use protocols
 /// supported by ChatService and OCR. Their IDs retain the M1 group and local
 /// model identities, while requests are resolved against the account store.
 List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
   required List<LlmAccount> accounts,
   required List<LlmModelGroup> groups,
+  AiGatewayProviderCatalog? providerCatalog,
 }) {
+  final catalog =
+      providerCatalog ?? AiGateway.defaultProviderCatalog;
   final accountById = {for (final account in accounts) account.id: account};
   final configs = <ProviderConfigItem>[];
 
@@ -201,7 +286,8 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       for (final member in orderedMembers) {
         final account = accountById[member.accountId];
         if (account == null) continue;
-        final endpoint = llmChatEndpointTypeForConnector(account.connectorType);
+        final endpoint =
+            catalog.findProvider(account.connectorType)?.chatProtocolId;
         if (endpoint == null) continue;
         final model = resolveMemberModel(account, member);
         if (model == null) continue;
@@ -223,7 +309,7 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       final supportsVision = members.any((member) {
         final account = accountById[member.accountId];
         if (account == null ||
-            llmChatEndpointTypeForConnector(account.connectorType) !=
+            catalog.findProvider(account.connectorType)?.chatProtocolId !=
                 'openai') {
           return false;
         }
@@ -233,7 +319,8 @@ List<ProviderConfigItem> buildLlmModelGroupProviderConfigs({
       final supportsStreaming = members.any((member) {
         final account = accountById[member.accountId];
         if (account == null ||
-            llmChatEndpointTypeForConnector(account.connectorType) == null) {
+            catalog.findProvider(account.connectorType)?.supportsChatAdapter !=
+                true) {
           return false;
         }
         final model = resolveMemberModel(account, member);
@@ -314,4 +401,6 @@ String _modelGroupMemberReference(String groupId, String localModelId) =>
     '${localModelId.length}:$localModelId';
 
 String? llmChatEndpointTypeForConnector(String connectorType) =>
-    LlmConnectorRegistry.chatAdapterEndpointType(connectorType);
+    AiGateway.defaultProviderCatalog
+        .findProvider(connectorType)
+        ?.chatProtocolId;

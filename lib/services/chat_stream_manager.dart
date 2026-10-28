@@ -21,7 +21,7 @@ import 'chat_adapter.dart';
 import 'chat_protocol.dart' show rebuildToolResultText;
 import 'chat_service.dart' show ChatService;
 import 'context_manager.dart';
-import 'llm_chat_runtime.dart';
+import '../ai_gateway/ai_gateway.dart';
 
 // ============================================================================
 // ChatStreamManager — 对话流式请求管理器
@@ -100,7 +100,7 @@ class ChatStreamManager {
       : _ref = ref,
         _adapter = ChatAdapter(
           routingRuntime:
-              ref == null ? null : LlmChatRoutingRuntime.sharedPlatform(),
+              ref == null ? null : AiGateway.sharedPlatform(),
         );
 
   // ── 公开 getter ──

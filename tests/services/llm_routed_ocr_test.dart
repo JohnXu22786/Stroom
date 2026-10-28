@@ -3,11 +3,13 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/models/tts_models.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
@@ -521,7 +523,7 @@ void main() {
 
     await expectLater(
       service.recognize(imageBytes: Uint8List.fromList([1, 2, 3])),
-      throwsA(isA<LlmRoutingUnavailableException>()),
+      throwsA(isA<AiGatewayRoutingException>()),
     );
 
     expect(service.lastResponseStatusCode, 403);

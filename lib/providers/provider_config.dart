@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../ai_gateway/ai_gateway.dart';
 import '../models/mcp.dart';
 import '../models/mcp_provider_group.dart';
 import '../models/llm_account.dart';
@@ -73,12 +74,25 @@ class ProviderEntriesState {
 ProviderEntriesState removeLegacyLlmAccountSourceConfigs(
   ProviderEntriesState state,
   LlmAccount account,
-) {
-  final legacyOcrConfigId = account.endpointConfig['legacyOcrProviderConfigId'];
+) =>
+    removeLegacyLlmAccountSourceConfigsById(
+      state,
+      accountId: account.id,
+      endpointConfig: account.endpointConfig,
+    );
+
+/// Account-management UI adapter that only needs the safe account identifier
+/// and legacy OCR source marker exposed through the Gateway contract.
+ProviderEntriesState removeLegacyLlmAccountSourceConfigsById(
+  ProviderEntriesState state, {
+  required String accountId,
+  required Map<String, dynamic> endpointConfig,
+}) {
+  final legacyOcrConfigId = endpointConfig['legacyOcrProviderConfigId'];
   var changed = false;
   final entries = state.entries.map((entry) {
     final configs = entry.configs.where((config) {
-      final removeLlmSource = entry.type == 'llm' && config.id == account.id;
+      final removeLlmSource = entry.type == 'llm' && config.id == accountId;
       final removeOcrSource = legacyOcrConfigId is String &&
           legacyOcrConfigId.isNotEmpty &&
           entry.type == 'ocr' &&
@@ -513,7 +527,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
         }
 
         try {
-          await _appendLlmModelGroupConfigs(entries, prefs);
+          await _appendLlmModelGroupConfigs(entries);
         } catch (_) {
           // The account/group catalog is an optional selector overlay. Keep
           // existing provider settings readable when that separate catalog is
@@ -549,8 +563,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     // 默认预置
     final defaultState = _defaultEntries(mcpGroups: mcpGroups);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await _appendLlmModelGroupConfigs(defaultState.entries, prefs);
+      await _appendLlmModelGroupConfigs(defaultState.entries);
     } catch (_) {
       debugPrint('Failed to load LLM model groups for model selectors.');
       llmModelGroupCatalogUnavailable = true;
@@ -583,27 +596,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
 
   Future<void> _appendLlmModelGroupConfigs(
     List<ProviderEntry> entries,
-    SharedPreferences prefs,
   ) async {
-    List<Map<String, dynamic>> readItems(String key) {
-      final encoded = prefs.getString(key);
-      if (encoded == null || encoded.isEmpty) return const [];
-      final decoded = jsonDecode(encoded);
-      if (decoded is! Map || decoded['items'] is! List) {
-        throw const LlmAccountMigrationException();
-      }
-      return (decoded['items'] as List)
-          .whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item))
-          .toList(growable: false);
-    }
-
-    final accounts = readItems(
-      LlmAccountMigrationService.accountsPreferenceKey,
-    ).map(LlmAccount.fromMap).toList(growable: false);
-    final groups = readItems(
-      LlmAccountMigrationService.modelGroupsPreferenceKey,
-    ).map(LlmModelGroup.fromMap).toList(growable: false);
+    final gateway = await AiGateway.sharedPlatform();
+    final accountManagement = gateway.accountManagement;
+    final results = await Future.wait([
+      accountManagement.listAccounts(),
+      accountManagement.listModelGroups(),
+    ]);
+    final accounts = results[0] as List<AiGatewayAccount>;
+    final groups = results[1] as List<AiGatewayModelGroup>;
 
     var llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
     if (llmEntryIndex < 0 && groups.isEmpty) return;
@@ -614,13 +615,15 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     }
     llmEntryIndex = entries.indexWhere((entry) => entry.type == 'llm');
     final entry = entries[llmEntryIndex];
-    final realConfigs = markUnsupportedLegacyLlmConfigs(
+    final realConfigs = markUnsupportedGatewayLlmConfigs(
       entry.configs.where((config) => !isLlmModelGroupProviderConfig(config)),
       accounts,
+      providerCatalog: gateway.providerCatalog,
     );
-    final groupConfigs = buildLlmModelGroupProviderConfigs(
+    final groupConfigs = buildGatewayModelGroupProviderConfigs(
       accounts: accounts,
       groups: groups,
+      providerCatalog: gateway.providerCatalog,
     );
     entries[llmEntryIndex] = ProviderEntry(
       id: entry.id,

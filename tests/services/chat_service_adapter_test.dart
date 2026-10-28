@@ -17,6 +17,7 @@ import 'package:stroom/services/chat_adapter.dart';
 import 'package:stroom/services/chat_service.dart';
 import 'package:stroom/services/http_tool_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 
 void main() {

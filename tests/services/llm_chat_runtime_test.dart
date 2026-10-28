@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
@@ -570,10 +572,13 @@ void main() {
           localModelId: 'local-model-a',
           request: (candidate, progress) async {
             await progress.markRequestSent();
-            throw const LlmRouteRequestException(statusCode: 400);
+            throw AiGatewayExecutionException(
+              kind: AiGatewayFailureKind.request,
+              statusCode: 400,
+            );
           },
         ),
-        throwsA(isA<LlmRouteRequestException>()),
+        throwsA(isA<AiGatewayExecutionException>()),
       );
 
       final diagnostic = LlmChatRouteDiagnostics.latestForGroup(
