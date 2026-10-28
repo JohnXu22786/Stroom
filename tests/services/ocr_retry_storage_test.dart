@@ -66,7 +66,7 @@ void main() {
         modelId: modelId,
         images: [
           OcrRetryImage.reference(
-            storageRef: 'ocr_retry_cache/task-1-0.png',
+            storageRef: 'ocr_retry_cache/${List.filled(64, "a").join()}.bin',
             format: 'png',
           ),
         ],
