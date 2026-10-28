@@ -1373,6 +1373,81 @@ void main() {
     );
 
     test(
+      'malformed OCR retry migration retains safe settings and missing images',
+      () async {
+        WebFileStore.enableTestMode();
+        try {
+          final imageBytes = Uint8List.fromList([0x89, 0x50, 0x4e, 0x47]);
+          const requestBudget = 6 * 1024 * 1024;
+          final task = BackgroundTask.fromMap({
+            'id': 'malformed-ocr-settings-and-legacy-request',
+            'type': 'ocr',
+            'title': 'OCR retry with parseable settings',
+            'status': 'failed',
+            'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+            'retryData': {
+              'type': 'ocr',
+              'version': OcrRetrySnapshot.currentVersion,
+              'modelRef': {
+                'configId': 'saved-config',
+                'modelId': 'saved-model',
+              },
+              'images': [
+                {'bytes': base64Encode(imageBytes), 'format': 'png'},
+              ],
+              'instructionContent': 'Saved instruction',
+              'saveFolder': 'receipts/2026',
+              'batchMode': 'perImage',
+              'perImageConcurrency': 2,
+              'requestSizeBudgetBytes': requestBudget,
+              'futureMetadata': true,
+            },
+            'rawRequest': {
+              'url': 'https://api.example.com/v1/chat/completions',
+              'body': {
+                'model': 'fallback-model',
+                'messages': [
+                  {
+                    'role': 'user',
+                    'content': [
+                      {
+                        'type': 'image_url',
+                        'image_url': {'url': 'data:image/png;base64,AA=='},
+                      },
+                      {
+                        'type': 'image_url',
+                        'image_url': {'url': 'data:image/png;base64,AQ=='},
+                      },
+                      {'type': 'text', 'text': 'Fallback instruction'},
+                    ],
+                  },
+                ],
+              },
+            },
+          });
+
+          final snapshot = OcrRetrySnapshot.fromMap(task.retryData!);
+          final restored = await OcrRetryStorage.restoreImages(snapshot);
+
+          expect(snapshot.configId, 'saved-config');
+          expect(snapshot.modelId, 'saved-model');
+          expect(snapshot.instructionContent, 'Saved instruction');
+          expect(snapshot.saveFolder, 'receipts/2026');
+          expect(snapshot.batchMode.name, 'perImage');
+          expect(snapshot.perImageConcurrency, 2);
+          expect(snapshot.requestSizeBudgetBytes, requestBudget);
+          expect(snapshot.images, hasLength(2));
+          expect(snapshot.images.first.bytes, imageBytes);
+          expect(snapshot.images.last.bytes, isNull);
+          expect(restored.images, hasLength(1));
+          expect(restored.missingImageCount, 1);
+        } finally {
+          WebFileStore.disableTestMode();
+        }
+      },
+    );
+
+    test(
       'current OCR retry snapshots drop unknown fields before later writes',
       () async {
         WebFileStore.enableTestMode();

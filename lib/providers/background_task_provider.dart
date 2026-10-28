@@ -2324,8 +2324,16 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
     final retryData = OcrRetryStorage.unavailableSnapshotForCount(
       taskId: taskId,
       imageCount: imageCount,
-      modelId: unavailableSnapshot.modelId,
-      instructionContent: unavailableSnapshot.instructionContent,
+      configId: malformedSnapshot.configId,
+      modelId: malformedSnapshot.modelId ?? unavailableSnapshot.modelId,
+      instructionContent: malformedSnapshot.instructionContent ??
+          unavailableSnapshot.instructionContent,
+      saveFolder: malformedSnapshot.saveFolder,
+      batchMode: malformedSnapshot.batchMode,
+      perImageConcurrency: malformedSnapshot.perImageConcurrency,
+      requestSizeBudgetBytes: malformedSnapshot.requestSizeBudgetBytes,
+      legacyModelIndex: malformedSnapshot.legacyModelIndex,
+      legacyInstructionIndex: malformedSnapshot.legacyInstructionIndex,
     );
     final images = retryData['images'] as List;
     for (var index = 0; index < malformedSnapshot.images.length; index++) {
