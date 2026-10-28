@@ -2380,11 +2380,16 @@ void main() {
       tester,
     ) async {
       final bgNotifier = _InspectableBackgroundTaskNotifier();
+      final adapter = _CapturingOcrAdapter();
       final entry = _createOcrEntry(withModels: true);
       await tester.pumpWidget(
         _buildTestApp(
           entries: [entry],
           backgroundTasksNotifier: bgNotifier,
+          testOcrServiceFactory: (config) => OcrService(
+            config: config,
+            dio: Dio()..httpClientAdapter = adapter,
+          ),
           retryData: {
             'type': 'ocr',
             'images': [
@@ -2403,14 +2408,24 @@ void main() {
 
       expect(find.text('GPT-4o Mini | OpenAI'), findsOneWidget);
       expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsOneWidget);
-      await tester.tap(find.text('开始识别'));
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNull);
+      await tester.tap(startButton);
       await tester.pump();
       expect(bgNotifier.tasksForTest, isEmpty);
+      expect(adapter.requests, isEmpty);
 
       await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
       await tester.pump();
       expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsNothing);
-      expect(bgNotifier.tasksForTest, isEmpty);
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+
+      await tester.tap(startButton);
+      await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
+      await _pumpUntil(tester, () => bgNotifier.tasksForTest.isNotEmpty);
+      expect(bgNotifier.tasksForTest, hasLength(1));
+
+      await tester.pumpAndSettle();
     });
   });
 
