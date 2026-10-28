@@ -1624,10 +1624,16 @@ bool _legacyOcrTextContainsMaskedCredential(
                   prefix,
                   followingText,
                 );
+            final naturalReadPrompt = prefix.toLowerCase() == 'read' &&
+                _legacyOcrIsNaturalCarefullyObjectPhrase(
+                  prefix,
+                  followingText,
+                );
             final naturalTerminalReviewPrompt =
                 prefix.toLowerCase() == 'review' && followingText.isEmpty;
             if (isLineBrokenCarefulActionEcho &&
                 !naturalCheckPrompt &&
+                !naturalReadPrompt &&
                 !naturalTerminalReviewPrompt) {
               return true;
             }

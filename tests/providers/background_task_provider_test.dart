@@ -12829,41 +12829,52 @@ void main() {
     );
 
     test(
-      'legacy OCR instruction migration redacts a credential echo matching a short open mask',
+      'legacy OCR instruction migration redacts credential echoes matching a short open mask',
       () {
         const credentialEcho = 'Check7Qw9Lm2';
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-check-open-mask-credential-echo',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer Check…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer Check…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
                     {
-                      'type': 'text',
-                      'text': 'Use $credentialEcho to process the receipt.',
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
                     },
                   ],
                 },
-              ],
-            },
-          },
-        });
-        final persisted = jsonEncode(task.toMap());
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent!;
+              },
+            });
+        final tasks = [
+          taskFor(
+            'legacy-ocr-check-open-mask-credential-echo',
+            'Use $credentialEcho to process the receipt.',
+          ),
+          taskFor(
+            'legacy-ocr-check-open-mask-careful-credential-echo',
+            'Please check\ncarefully your $credentialEcho',
+          ),
+        ];
 
-        expect(migratedInstruction, isNot(contains(credentialEcho)));
-        expect(persisted, isNot(contains(credentialEcho)));
+        for (final task in tasks) {
+          final persisted = jsonEncode(task.toMap());
+          final migratedInstruction = OcrRetrySnapshot.fromMap(
+            task.retryData!,
+          ).instructionContent!;
+
+          expect(migratedInstruction, isNot(contains(credentialEcho)));
+          expect(persisted, isNot(contains(credentialEcho)));
+        }
       },
     );
 
