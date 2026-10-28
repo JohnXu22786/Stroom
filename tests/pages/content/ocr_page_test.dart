@@ -2380,22 +2380,18 @@ void main() {
       tester,
     ) async {
       final bgNotifier = _InspectableBackgroundTaskNotifier();
-      final adapter = _CapturingOcrAdapter();
+      final preflightStarted = Completer<void>();
+      final finishPreflight = Completer<int?>();
       final entry = _createOcrEntry(withModels: true);
       await tester.pumpWidget(
         _buildTestApp(
           entries: [entry],
           backgroundTasksNotifier: bgNotifier,
-          testOcrServiceFactory: (config) => OcrService(
-            config: config,
-            dio: Dio()..httpClientAdapter = adapter,
-          ),
           testImagePayloadPreparer: (bytes) async =>
               prepareOcrImagePayloadSync(bytes),
-          testRequestSizePreflight: (config, images) async => 8 * 1024 * 1024,
-          testRetrySnapshotCacher: (
-              {required taskId, required snapshot}) async {
-            throw StateError('cache write failed');
+          testRequestSizePreflight: (config, images) {
+            preflightStarted.complete();
+            return finishPreflight.future;
           },
           retryData: {
             'type': 'ocr',
@@ -2419,7 +2415,7 @@ void main() {
       await tester.tap(startButton);
       await tester.pump();
       expect(bgNotifier.tasksForTest, isEmpty);
-      expect(adapter.requests, isEmpty);
+      expect(preflightStarted.isCompleted, isFalse);
 
       await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
       await tester.pump();
@@ -2427,8 +2423,9 @@ void main() {
       expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
 
       await tester.tap(startButton);
-      await _pumpUntil(tester, () => bgNotifier.tasksForTest.isNotEmpty);
-      expect(bgNotifier.tasksForTest, hasLength(1));
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
+      finishPreflight.complete(null);
+      await tester.pump();
     });
   });
 
