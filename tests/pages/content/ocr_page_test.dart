@@ -762,9 +762,9 @@ void main() {
       await preparationStarted.future;
 
       await tester.tap(find.text('Model A | Provider A').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Model B | Provider B').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Model B | Provider B'), findsOneWidget);
 
       finishPreparation.complete(
