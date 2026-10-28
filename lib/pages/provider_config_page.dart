@@ -23,6 +23,23 @@ final _builtinToolDefinitions = [
   ...WebSearchService.toolDefinitions,
 ];
 
+/// Keeps the legacy provider row pointed at the account's current secure
+/// credential entry. This value is a reference only; secret bytes stay in
+/// platform secure storage.
+ProviderConfigItem syncLegacyLlmAccountCredentialReference(
+  ProviderConfigItem config,
+  AiGatewayAccount account,
+) {
+  final raw = config.toMap();
+  final credentialRef = account.credentialRef;
+  if (account.hasCredential) {
+    if (credentialRef != null) raw['credentialRef'] = credentialRef;
+  } else {
+    raw.remove('credentialRef');
+  }
+  return ProviderConfigItem.fromMap(raw);
+}
+
 ToolDefinition? _httpToolDefinition(String providerName) {
   final toolName = switch (providerName) {
     'Brave Search' => 'brave_web_search',
@@ -865,10 +882,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           raw.remove(key);
         }
       }
-      if (!account.hasCredential) {
-        raw.remove('credentialRef');
-      }
-      return ProviderConfigItem.fromMap(raw);
+      return syncLegacyLlmAccountCredentialReference(
+        ProviderConfigItem.fromMap(raw),
+        account,
+      );
     }).toList(growable: false);
     await ref.read(providerEntriesProvider.notifier).update(
           entry.id,

@@ -226,8 +226,8 @@ class AiGatewayUpstreamModel {
         config = Map.unmodifiable(config);
 }
 
-/// Gateway-owned account data. Credential references remain private to the
-/// Gateway's storage adapter and are intentionally absent from this contract.
+/// Gateway-owned account data. Credential references are opaque, non-secret
+/// secure-storage keys; secret values remain private to the Gateway adapter.
 class AiGatewayAccount {
   final String id;
   final String connectorType;
@@ -235,6 +235,9 @@ class AiGatewayAccount {
   final String displayName;
   final AiGatewayAccountStatus status;
   final bool hasCredential;
+
+  /// Opaque, non-secret secure-storage key used to resolve this credential.
+  final String? credentialRef;
   final Map<String, dynamic> endpointConfig;
   final List<AiGatewayUpstreamModel> models;
   final AiGatewayRoutingPolicy policy;
@@ -249,6 +252,7 @@ class AiGatewayAccount {
     required this.displayName,
     this.status = AiGatewayAccountStatus.unknown,
     this.hasCredential = false,
+    this.credentialRef,
     Map<String, dynamic> endpointConfig = const {},
     List<AiGatewayUpstreamModel> models = const [],
     AiGatewayRoutingPolicy? policy,

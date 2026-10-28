@@ -1,16 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
-import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
-import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  test('backward-compatible import exposes the routing runtime', () {
+    final factory = LlmChatRoutingRuntime.sharedPlatform;
+
+    expect(factory, isNotNull);
+  });
   test(
     'platform routing runtime retries initialization after a transient failure',
     () async {

@@ -583,7 +583,10 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
         .where((item) => item.id == account.id)
         .firstOrNull;
     final saved = await _accounts.saveAccount(
-      _legacyAccount(account, credentialRef: existing?.credentialRef),
+      _legacyAccount(
+        account,
+        credentialRef: existing?.credentialRef,
+      ),
       secret: secret,
     );
     return _gatewayAccount(saved);
@@ -783,6 +786,7 @@ AiGatewayAccount _gatewayAccount(LlmAccount account) => AiGatewayAccount(
       displayName: account.displayName,
       status: AiGatewayAccountStatus.values.byName(account.status.name),
       hasCredential: account.credentialRef != null,
+      credentialRef: account.credentialRef,
       endpointConfig: account.endpointConfig,
       models: account.models.map(_gatewayModel).toList(growable: false),
       policy: _gatewayPolicy(account.policy),
@@ -814,7 +818,7 @@ LlmAccount _legacyAccount(
       authType: account.authType,
       displayName: account.displayName,
       status: LlmAccountStatus.values.byName(account.status.name),
-      credentialRef: credentialRef,
+      credentialRef: credentialRef ?? account.credentialRef,
       endpointConfig: account.endpointConfig,
       models: account.models.map(_legacyModel).toList(growable: false),
       policy: _legacyPolicy(account.policy),
