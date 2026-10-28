@@ -39,7 +39,9 @@ class _EchoingErrorAdapter implements HttpClientAdapter {
     return ResponseBody.fromString(
       '{"error":{"message":"Rejected key=$apiKey"}}',
       401,
-      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType]
+      },
     );
   }
 
@@ -169,7 +171,8 @@ void main() {
     expect(background.state.single.error, contains('损坏'));
   });
 
-  test('OCR provider key echoes are removed from all failure surfaces', () async {
+  test('OCR provider key echoes are removed from all failure surfaces',
+      () async {
     const apiKey = 'configured-taskflow-ocr-secret-42';
     final source = await File('${directory.path}/credential_echo.png')
         .writeAsBytes(_validPng());
