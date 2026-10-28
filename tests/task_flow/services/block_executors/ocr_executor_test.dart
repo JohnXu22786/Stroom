@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,6 +21,31 @@ import 'package:stroom/utils/file_manifest.dart';
 import 'package:stroom/utils/text_manifest.dart';
 
 Uint8List _validPng() => img.encodePng(img.Image(width: 2, height: 2));
+
+class _EchoingErrorAdapter implements HttpClientAdapter {
+  _EchoingErrorAdapter(this.apiKey);
+
+  final String apiKey;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<dynamic>? cancelFuture,
+  ) async {
+    if (requestStream != null) {
+      await for (final _ in requestStream) {}
+    }
+    return ResponseBody.fromString(
+      '{"error":{"message":"Rejected key=$apiKey"}}',
+      401,
+      headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -63,12 +89,13 @@ void main() {
     background.dispose();
   });
 
-  ProviderEntriesState providerForOcr() => ProviderEntriesState(entries: [
+  ProviderEntriesState providerForOcr({String key = 'test-key'}) =>
+      ProviderEntriesState(entries: [
         ProviderEntry(name: 'OCR', type: 'ocr', configs: [
           ProviderConfigItem(
             id: 'config',
             host: 'https://example.invalid/recognition',
-            key: 'test-key',
+            key: key,
             models: [
               ModelConfig(id: 'model', name: 'Test', modelId: 'test'),
             ],
@@ -140,5 +167,42 @@ void main() {
     expect(requested, isFalse);
     expect(background.state.single.status, TaskStatus.failed);
     expect(background.state.single.error, contains('损坏'));
+  });
+
+  test('OCR provider key echoes are removed from all failure surfaces', () async {
+    const apiKey = 'configured-taskflow-ocr-secret-42';
+    final source = await File('${directory.path}/credential_echo.png')
+        .writeAsBytes(_validPng());
+    final dio = Dio()..httpClientAdapter = _EchoingErrorAdapter(apiKey);
+
+    BlockExecutionException? thrown;
+    try {
+      await executeOcrBlock(
+        block: ocrBlock(),
+        def: BlockTypeDefinition.ocr,
+        input: source.path,
+        execId: execId,
+        execNotifier: executions,
+        flowSubTask: subTask,
+        bgNotifier: background,
+        providerEntries: providerForOcr(key: apiKey),
+        ocrDio: dio,
+      );
+    } on BlockExecutionException catch (error) {
+      thrown = error;
+    } finally {
+      dio.close(force: true);
+    }
+
+    expect(thrown, isNotNull);
+    final task = background.state.single;
+    expect(task.status, TaskStatus.failed);
+    expect(task.error, isNot(contains(apiKey)));
+    expect(task.error, contains('HTTP 401'));
+    expect(task.steps.first.status, BgStepStatus.failed);
+    expect(task.steps.first.error, isNot(contains(apiKey)));
+    expect(task.steps.first.error, contains('HTTP 401'));
+    expect(thrown!.toString(), isNot(contains(apiKey)));
+    expect(thrown.toString(), contains('HTTP 401'));
   });
 }
