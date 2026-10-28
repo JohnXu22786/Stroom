@@ -2188,7 +2188,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(
-        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide)\b',
+        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide|instructions?)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final naturalNounInstructionPrompt = RegExp(
