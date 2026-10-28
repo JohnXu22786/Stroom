@@ -42,6 +42,61 @@ void main() {
     } catch (_) {}
   });
 
+  test('task serialization drops credential-valued OCR retry model refs', () {
+    for (final testCase in [
+      {
+        'modelId': 'sk-proj-abcdefghijk',
+        'headers': <String, String>{},
+        'expectedModelId': null,
+      },
+      {
+        'modelId': 'opaque-credential-value',
+        'headers': {'Authorization': 'Bearer opaque-credential-value'},
+        'expectedModelId': null,
+      },
+      {
+        'modelId': 'gpt-4o',
+        'headers': <String, String>{},
+        'expectedModelId': 'gpt-4o',
+      },
+    ]) {
+      final modelId = testCase['modelId']! as String;
+      final retryData = OcrRetrySnapshot.capture(
+        configId: 'config-1',
+        modelId: modelId,
+        images: [
+          OcrRetryImage.reference(
+            storageRef: 'ocr_retry_cache/${List.filled(64, "a").join()}.bin',
+            format: 'png',
+          ),
+        ],
+      ).toMap();
+      final task = BackgroundTask.fromMap({
+        'id': 'task-1',
+        'type': 'ocr',
+        'title': 'OCR task',
+        'status': 'completed',
+        'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+        'steps': [],
+        'rawRequest': {'headers': testCase['headers']},
+        'retryData': retryData,
+      });
+
+      final serialized = jsonEncode(task.toMap());
+
+      if (testCase['expectedModelId'] == null) {
+        expect(serialized, isNot(contains(modelId)));
+      } else {
+        expect(serialized, contains(modelId));
+      }
+      expect(
+        (task.retryData!['modelRef'] as Map)['modelId'],
+        testCase['expectedModelId'],
+      );
+      expect((task.retryData!['modelRef'] as Map)['configId'], 'config-1');
+    }
+  });
+
   test('current snapshot stores execution settings and restores image bytes',
       () async {
     final bytes = Uint8List.fromList([1, 2, 3, 4]);

@@ -541,16 +541,16 @@ String? _legacyOcrModelId(Map<String, dynamic>? rawRequest) {
   if (modelId is! String) return null;
   final value = modelId.trim();
   final credentialValues = _legacyOcrCredentialValues(rawRequest).toList();
-  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) ||
-      RegExp(
-        r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
-        caseSensitive: false,
-      ).hasMatch(value) ||
-      _legacyOcrTextContainsCredential(value, credentialValues)) {
-    return null;
-  }
-  return value;
+  return _isSafeOcrModelId(value, credentialValues) ? value : null;
 }
+
+bool _isSafeOcrModelId(String value, Iterable<String> credentialValues) =>
+    RegExp(r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$').hasMatch(value) &&
+    !RegExp(
+      r'^(?:sk-(?:proj-|ant-api\d{2}-|or-v1-)?[a-z0-9]{8,}|gsk_[a-z0-9]{8,}|gh[pousr]_[a-z0-9]{8,}|AIza[a-z0-9_-]{20,})$',
+      caseSensitive: false,
+    ).hasMatch(value) &&
+    !_legacyOcrTextContainsCredential(value, credentialValues);
 
 Iterable<String> _legacyOcrCredentialValues(Map<String, dynamic>? rawRequest) =>
     OcrDiagnosticSnapshot.credentialValuesFromRequest(rawRequest);
@@ -2326,12 +2326,27 @@ bool _retryDataHasSupportedOcrSchema(Map<String, dynamic> retryData) {
 Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   final taskId = map['id'] as String;
   final rawRetryData = map['retryData'];
+  final rawRequest = map['rawRequest'];
+  final request =
+      rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
   Map<String, dynamic>? malformedRetryData;
   if (rawRetryData is Map) {
     try {
       final retryData = Map<String, dynamic>.from(rawRetryData);
       if (map['type'] != BackgroundTaskType.ocr.name ||
           _retryDataHasSupportedOcrSchema(retryData)) {
+        final modelRef = retryData['modelRef'];
+        if (map['type'] == BackgroundTaskType.ocr.name && modelRef is Map) {
+          final modelId = modelRef['modelId'];
+          if (modelId is String &&
+              !_isSafeOcrModelId(
+                modelId.trim(),
+                _legacyOcrCredentialValues(request),
+              )) {
+            retryData['modelRef'] = Map<String, dynamic>.from(modelRef)
+              ..remove('modelId');
+          }
+        }
         return retryData;
       }
       malformedRetryData = retryData;
@@ -2341,9 +2356,6 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
   }
   if (map['type'] != BackgroundTaskType.ocr.name) return null;
 
-  final rawRequest = map['rawRequest'];
-  final request =
-      rawRequest is Map ? Map<String, dynamic>.from(rawRequest) : null;
   final unavailableRetryData =
       _unavailableRetryDataFromLegacyRequest(taskId, request);
   if (unavailableRetryData != null && malformedRetryData != null) {
