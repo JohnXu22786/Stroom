@@ -1779,9 +1779,16 @@ bool _legacyOcrTextContainsMaskedCredential(
     // A very short visible prefix is too common to identify a credential in
     // free text; the general credential-shape checks above still redact
     // explicit assignments and recognizable tokens.
-    if (prefix.length >= 4 &&
-        RegExp('${RegExp.escape(prefix)}\\S{1,12}').hasMatch(compactedText)) {
-      return true;
+    if (prefix.length >= 4) {
+      final openMaskEcho = RegExp(
+        '${RegExp.escape(prefix)}(\\S{1,12})',
+        caseSensitive: false,
+      );
+      for (final match in openMaskEcho.allMatches(textWithoutPartMarkers)) {
+        if (!_legacyOcrHasNaturalWordContinuation(prefix, match.group(1)!)) {
+          return true;
+        }
+      }
     }
   }
   return false;
