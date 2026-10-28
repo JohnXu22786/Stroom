@@ -3573,6 +3573,77 @@ void main() {
       );
       expect(editor.imageBytes, editedBytes);
     });
+
+    testWidgets('discards an edit whose payload finishes after OCR starts', (
+      tester,
+    ) async {
+      final originalBytes = await tester.runAsync(_createEnginePng);
+      final originalImage = SelectedImage.fromPayload(
+        payload: prepareOcrImagePayloadSync(originalBytes!),
+      );
+      final editPreparationStarted = Completer<void>();
+      final finishEditPreparation = Completer<OcrImagePayload>();
+      final preflightStarted = Completer<void>();
+      final finishPreflight = Completer<int?>();
+      late Uint8List editedBytes;
+
+      Future<OcrImagePayload> delayedEditPreparation(Uint8List bytes) {
+        editedBytes = bytes;
+        editPreparationStarted.complete();
+        return finishEditPreparation.future;
+      }
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImages: [originalImage],
+          testImagePayloadPreparer: delayedEditPreparation,
+          testRequestSizePreflight: (_, _) {
+            preflightStarted.complete();
+            return finishPreflight.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.crop));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text('保存'));
+      await _pumpUntil(
+        tester,
+        () =>
+            editPreparationStarted.isCompleted &&
+            find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+      );
+
+      await tester.tap(find.text('开始识别'));
+      await tester.pump();
+      await preflightStarted.future;
+
+      finishEditPreparation.complete(
+        prepareOcrImagePayloadSync(editedBytes),
+      );
+      await tester.pump();
+
+      final selectedImage = tester
+          .widget<ImageGridItem>(find.byKey(const Key('ocr_grid_item_0')))
+          .image;
+      expect(
+        selectedImage,
+        same(originalImage),
+        reason: 'an edit finishing after OCR starts must not replace its input',
+      );
+
+      finishPreflight.complete(null);
+      await tester.pumpAndSettle();
+    });
   });
 
   group('OcrPage - image tap to preview', () {
