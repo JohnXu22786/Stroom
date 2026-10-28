@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/stroom_conversation.dart';
 import 'package:stroom/providers/conversation_provider.dart';
@@ -28,6 +29,21 @@ class _TestPathProvider extends PathProviderPlatform {
 
   @override
   Future<String> getTemporaryPath() async => root;
+}
+
+class _RejectVerifiedMigrationCheckpointStore
+    extends InMemorySharedPreferencesStore {
+  _RejectVerifiedMigrationCheckpointStore() : super.withData({});
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key == 'flutter.${ConversationMigrationService.stateKey}' &&
+        value is String &&
+        (jsonDecode(value) as Map<String, dynamic>)['verified'] == true) {
+      throw StateError('simulate a final migration checkpoint failure');
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 class _FailingOrderMemoryRepository extends MemoryConversationRepository {
@@ -131,6 +147,25 @@ class _CapturedDelayedMessageReadMemoryRepository
       await releaseMessageRead.future;
     }
     return captured;
+  }
+}
+
+class _RecordingMessageChangesMemoryRepository
+    extends MemoryConversationRepository {
+  final changesByWrite = <List<ConversationRepositoryChange>>[];
+
+  @override
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
+  }) async {
+    changesByWrite.add(changes);
+    await super.applySnapshotChanges(
+      changes: changes,
+      conversationOrder: conversationOrder,
+      deleteConversationIds: deleteConversationIds,
+    );
   }
 }
 
@@ -489,6 +524,7 @@ void main() {
                     'storagePath': 'attachments/legacy-photo.png',
                     'thumbnailPath': 'attachments/legacy-photo-thumb.png',
                   },
+                  {'reference': 'attachments/legacy-photo-reference.png'},
                 ],
               },
             },
@@ -503,6 +539,7 @@ void main() {
       expect(issues.map((issue) => issue.reference).toSet(), {
         'attachments/legacy-photo.png',
         'attachments/legacy-photo-thumb.png',
+        'attachments/legacy-photo-reference.png',
       });
     });
 
@@ -700,6 +737,32 @@ void main() {
     await restored.close();
   });
 
+  test('IndexedDB summary order refreshes across repository handles', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final writer = IndexedDbConversationRepository();
+    await writer.initialize();
+    await writer.upsertConversation(
+      StroomConversation(id: 'shared-order-a', title: 'A'),
+    );
+    await writer.upsertConversation(
+      StroomConversation(id: 'shared-order-b', title: 'B'),
+    );
+    await writer.setConversationOrder(['shared-order-a', 'shared-order-b']);
+
+    final reader = IndexedDbConversationRepository();
+    await reader.initialize();
+    await writer.setConversationOrder(['shared-order-b', 'shared-order-a']);
+
+    expect(
+      (await reader.listSummaries()).map((summary) => summary.id),
+      ['shared-order-b', 'shared-order-a'],
+    );
+
+    await writer.close();
+    await reader.close();
+  });
+
   test(
     'repository backup preserves opaque message conversationId fields',
     () async {
@@ -794,6 +857,48 @@ void main() {
     await repository.close();
   });
 
+  test('IndexedDB uses raw message ids to break sequence ties', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final repository = IndexedDbConversationRepository();
+    await repository.initialize();
+    await repository.upsertConversation(
+      StroomConversation(id: 'indexeddb-tie-order', title: 'Tie order'),
+    );
+    await repository.replaceMessages('indexeddb-tie-order', [
+      _message('id:foo', 0),
+      _message('id0', 0),
+    ]);
+
+    final messages = await repository.getMessages('indexeddb-tie-order');
+
+    expect(messages.map((message) => message.id), ['id0', 'id:foo']);
+    await repository.close();
+  });
+
+  test('IndexedDB replace collapses duplicate message ids', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final repository = IndexedDbConversationRepository();
+    await repository.initialize();
+    await repository.upsertConversation(
+      StroomConversation(id: 'indexeddb-duplicate-id', title: 'Duplicate'),
+    );
+    await repository.replaceMessages('indexeddb-duplicate-id', [
+      _message('same-id', 0, 'old'),
+      _message('same-id', 1, 'latest'),
+    ]);
+
+    final messages = await repository.getMessages('indexeddb-duplicate-id');
+    final summaries = await repository.listSummaries();
+
+    expect(messages, hasLength(1));
+    expect(messages.single.sequence, 1);
+    expect(messages.single.content.single.data['text'], 'latest');
+    expect(summaries.single.messageCount, 1);
+    await repository.close();
+  });
+
   test('IndexedDB serializes concurrent updates to one message id', () async {
     WebFileStore.enableTestMode();
     addTearDown(WebFileStore.disableTestMode);
@@ -827,6 +932,60 @@ void main() {
 
   group('ConversationMigrationService', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test(
+      'serializes concurrent migration before later source checks',
+      () async {
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString(
+          'conversations',
+          '[${_legacyConversation('concurrent-migration', ['m1'])}]',
+        );
+        final repository = MemoryConversationRepository();
+        final firstBatchStarted = Completer<void>();
+        final releaseFirstBatch = Completer<void>();
+        final secondBatchStarted = Completer<void>();
+        final releaseSecondBatch = Completer<void>();
+
+        final firstMigration = ConversationMigrationService(
+          repository,
+          beforeBatchCommit: (_) async {
+            firstBatchStarted.complete();
+            await releaseFirstBatch.future;
+          },
+        ).migrate(preferences);
+        await firstBatchStarted.future;
+        final secondMigration = ConversationMigrationService(
+          repository,
+          beforeBatchCommit: (_) async {
+            secondBatchStarted.complete();
+            await releaseSecondBatch.future;
+          },
+        ).migrate(preferences);
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        releaseFirstBatch.complete();
+        await firstMigration;
+        await repository.importConversation(
+          StroomConversation(
+            id: 'concurrent-migration',
+            title: 'Edited after migration',
+            messages: [_message('m1', 0, 'edited after migration')],
+          ),
+        );
+        if (secondBatchStarted.isCompleted) {
+          releaseSecondBatch.complete();
+        }
+        await secondMigration;
+
+        final stored = await repository.getConversation('concurrent-migration');
+        final messages = await repository.getMessages('concurrent-migration');
+        expect(stored!.title, 'Edited after migration');
+        expect(messages.single.content.single.data['text'],
+            'edited after migration');
+        await repository.close();
+      },
+    );
 
     test('marks an empty legacy source as repository authoritative', () async {
       final preferences = await SharedPreferences.getInstance();
@@ -869,6 +1028,54 @@ void main() {
 
         expect(repository.markerPresentBeforeImport, isTrue);
         await repository.close();
+      },
+    );
+
+    test(
+      'does not reimport after the final preferences checkpoint fails',
+      () async {
+        final originalStore = SharedPreferencesStorePlatform.instance;
+        SharedPreferencesStorePlatform.instance =
+            _RejectVerifiedMigrationCheckpointStore();
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.setString(
+          'conversations',
+          '[${_legacyConversation('checkpoint-failure', ['m1'])}]',
+        );
+        final repository = MemoryConversationRepository();
+        await repository.initialize();
+
+        try {
+          final migration = ConversationMigrationService(repository);
+          final initial = await migration.migrate(preferences);
+          expect(initial.verified, isTrue);
+          await preferences.reload();
+          expect(
+            jsonDecode(preferences.getString(
+              ConversationMigrationService.stateKey,
+            )!)['verified'],
+            isFalse,
+          );
+
+          await repository.importConversation(
+            StroomConversation(
+              id: 'checkpoint-failure',
+              title: 'Edited after migration',
+              messages: [_message('m1', 0)],
+            ),
+          );
+          final retry = await migration.migrate(preferences);
+
+          expect(retry.verified, isTrue);
+          expect(retry.conversationCount, 1);
+          expect(
+            (await repository.getConversation('checkpoint-failure'))?.title,
+            'Edited after migration',
+          );
+        } finally {
+          await repository.close();
+          SharedPreferencesStorePlatform.instance = originalStore;
+        }
       },
     );
 
@@ -1150,6 +1357,74 @@ void main() {
           isTrue,
         );
         await repository.close();
+      },
+    );
+
+    test(
+      'uses distinct storage paths for matching drafts across conversations',
+      () async {
+        final previousPathProvider = PathProviderPlatform.instance;
+        final directory = Directory.systemTemp.createTempSync(
+          'draft_migration_shared_bytes_',
+        );
+        PathProviderPlatform.instance = _TestPathProvider(directory.path);
+        addTearDown(() {
+          PathProviderPlatform.instance = previousPathProvider;
+          directory.deleteSync(recursive: true);
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final bytes = Uint8List.fromList([9, 8, 7, 6]);
+        final attachment = (String id) => {
+              'id': id,
+              'fileName': 'draft.png',
+              'mimeType': 'image/png',
+              'fileType': 'image',
+              'storagePath': '',
+              'fileSize': bytes.length,
+              'base64Data': base64Encode(bytes),
+            };
+        await preferences.setString(
+          'conversations',
+          jsonEncode([
+            {
+              'id': 'draft-owner-one',
+              'title': 'First owner',
+              'draftAttachments': [attachment('same-attachment')],
+            },
+            {
+              'id': 'draft-owner-two',
+              'title': 'Second owner',
+              'draftAttachments': [attachment('same-attachment')],
+            },
+          ]),
+        );
+        final repository = MemoryConversationRepository();
+        await repository.initialize();
+
+        try {
+          final result = await ConversationMigrationService(
+            repository,
+          ).migrate(preferences);
+          final first = await repository.getConversation('draft-owner-one');
+          final second = await repository.getConversation('draft-owner-two');
+          final firstLegacy =
+              first!.extensions['stroom.legacyConversation'] as Map;
+          final secondLegacy =
+              second!.extensions['stroom.legacyConversation'] as Map;
+          final firstAttachment =
+              (firstLegacy['draftAttachments'] as List).single as Map;
+          final secondAttachment =
+              (secondLegacy['draftAttachments'] as List).single as Map;
+          final firstPath = firstAttachment['storagePath'] as String;
+          final secondPath = secondAttachment['storagePath'] as String;
+
+          expect(result.verified, isTrue);
+          expect(firstPath, isNot(secondPath));
+          expect(await AttachmentStorage.readFile(firstPath), bytes);
+          expect(await AttachmentStorage.readFile(secondPath), bytes);
+        } finally {
+          await repository.close();
+        }
       },
     );
 
@@ -1467,6 +1742,59 @@ void main() {
       );
     },
   );
+
+  test('message edits retain finish reason and usage metadata', () async {
+    SharedPreferences.setMockInitialValues({
+      'active_conversation_id': 'message-metadata-retention',
+      'conversations': jsonEncode([
+        {
+          'id': 'message-metadata-retention',
+          'title': 'Metadata',
+          'messages': [
+            {
+              'id': 'metadata-message',
+              'role': 'assistant',
+              'content': 'before',
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'finishReason': 'stop',
+              'usage': {'output_tokens': 4},
+            },
+          ],
+        },
+      ]),
+    });
+    final repository = _RecordingMessageChangesMemoryRepository();
+    final container = ProviderContainer(
+      overrides: [
+        conversationRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await repository.close();
+    });
+    final notifier = container.read(conversationsProvider.notifier);
+    await notifier.ready;
+    final current = notifier.state.single.messages.single;
+
+    await notifier.updateMessages(
+      'message-metadata-retention',
+      [current.copyWith(content: 'after')],
+      completeHistorySnapshot: true,
+    );
+
+    final upsert = repository.changesByWrite.last.single.upsertMessages.single;
+    expect(upsert.finishReason, 'stop');
+    expect(upsert.usage, {'output_tokens': 4});
+
+    final stored = await repository.getMessages(
+      'message-metadata-retention',
+      limit: 1,
+    );
+    final legacy = ConversationRecordAdapter.messageToLegacyMap(stored.single);
+    expect(legacy['finishReason'], 'stop');
+    expect(legacy['usage'], {'output_tokens': 4});
+  });
 
   test(
     'stale repository page read cannot replace newer complete history',
@@ -2136,6 +2464,15 @@ void main() {
       );
       await repository.importConversation(
         ConversationRecordAdapter.fromLegacyMap({
+          'id': 'expiry-write-failure-middle',
+          'title': 'Retained between expired conversations',
+          'createdAt': DateTime(2024, 6).toIso8601String(),
+          'updatedAt': DateTime(2024, 6).toIso8601String(),
+          'messages': const [],
+        }),
+      );
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
           'id': 'expiry-write-failure-active',
           'title': 'Active expired conversation',
           'createdAt': DateTime(2024).toIso8601String(),
@@ -2143,6 +2480,11 @@ void main() {
           'messages': const [],
         }),
       );
+      await repository.setConversationOrder([
+        'expiry-write-failure',
+        'expiry-write-failure-middle',
+        'expiry-write-failure-active',
+      ]);
       final container = ProviderContainer(
         overrides: [
           conversationRepositoryProvider.overrideWithValue(repository),
@@ -2154,6 +2496,10 @@ void main() {
       });
       final notifier = container.read(conversationsProvider.notifier);
       await notifier.ready;
+      final originalOrder = container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id)
+          .toList();
       final conversation = container
           .read(conversationsProvider)
           .firstWhere((item) => item.id == 'expiry-write-failure');
@@ -2176,13 +2522,13 @@ void main() {
         container
             .read(conversationsProvider)
             .map((conversation) => conversation.id),
-        containsAll(['expiry-write-failure', 'expiry-write-failure-active']),
+        originalOrder,
       );
       expect(
         container.read(activeConversationIdProvider),
         'expiry-write-failure-active',
       );
-      expect(await repository.countConversations(), 2);
+      expect(await repository.countConversations(), 3);
       expect(await AttachmentStorage.readFile(attachmentPath), attachmentBytes);
     },
   );
@@ -2194,12 +2540,23 @@ void main() {
       final repository = _FailingOrderMemoryRepository();
       await repository.initialize();
       await repository.importConversation(
+        StroomConversation(id: 'order-before', title: 'Before'),
+      );
+      await repository.importConversation(
         StroomConversation(
           id: 'order-failure',
           title: 'Keep on failure',
           messages: [_message('preserved-message', 0)],
         ),
       );
+      await repository.importConversation(
+        StroomConversation(id: 'order-after', title: 'After'),
+      );
+      await repository.setConversationOrder([
+        'order-before',
+        'order-failure',
+        'order-after',
+      ]);
       final container = ProviderContainer(
         overrides: [
           conversationRepositoryProvider.overrideWithValue(repository),
@@ -2211,6 +2568,10 @@ void main() {
       });
       final notifier = container.read(conversationsProvider.notifier);
       await notifier.ready;
+      final originalOrder = container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id)
+          .toList();
       repository.failOrderWrites = true;
 
       await notifier.deleteConversation('order-failure');
@@ -2219,15 +2580,62 @@ void main() {
         container
             .read(conversationsProvider)
             .map((conversation) => conversation.id),
-        contains('order-failure'),
+        originalOrder,
       );
-      expect(await repository.countConversations(), 1);
+      expect(await repository.countConversations(), 3);
       expect(
         (await repository.getMessages('order-failure')).single.id,
         'preserved-message',
       );
     },
   );
+
+  test('failed flow deletion restores the original conversation order',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final repository = _FailingOrderMemoryRepository();
+    await repository.initialize();
+    await repository.importConversation(
+      StroomConversation(id: 'flow-order-before', title: 'Before'),
+    );
+    await repository.importConversation(
+      StroomConversation(id: 'flow-order-delete', title: 'Flow conversation'),
+    );
+    await repository.importConversation(
+      StroomConversation(id: 'flow-order-after', title: 'After'),
+    );
+    await repository.setConversationOrder([
+      'flow-order-before',
+      'flow-order-delete',
+      'flow-order-after',
+    ]);
+    final container = ProviderContainer(
+      overrides: [conversationRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await repository.close();
+    });
+    final notifier = container.read(conversationsProvider.notifier);
+    await notifier.ready;
+    final originalOrder = container
+        .read(conversationsProvider)
+        .map((conversation) => conversation.id)
+        .toList();
+    repository.failOrderWrites = true;
+
+    expect(
+      await notifier.deleteFlowConversationWithFiles('flow-order-delete'),
+      isFalse,
+    );
+    expect(
+      container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id),
+      originalOrder,
+    );
+    expect(await repository.countConversations(), 3);
+  });
 
   test(
     'batch deletion restores state when repository persistence fails',
@@ -2237,6 +2645,9 @@ void main() {
       });
       final repository = _FailingOrderMemoryRepository();
       await repository.initialize();
+      await repository.importConversation(
+        StroomConversation(id: 'batch-delete-before', title: 'Before'),
+      );
       await repository.importConversation(
         StroomConversation(
           id: 'batch-delete-active',
@@ -2251,6 +2662,15 @@ void main() {
           messages: [_message('batch-other-message', 0)],
         ),
       );
+      await repository.importConversation(
+        StroomConversation(id: 'batch-delete-after', title: 'After'),
+      );
+      await repository.setConversationOrder([
+        'batch-delete-before',
+        'batch-delete-active',
+        'batch-delete-other',
+        'batch-delete-after',
+      ]);
       final container = ProviderContainer(
         overrides: [
           conversationRepositoryProvider.overrideWithValue(repository),
@@ -2262,7 +2682,11 @@ void main() {
       });
       final notifier = container.read(conversationsProvider.notifier);
       await notifier.ready;
-      expect(container.read(conversationsProvider).length, 2);
+      final originalOrder = container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id)
+          .toList();
+      expect(originalOrder, hasLength(4));
       repository.failOrderWrites = true;
 
       await notifier.batchDelete(['batch-delete-active', 'batch-delete-other']);
@@ -2271,13 +2695,13 @@ void main() {
         container
             .read(conversationsProvider)
             .map((conversation) => conversation.id),
-        containsAll(['batch-delete-active', 'batch-delete-other']),
+        originalOrder,
       );
       expect(
         container.read(activeConversationIdProvider),
         'batch-delete-active',
       );
-      expect(await repository.countConversations(), 2);
+      expect(await repository.countConversations(), 4);
       expect(
         (await repository.getMessages('batch-delete-active')).single.id,
         'batch-active-message',
@@ -2329,6 +2753,74 @@ void main() {
             .read(conversationsProvider)
             .map((conversation) => conversation.id),
         containsAll(['delete-race-active', 'delete-race-next']),
+      );
+    },
+  );
+
+  test(
+    'failed deletion rollback persists after a queued deletion snapshot',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'rollback-queue-c',
+      });
+      final repository = _DelayedFailingOrderMemoryRepository();
+      await repository.initialize();
+      for (final id in const [
+        'rollback-queue-a',
+        'rollback-queue-b',
+        'rollback-queue-c',
+      ]) {
+        await repository.importConversation(
+          StroomConversation(id: id, title: id),
+        );
+      }
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      final originalOrder = container
+          .read(conversationsProvider)
+          .map((conversation) => conversation.id)
+          .toList();
+      repository.delayNextOrderWrite = true;
+
+      final deletingA = notifier.deleteConversation('rollback-queue-a');
+      await repository.orderWriteStarted.future;
+      final deletingB = notifier.deleteConversation('rollback-queue-b');
+      for (var i = 0; i < 10; i++) {
+        if (!container
+            .read(conversationsProvider)
+            .any((conversation) => conversation.id == 'rollback-queue-b')) {
+          break;
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        ['rollback-queue-c'],
+      );
+
+      repository.releaseOrderWrite.complete();
+      await Future.wait([deletingA, deletingB]);
+
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        originalOrder.where((id) => id != 'rollback-queue-b'),
+      );
+      expect(
+        (await repository.listSummaries()).map((summary) => summary.id),
+        originalOrder.where((id) => id != 'rollback-queue-b'),
       );
     },
   );
@@ -2835,6 +3327,7 @@ void main() {
       );
       final restored = StroomMessage.fromLegacy(legacy, sequence: 4);
 
+      expect(legacy.content, 'neutral text');
       expect(restored.status, 'completed');
       expect(restored.finishReason, 'stop');
       expect(restored.usage, {'input_tokens': 12, 'output_tokens': 3});
@@ -2843,6 +3336,67 @@ void main() {
       });
     },
   );
+
+  test(
+    'legacy adapter preserves content that has no neutral text block',
+    () {
+      final conversation = ConversationRecordAdapter.fromLegacyMap({
+        'id': 'legacy-content-conversation',
+        'title': 'Legacy content',
+        'createdAt': '2025-01-01T00:00:00.000Z',
+        'updatedAt': '2025-01-01T00:00:00.000Z',
+        'messages': [
+          {
+            'id': 'legacy-content-message',
+            'role': 'assistant',
+            'createdAt': '2025-01-01T00:00:00.000Z',
+            'content': 'content beside a non-text block',
+            'blocks': [
+              {
+                'type': 'image',
+                'reference': 'attachments/legacy-content.png',
+              },
+            ],
+          },
+        ],
+      });
+      final message = conversation.messages.single;
+
+      final roundTripped = ConversationRecordAdapter.messageToLegacyMap(
+        message,
+      );
+      expect(roundTripped['content'], 'content beside a non-text block');
+
+      final editedWithoutBlocks = StroomMessage(
+        id: message.id,
+        role: message.role,
+        sequence: message.sequence,
+        createdAt: message.createdAt,
+        content: const [],
+        extensions: message.extensions,
+      );
+      final editedLegacy = ConversationRecordAdapter.messageToLegacyMap(
+        editedWithoutBlocks,
+      );
+      expect(editedLegacy['content'], '');
+    },
+  );
+
+  test('legacy adapter derives streaming state without a retained record', () {
+    final legacy = ConversationRecordAdapter.messageToLegacyMap(
+      StroomMessage(
+        id: 'neutral-streaming-message',
+        role: 'assistant',
+        sequence: 0,
+        createdAt: DateTime.utc(2025),
+        content: [StroomContentPart.text('streaming response')],
+        status: 'streaming',
+      ),
+    );
+
+    expect(legacy['isStreaming'], isTrue);
+    expect(ChatMessage.fromMap(legacy).isStreaming, isTrue);
+  });
 
   test('legacy adapter preserves non-map opaque legacy extension payloads', () {
     final conversation = ConversationRecordAdapter.fromLegacyMap({
@@ -2898,6 +3452,72 @@ void main() {
       (restored['messages'] as List).single['extensions'],
       messageExtensions,
     );
+  });
+
+  test('raw legacy conversation extensions survive added neutral extensions',
+      () {
+    const rawExtensions = ['vendor-conversation', 1];
+    final migrated = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'raw-extension-with-neutral-extension',
+      'title': 'Raw extension with a new extension',
+      'extensions': rawExtensions,
+    });
+    final updated = StroomConversation(
+      schemaVersion: migrated.schemaVersion,
+      id: migrated.id,
+      title: migrated.title,
+      createdAt: migrated.createdAt,
+      updatedAt: migrated.updatedAt,
+      messages: migrated.messages,
+      extensions: {
+        ...migrated.extensions,
+        'vendor.example.neutral': {'trace': 'new'},
+      },
+    );
+
+    final restored = ConversationRecordAdapter.toLegacyMap(updated, const []);
+
+    expect(restored['extensions'], {
+      ConversationRecordAdapter.rawLegacyExtensionsNamespace: rawExtensions,
+      'vendor.example.neutral': {'trace': 'new'},
+    });
+  });
+
+  test('raw legacy message extensions survive added neutral extensions', () {
+    const rawExtensions = ['vendor-message', 2];
+    final migrated = StroomMessage.fromLegacy(
+      ChatMessage.fromMap({
+        'id': 'raw-message-extension-with-neutral-extension',
+        'role': 'user',
+        'createdAt': '2025-01-01T00:00:00.000Z',
+        'content': 'message',
+        'extensions': rawExtensions,
+      }),
+      sequence: 0,
+    );
+    final updated = StroomMessage(
+      id: migrated.id,
+      role: migrated.role,
+      sequence: migrated.sequence,
+      createdAt: migrated.createdAt,
+      content: migrated.content,
+      status: migrated.status,
+      finishReason: migrated.finishReason,
+      usage: migrated.usage,
+      diagnostics: migrated.diagnostics,
+      extensions: {
+        ...migrated.extensions,
+        'vendor.example.message': {'trace': 'new'},
+      },
+      extraFields: migrated.extraFields,
+    );
+
+    final restored = ConversationRecordAdapter.messageToLegacyMap(updated);
+
+    expect(restored['extensions'], {
+      ConversationRecordAdapter.rawLegacyExtensionsNamespace: rawExtensions,
+      'vendor.example.message': {'trace': 'new'},
+    });
   });
 
   test('legacy adapter preserves marker-shaped opaque extension maps', () {
@@ -2956,6 +3576,56 @@ void main() {
     );
   });
 
+  test('migration preserves independent legacy streaming and error flags', () {
+    final conversation = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'independent-message-flags',
+      'title': 'Independent flags',
+      'messages': [
+        {
+          'id': 'pending-streaming-message',
+          'role': 'assistant',
+          'status': 'pending',
+          'isStreaming': true,
+          'isError': false,
+          'createdAt': '2025-01-01T00:00:00.000Z',
+          'content': 'waiting',
+        },
+      ],
+    });
+
+    final restored = ConversationRecordAdapter.messageToLegacyMap(
+      conversation.messages.single,
+    );
+
+    expect(restored['status'], 'pending');
+    expect(restored['isStreaming'], isTrue);
+    expect(restored['isError'], isFalse);
+  });
+
+  test('migration preserves legacy error flag with an independent status', () {
+    final conversation = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'independent-error-status',
+      'title': 'Independent error status',
+      'messages': [
+        {
+          'id': 'pending-error-message',
+          'role': 'assistant',
+          'status': 'pending',
+          'isError': true,
+          'createdAt': '2025-01-01T00:00:00.000Z',
+          'content': 'waiting',
+        },
+      ],
+    });
+
+    final restored = ConversationRecordAdapter.messageToLegacyMap(
+      conversation.messages.single,
+    );
+
+    expect(restored['status'], 'pending');
+    expect(restored['isError'], isTrue);
+  });
+
   test('canonical message fields replace retained legacy record values', () {
     final message = StroomMessage(
       id: 'message-current',
@@ -2977,6 +3647,8 @@ void main() {
             'status': 'pending',
             'finishReason': 'length',
             'usage': {'input_tokens': 1},
+            'isStreaming': true,
+            'isError': true,
             'extensions': {
               'vendor.example.message': {'trace': 'old'},
             },
@@ -2994,6 +3666,8 @@ void main() {
     expect(legacy['createdAt'], '2025-01-02T00:00:00.000Z');
     expect(legacy['content'], 'current text');
     expect(legacy['status'], 'completed');
+    expect(legacy['isStreaming'], isFalse);
+    expect(legacy['isError'], isFalse);
     expect(legacy['finishReason'], 'stop');
     expect(legacy['usage'], {'input_tokens': 20});
     expect(legacy['extensions'], {

@@ -1582,7 +1582,12 @@ class BackupService {
       return await repository.exportData();
     } catch (error) {
       debugPrint('Conversation repository backup export failed: $error');
-      rethrow;
+      if (await isConversationRepositoryAuthoritative(repository)) {
+        rethrow;
+      }
+      debugPrint(
+          'Conversation repository is not authoritative; omitting it from backup.');
+      return null;
     } finally {
       await repository.close();
     }
@@ -2226,6 +2231,34 @@ class BackupService {
   /// - v1: preferences.json（聊天+设置合并），attachments/ 分开
   /// - v2: chat_data.json（聊天记录）+ settings.json（设置），
   ///       attachments/ 作为聊天记录和附件的一部分
+  static Future<void> _writeRestoredConversationMigrationCheckpoint(
+    ConversationRepository repository,
+    String legacyJson,
+  ) async {
+    final repositorySourceHash = await repository.migrationSourceHash();
+    late final String sourceHash;
+    if (repositorySourceHash == null) {
+      sourceHash = sha256.convert(utf8.encode(legacyJson)).toString();
+    } else {
+      // The repository snapshot may include changes made after migration, so
+      // its paired legacy preference can be stale. Keeping that preference
+      // would make startup migration treat it as a new source and clear the
+      // restored repository rows.
+      await StartupPreferences.remove('conversations');
+      sourceHash = repositorySourceHash;
+    }
+    await StartupPreferences.setString(
+      ConversationMigrationService.stateKey,
+      jsonEncode({
+        'sourceHash': sourceHash,
+        'verified': true,
+        if (repositorySourceHash == null) 'preserveRepositoryRows': true,
+        'conversationCount': await repository.countConversations(),
+        'messageCount': await repository.countMessages(),
+      }),
+    );
+  }
+
   static Future<List<String>> _restoreFromBytes(
     Uint8List bytes, {
     void Function(double progress)? onProgress,
@@ -3475,11 +3508,19 @@ class BackupService {
           allPresent = false;
           continue;
         }
-        for (final key in const ['storagePath', 'thumbnailPath']) {
+        for (final key in const [
+          'storagePath',
+          'reference',
+          'thumbnailPath',
+        ]) {
           final path = attachment[key];
           if (path == null || path == '') continue;
           if (path is! String) {
             allPresent = false;
+            continue;
+          }
+          if (key == 'reference' &&
+              RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(path)) {
             continue;
           }
           final normalizedPath = path.replaceAll(r'\', '/');
@@ -3530,9 +3571,15 @@ class BackupService {
     }
     if (repositoryBackup is Map) {
       final seen = <String>{};
-      void checkRepositoryPath(Object? rawPath) {
+      void checkRepositoryPath(
+        Object? rawPath, {
+        bool allowExternalReference = false,
+      }) {
         if (rawPath is! String || rawPath.isEmpty) return;
-        if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(rawPath)) return;
+        if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(rawPath)) {
+          if (!allowExternalReference) allPresent = false;
+          return;
+        }
         if (!seen.add(rawPath)) return;
         final path = rawPath.replaceAll(r'\', '/');
         if (!_isSafeRelativeArchivePath(path)) {
@@ -3548,7 +3595,10 @@ class BackupService {
       void checkRepositoryAttachment(Object? raw) {
         if (raw is! Map) return;
         checkRepositoryPath(raw['storagePath']);
-        checkRepositoryPath(raw['reference']);
+        checkRepositoryPath(
+          raw['reference'],
+          allowExternalReference: true,
+        );
         checkRepositoryPath(raw['thumbnailPath']);
       }
 
@@ -3593,7 +3643,10 @@ class BackupService {
               // Typed parts can keep derived paths beside the nested media
               // object. Validate these paths too, or an archive can omit a
               // thumbnail while still passing restore validation.
-              checkRepositoryPath(data['reference']);
+              checkRepositoryPath(
+                data['reference'],
+                allowExternalReference: true,
+              );
               checkRepositoryPath(data['storagePath']);
               checkRepositoryPath(data['thumbnailPath']);
             } else if (const {
@@ -3602,7 +3655,10 @@ class BackupService {
               'video',
               'file',
             }.contains(part['type'])) {
-              checkRepositoryPath(data['reference']);
+              checkRepositoryPath(
+                data['reference'],
+                allowExternalReference: true,
+              );
               checkRepositoryPath(data['storagePath']);
               checkRepositoryPath(data['thumbnailPath']);
             }
@@ -5397,19 +5453,9 @@ class BackupService {
             'conversations',
           );
           if (repositoryBackup is Map && legacyJson != null) {
-            await StartupPreferences.setString(
-              ConversationMigrationService.stateKey,
-              jsonEncode({
-                'sourceHash':
-                    sha256.convert(utf8.encode(legacyJson)).toString(),
-                'verified': true,
-                'conversationCount': data['conversations'] is List
-                    ? (data['conversations'] as List).length
-                    : 0,
-                'messageCount': data['messages'] is List
-                    ? (data['messages'] as List).length
-                    : 0,
-              }),
+            await _writeRestoredConversationMigrationCheckpoint(
+              repository,
+              legacyJson,
             );
           } else {
             await StartupPreferences.remove(
@@ -6486,8 +6532,18 @@ class BackupService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('conversations');
-      final decoded = raw == null ? null : jsonDecode(raw);
-      if (decoded != null && decoded is! List) return null;
+      Object? decoded;
+      var malformedLegacyPreferences = false;
+      if (raw != null) {
+        try {
+          decoded = jsonDecode(raw);
+          if (decoded != null && decoded is! List) {
+            malformedLegacyPreferences = true;
+          }
+        } catch (_) {
+          malformedLegacyPreferences = true;
+        }
+      }
       final appDir =
           kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory;
       final keys = <String>{};
@@ -6539,80 +6595,93 @@ class BackupService {
         }
       }
 
-      if (decoded is List) {
-        for (final conversation in decoded) {
-          if (conversation is! Map) return null;
-          final messages = conversation['messages'];
-          if (messages != null) {
-            if (messages is! List) return null;
-            for (final message in messages) {
-              if (message is! Map) return null;
-              collectAttachments(message['attachments']);
-            }
-          }
-          collectAttachments(conversation['draftAttachments']);
-        }
-      }
-
       // ConversationRepository is authoritative after M2 migration. Legacy
       // preferences may be absent or stale, so include attachment references
       // from every repository row before allowing task-only restores to write
       // files into the shared attachments directory.
-      final repository = repositoryOverride ?? createConversationRepository();
-      try {
-        await repository.initialize();
-        for (final summary in await repository.listSummaries()) {
-          final conversation = await repository.getConversation(summary.id);
-          if (conversation == null) return null;
-          final conversationLegacy =
-              conversation.extensions['stroom.legacyConversation'];
-          if (conversationLegacy is Map) {
-            collectAttachments(conversationLegacy['draftAttachments']);
-          }
-          collectAttachments(conversation.extraFields['draftAttachments']);
+      var repositoryAuthoritative = false;
+      if (repositoryOverride != null ||
+          kIsWeb ||
+          (!WebFileStore.isTestMode && !_isBackupFlutterTest)) {
+        final repository = repositoryOverride ?? createConversationRepository();
+        try {
+          await repository.initialize();
+          repositoryAuthoritative =
+              await isConversationRepositoryAuthoritative(repository);
+          for (final summary in await repository.listSummaries()) {
+            final conversation = await repository.getConversation(summary.id);
+            if (conversation == null) return null;
+            final conversationLegacy =
+                conversation.extensions['stroom.legacyConversation'];
+            if (conversationLegacy is Map) {
+              collectAttachments(conversationLegacy['draftAttachments']);
+            }
+            collectAttachments(conversation.extraFields['draftAttachments']);
 
-          var offset = 0;
-          const pageSize = 100;
-          while (true) {
-            final messages = await repository.getMessages(
-              summary.id,
-              offset: offset,
-              limit: pageSize,
-            );
-            if (messages.isEmpty) break;
-            for (final message in messages) {
-              final legacy = message.extensions['stroom.legacy'];
-              final record = legacy is Map ? legacy['record'] : null;
-              if (record is Map) collectAttachments(record['attachments']);
-              for (final part in message.content) {
-                final data = part.data;
-                final attachment = data['attachment'];
-                if (attachment is Map) {
-                  collectAttachments([attachment]);
-                }
-                if (const {
-                  'image',
-                  'audio',
-                  'video',
-                  'file',
-                }.contains(part.type)) {
-                  for (final field in const [
-                    'reference',
-                    'storagePath',
-                    'thumbnailPath',
-                  ]) {
-                    final key = canonicalKey(data[field]);
-                    if (key != null) keys.add(key);
+            var offset = 0;
+            const pageSize = 100;
+            while (true) {
+              final messages = await repository.getMessages(
+                summary.id,
+                offset: offset,
+                limit: pageSize,
+              );
+              if (messages.isEmpty) break;
+              for (final message in messages) {
+                final legacy = message.extensions['stroom.legacy'];
+                final record = legacy is Map ? legacy['record'] : null;
+                if (record is Map) collectAttachments(record['attachments']);
+                for (final part in message.content) {
+                  final data = part.data;
+                  final attachment = data['attachment'];
+                  if (attachment is Map) {
+                    collectAttachments([attachment]);
+                  }
+                  if (const {
+                    'image',
+                    'audio',
+                    'video',
+                    'file',
+                  }.contains(part.type)) {
+                    for (final field in const [
+                      'reference',
+                      'storagePath',
+                      'thumbnailPath',
+                    ]) {
+                      final key = canonicalKey(data[field]);
+                      if (key != null) keys.add(key);
+                    }
                   }
                 }
               }
+              offset += messages.length;
+              if (messages.length < pageSize) break;
             }
-            offset += messages.length;
-            if (messages.length < pageSize) break;
+          }
+        } finally {
+          await repository.close();
+        }
+      }
+
+      // Old SharedPreferences records are consulted only before the verified
+      // repository checkpoint. After that checkpoint they may be stale and
+      // malformed legacy data must not block a task-only restore.
+      if (!repositoryAuthoritative) {
+        if (malformedLegacyPreferences) return null;
+        if (decoded is List) {
+          for (final conversation in decoded) {
+            if (conversation is! Map) return null;
+            final messages = conversation['messages'];
+            if (messages != null) {
+              if (messages is! List) return null;
+              for (final message in messages) {
+                if (message is! Map) return null;
+                collectAttachments(message['attachments']);
+              }
+            }
+            collectAttachments(conversation['draftAttachments']);
           }
         }
-      } finally {
-        await repository.close();
       }
       return keys;
     } catch (e) {
@@ -6626,6 +6695,13 @@ class BackupService {
     ConversationRepository repository,
   ) =>
       _collectChatAttachmentKeysStrict(repositoryOverride: repository);
+
+  @visibleForTesting
+  static Future<void> writeRestoredConversationMigrationCheckpointForTest(
+    ConversationRepository repository,
+    String legacyJson,
+  ) =>
+      _writeRestoredConversationMigrationCheckpoint(repository, legacyJson);
 
   @visibleForTesting
   static bool hasAllReferencedAttachmentFilesForTest({

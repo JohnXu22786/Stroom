@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'attachment_storage.dart';
@@ -31,6 +33,8 @@ class ConversationMigrationService {
       'conversations.migration.attachment_manifest';
   static const stateKey = 'conversations.migration.state';
 
+  static final Map<Object, Future<void>> _migrationQueues = {};
+
   final ConversationRepository repository;
   final int batchSize;
   Future<void> Function(int batchIndex)? beforeBatchCommit;
@@ -42,6 +46,35 @@ class ConversationMigrationService {
   }) : assert(batchSize > 0);
 
   Future<ConversationMigrationResult> migrate(
+    SharedPreferences preferences,
+  ) {
+    final lockKey = repository.migrationLockKey;
+    final previous = _migrationQueues[lockKey] ?? Future<void>.value();
+    final completion = Completer<void>();
+    final queued = previous.then((_) => completion.future);
+    _migrationQueues[lockKey] = queued;
+    return _migrateAfter(previous, completion, queued, lockKey, preferences);
+  }
+
+  Future<ConversationMigrationResult> _migrateAfter(
+    Future<void> previous,
+    Completer<void> completion,
+    Future<void> queued,
+    Object lockKey,
+    SharedPreferences preferences,
+  ) async {
+    try {
+      await previous;
+      return await _migrate(preferences);
+    } finally {
+      completion.complete();
+      if (identical(_migrationQueues[lockKey], queued)) {
+        _migrationQueues.remove(lockKey);
+      }
+    }
+  }
+
+  Future<ConversationMigrationResult> _migrate(
     SharedPreferences preferences,
   ) async {
     await repository.initialize();
@@ -75,6 +108,18 @@ class ConversationMigrationService {
     final sourceHash = sha256.convert(utf8.encode(raw)).toString();
     var resumeAt = 0;
     final storedSourceHash = await repository.migrationSourceHash();
+    var preserveRepositoryRows = false;
+    if (storedSourceHash == sourceHash) {
+      // This marker is written only after the imported rows pass count, order,
+      // and integrity verification. It remains authoritative as users mutate
+      // the repository, even if the final SharedPreferences checkpoint failed.
+      return ConversationMigrationResult(
+        verified: true,
+        conversationCount: await repository.countConversations(),
+        messageCount: await repository.countMessages(),
+        sourceHash: sourceHash,
+      );
+    }
     var restartForChangedSource =
         storedSourceHash != null && storedSourceHash != sourceHash;
     if (previous != null) {
@@ -84,22 +129,10 @@ class ConversationMigrationService {
         if (previousHash is String && previousHash != sourceHash) {
           restartForChangedSource = true;
         }
+        preserveRepositoryRows = storedSourceHash == null &&
+            previousHash == sourceHash &&
+            state['preserveRepositoryRows'] == true;
         if (state['verified'] == true && state['sourceHash'] == sourceHash) {
-          if (await repository.migrationSourceHash() == sourceHash) {
-            final storedConversationCount =
-                await repository.countConversations();
-            final storedMessageCount = await repository.countMessages();
-            // After verification the repository becomes authoritative and can
-            // legitimately diverge from the retained rollback source as users
-            // edit, add, or delete records. The repository marker survives those
-            // mutations but disappears if the store itself is reset.
-            return ConversationMigrationResult(
-              verified: true,
-              conversationCount: storedConversationCount,
-              messageCount: storedMessageCount,
-              sourceHash: sourceHash,
-            );
-          }
           resumeAt = 0;
         } else if (state['sourceHash'] == sourceHash &&
             state['nextConversation'] is num) {
@@ -144,7 +177,13 @@ class ConversationMigrationService {
       // backup above remain available if the process stops immediately after.
       await repository.clearConversations();
       resumeAt = 0;
+      preserveRepositoryRows = false;
     }
+    final preserveExistingIds = preserveRepositoryRows
+        ? (await repository.listSummaries())
+            .map((summary) => summary.id)
+            .toSet()
+        : const <String>{};
     if (resumeAt > 0 &&
         !await _containsImportedPrefix(conversations, resumeAt)) {
       // The repository may have been reset after a batch checkpoint was
@@ -158,6 +197,7 @@ class ConversationMigrationService {
         'sourceHash': sourceHash,
         'nextConversation': resumeAt,
         'verified': false,
+        if (preserveRepositoryRows) 'preserveRepositoryRows': true,
       }),
     )) {
       throw StateError(
@@ -170,6 +210,7 @@ class ConversationMigrationService {
       await beforeBatchCommit?.call(batchIndex);
       final end = (start + batchSize).clamp(0, conversations.length);
       for (final conversation in conversations.sublist(start, end)) {
+        if (preserveExistingIds.contains(conversation.id)) continue;
         await repository.importConversation(conversation);
       }
       await preferences.setString(
@@ -178,24 +219,36 @@ class ConversationMigrationService {
           'sourceHash': sourceHash,
           'nextConversation': end,
           'verified': false,
+          if (preserveRepositoryRows) 'preserveRepositoryRows': true,
         }),
       );
     }
-    await repository.setConversationOrder(
-      conversations.map((conversation) => conversation.id).toList(),
-    );
+    final existingOrder = (await repository.listSummaries())
+        .map((summary) => summary.id)
+        .toList();
+    final importedIds = conversations
+        .map((conversation) => conversation.id)
+        .where((id) => !existingOrder.contains(id));
+    final mergedOrder = [...existingOrder, ...importedIds];
+    await repository.setConversationOrder(mergedOrder);
 
     final verifiedMessages = <String, List<String>>{};
     for (final conversation in conversations) {
       final storedConversation = await repository.getConversation(
         conversation.id,
       );
+      final preserveExisting = preserveExistingIds.contains(conversation.id);
       if (storedConversation == null ||
-          jsonEncode(storedConversation.toMap()) !=
-              jsonEncode(_withoutMessages(conversation).toMap())) {
+          (!preserveExisting &&
+              jsonEncode(storedConversation.toMap()) !=
+                  jsonEncode(_withoutMessages(conversation).toMap()))) {
         throw StateError(
           'Conversation ${conversation.id} failed metadata verification.',
         );
+      }
+      if (preserveExisting) {
+        verifiedMessages[conversation.id] = const [];
+        continue;
       }
       final stored = await repository.getMessages(
         conversation.id,
@@ -222,19 +275,21 @@ class ConversationMigrationService {
     }
     final conversationCount = await repository.countConversations();
     final messageCount = await repository.countMessages();
-    final expectedMessageCount = conversations.fold<int>(
-      0,
-      (count, conversation) => count + conversation.messages.length,
-    );
-    if (conversationCount != conversations.length ||
-        messageCount != expectedMessageCount ||
+    final expectedMessageCount = conversations
+        .where((conversation) => !preserveExistingIds.contains(conversation.id))
+        .fold<int>(
+          0,
+          (count, conversation) => count + conversation.messages.length,
+        );
+    if (conversationCount < conversations.length ||
+        messageCount < expectedMessageCount ||
         verifiedMessages.length != conversations.length) {
       throw StateError('Conversation repository count verification failed.');
     }
     final summaryIds = (await repository.listSummaries())
         .map((summary) => summary.id)
         .toList();
-    if (!_sameIds(
+    if (!_isOrderedSubsequence(
       conversations.map((conversation) => conversation.id).toList(),
       summaryIds,
     )) {
@@ -249,20 +304,33 @@ class ConversationMigrationService {
       );
     }
     await repository.setMigrationSourceHash(sourceHash);
-    await preferences.setString(
-      stateKey,
-      jsonEncode({
-        'sourceHash': sourceHash,
-        'nextConversation': conversations.length,
-        'verified': true,
-        'conversationCount': conversations.length,
-        'messageCount': expectedMessageCount,
-      }),
-    );
+    try {
+      final saved = await preferences.setString(
+        stateKey,
+        jsonEncode({
+          'sourceHash': sourceHash,
+          'nextConversation': conversations.length,
+          'verified': true,
+          'conversationCount': conversationCount,
+          'messageCount': messageCount,
+        }),
+      );
+      if (!saved) {
+        debugPrint(
+          'Could not save the final conversation migration checkpoint; '
+          'the verified repository source marker remains authoritative.',
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        'Could not save the final conversation migration checkpoint: $error; '
+        'the verified repository source marker remains authoritative.',
+      );
+    }
     return ConversationMigrationResult(
       verified: true,
-      conversationCount: conversations.length,
-      messageCount: expectedMessageCount,
+      conversationCount: conversationCount,
+      messageCount: messageCount,
       sourceHash: sourceHash,
     );
   }
@@ -391,10 +459,19 @@ class ConversationMigrationService {
           }
         }
         if (!fileAvailable) {
+          final attachmentId = attachment['id'] is String
+              ? attachment['id'] as String
+              : '${rawDraftAttachments.indexOf(rawAttachment)}';
+          final stableAttachmentId = sha256
+              .convert(
+                utf8.encode(
+                    '${conversation['id']}\u0000$attachmentId\u0000$hash'),
+              )
+              .toString();
           final path = await AttachmentStorage.saveFile(
             attachment['fileName'] as String? ?? 'draft-attachment.bin',
             bytes,
-            stableId: hash,
+            stableId: stableAttachmentId,
           );
           attachment['storagePath'] = path;
         }
@@ -449,6 +526,19 @@ class ConversationMigrationService {
       if (expected[i] != actual[i]) return false;
     }
     return true;
+  }
+
+  static bool _isOrderedSubsequence(
+    List<String> expected,
+    List<String> actual,
+  ) {
+    var expectedIndex = 0;
+    for (final id in actual) {
+      if (expectedIndex < expected.length && id == expected[expectedIndex]) {
+        expectedIndex++;
+      }
+    }
+    return expectedIndex == expected.length;
   }
 
   static bool _sameBytes(List<int> left, List<int> right) {

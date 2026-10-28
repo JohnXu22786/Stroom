@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../models/chat_message.dart';
 import '../models/stroom_conversation.dart';
 
@@ -6,6 +8,9 @@ import '../models/stroom_conversation.dart';
 class ConversationRecordAdapter {
   static const legacyMessageNamespace = 'stroom.legacy';
   static const legacyConversationNamespace = 'stroom.legacyConversation';
+  static const rawLegacyExtensionsNamespace = 'stroom.legacyRawExtensions';
+  static const _neutralContentSnapshotKey =
+      '_stroomAdapterNeutralContentSnapshot';
   static const _conversationEnvelopeVersionKey =
       '_stroomAdapterLegacyConversationEnvelopeVersion';
   static const _conversationEnvelopeVersion = 1;
@@ -69,6 +74,8 @@ class ConversationRecordAdapter {
               if (oldLegacyExtension is Map)
                 ...Map<String, dynamic>.from(oldLegacyExtension),
               'record': legacyRecord,
+              _neutralContentSnapshotKey:
+                  neutral.content.map(_contentPartToLegacyBlock).toList(),
             },
           },
           extraFields: neutral.extraFields,
@@ -169,6 +176,9 @@ class ConversationRecordAdapter {
     }
     if (hasRawExtensions && ordinaryExtensions.isEmpty) {
       result['extensions'] = rawExtensionsValue;
+    } else if (hasRawExtensions) {
+      _retainRawExtensions(ordinaryExtensions, rawExtensionsValue);
+      result['extensions'] = ordinaryExtensions;
     } else if (ordinaryExtensions.isNotEmpty) {
       result['extensions'] = ordinaryExtensions;
     }
@@ -197,25 +207,29 @@ class ConversationRecordAdapter {
         : null;
     final record = legacy is Map ? legacy['record'] : null;
     if (record is Map) {
+      final currentBlocks =
+          message.content.map(_contentPartToLegacyBlock).toList();
+      final textParts = message.content.where(
+        (part) => part.type == 'text' && part.data['text'] is String,
+      );
+      final joinedText =
+          textParts.map((part) => part.data['text'] as String).join();
+      final snapshot =
+          legacy is Map ? legacy[_neutralContentSnapshotKey] : null;
+      final contentMatchesSnapshot =
+          snapshot is List && jsonEncode(snapshot) == jsonEncode(currentBlocks);
+      final retainedContent = record['content'];
+      final legacyContentIsUnrepresented = textParts.isEmpty &&
+          retainedContent is String &&
+          (snapshot == null || contentMatchesSnapshot);
       final result = <String, dynamic>{
         ...Map<String, dynamic>.from(record),
         ...message.extraFields,
         'id': message.id,
         'role': message.role,
         'createdAt': message.createdAt.toIso8601String(),
-        'content': message.content
-            .where((part) => part.type == 'text' && part.data['text'] is String)
-            .map((part) => part.data['text'] as String)
-            .join(),
-        'blocks': message.content
-            .map(
-              (part) => <String, dynamic>{
-                ...part.extraFields,
-                'type': part.type,
-                ...part.data,
-              },
-            )
-            .toList(),
+        'content': legacyContentIsUnrepresented ? retainedContent : joinedText,
+        'blocks': currentBlocks,
       };
       final attachments = <Map<String, dynamic>>[];
       for (final part in message.content) {
@@ -236,12 +250,17 @@ class ConversationRecordAdapter {
       }
       if (message.status == null) {
         result.remove('status');
-        result.remove('isStreaming');
-        result.remove('isError');
       } else {
+        final statusChanged = result['status'] != message.status;
         result['status'] = message.status;
-        result['isStreaming'] = message.status == 'streaming';
-        result['isError'] = message.status == 'error';
+        if (statusChanged) {
+          result['isStreaming'] = message.status == 'streaming';
+          result['isError'] = message.status == 'error';
+        } else {
+          result.putIfAbsent(
+              'isStreaming', () => message.status == 'streaming');
+          result.putIfAbsent('isError', () => message.status == 'error');
+        }
       }
       if (message.finishReason == null) {
         result.remove('finishReason');
@@ -259,27 +278,72 @@ class ConversationRecordAdapter {
         } else {
           result.remove('extensions');
         }
+      } else if (hasRawLegacyExtensions) {
+        _retainRawExtensions(ordinaryExtensions, rawLegacyExtensions);
+        result['extensions'] = ordinaryExtensions;
       } else {
         result['extensions'] = ordinaryExtensions;
       }
       final diagnostics = message.diagnostics?.toMap() ?? const {};
       return {...result, ...diagnostics};
     }
+    final retainedIsStreaming = legacy is Map ? legacy['isStreaming'] : null;
+    final retainedIsError = legacy is Map ? legacy['isError'] : null;
     return {
       ...message.extraFields,
       'id': message.id,
       'role': message.role,
       'createdAt': message.createdAt.toIso8601String(),
+      'content': message.content
+          .where((part) => part.type == 'text' && part.data['text'] is String)
+          .map((part) => part.data['text'] as String)
+          .join(),
       'blocks': message.content.map((part) => part.toMap()).toList(),
       if (message.status != null) 'status': message.status,
+      if (retainedIsStreaming is bool || message.status != null)
+        'isStreaming': retainedIsStreaming is bool
+            ? retainedIsStreaming
+            : message.status == 'streaming',
+      if (retainedIsError is bool || message.status != null)
+        'isError': retainedIsError is bool
+            ? retainedIsError
+            : message.status == 'error',
       if (message.finishReason != null) 'finishReason': message.finishReason,
       if (message.usage != null) 'usage': message.usage,
-      if (ordinaryExtensions.isNotEmpty)
+      if (ordinaryExtensions.isNotEmpty && hasRawLegacyExtensions)
+        'extensions': _retainingRawExtensions(
+          ordinaryExtensions,
+          rawLegacyExtensions,
+        )
+      else if (ordinaryExtensions.isNotEmpty)
         'extensions': ordinaryExtensions
       else if (hasRawLegacyExtensions)
         'extensions': rawLegacyExtensions,
-      if (message.status == 'error') 'isError': true,
     };
+  }
+
+  static void _retainRawExtensions(
+    Map<String, dynamic> ordinaryExtensions,
+    Object? rawValue,
+  ) {
+    if (!ordinaryExtensions.containsKey(rawLegacyExtensionsNamespace)) {
+      ordinaryExtensions[rawLegacyExtensionsNamespace] = rawValue;
+      return;
+    }
+    ordinaryExtensions[rawLegacyExtensionsNamespace] = {
+      '_stroomAdapterRawExtensionsValue': rawValue,
+      '_stroomAdapterExistingRawExtensionsNamespaceValue':
+          ordinaryExtensions[rawLegacyExtensionsNamespace],
+    };
+  }
+
+  static Map<String, dynamic> _retainingRawExtensions(
+    Map<String, dynamic> ordinaryExtensions,
+    Object? rawValue,
+  ) {
+    final result = Map<String, dynamic>.from(ordinaryExtensions);
+    _retainRawExtensions(result, rawValue);
+    return result;
   }
 
   /// Stores the complete legacy message shape except diagnostics, which are
@@ -290,6 +354,15 @@ class ConversationRecordAdapter {
       Map<String, dynamic>.from(map)
         ..remove('rawRequest')
         ..remove('rawResponse');
+
+  static Map<String, dynamic> _contentPartToLegacyBlock(
+    StroomContentPart part,
+  ) =>
+      <String, dynamic>{
+        ...part.extraFields,
+        'type': part.type,
+        ...part.data,
+      };
 
   static DateTime _date(Object? value) {
     if (value is String) {

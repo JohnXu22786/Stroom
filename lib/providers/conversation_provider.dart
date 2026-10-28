@@ -522,6 +522,59 @@ List<Conversation> pinnedFirstStable(List<Conversation> conversations) {
   return [...pinned, ...unpinned];
 }
 
+/// Restores optimistically removed conversations near their original
+/// neighbors after a failed write, while keeping changes made during the
+/// write attempt in the current list.
+List<Conversation> restoreConversationOrderAfterFailedWrite({
+  required List<Conversation> originalOrder,
+  required List<Conversation> current,
+  required List<Conversation> removed,
+}) {
+  final restored = List<Conversation>.from(current);
+  final originalIndex = {
+    for (var index = 0; index < originalOrder.length; index++)
+      originalOrder[index].id: index,
+  };
+  final orderedRemoved = List<Conversation>.from(removed)
+    ..sort(
+      (a, b) => (originalIndex[a.id] ?? originalOrder.length).compareTo(
+        originalIndex[b.id] ?? originalOrder.length,
+      ),
+    );
+
+  for (final conversation in orderedRemoved) {
+    if (restored.any((item) => item.id == conversation.id)) continue;
+    final index = originalIndex[conversation.id];
+    if (index == null) {
+      restored.add(conversation);
+      continue;
+    }
+    var insertAt = restored.length;
+    for (var next = index + 1; next < originalOrder.length; next++) {
+      final neighbor = restored.indexWhere(
+        (item) => item.id == originalOrder[next].id,
+      );
+      if (neighbor >= 0) {
+        insertAt = neighbor;
+        break;
+      }
+    }
+    if (insertAt == restored.length) {
+      for (var previous = index - 1; previous >= 0; previous--) {
+        final neighbor = restored.indexWhere(
+          (item) => item.id == originalOrder[previous].id,
+        );
+        if (neighbor >= 0) {
+          insertAt = neighbor + 1;
+          break;
+        }
+      }
+    }
+    restored.insert(insertAt, conversation);
+  }
+  return restored;
+}
+
 // ============================================================================
 // Providers
 // ============================================================================
@@ -685,11 +738,12 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
     final removable = <Conversation>[];
     for (final conversation in expired) {
+      List<ChatMessage>? repositoryMessages;
       if (_repositoryReady) {
         try {
           // Keep the conversation and its repository rows if cleanup cannot
           // discover every attachment in its paged history.
-          conversation.messages = await _readAllRepositoryMessages(
+          repositoryMessages = await _readAllRepositoryMessages(
             conversation.id,
           );
         } catch (error) {
@@ -706,7 +760,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
           currentExpiry.isAfter(DateTime.now())) {
         continue;
       }
-      currentConversation.messages = conversation.messages;
+      if (repositoryMessages != null) {
+        currentConversation.messages = repositoryMessages;
+      }
       removable.add(currentConversation);
     }
     if (removable.isEmpty) {
@@ -716,6 +772,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     final expiredIds = removable.map((c) => c.id).toSet();
     final previousActiveId = _ref.read(activeConversationIdProvider);
     final wasActive = expiredIds.contains(previousActiveId);
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => !expiredIds.contains(c.id)).toList();
     if (wasActive) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
@@ -729,17 +786,17 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     }
     if (!saved) {
       if (mounted) {
-        state = pinnedFirstStable([
-          ...removable,
-          ...state.where(
-            (conversation) => !expiredIds.contains(conversation.id),
-          ),
-        ]);
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: removable,
+        );
         if (wasActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state =
               previousActiveId;
         }
         _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
       }
       return;
     }

@@ -191,6 +191,23 @@ class _ToggleFailingMessageMemoryRepository
   }
 }
 
+class _FailingFullHistoryMemoryRepository extends MemoryConversationRepository {
+  bool failFullHistoryReads = false;
+  int fullHistoryReadCount = 0;
+
+  @override
+  Future<List<StroomMessage>> getMessages(
+    String conversationId, {
+    int offset = 0,
+    int limit = 50,
+  }) {
+    if (failFullHistoryReads && limit == 100 && ++fullHistoryReadCount == 2) {
+      throw StateError('simulated full-history read failure');
+    }
+    return super.getMessages(conversationId, offset: offset, limit: limit);
+  }
+}
+
 class _DeferredMessageMemoryRepository extends MemoryConversationRepository {
   bool deferReads = false;
   final readStarted = Completer<void>();
@@ -225,6 +242,39 @@ class _DeferredFullHistoryMemoryRepository
     if (deferFullReads && limit == 100 && conversationId == 'retry-old') {
       if (!readStarted.isCompleted) readStarted.complete();
       return pendingRead.future;
+    }
+    return super.getMessages(conversationId, offset: offset, limit: limit);
+  }
+}
+
+class _DeferredConversationPageMemoryRepository
+    extends MemoryConversationRepository {
+  String deferredOldConversationId = 'switch-old';
+  bool deferOldConversationPage = false;
+  bool deferNewConversationPage = false;
+  int deferredOldOffset = 5;
+  int deferredOldLimit = 20;
+  final oldPageStarted = Completer<void>();
+  final pendingOldPage = Completer<List<StroomMessage>>();
+  final newPageStarted = Completer<void>();
+  final pendingNewPage = Completer<List<StroomMessage>>();
+
+  @override
+  Future<List<StroomMessage>> getMessages(
+    String conversationId, {
+    int offset = 0,
+    int limit = 50,
+  }) {
+    if (deferOldConversationPage &&
+        conversationId == deferredOldConversationId &&
+        offset == deferredOldOffset &&
+        limit == deferredOldLimit) {
+      if (!oldPageStarted.isCompleted) oldPageStarted.complete();
+      return pendingOldPage.future;
+    }
+    if (deferNewConversationPage && conversationId == 'switch-new') {
+      if (!newPageStarted.isCompleted) newPageStarted.complete();
+      return pendingNewPage.future;
     }
     return super.getMessages(conversationId, offset: offset, limit: limit);
   }
@@ -366,7 +416,9 @@ void main() {
                 role: index == 0 ? 'assistant' : 'user',
                 content: index == 0
                     ? '```dart\nneedle-code-only\n```'
-                    : 'Ordinary message $index',
+                    : index == 40
+                        ? 'Newer plain text needle-code-only match'
+                        : 'Ordinary message $index',
                 createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
               ).toMap(),
           ],
@@ -406,6 +458,17 @@ void main() {
 
       await tester.tap(find.byTooltip('搜索消息'));
       await tester.pump();
+      await tester.enterText(find.byType(TextField).first, 'Live reply');
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('1/1'), findsOneWidget);
+      await tester.tap(find.byTooltip('关闭搜索'));
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pump();
       await tester.tap(find.text('所有对话'));
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 50));
@@ -435,7 +498,11 @@ void main() {
         chat.chatController.messages.map((message) => message.id),
         contains('code-search-0'),
       );
-      expect(find.text('1/1'), findsNothing);
+      expect(
+        find.text('1/1'),
+        findsOneWidget,
+        reason: 'returning from a global result resumes current-chat search',
+      );
       final target = find.descendant(
         of: find.byType(Chat),
         matching: find.byWidgetPredicate(
@@ -448,6 +515,116 @@ void main() {
       expect(
         tester.getRect(target).overlaps(tester.getRect(find.byType(Chat))),
         isTrue,
+      );
+      await tester.tap(find.text('当前对话'));
+      await tester.pump();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.hintText == '搜索当前对话...',
+        ),
+        '',
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField && widget.decoration?.hintText == '搜索当前对话...',
+        ),
+        'needle-code-only',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      final chatAfterNextMatch = tester.widget<Chat>(find.byType(Chat));
+      expect(
+        chatAfterNextMatch.chatController.messages.map((message) => message.id),
+        contains('code-search-40'),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('retry keeps the selected code-only global search target', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'retry-code-search',
+      });
+      final repository = _FailingFullHistoryMemoryRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
+          'id': 'retry-code-search',
+          'title': 'Retry Code Search',
+          'messages': [
+            for (var index = 0; index < 80; index++)
+              ChatMessage(
+                id: 'retry-code-search-$index',
+                role: index == 0 ? 'assistant' : 'user',
+                content: index == 0
+                    ? '```dart\nretry-code-target\n```'
+                    : 'Ordinary message $index',
+                createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+              ).toMap(),
+          ],
+        }),
+      );
+      addTearDown(repository.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationRepositoryProvider.overrideWithValue(repository),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'retry-code-search',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: const MaterialApp(home: Material(child: ChatPage())),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pump();
+      await tester.tap(find.text('所有对话'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '搜索所有对话中的消息...',
+        ),
+        'retry-code-target',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('Retry Code Search'), findsOneWidget);
+
+      repository.failFullHistoryReads = true;
+      await tester.tap(find.text('Retry Code Search'));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(find.text('搜索失败'), findsOneWidget);
+
+      repository.failFullHistoryReads = false;
+      await tester.tap(find.byTooltip('重试搜索'));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      final chat = tester.widget<Chat>(find.byType(Chat));
+      expect(
+        chat.chatController.messages.map((message) => message.id),
+        contains('retry-code-search-0'),
       );
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -972,6 +1149,204 @@ void main() {
       expect(await repository.countMessages(conversationId: 'retry-new'), 1);
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets(
+      'older page is discarded when the active conversation changes during read',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'active_conversation_id': 'switch-old',
+        });
+        final repository = _DeferredConversationPageMemoryRepository();
+        await repository.initialize();
+        await repository.importConversation(
+          StroomConversation(
+            id: 'switch-old',
+            title: 'Old paged conversation',
+            messages: [
+              for (var index = 0; index < 45; index++)
+                StroomMessage(
+                  id: 'switch-old-$index',
+                  role: 'user',
+                  sequence: index,
+                  createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+                  content: [
+                    StroomContentPart.text(
+                      index == 10
+                          ? 'Old page only marker'
+                          : 'Old page message $index',
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        );
+        await repository.importConversation(
+          StroomConversation(
+            id: 'switch-new',
+            title: 'New conversation',
+            messages: [
+              StroomMessage(
+                id: 'switch-new-0',
+                role: 'user',
+                sequence: 0,
+                createdAt: DateTime(2025),
+                content: [StroomContentPart.text('New conversation marker')],
+              ),
+            ],
+          ),
+        );
+        final olderRows = await repository.getMessages(
+          'switch-old',
+          offset: 5,
+          limit: 20,
+        );
+        final newRows = await repository.getMessages('switch-new', limit: 20);
+        addTearDown(repository.close);
+
+        final container = ProviderContainer(
+          overrides: [
+            conversationRepositoryProvider.overrideWithValue(repository),
+            chatStreamManagerProvider.overrideWith(
+              (ref) => _CompletingStreamManager(),
+            ),
+            activeConversationIdProvider.overrideWith((ref) => 'switch-old'),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(conversationsProvider.notifier).ready;
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: Material(child: ChatPage())),
+          ),
+        );
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        repository.deferOldConversationPage = true;
+        await dragToTop(tester);
+        await repository.oldPageStarted.future;
+
+        repository.deferNewConversationPage = true;
+        container.read(activeConversationIdProvider.notifier).state =
+            'switch-new';
+        for (var i = 0; i < 10 && !repository.newPageStarted.isCompleted; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(repository.newPageStarted.isCompleted, isTrue);
+
+        repository.pendingOldPage.complete(olderRows);
+        await tester.pump(const Duration(milliseconds: 600));
+        final chat = tester.widget<Chat>(find.byType(Chat));
+        expect(
+          chat.chatController.messages.map((message) => message.id),
+          isNot(contains('switch-old-10')),
+        );
+
+        repository.pendingNewPage.complete(newRows);
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(find.text('New conversation marker'), findsOneWidget);
+        expect(find.text('Old page only marker'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets(
+      'stream completion clears the loading state of a cancelled older page',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'active_conversation_id': 'stream-page',
+        });
+        final repository = _DeferredConversationPageMemoryRepository()
+          ..deferredOldConversationId = 'stream-page';
+        await repository.initialize();
+        await repository.importConversation(
+          ConversationRecordAdapter.fromLegacyMap({
+            'id': 'stream-page',
+            'title': 'Stream page conversation',
+            'messages': [
+              for (var index = 0; index < 45; index++)
+                ChatMessage(
+                  id: 'stream-page-$index',
+                  role: index.isEven ? 'user' : 'assistant',
+                  content: 'Stream page message $index',
+                  createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+                ).toMap(),
+            ],
+          }),
+        );
+        final oldestRows = await repository.getMessages(
+          'stream-page',
+          offset: 0,
+          limit: 5,
+        );
+        addTearDown(repository.close);
+
+        final container = ProviderContainer(
+          overrides: [
+            conversationRepositoryProvider.overrideWithValue(repository),
+            chatStreamManagerProvider.overrideWith(
+              (ref) => _CompletingStreamManager(),
+            ),
+            activeConversationIdProvider.overrideWith((ref) => 'stream-page'),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(conversationsProvider.notifier).ready;
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: Material(child: ChatPage())),
+          ),
+        );
+        for (var i = 0; i < 30; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        await dragToTop(tester);
+        await tester.pump(const Duration(milliseconds: 600));
+        await settleAnchor(tester);
+        expect(
+          tester.widget<Chat>(find.byType(Chat)).chatController.messages,
+          hasLength(40),
+        );
+        repository
+          ..deferredOldOffset = 0
+          ..deferredOldLimit = 5
+          ..deferOldConversationPage = true;
+        await dragToTop(tester);
+        await repository.oldPageStarted.future;
+        expect(find.byKey(loadMoreIndicatorKey), findsOneWidget);
+
+        await tester.enterText(find.byType(TextField), 'hello');
+        await tester.pump();
+        final sendButton = tester
+            .widgetList<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.send_rounded),
+            )
+            .firstWhere((button) => button.onPressed != null);
+        await tester.tap(find.byWidget(sendButton));
+        for (var i = 0; i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+
+        expect(find.byKey(loadMoreIndicatorKey), findsNothing);
+        repository.deferOldConversationPage = false;
+        repository.pendingOldPage.complete(oldestRows);
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.byKey(loadMoreIndicatorKey), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
 
     testWidgets('sending after loading an older page does not duplicate it', (
       tester,

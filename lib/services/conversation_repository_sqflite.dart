@@ -2,13 +2,16 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/stroom_conversation.dart';
 import 'conversation_repository.dart';
+import 'storage_service.dart';
 
 class SqfliteConversationRepository implements ConversationRepository {
+  @override
+  Object get migrationLockKey => 'sqflite:stroom_conversations.db';
+
   Database? _database;
   Future<Database>? _opening;
 
@@ -25,9 +28,9 @@ class SqfliteConversationRepository implements ConversationRepository {
   }
 
   Future<Database> _openDatabase() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await AppStorage.directory;
     final database = await openDatabase(
-      p.join(directory.path, 'stroom_conversations.db'),
+      p.join(directory, 'stroom_conversations.db'),
       version: 2,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) async {

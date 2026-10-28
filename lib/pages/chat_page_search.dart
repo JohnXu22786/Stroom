@@ -36,9 +36,29 @@ extension _ChatPageSearchExt on _ChatPageState {
           conversationId != ref.read(activeConversationIdProvider)) {
         return;
       }
+      final searchMessages = List<ChatMessage>.from(messages);
+      final messageIndexById = {
+        for (var index = 0; index < searchMessages.length; index++)
+          searchMessages[index].id: index,
+      };
+      for (final liveMessage in _history) {
+        final existingIndex = messageIndexById[liveMessage.id];
+        if (existingIndex == null) {
+          messageIndexById[liveMessage.id] = searchMessages.length;
+          searchMessages.add(liveMessage);
+        } else {
+          // The repository may hold a partial snapshot of the current stream.
+          // Keep the live history copy so search sees the visible response.
+          searchMessages[existingIndex] = liveMessage;
+        }
+      }
+
       final lowerQuery = query.toLowerCase();
       final matches = <SearchMatch>[];
-      for (final msg in messages) {
+      for (var messageIndex = 0;
+          messageIndex < searchMessages.length;
+          messageIndex++) {
+        final msg = searchMessages[messageIndex];
         // AI messages are rendered as markdown: matches inside code blocks,
         // inline code or math can never be highlighted (those are rendered
         // as dedicated widgets), so strip them before matching — otherwise
@@ -53,7 +73,14 @@ extension _ChatPageSearchExt on _ChatPageState {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          matches.add(SearchMatch(msg.id, idx, idx + query.length));
+          matches.add(
+            SearchMatch(
+              msg.id,
+              idx,
+              idx + query.length,
+              messageOrder: messageIndex,
+            ),
+          );
           start = idx + query.length;
         }
       }
@@ -208,18 +235,36 @@ extension _ChatPageSearchExt on _ChatPageState {
     final match = _searchMatches[targetIndex];
 
     Future<void> navigation() async {
-      // The target may still be unloaded: lazy pagination keeps only the
-      // latest messages in the chat controller. Load older batches (without
-      // the spinner's minimum-display delay) until the message is present.
+      // The target may still be unloaded: a global search can open a page
+      // around an older result. Load toward the target until it is present.
       var loadGuard = 0;
       var stalledRetries = 0;
       while (mounted) {
         final historyIdx = _history.indexWhere((m) => m.id == match.messageId);
         if (historyIdx >= 0 && _loadedUpToIndex <= historyIdx) break;
-        if (historyIdx < 0 && !_hasMoreMessages) break;
+        final conversationId = _loadedConversationId;
+        final repository = ref.read(conversationsProvider.notifier);
+        final pageDirection =
+            conversationId == null || match.messageOrder == null
+                ? null
+                : repository.repositoryMessagePageDirection(
+                    conversationId,
+                    match.messageOrder!,
+                  );
+        if (historyIdx < 0 && pageDirection == 0) break;
+        final loadNewer = historyIdx < 0 && pageDirection == 1;
+        final hasMoreInDirection = loadNewer
+            ? conversationId != null &&
+                repository.hasLaterRepositoryMessages(conversationId)
+            : _hasMoreMessages;
+        if (historyIdx < 0 && !hasMoreInDirection) break;
         final before = _loadedUpToIndex;
         final beforeHistoryLength = _history.length;
-        await _loadMoreMessages(skipMinDisplayDelay: true);
+        if (loadNewer) {
+          await _loadNewerRepositoryMessages();
+        } else {
+          await _loadMoreMessages(skipMinDisplayDelay: true);
+        }
         if (!mounted) return;
         final targetLoaded = _history.any((m) => m.id == match.messageId);
         if (targetLoaded ||
@@ -227,7 +272,7 @@ extension _ChatPageSearchExt on _ChatPageState {
             _history.length > beforeHistoryLength) {
           // The batch loaded — keep going.
           stalledRetries = 0;
-        } else if (_hasMoreMessages && ++stalledRetries <= 10) {
+        } else if (hasMoreInDirection && ++stalledRetries <= 10) {
           // _loadMoreMessages refuses concurrent runs (e.g. the user's own
           // scroll already triggered onEndReached). Wait briefly and retry
           // instead of silently dropping the navigation.
@@ -459,6 +504,7 @@ extension _ChatPageSearchExt on _ChatPageState {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() {
+          _searchMode = SearchMode.current;
           _searchTextController.text = query;
           _isSearching = true;
         });
@@ -606,7 +652,10 @@ extension _ChatPageSearchExt on _ChatPageState {
                   IconButton(
                     icon: const Icon(Icons.refresh, size: 18),
                     tooltip: '重试搜索',
-                    onPressed: () => _performSearch(_searchQuery),
+                    onPressed: () => _performSearch(
+                      _searchQuery,
+                      targetMessageId: _pendingSearchMessageId,
+                    ),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(

@@ -22,6 +22,7 @@ void main() {
     AppLogService.disableFileLogging();
     SharedPreferences.setMockInitialValues({});
     ManifestDatabase.enableTestMode();
+    WebFileStore.enableTestMode();
     TextManifest.invalidateCache();
   });
 

@@ -9,6 +9,9 @@ import 'conversation_repository.dart';
 /// store. Each conversation and message has an independent key; batch writes
 /// share one IndexedDB transaction.
 class IndexedDbConversationRepository implements ConversationRepository {
+  @override
+  Object get migrationLockKey => 'indexeddb:conversation_repository';
+
   static Future<void> _mutationQueue = Future<void>.value();
 
   static const _root = 'conversation_repository/';
@@ -71,6 +74,20 @@ class IndexedDbConversationRepository implements ConversationRepository {
   @override
   Future<List<ConversationSummary>> listSummaries({int? limit}) async {
     final keys = await WebFileStore.keysWithPrefix(_conversationPrefix);
+    final orderBytes = await WebFileStore.read(_orderKey);
+    List<String> currentOrder;
+    if (orderBytes == null) {
+      currentOrder = [];
+    } else {
+      try {
+        currentOrder = List<String>.from(
+          jsonDecode(utf8.decode(orderBytes)) as List,
+        );
+      } catch (_) {
+        currentOrder = [];
+      }
+    }
+    _cachedOrder = currentOrder;
     final summaries = <ConversationSummary>[];
     for (final key in keys) {
       final bytes = await WebFileStore.read(key);
@@ -88,9 +105,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
       );
     }
     summaries.sort((a, b) {
-      final orderBytes = _cachedOrder;
-      final ai = orderBytes.indexOf(a.id);
-      final bi = orderBytes.indexOf(b.id);
+      final ai = currentOrder.indexOf(a.id);
+      final bi = currentOrder.indexOf(b.id);
       if (ai >= 0 && bi >= 0 && ai != bi) return ai.compareTo(bi);
       if (ai >= 0) return -1;
       if (bi >= 0) return 1;
@@ -115,9 +131,20 @@ class IndexedDbConversationRepository implements ConversationRepository {
     int limit = 50,
   }) async {
     if (offset < 0 || limit < 0) throw ArgumentError('Invalid message page.');
-    final keys =
-        await WebFileStore.keysWithPrefix(_messagePrefixFor(conversationId))
-          ..sort();
+    final prefix = _messagePrefixFor(conversationId);
+    final keys = await WebFileStore.keysWithPrefix(prefix)
+      ..sort((a, b) {
+        final aOrder = a.substring(prefix.length);
+        final bOrder = b.substring(prefix.length);
+        final aSeparator = aOrder.indexOf('/');
+        final bSeparator = bOrder.indexOf('/');
+        final sequence = aOrder
+            .substring(0, aSeparator)
+            .compareTo(bOrder.substring(0, bSeparator));
+        if (sequence != 0) return sequence;
+        return Uri.decodeComponent(aOrder.substring(aSeparator + 1))
+            .compareTo(Uri.decodeComponent(bOrder.substring(bSeparator + 1)));
+      });
     if (offset >= keys.length || limit == 0) return const [];
     final page = keys.skip(offset).take(limit);
     final messages = <StroomMessage>[];
@@ -306,7 +333,10 @@ class IndexedDbConversationRepository implements ConversationRepository {
           _messageIndexPrefixFor(conversationId),
         );
         final writes = <String, Uint8List>{};
-        for (final message in messages) {
+        final uniqueMessages = <String, StroomMessage>{
+          for (final message in messages) message.id: message,
+        };
+        for (final message in uniqueMessages.values) {
           final rowKey = _orderedMessageKey(conversationId, message);
           writes[rowKey] = _encode(message.toMap());
           writes[_messageIndexKey(conversationId, message.id)] =

@@ -473,10 +473,10 @@ class StroomMessage {
       sequence: sequence,
       createdAt: message.createdAt,
       content: content,
-      status: message.isError
-          ? 'error'
-          : retainedStatus is String
-              ? retainedStatus
+      status: retainedStatus is String
+          ? retainedStatus
+          : message.isError
+              ? 'error'
               : null,
       finishReason:
           retainedFinishReason is String ? retainedFinishReason : null,

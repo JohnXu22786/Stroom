@@ -226,6 +226,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // 避免动画一闪而过。
     final loadStartedAt = DateTime.now();
     final loadGeneration = ++_loadMoreGeneration;
+    final loadingConversationId = _loadedConversationId;
+    bool isCurrentLoad() =>
+        loadGeneration == _loadMoreGeneration &&
+        loadingConversationId != null &&
+        _loadedConversationId == loadingConversationId &&
+        ref.read(activeConversationIdProvider) == loadingConversationId;
 
     try {
       final oldLoadedUpToIndex = _loadedUpToIndex;
@@ -236,7 +242,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       if (oldLoadedUpToIndex > 0) {
         batchMessages = _history.sublist(newStart, oldLoadedUpToIndex);
       } else {
-        final conversationId = _loadedConversationId;
+        final conversationId = loadingConversationId;
         if (conversationId == null) {
           _markNoMoreMessagesReached();
           return;
@@ -247,11 +253,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
               conversationId,
               limit: _ChatPageState._pageSize,
             );
-        if (loadGeneration != _loadMoreGeneration) return;
+        if (!isCurrentLoad()) return;
         if (batchMessages.isEmpty) {
           _markNoMoreMessagesReached();
           return;
         }
+        if (!isCurrentLoad()) return;
         _history.insertAll(0, batchMessages);
         ref
             .read(conversationsProvider.notifier)
@@ -286,7 +293,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         await Future<void>.delayed(remaining);
       }
       // 延迟期间可能已切换对话（_loadMoreGeneration 已推进）：放弃本批。
-      if (loadGeneration != _loadMoreGeneration) return;
+      if (!isCurrentLoad()) return;
 
       // Guard: controller might have been disposed during the async gap
       // (e.g., conversation switched).
@@ -295,7 +302,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
         await _controller!.insertAllMessages(msgs, index: 0);
         // Re-check after await: conversation might have switched during the
         // insertion.
-        if (loadGeneration == _loadMoreGeneration) {
+        if (isCurrentLoad()) {
           _loadedUpToIndex = oldLoadedUpToIndex > 0 ? newStart : 0;
         }
       }

@@ -101,6 +101,10 @@ class ConversationIntegrityIssue {
 
 /// Protocol-neutral persistence contract shared by SQLite and IndexedDB.
 abstract interface class ConversationRepository {
+  /// Stable key shared by handles to the same backing store. Migration calls
+  /// use it to serialize source checks and imports across repository handles.
+  Object get migrationLockKey;
+
   Future<void> initialize();
 
   Future<List<ConversationSummary>> listSummaries({int? limit});
@@ -189,6 +193,7 @@ Iterable<Map<String, dynamic>> conversationDraftAttachmentReferences(
     for (final attachment in candidate) {
       if (attachment is Map &&
           (attachment['storagePath'] is String ||
+              attachment['reference'] is String ||
               attachment['thumbnailPath'] is String)) {
         yield Map<String, dynamic>.from(attachment);
       }
@@ -257,6 +262,7 @@ Iterable<Map<String, dynamic>> conversationMessageMediaReferences(
     for (final attachment in attachments) {
       if (attachment is Map &&
           (attachment['storagePath'] is String ||
+              attachment['reference'] is String ||
               attachment['thumbnailPath'] is String)) {
         yield* unique([Map<String, dynamic>.from(attachment)]);
       }

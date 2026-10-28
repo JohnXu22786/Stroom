@@ -5,6 +5,9 @@ import 'conversation_repository.dart';
 
 /// In-memory implementation for deterministic tests and isolated migrations.
 class MemoryConversationRepository implements ConversationRepository {
+  @override
+  Object get migrationLockKey => this;
+
   final Map<String, StroomConversation> _conversations = {};
   final Map<String, Map<String, StroomMessage>> _messages = {};
   List<String> _order = [];

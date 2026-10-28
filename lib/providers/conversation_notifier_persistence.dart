@@ -241,13 +241,27 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
       final record = await repository.getConversation(summary.id);
       if (record == null)
         throw StateError('Missing conversation ${summary.id}.');
-      conversations.add(
-        Conversation.fromMap(
-          ConversationRecordAdapter.toLegacyMap(record, const []),
-        ),
+      final conversation = Conversation.fromMap(
+        ConversationRecordAdapter.toLegacyMap(record, const []),
       );
+      if (conversation.isTemporary &&
+          conversation.temporaryExpiryVersion <
+              kTemporaryConversationDurationVersion) {
+        // Repository migrations can start from records written by the old
+        // 24-hour temporary conversation policy, just like the legacy
+        // SharedPreferences loader above.
+        conversation.temporaryExpiresAt = conversation.temporaryExpiresAt!
+            .subtract(const Duration(hours: 23));
+        conversation.temporaryExpiryVersion =
+            kTemporaryConversationDurationVersion;
+        final migratedRecord = ConversationRecordAdapter.fromLegacyMap(
+          conversation.toMap(),
+        );
+        await repository.upsertConversation(migratedRecord);
+      }
+      conversations.add(conversation);
       _persistedConversationRecords[summary.id] = _conversationRecordSignature(
-        conversations.last,
+        conversation,
       );
       _persistedMessageRecords[summary.id] = {};
     }
@@ -484,6 +498,24 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     final offset = _repositoryMessageOffsets[conversationId] ?? 0;
     final count = _repositoryMessageCounts[conversationId] ?? 0;
     return offset + conversation.messages.length < count;
+  }
+
+  /// Returns whether a message's repository order falls before (-1), inside
+  /// (0), or after (1) the currently loaded page. Null means repository
+  /// paging is unavailable for this conversation.
+  int? repositoryMessagePageDirection(
+    String conversationId,
+    int messageOrder,
+  ) {
+    if (!_repositoryReady || messageOrder < 0) return null;
+    final conversation =
+        state.where((item) => item.id == conversationId).firstOrNull;
+    if (conversation == null) return null;
+    final start = _repositoryMessageOffsets[conversationId] ?? 0;
+    final end = start + conversation.messages.length;
+    if (messageOrder < start) return -1;
+    if (messageOrder >= end) return 1;
+    return 0;
   }
 
   /// Fetches one earlier page without replacing the provider's visible list
@@ -812,6 +844,19 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
     return _persistCoreResult();
   }
 
+  /// Repairs storage after a failed removal has restored the in-memory state.
+  /// A later queued snapshot may have been captured while the removed rows
+  /// were absent, so enqueue the restored snapshot after it.
+  Future<void> _persistRestoredStateAfterFailedWrite() async {
+    try {
+      if (!await _persistNowChecked()) {
+        debugPrint('Failed to persist conversation rollback state.');
+      }
+    } catch (error) {
+      debugPrint('Failed to persist conversation rollback state: $error');
+    }
+  }
+
   /// Persist the current state to SharedPreferences with fallback.
   ///
   /// Tries these strategies in order, stopping at the first success:
@@ -914,6 +959,7 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
                     (m) => ChatMessage(
                       id: m.id,
                       role: m.role,
+                      originalRole: m.originalRole,
                       content: m.content,
                       createdAt: m.createdAt,
                       attachments: m.attachments,
@@ -1067,6 +1113,8 @@ extension ConversationsNotifierPersistence on ConversationsNotifier {
                 createdAt: neutral.createdAt,
                 content: neutral.content,
                 status: neutral.status,
+                finishReason: neutral.finishReason,
+                usage: neutral.usage,
                 diagnostics: neutral.diagnostics,
                 extensions: {
                   ...neutral.extensions,

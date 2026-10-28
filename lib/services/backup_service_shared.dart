@@ -12,6 +12,7 @@ import 'conversation_repository.dart';
 import '../models/stroom_conversation.dart';
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import 'conversation_migration_service.dart';
 import 'startup_preferences.dart';
 import 'data_migration_isolate_stub.dart'
     if (dart.library.io) 'data_migration_isolate_io.dart'
@@ -133,7 +134,9 @@ Future<Set<String>> collectAttachmentPaths() async {
       _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
     } catch (e) {
       debugPrint('收集仓库媒体引用失败: $e');
-      rethrow;
+      if (await _hasAuthoritativeConversationRepository(repository)) rethrow;
+      debugPrint(
+          'Conversation repository is not authoritative; falling back to legacy data.');
     } finally {
       await repository.close();
     }
@@ -220,6 +223,33 @@ Future<Set<String>?> collectAttachmentPathsForSafety() async {
 bool get _shouldReadConversationRepository =>
     kIsWeb || (!WebFileStore.isTestMode && !_isBackupServiceFlutterTest);
 
+Future<bool> _hasAuthoritativeConversationRepository(
+  ConversationRepository repository,
+) async {
+  try {
+    if (await repository.migrationSourceHash() != null) return true;
+  } catch (_) {
+    // Fall through to the durable migration checkpoint when the repository
+    // cannot report its authority marker.
+  }
+  final preferences = await SharedPreferences.getInstance();
+  final migrationState = preferences.getString(
+    ConversationMigrationService.stateKey,
+  );
+  if (migrationState == null) return false;
+  try {
+    final decoded = jsonDecode(migrationState);
+    return decoded is Map && decoded['verified'] == true;
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<bool> isConversationRepositoryAuthoritative(
+  ConversationRepository repository,
+) =>
+    _hasAuthoritativeConversationRepository(repository);
+
 void _collectRepositoryAttachmentPaths(Object? rawData, Set<String> paths) {
   if (rawData is! Map) {
     throw const FormatException('Invalid conversation repository export.');
@@ -295,10 +325,10 @@ void _collectAttachments(Object? rawAttachments, Set<String> paths) {
   if (rawAttachments is! List) return;
   for (final att in rawAttachments) {
     if (att is! Map<String, dynamic>) continue;
-    final storagePath = _canonicalAttachmentPath(att['storagePath']);
-    if (storagePath != null) paths.add(storagePath);
-    final thumbnailPath = _canonicalAttachmentPath(att['thumbnailPath']);
-    if (thumbnailPath != null) paths.add(thumbnailPath);
+    for (final field in const ['storagePath', 'reference', 'thumbnailPath']) {
+      final path = _canonicalAttachmentPath(att[field]);
+      if (path != null) paths.add(path);
+    }
   }
 }
 

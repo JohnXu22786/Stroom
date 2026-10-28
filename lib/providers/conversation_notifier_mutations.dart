@@ -99,6 +99,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         return;
       }
     }
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => c.id != id).toList();
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
@@ -106,11 +107,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     _syncTemporaryTimer();
     if (!await _persistNowChecked()) {
       if (mounted) {
-        state = pinnedFirstStable([...removed, ...state]);
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: removed,
+        );
         if (wasActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state = id;
         }
         _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
       }
       return;
     }
@@ -137,6 +143,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         return false;
       }
     }
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => c.id != id).toList();
     _syncTemporaryTimer();
     bool saved;
@@ -151,11 +158,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       // platform store, which can still reject the write. Restore the visible
       // conversation and keep its attachment copies when disk removal fails.
       if (mounted) {
-        state = pinnedFirstStable([
-          ...old,
-          ...state.where((conversation) => conversation.id != id),
-        ]);
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: old,
+        );
         _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
       }
       return false;
     }
@@ -282,6 +291,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     }
     final activeId = _ref.read(activeConversationIdProvider);
     final wasActive = activeId != null && idSet.contains(activeId);
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => !idSet.contains(c.id)).toList();
     if (wasActive) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
@@ -297,14 +307,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     }
     if (!saved) {
       if (mounted) {
-        state = pinnedFirstStable([
-          ...removed,
-          ...state.where((conversation) => !idSet.contains(conversation.id)),
-        ]);
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: removed,
+        );
         if (wasActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state = activeId;
         }
         _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
       }
       return;
     }

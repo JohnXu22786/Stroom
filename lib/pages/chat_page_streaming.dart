@@ -402,6 +402,7 @@ extension _ChatPageStreamingExt on _ChatPageState {
         } else {
           _loadedUpToIndex = 0;
           _loadMoreGeneration++;
+          _isLoadingMore = false;
           _hasReachedTopWithoutMore = false;
         }
       }

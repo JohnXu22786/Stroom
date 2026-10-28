@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import '../utils/image_send_compressor.dart' show CompressedImage;
 import '../utils/web_file_store.dart';
 import 'app_log_service.dart';
+import 'storage_service.dart';
 
 class AttachmentStorage {
   static const _storageDirName = 'attachments';
@@ -27,8 +27,8 @@ class AttachmentStorage {
   static Future<String> get _storageDir async {
     if (kIsWeb) return '';
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final dir = p.join(appDir.path, _storageDirName);
+      final appDir = await AppStorage.directory;
+      final dir = p.join(appDir, _storageDirName);
       final d = Directory(dir);
       if (!await d.exists()) {
         await d.create(recursive: true);
@@ -298,7 +298,7 @@ class AttachmentStorage {
       'AttachmentStorage',
       '删除对话图片压缩缓存: $conversationId',
     );
-    if (kIsWeb) {
+    if (kIsWeb || WebFileStore.isTestMode) {
       await WebFileStore.deleteByPrefix(
         '$_compressedCacheDirName/$conversationId/',
       );

@@ -393,9 +393,22 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   : _searchController.text.trim().isNotEmpty
                       ? ListView.builder(
                           padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filtered.length,
+                          itemCount: filtered.length + (_searchFailed ? 1 : 0),
                           itemBuilder: (context, index) {
-                            final conv = filtered[index];
+                            if (_searchFailed && index == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  '搜索失败，部分消息结果可能未显示',
+                                  style: TextStyle(color: cs.error),
+                                ),
+                              );
+                            }
+                            final conv =
+                                filtered[index - (_searchFailed ? 1 : 0)];
                             final isActive = conv.id == activeId;
                             return _buildConversationItem(
                               conv,

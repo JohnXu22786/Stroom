@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/models/stroom_conversation.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
+import 'package:stroom/services/conversation_migration_service.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
@@ -268,6 +269,87 @@ void main() {
     expect(complete, isFalse);
   });
 
+  test('validates legacy repository attachment references', () {
+    final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+      chatPrefs: {
+        'conversation_repository': {
+          'schemaVersion': 1,
+          'migrationSourceHash': 'verified-source-hash',
+          'conversations': [
+            {
+              'schemaVersion': 1,
+              'id': 'legacy-media',
+              'title': 'Legacy media',
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'updatedAt': '2025-01-01T00:00:00.000Z',
+              'extensions': {
+                'stroom.legacyConversation': {
+                  'draftAttachments': [
+                    {'reference': 'attachments/missing-draft.png'},
+                  ],
+                },
+              },
+            },
+          ],
+          'messages': [
+            {
+              'conversationId': 'legacy-media',
+              'id': 'legacy-message',
+              'role': 'user',
+              'sequence': 0,
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'extensions': {
+                'stroom.legacy': {
+                  'record': {
+                    'attachments': [
+                      {'reference': 'attachments/missing-message.png'},
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+      archiveEntries: const {'chat_data.json'},
+      requireFiles: true,
+    );
+
+    expect(complete, isFalse);
+  });
+
+  test('allows external references in legacy repository attachments', () {
+    final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+      chatPrefs: {
+        'conversation_repository': {
+          'schemaVersion': 1,
+          'migrationSourceHash': 'verified-source-hash',
+          'conversations': [
+            {
+              'schemaVersion': 1,
+              'id': 'external-media',
+              'title': 'External media',
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'updatedAt': '2025-01-01T00:00:00.000Z',
+              'extensions': {
+                'stroom.legacyConversation': {
+                  'draftAttachments': [
+                    {'reference': 'https://media.example/draft.png'},
+                  ],
+                },
+              },
+            },
+          ],
+          'messages': [],
+        },
+      },
+      archiveEntries: const {'chat_data.json'},
+      requireFiles: true,
+    );
+
+    expect(complete, isTrue);
+  });
+
   test('allows external repository attachment references', () async {
     final backup = await BackupService.buildBackupBytesForTest();
     final complete = _backupWithRepositoryAttachment(
@@ -280,6 +362,41 @@ void main() {
       skipPostRestoreMigration: true,
       skipMissingCategories: true,
     );
+  });
+
+  test('requires local files for repository storage and thumbnail paths', () {
+    for (final field in const ['storagePath', 'thumbnailPath']) {
+      final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+        chatPrefs: {
+          'conversation_repository': {
+            'schemaVersion': 1,
+            'migrationSourceHash': 'verified-source-hash',
+            'conversations': [],
+            'messages': [
+              {
+                'conversationId': 'local-media',
+                'id': 'local-media-message',
+                'role': 'user',
+                'sequence': 0,
+                'content': [
+                  {
+                    'type': 'file',
+                    'data': {
+                      'attachment': {field: 'https://media.example/file.png'},
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        archiveEntries: const {'chat_data.json'},
+        requireFiles: true,
+      );
+
+      expect(complete, isFalse,
+          reason: '$field must reference an archive file');
+    }
   });
 
   test(
@@ -353,6 +470,152 @@ void main() {
         ]),
       );
       expect(keys, isNot(contains('https://media.example/external.pdf')));
+    },
+  );
+
+  test(
+    'authoritative repository ignores malformed legacy attachment preferences',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('conversations', '{malformed legacy data');
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.upsertConversation(
+        StroomConversation(
+          id: 'authoritative-conversation',
+          title: 'Authoritative conversation',
+          createdAt: DateTime.utc(2025),
+          updatedAt: DateTime.utc(2025),
+        ),
+      );
+      await repository.upsertMessage(
+        'authoritative-conversation',
+        StroomMessage(
+          id: 'authoritative-message',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          content: [
+            StroomContentPart.image(
+              reference: 'attachments/current-repository.png',
+            ),
+          ],
+        ),
+      );
+      await repository.setMigrationSourceHash('verified-source-hash');
+
+      final keys = await BackupService.collectChatAttachmentKeysForTest(
+        repository,
+      );
+
+      expect(keys, {'attachments/current-repository.png'});
+    },
+  );
+
+  test(
+    'restoring a repository preserves its source hash over stale legacy prefs',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      const staleLegacyJson = '[{"id":"stale-legacy-row"}]';
+      await prefs.setString('conversations', staleLegacyJson);
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.upsertConversation(
+        StroomConversation(
+          id: 'repository-only-row',
+          title: 'Repository only',
+          createdAt: DateTime.utc(2025),
+          updatedAt: DateTime.utc(2025),
+        ),
+      );
+      await repository.setMigrationSourceHash('backup-source-hash');
+
+      await BackupService.writeRestoredConversationMigrationCheckpointForTest(
+        repository,
+        staleLegacyJson,
+      );
+
+      expect(await repository.migrationSourceHash(), 'backup-source-hash');
+      expect(prefs.getString('conversations'), isNull);
+      final checkpoint = jsonDecode(
+        prefs.getString(ConversationMigrationService.stateKey)!,
+      ) as Map<String, dynamic>;
+      expect(checkpoint['sourceHash'], 'backup-source-hash');
+      expect(checkpoint['conversationCount'], 1);
+
+      await ConversationMigrationService(repository).migrate(prefs);
+
+      expect(await repository.countConversations(), 1);
+      expect(
+        (await repository.listSummaries()).single.id,
+        'repository-only-row',
+      );
+    },
+  );
+
+  test(
+    'restored markerless repository still imports legacy preferences',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      final legacyJson = jsonEncode([
+        {
+          'id': 'repository-only-row',
+          'title': 'Stale backup',
+          'messages': [
+            {'id': 'stale-1', 'role': 'user', 'content': 'stale one'},
+            {'id': 'stale-2', 'role': 'user', 'content': 'stale two'},
+          ],
+        },
+        {'id': 'legacy-row', 'title': 'Legacy'},
+      ]);
+      await prefs.setString('conversations', legacyJson);
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.upsertConversation(
+        StroomConversation(
+          id: 'repository-only-row',
+          title: 'Repository only',
+          createdAt: DateTime.utc(2025),
+          updatedAt: DateTime.utc(2025),
+        ),
+      );
+      await repository.upsertMessage(
+        'repository-only-row',
+        StroomMessage(
+          id: 'newer-repository-message',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          content: [StroomContentPart.text('newer repository content')],
+        ),
+      );
+
+      await BackupService.writeRestoredConversationMigrationCheckpointForTest(
+        repository,
+        legacyJson,
+      );
+
+      final checkpoint = jsonDecode(
+        prefs.getString(ConversationMigrationService.stateKey)!,
+      ) as Map<String, dynamic>;
+      expect(checkpoint['verified'], isTrue);
+      expect(await repository.migrationSourceHash(), isNull);
+
+      await ConversationMigrationService(repository).migrate(prefs);
+
+      expect(await repository.countConversations(), 2);
+      expect(
+        (await repository.listSummaries()).map((summary) => summary.id),
+        containsAll(['repository-only-row', 'legacy-row']),
+      );
+      expect(
+        (await repository.getConversation('repository-only-row'))!.title,
+        'Repository only',
+      );
+      expect(
+        (await repository.getMessages('repository-only-row')).single.id,
+        'newer-repository-message',
+      );
     },
   );
 

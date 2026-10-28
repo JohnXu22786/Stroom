@@ -530,7 +530,7 @@ class ChatMessage {
       ChatMessage(
         id: id,
         role: role ?? this.role,
-        originalRole: originalRole ?? this.originalRole,
+        originalRole: role == null ? originalRole : null,
         content: content ?? this.content,
         createdAt: createdAt ?? this.createdAt,
         attachments: attachments ?? this.attachments,
