@@ -500,6 +500,56 @@ void main() {
   });
 
   test(
+    'service setup failure terminalizes the running page outcome',
+    () async {
+      var serviceCreations = 0;
+      final setupFailureRunner = OcrTaskRunner(
+        taskId: id,
+        notifier: notifier,
+        config: _config,
+        images: [
+          (Uint8List.fromList([1]), 'png'),
+          (Uint8List.fromList([2]), 'png'),
+        ],
+        executionMode: OcrBatchMode.perImage,
+        perImageConcurrency: 1,
+        title: 'owned',
+        folder: 'captured folder',
+        serviceFactory: (config) {
+          serviceCreations++;
+          if (serviceCreations == 2) {
+            throw StateError('injected service setup failure');
+          }
+          return OcrService(
+            config: config,
+            dio: Dio()..httpClientAdapter = adapter,
+          );
+        },
+        writeText: TextManifest.writeText,
+        onSaved: () {},
+      );
+
+      final running = setupFailureRunner.run();
+      await adapter.requested.future;
+      adapter.succeed();
+      await running;
+
+      final task = notifier.state.single;
+      expect(task.status, TaskStatus.failed);
+      expect(task.ocrPageOutcomes[0].status, OcrPageOutcomeStatus.succeeded);
+      expect(task.ocrPageOutcomes[1].status, OcrPageOutcomeStatus.failed);
+      expect(
+        task.ocrPageOutcomes.every(
+          (outcome) =>
+              outcome.status != OcrPageOutcomeStatus.running &&
+              outcome.status != OcrPageOutcomeStatus.pending,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'pre-upload per-image failure does not complete later aggregate stages',
     () async {
       final failedBeforeUploadAdapter = _OutOfOrderAdapter();

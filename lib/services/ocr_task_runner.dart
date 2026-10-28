@@ -433,9 +433,10 @@ class OcrTaskRunner {
         );
         _publishPageOutcomes(outcomes);
         final image = images[imageIndex];
-        final service = _serviceFactory(config);
-        _activeServices.add(service);
+        OcrService? service;
         try {
+          service = _serviceFactory(config);
+          _activeServices.add(service);
           _setPerImageStageIndex(imageIndex, 0);
           final result = await service.recognize(
             imageBytes: image.$1,
@@ -488,8 +489,10 @@ class OcrTaskRunner {
           _perImageRequestStages.remove(imageIndex);
           _perImageUploadPercent.remove(imageIndex);
           _syncPerImageSteps();
-          _activeServices.remove(service);
-          service.close();
+          if (service != null) {
+            _activeServices.remove(service);
+            service.close();
+          }
         }
         _publishPageOutcomes(outcomes);
       }
