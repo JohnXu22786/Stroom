@@ -53,8 +53,36 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
   await tester.pump();
 }
 
+Future<void> _simulateSystemBack(WidgetTester tester) async {
+  // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+  await tester.binding.handlePopRoute();
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('OcrModelConfigPage built-in OpenAI-compatible params', () {
+    testWidgets(
+        'system Back prompts after a text edit and cancel keeps the edit',
+        (tester) async {
+      final model = ModelConfig(
+        name: 'Original OCR model',
+        modelId: 'qwen-vl-ocr',
+      );
+      await _pumpConfigPage(tester, model: model);
+
+      await _enterField(tester, 0, 'Edited OCR model');
+      await _simulateSystemBack(tester);
+
+      expect(find.text('放弃修改？'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('放弃修改？'), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Edited OCR model',
+      );
+    });
     testWidgets(
         'renders 3 universal params; instruction section and '
         'removed params absent', (tester) async {
