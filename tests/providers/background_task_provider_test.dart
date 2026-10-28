@@ -5113,6 +5113,46 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts a natural connector consumed after a split masked prefix',
+      () {
+        const credential = 'opaque-user-to';
+        const instruction = 'Supply opaque-user-\nto the API key header.';
+        const sanitizedInstruction = 'Supply [redacted] the API key header.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-split-masked-prefix-natural-connector',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer opaque-user-…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final persisted = jsonEncode(task.toMap());
+        final retryInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+
+        expect(retryInstruction, sanitizedInstruction);
+        expect(persisted, contains(sanitizedInstruction));
+        expect(retryInstruction, isNot(contains(credential)));
+        expect(persisted, isNot(contains(credential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a high-entropy open-mask echo split after its prefix',
       () {
         const apiKey = 'QwrtyPSDF89';
