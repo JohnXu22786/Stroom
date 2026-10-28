@@ -484,6 +484,24 @@ void main() {
     },
   );
 
+  test('credential-named headers exclude echoed opaque response IDs', () {
+    const credential = 'opaque-client-value-123';
+    final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
+      'X-Credentials': credential,
+    });
+    final response = OcrDiagnosticSnapshot.sanitizeResponse(
+      {
+        'requestId': credential,
+        'data': {'id': credential},
+      },
+      excludedValues: excludedValues,
+    )!;
+
+    expect(excludedValues, contains(credential));
+    expect(response, isEmpty);
+    expect(jsonEncode(response), isNot(contains(credential)));
+  });
+
   test('request IDs exclude echoes matching a short masked auth header', () {
     const apiKey = 'abcd123456789';
     final excludedValues = OcrDiagnosticSnapshot.credentialValuesFromHeaders({
