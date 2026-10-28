@@ -496,9 +496,10 @@ void main() {
         AnkiIncrementalSync.sync(collection, client),
         throwsA(isA<AnkiSyncFullTransferRequired>()),
       );
-      expect(fakeHttp.requests.map((request) => request.url.path), [
-        '/sync/meta',
-      ]);
+      expect(
+        fakeHttp.requests.map((request) => request.url.path),
+        ['/sync/meta'],
+      );
     },
   );
 
