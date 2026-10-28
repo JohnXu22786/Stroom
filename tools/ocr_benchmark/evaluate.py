@@ -874,6 +874,7 @@ def _strip_latex_markup(value: str) -> str:
     )
     text = re.sub(r"\\([#$%&_{}])", r"\1", text)
     text = re.sub(r"\\(?:,|;|:|!|quad|qquad)\s*", " ", text)
+    text = re.sub(r"\\(?:left|right)(?![A-Za-z])\s*", "", text)
     text = re.sub(
         r"\\(?:mathit|mathrm|operatorname|text)\s*\{([^{}]*)\}",
         r"\1",
