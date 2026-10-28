@@ -5147,10 +5147,10 @@ void main() {
           naturalPrompt,
         );
         final naturalPersisted = jsonEncode(naturalTask.toMap());
-        expect(
-          OcrRetrySnapshot.fromMap(naturalTask.retryData!).instructionContent,
-          naturalPrompt,
-        );
+        final naturalInstruction = OcrRetrySnapshot.fromMap(
+          naturalTask.retryData!,
+        ).instructionContent;
+        expect(naturalInstruction, naturalPrompt);
         expect(naturalPersisted, contains(naturalPrompt));
 
         final credentialTask = taskFor(
@@ -5158,8 +5158,11 @@ void main() {
           credentialEcho,
         );
         final credentialPersisted = jsonEncode(credentialTask.toMap());
+        final migratedCredential = OcrRetrySnapshot.fromMap(
+          credentialTask.retryData!,
+        ).instructionContent;
         expect(
-          OcrRetrySnapshot.fromMap(credentialTask.retryData!).instructionContent,
+          migratedCredential,
           'Read the receipt using [redacted]',
         );
         expect(
@@ -5174,9 +5177,11 @@ void main() {
         );
         final ambiguousCredentialPersisted =
             jsonEncode(ambiguousCredentialTask.toMap());
+        final migratedAmbiguousCredential = OcrRetrySnapshot.fromMap(
+          ambiguousCredentialTask.retryData!,
+        ).instructionContent;
         expect(
-          OcrRetrySnapshot.fromMap(ambiguousCredentialTask.retryData!)
-              .instructionContent,
+          migratedAmbiguousCredential,
           'Please use [redacted]',
         );
         expect(
