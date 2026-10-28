@@ -2397,7 +2397,7 @@ void main() {
             'type': 'ocr',
             'images': [
               {
-                'bytes': base64Encode(_createTestPngBytes()),
+                'bytes': base64Encode(_createValidOcrTestImage().bytes),
                 'format': 'png',
                 'name': 'legacy.png',
               },
