@@ -3237,6 +3237,76 @@ void main() {
       },
     );
 
+    testWidgets(
+      'keeps a selected new instruction after stored rows prepend during load',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        late _DelayedOcrInstructionsLoadNotifier notifier;
+        OcrConfig? preflightConfig;
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            testImages: [_createValidOcrTestImage()],
+            testInstructionsNotifierBuilder: (ref) {
+              notifier = _DelayedOcrInstructionsLoadNotifier(ref);
+              return notifier;
+            },
+            testImagePayloadPreparer: (bytes) async => OcrImagePayload(
+              bytes: bytes,
+              format: 'png',
+              width: 1,
+              height: 1,
+            ),
+            testRequestSizePreflight: (config, _) {
+              preflightConfig = config;
+              return Future.value(null);
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final load = notifier.load();
+        await notifier.add('新建', '新指令');
+        await notifier.add('新建', '新指令');
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('默认（仅发送图片）'));
+        await tester.pumpAndSettle();
+        // Pick the second equal-valued row so row identity survives its edit.
+        await tester.tap(find.text('新建').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.edit_outlined).last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, '新建'),
+          '编辑后',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, '指令内容'),
+          '编辑后的新指令',
+        );
+        await tester.pump();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('关闭'));
+        await tester.pumpAndSettle();
+
+        notifier.finishLoad();
+        await load;
+        await tester.pumpAndSettle();
+
+        expect(find.text('编辑后'), findsOneWidget);
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await _pumpUntil(tester, () => preflightConfig != null);
+
+        expect(preflightConfig!.typeConfig['userInstruction'], '编辑后的新指令');
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
     testWidgets('deleting a selected middle instruction selects the default', (
       tester,
     ) async {

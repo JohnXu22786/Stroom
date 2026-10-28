@@ -242,6 +242,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// stable negative values, while -1 keeps the default images-only request.
   int _selectedInstructionIndex = -1;
 
+  /// Keeps a live custom selection stable if async loading prepends entries.
+  OcrInstruction? _selectedInstruction;
+
   /// Instruction index restored from retry data, pending until the generic
   /// instruction list finishes loading. The provider's initial state is
   /// empty until its async load completes, so without this a restored
@@ -251,6 +254,21 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   /// Exact instruction captured for this retry. It stays authoritative even
   /// when the generic list is later edited or the entry is deleted.
   String? _retryInstructionSnapshot;
+
+  int _instructionIdentityIndex(
+    List<OcrInstruction> instructions,
+    OcrInstruction selected,
+  ) =>
+      instructions.indexWhere(
+        (instruction) => identical(instruction, selected),
+      );
+
+  int _instructionSelectionValue(List<OcrInstruction> instructions) {
+    final selected = _selectedInstruction;
+    if (selected == null) return _selectedInstructionIndex;
+    final index = _instructionIdentityIndex(instructions, selected);
+    return index >= 0 ? index : _selectedInstructionIndex;
+  }
 
   /// Whether [_startOcr] is waiting on image preparation or retry-instruction
   /// restoration, blocking a second tap from starting duplicate OCR work.
@@ -798,6 +816,25 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       return const SizedBox.shrink();
     }
     final instructions = ref.watch(ocrInstructionsProvider);
+    ref.listen(ocrInstructionsProvider, (previous, next) {
+      final selected = _selectedInstruction;
+      if (selected == null ||
+          previous == null ||
+          _instructionIdentityIndex(next, selected) >= 0) {
+        return;
+      }
+      final selectedIndex = _instructionIdentityIndex(previous, selected);
+      if (selectedIndex >= 0 &&
+          previous.length == next.length &&
+          selectedIndex < next.length) {
+        // Editing replaces the value in place. Carry the live selection over
+        // that replacement so a later async prepend can still resolve it.
+        setState(() {
+          _selectedInstruction = next[selectedIndex];
+          _selectedInstructionIndex = selectedIndex;
+        });
+      }
+    });
 
     // A captured instruction stays selected even when it no longer exists in
     // the editable generic list. Legacy index-only restore waits for the list
@@ -805,7 +842,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     final pending = _pendingRetryInstructionIndex;
     final rawIndex = _retryInstructionSnapshot != null
         ? -2
-        : (pending ?? _selectedInstructionIndex);
+        : (pending ?? _instructionSelectionValue(instructions));
     final clamped =
         rawIndex == -2 || ocrOutputTemplateForSelection(rawIndex) != null
             ? rawIndex
@@ -880,6 +917,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                             if (idx == null) return;
                             setState(() {
                               _selectedInstructionIndex = idx;
+                              _selectedInstruction = idx >= 0
+                                  ? instructions[idx]
+                                  : null;
                               if (idx != -2) _retryInstructionSnapshot = null;
                               // An explicit user choice wins over a pending
                               // retry restore.
@@ -946,6 +986,28 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         builder: (_) => OcrInstructionManageDialog(
                           onInstructionDeleted: (deletedIndex) {
                             if (!mounted) return;
+                            final selected = _selectedInstruction;
+                            if (selected != null) {
+                              final currentInstructions =
+                                  ref.read(ocrInstructionsProvider);
+                              final selectedIndex =
+                                  _instructionIdentityIndex(
+                                currentInstructions,
+                                selected,
+                              );
+                              if (selectedIndex < 0) {
+                                setState(() {
+                                  _selectedInstruction = null;
+                                  _selectedInstructionIndex = -1;
+                                });
+                              } else {
+                                setState(() {
+                                  _selectedInstructionIndex =
+                                      selectedIndex;
+                                });
+                              }
+                              return;
+                            }
                             if (deletedIndex == _selectedInstructionIndex) {
                               setState(() => _selectedInstructionIndex = -1);
                             } else if (deletedIndex <
@@ -2692,7 +2754,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     // Inject the selected generic instruction into the request (service
     // reads typeConfig['userInstruction']); unselected = images-only.
     final instructions = ref.read(ocrInstructionsProvider);
-    final selectedInstructionIndex = _selectedInstructionIndex;
+    final selectedInstructionIndex =
+        _instructionSelectionValue(instructions);
     final retryInstructionSnapshot = _retryInstructionSnapshot;
     final instructionContent = retryInstructionSnapshot ??
         selectedOcrInstructionContent(instructions, selectedInstructionIndex);
