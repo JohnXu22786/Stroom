@@ -846,7 +846,8 @@ bool _legacyOcrHasCredentialUseContext(
     r'\b(use|using|send|provide|enter|supply|pass|set|read|extract|identify|recognize|transcribe)$',
     caseSensitive: false,
   ).firstMatch(before);
-  final credentialTargetAfterConsumedConnector = suffix.toLowerCase() == 'as' &&
+  final credentialTargetAfterConsumedConnector =
+      const {'as', 'to'}.contains(suffix.toLowerCase()) &&
       RegExp(
         r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
         caseSensitive: false,
