@@ -2390,6 +2390,11 @@ void main() {
             config: config,
             dio: Dio()..httpClientAdapter = adapter,
           ),
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testRetrySnapshotCacher: ({required taskId, required snapshot}) async {
+            throw StateError('cache write failed');
+          },
           retryData: {
             'type': 'ocr',
             'images': [
@@ -2400,7 +2405,6 @@ void main() {
               },
             ],
             'modelIndex': 1,
-            'instructionIndex': 0,
           },
         ),
       );
