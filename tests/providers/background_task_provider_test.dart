@@ -5118,45 +5118,75 @@ void main() {
         const naturalPrompt = 'Review the secret-based policy';
         const credentialEcho = 'Read the receipt using secretQmXvP';
         const ambiguousCredentialEcho = 'Please use secret-based';
-        final task = BackgroundTask.fromMap({
-          'id': 'legacy-ocr-secret-based-natural-prompt',
-          'type': 'ocr',
-          'title': 'legacy OCR request',
-          'status': 'failed',
-          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
-          'rawRequest': {
-            'url': 'https://api.example.com/v1/chat/completions',
-            'headers': {'Authorization': 'Bearer secret…'},
-            'body': {
-              'model': 'vision-model',
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': [
-                    {'type': 'text', 'text': naturalPrompt},
-                    {'type': 'text', 'text': credentialEcho},
-                    {'type': 'text', 'text': ambiguousCredentialEcho},
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer secret…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
                   ],
                 },
-              ],
-            },
-          },
-        });
-        final migratedInstruction = OcrRetrySnapshot.fromMap(
-          task.retryData!,
-        ).instructionContent;
-        final persisted = jsonEncode(task.toMap());
+              },
+            });
 
+        final naturalTask = taskFor(
+          'legacy-ocr-secret-based-natural-prompt',
+          naturalPrompt,
+        );
+        final naturalPersisted = jsonEncode(naturalTask.toMap());
         expect(
-          migratedInstruction,
-          'Review the secret-based policy\n'
-          'Read the receipt using [redacted]\n'
+          OcrRetrySnapshot.fromMap(naturalTask.retryData!).instructionContent,
+          naturalPrompt,
+        );
+        expect(naturalPersisted, contains(naturalPrompt));
+
+        final credentialTask = taskFor(
+          'legacy-ocr-secret-based-credential-echo',
+          credentialEcho,
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!).instructionContent,
+          'Read the receipt using [redacted]',
+        );
+        expect(
+          credentialPersisted,
+          contains('Read the receipt using [redacted]'),
+        );
+        expect(credentialPersisted, isNot(contains('secretQmXvP')));
+
+        final ambiguousCredentialTask = taskFor(
+          'legacy-ocr-secret-based-bare-credential-echo',
+          ambiguousCredentialEcho,
+        );
+        final ambiguousCredentialPersisted =
+            jsonEncode(ambiguousCredentialTask.toMap());
+        expect(
+          OcrRetrySnapshot.fromMap(ambiguousCredentialTask.retryData!)
+              .instructionContent,
           'Please use [redacted]',
         );
-        expect(persisted, contains(naturalPrompt));
-        expect(persisted, contains('Read the receipt using [redacted]'));
-        expect(persisted, isNot(contains(ambiguousCredentialEcho)));
-        expect(persisted, isNot(contains('secretQmXvP')));
+        expect(
+          ambiguousCredentialPersisted,
+          contains('Please use [redacted]'),
+        );
+        expect(
+          ambiguousCredentialPersisted,
+          isNot(contains(ambiguousCredentialEcho)),
+        );
       },
     );
 
