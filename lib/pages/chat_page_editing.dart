@@ -12,9 +12,8 @@ extension _ChatPageEditingExt on _ChatPageState {
   /// id-based (the message must be looked up at removal time — the loop
   /// mutates the controller list, so positions shift).
   Future<void> _removeMessageFromController(String messageId) async {
-    final ctrlMsg = _controller?.messages
-        .where((m) => m.id == messageId)
-        .firstOrNull;
+    final ctrlMsg =
+        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
     if (ctrlMsg != null) {
       await _controller?.removeMessage(ctrlMsg);
     }
@@ -147,16 +146,15 @@ extension _ChatPageEditingExt on _ChatPageState {
       final persistedHistory = conversationId == null
           ? List<ChatMessage>.from(_history)
           : await ref
-                .read(conversationsProvider.notifier)
-                .loadFullMessagesForContext(conversationId);
+              .read(conversationsProvider.notifier)
+              .loadFullMessagesForContext(conversationId);
       if (!stillOwnsHistory()) return;
       final persistedMessageIndex = persistedHistory.indexWhere(
         (message) => message.id == messageId,
       );
       if (persistedMessageIndex < 0) return;
-      final retainedHistory = persistedHistory
-          .take(persistedMessageIndex)
-          .toList();
+      final retainedHistory =
+          persistedHistory.take(persistedMessageIndex).toList();
 
       // Remove this message and all after from history and controller.
       try {
@@ -226,8 +224,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       final persistedHistory = conversationId == null
           ? List<ChatMessage>.from(_history)
           : await ref
-                .read(conversationsProvider.notifier)
-                .loadFullMessagesForContext(conversationId);
+              .read(conversationsProvider.notifier)
+              .loadFullMessagesForContext(conversationId);
       if (!stillOwnsHistory()) return;
       final persistedAssistantIndex = persistedHistory.indexWhere(
         (message) => message.id == messageId,
@@ -282,8 +280,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       final completeHistory = conversationId == null
           ? List<ChatMessage>.from(_history)
           : await ref
-                .read(conversationsProvider.notifier)
-                .loadFullMessagesForContext(conversationId);
+              .read(conversationsProvider.notifier)
+              .loadFullMessagesForContext(conversationId);
       if (!stillOwnsHistory()) return;
       final contextUserIndex = completeHistory.indexWhere(
         (message) => message.id == userMsg.id,
@@ -334,8 +332,8 @@ extension _ChatPageEditingExt on _ChatPageState {
                     attachment.storagePath,
             }
           : await ref
-                .read(conversationsProvider.notifier)
-                .getOtherMessageAttachmentPaths(activeId, messageId);
+              .read(conversationsProvider.notifier)
+              .getOtherMessageAttachmentPaths(activeId, messageId);
     } catch (error) {
       debugPrint('[ChatPage] failed to inspect attachment references: $error');
     }
@@ -344,8 +342,7 @@ extension _ChatPageEditingExt on _ChatPageState {
     }
 
     for (final att in msg.attachments) {
-      final isReferencedElsewhere =
-          referencedAttachmentPaths == null ||
+      final isReferencedElsewhere = referencedAttachmentPaths == null ||
           referencedAttachmentPaths.contains(att.storagePath);
       if (!isReferencedElsewhere) {
         await AttachmentStorage.deleteFile(att.storagePath);
@@ -383,9 +380,8 @@ extension _ChatPageEditingExt on _ChatPageState {
       _loadMoreGeneration++;
     });
 
-    final msgToRemove = _controller?.messages
-        .where((m) => m.id == messageId)
-        .firstOrNull;
+    final msgToRemove =
+        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
     if (msgToRemove != null) {
       await _controller?.removeMessage(msgToRemove);
     }

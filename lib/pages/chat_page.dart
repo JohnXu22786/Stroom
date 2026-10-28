@@ -372,6 +372,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// completion or conversation switch during an async load from being lost
   /// to the in-flight guard.
   bool _reloadAfterLoading = false;
+  bool _reloadAfterLoadingForce = false;
 
   /// Invalidates a load when the active conversation changes while it is
   /// awaiting persistence/logging/controller work.
@@ -492,12 +493,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply = activeId != null
-        ? ref.watch(streamingFullReplyProvider(activeId))
-        : '';
-    final streamingMsgId = activeId != null
-        ? ref.watch(streamingMsgIdProvider(activeId))
-        : null;
+    final streamingFullReply =
+        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
+    final streamingMsgId =
+        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the

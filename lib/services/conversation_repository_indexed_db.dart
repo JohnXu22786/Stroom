@@ -9,6 +9,8 @@ import 'conversation_repository.dart';
 /// store. Each conversation and message has an independent key; batch writes
 /// share one IndexedDB transaction.
 class IndexedDbConversationRepository implements ConversationRepository {
+  static Future<void> _mutationQueue = Future<void>.value();
+
   static const _root = 'conversation_repository/';
   static const _conversationPrefix = '${_root}conversations/';
   static const _messagePrefix = '${_root}messages/';
@@ -42,6 +44,15 @@ class IndexedDbConversationRepository implements ConversationRepository {
   static Map<String, dynamic> _decode(Uint8List bytes) =>
       Map<String, dynamic>.from(jsonDecode(utf8.decode(bytes)) as Map);
 
+  static Future<T> _serializeMutation<T>(Future<T> Function() mutation) {
+    final result = _mutationQueue.then((_) => mutation());
+    _mutationQueue = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {},
+    );
+    return result;
+  }
+
   @override
   Future<void> initialize() async {
     await WebFileStore.keysWithPrefix(_root);
@@ -67,7 +78,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
       final conversation = StroomConversation.fromMap(_decode(bytes));
       final count = (await WebFileStore.keysWithPrefix(
         _messagePrefixFor(conversation.id),
-      )).length;
+      ))
+          .length;
       summaries.add(
         ConversationSummary.fromConversation(
           _withoutMessages(conversation),
@@ -119,232 +131,244 @@ class IndexedDbConversationRepository implements ConversationRepository {
   }
 
   @override
-  Future<void> upsertConversation(StroomConversation conversation) async {
-    await WebFileStore.write(
-      _conversationKey(conversation.id),
-      _encode(_withoutMessages(conversation).toMap()),
-    );
-  }
+  Future<void> upsertConversation(StroomConversation conversation) =>
+      _serializeMutation(() async {
+        await WebFileStore.write(
+          _conversationKey(conversation.id),
+          _encode(_withoutMessages(conversation).toMap()),
+        );
+      });
 
   @override
   Future<void> applyConversationChanges(
     StroomConversation conversation, {
     List<StroomMessage> upsertMessages = const [],
     List<String> deleteMessageIds = const [],
-  }) async {
-    final writes = <String, Uint8List>{
-      _conversationKey(conversation.id): _encode(
-        _withoutMessages(conversation).toMap(),
-      ),
-    };
-    final deletes = <String>{};
-    final indexKeys = <String>{
-      ...deleteMessageIds.map((id) => _messageIndexKey(conversation.id, id)),
-      ...upsertMessages.map(
-        (message) => _messageIndexKey(conversation.id, message.id),
-      ),
-    };
-    for (final indexKey in indexKeys) {
-      final existing = await WebFileStore.read(indexKey);
-      if (existing != null) deletes.add(utf8.decode(existing));
-    }
-    for (final id in deleteMessageIds) {
-      deletes.add(_messageIndexKey(conversation.id, id));
-    }
-    for (final message in upsertMessages) {
-      final rowKey = _orderedMessageKey(conversation.id, message);
-      writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversation.id, message.id)] =
-          Uint8List.fromList(utf8.encode(rowKey));
-      deletes.remove(rowKey);
-    }
-    await WebFileStore.writeBatch(writes, deletes: deletes);
-  }
+  }) =>
+      _serializeMutation(() async {
+        final writes = <String, Uint8List>{
+          _conversationKey(conversation.id): _encode(
+            _withoutMessages(conversation).toMap(),
+          ),
+        };
+        final deletes = <String>{};
+        final indexKeys = <String>{
+          ...deleteMessageIds
+              .map((id) => _messageIndexKey(conversation.id, id)),
+          ...upsertMessages.map(
+            (message) => _messageIndexKey(conversation.id, message.id),
+          ),
+        };
+        for (final indexKey in indexKeys) {
+          final existing = await WebFileStore.read(indexKey);
+          if (existing != null) deletes.add(utf8.decode(existing));
+        }
+        for (final id in deleteMessageIds) {
+          deletes.add(_messageIndexKey(conversation.id, id));
+        }
+        for (final message in upsertMessages) {
+          final rowKey = _orderedMessageKey(conversation.id, message);
+          writes[rowKey] = _encode(message.toMap());
+          writes[_messageIndexKey(conversation.id, message.id)] =
+              Uint8List.fromList(utf8.encode(rowKey));
+          deletes.remove(rowKey);
+        }
+        await WebFileStore.writeBatch(writes, deletes: deletes);
+      });
 
   @override
   Future<void> applySnapshotChanges({
     required List<ConversationRepositoryChange> changes,
     required List<String> conversationOrder,
     required List<String> deleteConversationIds,
-  }) async {
-    final writes = <String, Uint8List>{};
-    final deletes = <String>{};
-    for (final change in changes) {
-      final conversation = change.conversation;
-      writes[_conversationKey(conversation.id)] = _encode(
-        _withoutMessages(conversation).toMap(),
-      );
-      final indexKeys = <String>{
-        ...change.deleteMessageIds.map(
-          (id) => _messageIndexKey(conversation.id, id),
-        ),
-        ...change.upsertMessages.map(
-          (message) => _messageIndexKey(conversation.id, message.id),
-        ),
-      };
-      for (final indexKey in indexKeys) {
-        final existing = await WebFileStore.read(indexKey);
-        if (existing != null) deletes.add(utf8.decode(existing));
-      }
-      for (final id in change.deleteMessageIds) {
-        deletes.add(_messageIndexKey(conversation.id, id));
-      }
-      for (final message in change.upsertMessages) {
-        final rowKey = _orderedMessageKey(conversation.id, message);
-        writes[rowKey] = _encode(message.toMap());
-        writes[_messageIndexKey(conversation.id, message.id)] =
-            Uint8List.fromList(utf8.encode(rowKey));
-        deletes.remove(rowKey);
-      }
-    }
-    for (final id in deleteConversationIds) {
-      deletes.add(_conversationKey(id));
-      deletes.addAll(await WebFileStore.keysWithPrefix(_messagePrefixFor(id)));
-      deletes.addAll(
-        await WebFileStore.keysWithPrefix(_messageIndexPrefixFor(id)),
-      );
-    }
-    writes[_orderKey] = _encode(conversationOrder);
-    await WebFileStore.writeBatch(writes, deletes: deletes);
-    _cachedOrder = List<String>.from(conversationOrder);
-  }
+  }) =>
+      _serializeMutation(() async {
+        final writes = <String, Uint8List>{};
+        final deletes = <String>{};
+        for (final change in changes) {
+          final conversation = change.conversation;
+          writes[_conversationKey(conversation.id)] = _encode(
+            _withoutMessages(conversation).toMap(),
+          );
+          final indexKeys = <String>{
+            ...change.deleteMessageIds.map(
+              (id) => _messageIndexKey(conversation.id, id),
+            ),
+            ...change.upsertMessages.map(
+              (message) => _messageIndexKey(conversation.id, message.id),
+            ),
+          };
+          for (final indexKey in indexKeys) {
+            final existing = await WebFileStore.read(indexKey);
+            if (existing != null) deletes.add(utf8.decode(existing));
+          }
+          for (final id in change.deleteMessageIds) {
+            deletes.add(_messageIndexKey(conversation.id, id));
+          }
+          for (final message in change.upsertMessages) {
+            final rowKey = _orderedMessageKey(conversation.id, message);
+            writes[rowKey] = _encode(message.toMap());
+            writes[_messageIndexKey(conversation.id, message.id)] =
+                Uint8List.fromList(utf8.encode(rowKey));
+            deletes.remove(rowKey);
+          }
+        }
+        for (final id in deleteConversationIds) {
+          deletes.add(_conversationKey(id));
+          deletes
+              .addAll(await WebFileStore.keysWithPrefix(_messagePrefixFor(id)));
+          deletes.addAll(
+            await WebFileStore.keysWithPrefix(_messageIndexPrefixFor(id)),
+          );
+        }
+        writes[_orderKey] = _encode(conversationOrder);
+        await WebFileStore.writeBatch(writes, deletes: deletes);
+        _cachedOrder = List<String>.from(conversationOrder);
+      });
 
   @override
-  Future<void> importConversation(StroomConversation conversation) async {
-    final oldRows = await WebFileStore.keysWithPrefix(
-      _messagePrefixFor(conversation.id),
-    );
-    final oldIndexes = await WebFileStore.keysWithPrefix(
-      _messageIndexPrefixFor(conversation.id),
-    );
-    final writes = <String, Uint8List>{
-      _conversationKey(conversation.id): _encode(
-        _withoutMessages(conversation).toMap(),
-      ),
-    };
-    for (final message in conversation.messages) {
-      final rowKey = _orderedMessageKey(conversation.id, message);
-      writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversation.id, message.id)] =
-          Uint8List.fromList(utf8.encode(rowKey));
-    }
-    await WebFileStore.writeBatch(writes, deletes: [...oldRows, ...oldIndexes]);
-  }
+  Future<void> importConversation(StroomConversation conversation) =>
+      _serializeMutation(() async {
+        final oldRows = await WebFileStore.keysWithPrefix(
+          _messagePrefixFor(conversation.id),
+        );
+        final oldIndexes = await WebFileStore.keysWithPrefix(
+          _messageIndexPrefixFor(conversation.id),
+        );
+        final writes = <String, Uint8List>{
+          _conversationKey(conversation.id): _encode(
+            _withoutMessages(conversation).toMap(),
+          ),
+        };
+        for (final message in conversation.messages) {
+          final rowKey = _orderedMessageKey(conversation.id, message);
+          writes[rowKey] = _encode(message.toMap());
+          writes[_messageIndexKey(conversation.id, message.id)] =
+              Uint8List.fromList(utf8.encode(rowKey));
+        }
+        await WebFileStore.writeBatch(writes,
+            deletes: [...oldRows, ...oldIndexes]);
+      });
 
   List<String> _cachedOrder = [];
 
   @override
-  Future<void> setConversationOrder(List<String> conversationIds) async {
-    final bytes = await WebFileStore.read(_orderKey);
-    if (bytes != null) {
-      try {
-        _cachedOrder = List<String>.from(
-          jsonDecode(utf8.decode(bytes)) as List,
-        );
-      } catch (_) {
-        _cachedOrder = [];
-      }
-    }
-    final next = List<String>.from(conversationIds);
-    if (_sameIds(_cachedOrder, next)) return;
-    await WebFileStore.write(_orderKey, _encode(next));
-    _cachedOrder = next;
-  }
+  Future<void> setConversationOrder(List<String> conversationIds) =>
+      _serializeMutation(() async {
+        final bytes = await WebFileStore.read(_orderKey);
+        if (bytes != null) {
+          try {
+            _cachedOrder = List<String>.from(
+              jsonDecode(utf8.decode(bytes)) as List,
+            );
+          } catch (_) {
+            _cachedOrder = [];
+          }
+        }
+        final next = List<String>.from(conversationIds);
+        if (_sameIds(_cachedOrder, next)) return;
+        await WebFileStore.write(_orderKey, _encode(next));
+        _cachedOrder = next;
+      });
 
   @override
-  Future<void> clearConversations() async {
-    final conversations = await WebFileStore.keysWithPrefix(
-      _conversationPrefix,
-    );
-    final messages = await WebFileStore.keysWithPrefix(_messagePrefix);
-    final indexes = await WebFileStore.keysWithPrefix(_messageIndexPrefix);
-    await WebFileStore.writeBatch(
-      const {},
-      deletes: [
-        ...conversations,
-        ...messages,
-        ...indexes,
-        _orderKey,
-        _migrationSourceHashKey,
-      ],
-    );
-    _cachedOrder = [];
-  }
+  Future<void> clearConversations() => _serializeMutation(() async {
+        final conversations = await WebFileStore.keysWithPrefix(
+          _conversationPrefix,
+        );
+        final messages = await WebFileStore.keysWithPrefix(_messagePrefix);
+        final indexes = await WebFileStore.keysWithPrefix(_messageIndexPrefix);
+        await WebFileStore.writeBatch(
+          const {},
+          deletes: [
+            ...conversations,
+            ...messages,
+            ...indexes,
+            _orderKey,
+            _migrationSourceHashKey,
+          ],
+        );
+        _cachedOrder = [];
+      });
 
   @override
   Future<void> replaceMessages(
     String conversationId,
     List<StroomMessage> messages,
-  ) async {
-    if (await getConversation(conversationId) == null) {
-      throw StateError('Unknown conversation: $conversationId');
-    }
-    final prefix = _messagePrefixFor(conversationId);
-    final oldKeys = await WebFileStore.keysWithPrefix(prefix);
-    final oldIndexKeys = await WebFileStore.keysWithPrefix(
-      _messageIndexPrefixFor(conversationId),
-    );
-    final writes = <String, Uint8List>{};
-    for (final message in messages) {
-      final rowKey = _orderedMessageKey(conversationId, message);
-      writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversationId, message.id)] = Uint8List.fromList(
-        utf8.encode(rowKey),
-      );
-    }
-    await WebFileStore.writeBatch(
-      writes,
-      deletes: [...oldKeys, ...oldIndexKeys],
-    );
-  }
+  ) =>
+      _serializeMutation(() async {
+        if (await getConversation(conversationId) == null) {
+          throw StateError('Unknown conversation: $conversationId');
+        }
+        final prefix = _messagePrefixFor(conversationId);
+        final oldKeys = await WebFileStore.keysWithPrefix(prefix);
+        final oldIndexKeys = await WebFileStore.keysWithPrefix(
+          _messageIndexPrefixFor(conversationId),
+        );
+        final writes = <String, Uint8List>{};
+        for (final message in messages) {
+          final rowKey = _orderedMessageKey(conversationId, message);
+          writes[rowKey] = _encode(message.toMap());
+          writes[_messageIndexKey(conversationId, message.id)] =
+              Uint8List.fromList(
+            utf8.encode(rowKey),
+          );
+        }
+        await WebFileStore.writeBatch(
+          writes,
+          deletes: [...oldKeys, ...oldIndexKeys],
+        );
+      });
 
   @override
   Future<void> upsertMessage(
     String conversationId,
     StroomMessage message,
-  ) async {
-    if (await getConversation(conversationId) == null) {
-      throw StateError('Unknown conversation: $conversationId');
-    }
-    final indexKey = _messageIndexKey(conversationId, message.id);
-    final oldIndex = await WebFileStore.read(indexKey);
-    final oldRowKey = oldIndex == null ? null : utf8.decode(oldIndex);
-    final rowKey = _orderedMessageKey(conversationId, message);
-    await WebFileStore.writeBatch(
-      {
-        rowKey: _encode(message.toMap()),
-        indexKey: Uint8List.fromList(utf8.encode(rowKey)),
-      },
-      deletes: oldRowKey == null || oldRowKey == rowKey
-          ? const []
-          : [oldRowKey],
-    );
-  }
+  ) =>
+      _serializeMutation(() async {
+        if (await getConversation(conversationId) == null) {
+          throw StateError('Unknown conversation: $conversationId');
+        }
+        final indexKey = _messageIndexKey(conversationId, message.id);
+        final oldIndex = await WebFileStore.read(indexKey);
+        final oldRowKey = oldIndex == null ? null : utf8.decode(oldIndex);
+        final rowKey = _orderedMessageKey(conversationId, message);
+        await WebFileStore.writeBatch(
+          {
+            rowKey: _encode(message.toMap()),
+            indexKey: Uint8List.fromList(utf8.encode(rowKey)),
+          },
+          deletes:
+              oldRowKey == null || oldRowKey == rowKey ? const [] : [oldRowKey],
+        );
+      });
 
   @override
-  Future<void> deleteMessage(String conversationId, String messageId) async {
-    final indexKey = _messageIndexKey(conversationId, messageId);
-    final index = await WebFileStore.read(indexKey);
-    final rowKey = index == null ? null : utf8.decode(index);
-    await WebFileStore.writeBatch(
-      const {},
-      deletes: [if (rowKey != null) rowKey, indexKey],
-    );
-  }
+  Future<void> deleteMessage(String conversationId, String messageId) =>
+      _serializeMutation(() async {
+        final indexKey = _messageIndexKey(conversationId, messageId);
+        final index = await WebFileStore.read(indexKey);
+        final rowKey = index == null ? null : utf8.decode(index);
+        await WebFileStore.writeBatch(
+          const {},
+          deletes: [if (rowKey != null) rowKey, indexKey],
+        );
+      });
 
   @override
-  Future<void> deleteConversation(String conversationId) async {
-    final messages = await WebFileStore.keysWithPrefix(
-      _messagePrefixFor(conversationId),
-    );
-    final indexes = await WebFileStore.keysWithPrefix(
-      _messageIndexPrefixFor(conversationId),
-    );
-    await WebFileStore.writeBatch(
-      const {},
-      deletes: [...messages, ...indexes, _conversationKey(conversationId)],
-    );
-  }
+  Future<void> deleteConversation(String conversationId) =>
+      _serializeMutation(() async {
+        final messages = await WebFileStore.keysWithPrefix(
+          _messagePrefixFor(conversationId),
+        );
+        final indexes = await WebFileStore.keysWithPrefix(
+          _messageIndexPrefixFor(conversationId),
+        );
+        await WebFileStore.writeBatch(
+          const {},
+          deletes: [...messages, ...indexes, _conversationKey(conversationId)],
+        );
+      });
 
   @override
   Future<int> countConversations() async =>
@@ -355,7 +379,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
     if (conversationId != null) {
       return (await WebFileStore.keysWithPrefix(
         _messagePrefixFor(conversationId),
-      )).length;
+      ))
+          .length;
     }
     var count = 0;
     final conversations = await WebFileStore.keysWithPrefix(
@@ -367,7 +392,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
         final id = StroomConversation.fromMap(_decode(bytes)).id;
         count += (await WebFileStore.keysWithPrefix(
           _messagePrefixFor(id),
-        )).length;
+        ))
+            .length;
       }
     }
     return count;
@@ -380,12 +406,13 @@ class IndexedDbConversationRepository implements ConversationRepository {
   }
 
   @override
-  Future<void> setMigrationSourceHash(String sourceHash) async {
-    await WebFileStore.write(
-      _migrationSourceHashKey,
-      Uint8List.fromList(utf8.encode(sourceHash)),
-    );
-  }
+  Future<void> setMigrationSourceHash(String sourceHash) =>
+      _serializeMutation(() async {
+        await WebFileStore.write(
+          _migrationSourceHashKey,
+          Uint8List.fromList(utf8.encode(sourceHash)),
+        );
+      });
 
   @override
   Future<Map<String, dynamic>> exportData() async {
@@ -435,91 +462,101 @@ class IndexedDbConversationRepository implements ConversationRepository {
   }
 
   @override
-  Future<void> restoreData(Map<String, dynamic> data) async {
-    final rawConversations = data['conversations'];
-    final rawMessages = data['messages'];
-    if (rawConversations is! List || rawMessages is! List) {
-      throw const FormatException('Invalid conversation repository backup.');
-    }
-    final conversations = <String, StroomConversation>{};
-    for (final raw in rawConversations) {
-      if (raw is! Map)
-        throw const FormatException('Invalid conversation record.');
-      final conversation = StroomConversation.fromMap(
-        Map<String, dynamic>.from(raw),
-      );
-      if (conversation.id.isEmpty ||
-          conversations.containsKey(conversation.id)) {
-        throw const FormatException('Invalid or duplicate conversation id.');
-      }
-      conversations[conversation.id] = _withoutMessages(conversation);
-    }
-    final writes = <String, Uint8List>{};
-    for (final conversation in conversations.values) {
-      writes[_conversationKey(conversation.id)] = _encode(conversation.toMap());
-    }
-    final rawOrder = data['conversationOrder'];
-    final orderedIds = rawOrder is List
-        ? [
-            ...rawOrder.whereType<String>().where(conversations.containsKey),
-            ...conversations.keys.where(
-              (id) => !rawOrder.whereType<String>().contains(id),
-            ),
-          ]
-        : conversations.keys.toList();
-    writes[_orderKey] = _encode(orderedIds);
-    final migrationSourceHash = data['migrationSourceHash'];
-    if (migrationSourceHash is String) {
-      writes[_migrationSourceHashKey] = Uint8List.fromList(
-        utf8.encode(migrationSourceHash),
-      );
-    }
-    final seenMessageIds = <String>{};
-    for (final raw in rawMessages) {
-      if (raw is! Map) throw const FormatException('Invalid message record.');
-      final row = Map<String, dynamic>.from(raw);
-      final conversationId = row.remove('conversationId');
-      if (conversationId is! String ||
-          !conversations.containsKey(conversationId)) {
-        throw const FormatException(
-          'Message references a missing conversation.',
+  Future<void> restoreData(Map<String, dynamic> data) =>
+      _serializeMutation(() async {
+        final rawConversations = data['conversations'];
+        final rawMessages = data['messages'];
+        if (rawConversations is! List || rawMessages is! List) {
+          throw const FormatException(
+              'Invalid conversation repository backup.');
+        }
+        final conversations = <String, StroomConversation>{};
+        for (final raw in rawConversations) {
+          if (raw is! Map)
+            throw const FormatException('Invalid conversation record.');
+          final conversation = StroomConversation.fromMap(
+            Map<String, dynamic>.from(raw),
+          );
+          if (conversation.id.isEmpty ||
+              conversations.containsKey(conversation.id)) {
+            throw const FormatException(
+                'Invalid or duplicate conversation id.');
+          }
+          conversations[conversation.id] = _withoutMessages(conversation);
+        }
+        final writes = <String, Uint8List>{};
+        for (final conversation in conversations.values) {
+          writes[_conversationKey(conversation.id)] =
+              _encode(conversation.toMap());
+        }
+        final rawOrder = data['conversationOrder'];
+        final orderedIds = rawOrder is List
+            ? [
+                ...rawOrder
+                    .whereType<String>()
+                    .where(conversations.containsKey),
+                ...conversations.keys.where(
+                  (id) => !rawOrder.whereType<String>().contains(id),
+                ),
+              ]
+            : conversations.keys.toList();
+        writes[_orderKey] = _encode(orderedIds);
+        final migrationSourceHash = data['migrationSourceHash'];
+        if (migrationSourceHash is String) {
+          writes[_migrationSourceHashKey] = Uint8List.fromList(
+            utf8.encode(migrationSourceHash),
+          );
+        }
+        final seenMessageIds = <String>{};
+        for (final raw in rawMessages) {
+          if (raw is! Map)
+            throw const FormatException('Invalid message record.');
+          final row = Map<String, dynamic>.from(raw);
+          final conversationId = row.remove('conversationId');
+          if (conversationId is! String ||
+              !conversations.containsKey(conversationId)) {
+            throw const FormatException(
+              'Message references a missing conversation.',
+            );
+          }
+          final record =
+              data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
+          if (record is! Map) {
+            throw const FormatException('Invalid message envelope.');
+          }
+          final message =
+              StroomMessage.fromMap(Map<String, dynamic>.from(record));
+          final compositeId = '$conversationId\u0000${message.id}';
+          if (message.id.isEmpty || !seenMessageIds.add(compositeId)) {
+            throw const FormatException('Invalid or duplicate message id.');
+          }
+          final rowKey = _orderedMessageKey(conversationId, message);
+          writes[rowKey] = _encode(message.toMap());
+          writes[_messageIndexKey(conversationId, message.id)] =
+              Uint8List.fromList(
+            utf8.encode(rowKey),
+          );
+        }
+        final currentConversationKeys = await WebFileStore.keysWithPrefix(
+          _conversationPrefix,
         );
-      }
-      final record = data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
-      if (record is! Map) {
-        throw const FormatException('Invalid message envelope.');
-      }
-      final message = StroomMessage.fromMap(Map<String, dynamic>.from(record));
-      final compositeId = '$conversationId\u0000${message.id}';
-      if (message.id.isEmpty || !seenMessageIds.add(compositeId)) {
-        throw const FormatException('Invalid or duplicate message id.');
-      }
-      final rowKey = _orderedMessageKey(conversationId, message);
-      writes[rowKey] = _encode(message.toMap());
-      writes[_messageIndexKey(conversationId, message.id)] = Uint8List.fromList(
-        utf8.encode(rowKey),
-      );
-    }
-    final currentConversationKeys = await WebFileStore.keysWithPrefix(
-      _conversationPrefix,
-    );
-    final currentMessageKeys = await WebFileStore.keysWithPrefix(
-      _messagePrefix,
-    );
-    final currentIndexKeys = await WebFileStore.keysWithPrefix(
-      _messageIndexPrefix,
-    );
-    await WebFileStore.writeBatch(
-      writes,
-      deletes: [
-        ...currentConversationKeys,
-        ...currentMessageKeys,
-        ...currentIndexKeys,
-        if (migrationSourceHash is! String) _migrationSourceHashKey,
-      ],
-    );
-    _cachedOrder = orderedIds;
-  }
+        final currentMessageKeys = await WebFileStore.keysWithPrefix(
+          _messagePrefix,
+        );
+        final currentIndexKeys = await WebFileStore.keysWithPrefix(
+          _messageIndexPrefix,
+        );
+        await WebFileStore.writeBatch(
+          writes,
+          deletes: [
+            ...currentConversationKeys,
+            ...currentMessageKeys,
+            ...currentIndexKeys,
+            if (migrationSourceHash is! String) _migrationSourceHashKey,
+          ],
+        );
+        _cachedOrder = orderedIds;
+      });
 
   @override
   Future<List<ConversationIntegrityIssue>> checkIntegrity({
@@ -583,12 +620,14 @@ class IndexedDbConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path =
-        conversationLocalMediaPath(reference['reference']) ??
+    final path = conversationLocalMediaPath(reference['reference']) ??
         conversationLocalMediaPath(reference['storagePath']);
     if (path == null) {
+      final thumbnailPath =
+          conversationLocalMediaPath(reference['thumbnailPath']);
       if (!conversationIsExternalMediaUri(reference['reference']) &&
-          !conversationIsExternalMediaUri(reference['storagePath'])) {
+          !conversationIsExternalMediaUri(reference['storagePath']) &&
+          thumbnailPath == null) {
         issues.add(
           ConversationIntegrityIssue(
             conversationId: conversationId,
@@ -694,12 +733,13 @@ class IndexedDbConversationRepository implements ConversationRepository {
     String messageId,
     String reference,
     String reason,
-  ) => ConversationIntegrityIssue(
-    conversationId: conversationId,
-    messageId: messageId,
-    reference: reference,
-    reason: reason,
-  );
+  ) =>
+      ConversationIntegrityIssue(
+        conversationId: conversationId,
+        messageId: messageId,
+        reference: reference,
+        reason: reason,
+      );
 
   static bool _sameIds(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

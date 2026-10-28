@@ -13,6 +13,10 @@ class ConversationRecordAdapter {
       '_stroomAdapterLegacyConversationExtensionPresent';
   static const _conversationExtensionValueKey =
       '_stroomAdapterLegacyConversationExtensionValue';
+  static const _conversationRawExtensionsPresentKey =
+      '_stroomAdapterLegacyConversationRawExtensionsPresent';
+  static const _conversationRawExtensionsValueKey =
+      '_stroomAdapterLegacyConversationRawExtensionsValue';
 
   static StroomConversation fromLegacyMap(Map<String, dynamic> map) {
     final id = map['id'];
@@ -82,15 +86,16 @@ class ConversationRecordAdapter {
       'extensions',
     };
     final legacyExtensions = map['extensions'];
-    final hasLegacyConversationExtension =
-        legacyExtensions is Map &&
+    final hasRawLegacyExtensions =
+        map.containsKey('extensions') && legacyExtensions is! Map;
+    final hasLegacyConversationExtension = legacyExtensions is Map &&
         legacyExtensions.containsKey(legacyConversationNamespace);
     final legacyConversationExtension = legacyExtensions is Map
         ? legacyExtensions[legacyConversationNamespace]
         : null;
     final ordinaryExtensions = legacyExtensions is Map
         ? (Map<String, dynamic>.from(legacyExtensions)
-            ..remove(legacyConversationNamespace))
+          ..remove(legacyConversationNamespace))
         : <String, dynamic>{};
     return StroomConversation(
       schemaVersion: map['schemaVersion'] is num
@@ -108,6 +113,9 @@ class ConversationRecordAdapter {
           _conversationExtensionPresentKey: hasLegacyConversationExtension,
           if (hasLegacyConversationExtension)
             _conversationExtensionValueKey: legacyConversationExtension,
+          _conversationRawExtensionsPresentKey: hasRawLegacyExtensions,
+          if (hasRawLegacyExtensions)
+            _conversationRawExtensionsValueKey: legacyExtensions,
           ..._withoutInlineDraftAttachmentBytes(
             Map<String, dynamic>.fromEntries(
               map.entries.where((entry) => !known.contains(entry.key)),
@@ -123,11 +131,9 @@ class ConversationRecordAdapter {
     List<StroomMessage> messages,
   ) {
     final fields = conversation.extensions[legacyConversationNamespace];
-    final legacyFields = fields is Map
-        ? Map<String, dynamic>.from(fields)
-        : <String, dynamic>{};
-    final hasTaggedEnvelope =
-        legacyFields[_conversationEnvelopeVersionKey] ==
+    final legacyFields =
+        fields is Map ? Map<String, dynamic>.from(fields) : <String, dynamic>{};
+    final hasTaggedEnvelope = legacyFields[_conversationEnvelopeVersionKey] ==
             _conversationEnvelopeVersion &&
         legacyFields[_conversationExtensionPresentKey] is bool;
     final hasOriginalExtension = hasTaggedEnvelope
@@ -136,9 +142,14 @@ class ConversationRecordAdapter {
     final originalExtensionValue = hasTaggedEnvelope
         ? legacyFields[_conversationExtensionValueKey]
         : legacyFields['opaqueExtensionValue'];
+    final hasRawExtensions = hasTaggedEnvelope &&
+        legacyFields[_conversationRawExtensionsPresentKey] == true;
+    final rawExtensionsValue = legacyFields[_conversationRawExtensionsValueKey];
     legacyFields.remove(_conversationEnvelopeVersionKey);
     legacyFields.remove(_conversationExtensionPresentKey);
     legacyFields.remove(_conversationExtensionValueKey);
+    legacyFields.remove(_conversationRawExtensionsPresentKey);
+    legacyFields.remove(_conversationRawExtensionsValueKey);
     if (!hasTaggedEnvelope) legacyFields.remove('opaqueExtensionValue');
     final result = <String, dynamic>{
       ...legacyFields,
@@ -156,7 +167,9 @@ class ConversationRecordAdapter {
     if (hasOriginalExtension) {
       ordinaryExtensions[legacyConversationNamespace] = originalExtensionValue;
     }
-    if (ordinaryExtensions.isNotEmpty) {
+    if (hasRawExtensions && ordinaryExtensions.isEmpty) {
+      result['extensions'] = rawExtensionsValue;
+    } else if (ordinaryExtensions.isNotEmpty) {
       result['extensions'] = ordinaryExtensions;
     }
     return result;
@@ -166,11 +179,12 @@ class ConversationRecordAdapter {
     final legacy = message.extensions[legacyMessageNamespace];
     final ordinaryExtensions = Map<String, dynamic>.from(message.extensions)
       ..remove(legacyMessageNamespace);
-    final hasTaggedLegacyExtension =
-        legacy is Map &&
+    final hasTaggedLegacyExtension = legacy is Map &&
         legacy[StroomMessage.legacyExtensionEnvelopeVersionKey] ==
             StroomMessage.legacyExtensionEnvelopeVersion &&
         legacy[StroomMessage.legacyExtensionPresentKey] == true;
+    final hasRawLegacyExtensions = legacy is Map &&
+        legacy[StroomMessage.legacyRawExtensionsPresentKey] == true;
     if (hasTaggedLegacyExtension) {
       ordinaryExtensions[legacyMessageNamespace] =
           legacy[StroomMessage.legacyExtensionValueKey];
@@ -178,6 +192,9 @@ class ConversationRecordAdapter {
       ordinaryExtensions[legacyMessageNamespace] =
           legacy['opaqueExtensionValue'];
     }
+    final rawLegacyExtensions = legacy is Map
+        ? legacy[StroomMessage.legacyRawExtensionsValueKey]
+        : null;
     final record = legacy is Map ? legacy['record'] : null;
     if (record is Map) {
       final result = <String, dynamic>{
@@ -237,7 +254,11 @@ class ConversationRecordAdapter {
         result['usage'] = message.usage;
       }
       if (ordinaryExtensions.isEmpty) {
-        result.remove('extensions');
+        if (hasRawLegacyExtensions) {
+          result['extensions'] = rawLegacyExtensions;
+        } else {
+          result.remove('extensions');
+        }
       } else {
         result['extensions'] = ordinaryExtensions;
       }
@@ -253,7 +274,10 @@ class ConversationRecordAdapter {
       if (message.status != null) 'status': message.status,
       if (message.finishReason != null) 'finishReason': message.finishReason,
       if (message.usage != null) 'usage': message.usage,
-      if (ordinaryExtensions.isNotEmpty) 'extensions': ordinaryExtensions,
+      if (ordinaryExtensions.isNotEmpty)
+        'extensions': ordinaryExtensions
+      else if (hasRawLegacyExtensions)
+        'extensions': rawLegacyExtensions,
       if (message.status == 'error') 'isError': true,
     };
   }
@@ -262,9 +286,10 @@ class ConversationRecordAdapter {
   /// carried separately in StroomMessage's redacted, bounded diagnostics field.
   static Map<String, dynamic> legacyMessageRecordForStorage(
     Map<String, dynamic> map,
-  ) => Map<String, dynamic>.from(map)
-    ..remove('rawRequest')
-    ..remove('rawResponse');
+  ) =>
+      Map<String, dynamic>.from(map)
+        ..remove('rawRequest')
+        ..remove('rawResponse');
 
   static DateTime _date(Object? value) {
     if (value is String) {

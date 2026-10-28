@@ -104,9 +104,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
             .firstOrNull;
         conversationWasTemporary = conversation?.isTemporary;
       }
-      await ref
-          .read(conversationsProvider.notifier)
-          .updateMessages(
+      await ref.read(conversationsProvider.notifier).updateMessages(
             convId,
             [...historySnapshot],
             resetTemporaryCountdown: resetTemporaryCountdown,
@@ -191,9 +189,8 @@ extension _ChatPagePersistenceExt on _ChatPageState {
                   ..addAll(Map<String, dynamic>.from(existing))
                   ..['id'] = convId
                   ..['updatedAt'] = savedAt.toIso8601String()
-                  ..['messages'] = historySnapshot
-                      .map((m) => m.toMap())
-                      .toList();
+                  ..['messages'] =
+                      historySnapshot.map((m) => m.toMap()).toList();
                 list[existingIdx] = targetMap;
               } else {
                 list.insert(0, targetMap);
@@ -315,9 +312,7 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // This ensures the tool preferences are persisted even if the user
       // switches conversations or navigates away during streaming.
       _saveEnabledToolsToConversation();
-      final conversationWasTemporary = ref
-          .read(conversationsProvider)
-          .any(
+      final conversationWasTemporary = ref.read(conversationsProvider).any(
             (conversation) =>
                 conversation.id == convId && conversation.isTemporary,
           );

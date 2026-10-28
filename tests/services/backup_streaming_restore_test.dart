@@ -981,20 +981,19 @@ int _zipCrc32(List<int> bytes) {
   for (final byte in bytes) {
     checksum ^= byte;
     for (var bit = 0; bit < 8; bit++) {
-      checksum = (checksum & 1) != 0
-          ? (checksum >> 1) ^ 0xedb88320
-          : checksum >> 1;
+      checksum =
+          (checksum & 1) != 0 ? (checksum >> 1) ^ 0xedb88320 : checksum >> 1;
     }
   }
   return (checksum ^ 0xffffffff) & 0xffffffff;
 }
 
 Uint8List _le32(int v) => Uint8List.fromList([
-  v & 0xff,
-  (v >> 8) & 0xff,
-  (v >> 16) & 0xff,
-  (v >> 24) & 0xff,
-]);
+      v & 0xff,
+      (v >> 8) & 0xff,
+      (v >> 16) & 0xff,
+      (v >> 24) & 0xff,
+    ]);
 
 Uint8List _le64(int v) {
   final b = Uint8List(8);

@@ -48,6 +48,32 @@ class _FailingOrderMemoryRepository extends MemoryConversationRepository {
   }
 }
 
+class _DelayedFailingOrderMemoryRepository
+    extends MemoryConversationRepository {
+  bool delayNextOrderWrite = false;
+  final Completer<void> orderWriteStarted = Completer<void>();
+  final Completer<void> releaseOrderWrite = Completer<void>();
+
+  @override
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
+  }) async {
+    if (delayNextOrderWrite) {
+      delayNextOrderWrite = false;
+      orderWriteStarted.complete();
+      await releaseOrderWrite.future;
+      throw StateError('simulated delayed order write failure');
+    }
+    await super.applySnapshotChanges(
+      changes: changes,
+      conversationOrder: conversationOrder,
+      deleteConversationIds: deleteConversationIds,
+    );
+  }
+}
+
 class _FailingMessageReadMemoryRepository extends MemoryConversationRepository {
   bool failReads = false;
 
@@ -129,6 +155,20 @@ class _DelayedSnapshotMemoryRepository extends MemoryConversationRepository {
       conversationOrder: conversationOrder,
       deleteConversationIds: deleteConversationIds,
     );
+  }
+}
+
+class _DelayedInitializeMemoryRepository extends MemoryConversationRepository {
+  final initializeStarted = Completer<void>();
+  final releaseInitialize = Completer<void>();
+
+  @override
+  Future<void> initialize() async {
+    if (!initializeStarted.isCompleted) {
+      initializeStarted.complete();
+      await releaseInitialize.future;
+    }
+    await super.initialize();
   }
 }
 
@@ -280,6 +320,35 @@ void main() {
 
       expect(issues.single.reason, 'missing_media');
       expect(issues.single.reference, 'attachments/missing.png');
+    });
+
+    test('integrity validates duplicate media paths with distinct metadata',
+        () async {
+      await repository.upsertConversation(
+        StroomConversation(id: 'conversation-media-metadata', title: 'Media'),
+      );
+      await repository.upsertMessage(
+        'conversation-media-metadata',
+        StroomMessage(
+          id: 'media-metadata-message',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          content: [
+            for (final size in const [3, 4])
+              StroomContentPart(
+                type: 'image',
+                data: {'storagePath': 'attachments/shared.png', 'size': size},
+              ),
+          ],
+        ),
+      );
+
+      final issues = await repository.checkIntegrity(
+        readMedia: (_) async => Uint8List.fromList([1, 2, 3]),
+      );
+
+      expect(issues.map((issue) => issue.reason), ['size_mismatch']);
     });
 
     test('integrity check ignores external media URIs', () async {
@@ -664,7 +733,9 @@ void main() {
       expect(
         (await restored.getMessages(
           'opaque-owner',
-        )).single.extraFields['conversationId'],
+        ))
+            .single
+            .extraFields['conversationId'],
         'opaque-vendor-value',
       );
       await repository.close();
@@ -723,6 +794,37 @@ void main() {
     await repository.close();
   });
 
+  test('IndexedDB serializes concurrent updates to one message id', () async {
+    WebFileStore.enableTestMode();
+    addTearDown(WebFileStore.disableTestMode);
+    final repository = IndexedDbConversationRepository();
+    await repository.initialize();
+    await repository.upsertConversation(
+      StroomConversation(id: 'indexeddb-concurrent', title: 'Concurrent'),
+    );
+    await repository.upsertMessage(
+      'indexeddb-concurrent',
+      _message('shared-message-id', 0, 'initial'),
+    );
+
+    await Future.wait([
+      repository.upsertMessage(
+        'indexeddb-concurrent',
+        _message('shared-message-id', 1, 'first update'),
+      ),
+      repository.upsertMessage(
+        'indexeddb-concurrent',
+        _message('shared-message-id', 2, 'last update'),
+      ),
+    ]);
+
+    final messages = await repository.getMessages('indexeddb-concurrent');
+    expect(messages, hasLength(1));
+    expect(messages.single.id, 'shared-message-id');
+    expect(messages.single.content.single.data['text'], 'last update');
+    await repository.close();
+  });
+
   group('ConversationMigrationService', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -774,8 +876,7 @@ void main() {
       'backs up source, resumes an interrupted batch, then verifies import',
       () async {
         final preferences = await SharedPreferences.getInstance();
-        final raw =
-            '[${_legacyConversation('c1', ['m1', 'm2'])},'
+        final raw = '[${_legacyConversation('c1', ['m1', 'm2'])},'
             '${_legacyConversation('c2', ['m3'])}]';
         await preferences.setString('conversations', raw);
         final repository = MemoryConversationRepository();
@@ -842,7 +943,8 @@ void main() {
         expect(
           (await resetRepository.getMessages(
             'c1',
-          )).map((message) => message.id),
+          ))
+              .map((message) => message.id),
           ['m1', 'm2'],
         );
         await resetRepository.close();
@@ -854,8 +956,7 @@ void main() {
       'recovers from the retained backup when the live source disappears',
       () async {
         final preferences = await SharedPreferences.getInstance();
-        final raw =
-            '[${_legacyConversation('c1', ['m1'])},'
+        final raw = '[${_legacyConversation('c1', ['m1'])},'
             '${_legacyConversation('c2', ['m2'])}]';
         await preferences.setString('conversations', raw);
         final repository = MemoryConversationRepository();
@@ -886,8 +987,7 @@ void main() {
       'restarts an incomplete migration when repository rows were reset',
       () async {
         final preferences = await SharedPreferences.getInstance();
-        final raw =
-            '[${_legacyConversation('c1', ['m1'])},'
+        final raw = '[${_legacyConversation('c1', ['m1'])},'
             '${_legacyConversation('c2', ['m2'])}]';
         await preferences.setString('conversations', raw);
         final interruptedRepository = MemoryConversationRepository();
@@ -921,13 +1021,11 @@ void main() {
 
     test('reconciles stale rows when the legacy source changes', () async {
       final preferences = await SharedPreferences.getInstance();
-      final originalConversation =
-          Map<String, dynamic>.from(
-              jsonDecode(_legacyConversation('stale', ['old'])) as Map,
-            )
-            ..['draftAttachments'] = [
-              {'storagePath': 'https://media.example/original.png'},
-            ];
+      final originalConversation = Map<String, dynamic>.from(
+        jsonDecode(_legacyConversation('stale', ['old'])) as Map,
+      )..['draftAttachments'] = [
+          {'storagePath': 'https://media.example/original.png'},
+        ];
       final originalSource = jsonEncode([
         originalConversation,
         jsonDecode(_legacyConversation('interrupted', ['pending'])),
@@ -948,13 +1046,11 @@ void main() {
       );
       expect(await repository.countConversations(), 1);
 
-      final replacementConversation =
-          Map<String, dynamic>.from(
-              jsonDecode(_legacyConversation('replacement', ['new'])) as Map,
-            )
-            ..['draftAttachments'] = [
-              {'storagePath': 'https://media.example/replacement.png'},
-            ];
+      final replacementConversation = Map<String, dynamic>.from(
+        jsonDecode(_legacyConversation('replacement', ['new'])) as Map,
+      )..['draftAttachments'] = [
+          {'storagePath': 'https://media.example/replacement.png'},
+        ];
       final replacementSource = jsonEncode([replacementConversation]);
       await preferences.setString('conversations', replacementSource);
       final result = await ConversationMigrationService(
@@ -971,13 +1067,11 @@ void main() {
         preferences.getString(ConversationMigrationService.backupKey),
         replacementSource,
       );
-      final attachmentManifest =
-          jsonDecode(
-                preferences.getString(
-                  ConversationMigrationService.attachmentManifestBackupKey,
-                )!,
-              )
-              as List;
+      final attachmentManifest = jsonDecode(
+        preferences.getString(
+          ConversationMigrationService.attachmentManifestBackupKey,
+        )!,
+      ) as List;
       expect(attachmentManifest, hasLength(1));
       expect(
         attachmentManifest.single['storagePath'],
@@ -1000,6 +1094,10 @@ void main() {
         });
         final preferences = await SharedPreferences.getInstance();
         final bytes = Uint8List.fromList([1, 2, 3, 4]);
+        final thumbnailPath = await AttachmentStorage.saveFile(
+          'draft-preview.png',
+          bytes,
+        );
         final raw = jsonEncode([
           {
             'id': 'draft-conversation',
@@ -1012,6 +1110,7 @@ void main() {
                 'fileType': 'image',
                 'hash': '',
                 'storagePath': '',
+                'thumbnailPath': thumbnailPath,
                 'fileSize': bytes.length,
                 'base64Data': base64Encode(bytes),
               },
@@ -1036,14 +1135,79 @@ void main() {
           await AttachmentStorage.readFile(attachment['storagePath'] as String),
           bytes,
         );
-        final manifest =
-            jsonDecode(
-                  preferences.getString(
-                    ConversationMigrationService.attachmentManifestBackupKey,
-                  )!,
-                )
-                as List;
-        expect(manifest.single, isNot(contains('base64Data')));
+        final manifest = jsonDecode(
+          preferences.getString(
+            ConversationMigrationService.attachmentManifestBackupKey,
+          )!,
+        ) as List;
+        expect(
+          manifest.cast<Map>().any(
+                (attachment) =>
+                    attachment['storagePath'] == '' &&
+                    attachment['thumbnailPath'] == thumbnailPath &&
+                    !attachment.containsKey('base64Data'),
+              ),
+          isTrue,
+        );
+        await repository.close();
+      },
+    );
+
+    test(
+      'migrates a draft with only a valid local thumbnail path',
+      () async {
+        final previousPathProvider = PathProviderPlatform.instance;
+        final directory = Directory.systemTemp.createTempSync(
+          'draft_thumbnail_only_migration_',
+        );
+        PathProviderPlatform.instance = _TestPathProvider(directory.path);
+        addTearDown(() {
+          PathProviderPlatform.instance = previousPathProvider;
+          directory.deleteSync(recursive: true);
+        });
+        SharedPreferences.setMockInitialValues({});
+        final preferences = await SharedPreferences.getInstance();
+        final bytes = Uint8List.fromList([9, 8, 7, 6]);
+        final thumbnailPath = await AttachmentStorage.saveFile(
+          'draft-preview.png',
+          bytes,
+        );
+        await preferences.setString(
+          'conversations',
+          jsonEncode([
+            {
+              'id': 'thumbnail-only-conversation',
+              'title': 'Thumbnail only',
+              'draftAttachments': [
+                {
+                  'id': 'thumbnail-only-draft',
+                  'fileName': 'draft.png',
+                  'mimeType': 'image/png',
+                  'fileType': 'image',
+                  'storagePath': '',
+                  'thumbnailPath': thumbnailPath,
+                  'thumbnailSize': bytes.length,
+                },
+              ],
+            },
+          ]),
+        );
+        final repository = MemoryConversationRepository();
+        await repository.initialize();
+
+        final result = await ConversationMigrationService(
+          repository,
+        ).migrate(preferences);
+
+        expect(result.verified, isTrue);
+        final stored = await repository.getConversation(
+          'thumbnail-only-conversation',
+        );
+        final legacy = stored!.extensions['stroom.legacyConversation'] as Map;
+        final attachment = (legacy['draftAttachments'] as List).single as Map;
+        expect(attachment['storagePath'], '');
+        expect(attachment['thumbnailPath'], thumbnailPath);
+        expect(await AttachmentStorage.readFile(thumbnailPath), bytes);
         await repository.close();
       },
     );
@@ -1090,26 +1254,22 @@ void main() {
         );
 
         await expectLater(migration.migrate(preferences), throwsStateError);
-        final firstManifest =
-            jsonDecode(
-                  preferences.getString(
-                    ConversationMigrationService.attachmentManifestBackupKey,
-                  )!,
-                )
-                as List;
+        final firstManifest = jsonDecode(
+          preferences.getString(
+            ConversationMigrationService.attachmentManifestBackupKey,
+          )!,
+        ) as List;
         expect(firstManifest, hasLength(1));
         final firstPath = firstManifest.single['storagePath'] as String;
         await Future<void>.delayed(const Duration(milliseconds: 5));
         migration.beforeBatchCommit = null;
 
         final result = await migration.migrate(preferences);
-        final finalManifest =
-            jsonDecode(
-                  preferences.getString(
-                    ConversationMigrationService.attachmentManifestBackupKey,
-                  )!,
-                )
-                as List;
+        final finalManifest = jsonDecode(
+          preferences.getString(
+            ConversationMigrationService.attachmentManifestBackupKey,
+          )!,
+        ) as List;
 
         expect(result.verified, isTrue);
         expect(finalManifest, hasLength(1));
@@ -1601,10 +1761,8 @@ void main() {
 
       await notifier.reloadLatestMessagePage('failed-complete-snapshot');
       await notifier.loadFullMessagesForContext('failed-complete-snapshot');
-      final pagedMessages = container
-          .read(conversationsProvider)
-          .single
-          .messages;
+      final pagedMessages =
+          container.read(conversationsProvider).single.messages;
       await notifier.updateMessages('failed-complete-snapshot', pagedMessages);
 
       expect(
@@ -1712,7 +1870,8 @@ void main() {
     expect(
       (await repository.getMessages(
         'queued-complete-snapshot',
-      )).map((message) => message.id),
+      ))
+          .map((message) => message.id),
       [for (var index = 0; index < 10; index++) 'q$index'],
     );
   });
@@ -1749,10 +1908,8 @@ void main() {
       final fullHistory = await notifier.loadFullMessagesForContext(
         'queued-paged-snapshot',
       );
-      final pagedMessages = container
-          .read(conversationsProvider)
-          .single
-          .messages;
+      final pagedMessages =
+          container.read(conversationsProvider).single.messages;
       final changedPage = pagedMessages
           .map(
             (message) => message.id == pagedMessages.first.id
@@ -1784,7 +1941,8 @@ void main() {
       expect(
         (await repository.getMessages(
           'queued-paged-snapshot',
-        )).map((message) => message.id),
+        ))
+            .map((message) => message.id),
         [for (var index = 0; index < 10; index++) 'q$index'],
       );
     },
@@ -1817,9 +1975,8 @@ void main() {
                 role: 'user',
                 content: 'Message $index',
                 createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
-                attachments: index == 0 || index == 44
-                    ? [sharedAttachment]
-                    : const [],
+                attachments:
+                    index == 0 || index == 44 ? [sharedAttachment] : const [],
               ).toMap(),
           ],
         }),
@@ -1949,7 +2106,7 @@ void main() {
         attachmentBytes,
       );
       SharedPreferences.setMockInitialValues({
-        'active_conversation_id': 'expiry-write-failure',
+        'active_conversation_id': 'expiry-write-failure-active',
       });
       final repository = _FailingOrderMemoryRepository();
       await repository.initialize();
@@ -1977,6 +2134,15 @@ void main() {
           ],
         }),
       );
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
+          'id': 'expiry-write-failure-active',
+          'title': 'Active expired conversation',
+          'createdAt': DateTime(2024).toIso8601String(),
+          'updatedAt': DateTime(2024).toIso8601String(),
+          'messages': const [],
+        }),
+      );
       final container = ProviderContainer(
         overrides: [
           conversationRepositoryProvider.overrideWithValue(repository),
@@ -1988,9 +2154,18 @@ void main() {
       });
       final notifier = container.read(conversationsProvider.notifier);
       await notifier.ready;
-      final conversation = container.read(conversationsProvider).single;
+      final conversation = container
+          .read(conversationsProvider)
+          .firstWhere((item) => item.id == 'expiry-write-failure');
       conversation.isTemporary = true;
       conversation.temporaryExpiresAt = DateTime.now().subtract(
+        const Duration(minutes: 1),
+      );
+      final activeConversation = container
+          .read(conversationsProvider)
+          .firstWhere((item) => item.id == 'expiry-write-failure-active');
+      activeConversation.isTemporary = true;
+      activeConversation.temporaryExpiresAt = DateTime.now().subtract(
         const Duration(minutes: 1),
       );
       repository.failOrderWrites = true;
@@ -2001,9 +2176,13 @@ void main() {
         container
             .read(conversationsProvider)
             .map((conversation) => conversation.id),
-        contains('expiry-write-failure'),
+        containsAll(['expiry-write-failure', 'expiry-write-failure-active']),
       );
-      expect(await repository.countConversations(), 1);
+      expect(
+        container.read(activeConversationIdProvider),
+        'expiry-write-failure-active',
+      );
+      expect(await repository.countConversations(), 2);
       expect(await AttachmentStorage.readFile(attachmentPath), attachmentBytes);
     },
   );
@@ -2106,6 +2285,214 @@ void main() {
       expect(
         (await repository.getMessages('batch-delete-other')).single.id,
         'batch-other-message',
+      );
+    },
+  );
+
+  test(
+    'failed conversation deletion preserves a newer active selection',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'delete-race-active',
+      });
+      final repository = _DelayedFailingOrderMemoryRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        StroomConversation(id: 'delete-race-active', title: 'Delete'),
+      );
+      await repository.importConversation(
+        StroomConversation(id: 'delete-race-next', title: 'Next'),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      repository.delayNextOrderWrite = true;
+
+      final deleting = notifier.deleteConversation('delete-race-active');
+      await repository.orderWriteStarted.future;
+      container.read(activeConversationIdProvider.notifier).state =
+          'delete-race-next';
+      repository.releaseOrderWrite.complete();
+      await deleting;
+
+      expect(container.read(activeConversationIdProvider), 'delete-race-next');
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        containsAll(['delete-race-active', 'delete-race-next']),
+      );
+    },
+  );
+
+  test(
+    'failed batch deletion preserves a newer active selection',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'batch-race-active',
+      });
+      final repository = _DelayedFailingOrderMemoryRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        StroomConversation(id: 'batch-race-active', title: 'Delete active'),
+      );
+      await repository.importConversation(
+        StroomConversation(id: 'batch-race-other', title: 'Delete other'),
+      );
+      await repository.importConversation(
+        StroomConversation(id: 'batch-race-next', title: 'Next'),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      repository.delayNextOrderWrite = true;
+
+      final deleting = notifier.batchDelete([
+        'batch-race-active',
+        'batch-race-other',
+      ]);
+      await repository.orderWriteStarted.future;
+      container.read(activeConversationIdProvider.notifier).state =
+          'batch-race-next';
+      repository.releaseOrderWrite.complete();
+      await deleting;
+
+      expect(container.read(activeConversationIdProvider), 'batch-race-next');
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        containsAll([
+          'batch-race-active',
+          'batch-race-other',
+          'batch-race-next',
+        ]),
+      );
+    },
+  );
+
+  test('batch deletion cleans persisted conversation attachments', () async {
+    final previousPathProvider = PathProviderPlatform.instance;
+    final directory = Directory.systemTemp.createTempSync(
+      'conversation_batch_delete_',
+    );
+    PathProviderPlatform.instance = _TestPathProvider(directory.path);
+    addTearDown(() {
+      PathProviderPlatform.instance = previousPathProvider;
+      directory.deleteSync(recursive: true);
+    });
+
+    final attachmentBytes = Uint8List.fromList([7, 8, 9]);
+    final attachmentPath = await AttachmentStorage.saveFile(
+      'batch-delete.txt',
+      attachmentBytes,
+    );
+    final attachment = Attachment(
+      fileName: 'batch-delete.txt',
+      mimeType: 'text/plain',
+      fileType: 'text',
+      hash: AttachmentStorage.computeHash(attachmentBytes),
+      storagePath: attachmentPath,
+      fileSize: attachmentBytes.length,
+    );
+    SharedPreferences.setMockInitialValues({});
+    final repository = MemoryConversationRepository();
+    await repository.initialize();
+    await repository.importConversation(
+      ConversationRecordAdapter.fromLegacyMap({
+        'id': 'batch-delete-attachment',
+        'title': 'Delete attachment',
+        'messages': [
+          ChatMessage(
+            id: 'batch-delete-attachment-message',
+            role: 'user',
+            content: 'has attachment',
+            createdAt: DateTime.utc(2025),
+            attachments: [attachment],
+          ).toMap(),
+        ],
+      }),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        conversationRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await repository.close();
+    });
+    final notifier = container.read(conversationsProvider.notifier);
+    await notifier.ready;
+
+    await notifier.batchDelete(['batch-delete-attachment']);
+
+    expect(await repository.countConversations(), 0);
+    expect(await AttachmentStorage.readFile(attachmentPath), isNull);
+  });
+
+  test(
+    'messages created before repository readiness survive initial load',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final repository = _DelayedInitializeMemoryRepository();
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await repository.initializeStarted.future;
+
+      final conversationId = notifier.createConversation(
+        id: 'created-during-repository-load',
+        activate: false,
+      );
+      await notifier.updateMessages(conversationId, [
+        ChatMessage(
+          id: 'created-during-load-message',
+          role: 'user',
+          content: 'created before repository readiness',
+          createdAt: DateTime.utc(2025),
+        ),
+      ]);
+      repository.releaseInitialize.complete();
+      await notifier.ready;
+      expect(
+        await repository.countMessages(
+          conversationId: 'created-during-repository-load',
+        ),
+        1,
+      );
+      await notifier.loadMessages(conversationId);
+
+      expect(
+        container
+            .read(conversationsProvider)
+            .single
+            .messages
+            .map((message) => message.id),
+        ['created-during-load-message'],
       );
     },
   );
@@ -2481,6 +2868,36 @@ void main() {
       'opaque',
       'payload',
     ]);
+  });
+
+  test('migration preserves non-map conversation and message extensions', () {
+    const conversationExtensions = ['vendor-conversation', 1];
+    const messageExtensions = ['vendor-message', 2];
+    final conversation = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'raw-extension-values',
+      'title': 'Raw extensions',
+      'extensions': conversationExtensions,
+      'messages': [
+        {
+          'id': 'raw-extension-message',
+          'role': 'user',
+          'createdAt': '2025-01-01T00:00:00.000Z',
+          'content': 'message',
+          'extensions': messageExtensions,
+        },
+      ],
+    });
+
+    final restored = ConversationRecordAdapter.toLegacyMap(
+      conversation,
+      conversation.messages,
+    );
+
+    expect(restored['extensions'], conversationExtensions);
+    expect(
+      (restored['messages'] as List).single['extensions'],
+      messageExtensions,
+    );
   });
 
   test('legacy adapter preserves marker-shaped opaque extension maps', () {

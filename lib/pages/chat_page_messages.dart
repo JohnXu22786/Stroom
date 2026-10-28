@@ -7,15 +7,14 @@ part of 'chat_page.dart';
 
 extension _ChatPageMessagesExt on _ChatPageState {
   ({List<MessageSegment> segments, List<String>? reasoningContents})
-  _messagePresentationFor(ChatMessage message) {
-    final reasoningContents =
-        message.reasoningSections != null &&
+      _messagePresentationFor(ChatMessage message) {
+    final reasoningContents = message.reasoningSections != null &&
             message.reasoningSections!.isNotEmpty
         ? List<String>.from(message.reasoningSections!)
         : message.reasoningContent != null &&
-              message.reasoningContent!.isNotEmpty
-        ? [message.reasoningContent!]
-        : null;
+                message.reasoningContent!.isNotEmpty
+            ? [message.reasoningContent!]
+            : null;
     final rebuiltBlocks = legacyToBlocks(
       reasoningSections: message.reasoningSections ?? [],
       textChunks: message.textSections ?? [],
@@ -166,9 +165,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // empty) snapshot would skip MCP discovery entirely and leave the tool
     // list at built-in-only.
     try {
-      final freshEntriesState = mounted
-          ? ref.read(providerEntriesProvider)
-          : null;
+      final freshEntriesState =
+          mounted ? ref.read(providerEntriesProvider) : null;
       await AppLogService.info(
         'ChatPage',
         '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置',
@@ -280,8 +278,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // 若延迟放在插入之后，快速加载时新插入的旧消息会先闪现 0.5 秒，
       // 再被锚点拉回，产生可见跳动。先转满 0.5 秒再插入，指示器与内容
       // 就位保持同步，锚点校正的时机也与修复前一致。
-      final remaining =
-          _ChatPageState._loadMoreMinDisplayDuration -
+      final remaining = _ChatPageState._loadMoreMinDisplayDuration -
           DateTime.now().difference(loadStartedAt);
       // Search navigation skips the minimum-display delay so jumping to an
       // old match does not stall 500 ms per loaded batch.
@@ -359,8 +356,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
     if (!_reloadAfterLoading || !mounted || _isLoadingMessages) return;
     if (_isModifyingHistory) return;
     _reloadAfterLoading = false;
+    final force = _reloadAfterLoadingForce;
+    _reloadAfterLoadingForce = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadConversationMessages();
+      if (mounted) _loadConversationMessages(force: force);
     });
   }
 
@@ -372,18 +371,38 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // controller while another is using it, causing null errors.
     if (_isLoadingMessages) {
       _reloadAfterLoading = true;
+      _reloadAfterLoadingForce |= force;
+      final requestedConversationId = ref.read(activeConversationIdProvider);
+      final loadGenerationBeforeWait = _conversationLoadGeneration;
       await AppLogService.info(
         'ChatPage',
         '[STREAM-LOAD] _loadConversationMessages: already loading, skip',
       );
       final pendingLoad = _messageLoadCompleter;
       if (pendingLoad != null) await pendingLoad.future;
+      if (force && mounted) {
+        // A forced call can be the caller that needs the reload (for example,
+        // opening an older global-search result after switching conversations).
+        // The first in-flight load only schedules that reload for the next
+        // frame, so wait for the frame callback and its load before returning.
+        await WidgetsBinding.instance.endOfFrame;
+        final queuedLoad = _messageLoadCompleter;
+        if (queuedLoad != null) await queuedLoad.future;
+        if (mounted &&
+            requestedConversationId != null &&
+            _loadedConversationId != requestedConversationId &&
+            _conversationLoadGeneration == loadGenerationBeforeWait &&
+            !_isLoadingMessages) {
+          await _loadConversationMessages(force: true);
+        }
+      }
       return;
     }
     // Guard: do NOT reload while editing or retrying — the edit flow
     // truncates _history and would be corrupted by a concurrent reload.
     if (_isModifyingHistory) {
       _reloadAfterLoading = true;
+      _reloadAfterLoadingForce |= force;
       return;
     }
 
@@ -479,9 +498,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final savedChatSegments = _isStreamingActive
           ? Map<String, List<MessageSegment>>.from(_chatSegments)
           : null;
-      final savedFinalizedMessages = _isStreamingActive
-          ? Set<String>.from(_finalizedMessages)
-          : null;
+      final savedFinalizedMessages =
+          _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
       final savedReasoningContents = _isStreamingActive
           ? Map<String, List<String>>.from(_reasoningContents)
           : null;
@@ -661,11 +679,10 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // update it via _updateStreamingMessage.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
-            false;
+                false;
         if (!inCtrl) {
-          final restoredFullReply = ref
-              .read(chatStreamManagerProvider)
-              .fullReplyFor(activeId);
+          final restoredFullReply =
+              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
           _controller?.insertMessage(
             Message.text(
               id: savedStreamingMsgId,

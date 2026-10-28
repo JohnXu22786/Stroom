@@ -259,10 +259,10 @@ class SqfliteConversationRepository implements ConversationRepository {
       ];
       for (var index = 0; index < wanted.length; index++) {
         if (rows.asMap().entries.any(
-          (entry) =>
-              entry.value['id'] == wanted[index] &&
-              entry.value['sort_order'] == index,
-        )) {
+              (entry) =>
+                  entry.value['id'] == wanted[index] &&
+                  entry.value['sort_order'] == index,
+            )) {
           continue;
         }
         await txn.update(
@@ -325,15 +325,14 @@ class SqfliteConversationRepository implements ConversationRepository {
       ];
       if (_sameIds(currentIds, wanted) &&
           rows.asMap().entries.every(
-            (entry) => entry.value['sort_order'] == entry.key,
-          )) {
+                (entry) => entry.value['sort_order'] == entry.key,
+              )) {
         return;
       }
       for (var index = 0; index < wanted.length; index++) {
         if (index < rows.length &&
             rows[index]['id'] == wanted[index] &&
-            rows[index]['sort_order'] == index)
-          continue;
+            rows[index]['sort_order'] == index) continue;
         await txn.update(
           'conversations',
           {'sort_order': index},
@@ -392,13 +391,17 @@ class SqfliteConversationRepository implements ConversationRepository {
     DatabaseExecutor db,
     String conversationId,
     StroomMessage message,
-  ) => db.insert('messages', {
-    'id': message.id,
-    'conversation_id': conversationId,
-    'sequence': message.sequence,
-    'created_at': message.createdAt.millisecondsSinceEpoch,
-    'record_json': jsonEncode(message.toMap()),
-  }, conflictAlgorithm: ConflictAlgorithm.replace);
+  ) =>
+      db.insert(
+          'messages',
+          {
+            'id': message.id,
+            'conversation_id': conversationId,
+            'sequence': message.sequence,
+            'created_at': message.createdAt.millisecondsSinceEpoch,
+            'record_json': jsonEncode(message.toMap()),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
   Future<void> _requireConversation(DatabaseExecutor db, String id) async {
     final rows = await db.query(
@@ -439,17 +442,17 @@ class SqfliteConversationRepository implements ConversationRepository {
   @override
   Future<int> countMessages({String? conversationId}) async =>
       conversationId == null
-      ? Sqflite.firstIntValue(
-              await (await _db).rawQuery('SELECT COUNT(*) FROM messages'),
-            ) ??
-            0
-      : Sqflite.firstIntValue(
-              await (await _db).rawQuery(
-                'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
-                [conversationId],
-              ),
-            ) ??
-            0;
+          ? Sqflite.firstIntValue(
+                await (await _db).rawQuery('SELECT COUNT(*) FROM messages'),
+              ) ??
+              0
+          : Sqflite.firstIntValue(
+                await (await _db).rawQuery(
+                  'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
+                  [conversationId],
+                ),
+              ) ??
+              0;
 
   @override
   Future<String?> migrationSourceHash() async {
@@ -465,10 +468,13 @@ class SqfliteConversationRepository implements ConversationRepository {
 
   @override
   Future<void> setMigrationSourceHash(String sourceHash) async {
-    await (await _db).insert('repository_metadata', {
-      'key': 'migration_source_hash',
-      'value': sourceHash,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await (await _db).insert(
+        'repository_metadata',
+        {
+          'key': 'migration_source_hash',
+          'value': sourceHash,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -487,9 +493,8 @@ class SqfliteConversationRepository implements ConversationRepository {
       'schemaVersion': 1,
       'messageEnvelopeVersion': 1,
       if (sourceHash != null) 'migrationSourceHash': sourceHash,
-      'conversationOrder': conversations
-          .map((row) => row['id'] as String)
-          .toList(),
+      'conversationOrder':
+          conversations.map((row) => row['id'] as String).toList(),
       'conversations': conversations
           .map((row) => jsonDecode(row['record_json']! as String))
           .toList(),
@@ -640,12 +645,14 @@ class SqfliteConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path =
-        conversationLocalMediaPath(reference['reference']) ??
+    final path = conversationLocalMediaPath(reference['reference']) ??
         conversationLocalMediaPath(reference['storagePath']);
     if (path == null) {
+      final thumbnailPath =
+          conversationLocalMediaPath(reference['thumbnailPath']);
       if (!conversationIsExternalMediaUri(reference['reference']) &&
-          !conversationIsExternalMediaUri(reference['storagePath'])) {
+          !conversationIsExternalMediaUri(reference['storagePath']) &&
+          thumbnailPath == null) {
         issues.add(
           ConversationIntegrityIssue(
             conversationId: conversationId,

@@ -136,20 +136,21 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   }
 
   void _onSearchChanged(String value) {
+    final query = value.trim();
     final generation = ++_searchGeneration;
     setState(() {
-      _query = value;
+      _query = query;
       _results = [];
       _searchError = null;
-      _isSearching = value.trim().isNotEmpty;
+      _isSearching = query.isNotEmpty;
     });
     _searchDebounce?.cancel();
-    if (value.trim().isEmpty) {
+    if (query.isEmpty) {
       setState(() => _isSearching = false);
       return;
     }
     _searchDebounce = Timer(const Duration(milliseconds: 250), () {
-      unawaited(_searchRepository(value, generation));
+      unawaited(_searchRepository(query, generation));
     });
   }
 
@@ -157,9 +158,8 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     final activeLoad = _searchLoad;
     if (activeLoad != null) return activeLoad;
 
-    final load = ref
-        .read(conversationsProvider.notifier)
-        .loadConversationsForSearch();
+    final load =
+        ref.read(conversationsProvider.notifier).loadConversationsForSearch();
     _searchLoad = load;
     return load.whenComplete(() {
       if (identical(_searchLoad, load)) _searchLoad = null;
@@ -253,12 +253,12 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
             child: _query.isEmpty
                 ? _buildInitialState(cs)
                 : _searchError != null
-                ? _buildSearchErrorState(cs)
-                : _isSearching
-                ? const Center(child: CircularProgressIndicator())
-                : _results.isEmpty
-                ? _buildEmptyState(cs)
-                : _buildResultsList(cs),
+                    ? _buildSearchErrorState(cs)
+                    : _isSearching
+                        ? const Center(child: CircularProgressIndicator())
+                        : _results.isEmpty
+                            ? _buildEmptyState(cs)
+                            : _buildResultsList(cs),
           ),
         ],
       ),

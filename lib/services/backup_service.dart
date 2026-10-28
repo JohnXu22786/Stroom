@@ -240,16 +240,16 @@ class BackupSelection {
   }
 
   Set<String> get selectedPartIds => {
-    if (chatRecordsAndAttachments) DataParts.chat,
-    if (settings) DataParts.settings,
-    if (pictures) DataParts.pictures,
-    if (audio) DataParts.audio,
-    if (videos) DataParts.videos,
-    if (texts) DataParts.texts,
-    if (tasks) DataParts.tasks,
-    if (ankiData) DataParts.anki,
-    if (browserCookies) DataParts.browserCookies,
-  };
+        if (chatRecordsAndAttachments) DataParts.chat,
+        if (settings) DataParts.settings,
+        if (pictures) DataParts.pictures,
+        if (audio) DataParts.audio,
+        if (videos) DataParts.videos,
+        if (texts) DataParts.texts,
+        if (tasks) DataParts.tasks,
+        if (ankiData) DataParts.anki,
+        if (browserCookies) DataParts.browserCookies,
+      };
 }
 
 // ====================================================================
@@ -565,8 +565,8 @@ class BackupService {
       final appDir = useStreaming ? await AppStorage.directory : '';
       final taskFlowAttachmentPaths =
           selection.includeMediaFiles && !kIsWeb && !WebFileStore.isTestMode
-          ? await _taskFlowAttachmentPathsForBackup(appDir)
-          : <String>{};
+              ? await _taskFlowAttachmentPathsForBackup(appDir)
+              : <String>{};
       await _addTaskPlanFile(
         jsonFiles,
         memoryFiles,
@@ -910,22 +910,21 @@ class BackupService {
     };
     jsonFiles['stroom_manifest.json'] =
         useStartupPreferenceAdapter && !_isBackupFlutterTest
-        ? await Isolate.run(() => jsonEncode(mediaManifest))
-        : jsonEncode(mediaManifest);
+            ? await Isolate.run(() => jsonEncode(mediaManifest))
+            : jsonEncode(mediaManifest);
 
     final plannedArchivePaths = {...jsonFiles.keys, ...memoryFiles.keys};
     diskFiles.removeWhere((entry) => !plannedArchivePaths.add(entry.first));
-    final manifest =
-        Map<String, dynamic>.from(
-            jsonDecode(jsonFiles['manifest.json']!) as Map,
-          )
-          ..['fileInventoryVersion'] = 1
-          ..['includeMediaFiles'] = selection.includeMediaFiles
-          ..['fileInventories'] = await _fileInventoriesFromPlan(
-            diskFiles,
-            memoryFiles,
-            selection,
-          );
+    final manifest = Map<String, dynamic>.from(
+      jsonDecode(jsonFiles['manifest.json']!) as Map,
+    )
+      ..['fileInventoryVersion'] = 1
+      ..['includeMediaFiles'] = selection.includeMediaFiles
+      ..['fileInventories'] = await _fileInventoriesFromPlan(
+        diskFiles,
+        memoryFiles,
+        selection,
+      );
     jsonFiles['manifest.json'] = jsonEncode(manifest);
 
     return _BackupPlan(
@@ -989,8 +988,8 @@ class BackupService {
   }) async {
     final data = useStreaming
         ? (await File(filePath).exists()
-              ? await File(filePath).readAsBytes()
-              : null)
+            ? await File(filePath).readAsBytes()
+            : null)
         : await readBackupFile(
             p.posix.dirname(archiveName),
             p.posix.basename(archiveName),
@@ -1101,16 +1100,17 @@ class BackupService {
 
   static Map<String, List<Map<String, dynamic>>> _newFileInventories(
     BackupSelection selection,
-  ) => {
-    if (selection.chatRecordsAndAttachments)
-      DataParts.chat: <Map<String, dynamic>>[],
-    if (selection.pictures) DataParts.pictures: <Map<String, dynamic>>[],
-    if (selection.audio) DataParts.audio: <Map<String, dynamic>>[],
-    if (selection.videos) DataParts.videos: <Map<String, dynamic>>[],
-    if (selection.texts) DataParts.texts: <Map<String, dynamic>>[],
-    if (selection.tasks) DataParts.tasks: <Map<String, dynamic>>[],
-    if (selection.ankiData) DataParts.anki: <Map<String, dynamic>>[],
-  };
+  ) =>
+      {
+        if (selection.chatRecordsAndAttachments)
+          DataParts.chat: <Map<String, dynamic>>[],
+        if (selection.pictures) DataParts.pictures: <Map<String, dynamic>>[],
+        if (selection.audio) DataParts.audio: <Map<String, dynamic>>[],
+        if (selection.videos) DataParts.videos: <Map<String, dynamic>>[],
+        if (selection.texts) DataParts.texts: <Map<String, dynamic>>[],
+        if (selection.tasks) DataParts.tasks: <Map<String, dynamic>>[],
+        if (selection.ankiData) DataParts.anki: <Map<String, dynamic>>[],
+      };
 
   static List<String> _fileInventoryPrefixes(
     String category,
@@ -1199,7 +1199,7 @@ class BackupService {
   }
 
   static Future<Map<String, List<Map<String, dynamic>>>>
-  _fileInventoriesFromPlan(
+      _fileInventoriesFromPlan(
     List<List<String>> diskFiles,
     Map<String, Uint8List> memoryFiles,
     BackupSelection selection,
@@ -1810,8 +1810,8 @@ class BackupService {
     final archive = Archive();
     final browserCookieSnapshot =
         selection.browserCookies && !kIsWeb && !WebFileStore.isTestMode
-        ? await BrowserCookieService.snapshotCookiesForBackup()
-        : null;
+            ? await BrowserCookieService.snapshotCookiesForBackup()
+            : null;
     final ankiDbPath = await _findAnkiDatabasePath(selection);
 
     // 1. manifest.json（始终包含）
@@ -2398,10 +2398,10 @@ class BackupService {
         !skipPostRestoreMigration && !_isBackupFlutterTest;
     final restoredPartVersions =
         await DataMigrationService.mergeRestoredPartVersions(
-          backupVersions: metadata.dataPartVersions,
-          restoredParts: restoredPartIds,
-          deferCommit: deferVersionCommit,
-        );
+      backupVersions: metadata.dataPartVersions,
+      restoredParts: restoredPartIds,
+      deferCommit: deferVersionCommit,
+    );
     if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
       await DataMigrationService.migrateDataFormatIfNeeded(
         onlyParts: restoredPartIds,
@@ -2591,16 +2591,15 @@ class BackupService {
           !skipPostRestoreMigration && !_isBackupFlutterTest;
       final restoredPartVersions =
           await DataMigrationService.mergeRestoredPartVersions(
-            backupVersions: metadata.dataPartVersions,
-            restoredParts: restoredPartIds,
-            deferCommit: deferVersionCommit,
-          );
+        backupVersions: metadata.dataPartVersions,
+        restoredParts: restoredPartIds,
+        deferCommit: deferVersionCommit,
+      );
       if (!skipPostRestoreMigration && restoredPartIds.isNotEmpty) {
         await DataMigrationService.migrateDataFormatIfNeeded(
           onlyParts: restoredPartIds,
-          restoredPartVersions: deferVersionCommit
-              ? restoredPartVersions
-              : null,
+          restoredPartVersions:
+              deferVersionCommit ? restoredPartVersions : null,
           validateRestoredDataBeforeVersionCommit: deferVersionCommit,
         );
       }
@@ -2698,14 +2697,13 @@ class BackupService {
 
     // 数据库清单（stroom_manifest.json，兼容旧路径 database/manifest_data.json）
     Map<String, dynamic>? dbData;
-    final needsMediaManifest =
-        selection.pictures ||
+    final needsMediaManifest = selection.pictures ||
         selection.audio ||
         selection.videos ||
         selection.texts;
     final dbJson = needsMediaManifest
         ? readFile('stroom_manifest.json') ??
-              readFile('database/manifest_data.json')
+            readFile('database/manifest_data.json')
         : null;
     if (dbJson != null) {
       try {
@@ -2923,8 +2921,7 @@ class BackupService {
             dbData: dbData,
             chatPrefs: isV1Format ? v1Prefs : chatPrefs,
             requireMediaFiles: selection.includeMediaFiles,
-            requireAttachmentFiles:
-                selection.chatRecordsAndAttachments &&
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
             readFile: readFile,
             requireTaskAttachments:
@@ -2939,15 +2936,13 @@ class BackupService {
             chatPrefs: chatPrefs,
             settingsPrefs: settingsPrefs,
             isV1: isV1Format,
-            hasTaskData:
-                skipMissingCategories &&
+            hasTaskData: skipMissingCategories &&
                 selection.tasks &&
                 (trustEmptyLegacyTaskPayloads
                     ? _hasTaskPayloadFile(archiveEntries)
                     : _hasNonEmptyTaskPayload(readFile)),
             requireMediaFiles: selection.includeMediaFiles,
-            requireAttachmentFiles:
-                selection.chatRecordsAndAttachments &&
+            requireAttachmentFiles: selection.chatRecordsAndAttachments &&
                 selection.includeMediaFiles,
             readFile: readFile,
             requireTaskAttachments:
@@ -2964,7 +2959,8 @@ class BackupService {
         );
       }
       final unavailableDeclaredCategories =
-          _intersectSelections(selection, declaredSelection).selectedLabels
+          _intersectSelections(selection, declaredSelection)
+              .selectedLabels
               .where(
                 (label) => !availableSelection.selectedLabels.contains(label),
               )
@@ -2978,10 +2974,10 @@ class BackupService {
     }
     final skippedLabels = skipMissingCategories
         ? selection.selectedLabels
-              .where(
-                (label) => !availableSelection.selectedLabels.contains(label),
-              )
-              .toList()
+            .where(
+              (label) => !availableSelection.selectedLabels.contains(label),
+            )
+            .toList()
         : <String>[];
     final candidateRestoreSelection = skipMissingCategories
         ? _intersectSelections(selection, availableSelection)
@@ -3003,8 +2999,7 @@ class BackupService {
             category == DataParts.browserCookies) {
           continue;
         }
-        final taskPayloadComplete =
-            category != DataParts.tasks ||
+        final taskPayloadComplete = category != DataParts.tasks ||
             const [
               'synthesis/tasks.json',
               'catcatch/tasks.json',
@@ -3034,13 +3029,13 @@ class BackupService {
     // contain, preserving task state and task types added in newer versions.
     final taskFilesToReplace = restoreSelection.tasks
         ? completeFileInventories.contains(DataParts.tasks)
-              ? <String>{
-                  ..._taskPayloadFiles
-                      .map(_canonicalTaskPayloadName)
-                      .whereType<String>(),
-                  ..._taskStateArchiveFiles,
-                }
-              : _taskFilesPresentInArchive(archiveEntries)
+            ? <String>{
+                ..._taskPayloadFiles
+                    .map(_canonicalTaskPayloadName)
+                    .whereType<String>(),
+                ..._taskStateArchiveFiles,
+              }
+            : _taskFilesPresentInArchive(archiveEntries)
         : <String>{};
 
     if (restoreSelection.tasks) {
@@ -3049,8 +3044,7 @@ class BackupService {
 
     Uint8List? browserCookiesData;
     if (restoreSelection.browserCookies) {
-      browserCookiesData =
-          readFile(_browserCookieArchivePath) ??
+      browserCookiesData = readFile(_browserCookieArchivePath) ??
           readFile(_legacyBrowserCookieArchivePath);
       if (browserCookiesData != null) {
         try {
@@ -3080,10 +3074,10 @@ class BackupService {
     }
     final dataPartVersions =
         _parseBackupPartVersions(manifest['dataPartVersions']) ??
-        _parseBackupPartVersions(versionPrefs?['data_format_versions']) ??
-        DataMigrationService.partVersionsFromLegacyGlobal(
-          versionPrefs?['data_format_version'],
-        );
+            _parseBackupPartVersions(versionPrefs?['data_format_versions']) ??
+            DataMigrationService.partVersionsFromLegacyGlobal(
+              versionPrefs?['data_format_version'],
+            );
 
     for (final part in restoreSelection.selectedPartIds) {
       final backupVersion = dataPartVersions?[part];
@@ -3099,8 +3093,7 @@ class BackupService {
 
     return _RestoreMetadata(
       isV1: isV1Format,
-      restoreChatPreferences:
-          declaredSelection?.chatRecordsAndAttachments ??
+      restoreChatPreferences: declaredSelection?.chatRecordsAndAttachments ??
           (isV1Format
               ? v1Prefs?.keys.any(_isChatPrefKey) ?? false
               : chatPrefs != null),
@@ -3173,20 +3166,20 @@ class BackupService {
   static BackupSelection _intersectSelections(
     BackupSelection requested,
     BackupSelection available,
-  ) => BackupSelection(
-    chatRecordsAndAttachments:
-        requested.chatRecordsAndAttachments &&
-        available.chatRecordsAndAttachments,
-    settings: requested.settings && available.settings,
-    pictures: requested.pictures && available.pictures,
-    audio: requested.audio && available.audio,
-    videos: requested.videos && available.videos,
-    texts: requested.texts && available.texts,
-    tasks: requested.tasks && available.tasks,
-    ankiData: requested.ankiData && available.ankiData,
-    browserCookies: requested.browserCookies && available.browserCookies,
-    includeMediaFiles: requested.includeMediaFiles,
-  );
+  ) =>
+      BackupSelection(
+        chatRecordsAndAttachments: requested.chatRecordsAndAttachments &&
+            available.chatRecordsAndAttachments,
+        settings: requested.settings && available.settings,
+        pictures: requested.pictures && available.pictures,
+        audio: requested.audio && available.audio,
+        videos: requested.videos && available.videos,
+        texts: requested.texts && available.texts,
+        tasks: requested.tasks && available.tasks,
+        ankiData: requested.ankiData && available.ankiData,
+        browserCookies: requested.browserCookies && available.browserCookies,
+        includeMediaFiles: requested.includeMediaFiles,
+      );
 
   static bool _isSafeRelativeArchivePath(String path) =>
       isSafeBackupArchivePath(path);
@@ -3341,8 +3334,7 @@ class BackupService {
 
     final hasManifest = dbData != null;
     return BackupSelection(
-      chatRecordsAndAttachments:
-          declared.chatRecordsAndAttachments &&
+      chatRecordsAndAttachments: declared.chatRecordsAndAttachments &&
           entries.contains('chat_data.json') &&
           _hasAllReferencedAttachmentFiles(
             chatPrefs: chatPrefs,
@@ -3358,8 +3350,7 @@ class BackupService {
                 requireMediaFiles: requireAttachmentFiles,
               )),
       settings: declared.settings && entries.contains('settings.json'),
-      pictures:
-          declared.pictures &&
+      pictures: declared.pictures &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -3376,8 +3367,7 @@ class BackupService {
                     archiveEntrySizes: archiveEntrySizes,
                     requireMediaFiles: requireMediaFiles,
                   )),
-      audio:
-          declared.audio &&
+      audio: declared.audio &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -3394,8 +3384,7 @@ class BackupService {
                     archiveEntrySizes: archiveEntrySizes,
                     requireMediaFiles: requireMediaFiles,
                   )),
-      videos:
-          declared.videos &&
+      videos: declared.videos &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -3412,8 +3401,7 @@ class BackupService {
                     archiveEntrySizes: archiveEntrySizes,
                     requireMediaFiles: requireMediaFiles,
                   )),
-      texts:
-          declared.texts &&
+      texts: declared.texts &&
           hasManifest &&
           (!requireMediaFiles ||
               _hasAllMediaFiles(
@@ -3430,8 +3418,7 @@ class BackupService {
                     archiveEntrySizes: archiveEntrySizes,
                     requireMediaFiles: requireMediaFiles,
                   )),
-      tasks:
-          !kIsWeb &&
+      tasks: !kIsWeb &&
           declared.tasks &&
           const [
             'synthesis/tasks.json',
@@ -3452,8 +3439,7 @@ class BackupService {
                 readFile: readFile,
                 archiveEntries: entries,
               )),
-      ankiData:
-          !kIsWeb &&
+      ankiData: !kIsWeb &&
           declared.ankiData &&
           (entries.contains('anki/collection.anki2') ||
               entries.contains('collection.anki2')) &&
@@ -3465,8 +3451,7 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      browserCookies:
-          declared.browserCookies &&
+      browserCookies: declared.browserCookies &&
           !kIsWeb &&
           _hasBrowserCookieArchiveEntry(entries),
     );
@@ -3511,8 +3496,7 @@ class BackupService {
     }
 
     final repositoryBackup = chatPrefs?[_conversationRepositoryBackupField];
-    final repositoryIsAuthoritative =
-        repositoryBackup is Map &&
+    final repositoryIsAuthoritative = repositoryBackup is Map &&
         repositoryBackup['migrationSourceHash'] is String;
     final rawConversations = chatPrefs?['conversations'];
     if (!repositoryIsAuthoritative && rawConversations != null) {
@@ -3660,9 +3644,8 @@ class BackupService {
             !conversationIds.contains(conversationId)) {
           return false;
         }
-        final record = data['messageEnvelopeVersion'] == 1
-            ? row['record']
-            : row;
+        final record =
+            data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
         if (record is! Map) return false;
         final message = StroomMessage.fromMap(
           Map<String, dynamic>.from(record),
@@ -3695,13 +3678,12 @@ class BackupService {
       if (value is String && value.startsWith(_portableAppDataPathPrefix)) {
         final relative = value.substring(_portableAppDataPathPrefix.length);
         final isTaskAttachment = relative.startsWith('attachments/');
-        final isCatCatchFile =
-            relative.startsWith('catcatch/') &&
+        final isCatCatchFile = relative.startsWith('catcatch/') &&
             _isCatCatchMediaPath(relative.substring('catcatch/'.length));
         if (!isTaskAttachment && !isCatCatchFile) return;
         final packagedPath = isTaskAttachment
             ? 'task_flow_attachments/'
-                  '${relative.substring('attachments/'.length)}'
+                '${relative.substring('attachments/'.length)}'
             : relative;
         if (!_isSafeRelativeArchivePath(relative) ||
             !entries.contains(packagedPath)) {
@@ -3839,11 +3821,9 @@ class BackupService {
       return hasNonEmptyList(dbData, foldersKey);
     }
 
-    final hasChatData =
-        normalizedEntries.contains('chat_data.json') ||
+    final hasChatData = normalizedEntries.contains('chat_data.json') ||
         (isV1 && hasV1Preference(_isChatPrefKey));
-    final chatAttachmentsPresent =
-        _hasAllReferencedAttachmentFiles(
+    final chatAttachmentsPresent = _hasAllReferencedAttachmentFiles(
           chatPrefs: isV1 ? v1Prefs : chatPrefs,
           archiveEntries: normalizedEntries,
           requireFiles: requireAttachmentFiles,
@@ -3859,8 +3839,7 @@ class BackupService {
 
     return BackupSelection(
       chatRecordsAndAttachments: hasChatData && chatAttachmentsPresent,
-      settings:
-          hasSettingsPreference(settingsPrefs) ||
+      settings: hasSettingsPreference(settingsPrefs) ||
           (isV1 &&
               hasV1Preference(
                 (key) =>
@@ -3869,8 +3848,7 @@ class BackupService {
                     !_isLegacyProviderQuarantineKey(key) &&
                     !DataMigrationService.isFormatMetadataKey(key),
               )),
-      pictures:
-          hasMediaData(
+      pictures: hasMediaData(
             'image_records',
             ManifestTables.imageFolders,
             'pictures',
@@ -3884,8 +3862,7 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      audio:
-          (hasMediaData(
+      audio: (hasMediaData(
                 'audio_records',
                 ManifestTables.audioFolders,
                 'tts_audio',
@@ -3900,8 +3877,7 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      videos:
-          hasMediaData(
+      videos: hasMediaData(
             'video_records',
             ManifestTables.videoFolders,
             'videos',
@@ -3915,8 +3891,7 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      texts:
-          hasMediaData(
+      texts: hasMediaData(
             'text_records',
             ManifestTables.textFolders,
             'texts',
@@ -3930,8 +3905,7 @@ class BackupService {
                 archiveEntrySizes: archiveEntrySizes,
                 requireMediaFiles: requireMediaFiles,
               )),
-      tasks:
-          !kIsWeb &&
+      tasks: !kIsWeb &&
           hasTaskData &&
           _hasCompleteFileInventory(
             manifest: manifest,
@@ -3945,8 +3919,7 @@ class BackupService {
                 readFile: readFile,
                 archiveEntries: normalizedEntries,
               )),
-      ankiData:
-          !kIsWeb &&
+      ankiData: !kIsWeb &&
           (normalizedEntries.contains('anki/collection.anki2') ||
               normalizedEntries.contains('collection.anki2')) &&
           (!requireMediaFiles ||
@@ -4069,21 +4042,20 @@ class BackupService {
   }
 
   static String? _canonicalTaskPayloadName(String name) {
-    var normalized = name.startsWith('files/')
-        ? name.substring('files/'.length)
-        : name;
+    var normalized =
+        name.startsWith('files/') ? name.substring('files/'.length) : name;
     if (normalized == 'tasks/synthesis_tasks.json') {
       normalized = 'synthesis/tasks.json';
     } else if (normalized == 'tasks/catcatch_tasks.json') {
       normalized = 'catcatch/tasks.json';
     }
     return const {
-          'synthesis/tasks.json',
-          'catcatch/tasks.json',
-          'background/tasks.json',
-          'task_flows/flows.json',
-          'task_flows/executions.json',
-        }.contains(normalized)
+      'synthesis/tasks.json',
+      'catcatch/tasks.json',
+      'background/tasks.json',
+      'task_flows/flows.json',
+      'task_flows/executions.json',
+    }.contains(normalized)
         ? normalized
         : null;
   }
@@ -4229,15 +4201,14 @@ class BackupService {
           archivedAttachmentKeys[j],
         )) {
           final destination = archivedAttachmentKeys[i];
-          final taskAlias =
-              'task_flow_attachments/'
+          final taskAlias = 'task_flow_attachments/'
               '${destination.substring('attachments/'.length)}';
           final isSharedTaskAttachment =
               destination == archivedAttachmentKeys[j] &&
-              ((normalizedSourcePaths[i] == destination &&
-                      normalizedSourcePaths[j] == taskAlias) ||
-                  (normalizedSourcePaths[j] == destination &&
-                      normalizedSourcePaths[i] == taskAlias));
+                  ((normalizedSourcePaths[i] == destination &&
+                          normalizedSourcePaths[j] == taskAlias) ||
+                      (normalizedSourcePaths[j] == destination &&
+                          normalizedSourcePaths[i] == taskAlias));
           if (isSharedTaskAttachment) {
             final fingerprint = entryFingerprint(sourcePaths[i]);
             if (fingerprint != null &&
@@ -4315,7 +4286,8 @@ class BackupService {
           await BrowserCookieService.hasBackupRestorePending();
       try {
         final existingCookies =
-            (await BrowserCookieService.getCookiesFromFileChecked()).values
+            (await BrowserCookieService.getCookiesFromFileChecked())
+                .values
                 .expand((cookies) => cookies)
                 .toList();
         final importedCookies = (jsonDecode(utf8.decode(cookieData)) as List)
@@ -4458,11 +4430,9 @@ class BackupService {
 
       final rawConfigs = entry['configs'];
       if (rawConfigs is List) {
-        for (
-          var configIndex = 0;
-          configIndex < rawConfigs.length;
-          configIndex++
-        ) {
+        for (var configIndex = 0;
+            configIndex < rawConfigs.length;
+            configIndex++) {
           final rawConfig = rawConfigs[configIndex];
           if (rawConfig is! Map) continue;
           final config = Map<String, dynamic>.from(rawConfig);
@@ -4471,11 +4441,9 @@ class BackupService {
           final rawModels = config['models'];
           if (rawModels is! List) continue;
           final configModels = <Map>[];
-          for (
-            var modelIndex = 0;
-            modelIndex < rawModels.length;
-            modelIndex++
-          ) {
+          for (var modelIndex = 0;
+              modelIndex < rawModels.length;
+              modelIndex++) {
             final rawModel = rawModels[modelIndex];
             if (rawModel is! Map) continue;
             final model = Map<String, dynamic>.from(rawModel);
@@ -4618,11 +4586,9 @@ class BackupService {
       final rawProviderEntries = selectedPreferences['provider_entries'];
       if (rawProviderEntries is String) {
         restoredProviderEntries = jsonDecode(rawProviderEntries) as List;
-        for (
-          var entryIndex = 0;
-          entryIndex < restoredProviderEntries.length;
-          entryIndex++
-        ) {
+        for (var entryIndex = 0;
+            entryIndex < restoredProviderEntries.length;
+            entryIndex++) {
           final rawEntry = restoredProviderEntries[entryIndex];
           if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
           final entry = Map<String, dynamic>.from(rawEntry);
@@ -4652,18 +4618,15 @@ class BackupService {
             configs[0] = config;
             providerEntriesChanged = true;
           }
-          for (
-            var configIndex = 0;
-            configIndex < configs.length;
-            configIndex++
-          ) {
+          for (var configIndex = 0;
+              configIndex < configs.length;
+              configIndex++) {
             final rawConfig = configs[configIndex];
             if (rawConfig is! Map) continue;
             final config = Map<String, dynamic>.from(rawConfig);
             configs[configIndex] = config;
             final id = config['id'];
-            final reference =
-                config['credentialRef'] ??
+            final reference = config['credentialRef'] ??
                 (id is String ? accountReferenceById[id] : null);
             if (reference is String) {
               rememberReference(
@@ -4677,21 +4640,17 @@ class BackupService {
           restoredProviderEntries[entryIndex] = entry;
         }
 
-        for (
-          var entryIndex = 0;
-          entryIndex < restoredProviderEntries.length;
-          entryIndex++
-        ) {
+        for (var entryIndex = 0;
+            entryIndex < restoredProviderEntries.length;
+            entryIndex++) {
           final rawEntry = restoredProviderEntries[entryIndex];
           if (rawEntry is! Map || rawEntry['type'] != 'llm') continue;
           final entry = Map<String, dynamic>.from(rawEntry);
           final configs = entry['configs'];
           if (configs is! List) continue;
-          for (
-            var configIndex = 0;
-            configIndex < configs.length;
-            configIndex++
-          ) {
+          for (var configIndex = 0;
+              configIndex < configs.length;
+              configIndex++) {
             final rawConfig = configs[configIndex];
             if (rawConfig is! Map) continue;
             final config = Map<String, dynamic>.from(rawConfig);
@@ -4703,8 +4662,7 @@ class BackupService {
                 throw const FormatException('Invalid LLM restore config ID.');
               }
               final identity = configIdentity(config);
-              final reference =
-                  config['credentialRef'] ??
+              final reference = config['credentialRef'] ??
                   referencesByAccountId[id] ??
                   'stroom.llm.credential.${Uri.encodeComponent(id)}';
               if (reference is! String || reference.isEmpty) {
@@ -4754,8 +4712,7 @@ class BackupService {
               ? referencesByAccountId[id]
               : uniqueIdentityReference(identity);
           if (key is String && key.isNotEmpty) {
-            final reference =
-                config['credentialRef'] ??
+            final reference = config['credentialRef'] ??
                 existingReference ??
                 (id is String
                     ? 'stroom.llm.credential.${Uri.encodeComponent(id)}'
@@ -4884,11 +4841,8 @@ class BackupService {
       final providerAccountIds = <String>{};
       final providerConfigUsagesById =
           <String, ({String key, String? reference, String? publicKey})>{};
-      final providerConfigUsagesByIdentity =
-          <
-            String,
-            List<({String key, String? reference, String? publicKey})>
-          >{};
+      final providerConfigUsagesByIdentity = <String,
+          List<({String key, String? reference, String? publicKey})>>{};
 
       String? configIdentity(
         Map<String, dynamic> config,
@@ -4919,7 +4873,7 @@ class BackupService {
               left.publicKey != right.publicKey);
 
       ({String key, String? reference, String? publicKey})?
-      matchingProviderConfig(String? accountId, String? identity) {
+          matchingProviderConfig(String? accountId, String? identity) {
         if (accountId != null) return providerConfigUsagesById[accountId];
         if (identity == null) return null;
         final candidates = providerConfigUsagesByIdentity[identity];
@@ -4976,9 +4930,8 @@ class BackupService {
         }
       }
 
-      final groupEnvelope =
-          selectedPreferences[LlmAccountMigrationService
-              .modelGroupsPreferenceKey];
+      final groupEnvelope = selectedPreferences[
+          LlmAccountMigrationService.modelGroupsPreferenceKey];
       if (groupEnvelope != null) {
         if (groupEnvelope is! String) {
           throw const FormatException('Invalid LLM model-group envelope.');
@@ -5078,9 +5031,8 @@ class BackupService {
                 rawKey != entryKey) {
               throw const FormatException('Conflicting provider credentials.');
             }
-            final key = rawKey is String && rawKey.isNotEmpty
-                ? rawKey
-                : entryKey;
+            final key =
+                rawKey is String && rawKey.isNotEmpty ? rawKey : entryKey;
             final reference = config['credentialRef'];
             if (reference != null &&
                 (reference is! String || reference.trim().isEmpty)) {
@@ -5142,10 +5094,11 @@ class BackupService {
               providerConfigUsagesByIdentity
                   .putIfAbsent(
                     identity,
-                    () =>
-                        <
-                          ({String key, String? reference, String? publicKey})
-                        >[],
+                    () => <({
+                      String key,
+                      String? reference,
+                      String? publicKey
+                    })>[],
                   )
                   .add(current);
             }
@@ -5156,9 +5109,9 @@ class BackupService {
             if (effectiveReference is String) {
               credentialUsages
                   .putIfAbsent(
-                    effectiveReference,
-                    () => <({String? accountId, String? key})>[],
-                  )
+                effectiveReference,
+                () => <({String? accountId, String? key})>[],
+              )
                   .add((accountId: accountId, key: key.isEmpty ? null : key));
             }
           }
@@ -5169,9 +5122,9 @@ class BackupService {
         if (providerAccountIds.contains(accountReference.key)) continue;
         credentialUsages
             .putIfAbsent(
-              accountReference.value,
-              () => <({String? accountId, String? key})>[],
-            )
+          accountReference.value,
+          () => <({String? accountId, String? key})>[],
+        )
             .add((accountId: accountReference.key, key: null));
       }
 
@@ -5229,8 +5182,8 @@ class BackupService {
               final name = rawModel['name'];
               final modelId =
                   rawModelId is String && rawModelId.trim().isNotEmpty
-                  ? rawModelId
-                  : (name is String && name.trim().isNotEmpty ? name : '');
+                      ? rawModelId
+                      : (name is String && name.trim().isNotEmpty ? name : '');
               modelIds.add(modelId);
             }
           }
@@ -5254,8 +5207,8 @@ class BackupService {
           final correlationKey = accountId != null
               ? 'account:$accountId'
               : identity != null
-              ? 'identity:$identity'
-              : 'anonymous:$legacyIndex';
+                  ? 'identity:$identity'
+                  : 'anonymous:$legacyIndex';
           final previous = seen[correlationKey];
           if (previous != null &&
               ((previous.key.isNotEmpty &&
@@ -5289,13 +5242,13 @@ class BackupService {
               : null;
           credentialUsages
               .putIfAbsent(
-                usage.reference!,
-                () => <({String? accountId, String? key})>[],
-              )
+            usage.reference!,
+            () => <({String? accountId, String? key})>[],
+          )
               .add((
-                accountId: accountId,
-                key: usage.key.isEmpty ? null : usage.key,
-              ));
+            accountId: accountId,
+            key: usage.key.isEmpty ? null : usage.key,
+          ));
         }
       }
 
@@ -5306,16 +5259,13 @@ class BackupService {
         if (existing != null && existing.trim().isNotEmpty) {
           credentialValues.add(existing);
         }
-        final keys = usage.value
-            .map((use) => use.key)
-            .whereType<String>()
-            .toSet();
+        final keys =
+            usage.value.map((use) => use.key).whereType<String>().toSet();
         if (keys.length > 1) {
           throw const FormatException('Conflicting credential references.');
         }
-        final keylessUses = usage.value
-            .where((use) => use.key == null)
-            .toList();
+        final keylessUses =
+            usage.value.where((use) => use.key == null).toList();
         final hasKeylessUse = keylessUses.isNotEmpty;
         if (hasKeylessUse && keys.isNotEmpty && existing != keys.single) {
           throw const FormatException('Conflicting credential references.');
@@ -5450,9 +5400,8 @@ class BackupService {
             await StartupPreferences.setString(
               ConversationMigrationService.stateKey,
               jsonEncode({
-                'sourceHash': sha256
-                    .convert(utf8.encode(legacyJson))
-                    .toString(),
+                'sourceHash':
+                    sha256.convert(utf8.encode(legacyJson)).toString(),
                 'verified': true,
                 'conversationCount': data['conversations'] is List
                     ? (data['conversations'] as List).length
@@ -5690,48 +5639,47 @@ class BackupService {
   }) async {
     final imageRecords = selection.pictures
         ? (data['image_records'] as List<dynamic>?)
-                  ?.cast<Map<String, dynamic>>() ??
-              <Map<String, dynamic>>[]
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
         : <Map<String, dynamic>>[];
     final audioRecords = selection.audio
         ? (data['audio_records'] as List<dynamic>?)
-                  ?.cast<Map<String, dynamic>>() ??
-              <Map<String, dynamic>>[]
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
         : <Map<String, dynamic>>[];
     final videoRecords = selection.videos
         ? (data['video_records'] as List<dynamic>?)
-                  ?.cast<Map<String, dynamic>>() ??
-              <Map<String, dynamic>>[]
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
         : <Map<String, dynamic>>[];
     final textRecords = selection.texts
         ? (data['text_records'] as List<dynamic>?)
-                  ?.cast<Map<String, dynamic>>() ??
-              <Map<String, dynamic>>[]
+                ?.cast<Map<String, dynamic>>() ??
+            <Map<String, dynamic>>[]
         : <Map<String, dynamic>>[];
 
     // Per-type folders (v2+ backups)
     final textFolders = selection.texts
         ? (data[ManifestTables.textFolders] as List<dynamic>?)
-                  ?.cast<String>() ??
-              <String>[]
+                ?.cast<String>() ??
+            <String>[]
         : <String>[];
     final audioFolders = selection.audio
         ? (data[ManifestTables.audioFolders] as List<dynamic>?)
-                  ?.cast<String>() ??
-              <String>[]
+                ?.cast<String>() ??
+            <String>[]
         : <String>[];
     final imageFolders = selection.pictures
         ? (data[ManifestTables.imageFolders] as List<dynamic>?)
-                  ?.cast<String>() ??
-              <String>[]
+                ?.cast<String>() ??
+            <String>[]
         : <String>[];
     final videoFolders = selection.videos
         ? (data[ManifestTables.videoFolders] as List<dynamic>?)
-                  ?.cast<String>() ??
-              <String>[]
+                ?.cast<String>() ??
+            <String>[]
         : <String>[];
-    final usesLegacyFolders =
-        (selection.texts && textFolders.isEmpty) ||
+    final usesLegacyFolders = (selection.texts && textFolders.isEmpty) ||
         (selection.audio && audioFolders.isEmpty) ||
         (selection.pictures && imageFolders.isEmpty) ||
         (selection.videos && videoFolders.isEmpty);
@@ -6095,9 +6043,8 @@ class BackupService {
           } catch (_) {}
         }
         final displayPath = await BackupLocationManager.getDisplayPath();
-        savedLocation = displayPath.isEmpty
-            ? defaultName
-            : '$displayPath/$defaultName';
+        savedLocation =
+            displayPath.isEmpty ? defaultName : '$displayPath/$defaultName';
       } else {
         // 桌面：先选保存位置（不传 bytes → 只返回路径，不写文件），
         // 再流式写入 —— 峰值内存不随备份体积增长。
@@ -6240,8 +6187,7 @@ class BackupService {
       selection,
     );
 
-    final guardsBrowserAction =
-        selection.browserCookies &&
+    final guardsBrowserAction = selection.browserCookies &&
         BrowserProfileService.currentPlatformName != null;
     if (guardsBrowserAction) BrowserProfileService.beginAction();
     try {
@@ -6267,11 +6213,11 @@ class BackupService {
     if (selection.browserCookies) {
       cookieDeleteFailed =
           await BrowserCookieService.runExclusiveRetentionOperation(() async {
-            await _clearLiveCookiesForSelectedData(selection);
-            final deleted = await _deleteFile('', 'browser_cookies.json');
-            await BrowserCookieService.clearBackupRestorePending();
-            return !deleted;
-          });
+        await _clearLiveCookiesForSelectedData(selection);
+        final deleted = await _deleteFile('', 'browser_cookies.json');
+        await BrowserCookieService.clearBackupRestorePending();
+        return !deleted;
+      });
     }
 
     // 1. SharedPreferences — 只删除选中类别的键
@@ -6396,9 +6342,8 @@ class BackupService {
     bool isWebStore,
   ) {
     final preservedKeys = <String>{};
-    final attachmentDir = appDir == null
-        ? null
-        : p.normalize(p.join(appDir, 'attachments'));
+    final attachmentDir =
+        appDir == null ? null : p.normalize(p.join(appDir, 'attachments'));
 
     void preserveReference(String reference) {
       final slashPath = reference.replaceAll('\\', '/');
@@ -6512,9 +6457,8 @@ class BackupService {
       final appDir = await AppStorage.directory;
       final attachmentDir = Directory(p.join(appDir, 'attachments'));
       if (!await attachmentDir.exists()) return true;
-      final comparablePreservedKeys = preservedKeys
-          .map(_comparableAttachmentPath)
-          .toSet();
+      final comparablePreservedKeys =
+          preservedKeys.map(_comparableAttachmentPath).toSet();
       await for (final entity in attachmentDir.list(
         recursive: true,
         followLinks: false,
@@ -6544,9 +6488,8 @@ class BackupService {
       final raw = prefs.getString('conversations');
       final decoded = raw == null ? null : jsonDecode(raw);
       if (decoded != null && decoded is! List) return null;
-      final appDir = kIsWeb || WebFileStore.isTestMode
-          ? null
-          : await AppStorage.directory;
+      final appDir =
+          kIsWeb || WebFileStore.isTestMode ? null : await AppStorage.directory;
       final keys = <String>{};
 
       String? canonicalKey(Object? value) {
@@ -6580,7 +6523,11 @@ class BackupService {
           if (attachment is! Map) {
             throw const FormatException('attachment is not an object');
           }
-          for (final field in const ['storagePath', 'thumbnailPath']) {
+          for (final field in const [
+            'storagePath',
+            'reference',
+            'thumbnailPath',
+          ]) {
             final rawPath = attachment[field];
             if (rawPath == null) continue;
             if (rawPath is! String) {
@@ -6677,18 +6624,20 @@ class BackupService {
   @visibleForTesting
   static Future<Set<String>?> collectChatAttachmentKeysForTest(
     ConversationRepository repository,
-  ) => _collectChatAttachmentKeysStrict(repositoryOverride: repository);
+  ) =>
+      _collectChatAttachmentKeysStrict(repositoryOverride: repository);
 
   @visibleForTesting
   static bool hasAllReferencedAttachmentFilesForTest({
     required Map<String, dynamic>? chatPrefs,
     required Set<String> archiveEntries,
     required bool requireFiles,
-  }) => _hasAllReferencedAttachmentFiles(
-    chatPrefs: chatPrefs,
-    archiveEntries: archiveEntries,
-    requireFiles: requireFiles,
-  );
+  }) =>
+      _hasAllReferencedAttachmentFiles(
+        chatPrefs: chatPrefs,
+        archiveEntries: archiveEntries,
+        requireFiles: requireFiles,
+      );
 
   static Future<bool> _deleteAttachmentKeys(Set<String> keys) async {
     try {
@@ -6829,8 +6778,7 @@ class BackupService {
 
     // 任务文件
     if (selection.tasks) {
-      final taskFiles =
-          taskFilesToReplace ??
+      final taskFiles = taskFilesToReplace ??
           const {
             'synthesis/tasks.json',
             'catcatch/tasks.json',
@@ -6953,11 +6901,12 @@ class BackupService {
     void Function(double progress)? onProgress,
     bool Function()? isCancelled,
     BackupSelection selection = BackupSelection.all,
-  }) => _buildBackupBytes(
-    onProgress: onProgress,
-    isCancelled: isCancelled,
-    selection: selection,
-  );
+  }) =>
+      _buildBackupBytes(
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+        selection: selection,
+      );
 
   /// 公开流式备份的同步构建核心供测试使用（大文件路径）。
   ///
@@ -7000,10 +6949,11 @@ class BackupService {
   static Future<void> restoreDatabaseFromJsonForTest(
     String json, {
     BackupSelection selection = BackupSelection.all,
-  }) => _restoreDatabaseFromJson(
-    jsonDecode(json) as Map<String, dynamic>,
-    selection: selection,
-  );
+  }) =>
+      _restoreDatabaseFromJson(
+        jsonDecode(json) as Map<String, dynamic>,
+        selection: selection,
+      );
 }
 
 // ====================================================================
@@ -7034,9 +6984,8 @@ void _sanitizeBackupSettings(Map<String, dynamic> settings) {
   final credentialValues = <String>{};
   for (final value in settings.values) {
     try {
-      final decoded = value is String
-          ? jsonDecode(value)
-          : jsonDecode(jsonEncode(value));
+      final decoded =
+          value is String ? jsonDecode(value) : jsonDecode(jsonEncode(value));
       credentialValues.addAll(collectCredentialValues(decoded));
     } catch (_) {
       // Malformed known preferences are omitted by the per-key sanitizer.
@@ -7316,9 +7265,9 @@ class _FileInputStream extends InputStream {
   int _pos = 0;
 
   _FileInputStream(String path)
-    : _file = File(path).openSync(),
-      _fileLength = File(path).lengthSync(),
-      super(byteOrder: ByteOrder.littleEndian);
+      : _file = File(path).openSync(),
+        _fileLength = File(path).lengthSync(),
+        super(byteOrder: ByteOrder.littleEndian);
 
   @override
   int get position => _pos;
@@ -7388,8 +7337,8 @@ class _FileOutputStream extends OutputStream {
   int _length = 0;
 
   _FileOutputStream(String path)
-    : _file = File(path).openSync(mode: FileMode.write),
-      super(byteOrder: ByteOrder.littleEndian);
+      : _file = File(path).openSync(mode: FileMode.write),
+        super(byteOrder: ByteOrder.littleEndian);
 
   @override
   int get length => _length;
@@ -7596,7 +7545,7 @@ class _ZipStreamReader {
   final Map<String, _ZipEntryInfo> _byName;
 
   _ZipStreamReader._fromFile(this._file, this._entries)
-    : _byName = {for (final e in _entries) e.name: e};
+      : _byName = {for (final e in _entries) e.name: e};
 
   /// 解析 [path] 指向的 ZIP 文件。结构损坏时抛 [FormatException]
   /// （由调用方包装为 [BackupValidationException]）。

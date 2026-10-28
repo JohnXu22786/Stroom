@@ -513,6 +513,97 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
+    testWidgets('closing global search clears its pending message target', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'stale-search-target',
+      });
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        ConversationRecordAdapter.fromLegacyMap({
+          'id': 'stale-search-target',
+          'title': 'Stale Search Target',
+          'messages': [
+            for (var index = 0; index < 80; index++)
+              ChatMessage(
+                id: 'stale-search-$index',
+                role: index == 0 ? 'assistant' : 'user',
+                content: index == 0
+                    ? '```dart\nneedle-code-only\n```'
+                    : 'Ordinary message $index',
+                createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
+              ).toMap(),
+          ],
+        }),
+      );
+      addTearDown(repository.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            conversationRepositoryProvider.overrideWithValue(repository),
+            activeConversationIdProvider.overrideWith(
+              (ref) => 'stale-search-target',
+            ),
+            providerEntriesProvider.overrideWith((ref) {
+              return ProviderEntriesNotifier();
+            }),
+          ],
+          child: const MaterialApp(home: Material(child: ChatPage())),
+        ),
+      );
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pump();
+      await tester.tap(find.text('所有对话'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == '搜索所有对话中的消息...',
+        ),
+        'needle-code-only',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.tap(find.text('Stale Search Target'));
+      // Advance frames without advancing the 250 ms local-search debounce.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+      expect(find.byTooltip('关闭搜索'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.search_off));
+      await tester.pump();
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField).first, 'no-local-match');
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      final staleTarget = find.descendant(
+        of: find.byType(Chat),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SelectableText &&
+              (widget.data?.contains('needle-code-only') ?? false),
+        ),
+      );
+      expect(staleTarget, findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
     testWidgets('closing search cancels pending repository lookup', (
       tester,
     ) async {
@@ -721,13 +812,15 @@ void main() {
         expect(
           (await repository.getMessages(
             'paged-edit',
-          )).map((message) => message.id),
+          ))
+              .map((message) => message.id),
           isNot(contains('e10')),
         );
         expect(
           (await repository.getMessages(
             'paged-edit',
-          )).map((message) => message.id),
+          ))
+              .map((message) => message.id),
           isNot(contains('e44')),
         );
         await tester.pumpWidget(const SizedBox.shrink());
@@ -899,15 +992,14 @@ void main() {
                 role: index == 5 || index == 6
                     ? 'assistant'
                     : index.isEven
-                    ? 'user'
-                    : 'assistant',
+                        ? 'user'
+                        : 'assistant',
                 content: index == 6
                     ? 'Repeated paged text'
                     : 'Message $index content',
                 createdAt: DateTime(2025, 1, 1).add(Duration(hours: index)),
-                reasoningSections: index == 5
-                    ? ['Reasoning for paged message']
-                    : null,
+                reasoningSections:
+                    index == 5 ? ['Reasoning for paged message'] : null,
                 textSections: index == 5 ? ['Message $index content'] : null,
                 toolCalls: index == 5
                     ? [
@@ -982,9 +1074,8 @@ void main() {
       }
 
       chat = tester.widget<Chat>(find.byType(Chat));
-      final latestWindowIds = chat.chatController.messages
-          .map((message) => message.id)
-          .toList();
+      final latestWindowIds =
+          chat.chatController.messages.map((message) => message.id).toList();
       expect(latestWindowIds, isNot(contains('m5')));
       expect(latestWindowIds, isNot(contains('m24')));
       expect(latestWindowIds.toSet(), hasLength(latestWindowIds.length));
@@ -992,9 +1083,8 @@ void main() {
       await dragToTop(tester);
       await tester.pump(const Duration(milliseconds: 600));
       chat = tester.widget<Chat>(find.byType(Chat));
-      final pagedIds = chat.chatController.messages
-          .map((message) => message.id)
-          .toList();
+      final pagedIds =
+          chat.chatController.messages.map((message) => message.id).toList();
       expect(pagedIds.toSet(), hasLength(pagedIds.length));
       expect(pagedIds, contains('m6'));
       expect(pagedIds, contains('m25'));
@@ -1029,8 +1119,7 @@ void main() {
         expect(
           find.byKey(loadMoreIndicatorKey),
           findsOneWidget,
-          reason:
-              'spinner must stay visible at least 500ms after the '
+          reason: 'spinner must stay visible at least 500ms after the '
               'load finished',
         );
 
@@ -1045,8 +1134,7 @@ void main() {
         expect(
           chat.chatController.messages.length,
           35,
-          reason:
-              'the older-messages page was inserted after the '
+          reason: 'the older-messages page was inserted after the '
               'minimum display window',
         );
 
@@ -1054,7 +1142,8 @@ void main() {
       },
     );
 
-    testWidgets('no-more-content hint appears only after reaching the top with '
+    testWidgets(
+        'no-more-content hint appears only after reaching the top with '
         'nothing left to load', (tester) async {
       await pumpConversation(tester, messageCount: 35);
 
@@ -1109,8 +1198,7 @@ void main() {
         expect(
           find.text(noMoreMessagesText),
           findsOneWidget,
-          reason:
-              'reaching the top of a fully loaded conversation shows '
+          reason: 'reaching the top of a fully loaded conversation shows '
               'the hint',
         );
 
@@ -1118,7 +1206,8 @@ void main() {
       },
     );
 
-    testWidgets('short conversation: no hint on entry; hint appears only after '
+    testWidgets(
+        'short conversation: no hint on entry; hint appears only after '
         'the user pulls at the top', (tester) async {
       // Fewer messages than one page: everything is loaded from the start,
       // so reaching the top means "no more content" — but only after the
@@ -1139,8 +1228,7 @@ void main() {
       expect(
         find.text(noMoreMessagesText),
         findsOneWidget,
-        reason:
-            'pull at the top of a fully-loaded conversation shows '
+        reason: 'pull at the top of a fully-loaded conversation shows '
             'the hint',
       );
 

@@ -87,5 +87,32 @@ void main() {
 
       expect(paths, isEmpty);
     });
+
+    test('ignores attachment paths that traverse outside their storage root',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/safe/file.png'},
+                  {'storagePath': 'attachments/../../secret.txt'},
+                  {'storagePath': r'attachments\..\..\secret.txt'},
+                  {'storagePath': 'temp_edited/../../secret.txt'},
+                ],
+              },
+            ],
+          },
+        ]),
+      });
+
+      final paths = await collectAttachmentPaths();
+
+      expect(paths, contains('attachments/safe/file.png'));
+      expect(paths, isNot(contains('attachments/../../secret.txt')));
+      expect(paths, isNot(contains(r'attachments\..\..\secret.txt')));
+      expect(paths, isNot(contains('temp_edited/../../secret.txt')));
+    });
   });
 }

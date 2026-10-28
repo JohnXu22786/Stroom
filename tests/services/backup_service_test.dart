@@ -43,9 +43,8 @@ Uint8List _backupWithSettings(
 ) {
   final archive = ZipDecoder().decodeBytes(source);
   final settingsFile = archive.findFile('settings.json')!;
-  final settings =
-      jsonDecode(utf8.decode(settingsFile.content as List<int>))
-          as Map<String, dynamic>;
+  final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
+      as Map<String, dynamic>;
   settings.addAll(replacements);
   archive.removeFile(settingsFile);
   final encoded = utf8.encode(jsonEncode(settings));
@@ -60,9 +59,8 @@ Uint8List _backupWithRepositoryAttachment(
 }) {
   final archive = ZipDecoder().decodeBytes(source);
   final chatFile = archive.findFile('chat_data.json')!;
-  final chatData =
-      jsonDecode(utf8.decode(chatFile.content as List<int>))
-          as Map<String, dynamic>;
+  final chatData = jsonDecode(utf8.decode(chatFile.content as List<int>))
+      as Map<String, dynamic>;
   chatData['conversation_repository'] = {
     'schemaVersion': 1,
     'conversations': [
@@ -322,6 +320,22 @@ void main() {
           createdAt: DateTime.utc(2025),
           content: [
             StroomContentPart.image(reference: 'attachments/repository.png'),
+            StroomContentPart(
+              type: 'file',
+              data: {
+                'attachment': {
+                  'reference': 'attachments/nested-reference.pdf',
+                },
+              },
+            ),
+            StroomContentPart(
+              type: 'file',
+              data: {
+                'attachment': {
+                  'reference': 'https://media.example/external.pdf',
+                },
+              },
+            ),
           ],
         ),
       );
@@ -332,8 +346,13 @@ void main() {
 
       expect(
         keys,
-        containsAll(['attachments/legacy.png', 'attachments/repository.png']),
+        containsAll([
+          'attachments/legacy.png',
+          'attachments/repository.png',
+          'attachments/nested-reference.pdf',
+        ]),
       );
+      expect(keys, isNot(contains('https://media.example/external.pdf')));
     },
   );
 
@@ -1938,8 +1957,8 @@ void main() {
 
       final restoredEntries =
           jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-      final configs = ((restoredEntries.single as Map)['configs'] as List)
-          .cast<Map>();
+      final configs =
+          ((restoredEntries.single as Map)['configs'] as List).cast<Map>();
       expect(configs.map((config) => config['credentialRef']).toSet(), {
         firstReference,
         secondReference,
@@ -2228,27 +2247,17 @@ void main() {
 
       final restoredEntries =
           jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-      final restoredConfig =
-          ((restoredEntries.singleWhere(
-                            (entry) =>
-                                (entry as Map)['id'] == 'restore-llm-entry',
-                          )
-                          as Map)['configs']
-                      as List)
-                  .single
-              as Map;
+      final restoredConfig = ((restoredEntries.singleWhere(
+        (entry) => (entry as Map)['id'] == 'restore-llm-entry',
+      ) as Map)['configs'] as List)
+          .single as Map;
       expect(restoredConfig.containsKey('key'), isFalse);
       final providerReference = restoredConfig['credentialRef'] as String;
       expect(credentialStore.values[providerReference], providerSecret);
-      final restoredEntryKeyConfig =
-          ((restoredEntries.singleWhere(
-                            (entry) =>
-                                (entry as Map)['id'] == 'restore-llm-entry-key',
-                          )
-                          as Map)['configs']
-                      as List)
-                  .single
-              as Map;
+      final restoredEntryKeyConfig = ((restoredEntries.singleWhere(
+        (entry) => (entry as Map)['id'] == 'restore-llm-entry-key',
+      ) as Map)['configs'] as List)
+          .single as Map;
       expect(restoredEntryKeyConfig.containsKey('key'), isFalse);
       final entryReference = restoredEntryKeyConfig['credentialRef'] as String;
       expect(credentialStore.values[entryReference], entrySecret);
@@ -2304,21 +2313,21 @@ void main() {
       const restoredSecret = 'sk_committed_backup_restore_credential';
 
       String sourceWithKey(String secret) => jsonEncode([
-        {
-          'id': 'rollback-race-provider',
-          'type': 'llm',
-          'configs': [
             {
-              'id': 'rollback-race-account',
-              'providerName': 'Rollback race provider',
-              'host': 'https://rollback-race.example.test',
-              'credentialRef': reference,
-              'key': secret,
-              'models': [],
+              'id': 'rollback-race-provider',
+              'type': 'llm',
+              'configs': [
+                {
+                  'id': 'rollback-race-account',
+                  'providerName': 'Rollback race provider',
+                  'host': 'https://rollback-race.example.test',
+                  'credentialRef': reference,
+                  'key': secret,
+                  'models': [],
+                },
+              ],
             },
-          ],
-        },
-      ]);
+          ]);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('provider_entries', sourceWithKey(firstSecret));
@@ -2359,15 +2368,14 @@ void main() {
         archive.addFile(
           ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
         );
-        pendingRestore =
-            BackupService.restoreFromBytesForTest(
-              Uint8List.fromList(ZipEncoder().encode(archive)),
-              selection: settingsOnlySelection,
-              skipPostRestoreMigration: true,
-              credentialStore: credentials,
-            ).then((_) {
-              restoreCompletedBeforeMigrationFailure = true;
-            });
+        pendingRestore = BackupService.restoreFromBytesForTest(
+          Uint8List.fromList(ZipEncoder().encode(archive)),
+          selection: settingsOnlySelection,
+          skipPostRestoreMigration: true,
+          credentialStore: credentials,
+        ).then((_) {
+          restoreCompletedBeforeMigrationFailure = true;
+        });
         await Future<void>.delayed(Duration.zero);
         expect(restoreCompletedBeforeMigrationFailure, isFalse);
         return false;
@@ -3154,10 +3162,8 @@ void main() {
       expect(archive, isNotNull);
 
       // Should contain at least manifest.json and stroom_manifest.json
-      final fileNames = archive.files
-          .where((f) => f.isFile)
-          .map((f) => f.name)
-          .toSet();
+      final fileNames =
+          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('stroom_manifest.json'));
 

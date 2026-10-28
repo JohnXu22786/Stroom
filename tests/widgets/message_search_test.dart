@@ -212,6 +212,33 @@ void main() {
   });
 
   group('MessageSearchPage - Widget', () {
+    testWidgets('whitespace query keeps the initial search prompt', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+
+      expect(find.text('输入关键词搜索所有对话中的消息'), findsOneWidget);
+      expect(find.text('未找到匹配的消息'), findsNothing);
+    });
+
+    testWidgets('search trims surrounding whitespace from the query', (
+      tester,
+    ) async {
+      await tester.pumpWidget(createMessageSearchTestApp());
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), '  Flutter  ');
+      await tester.pump(const Duration(milliseconds: 251));
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Flutter讨论'), findsOneWidget);
+    });
+
     testWidgets('waits for typing to settle before showing search results', (
       tester,
     ) async {

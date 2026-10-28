@@ -305,8 +305,15 @@ void _collectAttachments(Object? rawAttachments, Set<String> paths) {
 String? _canonicalAttachmentPath(Object? value) {
   if (value is! String || value.isEmpty) return null;
   if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(value)) return null;
-  if (value.startsWith('temp_edited/')) {
-    return 'attachments/${p.basename(value)}';
+  final slashPath = value.replaceAll('\\', '/');
+  final pathSegments = slashPath.split('/');
+  if (pathSegments.contains('..')) return null;
+  if (slashPath.startsWith('temp_edited/')) {
+    if (pathSegments.length != 2 ||
+        pathSegments.any((segment) => segment.isEmpty || segment == '.')) {
+      return null;
+    }
+    return 'attachments/${p.posix.basename(slashPath)}';
   }
-  return value;
+  return slashPath;
 }

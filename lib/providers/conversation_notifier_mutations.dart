@@ -53,9 +53,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final assistant = assistantId == null
         ? null
         : _ref
-              .read(assistantProvider)
-              .where((a) => a.id == assistantId)
-              .firstOrNull;
+            .read(assistantProvider)
+            .where((a) => a.id == assistantId)
+            .firstOrNull;
     final hasToolDefaults = assistant?.defaultToolNames != null;
     final conv = Conversation(
       id: id,
@@ -88,9 +88,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// the active selection.
   Future<void> deleteConversation(String id) async {
     final wasActive = _ref.read(activeConversationIdProvider) == id;
-    final removed = state
-        .where((conversation) => conversation.id == id)
-        .toList();
+    final removed =
+        state.where((conversation) => conversation.id == id).toList();
     if (removed.isEmpty) return;
     if (_repositoryReady) {
       try {
@@ -108,7 +107,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (!await _persistNowChecked()) {
       if (mounted) {
         state = pinnedFirstStable([...removed, ...state]);
-        if (wasActive) {
+        if (wasActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state = id;
         }
         _syncTemporaryTimer();
@@ -262,9 +261,25 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
     final idSet = ids.toSet();
-    final removed = state
-        .where((conversation) => idSet.contains(conversation.id))
-        .toList();
+    final removed =
+        state.where((conversation) => idSet.contains(conversation.id)).toList();
+    if (_repositoryReady) {
+      final fullHistories = <String, List<ChatMessage>>{};
+      try {
+        for (final conversation in removed) {
+          fullHistories[conversation.id] = await _readAllRepositoryMessages(
+            conversation.id,
+          );
+        }
+      } catch (error) {
+        debugPrint(
+            'Failed to read batch-deleted conversation attachments: $error');
+        return;
+      }
+      for (final conversation in removed) {
+        conversation.messages = fullHistories[conversation.id]!;
+      }
+    }
     final activeId = _ref.read(activeConversationIdProvider);
     final wasActive = activeId != null && idSet.contains(activeId);
     state = state.where((c) => !idSet.contains(c.id)).toList();
@@ -286,7 +301,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           ...removed,
           ...state.where((conversation) => !idSet.contains(conversation.id)),
         ]);
-        if (wasActive) {
+        if (wasActive && _ref.read(activeConversationIdProvider) == null) {
           _ref.read(activeConversationIdProvider.notifier).state = activeId;
         }
         _syncTemporaryTimer();
@@ -294,6 +309,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       return;
     }
     await _persistActiveId();
+    for (final conversation in removed) {
+      await _cleanupConversationFiles(conversation);
+    }
   }
 
   /// Auto-generates a title for a conversation using the first messages.
@@ -306,9 +324,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       (m) => m.role == 'user',
       orElse: () => conv.messages.first,
     );
-    final firstAssistant = conv.messages
-        .where((m) => m.role == 'assistant')
-        .firstOrNull;
+    final firstAssistant =
+        conv.messages.where((m) => m.role == 'assistant').firstOrNull;
 
     String combined = firstUser.content.trim().isNotEmpty
         ? firstUser.content
@@ -316,9 +333,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
-    final title = combined.length > 60
-        ? '${combined.substring(0, 60)}…'
-        : combined;
+    final title =
+        combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
 
     state = state.map((c) {
       if (c.id != id) return c;
@@ -389,9 +405,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           (m) => m.role == 'user',
           orElse: () => messages.first,
         );
-        final firstAssistant = messages
-            .where((m) => m.role == 'assistant')
-            .firstOrNull;
+        final firstAssistant =
+            messages.where((m) => m.role == 'assistant').firstOrNull;
 
         String combined = firstUser.content.trim().isNotEmpty
             ? firstUser.content
@@ -399,9 +414,8 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }
-        c.title = combined.length > 60
-            ? '${combined.substring(0, 60)}…'
-            : combined;
+        c.title =
+            combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
         // 标记为自动生成：流完成后由标题助手用 AI 标题覆盖
         c.titleAutoGenerated = true;
       }

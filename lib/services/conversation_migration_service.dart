@@ -48,8 +48,7 @@ class ConversationMigrationService {
     final liveRaw = preferences.getString('conversations');
     final previous = preferences.getString(stateKey);
     final backupRaw = preferences.getString(backupKey);
-    final raw =
-        (liveRaw == null || liveRaw.isEmpty) &&
+    final raw = (liveRaw == null || liveRaw.isEmpty) &&
             backupRaw != null &&
             backupRaw.isNotEmpty
         ? backupRaw
@@ -87,8 +86,8 @@ class ConversationMigrationService {
         }
         if (state['verified'] == true && state['sourceHash'] == sourceHash) {
           if (await repository.migrationSourceHash() == sourceHash) {
-            final storedConversationCount = await repository
-                .countConversations();
+            final storedConversationCount =
+                await repository.countConversations();
             final storedMessageCount = await repository.countMessages();
             // After verification the repository becomes authoritative and can
             // legitimately diverge from the retained rollback source as users
@@ -105,9 +104,9 @@ class ConversationMigrationService {
         } else if (state['sourceHash'] == sourceHash &&
             state['nextConversation'] is num) {
           resumeAt = (state['nextConversation'] as num).toInt().clamp(
-            0,
-            1 << 30,
-          );
+                0,
+                1 << 30,
+              );
         }
       } catch (_) {
         // An invalid marker is safe to ignore; source rows remain authoritative.
@@ -165,11 +164,9 @@ class ConversationMigrationService {
         'Could not save the conversation migration source marker.',
       );
     }
-    for (
-      var start = resumeAt, batchIndex = resumeAt ~/ batchSize;
-      start < conversations.length;
-      start += batchSize, batchIndex++
-    ) {
+    for (var start = resumeAt, batchIndex = resumeAt ~/ batchSize;
+        start < conversations.length;
+        start += batchSize, batchIndex++) {
       await beforeBatchCommit?.call(batchIndex);
       final end = (start + batchSize).clamp(0, conversations.length);
       for (final conversation in conversations.sublist(start, end)) {
@@ -204,9 +201,8 @@ class ConversationMigrationService {
         conversation.id,
         limit: conversation.messages.length,
       );
-      final expectedIds = conversation.messages
-          .map((message) => message.id)
-          .toList();
+      final expectedIds =
+          conversation.messages.map((message) => message.id).toList();
       final actualIds = stored.map((message) => message.id).toList();
       if (expectedIds.length != actualIds.length ||
           !_sameIds(expectedIds, actualIds)) {
@@ -330,8 +326,11 @@ class ConversationMigrationService {
         if (attachment is! Map) continue;
         final map = Map<String, dynamic>.from(attachment);
         map.remove('base64Data');
-        final path =
-            map['storagePath'] as String? ?? map['thumbnailPath'] as String?;
+        final storagePath = map['storagePath'] as String?;
+        final thumbnailPath = map['thumbnailPath'] as String?;
+        final path = storagePath != null && storagePath.isNotEmpty
+            ? storagePath
+            : thumbnailPath;
         if (path != null && path.isNotEmpty) manifest[path] = map;
       }
     }
@@ -414,8 +413,7 @@ class ConversationMigrationService {
     SharedPreferences preferences,
     Map<String, dynamic> attachment,
   ) async {
-    final path =
-        attachment['storagePath'] as String? ??
+    final path = attachment['storagePath'] as String? ??
         attachment['thumbnailPath'] as String?;
     if (path == null || path.isEmpty) return;
     final existing = preferences.getString(attachmentManifestBackupKey);
@@ -429,8 +427,8 @@ class ConversationMigrationService {
       }
       manifest.addAll(
         decoded.whereType<Map>().map(
-          (entry) => Map<String, dynamic>.from(entry),
-        ),
+              (entry) => Map<String, dynamic>.from(entry),
+            ),
       );
     }
     if (!manifest.any((entry) => entry['storagePath'] == path)) {
