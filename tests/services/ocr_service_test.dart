@@ -494,6 +494,48 @@ void main() {
         );
       }
 
+      test(
+        'recognize retains text and marks an unlisted finish reason incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'max_tokens',
+                'message': {'content': 'partial OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognize(
+            imageBytes: Uint8List.fromList([1, 2, 3]),
+          );
+
+          expect(result.text, 'partial OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'max_tokens');
+        },
+      );
+
+      test('recognize keeps explicit stop responses complete', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'stop',
+              'message': {'content': 'complete OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognize(
+          imageBytes: Uint8List.fromList([1, 2, 3]),
+        );
+
+        expect(result.isComplete, isTrue);
+        expect(result.finishReason, 'stop');
+      });
+
       test('custom params cannot replace protected request fields', () async {
         for (final protectedName in ['model', 'messages']) {
           var sent = false;
@@ -847,6 +889,55 @@ void main() {
           },
         );
       }
+
+      test(
+        'recognizeBatch retains text and marks an unlisted finish reason '
+        'incomplete',
+        () async {
+          final dio = _mockDioWithSuccess({
+            'choices': [
+              {
+                'finish_reason': 'max_tokens',
+                'message': {'content': 'partial batch OCR text'},
+              },
+            ],
+          });
+          final service = OcrService(config: _testOcrConfig, dio: dio);
+
+          final result = await service.recognizeBatch(
+            imageBytesList: [
+              (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+              (Uint8List.fromList([4, 5, 6]), 'png'),
+            ],
+          );
+
+          expect(result.text, 'partial batch OCR text');
+          expect(result.isComplete, isFalse);
+          expect(result.finishReason, 'max_tokens');
+        },
+      );
+
+      test('recognizeBatch keeps explicit stop responses complete', () async {
+        final dio = _mockDioWithSuccess({
+          'choices': [
+            {
+              'finish_reason': 'stop',
+              'message': {'content': 'complete batch OCR text'},
+            },
+          ],
+        });
+        final service = OcrService(config: _testOcrConfig, dio: dio);
+
+        final result = await service.recognizeBatch(
+          imageBytesList: [
+            (Uint8List.fromList([1, 2, 3]), 'jpeg'),
+            (Uint8List.fromList([4, 5, 6]), 'png'),
+          ],
+        );
+
+        expect(result.isComplete, isTrue);
+        expect(result.finishReason, 'stop');
+      });
 
       test('recognizeBatch extracts text when content is a List', () async {
         final dio = _mockDioWithSuccess({
