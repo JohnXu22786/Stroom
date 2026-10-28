@@ -1967,12 +1967,28 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final prefixOffset = echo.indexOf(prefix);
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
-      final hasCredentialUseContext = _legacyOcrHasCredentialUseContext(
-        sanitized,
-        match,
-        prefix,
-        echoSuffix,
-      );
+      final splitEchoHasCredentialUseContext =
+          match.group(1)!.contains(RegExp(r'[\r\n]')) &&
+              _legacyOcrHasCredentialUseContext(
+                sanitized,
+                match,
+                prefix,
+                echoSuffix,
+              );
+      final authenticateWithToProcessContext =
+          RegExp(
+                r'\bauthenticate with$',
+                caseSensitive: false,
+              ).hasMatch(sanitized.substring(0, match.start).trimRight()) &&
+              _legacyOcrHasCredentialUseContext(
+                sanitized,
+                match,
+                prefix,
+                echoSuffix,
+              );
+      final hasCredentialUseContext =
+          splitEchoHasCredentialUseContext ||
+          authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
