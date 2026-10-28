@@ -587,6 +587,11 @@ class OcrDiagnosticSnapshot {
       if (base64Encode(bytes).replaceFirst(RegExp(r'=+$'), '') != unpadded) {
         return false;
       }
+      final decodedText = utf8.decode(bytes, allowMalformed: true).trimLeft();
+      if (RegExp(r'^<svg(?:[\s/>])', caseSensitive: false)
+          .hasMatch(decodedText)) {
+        return true;
+      }
       bool matches(List<int> signature, {int offset = 0}) =>
           bytes.length >= offset + signature.length &&
           List.generate(

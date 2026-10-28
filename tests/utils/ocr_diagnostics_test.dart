@@ -303,6 +303,25 @@ void main() {
     expect(jsonEncode(response), isNot(contains(imageDataUri)));
   });
 
+  test('bare SVG base64 is dropped from request ID fields', () {
+    const svg = 'IDxzdmcvPiAg';
+    final request = OcrDiagnosticSnapshot.sanitizeRequest({
+      'headers': {'x-request-id': svg},
+    })!;
+    final response = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': svg,
+      'data': {'id': svg},
+    })!;
+    final safeResponse = OcrDiagnosticSnapshot.sanitizeResponse({
+      'requestId': 'req-safe-svg-neighbor-123',
+    })!;
+
+    expect(request, isEmpty);
+    expect(response, isEmpty);
+    expect(safeResponse, {'requestId': 'req-safe-svg-neighbor-123'});
+    expect(jsonEncode([request, response]), isNot(contains(svg)));
+  });
+
   test('bare PNG base64 is dropped from request ID fields', () {
     const png =
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC';
