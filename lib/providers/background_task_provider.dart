@@ -783,6 +783,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'secretion',
     'secretariat',
     'secretarial',
+    'secretbased',
     'secretive',
     'secretmenu',
     'summarize',
@@ -897,6 +898,10 @@ bool _legacyOcrHasCredentialUseContext(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final bareSecretBasedUseContext = useVerb &&
+      prefix.toLowerCase() == 'secret' &&
+      suffix.toLowerCase() == '-based' &&
+      RegExp(r'^[.!?]*$').hasMatch(after);
   final naturalReadFromSourcePrompt = isNaturalWordContinuation &&
       actionVerb?.group(1)?.toLowerCase() == 'read' &&
       _legacyOcrNaturalSourcePhrasePattern.hasMatch(after);
@@ -950,6 +955,7 @@ bool _legacyOcrHasCredentialUseContext(
               maskPrefixIsEmbedded) &&
           RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
+      bareSecretBasedUseContext ||
       assignmentContext ||
       setToCredentialContext ||
       reportedValueContext ||

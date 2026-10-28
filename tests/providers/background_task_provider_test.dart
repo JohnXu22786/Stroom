@@ -5113,6 +5113,54 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves secret-based prose and redacts credential echoes',
+      () {
+        const naturalPrompt = 'Review the secret-based policy';
+        const credentialEcho = 'Read the receipt using secretQmXvP';
+        const ambiguousCredentialEcho = 'Read the receipt using secret-based';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-secret-based-natural-prompt',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer secret…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': naturalPrompt},
+                    {'type': 'text', 'text': credentialEcho},
+                    {'type': 'text', 'text': ambiguousCredentialEcho},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent;
+        final persisted = jsonEncode(task.toMap());
+
+        expect(
+          migratedInstruction,
+          'Review the secret-based policy\n'
+          'Read the receipt using [redacted]\n'
+          'Read the receipt using [redacted]',
+        );
+        expect(persisted, contains(naturalPrompt));
+        expect(persisted, contains('Read the receipt using [redacted]'));
+        expect(persisted, isNot(contains(ambiguousCredentialEcho)));
+        expect(persisted, isNot(contains('secretQmXvP')));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a natural connector consumed after a split masked prefix',
       () {
         const credential = 'opaque-user-to';
