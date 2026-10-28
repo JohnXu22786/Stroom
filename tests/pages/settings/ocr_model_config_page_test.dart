@@ -351,4 +351,54 @@ void main() {
       ]);
     });
   });
+
+  group('OcrModelConfigPage max token validation', () {
+    testWidgets('disabled invalid max tokens do not block saving other edits',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'enableMaxTokens': true, 'maxTokens': 1024},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _enterField(tester, 2, 'not an integer');
+      await tester.tap(find.byType(Switch).last);
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byType(TextField).first,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await _enterField(tester, 0, 'Edited OCR model');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.name, 'Edited OCR model');
+      expect(saved!.typeConfig['enableMaxTokens'], isFalse);
+      expect(saved!.typeConfig.containsKey('maxTokens'), isFalse);
+    });
+
+    testWidgets('enabled invalid max tokens still block saving',
+        (tester) async {
+      ModelConfig? saved;
+      final model = ModelConfig(
+        name: 'OCR模型',
+        modelId: 'qwen-vl-ocr',
+        typeConfig: {'enableMaxTokens': true, 'maxTokens': 1024},
+      );
+
+      await _pumpConfigPage(tester, model: model, onSaved: (m) => saved = m);
+      await _scrollTo(tester, find.text('最大 Token 数'));
+      await _enterField(tester, 2, 'not an integer');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNull);
+      expect(find.text('最大 Token 数必须为正整数'), findsOneWidget);
+    });
+  });
 }
