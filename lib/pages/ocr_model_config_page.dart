@@ -292,30 +292,33 @@ class _OcrModelConfigPageState extends State<OcrModelConfigPage> {
     typeConfig['enableTopP'] = _enableTopP;
     typeConfig['enableMaxTokens'] = _enableMaxTokens;
 
-    // Parse optional maxTokens
-    final maxTokensStr = _maxTokensController.text.trim();
-    if (maxTokensStr.isNotEmpty) {
-      final maxTokens = int.tryParse(maxTokensStr);
-      if (maxTokens == null || maxTokens <= 0) {
+    // Validate and serialize maxTokens only when enabled. A disabled field
+    // retains its text, which may be stale or invalid.
+    if (_enableMaxTokens) {
+      final maxTokensStr = _maxTokensController.text.trim();
+      if (maxTokensStr.isNotEmpty) {
+        final maxTokens = int.tryParse(maxTokensStr);
+        if (maxTokens == null || maxTokens <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('最大 Token 数必须为正整数'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() => _isSaving = false);
+          return;
+        }
+        typeConfig['maxTokens'] = maxTokens;
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('最大 Token 数必须为正整数'),
+            content: Text('最大 Token 数已启用但未填写'),
             behavior: SnackBarBehavior.floating,
           ),
         );
         setState(() => _isSaving = false);
         return;
       }
-      typeConfig['maxTokens'] = maxTokens;
-    } else if (_enableMaxTokens) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('最大 Token 数已启用但未填写'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      setState(() => _isSaving = false);
-      return;
     }
 
     // Instructions are now generic (configured on the OCR page, not per
