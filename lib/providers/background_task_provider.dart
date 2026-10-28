@@ -1967,14 +1967,12 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final prefixOffset = echo.indexOf(prefix);
       final echoSuffix =
           prefixOffset < 0 ? '' : echo.substring(prefixOffset + prefix.length);
-      final splitEchoHasCredentialUseContext =
-          match.group(1)!.contains(RegExp(r'[\r\n]')) &&
-              _legacyOcrHasCredentialUseContext(
-                sanitized,
-                match,
-                prefix,
-                echoSuffix,
-              );
+      final hasCredentialUseContext = _legacyOcrHasCredentialUseContext(
+        sanitized,
+        match,
+        prefix,
+        echoSuffix,
+      );
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
@@ -1995,7 +1993,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               !safeCredentialValueActionLead) ||
           echo.length <= prefix.length ||
           (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
-              !splitEchoHasCredentialUseContext &&
+              !hasCredentialUseContext &&
               !lineBrokenCarefulActionEcho)) {
         return match.group(0)!;
       }
