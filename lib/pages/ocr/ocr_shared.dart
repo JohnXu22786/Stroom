@@ -30,24 +30,44 @@ class SelectedImage {
 
   /// Original source name if imported from system/album, null if temp (camera).
   final String? sourceName;
+  final Object _selectionIdentity;
 
   SelectedImage({
     required this.bytes,
     this.format = 'jpeg',
     this.sourceName,
-  }) : isPrepared = false;
+  })  : isPrepared = false,
+        _selectionIdentity = Object();
 
   SelectedImage.fromPayload({
     required OcrImagePayload payload,
     this.sourceName,
   })  : bytes = payload.bytes,
         format = payload.format,
+        isPrepared = true,
+        _selectionIdentity = Object();
+
+  SelectedImage._edited({
+    required OcrImagePayload payload,
+    required this.sourceName,
+    required this._selectionIdentity,
+  })  : bytes = payload.bytes,
+        format = payload.format,
         isPrepared = true;
 
+  /// True when [other] is the same selected image, even after an edit replaces
+  /// this immutable value with an updated payload.
+  bool hasSameSelectionAs(SelectedImage other) =>
+      identical(_selectionIdentity, other._selectionIdentity);
+
   /// Creates an edited image with MIME derived from its output bytes while
-  /// retaining the imported filename for display and retry metadata.
+  /// retaining the imported filename and selection identity.
   SelectedImage withEditedPayload(OcrImagePayload payload) =>
-      SelectedImage.fromPayload(payload: payload, sourceName: sourceName);
+      SelectedImage._edited(
+        payload: payload,
+        sourceName: sourceName,
+        _selectionIdentity: _selectionIdentity,
+      );
 }
 
 // ============================================================================

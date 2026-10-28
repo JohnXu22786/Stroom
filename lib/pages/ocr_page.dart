@@ -2133,7 +2133,9 @@ class _OcrPageState extends ConsumerState<OcrPage> {
   ) async {
     if (!mounted ||
         _isImageSelectionLocked ||
-        !_selectedImages.any((image) => identical(image, currentImage))) {
+        !_selectedImages.any(
+          (image) => image.hasSameSelectionAs(currentImage),
+        )) {
       return;
     }
 
@@ -2141,11 +2143,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       final payload = await _prepareImagePayload(editedBytes);
       if (!mounted || _ocrStarting || _isImageSelectionLocked) return;
       final currentIndex = _selectedImages.indexWhere(
-        (image) => identical(image, currentImage),
+        (image) => image.hasSameSelectionAs(currentImage),
       );
       if (currentIndex < 0) return;
       setState(() {
-        _selectedImages[currentIndex] = currentImage.withEditedPayload(payload);
+        _selectedImages[currentIndex] =
+            _selectedImages[currentIndex].withEditedPayload(payload);
       });
     } on FormatException catch (error) {
       if (mounted) {
