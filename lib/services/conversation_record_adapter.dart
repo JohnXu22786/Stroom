@@ -45,12 +45,15 @@ class ConversationRecordAdapter {
         );
       }
       final legacyMap = Map<String, dynamic>.from(rawMessage);
-      final legacy = ChatMessage.fromMap(legacyMap);
-      if (legacy.id.isEmpty || !usedMessageIds.add(legacy.id)) {
+      final messageId = legacyMap['id'];
+      if (messageId is! String ||
+          messageId.isEmpty ||
+          !usedMessageIds.add(messageId)) {
         throw FormatException(
           'Conversation $id contains a missing or duplicate message id.',
         );
       }
+      final legacy = ChatMessage.fromMap(legacyMap);
       final neutral = StroomMessage.fromLegacy(
         legacy,
         sequence: messages.length,
@@ -205,6 +208,9 @@ class ConversationRecordAdapter {
     final rawLegacyExtensions = legacy is Map
         ? legacy[StroomMessage.legacyRawExtensionsValueKey]
         : null;
+    final retainedLegacyFields = legacy is Map && legacy['legacyFields'] is Map
+        ? Map<String, dynamic>.from(legacy['legacyFields'] as Map)
+        : const <String, dynamic>{};
     final record = legacy is Map ? legacy['record'] : null;
     if (record is Map) {
       final currentBlocks =
@@ -249,7 +255,7 @@ class ConversationRecordAdapter {
         result['attachments'] = attachments;
       }
       if (message.status == null) {
-        result.remove('status');
+        if (result['status'] is String) result.remove('status');
       } else {
         final statusChanged = result['status'] != message.status;
         result['status'] = message.status;
@@ -263,12 +269,12 @@ class ConversationRecordAdapter {
         }
       }
       if (message.finishReason == null) {
-        result.remove('finishReason');
+        if (result['finishReason'] is String) result.remove('finishReason');
       } else {
         result['finishReason'] = message.finishReason;
       }
       if (message.usage == null) {
-        result.remove('usage');
+        if (result['usage'] is Map) result.remove('usage');
       } else {
         result['usage'] = message.usage;
       }
@@ -290,6 +296,7 @@ class ConversationRecordAdapter {
     final retainedIsStreaming = legacy is Map ? legacy['isStreaming'] : null;
     final retainedIsError = legacy is Map ? legacy['isError'] : null;
     return {
+      ...retainedLegacyFields,
       ...message.extraFields,
       'id': message.id,
       'role': message.role,

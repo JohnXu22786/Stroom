@@ -1697,9 +1697,11 @@ class BackupService {
   ///
   /// `flutter.*` 内部键永不参与备份/恢复/清除。
   static bool _isKeyInSelection(String key, BackupSelection selection) {
+    if (_isConversationMigrationKey(key)) {
+      return selection.chatRecordsAndAttachments;
+    }
     if (key.startsWith('flutter.') ||
         _isLegacyProviderQuarantineKey(key) ||
-        _isConversationMigrationKey(key) ||
         _isDeviceLocalPreferenceKey(key) ||
         DataMigrationService.isFormatMetadataKey(key)) {
       return false;
@@ -3575,7 +3577,11 @@ class BackupService {
         Object? rawPath, {
         bool allowExternalReference = false,
       }) {
-        if (rawPath is! String || rawPath.isEmpty) return;
+        if (rawPath == null || rawPath == '') return;
+        if (rawPath is! String) {
+          allPresent = false;
+          return;
+        }
         if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*:').hasMatch(rawPath)) {
           if (!allowExternalReference) allPresent = false;
           return;
@@ -6250,8 +6256,9 @@ class BackupService {
   static Future<bool> _clearSelectedDataAfterPreflight(
     BackupSelection selection,
     Set<String> taskFlowAttachmentKeys,
-    void Function(double progress)? onProgress,
-  ) async {
+    void Function(double progress)? onProgress, {
+    ConversationRepository? repositoryOverride,
+  }) async {
     var browserWebsiteDataCleared = true;
     // Clear live and persisted Cookies together so browser-close persistence
     // cannot recreate the snapshot after the selected data is deleted.
@@ -6280,6 +6287,16 @@ class BackupService {
         'BackupService',
         'clearSelectedData: removed ${keysToRemove.length} preference keys',
       );
+    }
+
+    if (selection.chatRecordsAndAttachments) {
+      final repository = repositoryOverride ?? createConversationRepository();
+      try {
+        await repository.initialize();
+        await repository.clearConversations();
+      } finally {
+        if (repositoryOverride == null) await repository.close();
+      }
     }
 
     // 2. 选中类别的文件（附件目录整清，孤儿文件一并删除）
@@ -6695,6 +6712,25 @@ class BackupService {
     ConversationRepository repository,
   ) =>
       _collectChatAttachmentKeysStrict(repositoryOverride: repository);
+
+  @visibleForTesting
+  static Future<bool> clearSelectedDataForTest(
+    BackupSelection selection, {
+    required ConversationRepository repository,
+    void Function(double progress)? onProgress,
+  }) async {
+    onProgress?.call(0.0);
+    await _yieldToEventLoop();
+    final taskFlowAttachmentKeys = await _taskFlowAttachmentsToPreserve(
+      selection,
+    );
+    return _clearSelectedDataAfterPreflight(
+      selection,
+      taskFlowAttachmentKeys,
+      onProgress,
+      repositoryOverride: repository,
+    );
+  }
 
   @visibleForTesting
   static Future<void> writeRestoredConversationMigrationCheckpointForTest(

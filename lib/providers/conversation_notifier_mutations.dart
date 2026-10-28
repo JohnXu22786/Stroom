@@ -87,7 +87,6 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
-    final wasActive = _ref.read(activeConversationIdProvider) == id;
     final removed =
         state.where((conversation) => conversation.id == id).toList();
     if (removed.isEmpty) return;
@@ -99,6 +98,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         return;
       }
     }
+    final wasActive = _ref.read(activeConversationIdProvider) == id;
     final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => c.id != id).toList();
     if (_ref.read(activeConversationIdProvider) == id) {

@@ -340,10 +340,10 @@ class StroomMessage {
         : <String, dynamic>{};
     final retainedLegacyFields = Map<String, dynamic>.from(message.legacyFields)
       ..removeWhere(
-        (key, _) =>
-            key == 'status' ||
-            key == 'finishReason' ||
-            key == 'usage' ||
+        (key, value) =>
+            (key == 'status' && value is String) ||
+            (key == 'finishReason' && value is String) ||
+            (key == 'usage' && value is Map) ||
             key == 'extensions',
       );
     final content = <StroomContentPart>[];

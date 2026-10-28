@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/stroom_conversation.dart';
 import 'package:stroom/services/backup_service_shared.dart';
+import 'package:stroom/services/conversation_migration_service.dart';
 import 'package:stroom/services/conversation_repository_memory.dart';
 
 void main() {
@@ -28,6 +30,60 @@ void main() {
         await repository.close();
       },
     );
+
+    test('verified preferences checkpoint makes repository paths authoritative',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'conversations': jsonEncode([
+          {
+            'id': 'legacy',
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/stale-legacy.png'},
+                ],
+              },
+            ],
+          },
+        ]),
+        ConversationMigrationService.stateKey: jsonEncode({'verified': true}),
+      });
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        StroomConversation(
+          id: 'repository',
+          title: 'Repository',
+          messages: [
+            StroomMessage(
+              id: 'repository-message',
+              role: 'user',
+              sequence: 0,
+              createdAt: DateTime.utc(2025),
+              content: [
+                StroomContentPart(
+                  type: 'image',
+                  data: {'storagePath': 'attachments/repository.png'},
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      final backupPaths = await collectAttachmentPaths(
+        repositoryOverride: repository,
+      );
+      final safetyPaths = await collectAttachmentPathsForSafety(
+        repositoryOverride: repository,
+      );
+
+      for (final paths in [backupPaths, safetyPaths!]) {
+        expect(paths, contains('attachments/repository.png'));
+        expect(paths, isNot(contains('attachments/stale-legacy.png')));
+      }
+      await repository.close();
+    });
 
     test('collects local references and skips external URIs', () async {
       SharedPreferences.setMockInitialValues({

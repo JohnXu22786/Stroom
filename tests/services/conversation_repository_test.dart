@@ -67,8 +67,25 @@ class _FailingOrderMemoryRepository extends MemoryConversationRepository {
 class _DelayedFailingOrderMemoryRepository
     extends MemoryConversationRepository {
   bool delayNextOrderWrite = false;
+  bool delayNextMessageRead = false;
   final Completer<void> orderWriteStarted = Completer<void>();
   final Completer<void> releaseOrderWrite = Completer<void>();
+  final Completer<void> messageReadStarted = Completer<void>();
+  final Completer<void> releaseMessageRead = Completer<void>();
+
+  @override
+  Future<List<StroomMessage>> getMessages(
+    String conversationId, {
+    int offset = 0,
+    int limit = 50,
+  }) async {
+    if (delayNextMessageRead) {
+      delayNextMessageRead = false;
+      messageReadStarted.complete();
+      await releaseMessageRead.future;
+    }
+    return super.getMessages(conversationId, offset: offset, limit: limit);
+  }
 
   @override
   Future<void> applySnapshotChanges({
@@ -1010,6 +1027,38 @@ void main() {
       expect(await repository.migrationSourceHash(), '');
       expect(retry.conversationCount, 1);
       expect(retry.messageCount, 1);
+      await repository.close();
+    });
+
+    test('preserves source order when resuming a legacy migration', () async {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(
+        'conversations',
+        '[${_legacyConversation('z-first', ['z-message'])},'
+            '${_legacyConversation('a-second', ['a-message'])}]',
+      );
+      final repository = MemoryConversationRepository();
+      var interrupted = false;
+      final migration = ConversationMigrationService(
+        repository,
+        batchSize: 1,
+        beforeBatchCommit: (batchIndex) async {
+          if (batchIndex == 1 && !interrupted) {
+            interrupted = true;
+            throw StateError('simulate migration interruption');
+          }
+        },
+      );
+
+      await expectLater(migration.migrate(preferences), throwsStateError);
+      migration.beforeBatchCommit = null;
+      final result = await migration.migrate(preferences);
+
+      expect(result.verified, isTrue);
+      expect(
+        (await repository.listSummaries()).map((summary) => summary.id),
+        ['z-first', 'a-second'],
+      );
       await repository.close();
     });
 
@@ -2758,6 +2807,122 @@ void main() {
   );
 
   test(
+    'failed deletion rollback keeps pinned conversations first after interleaving',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'active_conversation_id': 'rollback-pinned-a',
+      });
+      final repository = _DelayedFailingOrderMemoryRepository();
+      await repository.initialize();
+      for (final id in const ['rollback-pinned-a', 'rollback-pinned-b']) {
+        await repository.importConversation(
+          StroomConversation(id: id, title: id),
+        );
+      }
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        ['rollback-pinned-b', 'rollback-pinned-a'],
+      );
+      notifier.reorderConversation(1, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        ['rollback-pinned-a', 'rollback-pinned-b'],
+      );
+      repository.delayNextOrderWrite = true;
+
+      final deleting = notifier.deleteConversation('rollback-pinned-a');
+      await repository.orderWriteStarted.future;
+      notifier.togglePin('rollback-pinned-b');
+      repository.releaseOrderWrite.complete();
+      await deleting;
+
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        ['rollback-pinned-b', 'rollback-pinned-a'],
+      );
+      expect(container.read(conversationsProvider).first.isPinned, isTrue);
+      expect(
+        (await repository.listSummaries()).map((summary) => summary.id),
+        ['rollback-pinned-b', 'rollback-pinned-a'],
+      );
+    },
+  );
+
+  test(
+    'failed deletion restores selection made during delayed history read',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final repository = _DelayedFailingOrderMemoryRepository();
+      await repository.initialize();
+      await repository.importConversation(
+        StroomConversation(
+          id: 'late-active-delete',
+          title: 'Delete after read',
+          messages: [
+            StroomMessage(
+              id: 'late-active-message',
+              role: 'user',
+              sequence: 0,
+              createdAt: DateTime.utc(2026),
+            ),
+          ],
+        ),
+      );
+      final container = ProviderContainer(
+        overrides: [
+          conversationRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.close();
+      });
+      final notifier = container.read(conversationsProvider.notifier);
+      await notifier.ready;
+      repository.delayNextMessageRead = true;
+      repository.delayNextOrderWrite = true;
+
+      final deleting = notifier.deleteConversation('late-active-delete');
+      await repository.messageReadStarted.future;
+      container.read(activeConversationIdProvider.notifier).state =
+          'late-active-delete';
+      repository.releaseMessageRead.complete();
+      await repository.orderWriteStarted.future;
+      repository.releaseOrderWrite.complete();
+      await deleting;
+
+      expect(
+        container.read(activeConversationIdProvider),
+        'late-active-delete',
+      );
+      expect(
+        container
+            .read(conversationsProvider)
+            .map((conversation) => conversation.id),
+        contains('late-active-delete'),
+      );
+    },
+  );
+
+  test(
     'failed deletion rollback persists after a queued deletion snapshot',
     () async {
       SharedPreferences.setMockInitialValues({
@@ -3336,6 +3501,52 @@ void main() {
       });
     },
   );
+
+  test('legacy adapter retains unsupported neutral field values', () {
+    final conversation = ConversationRecordAdapter.fromLegacyMap({
+      'id': 'unsupported-message-fields',
+      'title': 'Unsupported fields',
+      'messages': [
+        {
+          'id': 'unsupported-message',
+          'role': 'assistant',
+          'createdAt': '2025-01-01T00:00:00.000Z',
+          'content': 'text',
+          'status': 7,
+          'finishReason': false,
+          'usage': ['opaque'],
+        },
+      ],
+    });
+
+    final restored = ConversationRecordAdapter.messageToLegacyMap(
+      conversation.messages.single,
+    );
+
+    expect(restored['status'], 7);
+    expect(restored['finishReason'], isFalse);
+    expect(restored['usage'], ['opaque']);
+  });
+
+  test('legacy adapter rejects missing and non-string message ids', () {
+    for (final messageId in [null, 7]) {
+      expect(
+        () => ConversationRecordAdapter.fromLegacyMap({
+          'id': 'invalid-message-id',
+          'title': 'Invalid message ID',
+          'messages': [
+            {
+              if (messageId != null) 'id': messageId,
+              'role': 'assistant',
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'content': 'text',
+            },
+          ],
+        }),
+        throwsFormatException,
+      );
+    }
+  });
 
   test(
     'legacy adapter preserves content that has no neutral text block',

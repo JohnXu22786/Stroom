@@ -399,6 +399,40 @@ void main() {
     }
   });
 
+  test('rejects malformed repository media paths during restore preflight', () {
+    for (final field in const ['storagePath', 'thumbnailPath']) {
+      final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+        chatPrefs: {
+          'conversation_repository': {
+            'schemaVersion': 1,
+            'migrationSourceHash': 'verified-source-hash',
+            'conversations': [],
+            'messages': [
+              {
+                'conversationId': 'malformed-media',
+                'id': 'malformed-media-message',
+                'role': 'user',
+                'sequence': 0,
+                'content': [
+                  {
+                    'type': 'file',
+                    'data': {
+                      'attachment': {field: 123},
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        archiveEntries: const {'chat_data.json'},
+        requireFiles: true,
+      );
+
+      expect(complete, isFalse, reason: '$field must be a string path');
+    }
+  });
+
   test(
     'task restore protection includes repository media references',
     () async {

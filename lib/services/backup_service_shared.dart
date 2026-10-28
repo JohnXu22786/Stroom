@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, kIsWeb, visibleForTesting;
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -122,15 +123,17 @@ Future<void> writeBackupFile(
   }
 }
 
-Future<Set<String>> collectAttachmentPaths() async {
+Future<Set<String>> collectAttachmentPaths({
+  @visibleForTesting ConversationRepository? repositoryOverride,
+}) async {
   final paths = <String>{};
   var repositoryIsAuthoritative = false;
-  if (_shouldReadConversationRepository) {
-    final repository = createConversationRepository();
+  if (repositoryOverride != null || _shouldReadConversationRepository) {
+    final repository = repositoryOverride ?? createConversationRepository();
     try {
       await repository.initialize();
       repositoryIsAuthoritative =
-          await repository.migrationSourceHash() != null;
+          await isConversationRepositoryAuthoritative(repository);
       _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
     } catch (e) {
       debugPrint('收集仓库媒体引用失败: $e');
@@ -138,7 +141,7 @@ Future<Set<String>> collectAttachmentPaths() async {
       debugPrint(
           'Conversation repository is not authoritative; falling back to legacy data.');
     } finally {
-      await repository.close();
+      if (repositoryOverride == null) await repository.close();
     }
   }
   try {
@@ -184,19 +187,21 @@ Future<Set<String>> collectAttachmentPaths() async {
 /// Collects conversation attachment references for startup orphan cleanup.
 /// A null result means the stored references could not be read or parsed, so
 /// cleanup must abort rather than risk deleting a live attachment.
-Future<Set<String>?> collectAttachmentPathsForSafety() async {
+Future<Set<String>?> collectAttachmentPathsForSafety({
+  @visibleForTesting ConversationRepository? repositoryOverride,
+}) async {
   try {
     final paths = <String>{};
     var repositoryIsAuthoritative = false;
-    if (_shouldReadConversationRepository) {
-      final repository = createConversationRepository();
+    if (repositoryOverride != null || _shouldReadConversationRepository) {
+      final repository = repositoryOverride ?? createConversationRepository();
       try {
         await repository.initialize();
         repositoryIsAuthoritative =
-            await repository.migrationSourceHash() != null;
+            await isConversationRepositoryAuthoritative(repository);
         _collectRepositoryAttachmentPaths(await repository.exportData(), paths);
       } finally {
-        await repository.close();
+        if (repositoryOverride == null) await repository.close();
       }
     }
     if (!repositoryIsAuthoritative) {

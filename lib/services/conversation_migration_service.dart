@@ -226,10 +226,12 @@ class ConversationMigrationService {
     final existingOrder = (await repository.listSummaries())
         .map((summary) => summary.id)
         .toList();
-    final importedIds = conversations
-        .map((conversation) => conversation.id)
-        .where((id) => !existingOrder.contains(id));
-    final mergedOrder = [...existingOrder, ...importedIds];
+    final sourceIds =
+        conversations.map((conversation) => conversation.id).toSet();
+    final mergedOrder = [
+      ...existingOrder.where((id) => !sourceIds.contains(id)),
+      ...sourceIds,
+    ];
     await repository.setConversationOrder(mergedOrder);
 
     final verifiedMessages = <String, List<String>>{};

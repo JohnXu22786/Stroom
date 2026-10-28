@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
+import 'package:stroom/services/conversation_migration_service.dart';
+import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/data_migration_service.dart';
 import 'package:stroom/services/manifest_database.dart';
 import 'package:stroom/utils/image_thumbnail_loader.dart';
@@ -3134,6 +3136,58 @@ void main() {
   // ==================================================================
 
   group('clearSelectedData clears only selected categories', () {
+    testWidgets(
+      'chat clear removes repository rows and migration recovery state',
+      (WidgetTester t) async {
+        final raw = jsonEncode([
+          {
+            'id': 'cleared-conversation',
+            'title': 'Cleared',
+            'createdAt': '2025-01-01T00:00:00.000Z',
+            'updatedAt': '2025-01-01T00:00:00.000Z',
+            'messages': [],
+          },
+        ]);
+        SharedPreferences.setMockInitialValues({'conversations': raw});
+        final prefs = await SharedPreferences.getInstance();
+        final repository = MemoryConversationRepository();
+        final migration = ConversationMigrationService(repository);
+        await migration.migrate(prefs);
+        expect(await repository.countConversations(), 1);
+
+        final selection = BackupSelection(
+          chatRecordsAndAttachments: true,
+          settings: false,
+          pictures: false,
+          audio: false,
+          videos: false,
+          texts: false,
+          tasks: false,
+          ankiData: false,
+          browserCookies: false,
+        );
+        await BackupService.clearSelectedDataForTest(
+          selection,
+          repository: repository,
+        );
+
+        expect(await repository.countConversations(), 0);
+        expect(await repository.migrationSourceHash(), isNull);
+        expect(prefs.getString('conversations'), isNull);
+        expect(
+          prefs.getString(ConversationMigrationService.backupKey),
+          isNull,
+        );
+        expect(
+          prefs.getString(ConversationMigrationService.stateKey),
+          isNull,
+        );
+        await migration.migrate(prefs);
+        expect(await repository.countConversations(), 0);
+        await repository.close();
+      },
+    );
+
     testWidgets('chat-only clear removes chat keys, preserves settings keys',
         (WidgetTester t) async {
       // Seed a conversation with an attachment file (subdirectory path) and
@@ -3163,7 +3217,11 @@ void main() {
         ankiData: false,
         browserCookies: false,
       );
-      await BackupService.clearSelectedData(sel);
+      final repository = MemoryConversationRepository();
+      await BackupService.clearSelectedDataForTest(
+        sel,
+        repository: repository,
+      );
 
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('conversations'), isNull,
@@ -3184,6 +3242,7 @@ void main() {
       expect(orphan, isNull,
           reason:
               'Orphan attachment files must also be deleted when chat is cleared');
+      await repository.close();
     });
 
     testWidgets(

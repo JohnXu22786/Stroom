@@ -572,7 +572,7 @@ List<Conversation> restoreConversationOrderAfterFailedWrite({
     }
     restored.insert(insertAt, conversation);
   }
-  return restored;
+  return pinnedFirstStable(restored);
 }
 
 // ============================================================================
