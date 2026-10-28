@@ -5117,7 +5117,7 @@ void main() {
       () {
         const naturalPrompt = 'Review the secret-based policy';
         const credentialEcho = 'Read the receipt using secretQmXvP';
-        const ambiguousCredentialEcho = 'Read the receipt using secret-based';
+        const ambiguousCredentialEcho = 'Please use secret-based';
         final task = BackgroundTask.fromMap({
           'id': 'legacy-ocr-secret-based-natural-prompt',
           'type': 'ocr',
@@ -5151,7 +5151,7 @@ void main() {
           migratedInstruction,
           'Review the secret-based policy\n'
           'Read the receipt using [redacted]\n'
-          'Read the receipt using [redacted]',
+          'Please use [redacted]',
         );
         expect(persisted, contains(naturalPrompt));
         expect(persisted, contains('Read the receipt using [redacted]'));
