@@ -843,56 +843,93 @@ void main() {
   });
 
   group('OcrPage - stable retry context', () {
-    testWidgets('image preparation failure resets OCR start', (tester) async {
-      var prepareAttempts = 0;
-      final cacheStarted = Completer<void>();
-      final finishCache = Completer<Map<String, dynamic>?>();
-      final notifier = _InspectableBackgroundTaskNotifier();
-      await tester.pumpWidget(
-        _buildTestApp(
-          entries: [_createOcrEntry(withModels: true)],
-          testImages: [_createTestImage()],
-          backgroundTasksNotifier: notifier,
-          testImagePayloadPreparer: (bytes) async {
-            prepareAttempts++;
-            if (prepareAttempts == 1) {
-              throw StateError('image decode failed');
-            }
-            return OcrImagePayload(
-              bytes: bytes,
-              format: 'png',
-              width: 1,
-              height: 1,
-            );
-          },
-          testRetrySnapshotCacher: ({required taskId, required snapshot}) {
-            cacheStarted.complete();
-            return finishCache.future;
-          },
-        ),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'image preparation feedback prevents duplicate starts and recovers',
+      (tester) async {
+        var prepareAttempts = 0;
+        final preparationStarted = Completer<void>();
+        final finishPreparation = Completer<OcrImagePayload>();
+        final cacheStarted = Completer<void>();
+        final finishCache = Completer<Map<String, dynamic>?>();
+        final notifier = _InspectableBackgroundTaskNotifier();
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [_createOcrEntry(withModels: true)],
+            testImages: [_createTestImage()],
+            backgroundTasksNotifier: notifier,
+            testImagePayloadPreparer: (bytes) async {
+              prepareAttempts++;
+              if (prepareAttempts == 1) {
+                throw StateError('image decode failed');
+              }
+              if (prepareAttempts == 2) {
+                preparationStarted.complete();
+                return finishPreparation.future;
+              }
+              return OcrImagePayload(
+                bytes: bytes,
+                format: 'png',
+                width: 1,
+                height: 1,
+              );
+            },
+            testRetrySnapshotCacher: ({required taskId, required snapshot}) {
+              cacheStarted.complete();
+              return finishCache.future;
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('开始识别'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('开始识别'));
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('处理 OCR 图片失败，请重试'), findsOneWidget);
-      expect(find.text('已选 1 张图片'), findsOneWidget);
-      expect(notifier.tasksForTest, isEmpty);
+        expect(tester.takeException(), isNull);
+        expect(find.text('处理 OCR 图片失败，请重试'), findsOneWidget);
+        expect(find.text('已选 1 张图片'), findsOneWidget);
+        expect(find.text('开始识别'), findsOneWidget);
+        expect(notifier.tasksForTest, isEmpty);
 
-      await tester.tap(find.text('开始识别'));
-      await tester.pump();
-      await cacheStarted.future;
+        await tester.tap(find.text('开始识别'));
+        await tester.pump();
+        await preparationStarted.future;
 
-      expect(prepareAttempts, 2);
-      expect(find.text('保存重试图片...'), findsOneWidget);
-      expect(notifier.tasksForTest, isEmpty);
+        expect(find.text('准备图片中...'), findsOneWidget);
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.ancestor(
+                  of: find.text('准备图片中...'),
+                  matching: find.byType(FilledButton),
+                ),
+              )
+              .onPressed,
+          isNull,
+        );
+        await tester.tap(find.text('准备图片中...'));
+        await tester.pump();
+        expect(prepareAttempts, 2);
+        expect(notifier.tasksForTest, isEmpty);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      finishCache.complete(null);
-      await tester.pump();
-    });
+        finishPreparation.complete(
+          OcrImagePayload(
+            bytes: _createTestImage().bytes,
+            format: 'png',
+            width: 1,
+            height: 1,
+          ),
+        );
+        await tester.pump();
+        await cacheStarted.future;
+
+        expect(find.text('保存重试图片...'), findsOneWidget);
+        expect(notifier.tasksForTest, isEmpty);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        finishCache.complete(null);
+        await tester.pump();
+      },
+    );
 
     testWidgets('waits for retry image caching before adding a task', (
       tester,
