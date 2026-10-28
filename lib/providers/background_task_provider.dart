@@ -783,6 +783,7 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
     'secretion',
     'secretariat',
     'secretarial',
+    'secretbased',
     'secretive',
     'secretmenu',
     'summarize',
@@ -897,6 +898,10 @@ bool _legacyOcrHasCredentialUseContext(
     'use',
     'using',
   }.contains(actionVerb?.group(1)?.toLowerCase());
+  final bareSecretBasedUseContext = useVerb &&
+      prefix.toLowerCase() == 'secret' &&
+      suffix.toLowerCase() == '-based' &&
+      RegExp(r'^[.!?]*$').hasMatch(after);
   final naturalReadFromSourcePrompt = isNaturalWordContinuation &&
       actionVerb?.group(1)?.toLowerCase() == 'read' &&
       _legacyOcrNaturalSourcePhrasePattern.hasMatch(after);
@@ -950,6 +955,7 @@ bool _legacyOcrHasCredentialUseContext(
               maskPrefixIsEmbedded) &&
           RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
+      bareSecretBasedUseContext ||
       assignmentContext ||
       setToCredentialContext ||
       reportedValueContext ||
@@ -1856,7 +1862,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       // Preserve text-part boundaries separately so an echoed key split
       // between parts can be identified without removing natural whitespace.
       _legacyOcrTextContainsMaskedCredential(
-        textParts.join('\u0000'),
+        redactedMarkedInstruction,
         credentialValues,
       )) {
     return null;
@@ -1979,6 +1985,13 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
+      final bareSecretBasedUseContext = prefix.toLowerCase() == 'secret' &&
+          echoSuffix.toLowerCase() == '-based' &&
+          RegExp(
+            r'\b(?:use|using)$',
+            caseSensitive: false,
+          ).hasMatch(beforeEcho.trimRight()) &&
+          RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -1989,8 +2002,9 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             prefix,
             echoSuffix,
           );
-      final hasCredentialUseContext =
-          splitEchoHasCredentialUseContext || authenticateWithToProcessContext;
+      final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
+          bareSecretBasedUseContext ||
+          authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(

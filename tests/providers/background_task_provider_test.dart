@@ -5113,6 +5113,89 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves secret-based prose and redacts credential echoes',
+      () {
+        const naturalPrompt = 'Review the secret-based policy';
+        const credentialEcho = 'Read the receipt using secretQmXvP';
+        const ambiguousCredentialEcho = 'Please use secret-based';
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer secret…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        final naturalTask = taskFor(
+          'legacy-ocr-secret-based-natural-prompt',
+          naturalPrompt,
+        );
+        final naturalPersisted = jsonEncode(naturalTask.toMap());
+        final naturalInstruction = OcrRetrySnapshot.fromMap(
+          naturalTask.retryData!,
+        ).instructionContent;
+        expect(naturalInstruction, naturalPrompt);
+        expect(naturalPersisted, contains(naturalPrompt));
+
+        final credentialTask = taskFor(
+          'legacy-ocr-secret-based-credential-echo',
+          credentialEcho,
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        final migratedCredential = OcrRetrySnapshot.fromMap(
+          credentialTask.retryData!,
+        ).instructionContent;
+        expect(
+          migratedCredential,
+          'Read the receipt using [redacted]',
+        );
+        expect(
+          credentialPersisted,
+          contains('Read the receipt using [redacted]'),
+        );
+        expect(credentialPersisted, isNot(contains('secretQmXvP')));
+
+        final ambiguousCredentialTask = taskFor(
+          'legacy-ocr-secret-based-bare-credential-echo',
+          ambiguousCredentialEcho,
+        );
+        final ambiguousCredentialPersisted =
+            jsonEncode(ambiguousCredentialTask.toMap());
+        final migratedAmbiguousCredential = OcrRetrySnapshot.fromMap(
+          ambiguousCredentialTask.retryData!,
+        ).instructionContent;
+        expect(
+          migratedAmbiguousCredential,
+          'Please use [redacted]',
+        );
+        expect(
+          ambiguousCredentialPersisted,
+          contains('Please use [redacted]'),
+        );
+        expect(
+          ambiguousCredentialPersisted,
+          isNot(contains(ambiguousCredentialEcho)),
+        );
+      },
+    );
+
+    test(
       'legacy OCR instruction migration redacts a natural connector consumed after a split masked prefix',
       () {
         const credential = 'opaque-user-to';
