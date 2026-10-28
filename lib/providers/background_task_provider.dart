@@ -1032,6 +1032,20 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   final hasCredentialUseContext = text != null &&
       match != null &&
       _legacyOcrHasCredentialUseContext(text, match, prefix, continuation);
+  final ordinaryReadInstructionsPrompt = text != null &&
+      match != null &&
+      _legacyOcrHasNaturalWordContinuation(prefix, continuation) &&
+      RegExp(
+        r'\b(?:please\s+)?read\s*$',
+        caseSensitive: false,
+      ).hasMatch(text.substring(0, match.start)) &&
+      RegExp(
+        r'^instructions?\b',
+        caseSensitive: false,
+      ).hasMatch(text.substring(match.end).trimLeft());
+  if (ordinaryReadInstructionsPrompt && !hasCredentialUseContext) {
+    return false;
+  }
   final hasNumericMarker = RegExp(
     r'[\p{N}_]',
     unicode: true,
