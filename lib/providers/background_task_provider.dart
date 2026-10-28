@@ -1862,7 +1862,7 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       // Preserve text-part boundaries separately so an echoed key split
       // between parts can be identified without removing natural whitespace.
       _legacyOcrTextContainsMaskedCredential(
-        textParts.join('\u0000'),
+        redactedMarkedInstruction,
         credentialValues,
       )) {
     return null;
@@ -1985,6 +1985,12 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
+      final bareSecretBasedUseContext =
+          prefix.toLowerCase() == 'secret' &&
+              echoSuffix.toLowerCase() == '-based' &&
+              RegExp(r'\b(?:use|using)$', caseSensitive: false)
+                  .hasMatch(beforeEcho.trimRight()) &&
+              RegExp(r'^[.!?]*$').hasMatch(afterEcho.trim());
       final authenticateWithToProcessContext = RegExp(
             r'\bauthenticate with$',
             caseSensitive: false,
@@ -1996,7 +2002,9 @@ String _legacyOcrRedactMaskedCredentialEchoes(
             echoSuffix,
           );
       final hasCredentialUseContext =
-          splitEchoHasCredentialUseContext || authenticateWithToProcessContext;
+          splitEchoHasCredentialUseContext ||
+              bareSecretBasedUseContext ||
+              authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
