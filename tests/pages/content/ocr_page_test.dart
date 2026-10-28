@@ -2582,6 +2582,7 @@ void main() {
         expect(find.text('Saved instruction'), findsOneWidget);
         expect(find.text('管理识别指令'), findsNothing);
 
+        await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpWidget(
           _buildTestApp(
             entries: [entry],
