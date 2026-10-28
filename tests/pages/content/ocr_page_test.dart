@@ -143,6 +143,21 @@ Widget _buildTestApp({
   );
 }
 
+class _DelayedOcrInstructionsLoadNotifier extends OcrInstructionsNotifier {
+  _DelayedOcrInstructionsLoadNotifier(super.ref);
+
+  final _finishLoad = Completer<void>();
+  static const stored = OcrInstruction(name: '已保存', content: '保存的指令');
+
+  @override
+  Future<void> load() async {
+    await _finishLoad.future;
+    state = [stored, ...state];
+  }
+
+  void finishLoad() => _finishLoad.complete();
+}
+
 Future<void> _tapClearAndConfirm(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('ocr_clear_button')));
   await tester.pumpAndSettle();
@@ -3100,6 +3115,53 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('发票提取v2'), findsWidgets);
     });
+
+    testWidgets(
+      'editing a new instruction after stored rows load updates only that row',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        late _DelayedOcrInstructionsLoadNotifier notifier;
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            testInstructionsNotifierBuilder: (ref) {
+              notifier = _DelayedOcrInstructionsLoadNotifier(ref);
+              return notifier;
+            },
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final load = notifier.load();
+        await notifier.add('新建', '新指令');
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.edit_outlined));
+        await tester.pumpAndSettle();
+
+        // The editor stays open while the initial load prepends its stored row.
+        notifier.finishLoad();
+        await load;
+        await tester.pump();
+        await tester.enterText(
+          find.widgetWithText(TextField, '新建'),
+          '编辑后的新建',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, '指令内容'),
+          '编辑后的内容',
+        );
+        await tester.pump();
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+
+        expect(notifier.state, const [
+          _DelayedOcrInstructionsLoadNotifier.stored,
+          OcrInstruction(name: '编辑后的新建', content: '编辑后的内容'),
+        ]);
+      },
+    );
 
     testWidgets('deleting a selected middle instruction selects the default', (
       tester,

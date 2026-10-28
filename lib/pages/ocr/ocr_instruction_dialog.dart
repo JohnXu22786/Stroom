@@ -44,9 +44,13 @@ class _OcrInstructionManageDialogState
       ),
     );
     if (result == null || !mounted) return;
+    final currentIndex = ref
+        .read(ocrInstructionsProvider)
+        .indexWhere((instruction) => identical(instruction, existing));
+    if (currentIndex == -1) return;
     await ref
         .read(ocrInstructionsProvider.notifier)
-        .update(index, result.$1, result.$2);
+        .update(currentIndex, result.$1, result.$2);
   }
 
   Future<void> _addInstruction() async {
