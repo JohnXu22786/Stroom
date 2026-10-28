@@ -940,11 +940,17 @@ bool _legacyOcrHasCredentialUseContext(
         r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final authenticateWithToProcessContext =
+      RegExp(r'\bauthenticate with$', caseSensitive: false).hasMatch(before) &&
+          (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+              maskPrefixIsEmbedded) &&
+          RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
       assignmentContext ||
       setToCredentialContext ||
       reportedValueContext ||
       useToProcessContext ||
+      authenticateWithToProcessContext ||
       identifiedLabelContext;
 }
 
