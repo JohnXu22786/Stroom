@@ -2026,6 +2026,36 @@ class EvaluateTests(unittest.TestCase):
                     report["metrics"]["character_error_rate"]["value"], 0
                 )
 
+    def test_latex_cer_ignores_left_right_sizing_commands_only(self):
+        cases = (
+            ("(x)", r"\left(x\right)", 0),
+            ("(x)", r"\left[x\right]", "positive"),
+            ("R", r"\mathbb{R}", "positive"),
+        )
+        for expected, actual, expected_cer in cases:
+            with self.subTest(expected=expected, actual=actual):
+                manifest = {
+                    "fixtures": [
+                        {
+                            "id": "sizing-delimiters",
+                            "gold_text": expected,
+                            "categories": ["formula"],
+                        }
+                    ]
+                }
+                input_data = predictions(
+                    [{"fixture_id": "sizing-delimiters", "text": actual}]
+                )
+                input_data["run"]["output_format"] = "latex"
+
+                report = evaluate_predictions(manifest, input_data)
+
+                cer = report["metrics"]["character_error_rate"]["value"]
+                if expected_cer == "positive":
+                    self.assertGreater(cer, 0)
+                else:
+                    self.assertEqual(cer, expected_cer)
+
     def test_latex_greek_commands_match_unicode_formula_symbols(self):
         for symbol, command in (("θ", "theta"), ("α", "alpha")):
             with self.subTest(symbol=symbol):
