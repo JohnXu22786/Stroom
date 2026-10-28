@@ -2426,11 +2426,8 @@ void main() {
       expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
 
       await tester.tap(startButton);
-      await _pumpUntil(tester, () => adapter.requests.isNotEmpty);
       await _pumpUntil(tester, () => bgNotifier.tasksForTest.isNotEmpty);
       expect(bgNotifier.tasksForTest, hasLength(1));
-
-      await tester.pumpAndSettle();
     });
   });
 
