@@ -40,7 +40,7 @@ class AppStorage {
     }
 
     if (isFlutterTest && _usesDefaultPathProvider) {
-      _resolved = _safeTempPath();
+      _resolved = await _safeTempPath();
       return _resolved!;
     }
 
@@ -50,7 +50,7 @@ class AppStorage {
       final dir = await getApplicationDocumentsDirectory();
       _resolved = dir.path;
     } on MissingPluginException {
-      _resolved = _fallbackPath();
+      _resolved = await _fallbackPath();
     }
 
     return _resolved!;
@@ -71,7 +71,7 @@ class AppStorage {
   ///
   /// Uses [kIsWeb] + try-catch to safely check platform conditions across
   /// all Flutter targets (web, desktop, mobile, test).
-  static String _fallbackPath() {
+  static Future<String> _fallbackPath() async {
     // Web: dart:io (Directory, Platform) is unavailable.
     // Return a placeholder — actual file operations won't work on web.
     if (kIsWeb) {
@@ -100,23 +100,27 @@ class AppStorage {
   }
 
   /// Returns a Stroom-specific path under the system temp directory safely.
-  static String _safeTempPath() {
+  static Future<String> _safeTempPath() async {
     try {
-      return '${Directory.systemTemp.path}'
+      final path = '${Directory.systemTemp.path}'
           '${Platform.pathSeparator}stroom_data';
+      await Directory(path).create(recursive: true);
+      return path;
     } catch (e) {
       AppLogService.warning('AppStorage', '获取系统临时目录失败，使用 /tmp 回退: $e');
-      return '/tmp/stroom_data';
+      return '/tmp';
     }
   }
 
   /// Returns [Directory.current.path]/[subDir] safely, or a fallback.
-  static String _safeCwdPath(String subDir) {
+  static Future<String> _safeCwdPath(String subDir) async {
     try {
-      return '${Directory.current.path}/$subDir';
+      final path = '${Directory.current.path}/$subDir';
+      await Directory(path).create(recursive: true);
+      return path;
     } catch (e) {
-      AppLogService.warning('AppStorage', '获取当前工作目录失败，使用 /tmp 回退: $e');
-      return '/tmp/$subDir';
+      AppLogService.warning('AppStorage', '获取当前工作目录失败，使用系统临时目录回退: $e');
+      return _safeTempPath();
     }
   }
 

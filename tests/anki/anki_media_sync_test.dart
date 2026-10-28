@@ -111,6 +111,75 @@ void main() {
       },
     );
 
+    test('rejects invalid media cursors without resetting the local index',
+        () async {
+      for (final invalidUsn in [null, 'not-an-integer', -1]) {
+        final workDir = await Directory.systemTemp.createTemp(
+          'stroom_anki_media_invalid_cursor_test_',
+        );
+        const identity = 'ankiweb:invalid-media-cursor';
+        final bytes = [1, 2, 3];
+        final mediaDir = Directory('${workDir.path}/collection.media');
+        await mediaDir.create();
+        await File('${mediaDir.path}/tracked.png').writeAsBytes(bytes);
+        await _seedMediaIndex(
+          workDir,
+          identity,
+          lastSyncUsn: 7,
+          files: [
+            {
+              'fname': 'tracked.png',
+              'sha1': sha1.convert(bytes).toString(),
+              'usn': 7,
+              'sync_required': 0,
+            },
+          ],
+        );
+        final fake = _QueueHttpClient()
+          ..responseFor = (request, body) async => _jsonResponse({
+                'data': {'usn': invalidUsn},
+                'err': '',
+              });
+        final client = AnkiSyncProtocolClient.ankiWeb(
+          client: fake,
+          hostKey: 'invalid-cursor-test',
+        );
+
+        try {
+          await expectLater(
+            AnkiMediaSync.sync(
+              client,
+              syncIdentity: identity,
+              documentsPath: workDir.path,
+            ),
+            throwsA(isA<AnkiSyncException>()),
+          );
+          expect(fake.paths, ['/msync/begin']);
+
+          final index = await sqflite.openDatabase(
+            '${workDir.path}/collection.media.sync.'
+            '${sha256.convert(utf8.encode(identity))}.db',
+          );
+          try {
+            expect(
+              (await index.query('media_meta')).single['last_sync_usn'],
+              7,
+            );
+            expect(
+              (await index.query('media_files')).single['sync_required'],
+              0,
+            );
+          } finally {
+            await index.close();
+          }
+        } finally {
+          client.close();
+          fake.close();
+          await workDir.delete(recursive: true);
+        }
+      }
+    });
+
     test(
       'rejects a media ZIP entry by declared size before reading content',
       () {

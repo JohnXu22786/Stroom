@@ -37,6 +37,7 @@ void main() {
         path,
         '${Directory.systemTemp.path}${Platform.pathSeparator}stroom_data',
       );
+      expect(await Directory(path).exists(), isTrue);
     },
   );
 

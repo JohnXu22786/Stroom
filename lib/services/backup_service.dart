@@ -4325,7 +4325,7 @@ class BackupService {
     if (key == 'collection.anki2') {
       if (!selection.ankiData) return false;
       await AnkiDatabase.closeOpenedInstance();
-      await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       await writeEntry('', key);
       return true;
     }
@@ -4371,7 +4371,7 @@ class BackupService {
       // 先关闭可能打开的数据库连接（Windows 上文件被占用时无法写入）。
       await AnkiDatabase.closeOpenedInstance();
       if (relativePath == 'collection.anki2') {
-        await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+        await _invalidateAnkiSyncMetadataMigrationMarker();
       }
       await writeEntry('', relativePath);
       return true;
@@ -4411,6 +4411,11 @@ class BackupService {
   // ================================================================
   // 文件清理辅助
   // ================================================================
+
+  static Future<void> _invalidateAnkiSyncMetadataMigrationMarker() async {
+    if (kIsWeb || WebFileStore.isTestMode) return;
+    await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+  }
 
   /// 删除指定目录中的一个文件。
   ///
@@ -5567,7 +5572,7 @@ class BackupService {
     // 同时清理历史恢复写入的 anki/collection.anki2 残留文件。
     if (selection.ankiData) {
       await AnkiDatabase.closeOpenedInstance();
-      await AnkiDatabase.invalidateLegacySyncMetadataMigrationMarker();
+      await _invalidateAnkiSyncMetadataMigrationMarker();
       if (!await _deleteFile('', 'collection.anki2')) deleteFailed = true;
       if (!await _deleteFile('anki', 'collection.anki2')) deleteFailed = true;
       if (selection.includeMediaFiles &&

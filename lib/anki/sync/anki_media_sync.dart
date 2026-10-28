@@ -75,7 +75,11 @@ class AnkiMediaSync {
       if (begin is! Map) {
         throw const AnkiSyncException('媒体同步 begin 响应无法解析');
       }
-      final remoteUsn = _int(begin['usn']);
+      final remoteUsnValue = begin['usn'];
+      if (remoteUsnValue is! int || remoteUsnValue < 0) {
+        throw const AnkiSyncException('媒体同步 begin 响应中的 USN 无效');
+      }
+      final remoteUsn = remoteUsnValue;
       final localMeta = (await index.query(
         'media_meta',
         where: 'id = 1',
