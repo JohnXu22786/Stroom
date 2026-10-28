@@ -295,7 +295,8 @@ void main() {
     }
   });
 
-  test('migrates local INTEGER sfld columns without losing note data', () async {
+  test('migrates local INTEGER sfld columns without losing note data',
+      () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_notes_affinity_migration_',
     );
