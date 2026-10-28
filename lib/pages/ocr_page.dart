@@ -2136,7 +2136,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
 
     try {
       final payload = await _prepareImagePayload(editedBytes);
-      if (!mounted) return;
+      if (!mounted || _ocrStarting || _isImageSelectionLocked) return;
       final currentIndex = _selectedImages.indexWhere(
         (image) => identical(image, currentImage),
       );
