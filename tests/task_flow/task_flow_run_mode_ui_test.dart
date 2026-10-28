@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:stroom/services/storage_service.dart';
 
 import 'package:stroom/task_flow/models/block_type_definition.dart';
 import 'package:stroom/task_flow/models/io_type.dart';
@@ -124,6 +125,10 @@ bool _startButtonEnabled(WidgetTester tester) {
 }
 
 void main() {
+  // Each widget test may install a different documents directory.
+  setUp(AppStorage.resetCache);
+  tearDown(AppStorage.resetCache);
+
   group('Task flow run-mode input adapts to the FIRST block', () {
     testWidgets('a restored generic file input stays a picked file',
         (tester) async {

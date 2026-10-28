@@ -288,8 +288,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
+  String? _searchError;
+  String? _pendingSearchMessageId;
   final List<SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
+  Timer? _searchDebounceTimer;
+  int _searchGeneration = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
 
@@ -327,14 +331,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Number of messages to load per page.
   static const int _pageSize = 20;
 
-  /// Index in [_history] pointing to the first message that is loaded into
-  /// the chat controller. All messages from [_loadedUpToIndex] to the end of
-  /// [_history] are visible. When [_loadedUpToIndex] is 0, all messages are
-  /// already loaded.
+  /// Index in the current [_history] window pointing to the first message
+  /// already loaded into the chat controller. Repository pages older than this
+  /// window are fetched separately as the user scrolls.
   int _loadedUpToIndex = 0;
 
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
+  bool _isLoadingNewer = false;
+  int? _loadingNewerConversationGeneration;
+  bool _pendingNewerConversationLoad = false;
 
   /// True once the user has reached the top of the list while no older
   /// messages remain — shows the "没有更多内容了" hint above the first
@@ -351,8 +357,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Minimum display duration of the top load-more indicator. The spinner
   /// must stay up for at least this long even when the page loads
   /// instantly, otherwise it flashes for a single frame.
-  static const Duration _loadMoreMinDisplayDuration =
-      Duration(milliseconds: 500);
+  static const Duration _loadMoreMinDisplayDuration = Duration(
+    milliseconds: 500,
+  );
 
   /// Guards against concurrent calls to [_loadConversationMessages].
   /// Prevents race conditions where message loading is triggered from
@@ -365,13 +372,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// completion or conversation switch during an async load from being lost
   /// to the in-flight guard.
   bool _reloadAfterLoading = false;
+  bool _reloadAfterLoadingForce = false;
 
   /// Invalidates a load when the active conversation changes while it is
   /// awaiting persistence/logging/controller work.
   int _conversationLoadGeneration = 0;
 
   /// Whether there are more older messages to load.
-  bool get _hasMoreMessages => _loadedUpToIndex > 0;
+  bool get _hasMoreMessages {
+    if (_loadedUpToIndex > 0) return true;
+    final conversationId = _loadedConversationId;
+    return conversationId != null &&
+        ref
+            .read(conversationsProvider.notifier)
+            .hasEarlierRepositoryMessages(conversationId);
+  }
 
   @override
   void initState() {
@@ -399,6 +414,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchDebounceTimer?.cancel();
+    _searchGeneration++;
     // 使进行中的加载失效：卡在 0.5 秒最少显示延迟里的加载在延迟结束后
     // 不得再向已 dispose 的控制器插入消息。
     _loadMoreGeneration++;

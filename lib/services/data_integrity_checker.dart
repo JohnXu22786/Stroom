@@ -8,6 +8,8 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import '../startup/startup_check_service.dart';
 import '../utils/web_file_store.dart';
 import 'manifest_database.dart';
+import 'attachment_storage.dart';
+import 'conversation_repository.dart';
 import 'startup_data_validation_unavailable.dart';
 import 'startup_preferences.dart';
 import 'storage_service.dart';
@@ -124,6 +126,8 @@ class DataIntegrityChecker {
 
     final sqliteIssues = <DataIntegrityIssue>[];
     await _checkSqliteDatabases(sqliteIssues);
+    final conversationIssues = <DataIntegrityIssue>[];
+    await _checkConversationRepository(conversationIssues);
     final jsonValidation = await jsonValidationFuture;
     final semanticIssues = <DataIntegrityIssue>[];
     for (final issue in jsonValidation.formatIssues) {
@@ -149,8 +153,46 @@ class DataIntegrityChecker {
     return DataIntegrityReport([
       ..._jsonIssues(jsonChecks, jsonValidation.parseErrors),
       ...sqliteIssues,
+      ...conversationIssues,
       ...semanticIssues,
     ]);
+  }
+
+  static Future<void> _checkConversationRepository(
+    List<DataIntegrityIssue> issues,
+  ) async {
+    if (WebFileStore.isTestMode && !kIsWeb) return;
+    final repository = createConversationRepository();
+    try {
+      await repository.initialize();
+      final integrityIssues = await repository.checkIntegrity(
+        readMedia: AttachmentStorage.readFile,
+      );
+      for (final issue in integrityIssues) {
+        issues.add(
+          DataIntegrityIssue(
+            part: 'chat',
+            message:
+                'Conversation ${issue.conversationId}, message ${issue.messageId}: '
+                '${issue.reason} (${issue.reference}).',
+            isCorruption: true,
+          ),
+        );
+      }
+    } catch (error) {
+      issues.add(
+        DataIntegrityIssue(
+          part: 'chat',
+          message:
+              'Conversation repository integrity check unavailable: $error',
+          isCorruption: error is FormatException ||
+              error is TypeError ||
+              error is sqflite.DatabaseException,
+        ),
+      );
+    } finally {
+      await repository.close();
+    }
   }
 
   static int? _contentIndexForPrefsKey(

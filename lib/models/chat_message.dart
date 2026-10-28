@@ -159,6 +159,8 @@ class ChatMessage {
 
   final String id;
   final String role; // 'user' | 'assistant'
+  /// Original open-ended storage role when the UI model normalizes it.
+  final String? originalRole;
   final String content;
   final DateTime createdAt;
   final List<Attachment> attachments;
@@ -213,6 +215,7 @@ class ChatMessage {
   ChatMessage({
     String? id,
     required this.role,
+    this.originalRole,
     required this.content,
     DateTime? createdAt,
     List<Attachment>? attachments,
@@ -326,7 +329,7 @@ class ChatMessage {
         ...legacyFields,
         'schemaVersion': schemaVersion,
         'id': id,
-        'role': role,
+        'role': originalRole ?? role,
         'content': content,
         'createdAt': createdAt.toIso8601String(),
         'attachments': attachments.map((a) => a.toMap()).toList(),
@@ -465,6 +468,7 @@ class ChatMessage {
     return ChatMessage(
       id: map['id'] is String ? map['id'] as String : null,
       role: roleStr,
+      originalRole: roleRaw is String && roleRaw != roleStr ? roleRaw : null,
       // 防御：content 非 String（损坏数据）时回退空串，
       // 不抛 TypeError 丢弃整条消息（与其他字段防御风格一致）
       content: map['content'] is String ? map['content'] as String : '',
@@ -526,6 +530,7 @@ class ChatMessage {
       ChatMessage(
         id: id,
         role: role ?? this.role,
+        originalRole: role == null ? originalRole : null,
         content: content ?? this.content,
         createdAt: createdAt ?? this.createdAt,
         attachments: attachments ?? this.attachments,

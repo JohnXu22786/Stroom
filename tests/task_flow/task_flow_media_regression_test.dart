@@ -422,7 +422,11 @@ void main() {
       final bytes = [1, 2, 3];
       final source =
           await File('${directory.path}/speech.wav').writeAsBytes(bytes);
+      await container.read(conversationsProvider.notifier).ready;
       final gate = documents.gate = Completer<void>();
+      // Re-arm AppStorage after conversation startup so this gate covers the
+      // attachment write itself rather than the repository's startup lookup.
+      AppStorage.resetCache();
       final pending = runChat(source);
       await documents.entered.future.timeout(const Duration(seconds: 5));
       if (action == 'cancel') executions.cancelExecution(execId);

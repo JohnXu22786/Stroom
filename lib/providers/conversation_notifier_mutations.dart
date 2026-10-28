@@ -87,13 +87,43 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes a conversation by [id]. If it was the active conversation, clears
   /// the active selection.
   Future<void> deleteConversation(String id) async {
+    final removed =
+        state.where((conversation) => conversation.id == id).toList();
+    if (removed.isEmpty) return;
+    if (_repositoryReady) {
+      try {
+        removed.first.messages = await _readAllRepositoryMessages(id);
+      } catch (error) {
+        debugPrint('Failed to read conversation attachments: $error');
+        return;
+      }
+    }
+    final wasActive = _ref.read(activeConversationIdProvider) == id;
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => c.id != id).toList();
     if (_ref.read(activeConversationIdProvider) == id) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    await _persist();
+    if (!await _persistNowChecked()) {
+      if (mounted) {
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: removed,
+        );
+        if (wasActive && _ref.read(activeConversationIdProvider) == null) {
+          _ref.read(activeConversationIdProvider.notifier).state = id;
+        }
+        _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
+      }
+      return;
+    }
     await _persistActiveId();
+    for (final conversation in removed) {
+      await _cleanupConversationFiles(conversation);
+    }
   }
 
   /// Replaces a flow-owned conversation from a prior attempt. Unlike the
@@ -102,6 +132,18 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   Future<bool> deleteFlowConversationWithFiles(String id) async {
     final old = state.where((c) => c.id == id).toList();
     if (old.isEmpty) return true;
+    if (_repositoryReady) {
+      try {
+        // The repository will remove its message rows when this conversation
+        // is persisted as deleted, so capture every attachment reference
+        // before that transaction runs.
+        old.first.messages = await _readAllRepositoryMessages(id);
+      } catch (error) {
+        debugPrint('Failed to read flow conversation attachments: $error');
+        return false;
+      }
+    }
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => c.id != id).toList();
     _syncTemporaryTimer();
     bool saved;
@@ -116,11 +158,13 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       // platform store, which can still reject the write. Restore the visible
       // conversation and keep its attachment copies when disk removal fails.
       if (mounted) {
-        state = pinnedFirstStable([
-          ...old,
-          ...state.where((conversation) => conversation.id != id),
-        ]);
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: old,
+        );
         _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
       }
       return false;
     }
@@ -137,6 +181,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Selects a conversation by [id], setting it as the active one.
   void selectConversation(String id) {
     _ref.read(activeConversationIdProvider.notifier).state = id;
+    if (_repositoryReady && !_messageLoadedConversationIds.contains(id)) {
+      unawaited(_loadMessagesFromRepository(id));
+    }
     _persistActiveId();
   }
 
@@ -223,13 +270,60 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
     final idSet = ids.toSet();
+    final removed =
+        state.where((conversation) => idSet.contains(conversation.id)).toList();
+    if (_repositoryReady) {
+      final fullHistories = <String, List<ChatMessage>>{};
+      try {
+        for (final conversation in removed) {
+          fullHistories[conversation.id] = await _readAllRepositoryMessages(
+            conversation.id,
+          );
+        }
+      } catch (error) {
+        debugPrint(
+            'Failed to read batch-deleted conversation attachments: $error');
+        return;
+      }
+      for (final conversation in removed) {
+        conversation.messages = fullHistories[conversation.id]!;
+      }
+    }
+    final activeId = _ref.read(activeConversationIdProvider);
+    final wasActive = activeId != null && idSet.contains(activeId);
+    final originalOrder = List<Conversation>.from(state);
     state = state.where((c) => !idSet.contains(c.id)).toList();
-    if (idSet.contains(_ref.read(activeConversationIdProvider))) {
+    if (wasActive) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    await _persist();
+
+    bool saved;
+    try {
+      saved = await _persistNowChecked();
+    } catch (error) {
+      debugPrint('Failed to batch-delete conversations: $error');
+      saved = false;
+    }
+    if (!saved) {
+      if (mounted) {
+        state = restoreConversationOrderAfterFailedWrite(
+          originalOrder: originalOrder,
+          current: state,
+          removed: removed,
+        );
+        if (wasActive && _ref.read(activeConversationIdProvider) == null) {
+          _ref.read(activeConversationIdProvider.notifier).state = activeId;
+        }
+        _syncTemporaryTimer();
+        await _persistRestoredStateAfterFailedWrite();
+      }
+      return;
+    }
     await _persistActiveId();
+    for (final conversation in removed) {
+      await _cleanupConversationFiles(conversation);
+    }
   }
 
   /// Auto-generates a title for a conversation using the first messages.
@@ -271,23 +365,44 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// true：临时对话的 1 小时倒计时只在这些事件上重置。切换对话前的
   /// 存档保存、编辑截断、删除消息等非产生事件不得重置（否则会无意中
   /// 延长临时对话的生命周期）。
-  Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) async {
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
+  /// [completeHistorySnapshot] is true only when [messages] contains the
+  /// complete persisted history. It lets repository persistence delete omitted
+  /// rows without mistaking an ordinary paged view for a full transcript.
+  Future<void> updateMessages(
+    String conversationId,
+    List<ChatMessage> messages, {
+    bool resetTemporaryCountdown = false,
+    bool completeHistorySnapshot = false,
+  }) async {
+    if (_repositoryReady && completeHistorySnapshot) {
+      _completeMessageSnapshotGenerations[conversationId] =
+          ++_completeMessageSnapshotGeneration;
+    }
+    _replaceMessages(
+      conversationId,
+      messages,
+      resetTemporaryCountdown: resetTemporaryCountdown,
+    );
     await _persistNow();
   }
 
   /// Confirm flow messages reached disk before sending or completing a step.
   Future<bool> updateFlowMessagesChecked(
-      String conversationId, List<ChatMessage> messages) async {
+    String conversationId,
+    List<ChatMessage> messages,
+  ) async {
     if (!mounted || !state.any((c) => c.id == conversationId)) return false;
     _replaceMessages(conversationId, messages);
     return _persistNowChecked();
   }
 
-  void _replaceMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) {
+  void _replaceMessages(
+    String conversationId,
+    List<ChatMessage> messages, {
+    bool resetTemporaryCountdown = false,
+  }) {
+    _invalidateRepositoryMessageLoads(conversationId);
+    if (_repositoryReady) _messageLoadedConversationIds.add(conversationId);
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.messages = messages;
@@ -404,8 +519,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Updates the context compaction summary for a conversation.
-  Future<void> updateContextSummary(String conversationId, String summary,
-      {String? tailStartId}) async {
+  Future<void> updateContextSummary(
+    String conversationId,
+    String summary, {
+    String? tailStartId,
+  }) async {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.contextSummary = summary;

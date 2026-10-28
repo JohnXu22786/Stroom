@@ -61,11 +61,13 @@ void main() {
     int version = 2,
   }) {
     final archive = Archive();
-    final manifest = utf8.encode(jsonEncode({
-      'version': version,
-      'createdAt': DateTime.now().toIso8601String(),
-      'appVersion': 'test',
-    }));
+    final manifest = utf8.encode(
+      jsonEncode({
+        'version': version,
+        'createdAt': DateTime.now().toIso8601String(),
+        'appVersion': 'test',
+      }),
+    );
     archive.addFile(ArchiveFile('manifest.json', manifest.length, manifest));
     final dbData = {
       'image_records': <Map<String, dynamic>>[],
@@ -79,8 +81,13 @@ void main() {
       ManifestTables.videoFolders: <String>[],
     };
     final databaseManifest = utf8.encode(jsonEncode(dbData));
-    archive.addFile(ArchiveFile(
-        'stroom_manifest.json', databaseManifest.length, databaseManifest));
+    archive.addFile(
+      ArchiveFile(
+        'stroom_manifest.json',
+        databaseManifest.length,
+        databaseManifest,
+      ),
+    );
     for (final entry in files.entries) {
       archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
     }
@@ -91,60 +98,66 @@ void main() {
   // store 模式大文件：流式恢复逐字节一致（主回归）
   // ==================================================================
 
-  test('restoreBackup roundtrips a large store-mode backup byte-identical',
-      () async {
-    final rng = Random(42);
-    final largeSize = 12 * 1024 * 1024; // 覆盖 64KB 分块与多块累积
-    final largeData = Uint8List(largeSize);
-    for (var i = 0; i < largeSize; i++) {
-      largeData[i] = rng.nextInt(256);
-    }
-    final srcPath = '$workDir/video.mp4';
-    await File(srcPath).writeAsBytes(largeData, flush: true);
-    final textPath = '$workDir/note.txt';
-    await File(textPath).writeAsBytes(utf8.encode('hello 中文'), flush: true);
+  test(
+    'restoreBackup roundtrips a large store-mode backup byte-identical',
+    () async {
+      final rng = Random(42);
+      final largeSize = 12 * 1024 * 1024; // 覆盖 64KB 分块与多块累积
+      final largeData = Uint8List(largeSize);
+      for (var i = 0; i < largeSize; i++) {
+        largeData[i] = rng.nextInt(256);
+      }
+      final srcPath = '$workDir/video.mp4';
+      await File(srcPath).writeAsBytes(largeData, flush: true);
+      final textPath = '$workDir/note.txt';
+      await File(textPath).writeAsBytes(utf8.encode('hello 中文'), flush: true);
 
-    final zipPath = '$workDir/backup.zip';
-    BackupService.createBackupStreamingSyncForTest(
-      jsonFiles: {
-        'manifest.json': '{"version":2}',
-        'settings.json': '{"darkMode":true}',
-      },
-      memoryFiles: {
-        // 注意：conversations 在应用内以 JSON 字符串形式存储
-        'chat_data.json':
-            Uint8List.fromList(utf8.encode('{"conversations":"[]"}')),
-      },
-      diskFiles: [
-        ['videos/big.mp4', srcPath],
-        ['texts/note.txt', textPath],
-      ],
-      outputPath: zipPath,
-    );
+      final zipPath = '$workDir/backup.zip';
+      BackupService.createBackupStreamingSyncForTest(
+        jsonFiles: {
+          'manifest.json': '{"version":2}',
+          'settings.json': '{"darkMode":true}',
+        },
+        memoryFiles: {
+          // 注意：conversations 在应用内以 JSON 字符串形式存储
+          'chat_data.json': Uint8List.fromList(
+            utf8.encode('{"conversations":"[]"}'),
+          ),
+        },
+        diskFiles: [
+          ['videos/big.mp4', srcPath],
+          ['texts/note.txt', textPath],
+        ],
+        outputPath: zipPath,
+      );
 
-    // 恢复（勾选全量）
-    final progress = <double>[];
-    await BackupService.restoreBackup(zipPath, onProgress: progress.add);
+      // 恢复（勾选全量）
+      final progress = <double>[];
+      await BackupService.restoreBackup(zipPath, onProgress: progress.add);
 
-    // 进度：0.0 开始、1.0 结束
-    expect(progress.first, equals(0.0));
-    expect(progress.last, equals(1.0));
+      // 进度：0.0 开始、1.0 结束
+      expect(progress.first, equals(0.0));
+      expect(progress.last, equals(1.0));
 
-    // 大视频逐字节一致（store 模式流式恢复损坏回归）
-    final restored = await readBackupFile('videos', 'big.mp4');
-    expect(restored, isNotNull, reason: '大文件必须被恢复出来');
-    expect(restored!.length, equals(largeSize));
-    expect(restored, equals(largeData), reason: '流式恢复必须逐字节还原大文件');
+      // 大视频逐字节一致（store 模式流式恢复损坏回归）
+      final restored = await readBackupFile('videos', 'big.mp4');
+      expect(restored, isNotNull, reason: '大文件必须被恢复出来');
+      expect(restored!.length, equals(largeSize));
+      expect(restored, equals(largeData), reason: '流式恢复必须逐字节还原大文件');
 
-    // 文本文件
-    final restoredText = await readBackupFile('texts', 'note.txt');
-    expect(utf8.decode(restoredText!), equals('hello 中文'));
+      // 文本文件
+      final restoredText = await readBackupFile('texts', 'note.txt');
+      expect(utf8.decode(restoredText!), equals('hello 中文'));
 
-    // 设置类 preferences 从 settings.json 恢复
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('darkMode'), isTrue,
-        reason: 'settings.json 必须在流式恢复中合并进 SharedPreferences');
-  });
+      // 设置类 preferences 从 settings.json 恢复
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getBool('darkMode'),
+        isTrue,
+        reason: 'settings.json 必须在流式恢复中合并进 SharedPreferences',
+      );
+    },
+  );
 
   // ==================================================================
   // deflate 压缩条目（旧备份默认压缩格式）
@@ -152,7 +165,8 @@ void main() {
 
   test('restoreBackup decompresses deflate-compressed entries', () async {
     final videoBytes = Uint8List.fromList(
-        List<int>.generate(256 * 1024, (i) => i % 251)); // 不易压缩的伪随机
+      List<int>.generate(256 * 1024, (i) => i % 251),
+    ); // 不易压缩的伪随机
     final archive = buildV2Archive(
       videoRecords: [
         {
@@ -188,65 +202,83 @@ void main() {
   // 旧版 v1 布局：files/ 前缀、tasks/*.json、preferences.json
   // ==================================================================
 
-  test('restoreBackup maps legacy v1 layout (files/, tasks/, preferences.json)',
-      () async {
-    final archive = Archive()
-      // 带非空 EOCD 注释：覆盖尾部搜索的注释长度边界检查
-      ..comment = 'stroom backup with a non-empty comment 中文';
-    archive.addFile(ArchiveFile(
-        'manifest.json',
-        utf8
-            .encode(jsonEncode({
+  test(
+    'restoreBackup maps legacy v1 layout (files/, tasks/, preferences.json)',
+    () async {
+      final archive = Archive()
+        // 带非空 EOCD 注释：覆盖尾部搜索的注释长度边界检查
+        ..comment = 'stroom backup with a non-empty comment 中文';
+      archive.addFile(
+        ArchiveFile(
+          'manifest.json',
+          utf8
+              .encode(
+                jsonEncode({
+                  'version': 1,
+                  'createdAt': DateTime.now().toIso8601String(),
+                }),
+              )
+              .length,
+          utf8.encode(
+            jsonEncode({
               'version': 1,
               'createdAt': DateTime.now().toIso8601String(),
-            }))
-            .length,
-        utf8.encode(jsonEncode({
-          'version': 1,
-          'createdAt': DateTime.now().toIso8601String(),
-        }))));
-    // v1：聊天+设置合并在一个 preferences.json
-    // （conversations 在应用内以 JSON 字符串形式存储）
-    archive.addFile(ArchiveFile(
-        'preferences.json',
-        utf8
-            .encode(jsonEncode({
+            }),
+          ),
+        ),
+      );
+      // v1：聊天+设置合并在一个 preferences.json
+      // （conversations 在应用内以 JSON 字符串形式存储）
+      archive.addFile(
+        ArchiveFile(
+          'preferences.json',
+          utf8
+              .encode(
+                jsonEncode({
+                  'conversations': '[]',
+                  'active_conversation_id': 'conv_1',
+                  'theme': 'dark',
+                }),
+              )
+              .length,
+          utf8.encode(
+            jsonEncode({
               'conversations': '[]',
               'active_conversation_id': 'conv_1',
               'theme': 'dark',
-            }))
-            .length,
-        utf8.encode(jsonEncode({
-          'conversations': '[]',
-          'active_conversation_id': 'conv_1',
-          'theme': 'dark',
-        }))));
-    // v1 二进制：files/ 前缀
-    final jpg = Uint8List.fromList(List<int>.generate(4096, (i) => i % 256));
-    archive.addFile(
-        ArchiveFile('files/pictures/hash_legacy.jpg', jpg.length, jpg));
-    // v1 任务：tasks/synthesis_tasks.json
-    final tasks = utf8.encode('{"jobs":[]}');
-    archive.addFile(
-        ArchiveFile('tasks/synthesis_tasks.json', tasks.length, tasks));
+            }),
+          ),
+        ),
+      );
+      // v1 二进制：files/ 前缀
+      final jpg = Uint8List.fromList(List<int>.generate(4096, (i) => i % 256));
+      archive.addFile(
+        ArchiveFile('files/pictures/hash_legacy.jpg', jpg.length, jpg),
+      );
+      // v1 任务：tasks/synthesis_tasks.json
+      final tasks = utf8.encode('{"jobs":[]}');
+      archive.addFile(
+        ArchiveFile('tasks/synthesis_tasks.json', tasks.length, tasks),
+      );
 
-    final zipPath = await writeArchive(archive, 'legacy_v1.zip');
+      final zipPath = await writeArchive(archive, 'legacy_v1.zip');
 
-    await BackupService.restoreBackup(zipPath);
+      await BackupService.restoreBackup(zipPath);
 
-    // preferences.json → 聊天键 + 设置键分别恢复
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('active_conversation_id'), equals('conv_1'));
-    expect(prefs.getString('theme'), equals('dark'));
+      // preferences.json → 聊天键 + 设置键分别恢复
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('active_conversation_id'), equals('conv_1'));
+      expect(prefs.getString('theme'), equals('dark'));
 
-    // files/pictures/ → pictures/
-    final restoredJpg = await readBackupFile('pictures', 'hash_legacy.jpg');
-    expect(restoredJpg, equals(jpg));
+      // files/pictures/ → pictures/
+      final restoredJpg = await readBackupFile('pictures', 'hash_legacy.jpg');
+      expect(restoredJpg, equals(jpg));
 
-    // tasks/synthesis_tasks.json → synthesis/tasks.json
-    final restoredTasks = await readBackupFile('synthesis', 'tasks.json');
-    expect(utf8.decode(restoredTasks!), equals('{"jobs":[]}'));
-  });
+      // tasks/synthesis_tasks.json → synthesis/tasks.json
+      final restoredTasks = await readBackupFile('synthesis', 'tasks.json');
+      expect(utf8.decode(restoredTasks!), equals('{"jobs":[]}'));
+    },
+  );
 
   // ==================================================================
   // 选择性恢复：未勾选类别保持原样
@@ -279,10 +311,7 @@ void main() {
           'textLength': textBytes.length,
         },
       ],
-      files: {
-        'videos/v_skip.mp4': videoBytes,
-        'texts/t_keep.txt': textBytes,
-      },
+      files: {'videos/v_skip.mp4': videoBytes, 'texts/t_keep.txt': textBytes},
     );
     final zipPath = await writeArchive(archive, 'selective.zip');
 
@@ -301,10 +330,16 @@ void main() {
     await BackupService.restoreBackup(zipPath, selection: selection);
 
     // 未选中的视频：文件与记录都不应出现
-    expect(await readBackupFile('videos', 'v_skip.mp4'), isNull,
-        reason: '未勾选的视频类别不得恢复文件');
-    expect(await ManifestDatabase.getAllVideoRecords(), isEmpty,
-        reason: '未勾选的视频类别不得恢复记录');
+    expect(
+      await readBackupFile('videos', 'v_skip.mp4'),
+      isNull,
+      reason: '未勾选的视频类别不得恢复文件',
+    );
+    expect(
+      await ManifestDatabase.getAllVideoRecords(),
+      isEmpty,
+      reason: '未勾选的视频类别不得恢复记录',
+    );
 
     // 选中的文本：文件与记录都恢复
     final restoredText = await readBackupFile('texts', 't_keep.txt');
@@ -318,28 +353,34 @@ void main() {
   // 校验失败（验证先于删除）：不碰已有数据
   // ==================================================================
 
-  test('invalid backup throws BackupValidationException and keeps data intact',
-      () async {
-    // 已有数据（文件 + 偏好设置）
-    await writeBackupFile(
-        'texts', 'keep.txt', Uint8List.fromList(utf8.encode('KEEP')));
-    SharedPreferences.setMockInitialValues({'theme': 'light'});
+  test(
+    'invalid backup throws BackupValidationException and keeps data intact',
+    () async {
+      // 已有数据（文件 + 偏好设置）
+      await writeBackupFile(
+        'texts',
+        'keep.txt',
+        Uint8List.fromList(utf8.encode('KEEP')),
+      );
+      SharedPreferences.setMockInitialValues({'theme': 'light'});
 
-    final garbagePath = '$workDir/garbage.zip';
-    await File(garbagePath)
-        .writeAsBytes(Uint8List.fromList(List.generate(1024, (i) => i % 256)));
+      final garbagePath = '$workDir/garbage.zip';
+      await File(
+        garbagePath,
+      ).writeAsBytes(Uint8List.fromList(List.generate(1024, (i) => i % 256)));
 
-    await expectLater(
-      BackupService.restoreBackup(garbagePath),
-      throwsA(isA<BackupValidationException>()),
-    );
+      await expectLater(
+        BackupService.restoreBackup(garbagePath),
+        throwsA(isA<BackupValidationException>()),
+      );
 
-    // 校验失败发生在删除之前：已有数据必须原样保留
-    final kept = await readBackupFile('texts', 'keep.txt');
-    expect(utf8.decode(kept!), equals('KEEP'), reason: '校验失败的备份不得删除任何已有数据');
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('theme'), equals('light'));
-  });
+      // 校验失败发生在删除之前：已有数据必须原样保留
+      final kept = await readBackupFile('texts', 'keep.txt');
+      expect(utf8.decode(kept!), equals('KEEP'), reason: '校验失败的备份不得删除任何已有数据');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('theme'), equals('light'));
+    },
+  );
 
   test('restoreBackup rejects a zip without manifest.json', () async {
     final archive = Archive();
@@ -360,7 +401,8 @@ void main() {
     // 手工合成：1 个普通条目（manifest.json）+ 1 个 zip64 条目
     // （local/central 尺寸与偏移字段全部置 0xFFFFFFFF，值放入 zip64 extra）。
     final manifestContent = utf8.encode(
-        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}');
+      '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}',
+    );
     final binContent = Uint8List.fromList('ZIP64-CONTENT'.codeUnits);
 
     final b = BytesBuilder(copy: false);
@@ -389,12 +431,23 @@ void main() {
 
     // ---- 中央目录（zip64 条目在前，普通条目在后）----
     final cdOffset = b.length;
-    writeCfh(b, 'pictures/zip64.bin', binContent.length, binContent.length,
-        binOffset,
-        zip64Fields: true, crc32: _zipCrc32(binContent));
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
-        crc32: _zipCrc32(manifestContent));
+      b,
+      'pictures/zip64.bin',
+      binContent.length,
+      binContent.length,
+      binOffset,
+      zip64Fields: true,
+      crc32: _zipCrc32(binContent),
+    );
+    writeCfh(
+      b,
+      'manifest.json',
+      manifestContent.length,
+      manifestContent.length,
+      0,
+      crc32: _zipCrc32(manifestContent),
+    );
 
     final cdSize = b.length - cdOffset;
     final zip64EocdOffset = b.length;
@@ -437,18 +490,22 @@ void main() {
     // manifest 和 stroom_manifest 合法；视频条目是合法但尺寸不符的
     // deflate 流。预检必须在删除现有数据前将其作为无效备份拒绝。
     final manifestContent = utf8.encode(
-        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}');
-    final dbContent = utf8.encode(jsonEncode({
-      'image_records': <Map<String, dynamic>>[],
-      'audio_records': <Map<String, dynamic>>[],
-      'video_records': <Map<String, dynamic>>[],
-      'text_records': <Map<String, dynamic>>[],
-      'folders': <String>[],
-    }));
+      '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}',
+    );
+    final dbContent = utf8.encode(
+      jsonEncode({
+        'image_records': <Map<String, dynamic>>[],
+        'audio_records': <Map<String, dynamic>>[],
+        'video_records': <Map<String, dynamic>>[],
+        'text_records': <Map<String, dynamic>>[],
+        'folders': <String>[],
+      }),
+    );
     // 一个合法但内容极短的 raw deflate 流（解压后 5 字节）
     final shortContent = utf8.encode('SHORT');
-    final shortDeflate =
-        Uint8List.fromList(ZLibCodec(raw: true).encode(shortContent));
+    final shortDeflate = Uint8List.fromList(
+      ZLibCodec(raw: true).encode(shortContent),
+    );
 
     final b = BytesBuilder(copy: false);
     final mName = utf8.encode('manifest.json');
@@ -460,12 +517,7 @@ void main() {
     );
     b.add(manifestContent);
     final dbName = utf8.encode('stroom_manifest.json');
-    writeLocalHeader(
-      b,
-      dbName,
-      dbContent.length,
-      crc32: _zipCrc32(dbContent),
-    );
+    writeLocalHeader(b, dbName, dbContent.length, crc32: _zipCrc32(dbContent));
     b.add(dbContent);
     final vName = utf8.encode('videos/corrupt.mp4');
     final videoOffset = b.length;
@@ -480,13 +532,30 @@ void main() {
 
     final cdOffset = b.length;
     writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
-        crc32: _zipCrc32(manifestContent));
-    writeCfh(b, 'stroom_manifest.json', dbContent.length, dbContent.length,
-        mName.length + 30 + manifestContent.length,
-        crc32: _zipCrc32(dbContent));
-    writeCfh(b, 'videos/corrupt.mp4', shortDeflate.length, 1000000, videoOffset,
-        method: 8, crc32: _zipCrc32(shortContent));
+      b,
+      'manifest.json',
+      manifestContent.length,
+      manifestContent.length,
+      0,
+      crc32: _zipCrc32(manifestContent),
+    );
+    writeCfh(
+      b,
+      'stroom_manifest.json',
+      dbContent.length,
+      dbContent.length,
+      mName.length + 30 + manifestContent.length,
+      crc32: _zipCrc32(dbContent),
+    );
+    writeCfh(
+      b,
+      'videos/corrupt.mp4',
+      shortDeflate.length,
+      1000000,
+      videoOffset,
+      method: 8,
+      crc32: _zipCrc32(shortContent),
+    );
     final cdSize = b.length - cdOffset;
     writeEocd(b, entryCount: 3, cdSize: cdSize, cdOffset: cdOffset);
 
@@ -499,106 +568,141 @@ void main() {
     );
   });
 
-  test('truncated deflate stream is rejected instead of silent partial restore',
-      () async {
-    // 截断的 deflate 流：dart:io zlib 不会报错，只输出已解压的部分 ——
-    // 解压字节数与中央目录声明不符时必须失败，禁止静默恢复半个文件。
-    final fullData =
-        Uint8List.fromList(List<int>.generate(128 * 1024, (i) => i % 251));
-    final fullDeflate =
-        Uint8List.fromList(ZLibCodec(raw: true).encode(fullData));
-    // 截掉一半压缩数据
-    final truncated =
-        Uint8List.fromList(fullDeflate.sublist(0, fullDeflate.length ~/ 2));
+  test(
+    'truncated deflate stream is rejected instead of silent partial restore',
+    () async {
+      // 截断的 deflate 流：dart:io zlib 不会报错，只输出已解压的部分 ——
+      // 解压字节数与中央目录声明不符时必须失败，禁止静默恢复半个文件。
+      final fullData = Uint8List.fromList(
+        List<int>.generate(128 * 1024, (i) => i % 251),
+      );
+      final fullDeflate = Uint8List.fromList(
+        ZLibCodec(raw: true).encode(fullData),
+      );
+      // 截掉一半压缩数据
+      final truncated = Uint8List.fromList(
+        fullDeflate.sublist(0, fullDeflate.length ~/ 2),
+      );
 
-    final manifestContent = utf8.encode(
-        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}');
-    final dbContent = utf8.encode(jsonEncode({
-      'image_records': <Map<String, dynamic>>[],
-      'audio_records': <Map<String, dynamic>>[],
-      'video_records': <Map<String, dynamic>>[],
-      'text_records': <Map<String, dynamic>>[],
-      'folders': <String>[],
-    }));
+      final manifestContent = utf8.encode(
+        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}',
+      );
+      final dbContent = utf8.encode(
+        jsonEncode({
+          'image_records': <Map<String, dynamic>>[],
+          'audio_records': <Map<String, dynamic>>[],
+          'video_records': <Map<String, dynamic>>[],
+          'text_records': <Map<String, dynamic>>[],
+          'folders': <String>[],
+        }),
+      );
 
-    final b = BytesBuilder(copy: false);
-    final mName = utf8.encode('manifest.json');
-    writeLocalHeader(
-      b,
-      mName,
-      manifestContent.length,
-      crc32: _zipCrc32(manifestContent),
-    );
-    b.add(manifestContent);
-    final dbName = utf8.encode('stroom_manifest.json');
-    writeLocalHeader(
-      b,
-      dbName,
-      dbContent.length,
-      crc32: _zipCrc32(dbContent),
-    );
-    b.add(dbContent);
-    final vName = utf8.encode('videos/truncated.mp4');
-    final videoOffset = b.length;
-    writeLocalHeader(
-      b,
-      vName,
-      truncated.length,
-      crc32: _zipCrc32(fullData),
-      method: 8,
-    );
-    b.add(truncated);
+      final b = BytesBuilder(copy: false);
+      final mName = utf8.encode('manifest.json');
+      writeLocalHeader(
+        b,
+        mName,
+        manifestContent.length,
+        crc32: _zipCrc32(manifestContent),
+      );
+      b.add(manifestContent);
+      final dbName = utf8.encode('stroom_manifest.json');
+      writeLocalHeader(
+        b,
+        dbName,
+        dbContent.length,
+        crc32: _zipCrc32(dbContent),
+      );
+      b.add(dbContent);
+      final vName = utf8.encode('videos/truncated.mp4');
+      final videoOffset = b.length;
+      writeLocalHeader(
+        b,
+        vName,
+        truncated.length,
+        crc32: _zipCrc32(fullData),
+        method: 8,
+      );
+      b.add(truncated);
 
-    final cdOffset = b.length;
-    writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
-        crc32: _zipCrc32(manifestContent));
-    writeCfh(b, 'stroom_manifest.json', dbContent.length, dbContent.length,
+      final cdOffset = b.length;
+      writeCfh(
+        b,
+        'manifest.json',
+        manifestContent.length,
+        manifestContent.length,
+        0,
+        crc32: _zipCrc32(manifestContent),
+      );
+      writeCfh(
+        b,
+        'stroom_manifest.json',
+        dbContent.length,
+        dbContent.length,
         mName.length + 30 + manifestContent.length,
-        crc32: _zipCrc32(dbContent));
-    writeCfh(b, 'videos/truncated.mp4', truncated.length, fullData.length,
+        crc32: _zipCrc32(dbContent),
+      );
+      writeCfh(
+        b,
+        'videos/truncated.mp4',
+        truncated.length,
+        fullData.length,
         videoOffset,
-        method: 8, crc32: _zipCrc32(fullData));
-    final cdSize = b.length - cdOffset;
-    writeEocd(b, entryCount: 3, cdSize: cdSize, cdOffset: cdOffset);
+        method: 8,
+        crc32: _zipCrc32(fullData),
+      );
+      final cdSize = b.length - cdOffset;
+      writeEocd(b, entryCount: 3, cdSize: cdSize, cdOffset: cdOffset);
 
-    final zipPath = '$workDir/truncated_deflate.zip';
-    await File(zipPath).writeAsBytes(b.takeBytes(), flush: true);
+      final zipPath = '$workDir/truncated_deflate.zip';
+      await File(zipPath).writeAsBytes(b.takeBytes(), flush: true);
 
-    await expectLater(
-      BackupService.restoreBackup(zipPath),
-      throwsA(isA<BackupValidationException>()),
-    );
-    // 绝不允许出现半个文件
-    expect(await readBackupFile('videos', 'truncated.mp4'), isNull);
-  });
+      await expectLater(
+        BackupService.restoreBackup(zipPath),
+        throwsA(isA<BackupValidationException>()),
+      );
+      // 绝不允许出现半个文件
+      expect(await readBackupFile('videos', 'truncated.mp4'), isNull);
+    },
+  );
 
   // ==================================================================
   // zip-slip 防护：含 `..` 路径段的条目名不得逃逸出应用数据目录
   // ==================================================================
 
-  test('restoreBackup skips entries with unsafe path segments (zip-slip guard)',
-      () async {
-    final archive = buildV2Archive(
-      files: {
-        'attachments/../../evil.txt': Uint8List.fromList(utf8.encode('EVIL')),
-        // 绝对/根路径段：p.join 会把它当作路径重置（Windows 上逃逸）
-        'pictures/C:/evil.txt': Uint8List.fromList(utf8.encode('EVIL2')),
-        r'videos/\evil.txt': Uint8List.fromList(utf8.encode('EVIL3')),
-      },
-    );
-    final zipPath = await writeArchive(archive, 'zip_slip.zip');
+  test(
+    'restoreBackup skips entries with unsafe path segments (zip-slip guard)',
+    () async {
+      final archive = buildV2Archive(
+        files: {
+          'attachments/../../evil.txt': Uint8List.fromList(utf8.encode('EVIL')),
+          // 绝对/根路径段：p.join 会把它当作路径重置（Windows 上逃逸）
+          'pictures/C:/evil.txt': Uint8List.fromList(utf8.encode('EVIL2')),
+          r'videos/\evil.txt': Uint8List.fromList(utf8.encode('EVIL3')),
+        },
+      );
+      final zipPath = await writeArchive(archive, 'zip_slip.zip');
 
-    // 不崩溃、正常完成，且恶意条目都被跳过
-    await BackupService.restoreBackup(zipPath);
+      // 不崩溃、正常完成，且恶意条目都被跳过
+      await BackupService.restoreBackup(zipPath);
 
-    expect(await readBackupFile('attachments', '../../evil.txt'), isNull,
-        reason: '含 .. 路径段的条目必须被跳过');
-    expect(await readBackupFile('pictures', 'C:/evil.txt'), isNull,
-        reason: '绝对路径条目必须被跳过');
-    expect(await readBackupFile('videos', r'\evil.txt'), isNull,
-        reason: '根路径条目必须被跳过');
-  });
+      expect(
+        await readBackupFile('attachments', '../../evil.txt'),
+        isNull,
+        reason: '含 .. 路径段的条目必须被跳过',
+      );
+      expect(
+        await readBackupFile('pictures', 'C:/evil.txt'),
+        isNull,
+        reason: '绝对路径条目必须被跳过',
+      );
+      expect(
+        await readBackupFile('videos', r'\evil.txt'),
+        isNull,
+        reason: '根路径条目必须被跳过',
+      );
+    },
+  );
 
   // ==================================================================
   // 物理截断的文件（数据区被砍）：解析阶段必须校验失败
@@ -618,15 +722,17 @@ void main() {
         },
       ],
       files: {
-        'videos/v_trunc.mp4':
-            Uint8List.fromList(List<int>.generate(4096, (i) => i % 256)),
+        'videos/v_trunc.mp4': Uint8List.fromList(
+          List<int>.generate(4096, (i) => i % 256),
+        ),
       },
     );
     final zipPath = await writeArchive(archive, 'truncated_file.zip');
     final full = await File(zipPath).readAsBytes();
     // 整体截断到一半：中央目录偏移超出文件范围，解析阶段必须失败
-    await File(zipPath)
-        .writeAsBytes(Uint8List.fromList(full.sublist(0, full.length ~/ 2)));
+    await File(
+      zipPath,
+    ).writeAsBytes(Uint8List.fromList(full.sublist(0, full.length ~/ 2)));
 
     await expectLater(
       BackupService.restoreBackup(zipPath),
@@ -638,127 +744,156 @@ void main() {
   // 恰好 65535 个条目的非 ZIP64 归档：EOCD 满值应回退到 32 位字段
   // ==================================================================
 
-  test('restoreBackup falls back to 32-bit EOCD for exactly 65535 entries',
-      () async {
-    // 手工合成：1 个真实 manifest 条目 + 65534 个只存在于中央目录的
-    // 占位条目（不会匹配已知目录，恢复时被跳过）。EOCD 条目数恰好
-    // 是 0xFFFF —— 这是合法值而非 ZIP64 溢出，定位器缺失时应回退。
-    final manifestContent = utf8.encode(
-        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}');
+  test(
+    'restoreBackup falls back to 32-bit EOCD for exactly 65535 entries',
+    () async {
+      // 手工合成：1 个真实 manifest 条目 + 65534 个只存在于中央目录的
+      // 占位条目（不会匹配已知目录，恢复时被跳过）。EOCD 条目数恰好
+      // 是 0xFFFF —— 这是合法值而非 ZIP64 溢出，定位器缺失时应回退。
+      final manifestContent = utf8.encode(
+        '{"version":2,"createdAt":"2026-01-01T00:00:00","appVersion":"test"}',
+      );
 
-    final b = BytesBuilder(copy: false);
-    final mName = utf8.encode('manifest.json');
-    writeLocalHeader(
-      b,
-      mName,
-      manifestContent.length,
-      crc32: _zipCrc32(manifestContent),
-    );
-    b.add(manifestContent);
+      final b = BytesBuilder(copy: false);
+      final mName = utf8.encode('manifest.json');
+      writeLocalHeader(
+        b,
+        mName,
+        manifestContent.length,
+        crc32: _zipCrc32(manifestContent),
+      );
+      b.add(manifestContent);
 
-    final cdOffset = b.length;
-    writeCfh(
-        b, 'manifest.json', manifestContent.length, manifestContent.length, 0,
-        crc32: _zipCrc32(manifestContent));
-    for (var i = 0; i < 65534; i++) {
-      final name = 'f${i.toString().padLeft(5, '0')}';
-      final nameB = utf8.encode(name);
-      b.add(_le32(0x02014b50));
-      b.add(_le16(0x0314));
-      b.add(_le16(20));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le32(0));
-      b.add(_le32(1));
-      b.add(_le32(1));
-      b.add(_le16(nameB.length));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le16(0));
-      b.add(_le32(0));
-      b.add(_le32(0));
-      b.add(nameB);
-    }
-    final cdSize = b.length - cdOffset;
-    writeEocd(b, entryCount: 65535, cdSize: cdSize, cdOffset: cdOffset);
+      final cdOffset = b.length;
+      writeCfh(
+        b,
+        'manifest.json',
+        manifestContent.length,
+        manifestContent.length,
+        0,
+        crc32: _zipCrc32(manifestContent),
+      );
+      for (var i = 0; i < 65534; i++) {
+        final name = 'f${i.toString().padLeft(5, '0')}';
+        final nameB = utf8.encode(name);
+        b.add(_le32(0x02014b50));
+        b.add(_le16(0x0314));
+        b.add(_le16(20));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le32(0));
+        b.add(_le32(1));
+        b.add(_le32(1));
+        b.add(_le16(nameB.length));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le16(0));
+        b.add(_le32(0));
+        b.add(_le32(0));
+        b.add(nameB);
+      }
+      final cdSize = b.length - cdOffset;
+      writeEocd(b, entryCount: 65535, cdSize: cdSize, cdOffset: cdOffset);
 
-    final zipPath = '$workDir/65535_entries.zip';
-    await File(zipPath).writeAsBytes(b.takeBytes(), flush: true);
+      final zipPath = '$workDir/65535_entries.zip';
+      await File(zipPath).writeAsBytes(b.takeBytes(), flush: true);
 
-    // 能解析（回退 32 位字段）、manifest 校验通过、占位条目被跳过
-    await BackupService.restoreBackup(zipPath);
-  });
+      // 能解析（回退 32 位字段）、manifest 校验通过、占位条目被跳过
+      await BackupService.restoreBackup(zipPath);
+    },
+  );
 
   // ==================================================================
   // 真实生产路径（关闭测试模式）：分块 dart:io 落盘
   // ==================================================================
 
-  test('restoreBackup works on the production path (chunked dart:io writes)',
-      () async {
-    // 生成大文件备份（生产流式创建）
-    final rng = Random(2024);
-    final size = 6 * 1024 * 1024;
-    final data = Uint8List(size);
-    for (var i = 0; i < size; i++) {
-      data[i] = rng.nextInt(256);
-    }
-    // 带当前数据格式版本号：备份中包含后，恢复后的迁移为 no-op，
-    // 避免在无插件测试环境触发数据安全检查（与生产一致：备份自带版本记录）。
-    SharedPreferences.setMockInitialValues({
-      'data_format_versions': jsonEncode(DataParts.currentVersions),
-    });
-    final appDir = await AppStorage.directory;
-    final videosDir = Directory('$appDir/videos');
-    await videosDir.create(recursive: true);
-    addTearDown(() async {
-      if (await videosDir.exists()) {
-        await videosDir.delete(recursive: true);
+  test(
+    'restoreBackup works on the production path (chunked dart:io writes)',
+    () async {
+      // 生成大文件备份（生产流式创建）
+      final rng = Random(2024);
+      final size = 6 * 1024 * 1024;
+      final data = Uint8List(size);
+      for (var i = 0; i < size; i++) {
+        data[i] = rng.nextInt(256);
       }
-    });
-    final videoPath = '$appDir/videos/prod_big.mp4';
-    await File(videoPath).writeAsBytes(data, flush: true);
+      // 带当前数据格式版本号：备份中包含后，恢复后的迁移为 no-op，
+      // 避免在无插件测试环境触发数据安全检查（与生产一致：备份自带版本记录）。
+      SharedPreferences.setMockInitialValues({
+        'data_format_versions': jsonEncode(DataParts.currentVersions),
+      });
+      final appDir = await AppStorage.directory;
+      final videosDir = Directory('$appDir/videos');
+      await videosDir.create(recursive: true);
+      addTearDown(() async {
+        if (await videosDir.exists()) {
+          await videosDir.delete(recursive: true);
+        }
+      });
+      final videoPath = '$appDir/videos/prod_big.mp4';
+      await File(videoPath).writeAsBytes(data, flush: true);
 
-    await ManifestDatabase.clearAllData();
-    await ManifestDatabase.insertVideoRecord({
-      'id': 'prod_big',
-      'name': 'prod_big',
-      'hash': 'prod_big',
-      'format': 'mp4',
-      'createdAt': DateTime.now().toIso8601String(),
-      'size': size,
-      'folder': '',
-    });
+      await ManifestDatabase.clearAllData();
+      await ManifestDatabase.insertVideoRecord({
+        'id': 'prod_big',
+        'name': 'prod_big',
+        'hash': 'prod_big',
+        'format': 'mp4',
+        'createdAt': DateTime.now().toIso8601String(),
+        'size': size,
+        'folder': '',
+      });
 
-    // 关闭测试模式 → 走真实生产路径（磁盘文件进备份计划 + 后台 isolate）
-    WebFileStore.disableTestMode();
-    addTearDown(() {
-      ManifestDatabase.enableTestMode();
-    });
+      // 关闭测试模式 → 走真实生产路径（磁盘文件进备份计划 + 后台 isolate）
+      WebFileStore.disableTestMode();
+      addTearDown(() {
+        ManifestDatabase.enableTestMode();
+      });
 
-    final zipPath = '$workDir/prod_backup.zip';
-    await BackupService.createBackup(outputPath: zipPath);
+      final zipPath = '$workDir/prod_backup.zip';
+      await BackupService.createBackup(
+        outputPath: zipPath,
+        selection: const BackupSelection(
+          chatRecordsAndAttachments: false,
+          settings: false,
+          tasks: false,
+          ankiData: false,
+          browserCookies: false,
+        ),
+      );
 
-    // 先清掉目标文件，再走真实生产恢复路径（分块 dart:io 落盘）
-    if (await File(videoPath).exists()) {
-      await File(videoPath).delete();
-    }
-    await BackupService.restoreBackup(zipPath, skipMissingCategories: true);
+      // 先清掉目标文件，再走真实生产恢复路径（分块 dart:io 落盘）
+      if (await File(videoPath).exists()) {
+        await File(videoPath).delete();
+      }
+      await BackupService.restoreBackup(zipPath, skipMissingCategories: true);
 
-    final restoredFile = File(videoPath);
-    expect(await restoredFile.exists(), isTrue, reason: '生产路径恢复必须把大文件写回应用数据目录');
-    final restoredBytes = await restoredFile.readAsBytes();
-    expect(restoredBytes, equals(data), reason: '生产路径（分块 dart:io 落盘）不得损坏大文件');
-  });
+      final restoredFile = File(videoPath);
+      expect(
+        await restoredFile.exists(),
+        isTrue,
+        reason: '生产路径恢复必须把大文件写回应用数据目录',
+      );
+      final restoredBytes = await restoredFile.readAsBytes();
+      expect(restoredBytes, equals(data), reason: '生产路径（分块 dart:io 落盘）不得损坏大文件');
+    },
+  );
 }
 
 // ---- 手工合成 ZIP 的小端字节工具 ----
 
 /// 写 ZIP 本地文件头（store 或 deflate，可选 zip64 满值尺寸）。
-void writeLocalHeader(BytesBuilder b, Uint8List name, int dataLen,
-    {required int crc32, bool zip64Sizes = false, int method = 0}) {
+void writeLocalHeader(
+  BytesBuilder b,
+  Uint8List name,
+  int dataLen, {
+  required int crc32,
+  bool zip64Sizes = false,
+  int method = 0,
+}) {
   b.add(_le32(0x04034b50));
   b.add(_le16(20)); // version needed
   b.add(_le16(0)); // flags
@@ -779,8 +914,16 @@ void writeLocalHeader(BytesBuilder b, Uint8List name, int dataLen,
 }
 
 /// 写 ZIP 中央目录条目（store 或 deflate，可选 zip64 extra）。
-void writeCfh(BytesBuilder b, String name, int comp, int uncomp, int offset,
-    {required int crc32, bool zip64Fields = false, int method = 0}) {
+void writeCfh(
+  BytesBuilder b,
+  String name,
+  int comp,
+  int uncomp,
+  int offset, {
+  required int crc32,
+  bool zip64Fields = false,
+  int method = 0,
+}) {
   final nameB = utf8.encode(name);
   b.add(_le32(0x02014b50));
   b.add(_le16(0x0314)); // version made by
@@ -815,8 +958,12 @@ void writeCfh(BytesBuilder b, String name, int comp, int uncomp, int offset,
 }
 
 /// 写 ZIP End Of Central Directory（22 字节 + 可选注释）。
-void writeEocd(BytesBuilder b,
-    {required int entryCount, required int cdSize, required int cdOffset}) {
+void writeEocd(
+  BytesBuilder b, {
+  required int entryCount,
+  required int cdSize,
+  required int cdOffset,
+}) {
   b.add(_le32(0x06054b50));
   b.add(_le16(0));
   b.add(_le16(0));

@@ -87,8 +87,12 @@ extension _ChatPagePersistenceExt on _ChatPageState {
     String? capturedConvId,
     bool resetTemporaryCountdown = false,
     bool? capturedIsTemporary,
+    List<ChatMessage>? messagesOverride,
+    bool completeHistorySnapshot = false,
   }) async {
-    final historySnapshot = List<ChatMessage>.from(_history);
+    final historySnapshot = List<ChatMessage>.from(
+      messagesOverride ?? _history,
+    );
     bool? conversationWasTemporary = capturedIsTemporary;
     try {
       final convId = capturedConvId ?? ref.read(activeConversationIdProvider);
@@ -101,11 +105,11 @@ extension _ChatPagePersistenceExt on _ChatPageState {
         conversationWasTemporary = conversation?.isTemporary;
       }
       await ref.read(conversationsProvider.notifier).updateMessages(
-          convId,
-          [
-            ...historySnapshot,
-          ],
-          resetTemporaryCountdown: resetTemporaryCountdown);
+            convId,
+            [...historySnapshot],
+            resetTemporaryCountdown: resetTemporaryCountdown,
+            completeHistorySnapshot: completeHistorySnapshot,
+          );
     } catch (e, s) {
       // Fallback: save directly to SharedPreferences if the notifier is
       // unavailable (e.g. during background streaming after page disposal).
@@ -313,6 +317,13 @@ extension _ChatPagePersistenceExt on _ChatPageState {
                 conversation.id == convId && conversation.isTemporary,
           );
 
+      // The UI keeps a bounded recent window, while each model request still
+      // receives the conversation's complete persisted context.
+      final completeContext = await ref
+          .read(conversationsProvider.notifier)
+          .loadFullMessagesForContext(convId);
+      if (!mounted || ref.read(activeConversationIdProvider) != convId) return;
+
       final userMsgId = 'u${DateTime.now().microsecondsSinceEpoch}';
 
       _history.add(
@@ -335,7 +346,14 @@ extension _ChatPagePersistenceExt on _ChatPageState {
       // Persist the user message before starting the background stream. If the
       // page is disposed during generation, the next page instance can load
       // this message even before the manager's periodic partial save runs.
-      final historyForStream = List<ChatMessage>.from(_history);
+      final currentById = {for (final message in _history) message.id: message};
+      final historyForStream = completeContext
+          .map((message) => currentById[message.id] ?? message)
+          .toList();
+      final contextIds = historyForStream.map((message) => message.id).toSet();
+      historyForStream.addAll(
+        _history.where((message) => !contextIds.contains(message.id)),
+      );
       final saveFuture = _saveMessages(
         capturedConvId: convId,
         resetTemporaryCountdown: true,

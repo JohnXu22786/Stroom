@@ -38,8 +38,14 @@ class SearchMatch {
   final String messageId;
   final int matchStart;
   final int matchEnd;
+  final int? messageOrder;
 
-  SearchMatch(this.messageId, this.matchStart, this.matchEnd);
+  SearchMatch(
+    this.messageId,
+    this.matchStart,
+    this.matchEnd, {
+    this.messageOrder,
+  });
 }
 
 /// Search mode: within current conversation or across all conversations.

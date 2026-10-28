@@ -30,6 +30,7 @@ import 'package:stroom/pages/chat/composer/chat_composer_widget.dart';
 import 'package:stroom/pages/chat_page.dart';
 import 'package:stroom/providers/conversation_provider.dart';
 import 'package:stroom/providers/provider_config.dart';
+import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/widgets/tap_outside_unfocus.dart';
 
 List<ChatMessage> _testMessages(int count) {
@@ -63,7 +64,7 @@ Future<void> withPlatform(
 /// Pumps a ChatPage exactly like production: the app-level
 /// [TapOutsideUnfocus] override is present (MaterialApp.builder), so a tap
 /// outside the composer's tap region blurs the composer.
-Future<void> pumpChat(WidgetTester tester) async {
+Future<ProviderContainer> pumpChat(WidgetTester tester) async {
   final messages = _testMessages(6);
   SharedPreferences.setMockInitialValues({
     'conversations': jsonEncode([
@@ -79,14 +80,22 @@ Future<void> pumpChat(WidgetTester tester) async {
     ]),
   });
 
+  final container = ProviderContainer(
+    overrides: [
+      conversationRepositoryProvider.overrideWithValue(
+        MemoryConversationRepository(),
+      ),
+      activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
+      providerEntriesProvider.overrideWith((ref) {
+        return ProviderEntriesNotifier();
+      }),
+    ],
+  );
+  addTearDown(container.dispose);
+  await container.read(conversationsProvider.notifier).ready;
   await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        activeConversationIdProvider.overrideWith((ref) => 'test-conv-id'),
-        providerEntriesProvider.overrideWith((ref) {
-          return ProviderEntriesNotifier();
-        }),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: MaterialApp(
         builder: (context, child) =>
             TapOutsideUnfocus(child: child ?? const SizedBox.shrink()),
@@ -110,6 +119,7 @@ Future<void> pumpChat(WidgetTester tester) async {
     VisibilityDetectorController.instance.updateInterval = oldUpdateInterval;
   });
   addTearDown(tester.view.reset);
+  return container;
 }
 
 /// Whether the composer's TextField currently has focus.
@@ -152,7 +162,7 @@ void main() {
         'tapping the top bar (outside the group) blurs the composer '
         '(the app-wide override still applies)', (tester) async {
       await withPlatform(tester, TargetPlatform.android, () async {
-        await pumpChat(tester);
+        final container = await pumpChat(tester);
 
         await tester.tap(find.byType(TextField));
         await tester.pump();
@@ -162,9 +172,14 @@ void main() {
         // outside the composer's tap-region group, so the app-wide blur fires.
         await tester.tap(find.byTooltip('临时对话'));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
         expect(composerFocused(tester), isFalse,
             reason: 'tapping the top bar must blur the composer like any '
                 'other outside-tap in the app');
+        container
+            .read(conversationsProvider.notifier)
+            .toggleTemporary('test-conv-id');
+        await tester.pump(const Duration(milliseconds: 600));
       });
     });
 
@@ -189,6 +204,7 @@ void main() {
         await tester.enterText(renameField, 'Renamed Conversation');
         await tester.tap(find.widgetWithText(TextButton, '确定'));
         await tester.pump();
+        await tester.pump(const Duration(milliseconds: 600));
 
         expect(find.text('Renamed Conversation'), findsOneWidget);
       });

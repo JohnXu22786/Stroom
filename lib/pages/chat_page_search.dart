@@ -6,14 +6,59 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageSearchExt on _ChatPageState {
-  void _performSearch(String query) {
+  void _performSearch(String query, {String? targetMessageId}) {
+    query = query.trim();
+    _searchDebounceTimer?.cancel();
+    _pendingSearchMessageId = targetMessageId;
+    final generation = ++_searchGeneration;
     setState(() {
       _searchQuery = query;
+      _searchError = null;
       _searchMatches.clear();
       _currentMatchIndex = 0;
-      if (query.isEmpty) return;
+    });
+    if (query.isEmpty) return;
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      _searchConversation(query, generation);
+    });
+  }
+
+  Future<void> _searchConversation(String query, int generation) async {
+    final conversationId = ref.read(activeConversationIdProvider);
+    if (conversationId == null) return;
+    try {
+      final messages = await ref
+          .read(conversationsProvider.notifier)
+          .loadFullMessagesForContext(conversationId);
+      if (!mounted ||
+          generation != _searchGeneration ||
+          query != _searchQuery ||
+          conversationId != ref.read(activeConversationIdProvider)) {
+        return;
+      }
+      final searchMessages = List<ChatMessage>.from(messages);
+      final messageIndexById = {
+        for (var index = 0; index < searchMessages.length; index++)
+          searchMessages[index].id: index,
+      };
+      for (final liveMessage in _history) {
+        final existingIndex = messageIndexById[liveMessage.id];
+        if (existingIndex == null) {
+          messageIndexById[liveMessage.id] = searchMessages.length;
+          searchMessages.add(liveMessage);
+        } else {
+          // The repository may hold a partial snapshot of the current stream.
+          // Keep the live history copy so search sees the visible response.
+          searchMessages[existingIndex] = liveMessage;
+        }
+      }
+
       final lowerQuery = query.toLowerCase();
-      for (final msg in _history) {
+      final matches = <SearchMatch>[];
+      for (var messageIndex = 0;
+          messageIndex < searchMessages.length;
+          messageIndex++) {
+        final msg = searchMessages[messageIndex];
         // AI messages are rendered as markdown: matches inside code blocks,
         // inline code or math can never be highlighted (those are rendered
         // as dedicated widgets), so strip them before matching — otherwise
@@ -28,17 +73,146 @@ extension _ChatPageSearchExt on _ChatPageState {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          _searchMatches.add(SearchMatch(msg.id, idx, idx + query.length));
+          matches.add(
+            SearchMatch(
+              msg.id,
+              idx,
+              idx + query.length,
+              messageOrder: messageIndex,
+            ),
+          );
           start = idx + query.length;
         }
       }
-    });
-    if (_searchMatches.isNotEmpty) {
-      // Scroll after the rebuild so the message list reflects the new
-      // highlight state (lazy items may not be built until then).
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _scrollToCurrentMatch();
+      final requestedMessageId = _pendingSearchMessageId;
+      final targetMatch = requestedMessageId == null
+          ? -1
+          : matches.indexWhere(
+              (match) => match.messageId == requestedMessageId,
+            );
+      setState(() {
+        _searchMatches
+          ..clear()
+          ..addAll(matches);
+        _currentMatchIndex = 0;
+        if (targetMatch >= 0) _currentMatchIndex = targetMatch;
+        _pendingSearchMessageId = null;
       });
+      if (requestedMessageId != null && targetMatch < 0) {
+        // Global search can find text inside code or math that local search
+        // intentionally excludes because those widgets cannot highlight raw
+        // offsets. Still navigate to the selected message.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && generation == _searchGeneration) {
+            _scrollToMessageId(requestedMessageId, generation);
+          }
+        });
+      } else if (_searchMatches.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && generation == _searchGeneration) {
+            _scrollToCurrentMatch();
+          }
+        });
+      }
+    } catch (error) {
+      debugPrint('[ChatPage] failed to search conversation: $error');
+      if (!mounted ||
+          generation != _searchGeneration ||
+          query != _searchQuery ||
+          conversationId != ref.read(activeConversationIdProvider)) {
+        return;
+      }
+      setState(() => _searchError = '搜索失败');
+    }
+  }
+
+  Future<void> _scrollToMessageId(
+      String messageId, int searchGeneration) async {
+    // A selected repository page can contain more messages than the chat
+    // controller window when live stream messages were merged into history.
+    // Bring the target into the controller before asking it to scroll.
+    final conversationId = _loadedConversationId;
+    final conversationGeneration = _conversationLoadGeneration;
+    var loadGuard = 0;
+    var stalledRetries = 0;
+    while (mounted && conversationId != null) {
+      if (searchGeneration != _searchGeneration ||
+          conversationGeneration != _conversationLoadGeneration ||
+          conversationId != _loadedConversationId ||
+          conversationId != ref.read(activeConversationIdProvider)) {
+        return;
+      }
+      final historyIndex = _history.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (historyIndex >= 0 && _loadedUpToIndex <= historyIndex) break;
+      if (historyIndex < 0 && !_hasMoreMessages) break;
+
+      final beforeLoadedUpToIndex = _loadedUpToIndex;
+      final beforeHistoryLength = _history.length;
+      await _loadMoreMessages(skipMinDisplayDelay: true);
+      if (!mounted ||
+          searchGeneration != _searchGeneration ||
+          conversationGeneration != _conversationLoadGeneration) {
+        return;
+      }
+      final targetLoaded = _history.any((message) => message.id == messageId);
+      if (targetLoaded ||
+          _loadedUpToIndex < beforeLoadedUpToIndex ||
+          _history.length > beforeHistoryLength) {
+        stalledRetries = 0;
+      } else if (_hasMoreMessages && ++stalledRetries <= 10) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        if (!mounted || searchGeneration != _searchGeneration) return;
+        continue;
+      } else {
+        break;
+      }
+      if (++loadGuard > 100) break;
+    }
+
+    if (!mounted || searchGeneration != _searchGeneration) return;
+    final key = _messageKeys[messageId];
+    if (key?.currentContext != null) {
+      await Scrollable.ensureVisible(
+        key!.currentContext!,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 250),
+      );
+      return;
+    }
+
+    final controller = _controller;
+    if (controller == null) return;
+    final wasSwallow = _chatScrollController.swallowScrolls;
+    _chatScrollController.swallowScrolls = false;
+    try {
+      final scrolled = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          if (!mounted || searchGeneration != _searchGeneration) {
+            if (!scrolled.isCompleted) scrolled.complete();
+            return;
+          }
+          await controller.scrollToMessage(
+            messageId,
+            alignment: 0.3,
+            duration: const Duration(milliseconds: 250),
+          );
+        } catch (error, stackTrace) {
+          if (!scrolled.isCompleted) {
+            scrolled.completeError(error, stackTrace);
+          }
+        } finally {
+          if (!scrolled.isCompleted) scrolled.complete();
+        }
+      });
+      WidgetsBinding.instance.scheduleFrame();
+      await scrolled.future;
+    } catch (_) {
+      // The target may have been removed while global search was open.
+    } finally {
+      _chatScrollController.swallowScrolls = wasSwallow;
     }
   }
 
@@ -61,21 +235,44 @@ extension _ChatPageSearchExt on _ChatPageState {
     final match = _searchMatches[targetIndex];
 
     Future<void> navigation() async {
-      // The target may still be unloaded: lazy pagination keeps only the
-      // latest messages in the chat controller. Load older batches (without
-      // the spinner's minimum-display delay) until the message is present.
+      // The target may still be unloaded: a global search can open a page
+      // around an older result. Load toward the target until it is present.
       var loadGuard = 0;
       var stalledRetries = 0;
       while (mounted) {
         final historyIdx = _history.indexWhere((m) => m.id == match.messageId);
-        if (historyIdx == -1 || _loadedUpToIndex <= historyIdx) break;
+        if (historyIdx >= 0 && _loadedUpToIndex <= historyIdx) break;
+        final conversationId = _loadedConversationId;
+        final repository = ref.read(conversationsProvider.notifier);
+        final pageDirection =
+            conversationId == null || match.messageOrder == null
+                ? null
+                : repository.repositoryMessagePageDirection(
+                    conversationId,
+                    match.messageOrder!,
+                  );
+        if (historyIdx < 0 && pageDirection == 0) break;
+        final loadNewer = historyIdx < 0 && pageDirection == 1;
+        final hasMoreInDirection = loadNewer
+            ? conversationId != null &&
+                repository.hasLaterRepositoryMessages(conversationId)
+            : _hasMoreMessages;
+        if (historyIdx < 0 && !hasMoreInDirection) break;
         final before = _loadedUpToIndex;
-        await _loadMoreMessages(skipMinDisplayDelay: true);
+        final beforeHistoryLength = _history.length;
+        if (loadNewer) {
+          await _loadNewerRepositoryMessages();
+        } else {
+          await _loadMoreMessages(skipMinDisplayDelay: true);
+        }
         if (!mounted) return;
-        if (_loadedUpToIndex < before) {
+        final targetLoaded = _history.any((m) => m.id == match.messageId);
+        if (targetLoaded ||
+            _loadedUpToIndex < before ||
+            _history.length > beforeHistoryLength) {
           // The batch loaded — keep going.
           stalledRetries = 0;
-        } else if (_hasMoreMessages && ++stalledRetries <= 10) {
+        } else if (hasMoreInDirection && ++stalledRetries <= 10) {
           // _loadMoreMessages refuses concurrent runs (e.g. the user's own
           // scroll already triggered onEndReached). Wait briefly and retry
           // instead of silently dropping the navigation.
@@ -85,14 +282,18 @@ extension _ChatPageSearchExt on _ChatPageState {
           // Nothing more to load (or retries exhausted): the target message
           // is not in the chat controller.
           if (stalledRetries > 10) {
-            debugPrint('[ChatPage] search navigation retries exhausted for '
-                'message ${match.messageId}');
+            debugPrint(
+              '[ChatPage] search navigation retries exhausted for '
+              'message ${match.messageId}',
+            );
           }
           break;
         }
         if (++loadGuard > 100) {
-          debugPrint('[ChatPage] search navigation gave up before reaching '
-              'message ${match.messageId}');
+          debugPrint(
+            '[ChatPage] search navigation gave up before reaching '
+            'message ${match.messageId}',
+          );
           break;
         }
       }
@@ -185,10 +386,14 @@ extension _ChatPageSearchExt on _ChatPageState {
   }
 
   void _closeSearch() {
+    _searchDebounceTimer?.cancel();
+    _searchGeneration++;
+    _pendingSearchMessageId = null;
     setState(() {
       _isSearching = false;
       _searchMode = SearchMode.current;
       _searchQuery = '';
+      _searchError = null;
       _searchMatches.clear();
       _currentMatchIndex = 0;
       _searchTextController.clear();
@@ -233,12 +438,24 @@ extension _ChatPageSearchExt on _ChatPageState {
         .then((result) async {
       if (!mounted || result == null) return;
       final conversationId = result['conversationId'] as String?;
+      final messageId = result['messageId'] as String?;
       final query = result['query'] as String?;
       if (conversationId == null || query == null || query.isEmpty) return;
 
       // Step 1: Save current conversation's messages first (before switching)
       await _saveMessages();
       if (!mounted) return;
+
+      final conversationsNotifier = ref.read(
+        conversationsProvider.notifier,
+      );
+      if (messageId != null) {
+        await conversationsNotifier.loadMessagesAroundMessage(
+          conversationId,
+          messageId,
+        );
+        if (!mounted) return;
+      }
 
       // Step 2: If switching to a different conversation, select it.
       // The activeConversationIdProvider listener schedules
@@ -247,9 +464,13 @@ extension _ChatPageSearchExt on _ChatPageState {
       // post-frame callback so it runs AFTER that load completes.
       final activeId = ref.read(activeConversationIdProvider);
       if (conversationId != activeId) {
-        ref
-            .read(conversationsProvider.notifier)
-            .selectConversation(conversationId);
+        conversationsNotifier.selectConversation(conversationId);
+      }
+      if (messageId != null) {
+        // Load the page selected above before activating local search. This
+        // also handles a result in the conversation already being viewed.
+        await _loadConversationMessages(force: true);
+        if (!mounted) return;
       }
       // Step 2b: Sync the session assistant selection to the opened
       // conversation's bound assistant. Global search can open ANY
@@ -283,10 +504,11 @@ extension _ChatPageSearchExt on _ChatPageState {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() {
+          _searchMode = SearchMode.current;
           _searchTextController.text = query;
           _isSearching = true;
         });
-        _performSearch(query);
+        _performSearch(query, targetMessageId: messageId);
       });
     });
   }
@@ -351,10 +573,7 @@ extension _ChatPageSearchExt on _ChatPageState {
     return TextFieldTapRegion(
       groupId: chatComposerTapRegionGroupId,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 4,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           border: Border(
@@ -373,9 +592,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                 Icon(
                   Icons.search,
                   size: 18,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurfaceVariant,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -418,18 +635,38 @@ extension _ChatPageSearchExt on _ChatPageState {
                     '${_currentMatchIndex + 1}/${_searchMatches.length}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurfaceVariant,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                if (_searchMode == SearchMode.current &&
+                    _searchError != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    _searchError!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh, size: 18),
+                    tooltip: '重试搜索',
+                    onPressed: () => _performSearch(
+                      _searchQuery,
+                      targetMessageId: _pendingSearchMessageId,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
                     ),
                   ),
                 ],
                 if (_searchMode == SearchMode.current) ...[
                   IconButton(
-                    icon: const Icon(
-                      Icons.keyboard_arrow_up,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.keyboard_arrow_up, size: 20),
                     tooltip: '上一个',
                     onPressed: _previousMatch,
                     visualDensity: VisualDensity.compact,
@@ -440,10 +677,7 @@ extension _ChatPageSearchExt on _ChatPageState {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 20,
-                    ),
+                    icon: const Icon(Icons.keyboard_arrow_down, size: 20),
                     tooltip: '下一个',
                     onPressed: _nextMatch,
                     visualDensity: VisualDensity.compact,
@@ -476,11 +710,9 @@ extension _ChatPageSearchExt on _ChatPageState {
                   selected: _searchMode == SearchMode.current,
                   onTap: () {
                     if (_searchMode != SearchMode.current) {
-                      setState(() {
-                        _searchMode = SearchMode.current;
-                        _searchTextController.clear();
-                        _performSearch('');
-                      });
+                      setState(() => _searchMode = SearchMode.current);
+                      _searchTextController.clear();
+                      _performSearch('');
                     }
                   },
                 ),
