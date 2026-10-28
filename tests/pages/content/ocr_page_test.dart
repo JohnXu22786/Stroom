@@ -3589,6 +3589,62 @@ void main() {
     });
   });
 
+  testWidgets('successful camera import clears an earlier app album error', (
+    tester,
+  ) async {
+    final imageBytes = _createValidOcrTestImage().bytes;
+    var preparationCount = 0;
+    await tester.runAsync(
+      () => _storeAppAlbumImage(
+        name: 'A_corrupt',
+        hash: 'ocr_stale_app_album_error',
+        bytes: Uint8List.fromList([0x01, 0x02, 0x03]),
+      ),
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+            XFile.fromData(imageBytes, name: 'imported.png'),
+        testImagePayloadPreparer: (_) async {
+          preparationCount++;
+          if (preparationCount == 1) {
+            throw const FormatException('corrupt image');
+          }
+          return prepareOcrImagePayloadSync(imageBytes);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册选择'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('从应用相册选择'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await _pumpUntil(
+      tester,
+      () => find.text('A_corrupt.png').evaluate().isNotEmpty,
+    );
+    await tester.tap(find.text('A_corrupt.png'));
+    await _pumpUntil(tester, () => find.text('确定 (1)').evaluate().isNotEmpty);
+    await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('corrupt image'), findsWidgets);
+    expect(find.byKey(const Key('ocr_grid_item_0')), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('corrupt image'), findsOneWidget);
+
+    await tester.tap(find.text('拍照识别'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('corrupt image'), findsNothing);
+    expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+    expect(find.text('已选 1 张图片'), findsOneWidget);
+  });
+
   group('OcrPage - async image validation races', () {
     testWidgets(
       'folder picker started before OCR preflight cannot '
