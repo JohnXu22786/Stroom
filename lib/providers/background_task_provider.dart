@@ -848,10 +848,10 @@ bool _legacyOcrHasCredentialUseContext(
   ).firstMatch(before);
   final credentialTargetAfterConsumedConnector =
       const {'as', 'to'}.contains(suffix.toLowerCase()) &&
-      RegExp(
-        r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
-        caseSensitive: false,
-      ).hasMatch(after);
+          RegExp(
+            r'^(?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
+            caseSensitive: false,
+          ).hasMatch(after);
   final explicitCredentialTarget = RegExp(
         r'^as (?:(?:the|a|an|my|your|our|their|his|her|its) )?(?:(?:api|access|private|oidc|openid\s+connect|oauth(?:\s*[0-9]+(?:\.[0-9]+)*)?|secret|temporary|bearer) )*(?:authorization|auth|keys?|credentials?|tokens?|secrets?|passwords?)\b',
         caseSensitive: false,
