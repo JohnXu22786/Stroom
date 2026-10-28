@@ -38,8 +38,7 @@ class OcrRetryStorage {
       debugBeforeCacheWrite;
 
   @visibleForTesting
-  static Future<void> Function(String reference)?
-      debugBeforeNativeReadAsBytes;
+  static Future<void> Function(String reference)? debugBeforeNativeReadAsBytes;
 
   /// Serializes cache writes through task publication against orphan cleanup.
   static Future<T> withCacheMaintenanceLock<T>(Future<T> Function() operation) {
