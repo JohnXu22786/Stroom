@@ -3633,6 +3633,96 @@ void main() {
       expect(find.text('开始识别'), findsOneWidget);
     });
 
+    testWidgets('applies overlapping edits to the same selected image', (
+      tester,
+    ) async {
+      final originalBytes = await tester.runAsync(_createEnginePng);
+      final firstEditedBytes = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFFFF0000)),
+      );
+      final secondEditedBytes = await tester.runAsync(
+        () => _createEnginePng(color: const Color(0xFF0000FF)),
+      );
+      final image = SelectedImage(bytes: originalBytes!, format: 'png');
+      final firstPreparationStarted = Completer<void>();
+      final secondPreparationStarted = Completer<void>();
+      final preparations = [
+        Completer<OcrImagePayload>(),
+        Completer<OcrImagePayload>(),
+      ];
+      var preparationCount = 0;
+
+      Future<OcrImagePayload> delayedPreparation(Uint8List _) {
+        final index = preparationCount++;
+        if (index == 0) {
+          firstPreparationStarted.complete();
+        } else {
+          secondPreparationStarted.complete();
+        }
+        return preparations[index].future;
+      }
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          testImages: [image],
+          testImagePayloadPreparer: delayedPreparation,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> saveEdit(int expectedPreparationCount) async {
+        await tester.tap(find.byKey(const Key('ocr_grid_item_0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.crop));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await _pumpUntil(
+          tester,
+          () => find.byType(ExtendedImageEditor).evaluate().isNotEmpty,
+        );
+        await tester.tap(find.text('保存'));
+        await _pumpUntil(
+          tester,
+          () =>
+              preparationCount >= expectedPreparationCount &&
+              find.byType(ExtendedImageEditorPage).evaluate().isEmpty,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await saveEdit(1);
+      await firstPreparationStarted.future;
+      await saveEdit(2);
+      await secondPreparationStarted.future;
+      expect(
+        preparationCount,
+        2,
+        reason: 'both saves must begin preparation before either completes',
+      );
+
+      preparations[1].complete(prepareOcrImagePayloadSync(secondEditedBytes!));
+      await tester.pumpAndSettle();
+      var selectedImage = tester
+          .widget<ImageGridItem>(find.byKey(const Key('ocr_grid_item_0')))
+          .image;
+      expect(
+        selectedImage.bytes,
+        same(secondEditedBytes),
+        reason: 'the second completed save must be applied to the selection',
+      );
+
+      preparations[0].complete(prepareOcrImagePayloadSync(firstEditedBytes!));
+      await tester.pumpAndSettle();
+      selectedImage = tester
+          .widget<ImageGridItem>(find.byKey(const Key('ocr_grid_item_0')))
+          .image;
+      expect(
+        selectedImage.bytes,
+        same(firstEditedBytes),
+        reason: 'the later completing valid save must not be silently lost',
+      );
+    });
+
     testWidgets('applies an edit to the same image after it is reordered', (
       tester,
     ) async {
