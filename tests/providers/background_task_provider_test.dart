@@ -14191,6 +14191,58 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves Spanish cañón and redacts Unicode credential tails',
+      () {
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer ca…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        const safeInstruction = 'Lee el cañón';
+        final safeTask = taskFor('legacy-ocr-spanish-canon', safeInstruction);
+        final safePersisted = jsonEncode(safeTask.toMap());
+        final safeRetryData =
+            (jsonDecode(safePersisted) as Map)['retryData'] as Map;
+        expect(
+          OcrRetrySnapshot.fromMap(safeTask.retryData!).instructionContent,
+          safeInstruction,
+        );
+        expect(safeRetryData['instructionContent'], safeInstruction);
+
+        const credential = 'cañón-7Qw9Lm2';
+        final credentialTask = taskFor(
+          'legacy-ocr-unicode-credential-tail',
+          'Use $credential to process the image.',
+        );
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+        final credentialInstruction = OcrRetrySnapshot.fromMap(
+          credentialTask.retryData!,
+        ).instructionContent!;
+        expect(credentialInstruction, 'Use [redacted] to process the image.');
+        expect(credentialPersisted, isNot(contains(credential)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves polite review instructions around echoed keys',
       () {
         const apiKey = 'opaque-user-secret-87';

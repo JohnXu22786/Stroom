@@ -644,6 +644,7 @@ bool _legacyOcrHasShortOpaqueUnicodeContinuation(
             RegExp(r'[-_0-9]').hasMatch(prefix)));
 
 bool _legacyOcrHasOpaqueUnicodeContinuation(String prefix, String suffix) =>
+    !_legacyOcrHasNaturalWordContinuation(prefix, suffix) &&
     RegExp(r'[^\x00-\x7F]').hasMatch(suffix) &&
     RegExp(r'^\p{L}', unicode: true).hasMatch(suffix) &&
     (_legacyOcrHasShortOpaqueUnicodeContinuation(prefix, suffix) ||
@@ -698,7 +699,9 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
   final unicodeWord = '$prefix$suffix'
       .replaceAll(RegExp(r'[^\p{L}]', unicode: true), '')
       .toLowerCase();
-  if (const {'secretaría', 'secretária'}.contains(unicodeWord)) return true;
+  if (const {'cañón', 'secretaría', 'secretária'}.contains(unicodeWord)) {
+    return true;
+  }
   final word =
       '$prefix$suffix'.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
   const naturalWords = {
