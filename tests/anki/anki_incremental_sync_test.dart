@@ -839,7 +839,8 @@ void main() {
         columns: ['sfld'],
         where: 'id = ?',
         whereArgs: [note.id],
-      )).single['sfld'],
+      ))
+          .single['sfld'],
       '001',
     );
   });
@@ -890,10 +891,12 @@ void main() {
       columns: ['sfld'],
       where: 'id = ?',
       whereArgs: [note.id],
-    )).single['sfld'];
+    ))
+        .single['sfld'];
     final column = (await collection.db.rawQuery(
       'PRAGMA table_info(notes)',
-    )).singleWhere((column) => column['name'] == 'sfld');
+    ))
+        .singleWhere((column) => column['name'] == 'sfld');
     expect(column['type'], 'TEXT');
     expect(sortField, '001');
   });

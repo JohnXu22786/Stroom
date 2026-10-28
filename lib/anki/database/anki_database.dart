@@ -340,9 +340,8 @@ class AnkiDatabase {
   bool _normalizeLegacyNotetypeRequirement(Map value) {
     final req = value['req'];
     if (req is! List) return false;
-    final legacyRequirements = req.length == 3 && req[0] is num
-        ? <dynamic>[req]
-        : req;
+    final legacyRequirements =
+        req.length == 3 && req[0] is num ? <dynamic>[req] : req;
     final type = value['type'];
     var changed = false;
     final normalized = <dynamic>[];
