@@ -603,12 +603,7 @@ class _GatedHttpClient extends http.BaseClient {
   }
 
   void respondWithMeta() {
-    final response = StreamController<List<int>>(
-      onDone: () {
-        if (!responseConsumed.isCompleted) responseConsumed.complete();
-      },
-    );
-    response.add(
+    final response = Stream<List<int>>.value(
       utf8.encode(
         jsonEncode({
           'mod': 1,
@@ -622,11 +617,17 @@ class _GatedHttpClient extends http.BaseClient {
           'media_usn': 0,
         }),
       ),
+    ).transform(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleDone: (sink) {
+          if (!responseConsumed.isCompleted) responseConsumed.complete();
+          sink.close();
+        },
+      ),
     );
-    unawaited(response.close());
     _response.complete(
       http.StreamedResponse(
-        response.stream,
+        response,
         HttpStatus.ok,
       ),
     );

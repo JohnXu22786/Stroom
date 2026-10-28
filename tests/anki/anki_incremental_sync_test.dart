@@ -463,37 +463,44 @@ void main() {
     },
   );
 
-  test('requires a full transfer when the server collection is empty', () async {
-    final note = Note.createNew(
-      notetype_id: collection.col.modelList.first.id,
-      fields: ['existing local note', 'back'],
-    )..usn = 0;
-    await collection.notes.insert(note);
-    await collection.db.update(
-      'notes',
-      {'usn': 0},
-      where: 'id = ?',
-      whereArgs: [note.id],
-    );
-    final local = (await collection.db.query('col')).single;
-    fakeHttp.responses.add(_json({
-      'mod': local['mod'],
-      'scm': local['scm'],
-      'usn': local['usn'],
-      'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      'msg': '',
-      'cont': true,
-      'hostNum': 1,
-      'empty': true,
-      'media_usn': 0,
-    }));
+  test(
+    'requires a full transfer when the server collection is empty',
+    () async {
+      final note = Note.createNew(
+        notetype_id: collection.col.modelList.first.id,
+        fields: ['existing local note', 'back'],
+      )..usn = 0;
+      await collection.notes.insert(note);
+      await collection.db.update(
+        'notes',
+        {'usn': 0},
+        where: 'id = ?',
+        whereArgs: [note.id],
+      );
+      final local = (await collection.db.query('col')).single;
+      fakeHttp.responses.add(
+        _json({
+          'mod': local['mod'],
+          'scm': local['scm'],
+          'usn': local['usn'],
+          'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          'msg': '',
+          'cont': true,
+          'hostNum': 1,
+          'empty': true,
+          'media_usn': 0,
+        }),
+      );
 
-    await expectLater(
-      AnkiIncrementalSync.sync(collection, client),
-      throwsA(isA<AnkiSyncFullTransferRequired>()),
-    );
-    expect(fakeHttp.requests.map((request) => request.url.path), ['/sync/meta']);
-  });
+      await expectLater(
+        AnkiIncrementalSync.sync(collection, client),
+        throwsA(isA<AnkiSyncFullTransferRequired>()),
+      );
+      expect(fakeHttp.requests.map((request) => request.url.path), [
+        '/sync/meta',
+      ]);
+    },
+  );
 
   test('requires a full transfer before changing sync destinations', () async {
     final note = Note.createNew(
@@ -750,24 +757,28 @@ void main() {
   );
 
   test(
-      'addCard falls back to an available note type when the placeholder is stale',
-      () async {
-    final availableModelId = collection.col.modelList.first.id;
-    expect(availableModelId, isNot(1));
+    'addCard falls back to an available note type when the placeholder is stale',
+    () async {
+      final availableModelId = collection.col.modelList.first.id;
+      expect(availableModelId, isNot(1));
 
-    final container = ProviderContainer(
-      overrides: [
-        ankiColDaoProvider.overrideWith((ref) async => collection.col),
-      ],
-    );
-    addTearDown(container.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          ankiColDaoProvider.overrideWith((ref) async => collection.col),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    final noteId = await container
-        .read(ankiActionsProvider)
-        .addCard(1, 'new front', 'new back', modelId: 1);
+      final noteId = await container
+          .read(ankiActionsProvider)
+          .addCard(1, 'new front', 'new back', modelId: 1);
 
-    expect((await collection.notes.get(noteId))!.notetype_id, availableModelId);
-  });
+      expect(
+        (await collection.notes.get(noteId))!.notetype_id,
+        availableModelId,
+      );
+    },
+  );
 
   test('decodes named and numeric HTML entities in note fields', () {
     expect(Note.stripHtml('<b>&copy; &#65; &amp;&nbsp;</b>'), '© A & ');

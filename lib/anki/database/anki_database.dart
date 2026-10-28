@@ -186,15 +186,16 @@ class AnkiDatabase {
           ..remove('id')
           ..remove('name');
         await db.insert(
-            'deck_config',
-            {
-              'id': id,
-              'name': entry.value['name']?.toString() ?? 'Default',
-              'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              'usn': -1,
-              'config': jsonEncode(config),
-            },
-            conflictAlgorithm: ConflictAlgorithm.ignore);
+          'deck_config',
+          {
+            'id': id,
+            'name': entry.value['name']?.toString() ?? 'Default',
+            'mtime_secs': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            'usn': -1,
+            'config': jsonEncode(config),
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
         existingIds.add(id);
       }
     } on FormatException {
