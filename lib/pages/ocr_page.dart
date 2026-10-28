@@ -1661,11 +1661,11 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                           ? _isPreparingRetryData
                               ? '保存重试图片...'
                               : '识别中...'
-                      : _isRetryImagesLoading
-                          ? '读取重试图片...'
-                          : _isImageImportPending
-                              ? '正在导入图片...'
-                              : '开始识别',
+                          : _isRetryImagesLoading
+                              ? '读取重试图片...'
+                              : _isImageImportPending
+                                  ? '正在导入图片...'
+                                  : '开始识别',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
