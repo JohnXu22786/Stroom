@@ -1077,9 +1077,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                 child: SizedBox(
                   height: 48,
                   child: ElevatedButton.icon(
-                    onPressed: _isProcessing || _isRetryImagesLoading
-                        ? null
-                        : _showAlbumChoicePanel,
+                    onPressed:
+                        _isImageSelectionLocked ? null : _showAlbumChoicePanel,
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),

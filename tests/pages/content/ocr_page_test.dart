@@ -1371,6 +1371,14 @@ void main() {
             .onPressed,
         isNull,
       );
+      final albumButton = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, '相册选择'),
+      );
+      expect(albumButton.onPressed, isNull);
+      await tester.tap(find.text('相册选择'));
+      await tester.pumpAndSettle();
+      expect(find.text('选择图片来源'), findsNothing);
+      expect(gallerySelections, 0);
 
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pumpAndSettle();
