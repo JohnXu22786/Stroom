@@ -12891,6 +12891,7 @@ void main() {
           'status': 'failed',
           'createdAt': DateTime(2025, 1, 1).toIso8601String(),
           'rawRequest': {
+            'imageCount': 1,
             'url': 'https://api.example.com/v1/chat/completions',
             'headers': {'Authorization': 'Bearer myproject…'},
             'body': {
