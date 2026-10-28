@@ -327,7 +327,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     LlmCredentialStore? credentialStore,
     Future<AiGatewayFacade> Function()? gatewayFactory,
   })  : _credentialStore = credentialStore ?? PlatformLlmCredentialStore(),
-        _gatewayFactory = gatewayFactory ?? AiGateway.sharedPlatform,
+        _gatewayFactory = gatewayFactory ?? AiGateway.createPlatform,
         super(const ProviderEntriesState(isLoaded: false));
 
   Future<void> _loading = Future<void>.value();
@@ -381,6 +381,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             );
             final currentSource = prefs.getString('provider_entries');
             if (currentSource == null || currentSource.isEmpty) {
+              if (!mounted) return;
               state = ProviderEntriesState(
                 isLoaded: false,
                 mcpGroups: mcpGroups,
@@ -394,6 +395,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
                   currentSource,
                 );
               } catch (_) {
+                if (!mounted) return;
                 state = ProviderEntriesState(
                   isLoaded: false,
                   mcpGroups: mcpGroups,
@@ -403,6 +405,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
             }
             providerEntriesJsonForLoad = currentSource;
             if (!_canServeLegacyProviderEntries(sourceForLoad, prefs)) {
+              if (!mounted) return;
               state = ProviderEntriesState(
                 isLoaded: false,
                 mcpGroups: mcpGroups,
@@ -431,6 +434,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           // 含 API key 的原始配置不可恢复地丢失。
           debugPrint('Failed to decode provider entries.');
           await _backupCorruptProviderEntries(prefs, json);
+          if (!mounted) return;
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
         }
@@ -455,6 +459,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           _providerEntriesSourceUnreadable = true;
           // 全部条目损坏：备份并回退默认（保留原始数据供恢复）
           await _backupCorruptProviderEntries(prefs, json);
+          if (!mounted) return;
           state = _defaultEntries(mcpGroups: mcpGroups);
           return;
         }
@@ -540,6 +545,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
           llmModelGroupCatalogUnavailable = true;
         }
         _loadedProviderEntriesSourceJson = providerEntriesJsonForLoad;
+        if (!mounted) return;
         state = ProviderEntriesState(
           entries: entries,
           mcpGroups: mcpGroups,
@@ -560,6 +566,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
     } catch (_) {
       _providerEntriesSourceUnreadable = true;
       _reloadBeforeNextMutation = true;
+      if (!mounted) return;
       state = ProviderEntriesState(isLoaded: false, mcpGroups: mcpGroups);
       return;
     }
@@ -572,6 +579,7 @@ class ProviderEntriesNotifier extends StateNotifier<ProviderEntriesState> {
       debugPrint('Failed to load LLM model groups for model selectors.');
       llmModelGroupCatalogUnavailable = true;
     }
+    if (!mounted) return;
     state = ProviderEntriesState(
       entries: defaultState.entries,
       mcpGroups: defaultState.mcpGroups,

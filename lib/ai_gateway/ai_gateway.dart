@@ -23,6 +23,11 @@ class AiGateway {
   static Future<AiGatewayFacade> sharedPlatform() =>
       implementation.LlmChatRoutingRuntime.sharedPlatform();
 
+  /// Creates a short-lived Gateway facade for reading account/catalog state.
+  /// Routing callers should use [sharedPlatform] to share session affinity.
+  static Future<AiGatewayFacade> createPlatform() =>
+      implementation.LlmChatRoutingRuntime.createPlatform();
+
   static AiGatewayProviderCatalog get defaultProviderCatalog =>
       implementation.LlmChatRoutingRuntime.defaultProviderCatalog;
 }
