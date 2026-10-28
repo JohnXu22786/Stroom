@@ -940,11 +940,17 @@ bool _legacyOcrHasCredentialUseContext(
         r'^to (?:process|analyze|recognize|extract|upload|download|access|authenticate|connect|send|submit)\b',
         caseSensitive: false,
       ).hasMatch(after);
+  final authenticateWithToProcessContext =
+      RegExp(r'\bauthenticate with$', caseSensitive: false).hasMatch(before) &&
+          (!_legacyOcrHasNaturalWordContinuation(prefix, suffix) ||
+              maskPrefixIsEmbedded) &&
+          RegExp(r'^to process\b', caseSensitive: false).hasMatch(after);
   return actionContext ||
       assignmentContext ||
       setToCredentialContext ||
       reportedValueContext ||
       useToProcessContext ||
+      authenticateWithToProcessContext ||
       identifiedLabelContext;
 }
 
@@ -1969,6 +1975,18 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
+      final authenticateWithToProcessContext = RegExp(
+            r'\bauthenticate with$',
+            caseSensitive: false,
+          ).hasMatch(sanitized.substring(0, match.start).trimRight()) &&
+          _legacyOcrHasCredentialUseContext(
+            sanitized,
+            match,
+            prefix,
+            echoSuffix,
+          );
+      final hasCredentialUseContext =
+          splitEchoHasCredentialUseContext || authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
@@ -1986,10 +2004,11 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               !hasSafeInstructionLead &&
               !hasRepeatedStructuredSuffix &&
               !hasSafeInstructionAfterEcho &&
-              !safeCredentialValueActionLead) ||
+              !safeCredentialValueActionLead &&
+              !hasCredentialUseContext) ||
           echo.length <= prefix.length ||
           (!_legacyOcrTextContainsMaskedCredential(echo, [value]) &&
-              !splitEchoHasCredentialUseContext &&
+              !hasCredentialUseContext &&
               !lineBrokenCarefulActionEcho)) {
         return match.group(0)!;
       }

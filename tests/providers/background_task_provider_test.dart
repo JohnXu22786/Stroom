@@ -12879,6 +12879,48 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration redacts an authenticated credential used to process an image',
+      () {
+        const credentialEcho = 'myprojectabcef';
+        const instruction =
+            'Authenticate with $credentialEcho to process this image.';
+        final task = BackgroundTask.fromMap({
+          'id': 'legacy-ocr-authenticate-with-open-mask-credential-echo',
+          'type': 'ocr',
+          'title': 'legacy OCR request',
+          'status': 'failed',
+          'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+          'rawRequest': {
+            'imageCount': 1,
+            'url': 'https://api.example.com/v1/chat/completions',
+            'headers': {'Authorization': 'Bearer myproject…'},
+            'body': {
+              'model': 'vision-model',
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': [
+                    {'type': 'text', 'text': instruction},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+
+        final persisted = jsonEncode(task.toMap());
+        final migratedInstruction = OcrRetrySnapshot.fromMap(
+          task.retryData!,
+        ).instructionContent!;
+
+        expect(migratedInstruction,
+            'Authenticate with [redacted] to process this image.');
+        expect(persisted, contains(jsonEncode(migratedInstruction)));
+        expect(persisted, isNot(contains(credentialEcho)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves natural long words split by a line break',
       () {
         const prompt = 'Please read the countervailing\narguments in the note.';
