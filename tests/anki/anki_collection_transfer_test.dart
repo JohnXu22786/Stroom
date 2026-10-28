@@ -275,7 +275,7 @@ void main() {
     },
   );
 
-  test('creates local notes with official INTEGER sfld affinity', () async {
+  test('creates local notes with TEXT sfld affinity', () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_notes_affinity_',
     );
@@ -288,14 +288,14 @@ void main() {
       final sortField = columns.singleWhere(
         (column) => column['name'] == 'sfld',
       );
-      expect(sortField['type'], 'INTEGER');
+      expect(sortField['type'], 'TEXT');
     } finally {
       await AnkiDatabase.closeOpenedInstance();
       await documents.delete(recursive: true);
     }
   });
 
-  test('migrates local TEXT sfld columns without losing note data', () async {
+  test('migrates local INTEGER sfld columns without losing note data', () async {
     final documents = await Directory.systemTemp.createTemp(
       'stroom_anki_notes_affinity_migration_',
     );
@@ -308,7 +308,7 @@ void main() {
           final sql = statement.contains('CREATE TABLE IF NOT EXISTS notes')
               ? statement.replaceFirst(
                   RegExp(r'sfld\s+(?:TEXT|INTEGER)'),
-                  'sfld TEXT',
+                  'sfld INTEGER',
                 )
               : statement;
           await db.execute(sql);
@@ -339,7 +339,7 @@ void main() {
       final sortField = columns.singleWhere(
         (column) => column['name'] == 'sfld',
       );
-      expect(sortField['type'], 'INTEGER');
+      expect(sortField['type'], 'TEXT');
       final note = (await database.db.query('notes')).single;
       expect(note['id'], 1);
       expect(note['flds'], 'legacy sort\u001fback');
