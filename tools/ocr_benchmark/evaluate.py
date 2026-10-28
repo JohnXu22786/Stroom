@@ -2287,7 +2287,10 @@ def main(argv: list[str] | None = None) -> int:
                 }
         output = json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)
         if args.output:
-            args.output.write_text(output + "\n", encoding="utf-8")
+            try:
+                args.output.write_text(output + "\n", encoding="utf-8")
+            except OSError as error:
+                raise EvaluationError(f"cannot write {args.output}: {error}") from error
         else:
             print(output)
         return 0
