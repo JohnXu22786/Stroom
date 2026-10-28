@@ -237,6 +237,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     _errorMessageValue = message;
     _lastImageImportErrorMessage = null;
   }
+
   int _selectedModelIndex = 0;
   String? _selectedConfigId;
   String? _selectedModelRecordId;
