@@ -61,15 +61,27 @@ class ConversationSummary {
   factory ConversationSummary.fromConversation(
     StroomConversation conversation, {
     required int messageCount,
-  }) =>
-      ConversationSummary(
-        id: conversation.id,
-        title: conversation.title,
-        createdAt: conversation.createdAt,
-        updatedAt: conversation.updatedAt,
-        messageCount: messageCount,
-        extraFields: conversation.extraFields,
-      );
+  }) => ConversationSummary(
+    id: conversation.id,
+    title: conversation.title,
+    createdAt: conversation.createdAt,
+    updatedAt: conversation.updatedAt,
+    messageCount: messageCount,
+    extraFields: conversation.extraFields,
+  );
+}
+
+/// One conversation's changed rows in a repository-wide atomic snapshot.
+class ConversationRepositoryChange {
+  final StroomConversation conversation;
+  final List<StroomMessage> upsertMessages;
+  final List<String> deleteMessageIds;
+
+  const ConversationRepositoryChange({
+    required this.conversation,
+    this.upsertMessages = const [],
+    this.deleteMessageIds = const [],
+  });
 }
 
 class ConversationIntegrityIssue {
@@ -108,6 +120,14 @@ abstract interface class ConversationRepository {
     StroomConversation conversation, {
     List<StroomMessage> upsertMessages = const [],
     List<String> deleteMessageIds = const [],
+  });
+
+  /// Commits row changes, conversation deletions, and visible ordering as one
+  /// durable snapshot. A failure leaves the previous repository state intact.
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
   });
 
   Future<void> importConversation(StroomConversation conversation);
@@ -181,7 +201,16 @@ Map<String, dynamic>? conversationMediaReferenceForPart(
   StroomContentPart part,
 ) {
   final attachment = part.data['attachment'];
-  if (attachment is Map) return Map<String, dynamic>.from(attachment);
+  if (attachment is Map) {
+    final reference = Map<String, dynamic>.from(attachment);
+    for (final field in const ['reference', 'storagePath', 'thumbnailPath']) {
+      final siblingPath = part.data[field];
+      if (siblingPath is String && siblingPath.isNotEmpty) {
+        reference.putIfAbsent(field, () => siblingPath);
+      }
+    }
+    return reference;
+  }
   if (const {'image', 'audio', 'video', 'file'}.contains(part.type)) {
     return part.data;
   }
@@ -191,9 +220,23 @@ Map<String, dynamic>? conversationMediaReferenceForPart(
 Iterable<Map<String, dynamic>> conversationMessageMediaReferences(
   StroomMessage message,
 ) sync* {
+  final seenReferences = <String>{};
+  Iterable<Map<String, dynamic>> unique(
+    Iterable<Map<String, dynamic>> refs,
+  ) sync* {
+    for (final reference in refs) {
+      final key = const [
+        'reference',
+        'storagePath',
+        'thumbnailPath',
+      ].map((field) => '${reference[field] ?? ''}').join('\u001f');
+      if (seenReferences.add(key)) yield reference;
+    }
+  }
+
   for (final part in message.content) {
     final reference = conversationMediaReferenceForPart(part);
-    if (reference != null) yield reference;
+    if (reference != null) yield* unique([reference]);
   }
 
   // The migration adapter retains the complete legacy message map in this
@@ -207,7 +250,7 @@ Iterable<Map<String, dynamic>> conversationMessageMediaReferences(
       if (attachment is Map &&
           (attachment['storagePath'] is String ||
               attachment['thumbnailPath'] is String)) {
-        yield Map<String, dynamic>.from(attachment);
+        yield* unique([Map<String, dynamic>.from(attachment)]);
       }
     }
   }

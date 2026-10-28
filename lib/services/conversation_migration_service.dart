@@ -45,8 +45,21 @@ class ConversationMigrationService {
     SharedPreferences preferences,
   ) async {
     await repository.initialize();
-    final raw = preferences.getString('conversations');
+    final liveRaw = preferences.getString('conversations');
+    final previous = preferences.getString(stateKey);
+    final backupRaw = preferences.getString(backupKey);
+    final raw =
+        (liveRaw == null || liveRaw.isEmpty) &&
+            backupRaw != null &&
+            backupRaw.isNotEmpty
+        ? backupRaw
+        : liveRaw;
     if (raw == null || raw.isEmpty) {
+      if (_hasIncompleteMigrationState(previous)) {
+        throw StateError(
+          'The interrupted conversation migration source is unavailable.',
+        );
+      }
       if (await repository.migrationSourceHash() == null) {
         // An empty legacy source is still a completed migration state. The
         // non-null marker tells backup and orphan scans that repository rows
@@ -61,7 +74,6 @@ class ConversationMigrationService {
       );
     }
     final sourceHash = sha256.convert(utf8.encode(raw)).toString();
-    final previous = preferences.getString(stateKey);
     var resumeAt = 0;
     final storedSourceHash = await repository.migrationSourceHash();
     var restartForChangedSource =
@@ -75,8 +87,8 @@ class ConversationMigrationService {
         }
         if (state['verified'] == true && state['sourceHash'] == sourceHash) {
           if (await repository.migrationSourceHash() == sourceHash) {
-            final storedConversationCount =
-                await repository.countConversations();
+            final storedConversationCount = await repository
+                .countConversations();
             final storedMessageCount = await repository.countMessages();
             // After verification the repository becomes authoritative and can
             // legitimately diverge from the retained rollback source as users
@@ -92,8 +104,10 @@ class ConversationMigrationService {
           resumeAt = 0;
         } else if (state['sourceHash'] == sourceHash &&
             state['nextConversation'] is num) {
-          resumeAt =
-              (state['nextConversation'] as num).toInt().clamp(0, 1 << 30);
+          resumeAt = (state['nextConversation'] as num).toInt().clamp(
+            0,
+            1 << 30,
+          );
         }
       } catch (_) {
         // An invalid marker is safe to ignore; source rows remain authoritative.
@@ -113,7 +127,8 @@ class ConversationMigrationService {
     for (final item in decoded) {
       if (item is! Map) {
         throw const FormatException(
-            'Legacy conversation list contains a non-object row.');
+          'Legacy conversation list contains a non-object row.',
+        );
       }
       conversations.add(
         await _conversationForRepository(
@@ -131,6 +146,13 @@ class ConversationMigrationService {
       await repository.clearConversations();
       resumeAt = 0;
     }
+    if (resumeAt > 0 &&
+        !await _containsImportedPrefix(conversations, resumeAt)) {
+      // The repository may have been reset after a batch checkpoint was
+      // persisted. Reimporting stable IDs from the beginning is idempotent;
+      // trusting a stale cursor would skip rows and fail final verification.
+      resumeAt = 0;
+    }
     if (!await preferences.setString(
       stateKey,
       jsonEncode({
@@ -140,11 +162,14 @@ class ConversationMigrationService {
       }),
     )) {
       throw StateError(
-          'Could not save the conversation migration source marker.');
+        'Could not save the conversation migration source marker.',
+      );
     }
-    for (var start = resumeAt, batchIndex = resumeAt ~/ batchSize;
-        start < conversations.length;
-        start += batchSize, batchIndex++) {
+    for (
+      var start = resumeAt, batchIndex = resumeAt ~/ batchSize;
+      start < conversations.length;
+      start += batchSize, batchIndex++
+    ) {
       await beforeBatchCommit?.call(batchIndex);
       final end = (start + batchSize).clamp(0, conversations.length);
       for (final conversation in conversations.sublist(start, end)) {
@@ -165,31 +190,36 @@ class ConversationMigrationService {
 
     final verifiedMessages = <String, List<String>>{};
     for (final conversation in conversations) {
-      final storedConversation =
-          await repository.getConversation(conversation.id);
+      final storedConversation = await repository.getConversation(
+        conversation.id,
+      );
       if (storedConversation == null ||
           jsonEncode(storedConversation.toMap()) !=
               jsonEncode(_withoutMessages(conversation).toMap())) {
         throw StateError(
-            'Conversation ${conversation.id} failed metadata verification.');
+          'Conversation ${conversation.id} failed metadata verification.',
+        );
       }
       final stored = await repository.getMessages(
         conversation.id,
         limit: conversation.messages.length,
       );
-      final expectedIds =
-          conversation.messages.map((message) => message.id).toList();
+      final expectedIds = conversation.messages
+          .map((message) => message.id)
+          .toList();
       final actualIds = stored.map((message) => message.id).toList();
       if (expectedIds.length != actualIds.length ||
           !_sameIds(expectedIds, actualIds)) {
         throw StateError(
-            'Conversation ${conversation.id} failed migration verification.');
+          'Conversation ${conversation.id} failed migration verification.',
+        );
       }
       for (var index = 0; index < stored.length; index++) {
         if (jsonEncode(stored[index].toMap()) !=
             jsonEncode(conversation.messages[index].toMap())) {
           throw StateError(
-              'Conversation ${conversation.id} changed message content during migration.');
+            'Conversation ${conversation.id} changed message content during migration.',
+          );
         }
       }
       verifiedMessages[conversation.id] = actualIds;
@@ -241,6 +271,47 @@ class ConversationMigrationService {
     );
   }
 
+  bool _hasIncompleteMigrationState(String? rawState) {
+    if (rawState == null) return false;
+    try {
+      final state = jsonDecode(rawState);
+      return state is Map<String, dynamic> &&
+          state['sourceHash'] is String &&
+          state['verified'] != true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _containsImportedPrefix(
+    List<StroomConversation> conversations,
+    int count,
+  ) async {
+    final end = count.clamp(0, conversations.length);
+    for (final conversation in conversations.take(end)) {
+      final storedConversation = await repository.getConversation(
+        conversation.id,
+      );
+      if (storedConversation == null ||
+          jsonEncode(storedConversation.toMap()) !=
+              jsonEncode(_withoutMessages(conversation).toMap())) {
+        return false;
+      }
+      final storedMessages = await repository.getMessages(
+        conversation.id,
+        limit: conversation.messages.length,
+      );
+      if (storedMessages.length != conversation.messages.length) return false;
+      for (var index = 0; index < storedMessages.length; index++) {
+        if (jsonEncode(storedMessages[index].toMap()) !=
+            jsonEncode(conversation.messages[index].toMap())) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   Future<void> _writeBackup(
     SharedPreferences preferences,
     String raw, {
@@ -282,9 +353,12 @@ class ConversationMigrationService {
     if ((replaceExisting ||
             preferences.getString(attachmentManifestBackupKey) == null) &&
         !await preferences.setString(
-            attachmentManifestBackupKey, manifestJson)) {
+          attachmentManifestBackupKey,
+          manifestJson,
+        )) {
       throw StateError(
-          'Could not back up the conversation attachment manifest.');
+        'Could not back up the conversation attachment manifest.',
+      );
     }
   }
 
@@ -302,26 +376,31 @@ class ConversationMigrationService {
         final attachment = Map<String, dynamic>.from(rawAttachment);
         final inlinePayload = attachment['base64Data'];
         if (inlinePayload is! String || inlinePayload.isEmpty) continue;
+        final bytes = base64Decode(inlinePayload);
+        final hash = AttachmentStorage.computeHash(bytes);
         final existingPath = attachment['storagePath'] as String? ?? '';
         var fileAvailable = false;
         if (existingPath.isNotEmpty) {
           try {
+            final existingBytes = await AttachmentStorage.readFile(
+              existingPath,
+            );
             fileAvailable =
-                await AttachmentStorage.readFile(existingPath) != null;
+                existingBytes != null && _sameBytes(existingBytes, bytes);
           } catch (_) {
             // Fall back to the retained inline payload below.
           }
         }
         if (!fileAvailable) {
-          final bytes = base64Decode(inlinePayload);
           final path = await AttachmentStorage.saveFile(
             attachment['fileName'] as String? ?? 'draft-attachment.bin',
             bytes,
+            stableId: hash,
           );
           attachment['storagePath'] = path;
-          attachment['fileSize'] = bytes.length;
-          attachment['hash'] = AttachmentStorage.computeHash(bytes);
         }
+        attachment['fileSize'] = bytes.length;
+        attachment['hash'] = hash;
         attachment.remove('base64Data');
         await _appendAttachmentManifest(preferences, attachment);
         rawDraftAttachments[rawDraftAttachments.indexOf(rawAttachment)] =
@@ -335,7 +414,8 @@ class ConversationMigrationService {
     SharedPreferences preferences,
     Map<String, dynamic> attachment,
   ) async {
-    final path = attachment['storagePath'] as String? ??
+    final path =
+        attachment['storagePath'] as String? ??
         attachment['thumbnailPath'] as String?;
     if (path == null || path.isEmpty) return;
     final existing = preferences.getString(attachmentManifestBackupKey);
@@ -344,12 +424,13 @@ class ConversationMigrationService {
       final decoded = jsonDecode(existing);
       if (decoded is! List) {
         throw const FormatException(
-            'Invalid conversation attachment manifest.');
+          'Invalid conversation attachment manifest.',
+        );
       }
       manifest.addAll(
-        decoded
-            .whereType<Map>()
-            .map((entry) => Map<String, dynamic>.from(entry)),
+        decoded.whereType<Map>().map(
+          (entry) => Map<String, dynamic>.from(entry),
+        ),
       );
     }
     if (!manifest.any((entry) => entry['storagePath'] == path)) {
@@ -368,6 +449,14 @@ class ConversationMigrationService {
     if (expected.length != actual.length) return false;
     for (var i = 0; i < expected.length; i++) {
       if (expected[i] != actual[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _sameBytes(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (left[index] != right[index]) return false;
     }
     return true;
   }

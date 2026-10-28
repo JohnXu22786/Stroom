@@ -12,8 +12,9 @@ extension _ChatPageEditingExt on _ChatPageState {
   /// id-based (the message must be looked up at removal time — the loop
   /// mutates the controller list, so positions shift).
   Future<void> _removeMessageFromController(String messageId) async {
-    final ctrlMsg =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    final ctrlMsg = _controller?.messages
+        .where((m) => m.id == messageId)
+        .firstOrNull;
     if (ctrlMsg != null) {
       await _controller?.removeMessage(ctrlMsg);
     }
@@ -138,6 +139,24 @@ extension _ChatPageEditingExt on _ChatPageState {
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
       if (index == -1 || index >= _history.length) return;
+      final conversationId = ref.read(activeConversationIdProvider);
+      bool stillOwnsHistory() =>
+          mounted &&
+          ref.read(activeConversationIdProvider) == conversationId &&
+          (conversationId == null || _loadedConversationId == conversationId);
+      final persistedHistory = conversationId == null
+          ? List<ChatMessage>.from(_history)
+          : await ref
+                .read(conversationsProvider.notifier)
+                .loadFullMessagesForContext(conversationId);
+      if (!stillOwnsHistory()) return;
+      final persistedMessageIndex = persistedHistory.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (persistedMessageIndex < 0) return;
+      final retainedHistory = persistedHistory
+          .take(persistedMessageIndex)
+          .toList();
 
       // Remove this message and all after from history and controller.
       try {
@@ -146,6 +165,7 @@ extension _ChatPageEditingExt on _ChatPageState {
           _history.removeRange(index, _history.length);
           for (final r in removed) {
             await _removeMessageFromController(r.id);
+            if (!stillOwnsHistory()) return;
             // NOTE: 这里**不删除**附件文件——编辑态下 composer 直接
             // 复用原消息的同一批 Attachment 对象（storagePath 相同），
             // 删除文件会让新消息的附件读取失败（_onMessageSend 随后
@@ -156,6 +176,7 @@ extension _ChatPageEditingExt on _ChatPageState {
           // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
           // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
           await _removeOrphanMessagesFromController();
+          if (!stillOwnsHistory()) return;
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
           // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
@@ -167,6 +188,7 @@ extension _ChatPageEditingExt on _ChatPageState {
       } catch (e) {
         debugPrint('[ChatPage] _editUserMessageWithText remove failed: $e');
       }
+      if (!stillOwnsHistory()) return;
 
       // Force the UI to reflect the truncated history BEFORE any provider
       // listener fires _loadConversationMessages (which would reload old
@@ -176,7 +198,12 @@ extension _ChatPageEditingExt on _ChatPageState {
       // Now persist the truncated history. This must happen before
       // _onMessageSend calls _saveEnabledToolsToConversation which
       // triggers the conversationsProvider listener.
-      await _saveMessages();
+      await _saveMessages(
+        messagesOverride: retainedHistory,
+        capturedConvId: conversationId,
+        completeHistorySnapshot: true,
+      );
+      if (!stillOwnsHistory()) return;
 
       // Send with edited text and the combined attachments (original + new)
       await _onMessageSend(newText, newAttachments);
@@ -190,7 +217,29 @@ extension _ChatPageEditingExt on _ChatPageState {
     _isModifyingHistory = true;
     try {
       final index = _history.indexWhere((m) => m.id == messageId);
-      if (index == -1 || index == 0 || index >= _history.length) return;
+      if (index == -1 || index >= _history.length) return;
+      final conversationId = ref.read(activeConversationIdProvider);
+      bool stillOwnsHistory() =>
+          mounted &&
+          ref.read(activeConversationIdProvider) == conversationId &&
+          (conversationId == null || _loadedConversationId == conversationId);
+      final persistedHistory = conversationId == null
+          ? List<ChatMessage>.from(_history)
+          : await ref
+                .read(conversationsProvider.notifier)
+                .loadFullMessagesForContext(conversationId);
+      if (!stillOwnsHistory()) return;
+      final persistedAssistantIndex = persistedHistory.indexWhere(
+        (message) => message.id == messageId,
+      );
+      if (persistedAssistantIndex <= 0) return;
+      final userIndex = persistedHistory.lastIndexWhere(
+        (message) => message.role == 'user',
+        persistedAssistantIndex,
+      );
+      if (userIndex < 0) return;
+      final userMsg = persistedHistory[userIndex];
+      final retryHistory = persistedHistory.take(userIndex + 1).toList();
 
       // Remove this assistant message and all after from history
       try {
@@ -199,10 +248,12 @@ extension _ChatPageEditingExt on _ChatPageState {
           _history.removeRange(index, _history.length);
           for (final r in removed) {
             await _removeMessageFromController(r.id);
+            if (!stillOwnsHistory()) return;
           }
           // 截断点之下、不在 _history 中的孤儿消息（如 Stop 掉的部分
           // 回复）也要一并移除——否则其工具卡片会残留为幽灵卡片。
           await _removeOrphanMessagesFromController();
+          if (!stillOwnsHistory()) return;
           // Safety: keep pagination index within bounds
           _loadedUpToIndex = _loadedUpToIndex.clamp(0, _history.length);
           // 历史被截断：使进行中的加载失效（其 0.5 秒最少显示延迟
@@ -214,15 +265,38 @@ extension _ChatPageEditingExt on _ChatPageState {
       } catch (e) {
         debugPrint('[ChatPage] _retryAssistantMessage remove failed: $e');
       }
+      if (!stillOwnsHistory()) return;
 
       // Force UI rebuild and sync provider before re-streaming
       if (mounted) setState(() {});
-      await _saveMessages();
+      await _saveMessages(
+        capturedConvId: conversationId,
+        messagesOverride: retryHistory,
+        completeHistorySnapshot: true,
+      );
+      if (!stillOwnsHistory()) return;
 
-      // Re-generate using the preceding user message
-      final userMsg = _history[index - 1];
-      await _startStreaming(userMsg.content);
-      await _syncHistoryFromProvider();
+      // Re-generate using the complete persisted context through the
+      // preceding user message. `_history` is only the visible page when the
+      // repository is paged, so it cannot stand in for model context.
+      final completeHistory = conversationId == null
+          ? List<ChatMessage>.from(_history)
+          : await ref
+                .read(conversationsProvider.notifier)
+                .loadFullMessagesForContext(conversationId);
+      if (!stillOwnsHistory()) return;
+      final contextUserIndex = completeHistory.indexWhere(
+        (message) => message.id == userMsg.id,
+      );
+      final historyForRetry = contextUserIndex < 0
+          ? List<ChatMessage>.from(_history.take(index))
+          : completeHistory.take(contextUserIndex + 1).toList();
+      await _startStreaming(
+        userMsg.content,
+        capturedConvId: conversationId,
+        historyOverride: historyForRetry,
+      );
+      await _syncHistoryFromProvider(capturedConvId: conversationId);
     } finally {
       _isModifyingHistory = false;
       _scheduleReloadAfterBlockingOperation();
@@ -250,15 +324,29 @@ extension _ChatPageEditingExt on _ChatPageState {
       return;
     }
     final msg = _history[index];
+    Set<String>? referencedAttachmentPaths;
+    try {
+      referencedAttachmentPaths = activeId == null
+          ? {
+              for (final message in _history)
+                if (message.id != messageId)
+                  for (final attachment in message.attachments)
+                    attachment.storagePath,
+            }
+          : await ref
+                .read(conversationsProvider.notifier)
+                .getOtherMessageAttachmentPaths(activeId, messageId);
+    } catch (error) {
+      debugPrint('[ChatPage] failed to inspect attachment references: $error');
+    }
+    if (!mounted || activeId != ref.read(activeConversationIdProvider)) {
+      return;
+    }
 
     for (final att in msg.attachments) {
-      final isReferencedElsewhere = _history.asMap().entries.any(
-            (entry) =>
-                entry.key != index &&
-                entry.value.attachments.any(
-                  (a) => a.storagePath == att.storagePath,
-                ),
-          );
+      final isReferencedElsewhere =
+          referencedAttachmentPaths == null ||
+          referencedAttachmentPaths.contains(att.storagePath);
       if (!isReferencedElsewhere) {
         await AttachmentStorage.deleteFile(att.storagePath);
         // 磁盘压缩缓存一并清理（派生缓存，best-effort：失败不影响
@@ -295,8 +383,9 @@ extension _ChatPageEditingExt on _ChatPageState {
       _loadMoreGeneration++;
     });
 
-    final msgToRemove =
-        _controller?.messages.where((m) => m.id == messageId).firstOrNull;
+    final msgToRemove = _controller?.messages
+        .where((m) => m.id == messageId)
+        .firstOrNull;
     if (msgToRemove != null) {
       await _controller?.removeMessage(msgToRemove);
     }

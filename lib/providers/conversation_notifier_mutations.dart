@@ -53,9 +53,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     final assistant = assistantId == null
         ? null
         : _ref
-            .read(assistantProvider)
-            .where((a) => a.id == assistantId)
-            .firstOrNull;
+              .read(assistantProvider)
+              .where((a) => a.id == assistantId)
+              .firstOrNull;
     final hasToolDefaults = assistant?.defaultToolNames != null;
     final conv = Conversation(
       id: id,
@@ -88,14 +88,16 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// the active selection.
   Future<void> deleteConversation(String id) async {
     final wasActive = _ref.read(activeConversationIdProvider) == id;
-    final removed =
-        state.where((conversation) => conversation.id == id).toList();
+    final removed = state
+        .where((conversation) => conversation.id == id)
+        .toList();
     if (removed.isEmpty) return;
     if (_repositoryReady) {
       try {
         removed.first.messages = await _readAllRepositoryMessages(id);
       } catch (error) {
         debugPrint('Failed to read conversation attachments: $error');
+        return;
       }
     }
     state = state.where((c) => c.id != id).toList();
@@ -133,6 +135,7 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         old.first.messages = await _readAllRepositoryMessages(id);
       } catch (error) {
         debugPrint('Failed to read flow conversation attachments: $error');
+        return false;
       }
     }
     state = state.where((c) => c.id != id).toList();
@@ -259,12 +262,37 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// Deletes multiple conversations by [ids]. Also clears active if included.
   Future<void> batchDelete(List<String> ids) async {
     final idSet = ids.toSet();
+    final removed = state
+        .where((conversation) => idSet.contains(conversation.id))
+        .toList();
+    final activeId = _ref.read(activeConversationIdProvider);
+    final wasActive = activeId != null && idSet.contains(activeId);
     state = state.where((c) => !idSet.contains(c.id)).toList();
-    if (idSet.contains(_ref.read(activeConversationIdProvider))) {
+    if (wasActive) {
       _ref.read(activeConversationIdProvider.notifier).state = null;
     }
     _syncTemporaryTimer();
-    await _persist();
+
+    bool saved;
+    try {
+      saved = await _persistNowChecked();
+    } catch (error) {
+      debugPrint('Failed to batch-delete conversations: $error');
+      saved = false;
+    }
+    if (!saved) {
+      if (mounted) {
+        state = pinnedFirstStable([
+          ...removed,
+          ...state.where((conversation) => !idSet.contains(conversation.id)),
+        ]);
+        if (wasActive) {
+          _ref.read(activeConversationIdProvider.notifier).state = activeId;
+        }
+        _syncTemporaryTimer();
+      }
+      return;
+    }
     await _persistActiveId();
   }
 
@@ -278,8 +306,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
       (m) => m.role == 'user',
       orElse: () => conv.messages.first,
     );
-    final firstAssistant =
-        conv.messages.where((m) => m.role == 'assistant').firstOrNull;
+    final firstAssistant = conv.messages
+        .where((m) => m.role == 'assistant')
+        .firstOrNull;
 
     String combined = firstUser.content.trim().isNotEmpty
         ? firstUser.content
@@ -287,8 +316,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
     if (firstAssistant != null) {
       combined += ' - ${firstAssistant.content}';
     }
-    final title =
-        combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
+    final title = combined.length > 60
+        ? '${combined.substring(0, 60)}…'
+        : combined;
 
     state = state.map((c) {
       if (c.id != id) return c;
@@ -307,23 +337,43 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   /// true：临时对话的 1 小时倒计时只在这些事件上重置。切换对话前的
   /// 存档保存、编辑截断、删除消息等非产生事件不得重置（否则会无意中
   /// 延长临时对话的生命周期）。
-  Future<void> updateMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) async {
-    _replaceMessages(conversationId, messages,
-        resetTemporaryCountdown: resetTemporaryCountdown);
+  /// [completeHistorySnapshot] is true only when [messages] contains the
+  /// complete persisted history. It lets repository persistence delete omitted
+  /// rows without mistaking an ordinary paged view for a full transcript.
+  Future<void> updateMessages(
+    String conversationId,
+    List<ChatMessage> messages, {
+    bool resetTemporaryCountdown = false,
+    bool completeHistorySnapshot = false,
+  }) async {
+    if (_repositoryReady && completeHistorySnapshot) {
+      _completeMessageSnapshotGenerations[conversationId] =
+          ++_completeMessageSnapshotGeneration;
+    }
+    _replaceMessages(
+      conversationId,
+      messages,
+      resetTemporaryCountdown: resetTemporaryCountdown,
+    );
     await _persistNow();
   }
 
   /// Confirm flow messages reached disk before sending or completing a step.
   Future<bool> updateFlowMessagesChecked(
-      String conversationId, List<ChatMessage> messages) async {
+    String conversationId,
+    List<ChatMessage> messages,
+  ) async {
     if (!mounted || !state.any((c) => c.id == conversationId)) return false;
     _replaceMessages(conversationId, messages);
     return _persistNowChecked();
   }
 
-  void _replaceMessages(String conversationId, List<ChatMessage> messages,
-      {bool resetTemporaryCountdown = false}) {
+  void _replaceMessages(
+    String conversationId,
+    List<ChatMessage> messages, {
+    bool resetTemporaryCountdown = false,
+  }) {
+    _invalidateRepositoryMessageLoads(conversationId);
     if (_repositoryReady) _messageLoadedConversationIds.add(conversationId);
     state = state.map((c) {
       if (c.id != conversationId) return c;
@@ -339,8 +389,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
           (m) => m.role == 'user',
           orElse: () => messages.first,
         );
-        final firstAssistant =
-            messages.where((m) => m.role == 'assistant').firstOrNull;
+        final firstAssistant = messages
+            .where((m) => m.role == 'assistant')
+            .firstOrNull;
 
         String combined = firstUser.content.trim().isNotEmpty
             ? firstUser.content
@@ -348,8 +399,9 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
         if (firstAssistant != null) {
           combined += ' - ${firstAssistant.content}';
         }
-        c.title =
-            combined.length > 60 ? '${combined.substring(0, 60)}…' : combined;
+        c.title = combined.length > 60
+            ? '${combined.substring(0, 60)}…'
+            : combined;
         // 标记为自动生成：流完成后由标题助手用 AI 标题覆盖
         c.titleAutoGenerated = true;
       }
@@ -441,8 +493,11 @@ extension ConversationsNotifierMutationsExt on ConversationsNotifier {
   }
 
   /// Updates the context compaction summary for a conversation.
-  Future<void> updateContextSummary(String conversationId, String summary,
-      {String? tailStartId}) async {
+  Future<void> updateContextSummary(
+    String conversationId,
+    String summary, {
+    String? tailStartId,
+  }) async {
     state = state.map((c) {
       if (c.id != conversationId) return c;
       c.contextSummary = summary;

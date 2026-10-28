@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/models/stroom_conversation.dart';
 import 'package:stroom/services/app_log_service.dart';
 import 'package:stroom/services/backup_service.dart';
+import 'package:stroom/services/conversation_repository_memory.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/manifest_database.dart';
@@ -41,8 +43,9 @@ Uint8List _backupWithSettings(
 ) {
   final archive = ZipDecoder().decodeBytes(source);
   final settingsFile = archive.findFile('settings.json')!;
-  final settings = jsonDecode(utf8.decode(settingsFile.content as List<int>))
-      as Map<String, dynamic>;
+  final settings =
+      jsonDecode(utf8.decode(settingsFile.content as List<int>))
+          as Map<String, dynamic>;
   settings.addAll(replacements);
   archive.removeFile(settingsFile);
   final encoded = utf8.encode(jsonEncode(settings));
@@ -52,12 +55,14 @@ Uint8List _backupWithSettings(
 
 Uint8List _backupWithRepositoryAttachment(
   Uint8List source,
-  String reference,
-) {
+  String reference, {
+  String? thumbnailPath,
+}) {
   final archive = ZipDecoder().decodeBytes(source);
   final chatFile = archive.findFile('chat_data.json')!;
-  final chatData = jsonDecode(utf8.decode(chatFile.content as List<int>))
-      as Map<String, dynamic>;
+  final chatData =
+      jsonDecode(utf8.decode(chatFile.content as List<int>))
+          as Map<String, dynamic>;
   chatData['conversation_repository'] = {
     'schemaVersion': 1,
     'conversations': [
@@ -81,6 +86,7 @@ Uint8List _backupWithRepositoryAttachment(
             'type': 'file',
             'data': {
               'attachment': {'reference': reference},
+              if (thumbnailPath != null) 'thumbnailPath': thumbnailPath,
             },
           },
         ],
@@ -117,6 +123,153 @@ void main() {
     );
   });
 
+  test(
+    'rejects missing sibling thumbnail beside nested media attachment',
+    () async {
+      final backup = await BackupService.buildBackupBytesForTest();
+      final incomplete = _backupWithRepositoryAttachment(
+        backup,
+        'https://media.example/document.pdf',
+        thumbnailPath: 'attachments/missing-thumbnail.png',
+      );
+
+      await expectLater(
+        BackupService.restoreFromBytesForTest(incomplete),
+        throwsA(isA<BackupValidationException>()),
+      );
+    },
+  );
+
+  test('rejects malformed legacy chat shapes during attachment validation', () {
+    for (final conversations in [
+      jsonEncode([null]),
+      jsonEncode([
+        {'messages': 'not-a-list'},
+      ]),
+      jsonEncode([
+        {
+          'messages': [null],
+        },
+      ]),
+    ]) {
+      expect(
+        BackupService.hasAllReferencedAttachmentFilesForTest(
+          chatPrefs: {'conversations': conversations},
+          archiveEntries: const {'chat_data.json'},
+          requireFiles: true,
+        ),
+        isFalse,
+      );
+    }
+  });
+
+  test('ignores stale legacy attachment paths after repository migration', () {
+    final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+      chatPrefs: {
+        'conversations': jsonEncode([
+          {
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/removed-legacy-file.png'},
+                ],
+              },
+            ],
+          },
+        ]),
+        'conversation_repository': {
+          'schemaVersion': 1,
+          'migrationSourceHash': 'verified-source-hash',
+          'conversations': [],
+          'messages': [],
+        },
+      },
+      archiveEntries: const {'chat_data.json'},
+      requireFiles: true,
+    );
+
+    expect(complete, isTrue);
+  });
+
+  test('validates local media storage beside an external media URI', () {
+    final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+      chatPrefs: {
+        'conversation_repository': {
+          'schemaVersion': 1,
+          'migrationSourceHash': 'verified-source-hash',
+          'conversations': [],
+          'messages': [
+            {
+              'conversationId': 'local-copy',
+              'id': 'external-and-local',
+              'role': 'user',
+              'sequence': 0,
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'content': [
+                {
+                  'type': 'image',
+                  'data': {
+                    'reference': 'https://media.example/image.png',
+                    'storagePath': 'attachments/local-image.png',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      archiveEntries: const {'chat_data.json'},
+      requireFiles: true,
+    );
+
+    expect(complete, isFalse);
+  });
+
+  test('validates media references inside repository message envelopes', () {
+    final complete = BackupService.hasAllReferencedAttachmentFilesForTest(
+      chatPrefs: {
+        'conversation_repository': {
+          'schemaVersion': 1,
+          'messageEnvelopeVersion': 1,
+          'migrationSourceHash': 'verified-source-hash',
+          'conversations': [
+            {
+              'schemaVersion': 1,
+              'id': 'enveloped-message',
+              'title': 'Enveloped message',
+              'createdAt': '2025-01-01T00:00:00.000Z',
+              'updatedAt': '2025-01-01T00:00:00.000Z',
+            },
+          ],
+          'messages': [
+            {
+              'conversationId': 'enveloped-message',
+              'record': {
+                'id': 'enveloped-media',
+                'role': 'user',
+                'sequence': 0,
+                'createdAt': '2025-01-01T00:00:00.000Z',
+                'extensions': {
+                  'stroom.legacy': {
+                    'record': {
+                      'attachments': [
+                        {'storagePath': 'attachments/missing-envelope.png'},
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+      archiveEntries: const {'chat_data.json'},
+      requireFiles: true,
+    );
+
+    expect(complete, isFalse);
+  });
+
   test('allows external repository attachment references', () async {
     final backup = await BackupService.buildBackupBytesForTest();
     final complete = _backupWithRepositoryAttachment(
@@ -130,6 +283,59 @@ void main() {
       skipMissingCategories: true,
     );
   });
+
+  test(
+    'task restore protection includes repository media references',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'conversations',
+        jsonEncode([
+          {
+            'id': 'legacy-conversation',
+            'messages': [
+              {
+                'attachments': [
+                  {'storagePath': 'attachments/legacy.png'},
+                ],
+              },
+            ],
+          },
+        ]),
+      );
+      final repository = MemoryConversationRepository();
+      await repository.initialize();
+      await repository.upsertConversation(
+        StroomConversation(
+          id: 'repository-conversation',
+          title: 'Repository conversation',
+          createdAt: DateTime.utc(2025),
+          updatedAt: DateTime.utc(2025),
+        ),
+      );
+      await repository.upsertMessage(
+        'repository-conversation',
+        StroomMessage(
+          id: 'repository-message',
+          role: 'user',
+          sequence: 0,
+          createdAt: DateTime.utc(2025),
+          content: [
+            StroomContentPart.image(reference: 'attachments/repository.png'),
+          ],
+        ),
+      );
+
+      final keys = await BackupService.collectChatAttachmentKeysForTest(
+        repository,
+      );
+
+      expect(
+        keys,
+        containsAll(['attachments/legacy.png', 'attachments/repository.png']),
+      );
+    },
+  );
 
   testWidgets('LLM credentials migrate out of ordinary backup exports', (
     WidgetTester t,
@@ -1732,8 +1938,8 @@ void main() {
 
       final restoredEntries =
           jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-      final configs =
-          ((restoredEntries.single as Map)['configs'] as List).cast<Map>();
+      final configs = ((restoredEntries.single as Map)['configs'] as List)
+          .cast<Map>();
       expect(configs.map((config) => config['credentialRef']).toSet(), {
         firstReference,
         secondReference,
@@ -2022,17 +2228,27 @@ void main() {
 
       final restoredEntries =
           jsonDecode(prefs.getString('provider_entries')!) as List<dynamic>;
-      final restoredConfig = ((restoredEntries.singleWhere(
-        (entry) => (entry as Map)['id'] == 'restore-llm-entry',
-      ) as Map)['configs'] as List)
-          .single as Map;
+      final restoredConfig =
+          ((restoredEntries.singleWhere(
+                            (entry) =>
+                                (entry as Map)['id'] == 'restore-llm-entry',
+                          )
+                          as Map)['configs']
+                      as List)
+                  .single
+              as Map;
       expect(restoredConfig.containsKey('key'), isFalse);
       final providerReference = restoredConfig['credentialRef'] as String;
       expect(credentialStore.values[providerReference], providerSecret);
-      final restoredEntryKeyConfig = ((restoredEntries.singleWhere(
-        (entry) => (entry as Map)['id'] == 'restore-llm-entry-key',
-      ) as Map)['configs'] as List)
-          .single as Map;
+      final restoredEntryKeyConfig =
+          ((restoredEntries.singleWhere(
+                            (entry) =>
+                                (entry as Map)['id'] == 'restore-llm-entry-key',
+                          )
+                          as Map)['configs']
+                      as List)
+                  .single
+              as Map;
       expect(restoredEntryKeyConfig.containsKey('key'), isFalse);
       final entryReference = restoredEntryKeyConfig['credentialRef'] as String;
       expect(credentialStore.values[entryReference], entrySecret);
@@ -2088,21 +2304,21 @@ void main() {
       const restoredSecret = 'sk_committed_backup_restore_credential';
 
       String sourceWithKey(String secret) => jsonEncode([
+        {
+          'id': 'rollback-race-provider',
+          'type': 'llm',
+          'configs': [
             {
-              'id': 'rollback-race-provider',
-              'type': 'llm',
-              'configs': [
-                {
-                  'id': 'rollback-race-account',
-                  'providerName': 'Rollback race provider',
-                  'host': 'https://rollback-race.example.test',
-                  'credentialRef': reference,
-                  'key': secret,
-                  'models': [],
-                },
-              ],
+              'id': 'rollback-race-account',
+              'providerName': 'Rollback race provider',
+              'host': 'https://rollback-race.example.test',
+              'credentialRef': reference,
+              'key': secret,
+              'models': [],
             },
-          ]);
+          ],
+        },
+      ]);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('provider_entries', sourceWithKey(firstSecret));
@@ -2143,14 +2359,15 @@ void main() {
         archive.addFile(
           ArchiveFile('settings.json', encodedSettings.length, encodedSettings),
         );
-        pendingRestore = BackupService.restoreFromBytesForTest(
-          Uint8List.fromList(ZipEncoder().encode(archive)),
-          selection: settingsOnlySelection,
-          skipPostRestoreMigration: true,
-          credentialStore: credentials,
-        ).then((_) {
-          restoreCompletedBeforeMigrationFailure = true;
-        });
+        pendingRestore =
+            BackupService.restoreFromBytesForTest(
+              Uint8List.fromList(ZipEncoder().encode(archive)),
+              selection: settingsOnlySelection,
+              skipPostRestoreMigration: true,
+              credentialStore: credentials,
+            ).then((_) {
+              restoreCompletedBeforeMigrationFailure = true;
+            });
         await Future<void>.delayed(Duration.zero);
         expect(restoreCompletedBeforeMigrationFailure, isFalse);
         return false;
@@ -2937,8 +3154,10 @@ void main() {
       expect(archive, isNotNull);
 
       // Should contain at least manifest.json and stroom_manifest.json
-      final fileNames =
-          archive.files.where((f) => f.isFile).map((f) => f.name).toSet();
+      final fileNames = archive.files
+          .where((f) => f.isFile)
+          .map((f) => f.name)
+          .toSet();
       expect(fileNames, contains('manifest.json'));
       expect(fileNames, contains('stroom_manifest.json'));
 

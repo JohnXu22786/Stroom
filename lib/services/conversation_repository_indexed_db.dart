@@ -67,8 +67,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
       final conversation = StroomConversation.fromMap(_decode(bytes));
       final count = (await WebFileStore.keysWithPrefix(
         _messagePrefixFor(conversation.id),
-      ))
-          .length;
+      )).length;
       summaries.add(
         ConversationSummary.fromConversation(
           _withoutMessages(conversation),
@@ -160,6 +159,54 @@ class IndexedDbConversationRepository implements ConversationRepository {
       deletes.remove(rowKey);
     }
     await WebFileStore.writeBatch(writes, deletes: deletes);
+  }
+
+  @override
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
+  }) async {
+    final writes = <String, Uint8List>{};
+    final deletes = <String>{};
+    for (final change in changes) {
+      final conversation = change.conversation;
+      writes[_conversationKey(conversation.id)] = _encode(
+        _withoutMessages(conversation).toMap(),
+      );
+      final indexKeys = <String>{
+        ...change.deleteMessageIds.map(
+          (id) => _messageIndexKey(conversation.id, id),
+        ),
+        ...change.upsertMessages.map(
+          (message) => _messageIndexKey(conversation.id, message.id),
+        ),
+      };
+      for (final indexKey in indexKeys) {
+        final existing = await WebFileStore.read(indexKey);
+        if (existing != null) deletes.add(utf8.decode(existing));
+      }
+      for (final id in change.deleteMessageIds) {
+        deletes.add(_messageIndexKey(conversation.id, id));
+      }
+      for (final message in change.upsertMessages) {
+        final rowKey = _orderedMessageKey(conversation.id, message);
+        writes[rowKey] = _encode(message.toMap());
+        writes[_messageIndexKey(conversation.id, message.id)] =
+            Uint8List.fromList(utf8.encode(rowKey));
+        deletes.remove(rowKey);
+      }
+    }
+    for (final id in deleteConversationIds) {
+      deletes.add(_conversationKey(id));
+      deletes.addAll(await WebFileStore.keysWithPrefix(_messagePrefixFor(id)));
+      deletes.addAll(
+        await WebFileStore.keysWithPrefix(_messageIndexPrefixFor(id)),
+      );
+    }
+    writes[_orderKey] = _encode(conversationOrder);
+    await WebFileStore.writeBatch(writes, deletes: deletes);
+    _cachedOrder = List<String>.from(conversationOrder);
   }
 
   @override
@@ -268,8 +315,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
         rowKey: _encode(message.toMap()),
         indexKey: Uint8List.fromList(utf8.encode(rowKey)),
       },
-      deletes:
-          oldRowKey == null || oldRowKey == rowKey ? const [] : [oldRowKey],
+      deletes: oldRowKey == null || oldRowKey == rowKey
+          ? const []
+          : [oldRowKey],
     );
   }
 
@@ -307,8 +355,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
     if (conversationId != null) {
       return (await WebFileStore.keysWithPrefix(
         _messagePrefixFor(conversationId),
-      ))
-          .length;
+      )).length;
     }
     var count = 0;
     final conversations = await WebFileStore.keysWithPrefix(
@@ -320,8 +367,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
         final id = StroomConversation.fromMap(_decode(bytes)).id;
         count += (await WebFileStore.keysWithPrefix(
           _messagePrefixFor(id),
-        ))
-            .length;
+        )).length;
       }
     }
     return count;
@@ -368,7 +414,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
         if (messageBytes != null) {
           messages.add({
             'conversationId': conversation.id,
-            ..._decode(messageBytes),
+            'record': _decode(messageBytes),
           });
         }
       }
@@ -380,6 +426,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
     conversations.addAll(orderedIds.map((id) => recordsById[id]!.toMap()));
     return {
       'schemaVersion': 1,
+      'messageEnvelopeVersion': 1,
       if (sourceHash != null) 'migrationSourceHash': sourceHash,
       'conversationOrder': orderedIds,
       'conversations': conversations,
@@ -422,7 +469,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
         : conversations.keys.toList();
     writes[_orderKey] = _encode(orderedIds);
     final migrationSourceHash = data['migrationSourceHash'];
-    if (migrationSourceHash is String && migrationSourceHash.isNotEmpty) {
+    if (migrationSourceHash is String) {
       writes[_migrationSourceHashKey] = Uint8List.fromList(
         utf8.encode(migrationSourceHash),
       );
@@ -438,7 +485,11 @@ class IndexedDbConversationRepository implements ConversationRepository {
           'Message references a missing conversation.',
         );
       }
-      final message = StroomMessage.fromMap(row);
+      final record = data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
+      if (record is! Map) {
+        throw const FormatException('Invalid message envelope.');
+      }
+      final message = StroomMessage.fromMap(Map<String, dynamic>.from(record));
       final compositeId = '$conversationId\u0000${message.id}';
       if (message.id.isEmpty || !seenMessageIds.add(compositeId)) {
         throw const FormatException('Invalid or duplicate message id.');
@@ -464,8 +515,7 @@ class IndexedDbConversationRepository implements ConversationRepository {
         ...currentConversationKeys,
         ...currentMessageKeys,
         ...currentIndexKeys,
-        if (migrationSourceHash is! String || migrationSourceHash.isEmpty)
-          _migrationSourceHashKey,
+        if (migrationSourceHash is! String) _migrationSourceHashKey,
       ],
     );
     _cachedOrder = orderedIds;
@@ -533,7 +583,8 @@ class IndexedDbConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = conversationLocalMediaPath(reference['reference']) ??
+    final path =
+        conversationLocalMediaPath(reference['reference']) ??
         conversationLocalMediaPath(reference['storagePath']);
     if (path == null) {
       if (!conversationIsExternalMediaUri(reference['reference']) &&
@@ -643,13 +694,12 @@ class IndexedDbConversationRepository implements ConversationRepository {
     String messageId,
     String reference,
     String reason,
-  ) =>
-      ConversationIntegrityIssue(
-        conversationId: conversationId,
-        messageId: messageId,
-        reference: reference,
-        reason: reason,
-      );
+  ) => ConversationIntegrityIssue(
+    conversationId: conversationId,
+    messageId: messageId,
+    reference: reference,
+    reason: reason,
+  );
 
   static bool _sameIds(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

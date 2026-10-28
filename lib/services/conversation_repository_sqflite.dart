@@ -200,6 +200,82 @@ class SqfliteConversationRepository implements ConversationRepository {
   }
 
   @override
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
+  }) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final change in changes) {
+        final conversation = change.conversation;
+        final record = _withoutMessages(conversation);
+        final values = {
+          'id': conversation.id,
+          'title': conversation.title,
+          'created_at': conversation.createdAt.millisecondsSinceEpoch,
+          'updated_at': conversation.updatedAt.millisecondsSinceEpoch,
+          'record_json': record.toJson(),
+        };
+        await txn.insert(
+          'conversations',
+          values,
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        await txn.update(
+          'conversations',
+          values,
+          where: 'id = ?',
+          whereArgs: [conversation.id],
+        );
+        for (final id in change.deleteMessageIds) {
+          await txn.delete(
+            'messages',
+            where: 'conversation_id = ? AND id = ?',
+            whereArgs: [conversation.id, id],
+          );
+        }
+        for (final message in change.upsertMessages) {
+          await _insertMessage(txn, conversation.id, message);
+        }
+      }
+      for (final id in deleteConversationIds) {
+        await txn.delete(
+          'messages',
+          where: 'conversation_id = ?',
+          whereArgs: [id],
+        );
+        await txn.delete('conversations', where: 'id = ?', whereArgs: [id]);
+      }
+      final rows = await txn.query(
+        'conversations',
+        columns: ['id', 'sort_order'],
+        orderBy: 'sort_order ASC',
+      );
+      final currentIds = rows.map((row) => row['id']! as String).toList();
+      final wanted = <String>[
+        ...conversationOrder.where(currentIds.contains),
+        ...currentIds.where((id) => !conversationOrder.contains(id)),
+      ];
+      for (var index = 0; index < wanted.length; index++) {
+        if (rows.asMap().entries.any(
+          (entry) =>
+              entry.value['id'] == wanted[index] &&
+              entry.value['sort_order'] == index,
+        )) {
+          continue;
+        }
+        await txn.update(
+          'conversations',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [wanted[index]],
+        );
+      }
+    });
+  }
+
+  @override
   Future<void> importConversation(StroomConversation conversation) async {
     final record = _withoutMessages(conversation);
     final values = {
@@ -249,14 +325,15 @@ class SqfliteConversationRepository implements ConversationRepository {
       ];
       if (_sameIds(currentIds, wanted) &&
           rows.asMap().entries.every(
-                (entry) => entry.value['sort_order'] == entry.key,
-              )) {
+            (entry) => entry.value['sort_order'] == entry.key,
+          )) {
         return;
       }
       for (var index = 0; index < wanted.length; index++) {
         if (index < rows.length &&
             rows[index]['id'] == wanted[index] &&
-            rows[index]['sort_order'] == index) continue;
+            rows[index]['sort_order'] == index)
+          continue;
         await txn.update(
           'conversations',
           {'sort_order': index},
@@ -315,17 +392,13 @@ class SqfliteConversationRepository implements ConversationRepository {
     DatabaseExecutor db,
     String conversationId,
     StroomMessage message,
-  ) =>
-      db.insert(
-          'messages',
-          {
-            'id': message.id,
-            'conversation_id': conversationId,
-            'sequence': message.sequence,
-            'created_at': message.createdAt.millisecondsSinceEpoch,
-            'record_json': jsonEncode(message.toMap()),
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace);
+  ) => db.insert('messages', {
+    'id': message.id,
+    'conversation_id': conversationId,
+    'sequence': message.sequence,
+    'created_at': message.createdAt.millisecondsSinceEpoch,
+    'record_json': jsonEncode(message.toMap()),
+  }, conflictAlgorithm: ConflictAlgorithm.replace);
 
   Future<void> _requireConversation(DatabaseExecutor db, String id) async {
     final rows = await db.query(
@@ -366,17 +439,17 @@ class SqfliteConversationRepository implements ConversationRepository {
   @override
   Future<int> countMessages({String? conversationId}) async =>
       conversationId == null
-          ? Sqflite.firstIntValue(
-                await (await _db).rawQuery('SELECT COUNT(*) FROM messages'),
-              ) ??
-              0
-          : Sqflite.firstIntValue(
-                await (await _db).rawQuery(
-                  'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
-                  [conversationId],
-                ),
-              ) ??
-              0;
+      ? Sqflite.firstIntValue(
+              await (await _db).rawQuery('SELECT COUNT(*) FROM messages'),
+            ) ??
+            0
+      : Sqflite.firstIntValue(
+              await (await _db).rawQuery(
+                'SELECT COUNT(*) FROM messages WHERE conversation_id = ?',
+                [conversationId],
+              ),
+            ) ??
+            0;
 
   @override
   Future<String?> migrationSourceHash() async {
@@ -392,13 +465,10 @@ class SqfliteConversationRepository implements ConversationRepository {
 
   @override
   Future<void> setMigrationSourceHash(String sourceHash) async {
-    await (await _db).insert(
-        'repository_metadata',
-        {
-          'key': 'migration_source_hash',
-          'value': sourceHash,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await (await _db).insert('repository_metadata', {
+      'key': 'migration_source_hash',
+      'value': sourceHash,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   @override
@@ -415,9 +485,11 @@ class SqfliteConversationRepository implements ConversationRepository {
     final sourceHash = await migrationSourceHash();
     return {
       'schemaVersion': 1,
+      'messageEnvelopeVersion': 1,
       if (sourceHash != null) 'migrationSourceHash': sourceHash,
-      'conversationOrder':
-          conversations.map((row) => row['id'] as String).toList(),
+      'conversationOrder': conversations
+          .map((row) => row['id'] as String)
+          .toList(),
       'conversations': conversations
           .map((row) => jsonDecode(row['record_json']! as String))
           .toList(),
@@ -425,7 +497,7 @@ class SqfliteConversationRepository implements ConversationRepository {
         for (final row in messages)
           {
             'conversationId': row['conversation_id'],
-            ...Map<String, dynamic>.from(
+            'record': Map<String, dynamic>.from(
               jsonDecode(row['record_json']! as String),
             ),
           },
@@ -467,7 +539,11 @@ class SqfliteConversationRepository implements ConversationRepository {
           'Message references a missing conversation.',
         );
       }
-      final message = StroomMessage.fromMap(row);
+      final record = data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
+      if (record is! Map) {
+        throw const FormatException('Invalid message envelope.');
+      }
+      final message = StroomMessage.fromMap(Map<String, dynamic>.from(record));
       final compositeId = '$conversationId\u0000${message.id}';
       if (message.id.isEmpty || !seenMessageIds.add(compositeId)) {
         throw const FormatException('Invalid or duplicate message id.');
@@ -493,7 +569,7 @@ class SqfliteConversationRepository implements ConversationRepository {
         where: 'key = ?',
         whereArgs: ['migration_source_hash'],
       );
-      if (migrationSourceHash is String && migrationSourceHash.isNotEmpty) {
+      if (migrationSourceHash is String) {
         await txn.insert('repository_metadata', {
           'key': 'migration_source_hash',
           'value': migrationSourceHash,
@@ -564,7 +640,8 @@ class SqfliteConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = conversationLocalMediaPath(reference['reference']) ??
+    final path =
+        conversationLocalMediaPath(reference['reference']) ??
         conversationLocalMediaPath(reference['storagePath']);
     if (path == null) {
       if (!conversationIsExternalMediaUri(reference['reference']) &&

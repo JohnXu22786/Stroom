@@ -61,10 +61,10 @@ class _JsonIntegrityCheck {
   });
 
   DataIntegrityIssue issue(String error) => DataIntegrityIssue(
-        part: part,
-        message: '$messagePrefix$error',
-        isCorruption: true,
-      );
+    part: part,
+    message: '$messagePrefix$error',
+    isCorruption: true,
+  );
 }
 
 class _JsonChecksReadResult {
@@ -112,17 +112,18 @@ class DataIntegrityChecker {
     ];
     final jsonValidationFuture =
         StartupCheckService.validateJsonBatchAndDataFormats(
-      jsonContents,
-      providerEntriesIndex: jsonChecksRead.prefsKeysReadSuccessfully.contains(
-        'provider_entries',
-      )
-          ? _contentIndexForPrefsKey(jsonChecks, 'provider_entries')
-          : null,
-      conversationsIndex:
-          jsonChecksRead.prefsKeysReadSuccessfully.contains('conversations')
+          jsonContents,
+          providerEntriesIndex:
+              jsonChecksRead.prefsKeysReadSuccessfully.contains(
+                'provider_entries',
+              )
+              ? _contentIndexForPrefsKey(jsonChecks, 'provider_entries')
+              : null,
+          conversationsIndex:
+              jsonChecksRead.prefsKeysReadSuccessfully.contains('conversations')
               ? _contentIndexForPrefsKey(jsonChecks, 'conversations')
               : null,
-    );
+        );
 
     final sqliteIssues = <DataIntegrityIssue>[];
     await _checkSqliteDatabases(sqliteIssues);
@@ -213,7 +214,8 @@ class DataIntegrityChecker {
     var parseIndex = 0;
     final issues = <DataIntegrityIssue>[];
     for (final check in checks) {
-      final error = check.readError ??
+      final error =
+          check.readError ??
           (check.content == null ? null : parseErrors[parseIndex++]);
       if (error != null) issues.add(check.issue(error));
     }
@@ -243,7 +245,8 @@ class DataIntegrityChecker {
           _JsonIntegrityCheck(
             part: key == 'data_format_versions' ? 'settings' : 'chat',
             messagePrefix: 'SharedPreferences 键 $key 无法解析: ',
-            readError: 'Expected a string preference, got '
+            readError:
+                'Expected a string preference, got '
                 '${value.runtimeType}.',
             prefsKey: key,
           ),
@@ -392,8 +395,9 @@ class DataIntegrityChecker {
       if (db != null) {
         try {
           final rows = await db.rawQuery('PRAGMA integrity_check');
-          final result =
-              rows.isEmpty ? '' : (rows.first.values.first as String?);
+          final result = rows.isEmpty
+              ? ''
+              : (rows.first.values.first as String?);
           if (result != 'ok') {
             issues.add(
               DataIntegrityIssue(

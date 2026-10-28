@@ -6,18 +6,66 @@ part of 'chat_page.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _ChatPageMessagesExt on _ChatPageState {
+  ({List<MessageSegment> segments, List<String>? reasoningContents})
+  _messagePresentationFor(ChatMessage message) {
+    final reasoningContents =
+        message.reasoningSections != null &&
+            message.reasoningSections!.isNotEmpty
+        ? List<String>.from(message.reasoningSections!)
+        : message.reasoningContent != null &&
+              message.reasoningContent!.isNotEmpty
+        ? [message.reasoningContent!]
+        : null;
+    final rebuiltBlocks = legacyToBlocks(
+      reasoningSections: message.reasoningSections ?? [],
+      textChunks: message.textSections ?? [],
+      toolCalls: message.toolCalls ?? [],
+      toolCallRoundStarts: message.toolCallRoundStarts ?? [],
+    );
+    final blocks = (message.toolCallRoundStarts != null)
+        ? rebuiltBlocks
+        : (message.blocks ?? rebuiltBlocks);
+    final segments = blocksToSegments(blocks);
+    final hasText = segments.any(
+      (segment) => segment is TextSegment && segment.text.trim().isNotEmpty,
+    );
+    if (!hasText && message.content.isNotEmpty) {
+      segments.add(TextSegment(message.content));
+    }
+    return (segments: segments, reasoningContents: reasoningContents);
+  }
+
+  void _hydrateMessagePresentation(ChatMessage message) {
+    final presentation = _messagePresentationFor(message);
+    if (presentation.reasoningContents != null) {
+      _reasoningContents[message.id] = presentation.reasoningContents!;
+    }
+    if (presentation.segments.isNotEmpty) {
+      _chatSegments[message.id] = presentation.segments;
+    }
+  }
+
   /// Loads one newer repository page when a search result opened an older
   /// window and the user scrolls toward the conversation's newest messages.
   Future<void> _loadNewerRepositoryMessages() async {
-    if (_isLoadingNewer) return;
+    if (_isLoadingNewer) {
+      if (_loadingNewerConversationGeneration != _conversationLoadGeneration) {
+        _pendingNewerConversationLoad = true;
+      }
+      return;
+    }
     final conversationId = _loadedConversationId;
+    final conversationLoadGeneration = _conversationLoadGeneration;
+    final controller = _controller;
     if (conversationId == null ||
+        controller == null ||
         !ref
             .read(conversationsProvider.notifier)
             .hasLaterRepositoryMessages(conversationId)) {
       return;
     }
     _isLoadingNewer = true;
+    _loadingNewerConversationGeneration = conversationLoadGeneration;
     try {
       final notifier = ref.read(conversationsProvider.notifier);
       final messages = await notifier.loadLaterRepositoryMessages(
@@ -26,9 +74,13 @@ extension _ChatPageMessagesExt on _ChatPageState {
       );
       if (!mounted ||
           messages.isEmpty ||
+          conversationLoadGeneration != _conversationLoadGeneration ||
           _loadedConversationId != conversationId ||
           ref.read(activeConversationIdProvider) != conversationId) {
         return;
+      }
+      for (final message in messages) {
+        _hydrateMessagePresentation(message);
       }
       final chatMessages = messages
           .map(
@@ -40,16 +92,28 @@ extension _ChatPageMessagesExt on _ChatPageState {
             ),
           )
           .toList();
-      await _controller!.insertAllMessages(
+      await controller.insertAllMessages(
         chatMessages,
-        index: _controller!.messages.length,
+        index: controller.messages.length,
       );
+      if (!mounted ||
+          conversationLoadGeneration != _conversationLoadGeneration ||
+          !identical(_controller, controller) ||
+          _loadedConversationId != conversationId ||
+          ref.read(activeConversationIdProvider) != conversationId) {
+        return;
+      }
       _history.addAll(messages);
       notifier.commitLoadedLaterRepositoryMessages(conversationId, messages);
     } catch (e, s) {
       debugPrint('[ChatPage] _loadNewerRepositoryMessages error: $e\\n$s');
     } finally {
       _isLoadingNewer = false;
+      _loadingNewerConversationGeneration = null;
+      if (_pendingNewerConversationLoad && mounted) {
+        _pendingNewerConversationLoad = false;
+        unawaited(_loadNewerRepositoryMessages());
+      }
     }
   }
 
@@ -102,8 +166,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // empty) snapshot would skip MCP discovery entirely and leave the tool
     // list at built-in-only.
     try {
-      final freshEntriesState =
-          mounted ? ref.read(providerEntriesProvider) : null;
+      final freshEntriesState = mounted
+          ? ref.read(providerEntriesProvider)
+          : null;
       await AppLogService.info(
         'ChatPage',
         '开始初始化 MCP 服务器，当前有 ${freshEntriesState?.entries.length ?? 0} 个供应商配置',
@@ -196,6 +261,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       }
 
       // Convert ChatMessage list to flutter_chat_ui Message list
+      for (final message in batchMessages) {
+        _hydrateMessagePresentation(message);
+      }
       final msgs = batchMessages
           .map(
             (m) => Message.text(
@@ -212,7 +280,8 @@ extension _ChatPageMessagesExt on _ChatPageState {
       // 若延迟放在插入之后，快速加载时新插入的旧消息会先闪现 0.5 秒，
       // 再被锚点拉回，产生可见跳动。先转满 0.5 秒再插入，指示器与内容
       // 就位保持同步，锚点校正的时机也与修复前一致。
-      final remaining = _ChatPageState._loadMoreMinDisplayDuration -
+      final remaining =
+          _ChatPageState._loadMoreMinDisplayDuration -
           DateTime.now().difference(loadStartedAt);
       // Search navigation skips the minimum-display delay so jumping to an
       // old match does not stall 500 ms per loaded batch.
@@ -295,7 +364,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     });
   }
 
-  Future<void> _loadConversationMessages() async {
+  Future<void> _loadConversationMessages({bool force = false}) async {
     // Guard: prevent concurrent calls to _loadConversationMessages.
     // Multiple sources can trigger message loading (init, provider
     // listeners for conversationsProvider, activeConversationIdProvider)
@@ -326,7 +395,7 @@ extension _ChatPageMessagesExt on _ChatPageState {
     // (e.g. conversation data wasn't ready when _initialize ran). In that
     // case we MUST load history now, preserving the streaming state so
     // live segments continue to render while historical messages fill in.
-    if (_isStreamingActive && _history.isNotEmpty) {
+    if (!force && _isStreamingActive && _history.isNotEmpty) {
       await AppLogService.info(
         'ChatPage',
         '[STREAM-LOAD] _loadConversationMessages: streaming active + history has ${_history.length} msgs, skip',
@@ -410,8 +479,9 @@ extension _ChatPageMessagesExt on _ChatPageState {
       final savedChatSegments = _isStreamingActive
           ? Map<String, List<MessageSegment>>.from(_chatSegments)
           : null;
-      final savedFinalizedMessages =
-          _isStreamingActive ? Set<String>.from(_finalizedMessages) : null;
+      final savedFinalizedMessages = _isStreamingActive
+          ? Set<String>.from(_finalizedMessages)
+          : null;
       final savedReasoningContents = _isStreamingActive
           ? Map<String, List<String>>.from(_reasoningContents)
           : null;
@@ -436,50 +506,12 @@ extension _ChatPageMessagesExt on _ChatPageState {
       await AppLogService.info('ChatPage', '开始加载最近 $msgCount 条消息到 _history');
       for (final msg in messages) {
         loadedHistory.add(msg);
-        // Restore reasoning sections from persisted ChatMessage.
-        // Prefer the new multi-section [reasoningSections] field over the
-        // legacy single-string [reasoningContent] for backward compatibility.
-        if (msg.reasoningSections != null &&
-            msg.reasoningSections!.isNotEmpty) {
-          loadedReasoningContents[msg.id] = List<String>.from(
-            msg.reasoningSections!,
-          );
-        } else if (msg.reasoningContent != null &&
-            msg.reasoningContent!.isNotEmpty) {
-          loadedReasoningContents[msg.id] = [msg.reasoningContent!];
+        final presentation = _messagePresentationFor(msg);
+        if (presentation.reasoningContents != null) {
+          loadedReasoningContents[msg.id] = presentation.reasoningContents!;
         }
-
-        // Build unified segments for the full Agent chain.
-        // Build segments from blocks (unified path since v0.4.50).
-        // If blocks are absent (periodic persist or old data), build
-        // them from legacy fields on the fly.
-        // For roundStarts-era messages, REBUILD blocks from the legacy
-        // fields instead of trusting the persisted ones: blocks saved
-        // before the empty-section fix were built by the empty-skipping
-        // legacyToBlocks, whose ordinal ReasoningSegment indices
-        // misalign with the raw reasoningSections indices whenever a
-        // middle tool round had no reasoning (interior '' placeholder) —
-        // the reloaded message then rendered the wrong section (or none).
-        // Rebuilding is idempotent for correctly-aligned blocks
-        // (compactedAt markers are carried by the legacy toolCalls).
-        final rebuiltBlocks = legacyToBlocks(
-          reasoningSections: msg.reasoningSections ?? [],
-          textChunks: msg.textSections ?? [],
-          toolCalls: msg.toolCalls ?? [],
-          toolCallRoundStarts: msg.toolCallRoundStarts ?? [],
-        );
-        final blocks = (msg.toolCallRoundStarts != null)
-            ? rebuiltBlocks
-            : (msg.blocks ?? rebuiltBlocks);
-        final segments = blocksToSegments(blocks);
-        // Fallback: no textSections, use content as single trailing block
-        if (segments.isEmpty && msg.content.isNotEmpty) {
-          segments.add(TextSegment(msg.content));
-        } else if (msg.textSections == null && msg.content.isNotEmpty) {
-          segments.add(TextSegment(msg.content));
-        }
-        if (segments.isNotEmpty) {
-          loadedChatSegments[msg.id] = segments;
+        if (presentation.segments.isNotEmpty) {
+          loadedChatSegments[msg.id] = presentation.segments;
         }
       }
       final loadedUpToIndex = loadedHistory.length >= _ChatPageState._pageSize
@@ -629,10 +661,11 @@ extension _ChatPageMessagesExt on _ChatPageState {
         // update it via _updateStreamingMessage.
         final inCtrl =
             _controller?.messages.any((m) => m.id == savedStreamingMsgId) ??
-                false;
+            false;
         if (!inCtrl) {
-          final restoredFullReply =
-              ref.read(chatStreamManagerProvider).fullReplyFor(activeId);
+          final restoredFullReply = ref
+              .read(chatStreamManagerProvider)
+              .fullReplyFor(activeId);
           _controller?.insertMessage(
             Message.text(
               id: savedStreamingMsgId,

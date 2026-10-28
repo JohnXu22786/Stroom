@@ -15,23 +15,24 @@ class MemoryConversationRepository implements ConversationRepository {
 
   @override
   Future<List<ConversationSummary>> listSummaries({int? limit}) async {
-    final rows = _conversations.values
-        .map(
-          (conversation) => ConversationSummary.fromConversation(
-            conversation,
-            messageCount: _messages[conversation.id]?.length ?? 0,
-          ),
-        )
-        .toList()
-      ..sort((a, b) {
-        final ai = _order.indexOf(a.id);
-        final bi = _order.indexOf(b.id);
-        if (ai >= 0 && bi >= 0 && ai != bi) return ai.compareTo(bi);
-        if (ai >= 0) return -1;
-        if (bi >= 0) return 1;
-        final updated = b.updatedAt.compareTo(a.updatedAt);
-        return updated != 0 ? updated : a.id.compareTo(b.id);
-      });
+    final rows =
+        _conversations.values
+            .map(
+              (conversation) => ConversationSummary.fromConversation(
+                conversation,
+                messageCount: _messages[conversation.id]?.length ?? 0,
+              ),
+            )
+            .toList()
+          ..sort((a, b) {
+            final ai = _order.indexOf(a.id);
+            final bi = _order.indexOf(b.id);
+            if (ai >= 0 && bi >= 0 && ai != bi) return ai.compareTo(bi);
+            if (ai >= 0) return -1;
+            if (bi >= 0) return 1;
+            final updated = b.updatedAt.compareTo(a.updatedAt);
+            return updated != 0 ? updated : a.id.compareTo(b.id);
+          });
     return limit == null ? rows : rows.take(limit).toList();
   }
 
@@ -77,6 +78,48 @@ class MemoryConversationRepository implements ConversationRepository {
     }
     _conversations[conversation.id] = _withoutMessages(conversation);
     _messages[conversation.id] = nextMessages;
+  }
+
+  @override
+  Future<void> applySnapshotChanges({
+    required List<ConversationRepositoryChange> changes,
+    required List<String> conversationOrder,
+    required List<String> deleteConversationIds,
+  }) async {
+    final conversations = Map<String, StroomConversation>.from(_conversations);
+    final messages = {
+      for (final entry in _messages.entries)
+        entry.key: Map<String, StroomMessage>.from(entry.value),
+    };
+    for (final id in deleteConversationIds) {
+      conversations.remove(id);
+      messages.remove(id);
+    }
+    for (final change in changes) {
+      final id = change.conversation.id;
+      final nextMessages = Map<String, StroomMessage>.from(
+        messages[id] ?? const <String, StroomMessage>{},
+      );
+      for (final messageId in change.deleteMessageIds) {
+        nextMessages.remove(messageId);
+      }
+      for (final message in change.upsertMessages) {
+        nextMessages[message.id] = message;
+      }
+      conversations[id] = _withoutMessages(change.conversation);
+      messages[id] = nextMessages;
+    }
+    final order = [
+      ...conversationOrder.where(conversations.containsKey),
+      ...conversations.keys.where((id) => !conversationOrder.contains(id)),
+    ];
+    _conversations
+      ..clear()
+      ..addAll(conversations);
+    _messages
+      ..clear()
+      ..addAll(messages);
+    _order = order;
   }
 
   @override
@@ -142,11 +185,11 @@ class MemoryConversationRepository implements ConversationRepository {
   @override
   Future<int> countMessages({String? conversationId}) async =>
       conversationId == null
-          ? _messages.values.fold<int>(
-              0,
-              (count, messages) => count + messages.length,
-            )
-          : _messages[conversationId]?.length ?? 0;
+      ? _messages.values.fold<int>(
+          0,
+          (count, messages) => count + messages.length,
+        )
+      : _messages[conversationId]?.length ?? 0;
 
   @override
   Future<String?> migrationSourceHash() async => _migrationSourceHash;
@@ -158,21 +201,21 @@ class MemoryConversationRepository implements ConversationRepository {
 
   @override
   Future<Map<String, dynamic>> exportData() async => {
-        'schemaVersion': 1,
-        if (_migrationSourceHash != null)
-          'migrationSourceHash': _migrationSourceHash,
-        'conversationOrder': [
-          ..._order.where(_conversations.containsKey),
-          ..._conversations.keys.where((id) => !_order.contains(id)),
-        ],
-        'conversations':
-            _conversations.values.map((item) => item.toMap()).toList(),
-        'messages': [
-          for (final entry in _messages.entries)
-            for (final message in entry.value.values)
-              {'conversationId': entry.key, ...message.toMap()},
-        ],
-      };
+    'schemaVersion': 1,
+    'messageEnvelopeVersion': 1,
+    if (_migrationSourceHash != null)
+      'migrationSourceHash': _migrationSourceHash,
+    'conversationOrder': [
+      ..._order.where(_conversations.containsKey),
+      ..._conversations.keys.where((id) => !_order.contains(id)),
+    ],
+    'conversations': _conversations.values.map((item) => item.toMap()).toList(),
+    'messages': [
+      for (final entry in _messages.entries)
+        for (final message in entry.value.values)
+          {'conversationId': entry.key, 'record': message.toMap()},
+    ],
+  };
 
   @override
   Future<void> restoreData(Map<String, dynamic> data) async {
@@ -207,7 +250,11 @@ class MemoryConversationRepository implements ConversationRepository {
           'Message references a missing conversation.',
         );
       }
-      final message = StroomMessage.fromMap(row);
+      final record = data['messageEnvelopeVersion'] == 1 ? row['record'] : row;
+      if (record is! Map) {
+        throw const FormatException('Invalid message envelope.');
+      }
+      final message = StroomMessage.fromMap(Map<String, dynamic>.from(record));
       if (message.id.isEmpty ||
           messages[conversationId]!.containsKey(message.id)) {
         throw const FormatException('Invalid or duplicate message id.');
@@ -282,13 +329,12 @@ class MemoryConversationRepository implements ConversationRepository {
     String messageId,
     String reference,
     String reason,
-  ) =>
-      ConversationIntegrityIssue(
-        conversationId: conversationId,
-        messageId: messageId,
-        reference: reference,
-        reason: reason,
-      );
+  ) => ConversationIntegrityIssue(
+    conversationId: conversationId,
+    messageId: messageId,
+    reference: reference,
+    reason: reason,
+  );
 
   static Future<void> _checkReference(
     List<ConversationIntegrityIssue> issues,
@@ -297,7 +343,8 @@ class MemoryConversationRepository implements ConversationRepository {
     Map<String, dynamic> reference,
     Future<Uint8List?> Function(String reference) readMedia,
   ) async {
-    final path = conversationLocalMediaPath(reference['reference']) ??
+    final path =
+        conversationLocalMediaPath(reference['reference']) ??
         conversationLocalMediaPath(reference['storagePath']);
     if (path == null) {
       if (!conversationIsExternalMediaUri(reference['reference']) &&

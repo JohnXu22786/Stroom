@@ -23,9 +23,13 @@ void addStringToArchive(Archive archive, String name, String content) {
 }
 
 Future<void> addTaskFileToArchive(
-    Archive archive, String archiveName, String sourcePath) async {
+  Archive archive,
+  String archiveName,
+  String sourcePath,
+) async {
   debugPrint(
-      '[BackupServiceShared] addTaskFileToArchive: $archiveName <- $sourcePath');
+    '[BackupServiceShared] addTaskFileToArchive: $archiveName <- $sourcePath',
+  );
   if (WebFileStore.isTestMode) {
     addStringToArchive(archive, archiveName, '[]');
     return;
@@ -83,14 +87,20 @@ Future<Uint8List?> readBackupFile(String subDir, String fileName) async {
     }
   } catch (e) {
     await AppLogService.error(
-        'BackupServiceShared', 'readBackupFile($subDir/$fileName) 失败', e);
+      'BackupServiceShared',
+      'readBackupFile($subDir/$fileName) 失败',
+      e,
+    );
     debugPrint('读取备份文件 $subDir/$fileName 失败: $e');
     return null;
   }
 }
 
 Future<void> writeBackupFile(
-    String subDir, String fileName, Uint8List data) async {
+  String subDir,
+  String fileName,
+  Uint8List data,
+) async {
   try {
     if (kIsWeb || WebFileStore.isTestMode) {
       await WebFileStore.write('$subDir/$fileName', data);
@@ -102,7 +112,10 @@ Future<void> writeBackupFile(
     }
   } catch (e) {
     await AppLogService.error(
-        'BackupServiceShared', 'writeBackupFile($subDir/$fileName) 失败', e);
+      'BackupServiceShared',
+      'writeBackupFile($subDir/$fileName) 失败',
+      e,
+    );
     debugPrint('写入备份文件 $subDir/$fileName 失败: $e');
     rethrow;
   }
@@ -160,7 +173,8 @@ Future<Set<String>> collectAttachmentPaths() async {
     debugPrint('收集附件路径失败: $e');
   }
   debugPrint(
-      '[BackupServiceShared] collectAttachmentPaths: ${paths.length} paths found');
+    '[BackupServiceShared] collectAttachmentPaths: ${paths.length} paths found',
+  );
   return paths;
 }
 
@@ -188,9 +202,11 @@ Future<Set<String>?> collectAttachmentPathsForSafety() async {
         if (kIsWeb || _isBackupServiceFlutterTest) {
           paths.addAll(_collectAttachmentPathsFromJson(json));
         } else {
-          paths.addAll(await data_migration_isolate.runInIsolate(
-            () => _collectAttachmentPathsFromJson(json),
-          ));
+          paths.addAll(
+            await data_migration_isolate.runInIsolate(
+              () => _collectAttachmentPathsFromJson(json),
+            ),
+          );
         }
       }
     }
@@ -204,10 +220,7 @@ Future<Set<String>?> collectAttachmentPathsForSafety() async {
 bool get _shouldReadConversationRepository =>
     kIsWeb || (!WebFileStore.isTestMode && !_isBackupServiceFlutterTest);
 
-void _collectRepositoryAttachmentPaths(
-  Object? rawData,
-  Set<String> paths,
-) {
+void _collectRepositoryAttachmentPaths(Object? rawData, Set<String> paths) {
   if (rawData is! Map) {
     throw const FormatException('Invalid conversation repository export.');
   }
@@ -226,8 +239,9 @@ void _collectRepositoryAttachmentPaths(
       final conversation = StroomConversation.fromMap(
         Map<String, dynamic>.from(raw),
       );
-      for (final reference
-          in conversationDraftAttachmentReferences(conversation)) {
+      for (final reference in conversationDraftAttachmentReferences(
+        conversation,
+      )) {
         addMediaReference(reference);
       }
     }
@@ -236,8 +250,12 @@ void _collectRepositoryAttachmentPaths(
   if (messages is List) {
     for (final raw in messages) {
       if (raw is! Map) continue;
-      final record = Map<String, dynamic>.from(raw)..remove('conversationId');
-      final message = StroomMessage.fromMap(record);
+      final row = Map<String, dynamic>.from(raw);
+      final record = data['messageEnvelopeVersion'] == 1
+          ? row['record']
+          : (row..remove('conversationId'));
+      if (record is! Map) continue;
+      final message = StroomMessage.fromMap(Map<String, dynamic>.from(record));
       for (final reference in conversationMessageMediaReferences(message)) {
         addMediaReference(reference);
       }

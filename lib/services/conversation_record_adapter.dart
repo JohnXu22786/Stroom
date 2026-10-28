@@ -6,33 +6,46 @@ import '../models/stroom_conversation.dart';
 class ConversationRecordAdapter {
   static const legacyMessageNamespace = 'stroom.legacy';
   static const legacyConversationNamespace = 'stroom.legacyConversation';
+  static const _conversationEnvelopeVersionKey =
+      '_stroomAdapterLegacyConversationEnvelopeVersion';
+  static const _conversationEnvelopeVersion = 1;
+  static const _conversationExtensionPresentKey =
+      '_stroomAdapterLegacyConversationExtensionPresent';
+  static const _conversationExtensionValueKey =
+      '_stroomAdapterLegacyConversationExtensionValue';
 
   static StroomConversation fromLegacyMap(Map<String, dynamic> map) {
     final id = map['id'];
     if (id is! String || id.isEmpty) {
       throw const FormatException(
-          'Legacy conversation is missing its stable id.');
+        'Legacy conversation is missing its stable id.',
+      );
     }
     final rawMessages = map['messages'];
     if (rawMessages != null && rawMessages is! List) {
       throw const FormatException(
-          'Legacy conversation messages must be a list.');
+        'Legacy conversation messages must be a list.',
+      );
     }
     final messages = <StroomMessage>[];
     final usedMessageIds = <String>{};
     for (final rawMessage in (rawMessages as List? ?? const [])) {
       if (rawMessage is! Map) {
         throw FormatException(
-            'Conversation $id contains a non-object message.');
+          'Conversation $id contains a non-object message.',
+        );
       }
       final legacyMap = Map<String, dynamic>.from(rawMessage);
       final legacy = ChatMessage.fromMap(legacyMap);
       if (legacy.id.isEmpty || !usedMessageIds.add(legacy.id)) {
         throw FormatException(
-            'Conversation $id contains a missing or duplicate message id.');
+          'Conversation $id contains a missing or duplicate message id.',
+        );
       }
-      final neutral =
-          StroomMessage.fromLegacy(legacy, sequence: messages.length);
+      final neutral = StroomMessage.fromLegacy(
+        legacy,
+        sequence: messages.length,
+      );
       final oldLegacyExtension = neutral.extensions[legacyMessageNamespace];
       final legacyRecord = legacyMessageRecordForStorage(legacyMap);
       messages.add(
@@ -68,6 +81,17 @@ class ConversationRecordAdapter {
       'messages',
       'extensions',
     };
+    final legacyExtensions = map['extensions'];
+    final hasLegacyConversationExtension =
+        legacyExtensions is Map &&
+        legacyExtensions.containsKey(legacyConversationNamespace);
+    final legacyConversationExtension = legacyExtensions is Map
+        ? legacyExtensions[legacyConversationNamespace]
+        : null;
+    final ordinaryExtensions = legacyExtensions is Map
+        ? (Map<String, dynamic>.from(legacyExtensions)
+            ..remove(legacyConversationNamespace))
+        : <String, dynamic>{};
     return StroomConversation(
       schemaVersion: map['schemaVersion'] is num
           ? (map['schemaVersion'] as num).toInt()
@@ -78,9 +102,12 @@ class ConversationRecordAdapter {
       updatedAt: _date(map['updatedAt']),
       messages: messages,
       extensions: {
-        if (map['extensions'] is Map)
-          ...Map<String, dynamic>.from(map['extensions'] as Map),
+        ...ordinaryExtensions,
         legacyConversationNamespace: {
+          _conversationEnvelopeVersionKey: _conversationEnvelopeVersion,
+          _conversationExtensionPresentKey: hasLegacyConversationExtension,
+          if (hasLegacyConversationExtension)
+            _conversationExtensionValueKey: legacyConversationExtension,
           ..._withoutInlineDraftAttachmentBytes(
             Map<String, dynamic>.fromEntries(
               map.entries.where((entry) => !known.contains(entry.key)),
@@ -96,8 +123,25 @@ class ConversationRecordAdapter {
     List<StroomMessage> messages,
   ) {
     final fields = conversation.extensions[legacyConversationNamespace];
+    final legacyFields = fields is Map
+        ? Map<String, dynamic>.from(fields)
+        : <String, dynamic>{};
+    final hasTaggedEnvelope =
+        legacyFields[_conversationEnvelopeVersionKey] ==
+            _conversationEnvelopeVersion &&
+        legacyFields[_conversationExtensionPresentKey] is bool;
+    final hasOriginalExtension = hasTaggedEnvelope
+        ? legacyFields[_conversationExtensionPresentKey] == true
+        : legacyFields.containsKey('opaqueExtensionValue');
+    final originalExtensionValue = hasTaggedEnvelope
+        ? legacyFields[_conversationExtensionValueKey]
+        : legacyFields['opaqueExtensionValue'];
+    legacyFields.remove(_conversationEnvelopeVersionKey);
+    legacyFields.remove(_conversationExtensionPresentKey);
+    legacyFields.remove(_conversationExtensionValueKey);
+    if (!hasTaggedEnvelope) legacyFields.remove('opaqueExtensionValue');
     final result = <String, dynamic>{
-      if (fields is Map) ...Map<String, dynamic>.from(fields),
+      ...legacyFields,
       ...conversation.extraFields,
       'schemaVersion': conversation.schemaVersion,
       'id': conversation.id,
@@ -106,31 +150,99 @@ class ConversationRecordAdapter {
       'updatedAt': conversation.updatedAt.toIso8601String(),
       'messages': messages.map(messageToLegacyMap).toList(),
     };
-    final ordinaryExtensions =
-        Map<String, dynamic>.from(conversation.extensions)
-          ..remove(legacyConversationNamespace);
-    if (ordinaryExtensions.isNotEmpty)
+    final ordinaryExtensions = Map<String, dynamic>.from(
+      conversation.extensions,
+    )..remove(legacyConversationNamespace);
+    if (hasOriginalExtension) {
+      ordinaryExtensions[legacyConversationNamespace] = originalExtensionValue;
+    }
+    if (ordinaryExtensions.isNotEmpty) {
       result['extensions'] = ordinaryExtensions;
+    }
     return result;
   }
 
   static Map<String, dynamic> messageToLegacyMap(StroomMessage message) {
     final legacy = message.extensions[legacyMessageNamespace];
+    final ordinaryExtensions = Map<String, dynamic>.from(message.extensions)
+      ..remove(legacyMessageNamespace);
+    final hasTaggedLegacyExtension =
+        legacy is Map &&
+        legacy[StroomMessage.legacyExtensionEnvelopeVersionKey] ==
+            StroomMessage.legacyExtensionEnvelopeVersion &&
+        legacy[StroomMessage.legacyExtensionPresentKey] == true;
+    if (hasTaggedLegacyExtension) {
+      ordinaryExtensions[legacyMessageNamespace] =
+          legacy[StroomMessage.legacyExtensionValueKey];
+    } else if (legacy is Map && legacy.containsKey('opaqueExtensionValue')) {
+      ordinaryExtensions[legacyMessageNamespace] =
+          legacy['opaqueExtensionValue'];
+    }
     final record = legacy is Map ? legacy['record'] : null;
     if (record is Map) {
       final result = <String, dynamic>{
         ...Map<String, dynamic>.from(record),
-        'id': record['id'] is String ? record['id'] : message.id,
-        'role': record['role'] is String ? record['role'] : message.role,
-        'createdAt': record['createdAt'] is String
-            ? record['createdAt']
-            : message.createdAt.toIso8601String(),
+        ...message.extraFields,
+        'id': message.id,
+        'role': message.role,
+        'createdAt': message.createdAt.toIso8601String(),
+        'content': message.content
+            .where((part) => part.type == 'text' && part.data['text'] is String)
+            .map((part) => part.data['text'] as String)
+            .join(),
+        'blocks': message.content
+            .map(
+              (part) => <String, dynamic>{
+                ...part.extraFields,
+                'type': part.type,
+                ...part.data,
+              },
+            )
+            .toList(),
       };
+      final attachments = <Map<String, dynamic>>[];
+      for (final part in message.content) {
+        final attachment = part.data['attachment'];
+        if (attachment is Map) {
+          attachments.add(Map<String, dynamic>.from(attachment));
+        } else if (const {
+          'image',
+          'audio',
+          'video',
+          'file',
+        }.contains(part.type)) {
+          attachments.add(Map<String, dynamic>.from(part.data));
+        }
+      }
+      if (attachments.isNotEmpty || result.containsKey('attachments')) {
+        result['attachments'] = attachments;
+      }
+      if (message.status == null) {
+        result.remove('status');
+        result.remove('isStreaming');
+        result.remove('isError');
+      } else {
+        result['status'] = message.status;
+        result['isStreaming'] = message.status == 'streaming';
+        result['isError'] = message.status == 'error';
+      }
+      if (message.finishReason == null) {
+        result.remove('finishReason');
+      } else {
+        result['finishReason'] = message.finishReason;
+      }
+      if (message.usage == null) {
+        result.remove('usage');
+      } else {
+        result['usage'] = message.usage;
+      }
+      if (ordinaryExtensions.isEmpty) {
+        result.remove('extensions');
+      } else {
+        result['extensions'] = ordinaryExtensions;
+      }
       final diagnostics = message.diagnostics?.toMap() ?? const {};
-      return {
-        ...result,
-        ...diagnostics,
-      };
+      return {...result, ...diagnostics};
     }
     return {
       ...message.extraFields,
@@ -138,6 +250,10 @@ class ConversationRecordAdapter {
       'role': message.role,
       'createdAt': message.createdAt.toIso8601String(),
       'blocks': message.content.map((part) => part.toMap()).toList(),
+      if (message.status != null) 'status': message.status,
+      if (message.finishReason != null) 'finishReason': message.finishReason,
+      if (message.usage != null) 'usage': message.usage,
+      if (ordinaryExtensions.isNotEmpty) 'extensions': ordinaryExtensions,
       if (message.status == 'error') 'isError': true,
     };
   }
@@ -146,10 +262,9 @@ class ConversationRecordAdapter {
   /// carried separately in StroomMessage's redacted, bounded diagnostics field.
   static Map<String, dynamic> legacyMessageRecordForStorage(
     Map<String, dynamic> map,
-  ) =>
-      Map<String, dynamic>.from(map)
-        ..remove('rawRequest')
-        ..remove('rawResponse');
+  ) => Map<String, dynamic>.from(map)
+    ..remove('rawRequest')
+    ..remove('rawResponse');
 
   static DateTime _date(Object? value) {
     if (value is String) {

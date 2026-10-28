@@ -70,41 +70,41 @@ extension _ChatPageBuildersExt on _ChatPageState {
             // ensures the scroll area auto-adjusts as the
             // composer height changes (e.g. multi-line input).
             composerBuilder: (_) => const SizedBox.shrink(),
-            textMessageBuilder: (
-              context,
-              message,
-              index, {
-              required bool isSentByMe,
-              MessageGroupStatus? groupStatus,
-            }) =>
-                _buildTextMessage(
-              context,
-              message,
-              index,
-              isSentByMe: isSentByMe,
-              groupStatus: groupStatus,
-              isDark: isDark,
-              isStreaming: isStreaming,
-              activeId: activeId,
-            ),
-            textStreamMessageBuilder: (
-              context,
-              message,
-              index, {
-              required bool isSentByMe,
-              MessageGroupStatus? groupStatus,
-            }) =>
-                _buildTextStreamMessage(
-              context,
-              message,
-              index,
-              isSentByMe: isSentByMe,
-              groupStatus: groupStatus,
-              isStreaming: isStreaming,
-              streamingFullReply: streamingFullReply,
-              streamingMsgId: streamingMsgId,
-              isDark: isDark,
-            ),
+            textMessageBuilder:
+                (
+                  context,
+                  message,
+                  index, {
+                  required bool isSentByMe,
+                  MessageGroupStatus? groupStatus,
+                }) => _buildTextMessage(
+                  context,
+                  message,
+                  index,
+                  isSentByMe: isSentByMe,
+                  groupStatus: groupStatus,
+                  isDark: isDark,
+                  isStreaming: isStreaming,
+                  activeId: activeId,
+                ),
+            textStreamMessageBuilder:
+                (
+                  context,
+                  message,
+                  index, {
+                  required bool isSentByMe,
+                  MessageGroupStatus? groupStatus,
+                }) => _buildTextStreamMessage(
+                  context,
+                  message,
+                  index,
+                  isSentByMe: isSentByMe,
+                  groupStatus: groupStatus,
+                  isStreaming: isStreaming,
+                  streamingFullReply: streamingFullReply,
+                  streamingMsgId: streamingMsgId,
+                  isDark: isDark,
+                ),
           ),
         ),
       ),
@@ -152,7 +152,8 @@ extension _ChatPageBuildersExt on _ChatPageState {
       shouldScrollToEndWhenAtBottom: _autoScrollEnabled,
       shouldScrollToEndWhenSendingMessage: _autoScrollEnabled,
     );
-    final useMatrixStretch = defaultTargetPlatform == TargetPlatform.android &&
+    final useMatrixStretch =
+        defaultTargetPlatform == TargetPlatform.android &&
         Theme.of(context).useMaterial3;
     if (!useMatrixStretch) return list;
     return ScrollConfiguration(
@@ -252,8 +253,9 @@ extension _ChatPageBuildersExt on _ChatPageState {
     }
 
     return Column(
-      crossAxisAlignment:
-          isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isSentByMe
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
@@ -377,7 +379,8 @@ extension _ChatPageBuildersExt on _ChatPageState {
                 // updateMessage() converts the message
                 // to text type and textMessageBuilder
                 // takes over with the correct flag.
-                streaming: isStreaming &&
+                streaming:
+                    isStreaming &&
                     message.id == _streamingMsgId &&
                     _isReasoningCompletedForMsg[message.id] != true,
               ),

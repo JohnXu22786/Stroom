@@ -144,7 +144,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -205,7 +206,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             child: const Text('删除'),
           ),
         ],
@@ -320,8 +322,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () {
+                  _searchGeneration++;
+                  _searchDebounce?.cancel();
                   setState(() {
                     _showSearch = false;
+                    _searchQuery = '';
+                    _searchConversations = null;
+                    _searchFailed = false;
                     _searchController.clear();
                   });
                 },
@@ -366,73 +373,77 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     onPressed: _selectedIds.isNotEmpty ? _batchDelete : null,
                   ),
                 IconButton(
-                  icon: Icon(
-                    _selectionMode ? Icons.close : Icons.checklist,
-                  ),
+                  icon: Icon(_selectionMode ? Icons.close : Icons.checklist),
                   tooltip: _selectionMode ? '取消选择' : '选择',
                   onPressed: _toggleSelectionMode,
                 ),
               ],
             ),
-      body: filtered.isEmpty &&
+      body:
+          filtered.isEmpty &&
               _searchController.text.trim().isNotEmpty &&
               _searchConversations == null &&
               !_searchFailed
           ? const Center(child: CircularProgressIndicator())
           : filtered.isEmpty && _searchFailed
-              ? Center(
-                  child: Text(
-                    '搜索失败，请稍后重试',
-                    style: TextStyle(color: cs.error),
-                  ),
-                )
-              : filtered.isEmpty
-                  ? _buildEmptyState(cs)
-                  : _searchController.text.trim().isNotEmpty
-                      ? ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final conv = filtered[index];
-                            final isActive = conv.id == activeId;
-                            return _buildConversationItem(
-                                conv, isActive, cs, index, activeId);
-                          },
-                        )
-                      : ReorderableListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filtered.length,
-                          buildDefaultDragHandles: false,
-                          onReorderItem: (oldIndex, newIndex) {
-                            // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
-                            // 调整过的索引（框架保证），直接按显示位置映射回存储
-                            // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
-                            final convs = ref.read(conversationsProvider);
-                            final item = filtered[oldIndex];
-                            final realOld =
-                                convs.indexWhere((c) => c.id == item.id);
-                            final target = filtered[newIndex];
-                            final realNew =
-                                convs.indexWhere((c) => c.id == target.id);
-                            if (realOld >= 0 && realNew >= 0) {
-                              ref
-                                  .read(conversationsProvider.notifier)
-                                  .reorderConversation(realOld, realNew);
-                            }
-                          },
-                          proxyDecorator: (child, index, animation) => Material(
-                            elevation: 2,
-                            color: cs.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(8),
-                            child: child,
-                          ),
-                          itemBuilder: (context, index) {
-                            final conv = filtered[index];
-                            final isActive = conv.id == activeId;
-                            return _buildConversationItem(
-                                conv, isActive, cs, index, activeId);
-                          },
-                        ),
+          ? Center(
+              child: Text('搜索失败，请稍后重试', style: TextStyle(color: cs.error)),
+            )
+          : filtered.isEmpty
+          ? _buildEmptyState(cs)
+          : _searchController.text.trim().isNotEmpty
+          ? ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final conv = filtered[index];
+                final isActive = conv.id == activeId;
+                return _buildConversationItem(
+                  conv,
+                  isActive,
+                  cs,
+                  index,
+                  activeId,
+                );
+              },
+            )
+          : ReorderableListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: filtered.length,
+              buildDefaultDragHandles: false,
+              onReorderItem: (oldIndex, newIndex) {
+                // onReorderItem 的 newIndex 已是移除 oldIndex 项之后
+                // 调整过的索引（框架保证），直接按显示位置映射回存储
+                // 位置即可（存储与显示同为"置顶在前"的稳定顺序）。
+                final convs = ref.read(conversationsProvider);
+                final item = filtered[oldIndex];
+                final realOld = convs.indexWhere((c) => c.id == item.id);
+                final target = filtered[newIndex];
+                final realNew = convs.indexWhere((c) => c.id == target.id);
+                if (realOld >= 0 && realNew >= 0) {
+                  ref
+                      .read(conversationsProvider.notifier)
+                      .reorderConversation(realOld, realNew);
+                }
+              },
+              proxyDecorator: (child, index, animation) => Material(
+                elevation: 2,
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(8),
+                child: child,
+              ),
+              itemBuilder: (context, index) {
+                final conv = filtered[index];
+                final isActive = conv.id == activeId;
+                return _buildConversationItem(
+                  conv,
+                  isActive,
+                  cs,
+                  index,
+                  activeId,
+                );
+              },
+            ),
       floatingActionButton: _selectionMode && _selectedIds.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: _batchDelete,
@@ -445,8 +456,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
     );
   }
 
-  Widget _buildConversationItem(Conversation conv, bool isActive,
-      ColorScheme cs, int index, String? activeId) {
+  Widget _buildConversationItem(
+    Conversation conv,
+    bool isActive,
+    ColorScheme cs,
+    int index,
+    String? activeId,
+  ) {
     return ListTile(
       key: ValueKey('tile_${conv.id}'),
       selected: isActive,
@@ -457,16 +473,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
               onChanged: (_) => _toggleSelection(conv.id),
             )
           : conv.isTemporary
-              // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
-              // 不是按钮；拖拽把手让位于该图标）。
-              ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
-              : ReorderableDragStartListener(
-                  index: index,
-                  child: Icon(
-                    Icons.drag_handle,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
+          // 临时对话：左侧图标换成"虚线气泡 + 打勾"（纯指示，
+          // 不是按钮；拖拽把手让位于该图标）。
+          ? Icon(Icons.mark_chat_read_outlined, color: cs.primary)
+          : ReorderableDragStartListener(
+              index: index,
+              child: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+            ),
       title: Row(
         children: [
           if (conv.isPinned)
@@ -516,8 +529,11 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                   },
                 ),
                 PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert,
-                      size: 18, color: cs.onSurfaceVariant),
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
                   onSelected: (value) {
                     switch (value) {
                       case 'rename':
@@ -544,14 +560,13 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
                     }
                   },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                      value: 'rename',
-                      child: Text('重命名'),
-                    ),
+                    const PopupMenuItem(value: 'rename', child: Text('重命名')),
                     PopupMenuItem(
                       value: 'auto_rename',
-                      child:
-                          Text('自动命名', style: TextStyle(color: cs.onSurface)),
+                      child: Text(
+                        '自动命名',
+                        style: TextStyle(color: cs.onSurface),
+                      ),
                     ),
                     PopupMenuItem(
                       value: 'toggle_temporary',
@@ -589,7 +604,8 @@ class _ConversationsPageState extends ConsumerState<ConversationsPage> {
   }
 
   Widget _buildMatchBadge(Conversation conv, ColorScheme cs) {
-    final source = _searchConversations
+    final source =
+        _searchConversations
             ?.where((conversation) => conversation.id == conv.id)
             .firstOrNull ??
         conv;

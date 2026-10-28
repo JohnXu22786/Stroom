@@ -288,9 +288,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _isSearching = false;
   SearchMode _searchMode = SearchMode.current;
   String _searchQuery = '';
+  String? _searchError;
   String? _pendingSearchMessageId;
   final List<SearchMatch> _searchMatches = [];
   int _currentMatchIndex = 0;
+  Timer? _searchDebounceTimer;
+  int _searchGeneration = 0;
   final TextEditingController _searchTextController = TextEditingController();
   final Map<String, GlobalKey> _messageKeys = {};
 
@@ -336,6 +339,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// Whether a pagination load is currently in progress.
   bool _isLoadingMore = false;
   bool _isLoadingNewer = false;
+  int? _loadingNewerConversationGeneration;
+  bool _pendingNewerConversationLoad = false;
 
   /// True once the user has reached the top of the list while no older
   /// messages remain — shows the "没有更多内容了" hint above the first
@@ -408,6 +413,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchDebounceTimer?.cancel();
+    _searchGeneration++;
     // 使进行中的加载失效：卡在 0.5 秒最少显示延迟里的加载在延迟结束后
     // 不得再向已 dispose 的控制器插入消息。
     _loadMoreGeneration++;
@@ -485,10 +492,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final activeId = ref.watch(activeConversationIdProvider);
     final streamingConvs = ref.watch(streamingConversationsProvider);
     final isStreaming = activeId != null && streamingConvs.contains(activeId);
-    final streamingFullReply =
-        activeId != null ? ref.watch(streamingFullReplyProvider(activeId)) : '';
-    final streamingMsgId =
-        activeId != null ? ref.watch(streamingMsgIdProvider(activeId)) : null;
+    final streamingFullReply = activeId != null
+        ? ref.watch(streamingFullReplyProvider(activeId))
+        : '';
+    final streamingMsgId = activeId != null
+        ? ref.watch(streamingMsgIdProvider(activeId))
+        : null;
 
     // ── Streaming listeners (per-conversation via family providers) ──
     // Each listener watches its conversation's family instance. When the
