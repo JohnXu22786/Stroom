@@ -2014,7 +2014,7 @@ String _legacyOcrRedactMaskedCredentialEchoes(
               RegExp(
                 r'^instructions?\b',
                 caseSensitive: false,
-              ).hasMatch(afterEcho);
+              ).hasMatch(afterEcho.trimLeft());
       final ordinaryNaturalPromptContext =
           naturalReadInstructionsPrompt && !hasCredentialUseContext;
       if (ordinaryNaturalPromptContext) return match.group(0)!;
