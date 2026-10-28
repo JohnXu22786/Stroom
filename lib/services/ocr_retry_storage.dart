@@ -191,14 +191,28 @@ class OcrRetryStorage {
   static Map<String, dynamic> unavailableSnapshotForCount({
     required String taskId,
     required int imageCount,
+    String? configId,
     String? modelId,
     String? instructionContent,
+    String saveFolder = '',
+    OcrBatchMode batchMode = OcrBatchMode.joint,
+    int perImageConcurrency = 1,
+    int requestSizeBudgetBytes = defaultOcrRequestSizeBudgetBytes,
+    int? legacyModelIndex,
+    int? legacyInstructionIndex,
   }) =>
       _unavailableSnapshot(
         taskId: taskId,
         imageCount: imageCount,
+        configId: configId,
         modelId: modelId,
         instructionContent: instructionContent,
+        saveFolder: saveFolder,
+        batchMode: batchMode,
+        perImageConcurrency: perImageConcurrency,
+        requestSizeBudgetBytes: requestSizeBudgetBytes,
+        legacyModelIndex: legacyModelIndex,
+        legacyInstructionIndex: legacyInstructionIndex,
       );
 
   static Map<String, dynamic> _unavailableSnapshot({
