@@ -230,7 +230,13 @@ class _OcrPageState extends ConsumerState<OcrPage> {
       _selectedImages.length != _requiredRetryImageCount;
 
   bool _useOriginalImageQuality = false;
-  String? _errorMessage;
+  String? _errorMessageValue;
+  String? _lastImageImportErrorMessage;
+  String? get _errorMessage => _errorMessageValue;
+  set _errorMessage(String? message) {
+    _errorMessageValue = message;
+    _lastImageImportErrorMessage = null;
+  }
   int _selectedModelIndex = 0;
   String? _selectedConfigId;
   String? _selectedModelRecordId;
@@ -1915,6 +1921,10 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             // Camera: temp file, no source name
           ),
         );
+        if (_errorMessage == _lastImageImportErrorMessage) {
+          _errorMessage = null;
+        }
+        _lastImageImportErrorMessage = null;
         _updateRetryImageReselectionState();
       });
     } catch (e) {
@@ -2095,13 +2105,20 @@ class _OcrPageState extends ConsumerState<OcrPage> {
             sourceName: fileName, // App album file has original name
           ),
         );
+        if (_errorMessage == _lastImageImportErrorMessage) {
+          _errorMessage = null;
+        }
+        _lastImageImportErrorMessage = null;
         _updateRetryImageReselectionState();
       });
       return true;
     } catch (e) {
       if (mounted && importGeneration == _imageImportGeneration) {
         final message = e is FormatException ? e.message : '处理图片失败: $e';
-        setState(() => _errorMessage = message);
+        setState(() {
+          _errorMessage = message;
+          _lastImageImportErrorMessage = message;
+        });
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
       }
