@@ -55,8 +55,7 @@ Future<void> _enterField(WidgetTester tester, int index, String text) async {
 
 Future<void> _enterMaxTokens(WidgetTester tester, String text) async {
   final field = find.byWidgetPredicate(
-    (widget) =>
-        widget is TextField && widget.decoration?.hintText == '如 4096',
+    (widget) => widget is TextField && widget.decoration?.hintText == '如 4096',
   );
   await tester.enterText(field, text);
   await tester.pump();
