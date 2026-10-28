@@ -1634,11 +1634,18 @@ def _reading_order_metric(
             pending_pages += 1
             continue
         normalized_prediction = normalize_text(text)
-        positions = [normalized_prediction.find(anchor) for anchor in anchors]
-        for left_index, left_position in enumerate(positions):
-            for right_position in positions[left_index + 1 :]:
-                if left_position >= 0 and right_position >= 0:
-                    if left_position < right_position:
+        occurrences = []
+        for anchor in anchors:
+            positions = []
+            start = 0
+            while (position := normalized_prediction.find(anchor, start)) >= 0:
+                positions.append(position)
+                start = position + 1
+            occurrences.append(positions)
+        for left_index, left_positions in enumerate(occurrences):
+            for right_positions in occurrences[left_index + 1 :]:
+                if left_positions and right_positions:
+                    if min(left_positions) < max(right_positions):
                         correct_pairs += 1
 
     if not eligible:
