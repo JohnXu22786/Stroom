@@ -2392,6 +2392,7 @@ void main() {
           ),
           testImagePayloadPreparer: (bytes) async =>
               prepareOcrImagePayloadSync(bytes),
+          testRequestSizePreflight: (config, images) async => 8 * 1024 * 1024,
           testRetrySnapshotCacher: (
               {required taskId, required snapshot}) async {
             throw StateError('cache write failed');
