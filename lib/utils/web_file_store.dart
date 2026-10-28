@@ -83,8 +83,11 @@ class WebFileStore {
   }
 
   /// 写入文件
-  static Future<void> write(String key, Uint8List data,
-      {void Function()? beforeCommit}) async {
+  static Future<void> write(
+    String key,
+    Uint8List data, {
+    void Function()? beforeCommit,
+  }) async {
     if (_testMode) {
       beforeCommit?.call();
       _inMemoryStore[key] = Uint8List.fromList(data);
@@ -116,6 +119,53 @@ class WebFileStore {
     }
   }
 
+  /// Atomically writes and removes a set of records in the IndexedDB file
+  /// store. Conversation metadata and message rows use this to commit one
+  /// repository operation as a unit.
+  static Future<void> writeBatch(
+    Map<String, Uint8List> writes, {
+    Iterable<String> deletes = const [],
+    void Function()? beforeCommit,
+  }) async {
+    if (_testMode) {
+      beforeCommit?.call();
+      final next = Map<String, Uint8List>.from(_inMemoryStore);
+      for (final key in deletes) {
+        next.remove(key);
+      }
+      for (final entry in writes.entries) {
+        next[entry.key] = Uint8List.fromList(entry.value);
+      }
+      _inMemoryStore
+        ..clear()
+        ..addAll(next);
+      return;
+    }
+
+    final db = await _database;
+    final txn = db.transaction('files', idbModeReadWrite);
+    final completed = txn.completed;
+    try {
+      final store = txn.objectStore('files');
+      for (final key in deletes) {
+        await store.delete(key);
+      }
+      for (final entry in writes.entries) {
+        await store.put(entry.value, entry.key);
+      }
+      beforeCommit?.call();
+      await completed;
+    } catch (_) {
+      try {
+        txn.abort();
+      } catch (_) {}
+      try {
+        await completed;
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
   /// 将 IndexedDB 读回的任意类型尽量转为 Uint8List
   static Uint8List? _toUint8List(dynamic value, String key) {
     if (value == null) return null;
@@ -132,16 +182,21 @@ class WebFileStore {
     if (value is ByteBuffer) {
       final result = Uint8List.view(value);
       debugPrint(
-          'WebFileStore _toUint8List: $key → ByteBuffer (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → ByteBuffer (${result.length} 字节)',
+      );
       return result;
     }
 
     // Int8List → 转 Uint8List (视图共享)
     if (value is Int8List) {
-      final result =
-          Uint8List.view(value.buffer, value.offsetInBytes, value.length);
+      final result = Uint8List.view(
+        value.buffer,
+        value.offsetInBytes,
+        value.length,
+      );
       debugPrint(
-          'WebFileStore _toUint8List: $key → Int8List -> Uint8List (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → Int8List -> Uint8List (${result.length} 字节)',
+      );
       return result;
     }
 
@@ -149,9 +204,13 @@ class WebFileStore {
     // → 取其底层 buffer 的字节视图
     if (value is TypedData) {
       final result = Uint8List.view(
-          value.buffer, value.offsetInBytes, value.lengthInBytes);
+        value.buffer,
+        value.offsetInBytes,
+        value.lengthInBytes,
+      );
       debugPrint(
-          'WebFileStore _toUint8List: $key → ${value.runtimeType} -> Uint8List (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → ${value.runtimeType} -> Uint8List (${result.length} 字节)',
+      );
       return result;
     }
 
@@ -159,13 +218,15 @@ class WebFileStore {
     if (value is List<int>) {
       final result = Uint8List.fromList(value);
       debugPrint(
-          'WebFileStore _toUint8List: $key → List<int> (${result.length} 字节)');
+        'WebFileStore _toUint8List: $key → List<int> (${result.length} 字节)',
+      );
       return result;
     }
 
     // 兜底：toString 留日志
     debugPrint(
-        'WebFileStore _toUint8List: $key → 无法转换的类型 ${value.runtimeType}');
+      'WebFileStore _toUint8List: $key → 无法转换的类型 ${value.runtimeType}',
+    );
     return null;
   }
 
@@ -188,7 +249,8 @@ class WebFileStore {
     final converted = _toUint8List(result, key);
     if (converted == null) {
       debugPrint(
-          'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)');
+        'WebFileStore 读取 $key → 原始类型: ${result.runtimeType} (值: $result)',
+      );
     }
     return converted;
   }
@@ -232,9 +294,8 @@ class WebFileStore {
     final db = await _database;
     final txn = db.transaction('files', idbModeReadOnly);
     final keys = <String>[];
-    await for (final cwv in txn.objectStore('files').openCursor(
-          autoAdvance: true,
-        )) {
+    await for (final cwv
+        in txn.objectStore('files').openCursor(autoAdvance: true)) {
       final key = cwv.key;
       if (key is String && key.startsWith(prefix)) keys.add(key);
     }
@@ -253,7 +314,9 @@ class WebFileStore {
   /// Deletes files under [prefix], except keys still referenced by another
   /// data category.
   static Future<void> deleteByPrefixExcept(
-      String prefix, Set<String> preservedKeys) async {
+    String prefix,
+    Set<String> preservedKeys,
+  ) async {
     bool shouldDelete(String key) =>
         key.startsWith(prefix) && !preservedKeys.contains(key);
 

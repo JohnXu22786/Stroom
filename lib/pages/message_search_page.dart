@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,10 +30,7 @@ class SearchResult {
   final Conversation conversation;
   final List<SearchResultMatch> matches;
 
-  const SearchResult({
-    required this.conversation,
-    required this.matches,
-  });
+  const SearchResult({required this.conversation, required this.matches});
 
   int get matchCount => matches.length;
 }
@@ -42,7 +41,7 @@ class SearchResult {
 
 /// Full-screen page for searching message content across all conversations.
 ///
-/// Returns a [Map] with keys `conversationId` and `query` when a result is
+/// Returns the selected conversation, message, and query when a result is
 /// selected via [Navigator.pop].
 class MessageSearchPage extends ConsumerStatefulWidget {
   const MessageSearchPage({super.key});
@@ -73,11 +72,13 @@ class MessageSearchPage extends ConsumerStatefulWidget {
         while (true) {
           final idx = lowerContent.indexOf(lowerQuery, start);
           if (idx == -1) break;
-          matches.add(SearchResultMatch(
-            message: msg,
-            matchStart: idx,
-            matchEnd: idx + lowerQuery.length,
-          ));
+          matches.add(
+            SearchResultMatch(
+              message: msg,
+              matchStart: idx,
+              matchEnd: idx + lowerQuery.length,
+            ),
+          );
           start = idx + lowerQuery.length;
         }
       }
@@ -121,25 +122,78 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<SearchResult> _results = [];
   String _query = '';
+  String? _searchError;
+  bool _isSearching = false;
+  int _searchGeneration = 0;
+  Timer? _searchDebounce;
+  Future<List<Conversation>>? _searchLoad;
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged(String value) {
+    final query = value.trim();
+    final generation = ++_searchGeneration;
     setState(() {
-      _query = value;
-      final conversations = ref.read(conversationsProvider);
-      _results = MessageSearchPage.searchMessageContents(conversations, value);
+      _query = query;
+      _results = [];
+      _searchError = null;
+      _isSearching = query.isNotEmpty;
     });
+    _searchDebounce?.cancel();
+    if (query.isEmpty) {
+      setState(() => _isSearching = false);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      unawaited(_searchRepository(query, generation));
+    });
+  }
+
+  Future<List<Conversation>> _loadSearchConversations() {
+    final activeLoad = _searchLoad;
+    if (activeLoad != null) return activeLoad;
+
+    final load =
+        ref.read(conversationsProvider.notifier).loadConversationsForSearch();
+    _searchLoad = load;
+    return load.whenComplete(() {
+      if (identical(_searchLoad, load)) _searchLoad = null;
+    });
+  }
+
+  Future<void> _searchRepository(String query, int generation) async {
+    if (query.trim().isEmpty) return;
+    try {
+      final conversations = await _loadSearchConversations();
+      if (!mounted || generation != _searchGeneration || _query != query)
+        return;
+      setState(() {
+        _results = MessageSearchPage.searchMessageContents(
+          conversations,
+          query,
+        );
+        _isSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration || _query != query)
+        return;
+      setState(() {
+        _searchError = '搜索失败，请稍后重试';
+        _isSearching = false;
+      });
+    }
   }
 
   void _onResultTapped(SearchResult result) {
     Navigator.of(context).pop({
       'conversationId': result.conversation.id,
-      'query': _query,
+      'messageId': result.matches.first.messageId,
+      'query': _query.trim(),
     });
   }
 
@@ -183,8 +237,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                       )
                     : null,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -196,9 +252,13 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
           Expanded(
             child: _query.isEmpty
                 ? _buildInitialState(cs)
-                : _results.isEmpty
-                    ? _buildEmptyState(cs)
-                    : _buildResultsList(cs),
+                : _searchError != null
+                    ? _buildSearchErrorState(cs)
+                    : _isSearching
+                        ? const Center(child: CircularProgressIndicator())
+                        : _results.isEmpty
+                            ? _buildEmptyState(cs)
+                            : _buildResultsList(cs),
           ),
         ],
       ),
@@ -210,8 +270,11 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.manage_search,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.manage_search,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
             '输入关键词搜索所有对话中的消息',
@@ -222,13 +285,22 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     );
   }
 
+  Widget _buildSearchErrorState(ColorScheme cs) {
+    return Center(
+      child: Text(_searchError!, style: TextStyle(color: cs.error)),
+    );
+  }
+
   Widget _buildEmptyState(ColorScheme cs) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off,
-              size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          Icon(
+            Icons.search_off,
+            size: 48,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          ),
           const SizedBox(height: 12),
           Text(
             '未找到匹配的消息',
@@ -258,8 +330,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     // Build a preview of the first match
     const contextChars = 40;
     final firstMatch = result.matches.first;
-    final snippetStart = (firstMatch.matchStart - contextChars)
-        .clamp(0, firstMatch.message.content.length);
+    final snippetStart = (firstMatch.matchStart - contextChars).clamp(
+      0,
+      firstMatch.message.content.length,
+    );
     final snippet = MessageSearchPage.getSnippet(
       firstMatch.message.content,
       firstMatch.matchStart,
@@ -295,8 +369,10 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(10),
@@ -351,14 +427,16 @@ class _MessageSearchPageState extends ConsumerState<MessageSearchPage> {
     if (relativeStart > 0) {
       spans.add(TextSpan(text: snippet.substring(0, relativeStart)));
     }
-    spans.add(TextSpan(
-      text: snippet.substring(relativeStart, relativeStart + queryLen),
-      style: TextStyle(
-        backgroundColor: Colors.yellow,
-        color: Colors.black87,
-        fontWeight: FontWeight.bold,
+    spans.add(
+      TextSpan(
+        text: snippet.substring(relativeStart, relativeStart + queryLen),
+        style: TextStyle(
+          backgroundColor: Colors.yellow,
+          color: Colors.black87,
+          fontWeight: FontWeight.bold,
+        ),
       ),
-    ));
+    );
     if (relativeStart + queryLen < snippet.length) {
       spans.add(TextSpan(text: snippet.substring(relativeStart + queryLen)));
     }

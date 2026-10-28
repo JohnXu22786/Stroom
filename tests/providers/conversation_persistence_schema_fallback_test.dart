@@ -39,7 +39,7 @@ void main() {
           'messages': [
             {
               'id': 'future-message',
-              'role': 'assistant',
+              'role': 'tool',
               'content': 'answer',
               'createdAt': '2025-01-01T00:01:00.000Z',
               'schemaVersion': 8,
@@ -70,6 +70,7 @@ void main() {
       expect(savedConversation['futureConversationField'], {'keep': true});
       expect(savedMessage['schemaVersion'], 8);
       expect(savedMessage['futureMessageField'], 'keep');
+      expect(savedMessage['role'], 'tool');
       expect(savedMessage.containsKey('rawRequest'), isFalse);
     } finally {
       container.dispose();

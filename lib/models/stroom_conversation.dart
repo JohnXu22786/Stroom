@@ -211,6 +211,17 @@ class StroomConversation {
 /// names do not need to be coerced into the legacy user/assistant pair.
 @immutable
 class StroomMessage {
+  static const legacyExtensionEnvelopeVersionKey =
+      '_stroomAdapterLegacyExtensionEnvelopeVersion';
+  static const legacyExtensionEnvelopeVersion = 1;
+  static const legacyExtensionPresentKey =
+      '_stroomAdapterLegacyExtensionPresent';
+  static const legacyExtensionValueKey = '_stroomAdapterLegacyExtensionValue';
+  static const legacyRawExtensionsPresentKey =
+      '_stroomAdapterLegacyRawExtensionsPresent';
+  static const legacyRawExtensionsValueKey =
+      '_stroomAdapterLegacyRawExtensionsValue';
+
   final String id;
   final String role;
   final int sequence;
@@ -312,6 +323,29 @@ class StroomMessage {
     ChatMessage message, {
     required int sequence,
   }) {
+    final retainedStatus = message.legacyFields['status'];
+    final retainedFinishReason = message.legacyFields['finishReason'];
+    final retainedUsage = message.legacyFields['usage'];
+    final retainedExtensions = message.legacyFields['extensions'];
+    final hasRawLegacyExtensions =
+        message.legacyFields.containsKey('extensions') &&
+            retainedExtensions is! Map;
+    final hasRetainedLegacyExtension = retainedExtensions is Map &&
+        retainedExtensions.containsKey('stroom.legacy');
+    final retainedLegacyExtension =
+        retainedExtensions is Map ? retainedExtensions['stroom.legacy'] : null;
+    final retainedOrdinaryExtensions = retainedExtensions is Map
+        ? (Map<String, dynamic>.from(retainedExtensions)
+          ..remove('stroom.legacy'))
+        : <String, dynamic>{};
+    final retainedLegacyFields = Map<String, dynamic>.from(message.legacyFields)
+      ..removeWhere(
+        (key, value) =>
+            (key == 'status' && value is String) ||
+            (key == 'finishReason' && value is String) ||
+            (key == 'usage' && value is Map) ||
+            key == 'extensions',
+      );
     final content = <StroomContentPart>[];
     if (message.blocks != null && message.blocks!.isNotEmpty) {
       for (final block in message.blocks!) {
@@ -435,16 +469,33 @@ class StroomMessage {
     }
     return StroomMessage(
       id: message.id,
-      role: message.role,
+      role: message.originalRole ?? message.role,
       sequence: sequence,
       createdAt: message.createdAt,
       content: content,
-      status: message.isError ? 'error' : null,
+      status: retainedStatus is String
+          ? retainedStatus
+          : message.isError
+              ? 'error'
+              : null,
+      finishReason:
+          retainedFinishReason is String ? retainedFinishReason : null,
+      usage: retainedUsage is Map
+          ? Map<String, dynamic>.from(retainedUsage)
+          : null,
       diagnostics: message.rawRequest == null && message.rawResponse == null
           ? null
           : StroomMessageDiagnostics.fromLegacy(message),
       extensions: {
+        ...retainedOrdinaryExtensions,
         'stroom.legacy': {
+          legacyExtensionEnvelopeVersionKey: legacyExtensionEnvelopeVersion,
+          legacyExtensionPresentKey: hasRetainedLegacyExtension,
+          if (hasRetainedLegacyExtension)
+            legacyExtensionValueKey: retainedLegacyExtension,
+          legacyRawExtensionsPresentKey: hasRawLegacyExtensions,
+          if (hasRawLegacyExtensions)
+            legacyRawExtensionsValueKey: retainedExtensions,
           'schemaVersion': message.schemaVersion,
           'content': message.content,
           'isStreaming': message.isStreaming,
@@ -455,7 +506,7 @@ class StroomMessage {
           'toolCallRoundStarts': message.toolCallRoundStarts,
           'toolCalls': message.toolCalls?.map((call) => call.toMap()).toList(),
           'blocks': message.blocks?.map((block) => block.toMap()).toList(),
-          'legacyFields': message.legacyFields,
+          'legacyFields': retainedLegacyFields,
         },
       },
     );

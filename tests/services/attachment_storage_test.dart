@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:stroom/services/attachment_storage.dart';
+import 'package:stroom/services/storage_service.dart';
 
 /// 测试用 PathProvider：把"应用文档目录"指向临时目录，让
 /// AttachmentStorage 的磁盘读写落到真实临时文件上（无需平台通道）。
@@ -26,9 +27,12 @@ void main() {
   setUp(() {
     tmpRoot = Directory.systemTemp.createTempSync('stroom_att_storage_test_');
     PathProviderPlatform.instance = _FakePathProviderPlatform(tmpRoot.path);
+    // AppStorage caches the documents root, so each test root must be resolved.
+    AppStorage.resetCache();
   });
 
   tearDown(() {
+    AppStorage.resetCache();
     try {
       tmpRoot.deleteSync(recursive: true);
     } catch (_) {

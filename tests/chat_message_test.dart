@@ -3,6 +3,18 @@ import 'package:stroom/models/chat_message.dart';
 import 'package:stroom/models/tool_call.dart';
 
 void main() {
+  test('copyWith role change clears the retained legacy role', () {
+    final message = ChatMessage.fromMap({
+      'id': 'legacy-tool-role',
+      'role': 'tool',
+      'content': 'result',
+    });
+
+    final updated = message.copyWith(role: 'assistant');
+
+    expect(updated.toMap()['role'], 'assistant');
+  });
+
   group('ChatMessage rawRequest/rawResponse', () {
     test('toMap includes rawRequest and rawResponse when set', () {
       final msg = ChatMessage(
