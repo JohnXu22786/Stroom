@@ -1975,20 +1975,18 @@ String _legacyOcrRedactMaskedCredentialEchoes(
                 prefix,
                 echoSuffix,
               );
-      final authenticateWithToProcessContext =
-          RegExp(
-                r'\bauthenticate with$',
-                caseSensitive: false,
-              ).hasMatch(sanitized.substring(0, match.start).trimRight()) &&
-              _legacyOcrHasCredentialUseContext(
-                sanitized,
-                match,
-                prefix,
-                echoSuffix,
-              );
+      final authenticateWithToProcessContext = RegExp(
+            r'\bauthenticate with$',
+            caseSensitive: false,
+          ).hasMatch(sanitized.substring(0, match.start).trimRight()) &&
+          _legacyOcrHasCredentialUseContext(
+            sanitized,
+            match,
+            prefix,
+            echoSuffix,
+          );
       final hasCredentialUseContext =
-          splitEchoHasCredentialUseContext ||
-          authenticateWithToProcessContext;
+          splitEchoHasCredentialUseContext || authenticateWithToProcessContext;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
