@@ -104,6 +104,9 @@ class OcrResult {
   });
 }
 
+bool _isCompleteOcrFinishReason(String? finishReason) =>
+    finishReason == null || finishReason == 'stop';
+
 // ============================================================================
 // OCR Service
 // ============================================================================
@@ -336,10 +339,7 @@ class OcrService {
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: 1,
-        isComplete: parsed.finishReason != 'length' &&
-            parsed.finishReason != 'content_filter' &&
-            parsed.finishReason != 'tool_calls' &&
-            parsed.finishReason != 'function_call',
+        isComplete: _isCompleteOcrFinishReason(parsed.finishReason),
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
@@ -427,10 +427,7 @@ class OcrService {
         text: parsed.text,
         processingTimeMs: stopwatch.elapsedMilliseconds,
         imageCount: imageBytesList.length,
-        isComplete: parsed.finishReason != 'length' &&
-            parsed.finishReason != 'content_filter' &&
-            parsed.finishReason != 'tool_calls' &&
-            parsed.finishReason != 'function_call',
+        isComplete: _isCompleteOcrFinishReason(parsed.finishReason),
         finishReason: parsed.finishReason,
       );
     } on DioException catch (e) {
