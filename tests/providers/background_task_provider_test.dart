@@ -12803,7 +12803,8 @@ void main() {
         final migratedCredentialInstruction = OcrRetrySnapshot.fromMap(
           credentialTask.retryData!,
         ).instructionContent;
-        expect(migratedCredentialInstruction, isNot(contains(echoedCredential)));
+        expect(
+            migratedCredentialInstruction, isNot(contains(echoedCredential)));
         expect(credentialPersisted, isNot(contains(echoedCredential)));
       },
     );
