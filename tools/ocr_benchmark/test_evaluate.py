@@ -67,6 +67,48 @@ def predictions(results):
 
 
 class EvaluateTests(unittest.TestCase):
+    def test_reading_order_uses_a_valid_later_repeated_anchor_occurrence(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-anchor",
+                    "gold_text": "A intro B section A body",
+                    "reading_order": ["B", "A"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-anchor", "text": "A intro B section A body"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 1)
+
+    def test_reading_order_rejects_repeated_anchors_in_genuinely_reversed_order(self):
+        manifest = {
+            "fixtures": [
+                {
+                    "id": "repeated-anchor",
+                    "gold_text": "A intro B section A body",
+                    "reading_order": ["B", "A"],
+                    "categories": ["english"],
+                }
+            ]
+        }
+
+        report = evaluate_predictions(
+            manifest,
+            predictions(
+                [{"fixture_id": "repeated-anchor", "text": "A intro A body B section"}]
+            ),
+        )
+
+        self.assertEqual(report["metrics"]["reading_order_score"]["value"], 0)
+
     def test_empty_gold_is_rejected_for_nonblank_fixture_but_blank_is_valid(self):
         manifest = {
             "fixtures": [
