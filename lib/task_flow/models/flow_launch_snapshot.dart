@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../models/assistant.dart';
 import '../../providers/provider_config.dart';
-import '../../services/llm_chat_runtime.dart';
+import '../../ai_gateway/ai_gateway.dart';
 import '../../services/llm_model_group_provider.dart';
 import '../../utils/provider_models.dart';
 import 'task_flow_definition.dart';

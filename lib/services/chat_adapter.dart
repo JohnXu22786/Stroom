@@ -13,7 +13,7 @@ import '../providers/llm_routed_chat_provider.dart';
 import '../providers/provider_config.dart';
 import '../utils/provider_models.dart'
     show flattenProviderModels, resolveProviderModel;
-import 'llm_chat_runtime.dart';
+import '../ai_gateway/ai_gateway.dart';
 import 'llm_model_group_provider.dart';
 import 'chat_protocol.dart';
 import 'chat_service.dart';
@@ -86,9 +86,9 @@ class AvailableModel {
 
 /// 桥接层：将我们的供应商/模型配置系统适配到 flutter_chat_ui 的流式调用
 class ChatAdapter {
-  final Future<LlmChatRoutingRuntime>? _routingRuntime;
+  final Future<AiGatewayFacade>? _routingRuntime;
 
-  ChatAdapter({Future<LlmChatRoutingRuntime>? routingRuntime})
+  ChatAdapter({Future<AiGatewayFacade>? routingRuntime})
       : _routingRuntime = routingRuntime;
 
   /// Per-conversation ChatService instances, keyed by conversation ID.

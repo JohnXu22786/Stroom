@@ -1,21 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
-import '../models/llm_account.dart';
-import '../services/llm_chat_runtime.dart';
-import '../services/llm_connector_service.dart';
-import '../services/llm_model_group_provider.dart';
-import '../services/llm_routing_service.dart';
+import '../ai_gateway/ai_gateway.dart';
 
 class LlmAccountManagementPage extends StatefulWidget {
-  final LlmAccountConnectorService? accountService;
+  final AiGatewayFacade? gateway;
   final Future<void> Function()? onConfigurationChanged;
-  final Future<void> Function(LlmAccount account)? onAccountSaved;
-  final Future<void> Function(LlmAccount account)? onAccountDeleted;
+  final Future<void> Function(AiGatewayAccount account)? onAccountSaved;
+  final Future<void> Function(AiGatewayAccount account)? onAccountDeleted;
 
   const LlmAccountManagementPage({
     super.key,
-    this.accountService,
+    this.gateway,
     this.onConfigurationChanged,
     this.onAccountSaved,
     this.onAccountDeleted,
@@ -27,17 +23,15 @@ class LlmAccountManagementPage extends StatefulWidget {
 }
 
 class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
-  late final Future<LlmAccountConnectorService> _serviceFuture;
+  late final Future<AiGatewayFacade> _gatewayFuture;
   Future<_ManagementData>? _dataFuture;
 
   @override
   void initState() {
     super.initState();
-    _serviceFuture = widget.accountService == null
-        ? LlmChatRoutingRuntime.createPlatform().then(
-            (runtime) => runtime.accountService,
-          )
-        : Future.value(widget.accountService!);
+    _gatewayFuture = widget.gateway == null
+        ? AiGateway.sharedPlatform()
+        : Future.value(widget.gateway!);
     _dataFuture = _load();
     LlmChatRouteDiagnostics.revision.addListener(_refreshDiagnostics);
   }
@@ -56,23 +50,23 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<_ManagementData> _load() async {
-    final service = await _serviceFuture;
+    final gateway = await _gatewayFuture;
+    final accountManagement = gateway.accountManagement;
     final results = await Future.wait([
-      service.listAccounts(),
-      service.listModelGroups(),
+      accountManagement.listAccounts(),
+      accountManagement.listModelGroups(),
     ]);
-    LlmRoutingRuntimeState? usageState;
+    final gatewayAccounts = results[0] as List<AiGatewayAccount>;
+    AiGatewayRoutingSnapshot? usageState;
     try {
-      usageState = await LlmRoutingStateStore(
-        preferences: service.preferences,
-      ).load();
+      usageState = await gateway.loadRoutingState();
     } catch (_) {
       // Keep account and group management available if only local usage data
       // is malformed or temporarily unreadable.
     }
     final usageByAccount = <String, Map<String, num>>{};
     final usageByGroup = <String, Map<String, num>>{};
-    for (final event in usageState?.events ?? const <LlmUsageEvent>[]) {
+    for (final event in usageState?.events ?? const <AiGatewayUsageEvent>[]) {
       final measurements = usageByAccount.putIfAbsent(
         event.accountId,
         () => <String, num>{},
@@ -98,8 +92,9 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       }
     }
     return _ManagementData(
-      accounts: results[0] as List<LlmAccount>,
-      groups: results[1] as List<LlmModelGroup>,
+      accounts: gatewayAccounts,
+      groups: results[1] as List<AiGatewayModelGroup>,
+      providerCatalog: gateway.providerCatalog,
       runtimeUsageByAccount: usageByAccount,
       runtimeUsageByGroup: usageByGroup,
       runtimeUsageAvailable: usageState != null,
@@ -117,14 +112,18 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _addAccount() async {
+    final gateway = await _gatewayFuture;
     final result = await showDialog<_AccountEditResult>(
       context: context,
-      builder: (_) => const _AccountEditorDialog(),
+      builder: (_) => _AccountEditorDialog(
+        providerCatalog: gateway.providerCatalog,
+        modelDiscovery: gateway.modelDiscovery,
+      ),
     );
     if (result == null || !mounted) return;
     try {
-      final service = await _serviceFuture;
-      final saved = await service.saveAccount(
+      final gateway = await _gatewayFuture;
+      final saved = await gateway.accountManagement.saveAccount(
         result.account,
         secret: result.secret.isEmpty ? null : result.secret,
       );
@@ -135,15 +134,21 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     }
   }
 
-  Future<void> _editAccount(LlmAccount account) async {
+  Future<void> _editAccount(AiGatewayAccount account) async {
+    final gateway = await _gatewayFuture;
     final result = await showDialog<_AccountEditResult>(
       context: context,
-      builder: (_) => _AccountEditorDialog(account: account),
+      builder: (_) => _AccountEditorDialog(
+        account: account,
+        hasCredential: account.hasCredential,
+        providerCatalog: gateway.providerCatalog,
+        modelDiscovery: gateway.modelDiscovery,
+      ),
     );
     if (result == null || !mounted) return;
     try {
-      final service = await _serviceFuture;
-      final saved = await service.saveAccount(
+      final gateway = await _gatewayFuture;
+      final saved = await gateway.accountManagement.saveAccount(
         result.account,
         secret: result.secret.isEmpty ? null : result.secret,
       );
@@ -154,15 +159,15 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     }
   }
 
-  Future<void> _deleteAccount(LlmAccount account) async {
+  Future<void> _deleteAccount(AiGatewayAccount account) async {
     final confirmed = await _confirm(
       title: '删除账号',
       message: '删除“${account.displayName}”并从模型组中移除该账号？',
     );
     if (!confirmed || !mounted) return;
     try {
-      final service = await _serviceFuture;
-      await service.deleteAccount(account.id);
+      final gateway = await _gatewayFuture;
+      await gateway.accountManagement.deleteAccount(account.id);
     } catch (_) {
       if (mounted) _showError('账号删除失败。');
       return;
@@ -175,7 +180,7 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
     if (mounted) await _reload();
   }
 
-  Future<void> _addGroup(List<LlmAccount> accounts) async {
+  Future<void> _addGroup(List<AiGatewayAccount> accounts) async {
     final choices = [
       for (final account in accounts)
         for (final model in account.models) (account, model),
@@ -185,11 +190,11 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
       return;
     }
     final (account, model) = choices.first;
-    final initial = LlmModelGroup(
+    final initial = AiGatewayModelGroup(
       id: const Uuid().v4(),
       displayName: model.displayName,
       members: [
-        LlmModelGroupMember(
+        AiGatewayModelGroupMember(
           accountId: account.id,
           upstreamModelId: model.upstreamModelId,
           localModelId: model.id,
@@ -200,32 +205,37 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _editGroup(
-    LlmModelGroup group,
-    List<LlmAccount> accounts,
+    AiGatewayModelGroup group,
+    List<AiGatewayAccount> accounts,
   ) async {
-    final updated = await showDialog<LlmModelGroup>(
+    final gateway = await _gatewayFuture;
+    final updated = await showDialog<AiGatewayModelGroup>(
       context: context,
-      builder: (_) => _ModelGroupEditorDialog(group: group, accounts: accounts),
+      builder: (_) => _ModelGroupEditorDialog(
+        group: group,
+        accounts: accounts,
+        providerCatalog: gateway.providerCatalog,
+      ),
     );
     if (updated == null || !mounted) return;
     try {
-      final service = await _serviceFuture;
-      await service.saveModelGroup(updated);
+      final gateway = await _gatewayFuture;
+      await gateway.accountManagement.saveModelGroup(updated);
       await _reload();
     } catch (_) {
       _showError('模型组保存失败。请确认成员账号中存在对应的上游模型。');
     }
   }
 
-  Future<void> _deleteGroup(LlmModelGroup group) async {
+  Future<void> _deleteGroup(AiGatewayModelGroup group) async {
     final confirmed = await _confirm(
       title: '删除模型组',
       message: '删除“${group.displayName}”的路由配置？已有会话中的模型引用不会改写。',
     );
     if (!confirmed || !mounted) return;
     try {
-      final service = await _serviceFuture;
-      await service.deleteModelGroup(group.id);
+      final gateway = await _gatewayFuture;
+      await gateway.accountManagement.deleteModelGroup(group.id);
       await _reload();
     } catch (_) {
       _showError('模型组删除失败。');
@@ -233,12 +243,12 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
   }
 
   Future<void> _editPolicy({
-    required LlmRoutingPolicy policy,
+    required AiGatewayRoutingPolicy policy,
     required String title,
     required bool showGroupOnlyControls,
-    required Future<void> Function(LlmRoutingPolicy) save,
+    required Future<void> Function(AiGatewayRoutingPolicy) save,
   }) async {
-    final updated = await showDialog<LlmRoutingPolicy>(
+    final updated = await showDialog<AiGatewayRoutingPolicy>(
       context: context,
       builder: (_) => _RoutingPolicyEditorDialog(
         title: title,
@@ -347,6 +357,11 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) => _AccountCard(
                 account: data.accounts[index],
+                providerCatalog: data.providerCatalog,
+                recentError: _recentRequestErrorForAccount(
+                  data.accounts[index].id,
+                  data.groups,
+                ),
                 localUsage:
                     data.runtimeUsageByAccount[data.accounts[index].id] ??
                         const <String, num>{},
@@ -360,15 +375,15 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                   save: (policy) async {
                     final account = data.accounts[index];
                     try {
-                      final service = await _serviceFuture;
-                      await service.saveAccount(
-                        LlmAccount(
+                      final gateway = await _gatewayFuture;
+                      await gateway.accountManagement.saveAccount(
+                        AiGatewayAccount(
                           id: account.id,
                           connectorType: account.connectorType,
                           authType: account.authType,
                           displayName: account.displayName,
                           status: account.status,
-                          credentialRef: account.credentialRef,
+                          hasCredential: account.hasCredential,
                           endpointConfig: account.endpointConfig,
                           models: account.models,
                           policy: policy,
@@ -436,9 +451,9 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
                   save: (policy) async {
                     final group = data.groups[index];
                     try {
-                      final service = await _serviceFuture;
-                      await service.saveModelGroup(
-                        LlmModelGroup(
+                      final gateway = await _gatewayFuture;
+                      await gateway.accountManagement.saveModelGroup(
+                        AiGatewayModelGroup(
                           id: group.id,
                           displayName: group.displayName,
                           members: group.members,
@@ -462,8 +477,9 @@ class _LlmAccountManagementPageState extends State<LlmAccountManagementPage> {
 }
 
 class _ManagementData {
-  final List<LlmAccount> accounts;
-  final List<LlmModelGroup> groups;
+  final List<AiGatewayAccount> accounts;
+  final List<AiGatewayModelGroup> groups;
+  final AiGatewayProviderCatalog providerCatalog;
   final Map<String, Map<String, num>> runtimeUsageByAccount;
   final Map<String, Map<String, num>> runtimeUsageByGroup;
   final bool runtimeUsageAvailable;
@@ -471,6 +487,7 @@ class _ManagementData {
   const _ManagementData({
     required this.accounts,
     required this.groups,
+    required this.providerCatalog,
     required this.runtimeUsageByAccount,
     required this.runtimeUsageByGroup,
     required this.runtimeUsageAvailable,
@@ -496,7 +513,9 @@ class _LoadFailure extends StatelessWidget {
 }
 
 class _AccountCard extends StatelessWidget {
-  final LlmAccount account;
+  final AiGatewayAccount account;
+  final AiGatewayProviderCatalog providerCatalog;
+  final String? recentError;
   final Map<String, num> localUsage;
   final bool runtimeUsageAvailable;
   final VoidCallback onEdit;
@@ -505,6 +524,8 @@ class _AccountCard extends StatelessWidget {
 
   const _AccountCard({
     required this.account,
+    required this.providerCatalog,
+    required this.recentError,
     required this.localUsage,
     required this.runtimeUsageAvailable,
     required this.onEdit,
@@ -514,7 +535,7 @@ class _AccountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final connector = LlmConnectorRegistry.find(account.connectorType);
+    final connector = providerCatalog.findProvider(account.connectorType);
     final quotaRows = [
       ..._quotaRows(account.usageByWindow),
       ..._accountQuotaRows(account),
@@ -575,7 +596,10 @@ class _AccountCard extends StatelessWidget {
               ],
             ),
             Text(_connectionExplanation(account.status)),
-            if (llmChatEndpointTypeForConnector(account.connectorType) == null)
+            Text('认证方式：${_authLabel(account.authType)}'),
+            Text('授权来源：${_authSourceLabel(account, connector)}'),
+            Text('最近错误：${recentError ?? '无记录'}'),
+            if (connector?.supportsChatAdapter != true)
               const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Column(
@@ -632,8 +656,8 @@ class _AccountCard extends StatelessWidget {
 }
 
 class _ModelGroupCard extends StatelessWidget {
-  final LlmModelGroup group;
-  final List<LlmAccount> accounts;
+  final AiGatewayModelGroup group;
+  final List<AiGatewayAccount> accounts;
   final Map<String, num> localUsage;
   final bool runtimeUsageAvailable;
   final VoidCallback onEdit;
@@ -750,16 +774,17 @@ class _ModelGroupCard extends StatelessWidget {
   }
 }
 
-List<String> _quotaRows(Map<LlmUsageWindow, LlmUsageWindowState> usage) {
+List<String> _quotaRows(
+    Map<AiGatewayUsageWindow, AiGatewayUsageWindowState> usage) {
   const labels = {
-    LlmUsageWindow.fiveHour: '5 小时',
-    LlmUsageWindow.day: '每日',
-    LlmUsageWindow.week: '每周',
-    LlmUsageWindow.month: '每月',
+    AiGatewayUsageWindow.fiveHour: '5 小时',
+    AiGatewayUsageWindow.day: '每日',
+    AiGatewayUsageWindow.week: '每周',
+    AiGatewayUsageWindow.month: '每月',
   };
   final rows = <String>[];
-  for (final window in LlmUsageWindow.values) {
-    final state = usage[window] ?? const LlmUsageWindowState();
+  for (final window in AiGatewayUsageWindow.values) {
+    final state = usage[window] ?? const AiGatewayUsageWindowState();
     final quota = state.quota;
     final used = state.used;
     final remaining = state.remaining;
@@ -773,7 +798,7 @@ List<String> _quotaRows(Map<LlmUsageWindow, LlmUsageWindowState> usage) {
   return rows;
 }
 
-List<String> _accountQuotaRows(LlmAccount account) {
+List<String> _accountQuotaRows(AiGatewayAccount account) {
   final rows = <String>[];
   if (_isDisplayableQuotaMetric(account.remainingQuota)) {
     rows.add('剩余额度：${_metricLabel(account.remainingQuota)}');
@@ -785,7 +810,7 @@ List<String> _accountQuotaRows(LlmAccount account) {
   return rows;
 }
 
-bool _isDisplayableQuotaMetric(LlmMetricObservation metric) =>
+bool _isDisplayableQuotaMetric(AiGatewayMetricObservation metric) =>
     metric.isKnown &&
     metric.value != null &&
     metric.value!.isFinite &&
@@ -801,7 +826,7 @@ String _quotaSignalLabel(String signal) => switch (signal) {
       _ => signal,
     };
 
-String _metricLabel(LlmMetricObservation metric) =>
+String _metricLabel(AiGatewayMetricObservation metric) =>
     '${metric.value ?? '未知'} ${metric.unit ?? '单位未知'}';
 
 String _usageUnitLabel(String unit) => switch (unit) {
@@ -824,50 +849,128 @@ String _capabilitiesLabel(Map<String, dynamic> capabilities) {
       .join('、');
 }
 
-String _statusLabel(LlmAccountStatus status) => switch (status) {
-      LlmAccountStatus.unknown => '连接状态未知',
-      LlmAccountStatus.ready => '就绪',
-      LlmAccountStatus.paused => '已暂停',
-      LlmAccountStatus.needsAttention => '需要重新认证',
+String _statusLabel(AiGatewayAccountStatus status) => switch (status) {
+      AiGatewayAccountStatus.unknown => '连接状态未知',
+      AiGatewayAccountStatus.ready => '就绪',
+      AiGatewayAccountStatus.paused => '已暂停',
+      AiGatewayAccountStatus.needsAttention => '需要重新认证',
     };
 
-String _connectionExplanation(LlmAccountStatus status) => switch (status) {
-      LlmAccountStatus.unknown => '连接状态未知；路由仍可尝试请求，请根据请求结果更新状态。',
-      LlmAccountStatus.ready => '账号可参与其模型组路由。',
-      LlmAccountStatus.paused => '账号已暂停，不会参与路由。',
-      LlmAccountStatus.needsAttention => '账号需要重新认证后才会参与路由。',
+String _connectionExplanation(AiGatewayAccountStatus status) =>
+    switch (status) {
+      AiGatewayAccountStatus.unknown => '连接状态未知；路由仍可尝试请求，请根据请求结果更新状态。',
+      AiGatewayAccountStatus.ready => '账号可参与其模型组路由。',
+      AiGatewayAccountStatus.paused => '账号已暂停，不会参与路由。',
+      AiGatewayAccountStatus.needsAttention => '账号需要重新认证后才会参与路由。',
     };
 
-IconData _statusIcon(LlmAccountStatus status) => switch (status) {
-      LlmAccountStatus.unknown => Icons.help_outline,
-      LlmAccountStatus.ready => Icons.check_circle_outline,
-      LlmAccountStatus.paused => Icons.pause_circle_outline,
-      LlmAccountStatus.needsAttention => Icons.warning_amber_outlined,
+String _authLabel(String type) => switch (type) {
+      'api_key' => 'API Key',
+      'oauth' => '订阅 OAuth',
+      'service_account' => '企业服务账号凭据',
+      'session_token' => '会话令牌',
+      'relay' => '应用内中继',
+      'none' => '无认证',
+      _ => type,
     };
 
-String _fallbackLabel(LlmFallbackScope scope) => switch (scope) {
-      LlmFallbackScope.account => '同一连接器账号',
-      LlmFallbackScope.modelGroup => '当前模型组',
+String _authSourceLabel(
+  AiGatewayAccount account,
+  AiGatewayProviderDefinition? connector,
+) {
+  final provider = connector?.displayName ?? account.connectorType;
+  return switch (account.authType) {
+    'oauth' => '$provider OAuth',
+    'api_key' => account.connectorType == 'openai-compatibility'
+        ? '用户提供的上游 API Key'
+        : '$provider API Key',
+    'service_account' => '$provider 企业服务凭据',
+    'session_token' => '$provider 用户提供的会话令牌',
+    'relay' => 'Stroom 应用内 AI Studio 中继',
+    'none' => '本地兼容端点，无凭据',
+    _ => '$provider 提供的凭据',
+  };
+}
+
+String? _recentRequestErrorForAccount(
+  String accountId,
+  Iterable<AiGatewayModelGroup> groups,
+) {
+  LlmChatRouteDiagnostic? latest;
+  String? latestReason;
+  for (final group in groups) {
+    if (!group.members.any((member) => member.accountId == accountId)) {
+      continue;
+    }
+    final diagnostic = LlmChatRouteDiagnostics.latestForGroup(group.id);
+    if (diagnostic == null ||
+        (latest != null && !diagnostic.recordedAt.isAfter(latest.recordedAt))) {
+      continue;
+    }
+    final accountFailure = diagnostic.decisions
+        .where(
+          (decision) =>
+              decision.subjectId == accountId &&
+              decision.reason.startsWith('request_'),
+        )
+        .lastOrNull;
+    if (accountFailure == null) continue;
+    latest = diagnostic;
+    latestReason = accountFailure.reason;
+  }
+  return latestReason == null ? null : _safeRequestErrorLabel(latestReason);
+}
+
+String _safeRequestErrorLabel(String reason) => switch (reason) {
+      'request_authentication' => '上游认证失败',
+      'request_quotaExhausted' => '上游额度不足',
+      'request_rateLimited' => '上游请求受限',
+      'request_connection' => '上游连接失败',
+      'request_server' => '上游服务错误',
+      'request_invalidRequest' => '上游拒绝请求',
+      'request_cancelled' => '请求已取消',
+      _ => '上游请求失败',
     };
 
-String _strategyLabel(LlmSelectionStrategy strategy) => switch (strategy) {
-      LlmSelectionStrategy.leastUsed => '最少使用',
-      LlmSelectionStrategy.roundRobin => '轮询',
-      LlmSelectionStrategy.balanceHigher => '优先较高余额',
-      LlmSelectionStrategy.balanceLower => '优先消耗较低余额',
+IconData _statusIcon(AiGatewayAccountStatus status) => switch (status) {
+      AiGatewayAccountStatus.unknown => Icons.help_outline,
+      AiGatewayAccountStatus.ready => Icons.check_circle_outline,
+      AiGatewayAccountStatus.paused => Icons.pause_circle_outline,
+      AiGatewayAccountStatus.needsAttention => Icons.warning_amber_outlined,
+    };
+
+String _fallbackLabel(AiGatewayFallbackScope scope) => switch (scope) {
+      AiGatewayFallbackScope.account => '同一连接器账号',
+      AiGatewayFallbackScope.modelGroup => '当前模型组',
+    };
+
+String _strategyLabel(AiGatewaySelectionStrategy strategy) =>
+    switch (strategy) {
+      AiGatewaySelectionStrategy.leastUsed => '最少使用',
+      AiGatewaySelectionStrategy.roundRobin => '轮询',
+      AiGatewaySelectionStrategy.balanceHigher => '优先较高余额',
+      AiGatewaySelectionStrategy.balanceLower => '优先消耗较低余额',
     };
 
 class _AccountEditResult {
-  final LlmAccount account;
+  final AiGatewayAccount account;
   final String secret;
 
   const _AccountEditResult(this.account, this.secret);
 }
 
 class _AccountEditorDialog extends StatefulWidget {
-  final LlmAccount? account;
+  final AiGatewayAccount? account;
+  final bool hasCredential;
+  final AiGatewayProviderCatalog providerCatalog;
+  final AiGatewayModelDiscovery modelDiscovery;
 
-  const _AccountEditorDialog({this.account});
+  const _AccountEditorDialog({
+    this.account,
+    this.hasCredential = false,
+    required this.providerCatalog,
+    required this.modelDiscovery,
+  });
 
   @override
   State<_AccountEditorDialog> createState() => _AccountEditorDialogState();
@@ -880,7 +983,8 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   late final TextEditingController _models;
   late String _connectorType;
   late String _authType;
-  late LlmAccountStatus _status;
+  late AiGatewayAccountStatus _status;
+  var _draftChanged = false;
   String? _error;
 
   @override
@@ -889,7 +993,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     final account = widget.account;
     _connectorType = account?.connectorType ?? 'openai-compatibility';
     _authType = account?.authType ?? 'api_key';
-    _status = account?.status ?? LlmAccountStatus.unknown;
+    _status = account?.status ?? AiGatewayAccountStatus.unknown;
     _name = TextEditingController(text: account?.displayName ?? '');
     final endpoint = account?.endpointConfig['baseUrl'] ??
         account?.endpointConfig['host'] ??
@@ -926,9 +1030,9 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final connectors = LlmConnectorRegistry.all;
-    final connector = LlmConnectorRegistry.find(_connectorType)!;
-    final authTypes = connector.authTypes.toList()..sort();
+    final connectors = widget.providerCatalog.providers.toList();
+    final connector = widget.providerCatalog.findProvider(_connectorType)!;
+    final authTypes = connector.supportedAuthTypes.toList()..sort();
     if (!authTypes.contains(_authType)) _authType = authTypes.first;
     return AlertDialog(
       title: Text(widget.account == null ? '添加 LLM 账号' : '编辑 LLM 账号'),
@@ -941,6 +1045,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
               TextField(
                 controller: _name,
                 decoration: const InputDecoration(labelText: '账号名称'),
+                onChanged: (_) => setState(() => _draftChanged = true),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
@@ -956,11 +1061,11 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() {
+                    _draftChanged = true;
                     _connectorType = value;
-                    final available = LlmConnectorRegistry.find(
-                      value,
-                    )!
-                        .authTypes
+                    final available = widget.providerCatalog
+                        .findProvider(value)!
+                        .supportedAuthTypes
                         .toList()
                       ..sort();
                     if (!available.contains(_authType)) {
@@ -972,7 +1077,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   });
                 },
               ),
-              if (llmChatEndpointTypeForConnector(_connectorType) == null)
+              if (connector.supportsChatAdapter != true)
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text(
@@ -993,6 +1098,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() {
+                    _draftChanged = true;
                     _authType = value;
                     if (value == 'none' || value == 'relay') {
                       _credential.clear();
@@ -1007,6 +1113,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   labelText: '端点地址（连接器需要时填写）',
                   hintText: 'https://api.example.com/v1',
                 ),
+                onChanged: (_) => setState(() => _draftChanged = true),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -1017,24 +1124,29 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   labelText: _authType == 'none' || _authType == 'relay'
                       ? '该认证方式无需凭据'
                       : '凭据',
-                  hintText: widget.account?.credentialRef == null
-                      ? '保存在平台安全存储中'
-                      : '留空以保留当前安全凭据',
+                  hintText:
+                      !widget.hasCredential ? '保存在平台安全存储中' : '留空以保留当前安全凭据',
                 ),
+                onChanged: (_) => setState(() => _draftChanged = true),
               ),
               const SizedBox(height: 8),
-              DropdownButtonFormField<LlmAccountStatus>(
+              DropdownButtonFormField<AiGatewayAccountStatus>(
                 initialValue: _status,
                 decoration: const InputDecoration(labelText: '连接状态'),
                 items: [
-                  for (final status in LlmAccountStatus.values)
+                  for (final status in AiGatewayAccountStatus.values)
                     DropdownMenuItem(
                       value: status,
                       child: Text(_statusLabel(status)),
                     ),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _status = value);
+                  if (value != null) {
+                    setState(() {
+                      _draftChanged = true;
+                      _status = value;
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 8),
@@ -1047,7 +1159,23 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
                   hintText: '每行一个：模型 ID,streaming,vision,tools',
                   helperText: '能力为显式声明；用 vision=false 显式禁用，未填写保持未知。',
                 ),
+                onChanged: (_) => setState(() => _draftChanged = true),
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: widget.account != null && !_draftChanged
+                      ? _discoverModels
+                      : null,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('刷新模型目录'),
+                ),
+              ),
+              if (widget.account == null || _draftChanged)
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('保存账号和修改后可刷新模型目录。'),
+                ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -1069,6 +1197,38 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     );
   }
 
+  Future<void> _discoverModels() async {
+    if (widget.account == null || _draftChanged) return;
+    try {
+      final models = await widget.modelDiscovery.discoverModels(
+        widget.account!,
+        refreshRemote: true,
+      );
+      if (!mounted) return;
+      setState(() {
+        _models.text = models
+            .map(
+              (model) => [
+                model.upstreamModelId,
+                ...model.capabilities.entries
+                    .where((entry) => entry.value is bool)
+                    .map(
+                      (entry) => entry.value == true
+                          ? entry.key
+                          : '${entry.key}=false',
+                    ),
+              ].join(','),
+            )
+            .join('\n');
+        _draftChanged = true;
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = '模型目录读取失败，请检查账号认证和连接设置。');
+    }
+  }
+
   void _save() {
     final accountName = _name.text.trim();
     if (accountName.isEmpty) {
@@ -1076,11 +1236,12 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       return;
     }
     final id = widget.account?.id ?? const Uuid().v4();
-    final previousModels = widget.account?.models ?? const <LlmUpstreamModel>[];
-    final existingModelsByUpstream = <String, List<LlmUpstreamModel>>{};
+    final previousModels =
+        widget.account?.models ?? const <AiGatewayUpstreamModel>[];
+    final existingModelsByUpstream = <String, List<AiGatewayUpstreamModel>>{};
     for (final model in previousModels) {
       existingModelsByUpstream
-          .putIfAbsent(model.upstreamModelId, () => <LlmUpstreamModel>[])
+          .putIfAbsent(model.upstreamModelId, () => <AiGatewayUpstreamModel>[])
           .add(model);
     }
     final modelLines = <List<String>>[];
@@ -1088,7 +1249,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       final parts = line.split(',').map((part) => part.trim()).toList();
       if (parts.isNotEmpty && parts.first.isNotEmpty) modelLines.add(parts);
     }
-    final existingByLine = <int, LlmUpstreamModel>{};
+    final existingByLine = <int, AiGatewayUpstreamModel>{};
     final usedModelIds = <String>{};
     for (var index = 0; index < modelLines.length; index++) {
       final exact = existingModelsByUpstream[modelLines[index].first]
@@ -1098,7 +1259,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       existingByLine[index] = exact;
       usedModelIds.add(exact.id);
     }
-    final parsedModels = <LlmUpstreamModel>[];
+    final parsedModels = <AiGatewayUpstreamModel>[];
     for (var index = 0; index < modelLines.length; index++) {
       final parts = modelLines[index];
       final upstreamId = parts.first;
@@ -1139,7 +1300,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
       }
       if (existing == null) usedModelIds.add(newModelId);
       parsedModels.add(
-        LlmUpstreamModel(
+        AiGatewayUpstreamModel(
           id: existing?.id ?? newModelId,
           upstreamModelId: upstreamId,
           displayName: existing?.displayName ?? upstreamId,
@@ -1167,19 +1328,19 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     } else {
       endpointConfig['baseUrl'] = endpoint;
     }
-    final account = LlmAccount(
+    final account = AiGatewayAccount(
       id: id,
       connectorType: _connectorType,
       authType: _authType,
       displayName: accountName,
       status: _status,
-      credentialRef: widget.account?.credentialRef,
+      hasCredential: widget.hasCredential,
       endpointConfig: endpointConfig,
       models: parsedModels,
       policy: widget.account?.policy,
       usageByWindow: widget.account?.usageByWindow,
       remainingQuota: widget.account?.remainingQuota ??
-          const LlmMetricObservation.unknown(),
+          const AiGatewayMetricObservation.unknown(),
       quotaSignals: widget.account?.quotaSignals ?? const {},
     );
     final secret = _authType == 'none' || _authType == 'relay'
@@ -1191,7 +1352,7 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
     if (_authType != 'none' &&
         _authType != 'relay' &&
         secret.isEmpty &&
-        (widget.account?.credentialRef == null || credentialIdentityChanged)) {
+        (!widget.hasCredential || credentialIdentityChanged)) {
       setState(() => _error = '请输入凭据。');
       return;
     }
@@ -1199,21 +1360,16 @@ class _AccountEditorDialogState extends State<_AccountEditorDialog> {
   }
 }
 
-String _authLabel(String type) => switch (type) {
-      'api_key' => 'API Key',
-      'oauth' => 'OAuth 凭据',
-      'service_account' => '服务账号',
-      'session_token' => '会话令牌',
-      'relay' => '应用内中继',
-      'none' => '无认证',
-      _ => type,
-    };
-
 class _ModelGroupEditorDialog extends StatefulWidget {
-  final LlmModelGroup group;
-  final List<LlmAccount> accounts;
+  final AiGatewayModelGroup group;
+  final List<AiGatewayAccount> accounts;
+  final AiGatewayProviderCatalog providerCatalog;
 
-  const _ModelGroupEditorDialog({required this.group, required this.accounts});
+  const _ModelGroupEditorDialog({
+    required this.group,
+    required this.accounts,
+    required this.providerCatalog,
+  });
 
   @override
   State<_ModelGroupEditorDialog> createState() =>
@@ -1222,7 +1378,7 @@ class _ModelGroupEditorDialog extends StatefulWidget {
 
 class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
   late final TextEditingController _name;
-  late List<LlmModelGroupMember> _members;
+  late List<AiGatewayModelGroupMember> _members;
 
   @override
   void initState() {
@@ -1300,7 +1456,7 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
                   if (name.isEmpty) return;
                   Navigator.pop(
                     context,
-                    LlmModelGroup(
+                    AiGatewayModelGroup(
                       id: widget.group.id,
                       displayName: name,
                       members: _members,
@@ -1323,7 +1479,9 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
           .where((item) => item.id == member.accountId)
           .firstOrNull;
       if (account == null) continue;
-      final endpoint = llmChatEndpointTypeForConnector(account.connectorType);
+      final endpoint = widget.providerCatalog
+          .findProvider(account.connectorType)
+          ?.chatProtocolId;
       if (endpoint == null) continue;
       final localModelId = member.localModelId ?? widget.group.id;
       final existing = endpointByLocalModel[localModelId];
@@ -1371,7 +1529,7 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
               onChanged: (value) {
                 setState(() {
                   final current = _members[index];
-                  _members[index] = LlmModelGroupMember(
+                  _members[index] = AiGatewayModelGroupMember(
                     accountId: current.accountId,
                     upstreamModelId: current.upstreamModelId,
                     localModelId: value.trim(),
@@ -1391,7 +1549,7 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
                 if (tier == null) return;
                 setState(() {
                   final current = _members[index];
-                  _members[index] = LlmModelGroupMember(
+                  _members[index] = AiGatewayModelGroupMember(
                     accountId: current.accountId,
                     upstreamModelId: current.upstreamModelId,
                     localModelId: current.localModelId,
@@ -1407,7 +1565,7 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
   }
 
   Future<void> _addMember() async {
-    final member = await showDialog<LlmModelGroupMember>(
+    final member = await showDialog<AiGatewayModelGroupMember>(
       context: context,
       builder: (_) => _AddModelGroupMemberDialog(
         accounts: widget.accounts,
@@ -1422,8 +1580,8 @@ class _ModelGroupEditorDialogState extends State<_ModelGroupEditorDialog> {
   }
 }
 
-bool _preservesStableGroupIdentity(LlmModelGroup group,
-    {required List<LlmModelGroupMember> members, required int index}) {
+bool _preservesStableGroupIdentity(AiGatewayModelGroup group,
+    {required List<AiGatewayModelGroupMember> members, required int index}) {
   final exactAnchor = members.indexWhere((member) {
     final localModelId = member.localModelId;
     return localModelId != null &&
@@ -1440,7 +1598,7 @@ bool _preservesStableGroupIdentity(LlmModelGroup group,
 }
 
 class _AddModelGroupMemberDialog extends StatefulWidget {
-  final List<LlmAccount> accounts;
+  final List<AiGatewayAccount> accounts;
   final String defaultLocalModelId;
 
   const _AddModelGroupMemberDialog({
@@ -1460,13 +1618,13 @@ class _AddModelGroupMemberDialogState
   late final TextEditingController _localModelId;
   int _priorityTier = 0;
 
-  List<LlmAccount> get _accountsWithModels =>
+  List<AiGatewayAccount> get _accountsWithModels =>
       widget.accounts.where((account) => account.models.isNotEmpty).toList();
 
-  LlmAccount? get _selectedAccount => _accountsWithModels
+  AiGatewayAccount? get _selectedAccount => _accountsWithModels
       .where((account) => account.id == _accountId)
       .firstOrNull;
-  List<LlmUpstreamModel> get _selectableModels {
+  List<AiGatewayUpstreamModel> get _selectableModels {
     final seenUpstreamModelIds = <String>{};
     return [
       for (final model in _selectedAccount?.models ?? const [])
@@ -1474,7 +1632,7 @@ class _AddModelGroupMemberDialogState
     ];
   }
 
-  LlmUpstreamModel? get _selectedModel => _selectedAccount?.models
+  AiGatewayUpstreamModel? get _selectedModel => _selectedAccount?.models
       .where((model) => model.id == _modelRecordId)
       .firstOrNull;
 
@@ -1574,7 +1732,7 @@ class _AddModelGroupMemberDialogState
     }
     Navigator.pop(
       context,
-      LlmModelGroupMember(
+      AiGatewayModelGroupMember(
         accountId: accountId,
         upstreamModelId: upstreamModelId,
         localModelId: localModelId,
@@ -1586,7 +1744,7 @@ class _AddModelGroupMemberDialogState
 
 class _RoutingPolicyEditorDialog extends StatefulWidget {
   final String title;
-  final LlmRoutingPolicy policy;
+  final AiGatewayRoutingPolicy policy;
   final bool showGroupOnlyControls;
 
   const _RoutingPolicyEditorDialog({
@@ -1603,9 +1761,9 @@ class _RoutingPolicyEditorDialog extends StatefulWidget {
 class _RoutingPolicyEditorDialogState
     extends State<_RoutingPolicyEditorDialog> {
   late final TextEditingController _concurrency;
-  late LlmSelectionStrategy _strategy;
-  late LlmFallbackScope _fallbackScope;
-  final Map<LlmUsageWindow, _WindowDraft> _windows = {};
+  late AiGatewaySelectionStrategy _strategy;
+  late AiGatewayFallbackScope _fallbackScope;
+  final Map<AiGatewayUsageWindow, _WindowDraft> _windows = {};
   String? _error;
 
   @override
@@ -1616,7 +1774,7 @@ class _RoutingPolicyEditorDialogState
     );
     _strategy = widget.policy.strategy;
     _fallbackScope = widget.policy.fallbackScope;
-    for (final window in LlmUsageWindow.values) {
+    for (final window in AiGatewayUsageWindow.values) {
       _windows[window] = _WindowDraft(widget.policy.windows[window]!);
     }
   }
@@ -1640,11 +1798,11 @@ class _RoutingPolicyEditorDialogState
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.showGroupOnlyControls) ...[
-                  DropdownButtonFormField<LlmSelectionStrategy>(
+                  DropdownButtonFormField<AiGatewaySelectionStrategy>(
                     initialValue: _strategy,
                     decoration: const InputDecoration(labelText: '同优先级选择'),
                     items: [
-                      for (final strategy in LlmSelectionStrategy.values)
+                      for (final strategy in AiGatewaySelectionStrategy.values)
                         DropdownMenuItem(
                           value: strategy,
                           child: Text(_strategyLabel(strategy)),
@@ -1655,11 +1813,11 @@ class _RoutingPolicyEditorDialogState
                     },
                   ),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<LlmFallbackScope>(
+                  DropdownButtonFormField<AiGatewayFallbackScope>(
                     initialValue: _fallbackScope,
                     decoration: const InputDecoration(labelText: '跨账号回退范围'),
                     items: [
-                      for (final scope in LlmFallbackScope.values)
+                      for (final scope in AiGatewayFallbackScope.values)
                         DropdownMenuItem(
                           value: scope,
                           child: Text(_fallbackLabel(scope)),
@@ -1681,7 +1839,7 @@ class _RoutingPolicyEditorDialogState
                   ),
                 ),
                 const SizedBox(height: 12),
-                for (final window in LlmUsageWindow.values)
+                for (final window in AiGatewayUsageWindow.values)
                   _windowEditor(window, _windows[window]!),
                 if (_error != null)
                   Padding(
@@ -1705,7 +1863,7 @@ class _RoutingPolicyEditorDialogState
         ],
       );
 
-  Widget _windowEditor(LlmUsageWindow window, _WindowDraft draft) {
+  Widget _windowEditor(AiGatewayUsageWindow window, _WindowDraft draft) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(10),
@@ -1716,16 +1874,16 @@ class _RoutingPolicyEditorDialogState
               _windowLabel(window),
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            DropdownButtonFormField<LlmWindowMode>(
+            DropdownButtonFormField<AiGatewayWindowMode>(
               initialValue: draft.mode,
               decoration: const InputDecoration(labelText: '窗口模式'),
               items: const [
                 DropdownMenuItem(
-                  value: LlmWindowMode.rolling,
+                  value: AiGatewayWindowMode.rolling,
                   child: Text('滚动窗口'),
                 ),
                 DropdownMenuItem(
-                  value: LlmWindowMode.calendar,
+                  value: AiGatewayWindowMode.calendar,
                   child: Text('日历窗口'),
                 ),
               ],
@@ -1733,7 +1891,7 @@ class _RoutingPolicyEditorDialogState
                 if (value != null) setState(() => draft.mode = value);
               },
             ),
-            if (draft.mode == LlmWindowMode.calendar)
+            if (draft.mode == AiGatewayWindowMode.calendar)
               TextField(
                 controller: draft.timeZone,
                 decoration: const InputDecoration(
@@ -1771,16 +1929,16 @@ class _RoutingPolicyEditorDialogState
               const SizedBox(width: 8),
               Expanded(
                 flex: 2,
-                child: DropdownButtonFormField<LlmLimitKind>(
+                child: DropdownButtonFormField<AiGatewayLimitKind>(
                   initialValue: draft.kind,
                   decoration: const InputDecoration(labelText: '类型'),
                   items: const [
                     DropdownMenuItem(
-                      value: LlmLimitKind.fixed,
+                      value: AiGatewayLimitKind.fixed,
                       child: Text('固定值'),
                     ),
                     DropdownMenuItem(
-                      value: LlmLimitKind.percentage,
+                      value: AiGatewayLimitKind.percentage,
                       child: Text('百分比'),
                     ),
                   ],
@@ -1794,9 +1952,10 @@ class _RoutingPolicyEditorDialogState
                 flex: 2,
                 child: TextField(
                   controller: draft.unit,
-                  enabled: draft.kind == LlmLimitKind.fixed,
+                  enabled: draft.kind == AiGatewayLimitKind.fixed,
                   decoration: InputDecoration(
-                    labelText: draft.kind == LlmLimitKind.fixed ? '单位' : '%',
+                    labelText:
+                        draft.kind == AiGatewayLimitKind.fixed ? '单位' : '%',
                   ),
                 ),
               ),
@@ -1816,11 +1975,11 @@ class _RoutingPolicyEditorDialogState
       setState(() => _error = '并发上限必须是正整数，或留空表示不限。');
       return;
     }
-    final windows = <LlmUsageWindow, LlmWindowPolicy>{};
+    final windows = <AiGatewayUsageWindow, AiGatewayWindowPolicy>{};
     for (final entry in _windows.entries) {
       final draft = entry.value;
       final zone = draft.timeZone.text.trim();
-      if (draft.mode == LlmWindowMode.calendar && zone.isEmpty) {
+      if (draft.mode == AiGatewayWindowMode.calendar && zone.isEmpty) {
         setState(() => _error = '日历窗口需要填写时区。');
         return;
       }
@@ -1830,16 +1989,16 @@ class _RoutingPolicyEditorDialogState
         setState(() => _error = '额度和使用上限必须是非负数；百分比不能超过 100。');
         return;
       }
-      windows[entry.key] = LlmWindowPolicy(
+      windows[entry.key] = AiGatewayWindowPolicy(
         mode: draft.mode,
         timeZone: zone.isEmpty ? null : zone,
-        reserveFloor: reserve as LlmLimitThreshold?,
-        usageCeiling: ceiling as LlmLimitThreshold?,
+        reserveFloor: reserve as AiGatewayLimitThreshold?,
+        usageCeiling: ceiling as AiGatewayLimitThreshold?,
       );
     }
     Navigator.pop(
       context,
-      LlmRoutingPolicy(
+      AiGatewayRoutingPolicy(
         fallbackScope: _fallbackScope,
         strategy: _strategy,
         windows: windows,
@@ -1857,23 +2016,23 @@ class _RoutingPolicyEditorDialogState
     if (value == null || !value.isFinite || value < 0) {
       return _invalidThreshold;
     }
-    if (draft.kind == LlmLimitKind.percentage) {
+    if (draft.kind == AiGatewayLimitKind.percentage) {
       if (value > 100) return _invalidThreshold;
-      return LlmLimitThreshold.percentage(value);
+      return AiGatewayLimitThreshold.percentage(value);
     }
     final unit = draft.unit.text.trim();
     if (unit.isEmpty) return _invalidThreshold;
-    return LlmLimitThreshold.fixed(value, unit: unit);
+    return AiGatewayLimitThreshold.fixed(value, unit: unit);
   }
 }
 
 class _WindowDraft {
-  LlmWindowMode mode;
+  AiGatewayWindowMode mode;
   final TextEditingController timeZone;
   final _ThresholdDraft reserve;
   final _ThresholdDraft ceiling;
 
-  _WindowDraft(LlmWindowPolicy policy)
+  _WindowDraft(AiGatewayWindowPolicy policy)
       : mode = policy.mode,
         timeZone = TextEditingController(text: policy.timeZone ?? ''),
         reserve = _ThresholdDraft(policy.reserveFloor),
@@ -1887,12 +2046,12 @@ class _WindowDraft {
 }
 
 class _ThresholdDraft {
-  LlmLimitKind kind;
+  AiGatewayLimitKind kind;
   final TextEditingController value;
   final TextEditingController unit;
 
-  _ThresholdDraft(LlmLimitThreshold? threshold)
-      : kind = threshold?.kind ?? LlmLimitKind.fixed,
+  _ThresholdDraft(AiGatewayLimitThreshold? threshold)
+      : kind = threshold?.kind ?? AiGatewayLimitKind.fixed,
         value = TextEditingController(text: threshold?.value.toString() ?? ''),
         unit = TextEditingController(text: threshold?.unit ?? '');
 
@@ -1902,21 +2061,21 @@ class _ThresholdDraft {
   }
 }
 
-String _windowLabel(LlmUsageWindow window) => switch (window) {
-      LlmUsageWindow.fiveHour => '5 小时窗口',
-      LlmUsageWindow.day => '日窗口',
-      LlmUsageWindow.week => '周窗口',
-      LlmUsageWindow.month => '月窗口',
+String _windowLabel(AiGatewayUsageWindow window) => switch (window) {
+      AiGatewayUsageWindow.fiveHour => '5 小时窗口',
+      AiGatewayUsageWindow.day => '日窗口',
+      AiGatewayUsageWindow.week => '周窗口',
+      AiGatewayUsageWindow.month => '月窗口',
     };
 
-String _limitThresholdLabel(LlmLimitThreshold threshold) =>
-    threshold.kind == LlmLimitKind.percentage
+String _limitThresholdLabel(AiGatewayLimitThreshold threshold) =>
+    threshold.kind == AiGatewayLimitKind.percentage
         ? '${_formatUsageValue(threshold.value)}%'
         : '${_formatUsageValue(threshold.value)} ${threshold.unit ?? '单位未知'}';
 
-List<String> _policyWindowLimitRows(LlmRoutingPolicy policy) {
+List<String> _policyWindowLimitRows(AiGatewayRoutingPolicy policy) {
   final rows = <String>[];
-  for (final window in LlmUsageWindow.values) {
+  for (final window in AiGatewayUsageWindow.values) {
     final windowPolicy = policy.windows[window];
     if (windowPolicy == null) continue;
     final label = _windowLabel(window);

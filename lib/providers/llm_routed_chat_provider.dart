@@ -4,18 +4,14 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../models/ai_stream_event.dart';
-import '../models/llm_account.dart';
-import '../services/llm_chat_runtime.dart';
-import '../services/llm_connector_http_client.dart';
-import '../services/llm_connector_service.dart';
-import '../services/llm_routing_service.dart';
+import '../ai_gateway/ai_gateway.dart';
 import 'anthropic_chat_provider.dart';
 import 'chat_api_provider.dart';
 
 /// ChatAdapter provider that keeps the application's existing chat protocol
 /// while selecting an eligible account from the model's stable M1 group.
 class LlmRoutedChatProvider extends BaseChatProvider {
-  final Future<LlmChatRoutingRuntime> _runtime;
+  final Future<AiGatewayFacade> _runtime;
   final String groupId;
   final String localModelId;
   final String endpointType;
@@ -28,7 +24,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   Map<String, dynamic>? _lastUsage;
 
   LlmRoutedChatProvider({
-    required Future<LlmChatRoutingRuntime> runtime,
+    required Future<AiGatewayFacade> runtime,
     required this.groupId,
     required this.localModelId,
     required this.endpointType,
@@ -102,7 +98,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         );
         _captureRequest(candidate.account, body, stream: false);
         try {
-          final response = await runtime.connectorClient.request(
+          final response = await runtime.executor.request(
             account: candidate.account,
             modelId: candidate.upstreamModelId,
             body: body,
@@ -122,13 +118,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             accountId: candidate.account.id,
           );
           return result.text;
-        } on LlmConnectorHttpException catch (error) {
+        } on AiGatewayExecutionException catch (error) {
+          if (error.kind != AiGatewayFailureKind.request) rethrow;
           _captureResponseFailure(error);
-          throw LlmRouteRequestException(
-            statusCode: error.statusCode,
-            code: error.code,
-            headers: error.headers,
-          );
+          rethrow;
         }
       },
     );
@@ -184,7 +177,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
             );
             _captureRequest(candidate.account, body, stream: true);
             try {
-              final response = await runtime.connectorClient.request(
+              final response = await runtime.executor.request(
                 account: candidate.account,
                 modelId: candidate.upstreamModelId,
                 body: body,
@@ -207,13 +200,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
                 }
                 controller.add(event);
               }
-            } on LlmConnectorHttpException catch (error) {
+            } on AiGatewayExecutionException catch (error) {
+              if (error.kind != AiGatewayFailureKind.request) rethrow;
               _captureResponseFailure(error);
-              throw LlmRouteRequestException(
-                statusCode: error.statusCode,
-                code: error.code,
-                headers: error.headers,
-              );
+              rethrow;
             }
           },
         );
@@ -312,7 +302,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   void _captureRequest(
-    LlmAccount account,
+    AiGatewayAccount account,
     Map<String, dynamic> body, {
     required bool stream,
   }) {
@@ -333,7 +323,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     _lastUsage = null;
   }
 
-  void _captureResponseFailure(LlmConnectorHttpException error) {
+  void _captureResponseFailure(AiGatewayExecutionException error) {
     _lastResponseStatusCode = error.statusCode;
     _lastResponseHeaders = {
       for (final entry in error.headers.entries) entry.key: [entry.value],
@@ -341,14 +331,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   Future<Stream<AIStreamEvent>> _parseStream(
-    LlmConnectorResponse response,
-    LlmRouteProgress progress, {
-    required LlmChatRoutingRuntime runtime,
+    AiGatewayResponse response,
+    AiGatewayRouteProgress progress, {
+    required AiGatewayFacade runtime,
     required String accountId,
   }) async {
     final body = response.body;
     if (body is! Stream<List<int>>) {
-      throw const LlmConnectorHttpException();
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
     }
     final usage = <String, dynamic>{};
     final toolsByIndex = <int, Map<String, dynamic>>{};
@@ -413,7 +403,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         final connectorObservation = await response.completedObservation;
         final usageObservation = connectorObservation == null
             ? response.observation
-            : mergeLlmConnectorObservations(
+            : _mergeGatewayObservations(
                 response.observation,
                 connectorObservation,
               );
@@ -447,7 +437,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
         try {
           final connectorObservation = await response.completedObservation;
           if (connectorObservation != null) {
-            observation = mergeLlmConnectorObservations(
+            observation = _mergeGatewayObservations(
               observation,
               connectorObservation,
             );
@@ -480,7 +470,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
 
   _LlmCompletionResult _readCompletion(Object? raw) {
     final data = _jsonMap(raw);
-    if (data == null) throw const LlmConnectorHttpException();
+    if (data == null) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
     final apiError = data['error'];
     if (apiError is Map) throw _streamRequestError(apiError);
     if (endpointType == 'anthropic') {
@@ -493,7 +485,9 @@ class LlmRoutedChatProvider extends BaseChatProvider {
               .whereType<String>()
               .join()
           : '';
-      if (text.trim().isEmpty) throw const LlmConnectorHttpException();
+      if (text.trim().isEmpty) {
+        throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+      }
       final usage = <String, dynamic>{};
       final rawUsage = data['usage'];
       if (rawUsage is Map) {
@@ -503,12 +497,14 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     }
     final choices = data['choices'];
     if (choices is! List || choices.isEmpty) {
-      throw const LlmConnectorHttpException();
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
     }
     final first = choices.first;
     final message = first is Map ? first['message'] : null;
     final content = message is Map ? message['content'] : null;
-    if (content is! String) throw const LlmConnectorHttpException();
+    if (content is! String) {
+      throw AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
+    }
     return _LlmCompletionResult(
       data: data,
       text: content,
@@ -517,10 +513,10 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   Future<void> _recordUsage(
-    LlmRouteProgress progress,
+    AiGatewayRouteProgress progress,
     Map<String, dynamic> usage,
-    LlmConnectorObservation observation, {
-    required LlmChatRoutingRuntime runtime,
+    AiGatewayConnectorObservation observation, {
+    required AiGatewayFacade runtime,
     required String accountId,
   }) async {
     final requestUsage = observation.requestUsage;
@@ -545,7 +541,7 @@ class LlmRoutedChatProvider extends BaseChatProvider {
     if (observation.remainingQuota.isKnown ||
         observation.quotaSignals.values.any((metric) => metric.isKnown)) {
       try {
-        await runtime.accountService.recordQuotaObservation(
+        await runtime.accountManagement.recordQuotaObservation(
           accountId: accountId,
           remainingQuota: observation.remainingQuota,
           quotaSignals: observation.quotaSignals,
@@ -557,8 +553,8 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   Future<void> _recordMetric(
-    LlmRouteProgress progress,
-    LlmMetricObservation metric,
+    AiGatewayRouteProgress progress,
+    AiGatewayMetricObservation metric,
   ) async {
     final unit = metric.unit;
     final value = metric.value;
@@ -648,27 +644,36 @@ class LlmRoutedChatProvider extends BaseChatProvider {
   }
 
   static Object _safeError(Object error) {
-    if (error is LlmRoutingUnavailableException ||
-        error is LlmRouteRequestException ||
-        error is LlmConnectorRequestCancelled) {
+    if (error is AiGatewayRoutingException ||
+        error is AiGatewayExecutionException) {
       return error;
     }
-    if (error is LlmConnectorHttpException) {
-      return LlmRouteRequestException(
-        statusCode: error.statusCode,
-        code: error.code,
-        headers: error.headers,
-      );
-    }
-    return const LlmRouteRequestException();
+    return AiGatewayExecutionException(kind: AiGatewayFailureKind.request);
   }
 
-  static LlmRouteRequestException _streamRequestError(Object? apiError) {
+  static AiGatewayExecutionException _streamRequestError(Object? apiError) {
     final rawCode =
         apiError is Map ? apiError['code'] ?? apiError['type'] : null;
-    return LlmRouteRequestException(code: rawCode is String ? rawCode : null);
+    return AiGatewayExecutionException(
+      kind: AiGatewayFailureKind.request,
+      code: rawCode is String ? rawCode : null,
+    );
   }
 }
+
+AiGatewayConnectorObservation _mergeGatewayObservations(
+  AiGatewayConnectorObservation first,
+  AiGatewayConnectorObservation second,
+) =>
+    AiGatewayConnectorObservation(
+      requestUsage: second.requestUsage.isKnown
+          ? second.requestUsage
+          : first.requestUsage,
+      remainingQuota: second.remainingQuota.isKnown
+          ? second.remainingQuota
+          : first.remainingQuota,
+      quotaSignals: {...first.quotaSignals, ...second.quotaSignals},
+    );
 
 class _LlmCompletionResult {
   final Map<String, dynamic> data;

@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/pages/llm_account_management_page.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
-import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
@@ -33,7 +34,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: LlmAccountManagementPage(
-          accountService: service,
+          gateway: _testGateway(service),
           onAccountDeleted: (_) async {
             cleanupCalled = true;
           },
@@ -73,7 +74,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -126,7 +128,8 @@ void main() {
         jsonEncode(accountsEnvelope);
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -143,7 +146,8 @@ void main() {
       credentialStore: _MemoryCredentialStore(),
     );
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -200,7 +204,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -263,7 +268,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -333,7 +339,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('模型组'));
@@ -404,7 +411,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -466,7 +474,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -521,7 +530,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -584,7 +594,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -653,7 +664,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -752,7 +764,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -837,7 +850,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -889,7 +903,8 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
 
@@ -930,7 +945,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
 
@@ -980,7 +996,8 @@ void main() {
       preferences.values[LlmRoutingStateStore.preferenceKey] = '{malformed';
 
       await tester.pumpWidget(
-        MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+        MaterialApp(
+            home: LlmAccountManagementPage(gateway: _testGateway(service))),
       );
       await tester.pumpAndSettle();
 
@@ -1069,7 +1086,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1109,7 +1127,8 @@ void main() {
     final stateStore = LlmRoutingStateStore(preferences: preferences);
 
     await tester.pumpWidget(
-      MaterialApp(home: LlmAccountManagementPage(accountService: service)),
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无本地记录（最近 62 天）'), findsOneWidget);
@@ -1135,7 +1154,100 @@ void main() {
     expect(find.text('tokens：8'), findsOneWidget);
     expect(find.text('暂无本地记录（最近 62 天）'), findsNothing);
   });
+
+  testWidgets('account cards distinguish provider and supported auth source', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'codex-oauth-account',
+        connectorType: 'codex',
+        authType: 'oauth',
+        displayName: 'Work subscription',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: 'oauth-secret-that-must-not-render',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('认证方式：订阅 OAuth'), findsOneWidget);
+    expect(find.text('授权来源：OpenAI Codex OAuth'), findsOneWidget);
+    expect(
+      find.textContaining('oauth-secret-that-must-not-render'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('account cards show a safe recent routing error', (tester) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'failed-account',
+        connectorType: 'openai-compatibility',
+        authType: 'api_key',
+        displayName: 'Failed account',
+        status: LlmAccountStatus.ready,
+        models: const [
+          LlmUpstreamModel(
+            id: 'failed-model',
+            upstreamModelId: 'gpt-test',
+            displayName: 'GPT test',
+          ),
+        ],
+      ),
+      secret: 'provider-response-with-secret',
+    );
+    final group = LlmModelGroup(
+      id: 'failed-group',
+      displayName: 'Failed group',
+      members: const [
+        LlmModelGroupMember(
+          accountId: 'failed-account',
+          upstreamModelId: 'gpt-test',
+          localModelId: 'gpt-local',
+        ),
+      ],
+    );
+    await service.saveModelGroup(group);
+    LlmChatRouteDiagnostics.record(
+      groupId: group.id,
+      localModelId: 'gpt-local',
+      decisions: const [
+        AiGatewayRouteDecision(
+          subjectId: 'failed-account',
+          reason: 'request_authentication',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('最近错误：上游认证失败'), findsOneWidget);
+    expect(find.textContaining('provider-response-with-secret'), findsNothing);
+  });
 }
+
+LlmChatRoutingRuntime _testGateway(LlmAccountConnectorService service) =>
+    LlmChatRoutingRuntime(
+      accountService: service,
+      routingService: LlmRoutingService(accountService: service),
+    );
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};

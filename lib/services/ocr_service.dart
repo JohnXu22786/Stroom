@@ -8,10 +8,7 @@ import '../providers/provider_config.dart';
 import '../utils/http_utils.dart';
 import '../utils/http_timeout.dart';
 import 'app_log_service.dart';
-import 'llm_chat_runtime.dart';
-import 'llm_connector_http_client.dart';
-import 'llm_connector_service.dart';
-import 'llm_routing_service.dart';
+import '../ai_gateway/ai_gateway.dart';
 
 // ============================================================================
 // OCR Config
@@ -135,7 +132,7 @@ class OcrService {
   final OcrConfig config;
   final Dio _dio;
   final Duration? _sendTimeoutOverride;
-  final Future<LlmChatRoutingRuntime>? _routingRuntime;
+  final Future<AiGatewayFacade>? _routingRuntime;
 
   // ── Diagnostic capture (mirrors chat_api_provider pattern) ───────────
   /// The last request body sent to the API.
@@ -170,11 +167,11 @@ class OcrService {
     Duration? connectTimeout,
     Duration? sendTimeout,
     Duration? receiveTimeout,
-    Future<LlmChatRoutingRuntime>? routingRuntime,
+    Future<AiGatewayFacade>? routingRuntime,
   })  : _sendTimeoutOverride = sendTimeout,
         _routingRuntime = config.routingGroupId == null
             ? null
-            : routingRuntime ?? LlmChatRoutingRuntime.sharedPlatform(),
+            : routingRuntime ?? AiGateway.sharedPlatform(),
         _dio = dio ??
             Dio(
               BaseOptions(
@@ -444,9 +441,9 @@ class OcrService {
         lastResponseData = null;
         lastResponseStatusCode = null;
         lastResponseHeaders = null;
-        final LlmConnectorResponse response;
+        final AiGatewayResponse response;
         try {
-          response = await runtime.connectorClient.request(
+          response = await runtime.executor.request(
             account: candidate.account,
             modelId: candidate.upstreamModelId,
             body: routedBody,
@@ -460,16 +457,13 @@ class OcrService {
             receiveTimeout:
                 _dio.options.receiveTimeout ?? receiveTimeoutFallback,
           );
-        } on LlmConnectorHttpException catch (error) {
+        } on AiGatewayExecutionException catch (error) {
+          if (error.kind != AiGatewayFailureKind.request) rethrow;
           lastResponseStatusCode = error.statusCode;
           lastResponseHeaders = {
             for (final entry in error.headers.entries) entry.key: [entry.value],
           };
-          throw LlmRouteRequestException(
-            statusCode: error.statusCode,
-            code: error.code,
-            headers: error.headers,
-          );
+          rethrow;
         }
         final data = _decodeRoutedResponse(response.body);
         lastResponseStatusCode = response.statusCode;
@@ -480,7 +474,8 @@ class OcrService {
         final apiError = data is Map ? data['error'] : null;
         if (apiError is Map) {
           final rawCode = apiError['code'] ?? apiError['type'];
-          throw LlmRouteRequestException(
+          throw AiGatewayExecutionException(
+            kind: AiGatewayFailureKind.request,
             code: rawCode is String ? rawCode : null,
           );
         }
@@ -502,10 +497,10 @@ class OcrService {
   }
 
   Future<void> _recordRoutedUsage(
-    LlmRouteProgress progress,
+    AiGatewayRouteProgress progress,
     Object? response,
-    LlmConnectorObservation observation, {
-    required LlmChatRoutingRuntime runtime,
+    AiGatewayConnectorObservation observation, {
+    required AiGatewayFacade runtime,
     required String accountId,
   }) async {
     final reported = observation.requestUsage;
@@ -522,7 +517,7 @@ class OcrService {
     if (observation.remainingQuota.isKnown ||
         observation.quotaSignals.values.any((metric) => metric.isKnown)) {
       try {
-        await runtime.accountService.recordQuotaObservation(
+        await runtime.accountManagement.recordQuotaObservation(
           accountId: accountId,
           remainingQuota: observation.remainingQuota,
           quotaSignals: observation.quotaSignals,

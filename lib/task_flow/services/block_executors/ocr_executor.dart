@@ -9,7 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../../providers/background_task_provider.dart';
 import '../../../providers/provider_config.dart';
 import '../../../providers/task_provider_shared.dart';
-import '../../../services/llm_chat_runtime.dart';
+import '../../../ai_gateway/ai_gateway.dart';
 import '../../../services/ocr_service.dart';
 import '../../../services/llm_model_group_provider.dart';
 import '../../../utils/http_timeout.dart';
@@ -46,7 +46,7 @@ Future<String> executeOcrBlock({
 
   /// Controlled Dio client for request/response contract tests.
   Dio? ocrDio,
-  Future<LlmChatRoutingRuntime>? routingRuntime,
+  Future<AiGatewayFacade>? routingRuntime,
 }) async {
   final inputBasename = p.basename(input);
   final title = '文字识别_${p.basenameWithoutExtension(inputBasename)}';

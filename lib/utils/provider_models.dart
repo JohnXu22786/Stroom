@@ -1,6 +1,6 @@
 import '../models/tts_models.dart';
 import '../providers/provider_config.dart';
-import '../services/llm_chat_runtime.dart';
+import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_model_group_provider.dart';
 
 typedef ProviderModel = ({ProviderConfigItem config, ModelConfig model});

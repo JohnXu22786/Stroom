@@ -9,6 +9,11 @@ import 'package:stroom/services/llm_credential_store.dart';
 import 'package:stroom/services/llm_routing_service.dart';
 
 void main() {
+  test('backward-compatible import exposes the routing runtime', () {
+    final factory = LlmChatRoutingRuntime.sharedPlatform;
+
+    expect(factory, isNotNull);
+  });
   test(
     'platform routing runtime retries initialization after a transient failure',
     () async {
@@ -570,10 +575,13 @@ void main() {
           localModelId: 'local-model-a',
           request: (candidate, progress) async {
             await progress.markRequestSent();
-            throw const LlmRouteRequestException(statusCode: 400);
+            throw AiGatewayExecutionException(
+              kind: AiGatewayFailureKind.request,
+              statusCode: 400,
+            );
           },
         ),
-        throwsA(isA<LlmRouteRequestException>()),
+        throwsA(isA<AiGatewayExecutionException>()),
       );
 
       final diagnostic = LlmChatRouteDiagnostics.latestForGroup(

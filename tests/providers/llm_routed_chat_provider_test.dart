@@ -3,10 +3,12 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/llm_routed_chat_provider.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/services/llm_connector_http_client.dart';
 import 'package:stroom/services/llm_connector_service.dart';
 import 'package:stroom/services/llm_credential_store.dart';
@@ -157,7 +159,7 @@ void main() {
       provider.chat(const [
         {'role': 'user', 'content': 'hello'},
       ]),
-      throwsA(isA<LlmRoutingUnavailableException>()),
+      throwsA(isA<AiGatewayRoutingException>()),
     );
 
     expect(provider.lastResponseStatusCode, 429);
@@ -814,7 +816,7 @@ void main() {
         provider.chat(const [
           {'role': 'user', 'content': 'hello'},
         ]),
-        throwsA(isA<LlmRouteRequestException>()),
+        throwsA(isA<AiGatewayExecutionException>()),
       );
       expect(connector.requestedAccountIds, ['empty-response-account']);
     },
@@ -893,7 +895,7 @@ void main() {
           provider.chat(const [
             {'role': 'user', 'content': 'hello'},
           ]),
-          throwsA(isA<LlmRouteRequestException>()),
+          throwsA(isA<AiGatewayExecutionException>()),
         );
       }
     },
@@ -1547,7 +1549,7 @@ void main() {
           {'role': 'user', 'content': 'hello'},
         ]).toList(),
         throwsA(
-          isA<LlmRoutingUnavailableException>().having(
+          isA<AiGatewayRoutingException>().having(
             (error) => error.decisions.map((decision) => decision.reason),
             'decision reasons',
             contains('request_rateLimited'),

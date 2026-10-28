@@ -3,13 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/llm_account.dart';
 import '../models/tool_call.dart';
 import '../providers/provider_config.dart';
 import '../services/connectivity_test_service.dart';
 import '../services/http_tool_service.dart';
-import '../services/llm_chat_runtime.dart';
-import '../services/llm_connector_service.dart';
+import '../ai_gateway/ai_gateway.dart';
 import '../services/llm_model_group_provider.dart';
 import '../services/todo_tool_service.dart';
 import '../services/web_search_service.dart';
@@ -24,6 +22,23 @@ final _builtinToolDefinitions = [
   ...TodoToolService.toolDefinitions,
   ...WebSearchService.toolDefinitions,
 ];
+
+/// Keeps the legacy provider row pointed at the account's current secure
+/// credential entry. This value is a reference only; secret bytes stay in
+/// platform secure storage.
+ProviderConfigItem syncLegacyLlmAccountCredentialReference(
+  ProviderConfigItem config,
+  AiGatewayAccount account,
+) {
+  final raw = config.toMap();
+  final credentialRef = account.credentialRef;
+  if (account.hasCredential) {
+    if (credentialRef != null) raw['credentialRef'] = credentialRef;
+  } else {
+    raw.remove('credentialRef');
+  }
+  return ProviderConfigItem.fromMap(raw);
+}
 
 ToolDefinition? _httpToolDefinition(String providerName) {
   final toolName = switch (providerName) {
@@ -130,7 +145,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
             jsonEncode(originalConfig.toMap()) !=
                 jsonEncode(updatedConfig.toMap())) {
           try {
-            final runtime = await LlmChatRoutingRuntime.sharedPlatform();
+            final runtime = await AiGateway.sharedPlatform();
             await ensureLegacyOcrProviderConfigGroups(
               runtime: runtime,
               config: updatedConfig,
@@ -333,7 +348,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     final sourceConfig = entry.configs[configIndex];
     if (entry.type == 'ocr') {
       try {
-        final runtime = await LlmChatRoutingRuntime.sharedPlatform();
+        final runtime = await AiGateway.sharedPlatform();
         await ensureLegacyOcrProviderConfigGroups(
           runtime: runtime,
           config: sourceConfig,
@@ -811,7 +826,11 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
     );
   }
 
-  Future<void> _syncLegacyLlmAccountConfig(LlmAccount account) async {
+  Future<void> _syncLegacyLlmAccountConfig(AiGatewayAccount account) async {
+    final gateway = await AiGateway.sharedPlatform();
+    final chatProtocolId = gateway.providerCatalog
+        .findProvider(account.connectorType)
+        ?.chatProtocolId;
     final state = ref.read(providerEntriesProvider);
     final entry = state.entries.where((item) => item.type == 'llm').firstOrNull;
     if (entry == null ||
@@ -825,9 +844,7 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         ..['connectorType'] = account.connectorType
         ..['authType'] = account.authType
         ..['endpointType'] =
-            LlmConnectorRegistry.canonicalId(account.connectorType) == 'claude'
-                ? 'anthropic'
-                : 'openai'
+            chatProtocolId == 'anthropic' ? 'anthropic' : 'openai'
         ..['models'] = account.models.map((model) {
           final modelConfig = Map<String, dynamic>.from(model.config)
             ..['id'] = model.id
@@ -865,12 +882,10 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
           raw.remove(key);
         }
       }
-      if (account.credentialRef == null) {
-        raw.remove('credentialRef');
-      } else {
-        raw['credentialRef'] = account.credentialRef;
-      }
-      return ProviderConfigItem.fromMap(raw);
+      return syncLegacyLlmAccountCredentialReference(
+        ProviderConfigItem.fromMap(raw),
+        account,
+      );
     }).toList(growable: false);
     await ref.read(providerEntriesProvider.notifier).update(
           entry.id,
@@ -885,9 +900,13 @@ class _ProviderConfigPageState extends ConsumerState<ProviderConfigPage> {
         );
   }
 
-  Future<void> _removeLegacyLlmAccountConfig(LlmAccount account) async {
+  Future<void> _removeLegacyLlmAccountConfig(AiGatewayAccount account) async {
     final state = ref.read(providerEntriesProvider);
-    final next = removeLegacyLlmAccountSourceConfigs(state, account);
+    final next = removeLegacyLlmAccountSourceConfigsById(
+      state,
+      accountId: account.id,
+      endpointConfig: account.endpointConfig,
+    );
     if (identical(next, state)) return;
     final notifier = ref.read(providerEntriesProvider.notifier);
     for (final updated in next.entries) {

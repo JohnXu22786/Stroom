@@ -3,15 +3,61 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stroom/ai_gateway/ai_gateway.dart';
+import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
 import 'package:stroom/services/llm_chat_runtime.dart';
 import 'package:stroom/services/llm_credential_store.dart';
+import 'package:stroom/services/llm_connector_service.dart';
+import 'package:stroom/services/llm_routing_service.dart';
 import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/provider_models.dart';
 
 void main() {
+  test('Gateway account and group DTOs project into selector configs', () {
+    final account = AiGatewayAccount(
+      id: 'account-a',
+      connectorType: 'openai',
+      authType: 'api_key',
+      displayName: 'Account A',
+      models: [
+        AiGatewayUpstreamModel(
+          id: 'upstream-model',
+          upstreamModelId: 'gpt-4.1',
+          displayName: 'GPT 4.1',
+          capabilities: const {'vision': true, 'streaming': true},
+        ),
+      ],
+    );
+    final group = AiGatewayModelGroup(
+      id: stableLlmModelGroupId('account-a', 'local-model'),
+      displayName: 'Local model',
+      members: const [
+        AiGatewayModelGroupMember(
+          accountId: 'account-a',
+          upstreamModelId: 'gpt-4.1',
+          localModelId: 'local-model',
+        ),
+      ],
+    );
+
+    final config = buildGatewayModelGroupProviderConfigs(
+      accounts: [account],
+      groups: [group],
+      providerCatalog: _GatewayProviderCatalog(),
+    ).single;
+
+    expect(config.id, group.id);
+    expect(config.models.single.id, 'local-model');
+    expect(config.models.single.modelId, 'gpt-4.1');
+    expect(
+      llmModelConfigSupportsCapability(config.models.single, 'vision'),
+      isTrue,
+    );
+  });
+
   test(
     'legacy rows for unsupported native connectors stay out of chat selectors',
     () async {
@@ -45,6 +91,7 @@ void main() {
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(
               credentialStore: _MemoryCredentialStore(),
+              gatewayFactory: _createTestGateway,
             ),
           ),
         ],
@@ -221,6 +268,7 @@ void main() {
           providerEntriesProvider.overrideWith(
             (ref) => ProviderEntriesNotifier(
               credentialStore: _MemoryCredentialStore(),
+              gatewayFactory: _createTestGateway,
             ),
           ),
         ],
@@ -271,4 +319,53 @@ class _MemoryCredentialStore implements LlmCredentialStore {
 
   @override
   Future<void> write(String reference, String value) async {}
+}
+
+class _GatewayProviderCatalog implements AiGatewayProviderCatalog {
+  @override
+  Iterable<AiGatewayProviderDefinition> get providers => const [
+        AiGatewayProviderDefinition(
+          id: 'openai',
+          displayName: 'OpenAI',
+          supportedAuthTypes: {'api_key'},
+          supportsChatAdapter: true,
+          chatProtocolId: 'openai',
+        ),
+      ];
+
+  @override
+  AiGatewayProviderDefinition? findProvider(String providerId) {
+    for (final provider in providers) {
+      if (provider.id == providerId) return provider;
+    }
+    return null;
+  }
+}
+
+Future<AiGatewayFacade> _createTestGateway() async {
+  final preferences = await SharedPreferences.getInstance();
+  final accountService = LlmAccountConnectorService(
+    preferences: _SharedPreferencesLlmAccountPreferences(preferences),
+    credentialStore: _MemoryCredentialStore(),
+  );
+  return LlmChatRoutingRuntime(
+    accountService: accountService,
+    routingService: LlmRoutingService(accountService: accountService),
+  );
+}
+
+class _SharedPreferencesLlmAccountPreferences implements LlmAccountPreferences {
+  final SharedPreferences _preferences;
+
+  const _SharedPreferencesLlmAccountPreferences(this._preferences);
+
+  @override
+  Future<String?> getString(String key) async => _preferences.getString(key);
+
+  @override
+  Future<bool> remove(String key) => _preferences.remove(key);
+
+  @override
+  Future<bool> setString(String key, String value) =>
+      _preferences.setString(key, value);
 }
