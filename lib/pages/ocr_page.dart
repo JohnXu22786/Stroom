@@ -938,21 +938,24 @@ class _OcrPageState extends ConsumerState<OcrPage> {
               // default 48px tap target would inflate the card).
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              onPressed: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => OcrInstructionManageDialog(
-                    onInstructionDeleted: (deletedIndex) {
-                      if (!mounted) return;
-                      if (deletedIndex == _selectedInstructionIndex) {
-                        setState(() => _selectedInstructionIndex = -1);
-                      } else if (deletedIndex < _selectedInstructionIndex) {
-                        setState(() => _selectedInstructionIndex--);
-                      }
+              onPressed: _hasReusablePageResults
+                  ? null
+                  : () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => OcrInstructionManageDialog(
+                          onInstructionDeleted: (deletedIndex) {
+                            if (!mounted) return;
+                            if (deletedIndex == _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex = -1);
+                            } else if (deletedIndex <
+                                _selectedInstructionIndex) {
+                              setState(() => _selectedInstructionIndex--);
+                            }
+                          },
+                        ),
+                      );
                     },
-                  ),
-                );
-              },
             ),
           ],
         ),

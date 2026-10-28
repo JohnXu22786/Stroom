@@ -2535,6 +2535,80 @@ void main() {
       expect(find.text('表格提取'), findsWidgets);
     });
 
+    testWidgets(
+      'locks instruction management only while retry results are reusable',
+      (tester) async {
+        final entry = _createOcrEntry(withModels: true);
+        final retryData = {
+          'type': 'ocr',
+          'version': 1,
+          'modelRef': {
+            'configId': entry.configs.single.id,
+            'modelId': entry.configs.single.models.first.id,
+          },
+          'instructionIndex': 0,
+          'images': [
+            {
+              'bytes': base64Encode(_createTestPngBytes()),
+              'format': 'png',
+              'name': 'retry-image.png',
+            },
+          ],
+        };
+        const instructions = [
+          OcrInstruction(name: 'Saved instruction', content: 'original prompt'),
+        ];
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            retryData: retryData,
+            retryPageOutcomes: const [
+              OcrPageOutcome(
+                imageIndex: 0,
+                status: OcrPageOutcomeStatus.succeeded,
+                text: 'reusable result',
+              ),
+            ],
+            ocrInstructions: instructions,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final lockedManageButton = tester.widget<IconButton>(
+          find.byKey(const Key('ocr_instruction_manage_btn')),
+        );
+        expect(lockedManageButton.onPressed, isNull);
+        expect(find.text('Saved instruction'), findsOneWidget);
+        expect(find.text('管理识别指令'), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(
+          _buildTestApp(
+            entries: [entry],
+            retryData: retryData,
+            retryPageOutcomes: const [
+              OcrPageOutcome(
+                imageIndex: 0,
+                status: OcrPageOutcomeStatus.failed,
+                error: 'retry required',
+              ),
+            ],
+            ocrInstructions: instructions,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final availableManageButton = tester.widget<IconButton>(
+          find.byKey(const Key('ocr_instruction_manage_btn')),
+        );
+        expect(availableManageButton.onPressed, isNotNull);
+        await tester.tap(find.byKey(const Key('ocr_instruction_manage_btn')));
+        await tester.pumpAndSettle();
+        expect(find.text('管理识别指令'), findsOneWidget);
+      },
+    );
+
     testWidgets('built-in templates stay separate from custom instructions', (
       tester,
     ) async {
