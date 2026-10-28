@@ -1711,7 +1711,8 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                         _isImageImportPending ||
                         _isRetryImagesLoading ||
                         _retryImagesUnavailable ||
-                        _retryImageCountMismatch
+                        _retryImageCountMismatch ||
+                        _legacyModelConfirmationPending
                     ? null
                     : _startOcr,
                 icon: _ocrStarting || _isProcessing

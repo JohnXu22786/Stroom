@@ -2380,22 +2380,29 @@ void main() {
       tester,
     ) async {
       final bgNotifier = _InspectableBackgroundTaskNotifier();
+      final preflightStarted = Completer<void>();
+      final finishPreflight = Completer<int?>();
       final entry = _createOcrEntry(withModels: true);
       await tester.pumpWidget(
         _buildTestApp(
           entries: [entry],
           backgroundTasksNotifier: bgNotifier,
+          testImagePayloadPreparer: (bytes) async =>
+              prepareOcrImagePayloadSync(bytes),
+          testRequestSizePreflight: (config, images) {
+            preflightStarted.complete();
+            return finishPreflight.future;
+          },
           retryData: {
             'type': 'ocr',
             'images': [
               {
-                'bytes': base64Encode(_createTestPngBytes()),
+                'bytes': base64Encode(_createValidOcrTestImage().bytes),
                 'format': 'png',
                 'name': 'legacy.png',
               },
             ],
             'modelIndex': 1,
-            'instructionIndex': 0,
           },
         ),
       );
@@ -2403,14 +2410,22 @@ void main() {
 
       expect(find.text('GPT-4o Mini | OpenAI'), findsOneWidget);
       expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsOneWidget);
-      await tester.tap(find.text('开始识别'));
+      final startButton = find.widgetWithText(FilledButton, '开始识别');
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNull);
+      await tester.tap(startButton);
       await tester.pump();
       expect(bgNotifier.tasksForTest, isEmpty);
+      expect(preflightStarted.isCompleted, isFalse);
 
       await tester.tap(find.byKey(const Key('ocr_confirm_legacy_model')));
       await tester.pump();
       expect(find.text('旧重试记录只保存了模型位置，请确认当前模型后继续。'), findsNothing);
-      expect(bgNotifier.tasksForTest, isEmpty);
+      expect(tester.widget<FilledButton>(startButton).onPressed, isNotNull);
+
+      await tester.tap(startButton);
+      await _pumpUntil(tester, () => preflightStarted.isCompleted);
+      finishPreflight.complete(null);
+      await tester.pump();
     });
   });
 
