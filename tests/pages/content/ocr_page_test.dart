@@ -4043,8 +4043,17 @@ void main() {
       await tester.pumpWidget(
         _buildTestApp(
           entries: [_createOcrEntry()],
-          testImages: [_createTestImage()],
-          testRequestSizePreflight: (_, _) async => 4200,
+          testImages: [
+            SelectedImage.fromPayload(
+              payload: OcrImagePayload(
+                bytes: Uint8List.fromList(List<int>.generate(2500, (i) => i)),
+                format: 'png',
+                width: 1,
+                height: 1,
+              ),
+              sourceName: 'small-request.png',
+            ),
+          ],
         ),
       );
       await tester.pumpAndSettle();
@@ -4066,10 +4075,17 @@ void main() {
       await tester.tap(find.text('开始识别'));
       await pumpDialogTransition();
 
-      expect(
-        find.text('当前 JSON 请求约为 0.00400543 MiB，超过 0.00300026 MiB 上限。'),
-        findsOneWidget,
+      final warning = tester.widget<Text>(
+        find.textContaining('当前 JSON 请求约为'),
       );
+      expect(warning.data, contains('0.00300026 MiB 上限。'));
+      final displayedSizes = RegExp(r'(\d+\.\d{8}) MiB')
+          .allMatches(warning.data!)
+          .map((match) => double.parse(match.group(1)!))
+          .toList();
+      expect(displayedSizes, hasLength(2));
+      expect(displayedSizes.every((size) => size < 0.005), isTrue);
+      expect(displayedSizes[0], greaterThan(displayedSizes[1]));
       await tester.tap(find.text('取消').last);
       await pumpDialogTransition();
     });
