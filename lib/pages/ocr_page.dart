@@ -2314,8 +2314,12 @@ class _OcrPageState extends ConsumerState<OcrPage> {
     return bytes > 0 ? bytes : null;
   }
 
-  String _formatRequestSizeMib(int bytes) =>
-      (bytes / (1024 * 1024)).toStringAsFixed(2);
+  String _formatRequestSizeMib(int bytes) {
+    final mebibytes = bytes / (1024 * 1024);
+    return mebibytes < 0.005
+        ? mebibytes.toStringAsFixed(8)
+        : mebibytes.toStringAsFixed(2);
+  }
 
   Future<void> _editRequestSizeBudget() async {
     final previousValue = _requestSizeBudgetMiBController.text;

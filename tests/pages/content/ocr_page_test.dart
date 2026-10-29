@@ -4037,6 +4037,59 @@ void main() {
   });
 
   group('OcrPage - request size budget', () {
+    testWidgets('shows distinct sub-0.005 MiB request and limit sizes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImages: [
+            SelectedImage.fromPayload(
+              payload: OcrImagePayload(
+                bytes: Uint8List.fromList(List<int>.generate(2500, (i) => i)),
+                format: 'png',
+                width: 1,
+                height: 1,
+              ),
+              sourceName: 'small-request.png',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> pumpDialogTransition() async {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+
+      await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
+      await pumpDialogTransition();
+      await tester.enterText(
+        find.byKey(const Key('ocr_request_budget_editor_mib')),
+        '0.003',
+      );
+      await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
+      await pumpDialogTransition();
+
+      await tester.tap(find.text('开始识别'));
+      await pumpDialogTransition();
+
+      final warning = tester.widget<Text>(
+        find.textContaining('当前 JSON 请求约为'),
+      );
+      expect(warning.data, contains('0.00300026 MiB 上限。'));
+      final displayedSizes = RegExp(r'(\d+\.\d{8}) MiB')
+          .allMatches(warning.data!)
+          .map((match) => double.parse(match.group(1)!))
+          .toList();
+      expect(displayedSizes, hasLength(2));
+      expect(displayedSizes.every((size) => size < 0.005), isTrue);
+      expect(displayedSizes[0], greaterThan(displayedSizes[1]));
+      await tester.tap(find.text('取消').last);
+      await pumpDialogTransition();
+    });
+
     testWidgets('reused per-image results skip request size preflight', (
       tester,
     ) async {
