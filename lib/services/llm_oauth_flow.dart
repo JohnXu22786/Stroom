@@ -1,0 +1,296 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
+
+/// Provider OAuth admission is based on a public third-party inference flow,
+/// not on an official CLI's private session format.
+class LlmOAuthProviderPolicy {
+  final String providerId;
+  final bool supported;
+  final String? reason;
+
+  const LlmOAuthProviderPolicy._({
+    required this.providerId,
+    required this.supported,
+    this.reason,
+  });
+
+  static const _policies = <String, LlmOAuthProviderPolicy>{
+    'codex': LlmOAuthProviderPolicy._(providerId: 'codex', supported: true),
+    'gemini': LlmOAuthProviderPolicy._(providerId: 'gemini', supported: true),
+    'claude': LlmOAuthProviderPolicy._(
+      providerId: 'claude',
+      supported: false,
+      reason:
+          'Claude Code OAuth is documented for the Anthropic CLI; third-party Messages API access requires a Console API key or configured workload identity federation.',
+    ),
+    'antigravity': LlmOAuthProviderPolicy._(
+      providerId: 'antigravity',
+      supported: false,
+      reason:
+          'No public third-party OAuth client and model-inference API contract is documented for Antigravity.',
+    ),
+    'xai': LlmOAuthProviderPolicy._(
+      providerId: 'xai',
+      supported: false,
+      reason:
+          'Grok Build OAuth is a CLI session; the public xAI model API uses API keys.',
+    ),
+    'kimi': LlmOAuthProviderPolicy._(
+      providerId: 'kimi',
+      supported: false,
+      reason:
+          'Kimi Code CLI sign-in is not documented as a third-party inference authorization; the public model API uses API keys.',
+    ),
+    'kimi-ai': LlmOAuthProviderPolicy._(
+      providerId: 'kimi-ai',
+      supported: false,
+      reason:
+          'Kimi Code CLI sign-in is not documented as a third-party inference authorization; the public model API uses API keys.',
+    ),
+    'kimi.ai': LlmOAuthProviderPolicy._(
+      providerId: 'kimi.ai',
+      supported: false,
+      reason:
+          'Kimi Code CLI sign-in is not documented as a third-party inference authorization; the public model API uses API keys.',
+    ),
+    'google-code-assist': LlmOAuthProviderPolicy._(
+      providerId: 'google-code-assist',
+      supported: false,
+      reason:
+          'Code Assist is a separate Google service and no public third-party model-inference OAuth contract is configured here.',
+    ),
+  };
+
+  static LlmOAuthProviderPolicy forProvider(String providerId) =>
+      _policies[providerId.trim().toLowerCase()] ??
+      LlmOAuthProviderPolicy._(
+        providerId: providerId.trim().toLowerCase(),
+        supported: false,
+        reason: 'No public third-party OAuth inference flow is registered.',
+      );
+}
+
+class LlmOAuthFlowException implements Exception {
+  const LlmOAuthFlowException();
+
+  @override
+  String toString() => 'OAuth authorization could not be completed.';
+}
+
+class LlmOAuthCallbackResult {
+  final String code;
+  final String clientId;
+  final String? scope;
+
+  const LlmOAuthCallbackResult({
+    required this.code,
+    required this.clientId,
+    this.scope,
+  });
+}
+
+/// One-use OAuth authorization attempt. The state, nonce and verifier live in
+/// memory until the matching loopback response is consumed.
+class LlmOAuthAuthorizationAttempt {
+  static const openAiIssuer = 'https://auth.openai.com';
+  static const openAiResource = 'https://api.openai.com/v1';
+  static const openAiDynamicClientId = 'dynamic_agent_client';
+  static const openAiTokenEndpoint =
+      'https://auth.openai.com/api/accounts/oauth/token';
+  static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
+  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
+      'https://www.googleapis.com/auth/generative-language.retriever';
+
+  final Uri redirectUri;
+  final Uri authorizationUri;
+  final String state;
+  final String nonce;
+  final String codeVerifier;
+  final String? existingClientId;
+  final bool isOpenAiRegistration;
+  var _consumed = false;
+
+  LlmOAuthAuthorizationAttempt._({
+    required this.redirectUri,
+    required this.authorizationUri,
+    required this.state,
+    required this.nonce,
+    required this.codeVerifier,
+    required this.existingClientId,
+    required this.isOpenAiRegistration,
+  });
+
+  factory LlmOAuthAuthorizationAttempt.openAiChatGpt({
+    required Uri redirectUri,
+    required String hostId,
+    String? existingClientId,
+    String? idTokenHint,
+    String? loginHint,
+  }) {
+    _validateLoopbackRedirect(redirectUri, '/auth/callback');
+    if (hostId.trim().isEmpty ||
+        (existingClientId != null && existingClientId.trim().isEmpty) ||
+        (existingClientId == openAiDynamicClientId)) {
+      throw const LlmOAuthFlowException();
+    }
+    final state = _secureValue();
+    final nonce = _secureValue();
+    final verifier = _secureValue();
+    final query = <String, String>{
+      'client_id': existingClientId ?? openAiDynamicClientId,
+      if (existingClientId == null) 'agent_name_hint': 'Stroom',
+      'ext_agent_host_id': hostId,
+      'response_type': 'code',
+      'redirect_uri': redirectUri.toString(),
+      'scope':
+          'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct',
+      'resource': openAiResource,
+      'state': state,
+      'nonce': nonce,
+      'code_challenge_method': 'S256',
+      'code_challenge': _challenge(verifier),
+      if (existingClientId != null && idTokenHint != null)
+        'id_token_hint': idTokenHint,
+      if (existingClientId != null && loginHint != null)
+        'login_hint': loginHint,
+    };
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https(
+        'auth.openai.com',
+        '/api/accounts/authorize',
+        query,
+      ),
+      state: state,
+      nonce: nonce,
+      codeVerifier: verifier,
+      existingClientId: existingClientId,
+      isOpenAiRegistration: true,
+    );
+  }
+
+  factory LlmOAuthAuthorizationAttempt.geminiDeveloperApi({
+    required Uri redirectUri,
+    required String clientId,
+  }) {
+    _validateLoopbackRedirect(redirectUri, '');
+    final normalizedClientId = clientId.trim();
+    if (normalizedClientId.isEmpty) throw const LlmOAuthFlowException();
+    final state = _secureValue();
+    final nonce = _secureValue();
+    final verifier = _secureValue();
+    final query = <String, String>{
+      'client_id': normalizedClientId,
+      'redirect_uri': redirectUri.toString(),
+      'response_type': 'code',
+      'scope': geminiScope,
+      'access_type': 'offline',
+      'prompt': 'consent',
+      'state': state,
+      'code_challenge_method': 'S256',
+      'code_challenge': _challenge(verifier),
+    };
+    return LlmOAuthAuthorizationAttempt._(
+      redirectUri: redirectUri,
+      authorizationUri: Uri.https(
+        'accounts.google.com',
+        '/o/oauth2/v2/auth',
+        query,
+      ),
+      state: state,
+      nonce: nonce,
+      codeVerifier: verifier,
+      existingClientId: normalizedClientId,
+      isOpenAiRegistration: false,
+    );
+  }
+
+  LlmOAuthCallbackResult consumeCallback(Uri callbackUri) {
+    if (_consumed) throw const LlmOAuthFlowException();
+    if (!_sameCallbackTarget(callbackUri, redirectUri)) {
+      throw const LlmOAuthFlowException();
+    }
+    final query = callbackUri.queryParametersAll;
+    final states = query['state'];
+    if (states == null ||
+        states.length != 1 ||
+        !_constantTimeEquals(states.single, state)) {
+      throw const LlmOAuthFlowException();
+    }
+    _consumed = true;
+
+    final errors = query['error'];
+    if (errors != null || query.containsKey('error_description')) {
+      throw const LlmOAuthFlowException();
+    }
+    final codes = query['code'];
+    if (codes == null || codes.length != 1 || codes.single.trim().isEmpty) {
+      throw const LlmOAuthFlowException();
+    }
+    final clientIds = query['client_id'];
+    if (clientIds != null && clientIds.length != 1) {
+      throw const LlmOAuthFlowException();
+    }
+    final returnedClientId = clientIds?.single;
+    final clientId = returnedClientId ?? existingClientId;
+    if (clientId == null ||
+        clientId.trim().isEmpty ||
+        clientId == openAiDynamicClientId ||
+        (existingClientId != null && clientId != existingClientId) ||
+        (isOpenAiRegistration &&
+            returnedClientId == null &&
+            existingClientId == null)) {
+      throw const LlmOAuthFlowException();
+    }
+    final scopes = query['scope'];
+    if (scopes != null && scopes.length != 1) {
+      throw const LlmOAuthFlowException();
+    }
+    return LlmOAuthCallbackResult(
+      code: codes.single,
+      clientId: clientId,
+      scope: scopes?.single,
+    );
+  }
+
+  static String _secureValue() {
+    final bytes = List<int>.generate(32, (_) => Random.secure().nextInt(256));
+    return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  static String _challenge(String verifier) => base64Url
+      .encode(sha256.convert(utf8.encode(verifier)).bytes)
+      .replaceAll('=', '');
+
+  static void _validateLoopbackRedirect(Uri uri, String path) {
+    if (uri.scheme != 'http' ||
+        uri.host != '127.0.0.1' ||
+        uri.port < 1 ||
+        uri.userInfo.isNotEmpty ||
+        uri.path != path ||
+        uri.hasQuery ||
+        uri.hasFragment) {
+      throw const LlmOAuthFlowException();
+    }
+  }
+
+  static bool _sameCallbackTarget(Uri value, Uri expected) =>
+      value.scheme == expected.scheme &&
+      value.host == expected.host &&
+      value.port == expected.port &&
+      (value.path == expected.path ||
+          (expected.path.isEmpty && value.path == '/')) &&
+      value.userInfo.isEmpty &&
+      !value.hasFragment;
+
+  static bool _constantTimeEquals(String left, String right) {
+    if (left.length != right.length) return false;
+    var difference = 0;
+    for (var index = 0; index < left.length; index++) {
+      difference |= left.codeUnitAt(index) ^ right.codeUnitAt(index);
+    }
+    return difference == 0;
+  }
+}

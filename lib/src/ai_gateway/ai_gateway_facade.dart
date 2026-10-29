@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../ai_gateway/ai_gateway_contracts.dart';
 import '../../models/llm_account.dart';
@@ -8,6 +12,9 @@ import '../../services/llm_account_migration_service.dart';
 import '../../services/llm_connector_service.dart';
 import '../../services/llm_connector_http_client.dart';
 import '../../services/llm_credential_store.dart';
+import '../../services/llm_oauth_flow.dart';
+import '../../services/llm_oauth_loopback.dart';
+import '../../services/llm_oauth_token_client.dart';
 import '../../services/llm_routing_service.dart';
 
 /// Reproduces M1's stable identity for a legacy account/model reference.
@@ -32,8 +39,9 @@ String? stableLlmModelGroupLocalModelId(String groupId) {
   if (accountEnd >= groupId.length) return null;
   final localLengthEnd = groupId.indexOf(':', accountEnd);
   if (localLengthEnd < 0) return null;
-  final localLength =
-      int.tryParse(groupId.substring(accountEnd, localLengthEnd));
+  final localLength = int.tryParse(
+    groupId.substring(accountEnd, localLengthEnd),
+  );
   if (localLength == null || localLength < 1) return null;
   final localStart = localLengthEnd + 1;
   final localEnd = localStart + localLength;
@@ -55,13 +63,24 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
       _LlmGatewayProviderCatalog();
 
   final LlmAccountConnectorService _accountService;
+  final Dio? _oauthDio;
+  final AiGatewayOAuthAuthorization? _oauthAuthorizationOverride;
   @override
   final AiGatewayAccountManagement accountManagement;
   @override
+  late final AiGatewayOAuthAuthorization oauthAuthorization =
+      _oauthAuthorizationOverride ??
+          _LlmGatewayOAuthAuthorization(
+            _accountService,
+            accountManagement as _LlmGatewayAccountManagement,
+            dio: _oauthDio,
+          );
+  @override
   late final AiGatewayProviderCatalog providerCatalog = defaultProviderCatalog;
   @override
-  late final AiGatewayModelDiscovery modelDiscovery =
-      _LlmGatewayModelDiscovery(_accountService);
+  late final AiGatewayModelDiscovery modelDiscovery = _LlmGatewayModelDiscovery(
+    _accountService,
+  );
   final LlmRoutingService _routingService;
   final LlmConnectorHttpClient _connectorClient;
   @override
@@ -71,7 +90,11 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     required LlmAccountConnectorService accountService,
     required LlmRoutingService routingService,
     LlmConnectorHttpClient? connectorClient,
+    Dio? oauthDio,
+    AiGatewayOAuthAuthorization? oauthAuthorization,
   })  : _accountService = accountService,
+        _oauthDio = oauthDio,
+        _oauthAuthorizationOverride = oauthAuthorization,
         accountManagement = _LlmGatewayAccountManagement(accountService),
         _routingService = routingService,
         _connectorClient = connectorClient ??
@@ -79,9 +102,9 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
 
   @override
   Future<AiGatewayRoutingSnapshot> loadRoutingState() async {
-    final state =
-        await LlmRoutingStateStore(preferences: _accountService.preferences)
-            .load();
+    final state = await LlmRoutingStateStore(
+      preferences: _accountService.preferences,
+    ).load();
     return AiGatewayRoutingSnapshot(
       events: state.events
           .map(
@@ -123,8 +146,10 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
     if (existing != null) return existing;
 
     late final Future<LlmChatRoutingRuntime> sharedRuntime;
-    sharedRuntime =
-        createPlatform().catchError((Object error, StackTrace stackTrace) {
+    sharedRuntime = createPlatform().catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
       if (identical(_sharedPlatformRuntime, sharedRuntime)) {
         _sharedPlatformRuntime = null;
       }
@@ -477,6 +502,273 @@ class LlmChatRoutingRuntime implements AiGatewayFacade {
   }
 }
 
+class _LlmGatewayOAuthAuthorization implements AiGatewayOAuthAuthorization {
+  static const _hostIdPreferenceKey = 'stroom.llm.oauth.openai.host_id';
+
+  final LlmAccountConnectorService _accounts;
+  final _LlmGatewayAccountManagement _accountManagement;
+  final LlmOAuthTokenClient _tokenClient;
+  final Dio _dio;
+
+  _LlmGatewayOAuthAuthorization(
+    this._accounts,
+    this._accountManagement, {
+    Dio? dio,
+    LlmOAuthTokenClient? tokenClient,
+  })  : _dio = dio ?? _createOAuthDio(),
+        _tokenClient =
+            tokenClient ?? LlmOAuthTokenClient(dio: dio ?? _createOAuthDio());
+
+  static Dio _createOAuthDio() => Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
+
+  @override
+  Future<AiGatewayAccount> authorize(
+    AiGatewayAccount account, {
+    Map<String, String> configuration = const {},
+  }) async {
+    if (account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    LlmOAuthLoopback? listener;
+    try {
+      final isOpenAi = account.connectorType == 'codex';
+      final isGemini = account.connectorType == 'gemini';
+      if (!isOpenAi && !isGemini) {
+        throw const AiGatewayOAuthException();
+      }
+      if (isGemini &&
+          !_isGoogleCloudProjectId(
+            account.endpointConfig['googleCloudProjectId'],
+          )) {
+        throw const AiGatewayOAuthException();
+      }
+      if (kIsWeb) throw const AiGatewayOAuthException();
+
+      listener = await LlmOAuthLoopback.bind(isGemini ? '/' : '/auth/callback');
+      final redirectUri = isGemini
+          ? listener.redirectUri.replace(path: '')
+          : listener.redirectUri;
+      final previousBundle =
+          isGemini || isOpenAi ? await _existingOAuthBundle(account) : null;
+      final previousOpenAiBundle =
+          previousBundle?['oauth_contract'] == 'openai-siwc-v1'
+              ? previousBundle
+              : null;
+      late final LlmOAuthAuthorizationAttempt attempt;
+      if (isOpenAi) {
+        attempt = LlmOAuthAuthorizationAttempt.openAiChatGpt(
+          redirectUri: listener.redirectUri,
+          hostId: await _openAiHostId(),
+          existingClientId: previousOpenAiBundle?['client_id'] as String?,
+          idTokenHint: previousOpenAiBundle?['id_token'] as String?,
+        );
+      } else {
+        final clientId = (configuration['clientId'] ?? '').trim().isNotEmpty
+            ? configuration['clientId']!.trim()
+            : previousBundle?['client_id'] as String? ?? '';
+        attempt = LlmOAuthAuthorizationAttempt.geminiDeveloperApi(
+          redirectUri: redirectUri,
+          clientId: clientId,
+        );
+      }
+      if (!await launchUrl(
+        attempt.authorizationUri,
+        mode: LaunchMode.externalApplication,
+      )) {
+        throw const AiGatewayOAuthException();
+      }
+      final callbackUri = await listener.nextCallback().timeout(
+            const Duration(minutes: 5),
+          );
+      final callback = attempt.consumeCallback(callbackUri);
+      final tokenBundle = isOpenAi
+          ? await _tokenClient.exchangeOpenAiChatGpt(
+              attempt: attempt,
+              callback: callback,
+              expectedSubject: previousOpenAiBundle?['identity_sub'] as String?,
+            )
+          : await _tokenClient.exchangeGeminiDeveloperApi(
+              attempt: attempt,
+              callback: callback,
+              clientSecret:
+                  (configuration['clientSecret'] ?? '').trim().isNotEmpty
+                      ? configuration['clientSecret']!.trim()
+                      : previousBundle?['client_secret'] as String? ?? '',
+            );
+      final saved = await _accountManagement.saveAuthorizedOAuthAccount(
+        AiGatewayAccount(
+          id: account.id,
+          connectorType: account.connectorType,
+          authType: account.authType,
+          displayName: account.displayName,
+          status: AiGatewayAccountStatus.ready,
+          hasCredential: true,
+          credentialRef: account.credentialRef,
+          endpointConfig: account.endpointConfig,
+          models: account.models,
+          policy: account.policy,
+          usageByWindow: account.usageByWindow,
+          remainingQuota: account.remainingQuota,
+          quotaSignals: account.quotaSignals,
+        ),
+        secret: jsonEncode(tokenBundle),
+      );
+      await listener.respond(accepted: true);
+      return saved;
+    } catch (_) {
+      if (listener != null) await listener.respond(accepted: false);
+      throw const AiGatewayOAuthException();
+    } finally {
+      await listener?.close();
+    }
+  }
+
+  @override
+  Future<void> revoke(AiGatewayAccount account) async {
+    try {
+      if (account.authType != 'oauth') {
+        throw const AiGatewayOAuthException();
+      }
+      if (!LlmOAuthProviderPolicy.forProvider(
+        account.connectorType,
+      ).supported) {
+        return;
+      }
+      final raw = await _accounts.readCredential(account.id);
+      if (raw == null) throw const AiGatewayOAuthException();
+      final bundle = _decodeOAuthBundle(raw);
+      await _revokeBundle(account, bundle);
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  @override
+  Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async {
+    if (account.authType != 'oauth' ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      await _accountManagement.deleteAccount(account.id);
+      return true;
+    }
+
+    Map<String, dynamic>? bundle;
+    try {
+      final raw = await _accounts.readCredential(account.id);
+      if (raw != null) bundle = _decodeOAuthBundle(raw);
+    } catch (_) {
+      // Preserve local deletion even when the credential cannot be read for
+      // provider revocation. The caller will report the revocation failure.
+    }
+
+    // The account service can restore its record and credential if deletion
+    // fails. Revoke only after it succeeds so the retained account stays
+    // usable on that failure path.
+    await _accountManagement.deleteAccount(account.id);
+    if (bundle == null) return false;
+    try {
+      await _revokeBundle(account, bundle);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _revokeBundle(
+    AiGatewayAccount account,
+    Map<String, dynamic> bundle,
+  ) async {
+    try {
+      final refreshToken = bundle['refresh_token'];
+      if (refreshToken is! String || refreshToken.isEmpty) {
+        throw const AiGatewayOAuthException();
+      }
+      late final Uri revocationEndpoint;
+      late final Map<String, String> body;
+      if (account.connectorType == 'codex') {
+        final discovery = await _dio.getUri<Object?>(
+          Uri.parse('https://auth.openai.com/.well-known/openid-configuration'),
+        );
+        final discoveryBody = _decodeOAuthBundle(jsonEncode(discovery.data));
+        final endpoint = discoveryBody['revocation_endpoint'];
+        final parsed = endpoint is String ? Uri.tryParse(endpoint) : null;
+        if (parsed == null ||
+            parsed.scheme != 'https' ||
+            parsed.host != 'auth.openai.com') {
+          throw const AiGatewayOAuthException();
+        }
+        revocationEndpoint = parsed;
+        final clientId = bundle['client_id'];
+        if (clientId is! String || clientId.isEmpty) {
+          throw const AiGatewayOAuthException();
+        }
+        body = {
+          'client_id': clientId,
+          'token': refreshToken,
+          'token_type_hint': 'refresh_token',
+        };
+      } else if (account.connectorType == 'gemini') {
+        revocationEndpoint = Uri.parse('https://oauth2.googleapis.com/revoke');
+        body = {'token': refreshToken};
+      } else {
+        throw const AiGatewayOAuthException();
+      }
+      final response = await _dio.postUri<Object?>(
+        revocationEndpoint,
+        data: body,
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          validateStatus: (status) => status != null,
+        ),
+      );
+      if ((response.statusCode ?? 0) < 200 ||
+          (response.statusCode ?? 0) >= 300) {
+        throw const AiGatewayOAuthException();
+      }
+    } catch (_) {
+      throw const AiGatewayOAuthException();
+    }
+  }
+
+  Future<String> _openAiHostId() async {
+    final preferences = _accounts.preferences;
+    final existing = await preferences.getString(_hostIdPreferenceKey);
+    if (existing != null && existing.trim().isNotEmpty) return existing;
+    final created = 'urn:uuid:${const Uuid().v4()}';
+    if (!await preferences.setString(_hostIdPreferenceKey, created)) {
+      throw const AiGatewayOAuthException();
+    }
+    return created;
+  }
+
+  Future<Map<String, dynamic>?> _existingOAuthBundle(
+    AiGatewayAccount account,
+  ) async {
+    final raw = await _accounts.readCredential(account.id);
+    if (raw == null) return null;
+    try {
+      return _decodeOAuthBundle(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic> _decodeOAuthBundle(String raw) {
+    final value = jsonDecode(raw);
+    if (value is Map) return Map<String, dynamic>.from(value);
+    throw const AiGatewayOAuthException();
+  }
+
+  static bool _isGoogleCloudProjectId(Object? value) =>
+      value is String &&
+      RegExp(r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$').hasMatch(value.trim());
+}
+
 class LlmChatRouteDiagnostic {
   final String groupId;
   final String localModelId;
@@ -582,11 +874,34 @@ class _LlmGatewayAccountManagement implements AiGatewayAccountManagement {
     final existing = (await _accounts.listAccounts())
         .where((item) => item.id == account.id)
         .firstOrNull;
+    if (account.authType == 'oauth') {
+      final alreadyOAuthForConnector = existing?.authType == 'oauth' &&
+          existing?.connectorType == account.connectorType;
+      if (!alreadyOAuthForConnector || secret != null) {
+        throw const AiGatewayOAuthException();
+      }
+    }
     final saved = await _accounts.saveAccount(
-      _legacyAccount(
-        account,
-        credentialRef: existing?.credentialRef,
-      ),
+      _legacyAccount(account, credentialRef: existing?.credentialRef),
+      secret: secret,
+    );
+    return _gatewayAccount(saved);
+  }
+
+  Future<AiGatewayAccount> saveAuthorizedOAuthAccount(
+    AiGatewayAccount account, {
+    required String secret,
+  }) async {
+    if (account.authType != 'oauth' ||
+        secret.isEmpty ||
+        !LlmOAuthProviderPolicy.forProvider(account.connectorType).supported) {
+      throw const AiGatewayOAuthException();
+    }
+    final existing = (await _accounts.listAccounts())
+        .where((item) => item.id == account.id)
+        .firstOrNull;
+    final saved = await _accounts.saveAccount(
+      _legacyAccount(account, credentialRef: existing?.credentialRef),
       secret: secret,
     );
     return _gatewayAccount(saved);
@@ -629,17 +944,17 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
           id: connector.id,
           displayName: connector.displayName,
           supportedAuthTypes: Set.unmodifiable(connector.authTypes),
-          capabilities: LlmConnectorRegistry.chatAdapterEndpointType(
-                    connector.id,
-                  ) ==
-                  null
-              ? const {}
-              : const {'chat'},
+          capabilities:
+              LlmConnectorRegistry.chatAdapterEndpointType(connector.id) == null
+                  ? const {}
+                  : const {'chat'},
           supportsChatAdapter:
               LlmConnectorRegistry.chatAdapterEndpointType(connector.id) !=
                   null,
-          chatProtocolId:
-              LlmConnectorRegistry.chatAdapterEndpointType(connector.id),
+          chatProtocolId: LlmConnectorRegistry.chatAdapterEndpointType(
+            connector.id,
+          ),
+          authTypeLimitations: _oauthLimitations(connector),
         ),
       );
 
@@ -655,9 +970,19 @@ class _LlmGatewayProviderCatalog implements AiGatewayProviderCatalog {
       supportedAuthTypes: Set.unmodifiable(connector.authTypes),
       capabilities: supportsChatAdapter ? const {'chat'} : const {},
       supportsChatAdapter: supportsChatAdapter,
-      chatProtocolId:
-          LlmConnectorRegistry.chatAdapterEndpointType(connector.id),
+      chatProtocolId: LlmConnectorRegistry.chatAdapterEndpointType(
+        connector.id,
+      ),
+      authTypeLimitations: _oauthLimitations(connector),
     );
+  }
+
+  static Map<String, String> _oauthLimitations(
+    LlmConnectorDefinition connector,
+  ) {
+    if (!connector.authTypes.contains('oauth')) return const {};
+    final policy = LlmOAuthProviderPolicy.forProvider(connector.id);
+    return policy.supported ? const {} : {'oauth': policy.reason!};
   }
 }
 
@@ -792,8 +1117,9 @@ AiGatewayAccount _gatewayAccount(LlmAccount account) => AiGatewayAccount(
       policy: _gatewayPolicy(account.policy),
       usageByWindow: {
         for (final entry in account.usageByWindow.entries)
-          AiGatewayUsageWindow.values.byName(entry.key.name):
-              AiGatewayUsageWindowState(
+          AiGatewayUsageWindow.values.byName(
+            entry.key.name,
+          ): AiGatewayUsageWindowState(
             quota: _gatewayMetricObservation(entry.value.quota),
             used: _gatewayMetricObservation(entry.value.used),
             remaining: _gatewayMetricObservation(entry.value.remaining),
@@ -808,10 +1134,7 @@ AiGatewayAccount _gatewayAccount(LlmAccount account) => AiGatewayAccount(
       },
     );
 
-LlmAccount _legacyAccount(
-  AiGatewayAccount account, {
-  String? credentialRef,
-}) =>
+LlmAccount _legacyAccount(AiGatewayAccount account, {String? credentialRef}) =>
     LlmAccount(
       id: account.id,
       connectorType: account.connectorType,
@@ -893,15 +1216,15 @@ LlmModelGroup _legacyModelGroup(AiGatewayModelGroup group) => LlmModelGroup(
 
 AiGatewayRoutingPolicy _gatewayPolicy(LlmRoutingPolicy policy) =>
     AiGatewayRoutingPolicy(
-      fallbackScope:
-          AiGatewayFallbackScope.values.byName(policy.fallbackScope.name),
-      strategy: AiGatewaySelectionStrategy.values.byName(
-        policy.strategy.name,
+      fallbackScope: AiGatewayFallbackScope.values.byName(
+        policy.fallbackScope.name,
       ),
+      strategy: AiGatewaySelectionStrategy.values.byName(policy.strategy.name),
       windows: {
         for (final entry in policy.windows.entries)
-          AiGatewayUsageWindow.values.byName(entry.key.name):
-              AiGatewayWindowPolicy(
+          AiGatewayUsageWindow.values.byName(
+            entry.key.name,
+          ): AiGatewayWindowPolicy(
             mode: AiGatewayWindowMode.values.byName(entry.value.mode.name),
             timeZone: entry.value.timeZone,
             reserveFloor: _gatewayThreshold(entry.value.reserveFloor),

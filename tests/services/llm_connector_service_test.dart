@@ -844,6 +844,167 @@ void main() {
       expect(models.single.displayName, 'Gemini 3.1 Pro');
     });
 
+    test(
+      'attributes Gemini OAuth model discovery to its Cloud project',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({'models': []}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final prefs = _MemoryPreferences();
+        final connector = LlmAccountConnectorService(
+          preferences: prefs,
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await connector.saveAccount(
+          LlmAccount(
+            id: 'gemini-oauth-discovery',
+            connectorType: 'gemini',
+            authType: 'oauth',
+            displayName: 'Gemini Developer API',
+            endpointConfig: const {
+              'googleCloudProjectId': 'my-cloud-project',
+              'clientId': 'desktop-client.apps.googleusercontent.com',
+            },
+          ),
+          secret: jsonEncode({'access_token': 'gemini-access-token'}),
+        );
+
+        await connector.discoverModels(account, refreshRemote: true);
+
+        expect(
+          captured?.headers['Authorization'],
+          'Bearer gemini-access-token',
+        );
+        expect(captured?.headers['x-goog-user-project'], 'my-cloud-project');
+        expect(captured?.headers.containsKey('x-goog-api-key'), isFalse);
+      },
+    );
+
+    test(
+      'refreshes an expired Gemini OAuth token before model discovery',
+      () async {
+        final requests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requests.add(options);
+            if (options.uri.host == 'oauth2.googleapis.com') {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'access_token': 'fresh-gemini-access',
+                  'refresh_token': 'rotated-gemini-refresh',
+                  'expires_in': 3600,
+                }),
+                200,
+              );
+            }
+            return ResponseBody.fromString(jsonEncode({'models': []}), 200);
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'gemini-discovery-expired-oauth',
+            connectorType: 'gemini',
+            authType: 'oauth',
+            displayName: 'Gemini Developer API',
+            endpointConfig: const {'googleCloudProjectId': 'my-cloud-project'},
+          ),
+          secret: jsonEncode({
+            'access_token': 'expired-gemini-access',
+            'refresh_token': 'gemini-refresh-token',
+            'client_id': 'desktop-client.apps.googleusercontent.com',
+            'client_secret': 'secure-client-secret',
+            'expires_at': DateTime.now()
+                .toUtc()
+                .subtract(const Duration(minutes: 1))
+                .toIso8601String(),
+            'oauth_contract': 'google-gemini-developer-api-v1',
+          }),
+        );
+
+        await service.discoverModels(account, refreshRemote: true);
+
+        expect(requests, hasLength(2));
+        expect(requests.first.uri.host, 'oauth2.googleapis.com');
+        expect(requests.last.uri.host, 'generativelanguage.googleapis.com');
+        expect(
+          requests.last.headers['Authorization'],
+          'Bearer fresh-gemini-access',
+        );
+      },
+    );
+
+    test(
+      'retries Gemini OAuth model discovery after an unauthorized response',
+      () async {
+        final modelRequests = <RequestOptions>[];
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            if (options.uri.host == 'oauth2.googleapis.com') {
+              return ResponseBody.fromString(
+                jsonEncode({
+                  'access_token': 'fresh-gemini-access',
+                  'refresh_token': 'rotated-gemini-refresh',
+                  'expires_in': 3600,
+                }),
+                200,
+              );
+            }
+            modelRequests.add(options);
+            if (modelRequests.length == 1) {
+              return ResponseBody.fromString('{}', 401);
+            }
+            return ResponseBody.fromString(jsonEncode({'models': []}), 200);
+          });
+        final service = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await service.saveAccount(
+          LlmAccount(
+            id: 'gemini-discovery-unauthorized-oauth',
+            connectorType: 'gemini',
+            authType: 'oauth',
+            displayName: 'Gemini Developer API',
+            endpointConfig: const {'googleCloudProjectId': 'my-cloud-project'},
+          ),
+          secret: jsonEncode({
+            'access_token': 'stale-gemini-access',
+            'refresh_token': 'gemini-refresh-token',
+            'client_id': 'desktop-client.apps.googleusercontent.com',
+            'client_secret': 'secure-client-secret',
+            'oauth_contract': 'google-gemini-developer-api-v1',
+          }),
+        );
+
+        await service.discoverModels(account, refreshRemote: true);
+
+        expect(modelRequests, hasLength(2));
+        expect(
+          modelRequests.first.headers['Authorization'],
+          'Bearer stale-gemini-access',
+        );
+        expect(
+          modelRequests.last.headers['Authorization'],
+          'Bearer fresh-gemini-access',
+        );
+      },
+    );
+
     test('follows Gemini model discovery pagination tokens', () async {
       final requestedUris = <Uri>[];
       final dio = Dio()
@@ -895,42 +1056,44 @@ void main() {
         requestedUris.last.queryParameters['pageToken'],
         'next-page-token',
       );
-      expect(
-        models.map((model) => model.upstreamModelId),
-        ['gemini-3.1-pro', 'gemini-3.1-flash'],
-      );
+      expect(models.map((model) => model.upstreamModelId), [
+        'gemini-3.1-pro',
+        'gemini-3.1-flash',
+      ]);
     });
 
-    test('bounds Gemini model discovery when every page returns a new token',
-        () async {
-      var requestCount = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          requestCount++;
-          return ResponseBody.fromString(
-            jsonEncode({'models': [], 'nextPageToken': 'page-$requestCount'}),
-            200,
-            headers: const {
-              'content-type': ['application/json'],
-            },
-          );
-        });
-      final discoveryService = LlmAccountConnectorService(
-        preferences: preferences,
-        credentialStore: credentials,
-        dio: dio,
-      );
-      final account = await discoveryService.saveAccount(
-        _account('gemini-unbounded-discovery', 'gemini'),
-        secret: 'gemini-private-key',
-      );
+    test(
+      'bounds Gemini model discovery when every page returns a new token',
+      () async {
+        var requestCount = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestCount++;
+            return ResponseBody.fromString(
+              jsonEncode({'models': [], 'nextPageToken': 'page-$requestCount'}),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final discoveryService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await discoveryService.saveAccount(
+          _account('gemini-unbounded-discovery', 'gemini'),
+          secret: 'gemini-private-key',
+        );
 
-      await expectLater(
-        discoveryService.discoverModels(account, refreshRemote: true),
-        throwsA(isA<LlmAccountConnectorException>()),
-      );
-      expect(requestCount, 100);
-    });
+        await expectLater(
+          discoveryService.discoverModels(account, refreshRemote: true),
+          throwsA(isA<LlmAccountConnectorException>()),
+        );
+        expect(requestCount, 100);
+      },
+    );
 
     test(
       'rejects unapproved Gemini model discovery hosts before key use',
@@ -1140,6 +1303,7 @@ void main() {
           secret: jsonEncode({
             'access_token': 'old-access-token',
             'refresh_token': 'old-refresh-token',
+            'client_id': 'registered-openai-oauth-client',
           }),
         );
 
@@ -1152,7 +1316,10 @@ void main() {
         );
 
         expect(didRefresh, isTrue);
-        expect(captured?.uri.toString(), 'https://auth.openai.com/oauth/token');
+        expect(
+          captured?.uri.toString(),
+          'https://auth.openai.com/api/accounts/oauth/token',
+        );
         expect(captured?.method, 'POST');
         expect(refreshed['access_token'], 'fresh-access-token');
         expect(refreshed['refresh_token'], 'fresh-refresh-token');
@@ -1161,7 +1328,60 @@ void main() {
     );
 
     test(
-      'refreshes Claude, Antigravity, Kimi aliases, and Grok Build OAuth',
+      'refreshes Gemini Developer API OAuth and retains client config',
+      () async {
+        RequestOptions? captured;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            captured = options;
+            return ResponseBody.fromString(
+              jsonEncode({
+                'access_token': 'fresh-gemini-access',
+                'refresh_token': 'rotated-gemini-refresh',
+                'expires_in': 3600,
+                'token_type': 'Bearer',
+              }),
+              200,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            );
+          });
+        final refreshService = LlmAccountConnectorService(
+          preferences: preferences,
+          credentialStore: credentials,
+          dio: dio,
+        );
+        final account = await refreshService.saveAccount(
+          _account('gemini-oauth', 'gemini', authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'old-gemini-access',
+            'refresh_token': 'old-gemini-refresh',
+            'client_id': 'desktop-client.apps.googleusercontent.com',
+            'client_secret': 'secure-client-secret',
+            'oauth_contract': 'google-gemini-developer-api-v1',
+          }),
+        );
+
+        expect(await refreshService.refreshCredential(account), isTrue);
+        final refreshed =
+            jsonDecode((await refreshService.readCredential(account.id))!)
+                as Map;
+        expect(captured?.uri.toString(), 'https://oauth2.googleapis.com/token');
+        expect(captured?.data.toString(), contains('old-gemini-refresh'));
+        expect(captured?.data.toString(), contains('secure-client-secret'));
+        expect(refreshed['access_token'], 'fresh-gemini-access');
+        expect(refreshed['refresh_token'], 'rotated-gemini-refresh');
+        expect(
+          refreshed['client_id'],
+          'desktop-client.apps.googleusercontent.com',
+        );
+        expect(refreshed['client_secret'], 'secure-client-secret');
+      },
+    );
+
+    test(
+      'does not refresh CLI-only OAuth credentials without public contracts',
       () async {
         final refreshRequests = <String, RequestOptions>{};
         final dio = Dio()
@@ -1212,90 +1432,50 @@ void main() {
 
           expect(
             await refreshService.refreshCredential(account),
-            isTrue,
-            reason: connector,
-          );
-          expect(
-            jsonDecode(
-              (await refreshService.readCredential(account.id))!,
-            )['access_token'],
-            startsWith('fresh-'),
+            isFalse,
             reason: connector,
           );
         }
-
-        expect(
-          refreshRequests.keys,
-          containsAll({
-            'platform.claude.com',
-            'oauth2.googleapis.com',
-            'auth.kimi.com',
-            'auth.kimi.ai',
-            'auth.x.ai',
-          }),
-        );
-        final antigravityRequestData =
-            refreshRequests['oauth2.googleapis.com']?.data;
-        Map<String, dynamic> antigravityFormFields() {
-          if (antigravityRequestData is String) {
-            return Uri.splitQueryString(antigravityRequestData);
-          }
-          if (antigravityRequestData is Map) {
-            return antigravityRequestData.cast<String, dynamic>();
-          }
-          fail('Antigravity refresh request did not contain form fields');
-        }
-
-        expect(
-          antigravityFormFields(),
-          containsPair('client_id', 'test-antigravity-client-id'),
-        );
-        expect(
-          antigravityFormFields(),
-          containsPair('client_secret', 'test-antigravity-client-secret'),
-        );
-        expect(
-          refreshRequests['platform.claude.com']?.contentType,
-          Headers.jsonContentType,
-        );
-        expect(refreshRequests['oauth2.googleapis.com']?.uri.path, '/token');
+        expect(refreshRequests, isEmpty);
       },
     );
 
-    test('requires secure Antigravity OAuth app credentials for refresh',
-        () async {
-      var refreshRequests = 0;
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          refreshRequests++;
-          return ResponseBody.fromString(
-            jsonEncode({'access_token': 'unexpected-access-token'}),
-            200,
-          );
-        });
-      final refreshService = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await refreshService.saveAccount(
-        _account(
-          'antigravity-missing-oauth-app-credentials',
-          'antigravity',
-          authType: 'oauth',
-        ),
-        secret: jsonEncode({
-          'access_token': 'antigravity-access-token',
-          'refresh_token': 'antigravity-refresh-token',
-        }),
-      );
+    test(
+      'requires secure Antigravity OAuth app credentials for refresh',
+      () async {
+        var refreshRequests = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            refreshRequests++;
+            return ResponseBody.fromString(
+              jsonEncode({'access_token': 'unexpected-access-token'}),
+              200,
+            );
+          });
+        final refreshService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await refreshService.saveAccount(
+          _account(
+            'antigravity-missing-oauth-app-credentials',
+            'antigravity',
+            authType: 'oauth',
+          ),
+          secret: jsonEncode({
+            'access_token': 'antigravity-access-token',
+            'refresh_token': 'antigravity-refresh-token',
+          }),
+        );
 
-      expect(await refreshService.refreshCredential(account), isFalse);
-      expect(refreshRequests, 0);
-    });
+        expect(await refreshService.refreshCredential(account), isFalse);
+        expect(refreshRequests, 0);
+      },
+    );
 
     test(
-      'mints Meta Muse API keys from accepted DCA OAuth credentials',
+      'does not mint Meta credentials from a private DCA OAuth token',
       () async {
         RequestOptions? mintRequest;
         final dio = Dio()
@@ -1327,24 +1507,9 @@ void main() {
           LlmConnectorRegistry.find('meta')?.canRefreshCredentials,
           isTrue,
         );
-        expect(await refreshService.refreshCredential(account), isTrue);
-
-        final storedCredential =
-            jsonDecode((await refreshService.readCredential(account.id))!)
-                as Map;
         final preferencesJson = preferences.values.values.join();
-        expect(
-          mintRequest?.uri.toString(),
-          'https://api.meta.ai/muse-code/key',
-        );
-        expect(
-          mintRequest?.headers['Authorization'],
-          'Bearer dca:private-session-token',
-        );
-        expect(mintRequest?.headers['User-Agent'], startsWith('muse-code/'));
-        expect(storedCredential['api_key'], 'meta-private-api-key');
-        expect(storedCredential['dca_token'], 'dca:private-session-token');
-        expect(preferencesJson, isNot(contains('meta-private-api-key')));
+        expect(await refreshService.refreshCredential(account), isFalse);
+        expect(mintRequest, isNull);
         expect(preferencesJson, isNot(contains('dca:private-session-token')));
       },
     );
@@ -1421,8 +1586,10 @@ void main() {
       );
 
       expect(request.headers['Authorization'], 'Bearer 1234567890');
-      expect(request.uri.toString(),
-          'https://api.example.test/v1/chat/completions');
+      expect(
+        request.uri.toString(),
+        'https://api.example.test/v1/chat/completions',
+      );
     });
 
     test('uses Anthropic Messages with Claude Code OAuth credentials', () {
@@ -2050,38 +2217,93 @@ void main() {
         );
       },
     );
+
+    test(
+      'builds public Gemini Developer API OAuth requests with bearer auth',
+      () {
+        final request = builder.build(
+          account: LlmAccount(
+            id: 'gemini-developer-oauth',
+            connectorType: 'gemini',
+            authType: 'oauth',
+            displayName: 'Gemini Developer API',
+            endpointConfig: const {'googleCloudProjectId': 'my-cloud-project'},
+          ),
+          credential: jsonEncode({'access_token': 'gemini-access-token'}),
+          modelId: 'gemini-2.5-flash',
+          body: const {'contents': []},
+        );
+
+        expect(request.uri.host, 'generativelanguage.googleapis.com');
+        expect(request.headers['Authorization'], 'Bearer gemini-access-token');
+        expect(request.headers['x-goog-user-project'], 'my-cloud-project');
+        expect(request.headers.containsKey('x-goog-api-key'), isFalse);
+      },
+    );
+
+    test('requires project attribution for Gemini OAuth requests', () {
+      expect(
+        () => builder.build(
+          account: LlmAccount(
+            id: 'gemini-oauth-no-project',
+            connectorType: 'gemini',
+            authType: 'oauth',
+            displayName: 'Gemini Developer API',
+          ),
+          credential: jsonEncode({'access_token': 'gemini-access-token'}),
+          modelId: 'gemini-2.5-flash',
+          body: const {'contents': []},
+        ),
+        throwsA(isA<LlmAccountConnectorException>()),
+      );
+    });
   });
 
   group('LlmConnectorHttpClient', () {
     test(
-      'discovers and stores an Antigravity project before generation',
+      'does not route OAuth providers without public inference contracts',
       () async {
-        RequestOptions? generationRequest;
-        var projectLookups = 0;
+        var requestsSent = 0;
         final dio = Dio()
           ..httpClientAdapter = _FunctionalAdapter((options) async {
-            if (options.uri.path.endsWith(':loadCodeAssist')) {
-              projectLookups++;
-              expect(
-                options.headers['Authorization'],
-                'Bearer antigravity-token',
-              );
-              return ResponseBody.fromString(
-                jsonEncode({
-                  'cloudaicompanionProject': {'id': 'resolved-project'},
-                }),
-                200,
-                headers: const {
-                  'content-type': ['application/json'],
-                },
-              );
-            }
-            generationRequest = options;
+            requestsSent++;
             return ResponseBody.fromString('{}', 200);
           });
-        final preferences = _MemoryPreferences();
+        final accountService = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accountService.saveAccount(
+          _account('claude-cli-oauth', 'claude', authType: 'oauth'),
+          secret: jsonEncode({'access_token': 'cli-session-token'}),
+        );
+
+        await expectLater(
+          LlmConnectorHttpClient(
+            accountService: accountService,
+            dio: dio,
+          ).request(
+            account: account,
+            modelId: 'claude-sonnet-4-5',
+            body: const {'messages': []},
+          ),
+          throwsA(isA<LlmConnectorAuthenticationRequired>()),
+        );
+        expect(requestsSent, 0);
+      },
+    );
+
+    test(
+      'does not send Antigravity CLI OAuth to private inference endpoints',
+      () async {
+        var requestsSent = 0;
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
+          });
         final accounts = LlmAccountConnectorService(
-          preferences: preferences,
+          preferences: _MemoryPreferences(),
           credentialStore: _MemoryCredentials(),
           dio: dio,
         );
@@ -2094,28 +2316,17 @@ void main() {
           secret: jsonEncode({'access_token': 'antigravity-token'}),
         );
 
-        await LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        ).request(
-          account: account,
-          modelId: 'gemini-3.1-pro',
-          body: const {
-            'request': {'contents': []},
-          },
+        await expectLater(
+          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+            account: account,
+            modelId: 'gemini-3.1-pro',
+            body: const {
+              'request': {'contents': []},
+            },
+          ),
+          throwsA(isA<LlmConnectorAuthenticationRequired>()),
         );
-
-        expect(projectLookups, 1);
-        expect(
-          generationRequest?.data,
-          containsPair('project', 'resolved-project'),
-        );
-        expect(
-          (await accounts.getAccount(account.id))?.endpointConfig['projectId'],
-          'resolved-project',
-        );
-        final storedPreferences = preferences.values.values.join();
-        expect(storedPreferences, isNot(contains('antigravity-token')));
+        expect(requestsSent, 0);
       },
     );
 
@@ -2154,7 +2365,7 @@ void main() {
           account: account,
           modelId: 'gemini-3.1-pro',
           body: const {
-            'request': {'contents': []}
+            'request': {'contents': []},
           },
           cancelToken: cancelToken,
         ),
@@ -2201,7 +2412,7 @@ void main() {
             'request': {'contents': []},
           },
         ),
-        throwsA(isA<LlmConnectorHttpException>()),
+        throwsA(isA<LlmConnectorAuthenticationRequired>()),
       );
 
       expect(requestsSent, 0);
@@ -2229,42 +2440,12 @@ void main() {
       final scenarios = [
         (
           _account('native-codex', 'codex', authType: 'oauth'),
-          jsonEncode({'access_token': 'codex-token'}),
-          'https://chatgpt.com/backend-api/codex/responses',
+          jsonEncode({
+            'access_token': 'codex-token',
+            'client_id': 'registered-openai-client',
+          }),
+          'https://api.openai.com/v1/responses',
           const {'model': 'gpt-5.5', 'input': []},
-        ),
-        (
-          _account('native-claude', 'claude', authType: 'oauth'),
-          jsonEncode({'access_token': 'claude-token'}),
-          'https://api.anthropic.com/v1/messages?beta=true',
-          const {'model': 'claude-sonnet-4-6', 'messages': []},
-        ),
-        (
-          LlmAccount(
-            id: 'native-antigravity',
-            connectorType: 'antigravity',
-            authType: 'oauth',
-            displayName: 'Antigravity',
-            endpointConfig: const {'projectId': 'native-project'},
-          ),
-          jsonEncode({'access_token': 'antigravity-token'}),
-          'https://cloudcode-pa.googleapis.com/v1internal:generateContent',
-          const {
-            'request': {'contents': []},
-          },
-        ),
-        for (final connector in ['kimi', 'kimi-ai', 'kimi.ai'])
-          (
-            _account('native-$connector', connector, authType: 'oauth'),
-            jsonEncode({'access_token': 'kimi-token'}),
-            'https://${connector == 'kimi' ? 'api.kimi.com' : 'api.kimi.ai'}/coding/v1/chat/completions',
-            const {'model': 'kimi-k2.8', 'messages': []},
-          ),
-        (
-          _account('native-xai', 'xai', authType: 'oauth'),
-          jsonEncode({'access_token': 'xai-token'}),
-          'https://cli-chat-proxy.grok.com/v1/responses',
-          const {'model': 'grok-code-fast-1', 'input': []},
         ),
         (
           _account('native-devin', 'devin', authType: 'session_token'),
@@ -2336,32 +2517,13 @@ void main() {
     });
 
     test(
-      'mints Meta OAuth credentials before the native Responses request',
+      'does not route Meta CLI OAuth through its private mint endpoint',
       () async {
-        RequestOptions? modelRequest;
-        var minted = false;
+        var requestsSent = 0;
         final dio = Dio()
           ..httpClientAdapter = _FunctionalAdapter((options) async {
-            if (options.uri.path == '/muse-code/key') {
-              minted = true;
-              return ResponseBody.fromString(
-                jsonEncode({'api_key': 'meta-minted-key'}),
-                200,
-                headers: const {
-                  'content-type': ['application/json'],
-                },
-              );
-            }
-            modelRequest = options;
-            return ResponseBody.fromString(
-              jsonEncode({
-                'usage': {'input_tokens': 2, 'output_tokens': 3},
-              }),
-              200,
-              headers: const {
-                'content-type': ['application/json'],
-              },
-            );
+            requestsSent++;
+            return ResponseBody.fromString('{}', 200);
           });
         final accounts = LlmAccountConnectorService(
           preferences: _MemoryPreferences(),
@@ -2372,28 +2534,16 @@ void main() {
           _account('meta-request', 'meta', authType: 'oauth'),
           secret: jsonEncode({'dca_token': 'dca:request-token'}),
         );
-        final client = LlmConnectorHttpClient(
-          accountService: accounts,
-          dio: dio,
-        );
 
-        await client.request(
-          account: account,
-          modelId: 'muse-code-model',
-          body: const {'model': 'muse-code-model', 'input': []},
+        await expectLater(
+          LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+            account: account,
+            modelId: 'muse-code-model',
+            body: const {'model': 'muse-code-model', 'input': []},
+          ),
+          throwsA(isA<LlmConnectorAuthenticationRequired>()),
         );
-
-        expect(minted, isTrue);
-        expect(
-          modelRequest?.uri.toString(),
-          'https://api.meta.ai/v1/responses',
-        );
-        expect(
-          modelRequest?.headers['Authorization'],
-          'Bearer meta-minted-key',
-        );
-        expect(modelRequest?.headers['User-Agent'], startsWith('muse-build/'));
-        expect(modelRequest?.headers['X-Client-Id'], 'tbh:tui');
+        expect(requestsSent, 0);
       },
     );
 
@@ -2546,7 +2696,10 @@ void main() {
       );
       final account = await accounts.saveAccount(
         _account('codex-http', 'codex', authType: 'oauth'),
-        secret: jsonEncode({'access_token': 'private-access-token'}),
+        secret: jsonEncode({
+          'access_token': 'private-access-token',
+          'client_id': 'registered-openai-client',
+        }),
       );
       final client = LlmConnectorHttpClient(accountService: accounts, dio: dio);
 
@@ -2556,10 +2709,7 @@ void main() {
         body: const {'model': 'gpt-5.5', 'input': []},
       );
 
-      expect(
-        captured?.uri.toString(),
-        'https://chatgpt.com/backend-api/codex/responses',
-      );
+      expect(captured?.uri.toString(), 'https://api.openai.com/v1/responses');
       expect(captured?.headers['Authorization'], 'Bearer private-access-token');
       expect(response.statusCode, 200);
       expect(response.body, containsPair('id', 'resp-1'));
@@ -2617,18 +2767,12 @@ void main() {
       },
     );
 
-    test('combines Claude Code usage from native stream events', () async {
-      final source = StreamController<Uint8List>();
+    test('does not route Claude Code CLI OAuth to the Messages API', () async {
+      var requestsSent = 0;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
-          expect(options.responseType, ResponseType.stream);
-          return ResponseBody(
-            source.stream,
-            200,
-            headers: const {
-              'content-type': ['text/event-stream'],
-            },
-          );
+          requestsSent++;
+          return ResponseBody.fromString('{}', 200);
         });
       final accounts = LlmAccountConnectorService(
         preferences: _MemoryPreferences(),
@@ -2638,29 +2782,17 @@ void main() {
         _account('claude-stream-usage', 'claude', authType: 'oauth'),
         secret: jsonEncode({'access_token': 'claude-stream-token'}),
       );
-      final response = await LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'claude-sonnet-4-6',
-        body: const {'model': 'claude-sonnet-4-6', 'messages': []},
-        stream: true,
-      );
 
-      final events = utf8.encode(
-        'event: message_start\n'
-        'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":0}}}\n\n'
-        'event: message_delta\n'
-        'data: {"type":"message_delta","usage":{"output_tokens":4}}\n\n',
+      await expectLater(
+        LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'claude-sonnet-4-6',
+          body: const {'model': 'claude-sonnet-4-6', 'messages': []},
+          stream: true,
+        ),
+        throwsA(isA<LlmConnectorAuthenticationRequired>()),
       );
-      source.add(Uint8List.fromList(events));
-      await source.close();
-      final delivered = await (response.body as Stream<List<int>>).toList();
-      final observation = await response.completedObservation;
-
-      expect(delivered, hasLength(1));
-      expect(observation?.requestUsage.value, 9);
+      expect(requestsSent, 0);
     });
 
     test(
@@ -2904,7 +3036,10 @@ void main() {
         );
         final account = await accounts.saveAccount(
           _account('codex-refresh-only', 'codex', authType: 'oauth'),
-          secret: jsonEncode({'refresh_token': 'private-refresh-token'}),
+          secret: jsonEncode({
+            'refresh_token': 'private-refresh-token',
+            'client_id': 'registered-openai-client',
+          }),
         );
 
         await LlmConnectorHttpClient(
@@ -3031,6 +3166,7 @@ void main() {
           secret: jsonEncode({
             'access_token': 'expired-access-token',
             'refresh_token': 'old-refresh-token',
+            'client_id': 'registered-openai-client',
           }),
         );
         final client = LlmConnectorHttpClient(
@@ -3053,62 +3189,63 @@ void main() {
       },
     );
 
-    test('cancels an in-flight OAuth refresh without persisting new tokens',
-        () async {
-      final refreshStarted = Completer<void>();
-      final finishRefresh = Completer<void>();
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          if (options.uri.host == 'auth.openai.com') {
-            refreshStarted.complete();
-            await finishRefresh.future;
-            return ResponseBody.fromString(
-              jsonEncode({'access_token': 'rotated-access-token'}),
-              200,
-              headers: const {
-                'content-type': ['application/json'],
-              },
-            );
-          }
-          return ResponseBody.fromString('{}', 200);
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-        dio: dio,
-      );
-      final account = await accounts.saveAccount(
-        _account('codex-refresh-cancel', 'codex', authType: 'oauth'),
-        secret: jsonEncode({
-          'access_token': 'expired-access-token',
-          'refresh_token': 'old-refresh-token',
-          'expires_at': DateTime.utc(2000).toIso8601String(),
-        }),
-      );
-      final cancelToken = CancelToken();
-      final request = LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'gpt-5.5',
-        body: const {'model': 'gpt-5.5', 'input': []},
-        cancelToken: cancelToken,
-      );
+    test(
+      'cancels an in-flight OAuth refresh without persisting new tokens',
+      () async {
+        final refreshStarted = Completer<void>();
+        final finishRefresh = Completer<void>();
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            if (options.uri.host == 'auth.openai.com') {
+              refreshStarted.complete();
+              await finishRefresh.future;
+              return ResponseBody.fromString(
+                jsonEncode({'access_token': 'rotated-access-token'}),
+                200,
+                headers: const {
+                  'content-type': ['application/json'],
+                },
+              );
+            }
+            return ResponseBody.fromString('{}', 200);
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+          dio: dio,
+        );
+        final account = await accounts.saveAccount(
+          _account('codex-refresh-cancel', 'codex', authType: 'oauth'),
+          secret: jsonEncode({
+            'access_token': 'expired-access-token',
+            'refresh_token': 'old-refresh-token',
+            'client_id': 'registered-openai-client',
+            'expires_at': DateTime.utc(2000).toIso8601String(),
+          }),
+        );
+        final cancelToken = CancelToken();
+        final request =
+            LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'gpt-5.5',
+          body: const {'model': 'gpt-5.5', 'input': []},
+          cancelToken: cancelToken,
+        );
 
-      await refreshStarted.future;
-      cancelToken.cancel('caller cancelled');
-      finishRefresh.complete();
+        await refreshStarted.future;
+        cancelToken.cancel('caller cancelled');
+        finishRefresh.complete();
 
-      await expectLater(
-        request,
-        throwsA(isA<LlmConnectorRequestCancelled>()),
-      );
-      final storedCredential = jsonDecode(
-        (await accounts.readCredential(account.id))!,
-      );
-      expect(storedCredential['access_token'], 'expired-access-token');
-    });
+        await expectLater(
+          request,
+          throwsA(isA<LlmConnectorRequestCancelled>()),
+        );
+        final storedCredential = jsonDecode(
+          (await accounts.readCredential(account.id))!,
+        );
+        expect(storedCredential['access_token'], 'expired-access-token');
+      },
+    );
 
     test('does not expose upstream error text or credentials', () async {
       final dio = Dio()
@@ -3151,57 +3288,57 @@ void main() {
       }
     });
 
-    test('cancels unread error response streams before reporting failure',
-        () async {
-      var responseStreamCancelled = false;
-      final source = StreamController<Uint8List>(
-        onCancel: () => responseStreamCancelled = true,
-      );
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter(
-          (options) async => ResponseBody(
-            source.stream,
-            500,
-            headers: const {
-              'content-type': ['application/json'],
-            },
+    test(
+      'cancels unread error response streams before reporting failure',
+      () async {
+        var responseStreamCancelled = false;
+        final source = StreamController<Uint8List>(
+          onCancel: () => responseStreamCancelled = true,
+        );
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter(
+            (options) async => ResponseBody(
+              source.stream,
+              500,
+              headers: const {
+                'content-type': ['application/json'],
+              },
+            ),
+          );
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          LlmAccount(
+            id: 'compat-stream-error',
+            connectorType: 'openai-compatibility',
+            authType: 'api_key',
+            displayName: 'Private endpoint',
+            endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
           ),
+          secret: 'custom-private-api-key',
         );
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final account = await accounts.saveAccount(
-        LlmAccount(
-          id: 'compat-stream-error',
-          connectorType: 'openai-compatibility',
-          authType: 'api_key',
-          displayName: 'Private endpoint',
-          endpointConfig: const {'baseUrl': 'https://llm.example.test/v1'},
-        ),
-        secret: 'custom-private-api-key',
-      );
-      final request = LlmConnectorHttpClient(
-        accountService: accounts,
-        dio: dio,
-      ).request(
-        account: account,
-        modelId: 'private-model',
-        body: const {'model': 'private-model', 'messages': []},
-        stream: true,
-      );
+        final request =
+            LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
+          account: account,
+          modelId: 'private-model',
+          body: const {'model': 'private-model', 'messages': []},
+          stream: true,
+        );
 
-      try {
-        await expectLater(
-          request.timeout(const Duration(milliseconds: 100)),
-          throwsA(isA<LlmConnectorHttpException>()),
-        );
-        await Future<void>.delayed(Duration.zero);
-        expect(responseStreamCancelled, isTrue);
-      } finally {
-        await source.close();
-      }
-    });
+        try {
+          await expectLater(
+            request.timeout(const Duration(milliseconds: 100)),
+            throwsA(isA<LlmConnectorHttpException>()),
+          );
+          await Future<void>.delayed(Duration.zero);
+          expect(responseStreamCancelled, isTrue);
+        } finally {
+          await source.close();
+        }
+      },
+    );
   });
 
   group('LlmConnectorQuotaService', () {
@@ -3253,58 +3390,47 @@ void main() {
       }
     });
 
-    test(
-      'reads Antigravity credits from loadCodeAssist without changing units',
-      () async {
-        RequestOptions? captured;
-        final dio = Dio()
-          ..httpClientAdapter = _FunctionalAdapter((options) async {
-            captured = options;
-            return ResponseBody.fromString(
-              jsonEncode({
-                'paidTier': {
-                  'id': 'tier-1',
-                  'availableCredits': [
-                    {
-                      'creditType': 'GOOGLE_ONE_AI',
-                      'creditAmount': '25000',
-                      'minimumCreditAmountForUsage': '50',
-                    },
-                  ],
-                },
-              }),
-              200,
-              headers: const {
-                'content-type': ['application/json'],
+    test('does not query private Antigravity quota endpoints', () async {
+      RequestOptions? captured;
+      final dio = Dio()
+        ..httpClientAdapter = _FunctionalAdapter((options) async {
+          captured = options;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'paidTier': {
+                'id': 'tier-1',
+                'availableCredits': [
+                  {
+                    'creditType': 'GOOGLE_ONE_AI',
+                    'creditAmount': '25000',
+                    'minimumCreditAmountForUsage': '50',
+                  },
+                ],
               },
-            );
-          });
-        final accounts = LlmAccountConnectorService(
-          preferences: _MemoryPreferences(),
-          credentialStore: _MemoryCredentials(),
-        );
-        final account = await accounts.saveAccount(
-          _account('antigravity-quota', 'antigravity', authType: 'oauth'),
-          secret: jsonEncode({'access_token': 'antigravity-access-token'}),
-        );
+            }),
+            200,
+            headers: const {
+              'content-type': ['application/json'],
+            },
+          );
+        });
+      final accounts = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentials(),
+      );
+      final account = await accounts.saveAccount(
+        _account('antigravity-quota', 'antigravity', authType: 'oauth'),
+        secret: jsonEncode({'access_token': 'antigravity-access-token'}),
+      );
 
-        final observation = await LlmConnectorQuotaService(
-          accountService: accounts,
-          dio: dio,
-        ).observeAccountQuota(account);
+      final observation = await LlmConnectorQuotaService(
+        accountService: accounts,
+        dio: dio,
+      ).observeAccountQuota(account);
 
-        expect(
-          captured?.uri.toString(),
-          'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
-        );
-        expect(
-          captured?.headers['Authorization'],
-          'Bearer antigravity-access-token',
-        );
-        expect(observation.remainingQuota.value, 25000);
-        expect(observation.remainingQuota.unit, 'credits');
-      },
-    );
+      expect(captured, isNull);
+      expect(observation.remainingQuota.isKnown, isFalse);
+    });
 
     test(
       'does not send refresh-only OAuth bundles to quota endpoints',
@@ -3328,14 +3454,12 @@ void main() {
           secret: jsonEncode({'refresh_token': 'private-refresh-token'}),
         );
 
-        await expectLater(
-          LlmConnectorQuotaService(
-            accountService: accounts,
-            dio: dio,
-          ).observeAccountQuota(account),
-          throwsA(isA<LlmConnectorQuotaException>()),
-        );
+        final observation = await LlmConnectorQuotaService(
+          accountService: accounts,
+          dio: dio,
+        ).observeAccountQuota(account);
         expect(quotaRequestSent, isFalse);
+        expect(observation.remainingQuota.isKnown, isFalse);
       },
     );
 
@@ -3357,14 +3481,12 @@ void main() {
           secret: jsonEncode([]),
         );
 
-        await expectLater(
-          LlmConnectorQuotaService(
-            accountService: accounts,
-            dio: dio,
-          ).observeAccountQuota(account),
-          throwsA(isA<LlmConnectorQuotaException>()),
-        );
+        final observation = await LlmConnectorQuotaService(
+          accountService: accounts,
+          dio: dio,
+        ).observeAccountQuota(account);
         expect(quotaRequestSent, isFalse);
+        expect(observation.remainingQuota.isKnown, isFalse);
       },
     );
 
@@ -3389,18 +3511,16 @@ void main() {
           secret: jsonEncode({'session_token': 'private-session-token'}),
         );
 
-        await expectLater(
-          LlmConnectorQuotaService(
-            accountService: accounts,
-            dio: dio,
-          ).observeAccountQuota(account),
-          throwsA(isA<LlmConnectorQuotaException>()),
-        );
+        final observation = await LlmConnectorQuotaService(
+          accountService: accounts,
+          dio: dio,
+        ).observeAccountQuota(account);
         expect(quotaRequestSent, isFalse);
+        expect(observation.remainingQuota.isKnown, isFalse);
       },
     );
 
-    test('refreshes an expired Antigravity token after a quota 401', () async {
+    test('does not refresh Antigravity CLI OAuth for quota requests', () async {
       var quotaRequests = 0;
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -3451,8 +3571,8 @@ void main() {
         dio: dio,
       ).observeAccountQuota(account);
 
-      expect(quotaRequests, 2);
-      expect(observation.remainingQuota.value, 7);
+      expect(quotaRequests, 0);
+      expect(observation.remainingQuota.isKnown, isFalse);
     });
 
     test(
@@ -3502,43 +3622,45 @@ void main() {
       },
     );
 
-    test('ignores Devin reset timestamps outside the supported date range',
-        () async {
-      final dio = Dio()
-        ..httpClientAdapter = _FunctionalAdapter((options) async {
-          return ResponseBody.fromBytes(
-            _devinQuotaResponse(
-              daily: 91,
-              weekly: 47,
-              dailyReset: 8640000000001,
-            ),
-            200,
-            headers: const {
-              'content-type': ['application/proto'],
-            },
-          );
-        });
-      final accounts = LlmAccountConnectorService(
-        preferences: _MemoryPreferences(),
-        credentialStore: _MemoryCredentials(),
-      );
-      final account = await accounts.saveAccount(
-        _account('devin-invalid-reset', 'devin', authType: 'session_token'),
-        secret: 'devin-session-token',
-      );
+    test(
+      'ignores Devin reset timestamps outside the supported date range',
+      () async {
+        final dio = Dio()
+          ..httpClientAdapter = _FunctionalAdapter((options) async {
+            return ResponseBody.fromBytes(
+              _devinQuotaResponse(
+                daily: 91,
+                weekly: 47,
+                dailyReset: 8640000000001,
+              ),
+              200,
+              headers: const {
+                'content-type': ['application/proto'],
+              },
+            );
+          });
+        final accounts = LlmAccountConnectorService(
+          preferences: _MemoryPreferences(),
+          credentialStore: _MemoryCredentials(),
+        );
+        final account = await accounts.saveAccount(
+          _account('devin-invalid-reset', 'devin', authType: 'session_token'),
+          secret: 'devin-session-token',
+        );
 
-      final observation = await LlmConnectorQuotaService(
-        accountService: accounts,
-        dio: dio,
-      ).observeAccountQuota(account);
+        final observation = await LlmConnectorQuotaService(
+          accountService: accounts,
+          dio: dio,
+        ).observeAccountQuota(account);
 
-      expect(observation.quotaSignals['dailyRemainingPercent']?.value, 91);
-      expect(
-        observation.quotaSignals['dailyRemainingPercent']?.resetAt,
-        isNull,
-      );
-      expect(observation.quotaSignals['weeklyRemainingPercent']?.value, 47);
-    });
+        expect(observation.quotaSignals['dailyRemainingPercent']?.value, 91);
+        expect(
+          observation.quotaSignals['dailyRemainingPercent']?.resetAt,
+          isNull,
+        );
+        expect(observation.quotaSignals['weeklyRemainingPercent']?.value, 47);
+      },
+    );
 
     test('rejects negative Devin remaining quota percentages', () async {
       final dio = Dio()

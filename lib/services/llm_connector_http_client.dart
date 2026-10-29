@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import '../models/llm_account.dart';
 import 'llm_ai_studio_webview_session_bridge.dart';
 import 'llm_connector_service.dart';
+import 'llm_oauth_flow.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -78,7 +79,7 @@ class LlmConnectorHttpClient {
         await onRequestSent?.call();
       }).then<void>(
         (_) {},
-        onError: (Object _, StackTrace __) {
+        onError: (Object _, StackTrace _) {
           requestSentMarkerFailed = true;
         },
       );
@@ -105,6 +106,12 @@ class LlmConnectorHttpClient {
         LlmConnectorRegistry.canonicalId(storedAccount.connectorType) !=
             LlmConnectorRegistry.canonicalId(account.connectorType)) {
       throw const LlmConnectorHttpException();
+    }
+    if (storedAccount.authType == 'oauth' &&
+        !LlmOAuthProviderPolicy.forProvider(
+          storedAccount.connectorType,
+        ).supported) {
+      throw const LlmConnectorAuthenticationRequired();
     }
     if (storedAccount.connectorType == 'antigravity') {
       try {
@@ -647,9 +654,7 @@ class LlmConnectorHttpClient {
       if (discardBody) {
         onErrorBodyLimitReached?.call();
       } else {
-        decodedBody = await _readFailureBody(
-          body,
-        );
+        decodedBody = await _readFailureBody(body);
       }
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) {
@@ -669,13 +674,9 @@ class LlmConnectorHttpClient {
     );
   }
 
-  static Future<Object?> _readFailureBody(
-    Object? body,
-  ) async {
+  static Future<Object?> _readFailureBody(Object? body) async {
     if (body is ResponseBody) {
-      return _decodeResponseBody(
-        await _readBoundedFailureStream(body.stream),
-      );
+      return _decodeResponseBody(await _readBoundedFailureStream(body.stream));
     }
     if (body is Stream<List<int>>) {
       return _decodeResponseBody(await _readBoundedFailureStream(body));

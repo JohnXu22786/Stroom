@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:stroom/ai_gateway/ai_gateway.dart';
-import 'package:stroom/src/ai_gateway/ai_gateway_facade.dart';
 import 'package:stroom/models/llm_account.dart';
 import 'package:stroom/providers/provider_config.dart';
 import 'package:stroom/services/llm_account_migration_service.dart';
@@ -16,6 +14,66 @@ import 'package:stroom/services/llm_model_group_provider.dart';
 import 'package:stroom/utils/provider_models.dart';
 
 void main() {
+  test('requires the OAuth flow for auth identity changes', () async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({});
+    final gateway = await _createTestGateway();
+    final codexApiKey = await gateway.accountManagement.saveAccount(
+      AiGatewayAccount(
+        id: 'codex-auth-transition',
+        connectorType: 'codex',
+        authType: 'api_key',
+        displayName: 'Codex',
+      ),
+      secret: 'codex-api-key',
+    );
+    final claudeApiKey = await gateway.accountManagement.saveAccount(
+      AiGatewayAccount(
+        id: 'claude-unsupported-oauth',
+        connectorType: 'claude',
+        authType: 'api_key',
+        displayName: 'Claude',
+      ),
+      secret: 'claude-api-key',
+    );
+
+    await expectLater(
+      gateway.accountManagement.saveAccount(
+        AiGatewayAccount(
+          id: codexApiKey.id,
+          connectorType: 'codex',
+          authType: 'oauth',
+          displayName: 'Codex',
+        ),
+      ),
+      throwsA(isA<AiGatewayOAuthException>()),
+    );
+    await expectLater(
+      gateway.accountManagement.saveAccount(
+        AiGatewayAccount(
+          id: codexApiKey.id,
+          connectorType: 'codex',
+          authType: 'oauth',
+          displayName: 'Codex',
+        ),
+        secret: jsonEncode({'access_token': 'fabricated-access-token'}),
+      ),
+      throwsA(isA<AiGatewayOAuthException>()),
+    );
+    await expectLater(
+      gateway.accountManagement.saveAccount(
+        AiGatewayAccount(
+          id: claudeApiKey.id,
+          connectorType: 'claude',
+          authType: 'oauth',
+          displayName: 'Claude Code',
+        ),
+        secret: jsonEncode({'access_token': 'cli-only-token'}),
+      ),
+      throwsA(isA<AiGatewayOAuthException>()),
+    );
+  });
+
   test('Gateway account and group DTOs project into selector configs', () {
     final account = AiGatewayAccount(
       id: 'account-a',
@@ -311,14 +369,20 @@ void main() {
 }
 
 class _MemoryCredentialStore implements LlmCredentialStore {
-  @override
-  Future<void> delete(String reference) async {}
+  final values = <String, String>{};
 
   @override
-  Future<String?> read(String reference) async => null;
+  Future<void> delete(String reference) async {
+    values.remove(reference);
+  }
 
   @override
-  Future<void> write(String reference, String value) async {}
+  Future<String?> read(String reference) async => values[reference];
+
+  @override
+  Future<void> write(String reference, String value) async {
+    values[reference] = value;
+  }
 }
 
 class _GatewayProviderCatalog implements AiGatewayProviderCatalog {

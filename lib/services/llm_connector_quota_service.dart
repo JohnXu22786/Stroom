@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/llm_account.dart';
 import 'llm_connector_service.dart';
+import 'llm_oauth_flow.dart';
 
 /// Queries the account-level signals the pinned upstream exposes directly.
 /// Other connectors return unknown unless their native request response itself
@@ -36,6 +37,10 @@ class LlmConnectorQuotaService {
         LlmConnectorRegistry.canonicalId(stored.connectorType) !=
             LlmConnectorRegistry.canonicalId(account.connectorType)) {
       throw const LlmConnectorQuotaException();
+    }
+    if (stored.authType == 'oauth' &&
+        !LlmOAuthProviderPolicy.forProvider(stored.connectorType).supported) {
+      return LlmConnectorObservation();
     }
     switch (stored.connectorType) {
       case 'antigravity':
