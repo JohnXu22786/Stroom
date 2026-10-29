@@ -3660,6 +3660,132 @@ void main() {
     expect(find.text('已选 1 张图片'), findsOneWidget);
   });
 
+  for (final laterImport in ['camera', 'app album']) {
+    testWidgets(
+      'successful $laterImport import clears an earlier system gallery error',
+      (tester) async {
+        final imageBytes = _createValidOcrTestImage().bytes;
+        if (laterImport == 'app album') {
+          await tester.runAsync(
+            () => _storeAppAlbumImage(
+              name: 'A_valid',
+              hash: 'ocr_gallery_error_then_app_album',
+              bytes: imageBytes,
+            ),
+          );
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                XFile.fromData(imageBytes, name: 'imported.png'),
+            testGalleryPicker: ({maxWidth, maxHeight, imageQuality}) async => [
+              _FailingPickerFile(
+                const FormatException('gallery image invalid'),
+              ),
+            ],
+            testImagePayloadPreparer: (bytes) async =>
+                prepareOcrImagePayloadSync(bytes),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('相册选择'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('从系统相册选择'));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        expect(find.text('gallery image invalid'), findsOneWidget);
+
+        if (laterImport == 'camera') {
+          await tester.tap(find.text('拍照识别'));
+          await tester.pumpAndSettle();
+        } else {
+          await tester.tap(find.text('相册选择'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('从应用相册选择'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+          await _pumpUntil(
+            tester,
+            () => find.text('A_valid.png').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.text('A_valid.png'));
+          await _pumpUntil(
+            tester,
+            () => find.text('确定 (1)').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('gallery image invalid'), findsNothing);
+        expect(find.byKey(const Key('ocr_grid_item_0')), findsOneWidget);
+        expect(find.text('已选 1 张图片'), findsOneWidget);
+      },
+    );
+  }
+
+  for (final laterImport in ['camera', 'app album']) {
+    testWidgets(
+      'successful $laterImport import preserves an unrelated OCR error',
+      (tester) async {
+        final imageBytes = _createValidOcrTestImage().bytes;
+        if (laterImport == 'app album') {
+          await tester.runAsync(
+            () => _storeAppAlbumImage(
+              name: 'A_valid',
+              hash: 'ocr_unrelated_error_then_app_album',
+              bytes: imageBytes,
+            ),
+          );
+        }
+
+        await tester.pumpWidget(
+          _buildTestApp(
+            testImages: [_createValidOcrTestImage()],
+            testCameraPicker: ({maxWidth, maxHeight, imageQuality}) async =>
+                XFile.fromData(imageBytes, name: 'imported.png'),
+            testImagePayloadPreparer: (bytes) async =>
+                prepareOcrImagePayloadSync(bytes),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('开始识别'));
+        await tester.pumpAndSettle();
+        const unrelatedError = '请先在设置中配置 OCR 供应商和模型';
+        expect(find.text(unrelatedError), findsOneWidget);
+
+        if (laterImport == 'camera') {
+          await tester.tap(find.text('拍照识别'));
+          await tester.pumpAndSettle();
+        } else {
+          await tester.tap(find.text('相册选择'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('从应用相册选择'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+          await _pumpUntil(
+            tester,
+            () => find.text('A_valid.png').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.text('A_valid.png'));
+          await _pumpUntil(
+            tester,
+            () => find.text('确定 (1)').evaluate().isNotEmpty,
+          );
+          await tester.tap(find.byKey(const Key('album_picker_confirm_btn')));
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text(unrelatedError), findsOneWidget);
+        expect(find.byKey(const Key('ocr_grid_item_1')), findsOneWidget);
+      },
+    );
+  }
+
   group('OcrPage - async image validation races', () {
     testWidgets(
       'folder picker started before OCR preflight cannot '

@@ -2019,6 +2019,7 @@ class _OcrPageState extends ConsumerState<OcrPage> {
                     ? _retryUnavailableMessage
                     : _retryReselectAllMessage(_requiredRetryImageCount!))
                 : null);
+        _lastImageImportErrorMessage = firstError;
         _updateRetryImageReselectionState();
       });
       if (firstError != null) {
