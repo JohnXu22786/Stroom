@@ -5961,7 +5961,6 @@ void main() {
 
         const tokenizingKey = 'tokenizing';
         const tokenizingPrompt = 'Please read $tokenizingKey instructions';
-        const redactedTokenizingPrompt = 'Please read [redacted] instructions';
         final tokenizingTask = taskFor(
           'legacy-ocr-short-token-word-verb-completion',
           [safePrompt, tokenizingPrompt],
@@ -5972,17 +5971,44 @@ void main() {
           OcrRetrySnapshot.fromMap(
             tokenizingTask.retryData!,
           ).instructionContent,
-          '$safePrompt\n$redactedTokenizingPrompt',
+          '$safePrompt\n$tokenizingPrompt',
         );
         expect(tokenizingPersisted, contains(safePrompt));
-        expect(tokenizingPersisted, contains(redactedTokenizingPrompt));
+        expect(tokenizingPersisted, contains(tokenizingPrompt));
         expect(
           OcrRetrySnapshot.fromMap(
             tokenizingTask.retryData!,
           ).instructionContent,
-          isNot(contains(tokenizingKey)),
+          contains(tokenizingKey),
         );
-        expect(tokenizingPersisted, isNot(contains(tokenizingKey)));
+        expect(tokenizingPersisted, contains(tokenizingKey));
+
+        const tokenizingCredentialEcho =
+            'Please use $tokenizingKey for the request';
+        final tokenizingCredentialTask = taskFor(
+          'legacy-ocr-tokenizing-prompt-with-credential-echo',
+          [safePrompt, tokenizingPrompt, tokenizingCredentialEcho],
+          credentialPrefix: 'token',
+        );
+        final tokenizingCredentialPersisted = jsonEncode(
+          tokenizingCredentialTask.toMap(),
+        );
+        final credentialTaskMap =
+            jsonDecode(tokenizingCredentialPersisted) as Map<String, dynamic>;
+        final credentialRetryData =
+            credentialTaskMap['retryData'] as Map<String, dynamic>;
+        const instructionWithRedactedTokenizingEcho =
+            '$safePrompt\n$tokenizingPrompt\nPlease use [redacted] for the request';
+        expect(
+          OcrRetrySnapshot.fromMap(
+            tokenizingCredentialTask.retryData!,
+          ).instructionContent,
+          instructionWithRedactedTokenizingEcho,
+        );
+        expect(
+          credentialRetryData['instructionContent'],
+          instructionWithRedactedTokenizingEcho,
+        );
 
         const tokenizePrompt = 'Please tokenize the receipt';
         final tokenizeTask = taskFor(

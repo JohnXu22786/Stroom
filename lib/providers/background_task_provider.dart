@@ -1032,6 +1032,20 @@ bool _legacyOcrHasEmbeddedShortMaskCredential(
   final hasCredentialUseContext = text != null &&
       match != null &&
       _legacyOcrHasCredentialUseContext(text, match, prefix, continuation);
+  final ordinaryReadInstructionsPrompt = text != null &&
+      match != null &&
+      _legacyOcrHasNaturalWordContinuation(prefix, continuation) &&
+      RegExp(
+        r'\b(?:please\s+)?read\s*$',
+        caseSensitive: false,
+      ).hasMatch(text.substring(0, match.start)) &&
+      RegExp(
+        r'^instructions?\b',
+        caseSensitive: false,
+      ).hasMatch(text.substring(match.end).trimLeft());
+  if (ordinaryReadInstructionsPrompt && !hasCredentialUseContext) {
+    return false;
+  }
   final hasNumericMarker = RegExp(
     r'[\p{N}_]',
     unicode: true,
@@ -2005,6 +2019,19 @@ String _legacyOcrRedactMaskedCredentialEchoes(
       final hasCredentialUseContext = splitEchoHasCredentialUseContext ||
           bareSecretBasedUseContext ||
           authenticateWithToProcessContext;
+      final naturalReadInstructionsPrompt =
+          _legacyOcrHasNaturalWordContinuation(prefix, echoSuffix) &&
+              RegExp(
+                r'\b(?:please\s+)?read\s*$',
+                caseSensitive: false,
+              ).hasMatch(beforeEcho) &&
+              RegExp(
+                r'^instructions?\b',
+                caseSensitive: false,
+              ).hasMatch(afterEcho.trimLeft());
+      final ordinaryNaturalPromptContext =
+          naturalReadInstructionsPrompt && !hasCredentialUseContext;
+      if (ordinaryNaturalPromptContext) return match.group(0)!;
       final hasRepeatedStructuredSuffix = allowEmbeddedPrefix &&
           _legacyOcrHasRepeatedHyphenatedAlphaComponent(prefix, echoSuffix);
       final hasAuthorizationConnectorAfterEcho = RegExp(
@@ -2184,11 +2211,11 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       (!_legacyOcrIsCredentialWord(naturalWord) ||
           naturalCredentialProcessSentenceWord) &&
       RegExp(
-        r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+        r'\b(?:please\s+)?read\s*(?:(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(
-        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide)\b',
+        r'^(?:label|document|receipt|invoice|record|image|sign|form|chart|page|sheet|table|login|guide|instructions?)\b',
         caseSensitive: false,
       ).hasMatch(after);
   final naturalNounInstructionPrompt = RegExp(
