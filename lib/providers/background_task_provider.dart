@@ -2211,7 +2211,7 @@ bool _legacyOcrHasOrdinaryNaturalPromptContext(
       (!_legacyOcrIsCredentialWord(naturalWord) ||
           naturalCredentialProcessSentenceWord) &&
       RegExp(
-        r'\b(?:please\s+)?read\s+(?:(?:the|this|that|these|those|a|an))?$',
+        r'\b(?:please\s+)?read\s*(?:(?:the|this|that|these|those|a|an))?$',
         caseSensitive: false,
       ).hasMatch(before) &&
       RegExp(
