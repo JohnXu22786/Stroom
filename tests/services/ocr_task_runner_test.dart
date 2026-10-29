@@ -503,6 +503,15 @@ void main() {
     'service setup failure terminalizes the running page outcome',
     () async {
       var serviceCreations = 0;
+      final setupFailurePublished = Completer<void>();
+      notifier.addListener((tasks) {
+        if (!setupFailurePublished.isCompleted &&
+            tasks.single.ocrPageOutcomes.length == 2 &&
+            tasks.single.ocrPageOutcomes[1].status ==
+                OcrPageOutcomeStatus.failed) {
+          setupFailurePublished.complete();
+        }
+      }, fireImmediately: false);
       final setupFailureRunner = OcrTaskRunner(
         taskId: id,
         notifier: notifier,
@@ -512,7 +521,7 @@ void main() {
           (Uint8List.fromList([2]), 'png'),
         ],
         executionMode: OcrBatchMode.perImage,
-        perImageConcurrency: 1,
+        perImageConcurrency: 2,
         title: 'owned',
         folder: 'captured folder',
         serviceFactory: (config) {
@@ -530,7 +539,14 @@ void main() {
       );
 
       final running = setupFailureRunner.run();
-      await adapter.requested.future;
+      final request = await adapter.requested.future;
+      await setupFailurePublished.future;
+
+      request.onSendProgress!(10, 10);
+      final stepsDuringOtherPageRequest = notifier.state.single.steps;
+      expect(stepsDuringOtherPageRequest[1].status, BgStepStatus.pending);
+      expect(stepsDuringOtherPageRequest[2].status, BgStepStatus.running);
+
       adapter.succeed();
       await running;
 
@@ -546,6 +562,8 @@ void main() {
         ),
         isTrue,
       );
+      expect(task.steps[1].status, isNot(BgStepStatus.completed));
+      expect(task.steps[2].status, isNot(BgStepStatus.completed));
     },
   );
 
