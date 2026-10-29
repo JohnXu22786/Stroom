@@ -4037,6 +4037,43 @@ void main() {
   });
 
   group('OcrPage - request size budget', () {
+    testWidgets('shows distinct sub-0.005 MiB request and limit sizes', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          entries: [_createOcrEntry()],
+          testImages: [_createTestImage()],
+          testRequestSizePreflight: (_, _) async => 4200,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> pumpDialogTransition() async {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+
+      await tester.tap(find.byKey(const Key('ocr_request_budget_mib')));
+      await pumpDialogTransition();
+      await tester.enterText(
+        find.byKey(const Key('ocr_request_budget_editor_mib')),
+        '0.003',
+      );
+      await tester.tap(find.byKey(const Key('ocr_save_request_budget')));
+      await pumpDialogTransition();
+
+      await tester.tap(find.text('开始识别'));
+      await pumpDialogTransition();
+
+      expect(
+        find.text('当前 JSON 请求约为 0.00400543 MiB，超过 0.00300026 MiB 上限。'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('取消').last);
+      await pumpDialogTransition();
+    });
+
     testWidgets('reused per-image results skip request size preflight', (
       tester,
     ) async {
