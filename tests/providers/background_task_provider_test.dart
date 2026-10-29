@@ -5993,6 +5993,10 @@ void main() {
         final tokenizingCredentialPersisted = jsonEncode(
           tokenizingCredentialTask.toMap(),
         );
+        final tokenizingCredentialPersistedMap =
+            jsonDecode(tokenizingCredentialPersisted) as Map<String, dynamic>;
+        final tokenizingCredentialPersistedRetryData =
+            tokenizingCredentialPersistedMap['retryData'] as Map<String, dynamic>;
         const instructionWithRedactedTokenizingEcho =
             '$safePrompt\n$tokenizingPrompt\nPlease use [redacted] for the request';
         expect(
@@ -6002,8 +6006,8 @@ void main() {
           instructionWithRedactedTokenizingEcho,
         );
         expect(
-          tokenizingCredentialPersisted,
-          contains(instructionWithRedactedTokenizingEcho),
+          tokenizingCredentialPersistedRetryData['instructionContent'],
+          instructionWithRedactedTokenizingEcho,
         );
 
         const tokenizePrompt = 'Please tokenize the receipt';
