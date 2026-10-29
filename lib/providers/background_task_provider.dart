@@ -2450,11 +2450,14 @@ Map<String, dynamic>? _retryDataFromTaskMap(Map<String, dynamic> map) {
 
 List<OcrPageOutcome> _ocrPageOutcomesFromTaskMap(dynamic rawOutcomes) {
   if (rawOutcomes is! List) return const [];
-  final outcomes = <OcrPageOutcome>[];
+  final outcomesByImageIndex = <int, OcrPageOutcome>{};
   for (final rawOutcome in rawOutcomes) {
     final outcome = OcrPageOutcome.fromMap(rawOutcome);
-    if (outcome != null) outcomes.add(outcome);
+    if (outcome != null) {
+      outcomesByImageIndex.putIfAbsent(outcome.imageIndex, () => outcome);
+    }
   }
+  final outcomes = outcomesByImageIndex.values.toList();
   outcomes.sort((a, b) => a.imageIndex.compareTo(b.imageIndex));
   return List.unmodifiable(outcomes);
 }
