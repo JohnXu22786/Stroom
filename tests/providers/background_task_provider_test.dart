@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:stroom/models/ocr_batch_execution.dart';
 import 'package:stroom/pages/ocr/ocr_retry_snapshot.dart';
 import 'package:stroom/providers/background_task_provider.dart';
 import 'package:stroom/providers/task_provider.dart';
@@ -865,6 +866,45 @@ void main() {
         expect(restored.steps[0].completed, task.steps[0].completed);
       },
     );
+
+    test('restoring OCR page outcomes keeps the first result per image', () {
+      const intended = OcrPageOutcome(
+        imageIndex: 0,
+        status: OcrPageOutcomeStatus.succeeded,
+        text: 'intended result',
+      );
+      const duplicate = OcrPageOutcome(
+        imageIndex: 0,
+        status: OcrPageOutcomeStatus.succeeded,
+        text: 'stale duplicate result',
+      );
+      const otherImage = OcrPageOutcome(
+        imageIndex: 1,
+        status: OcrPageOutcomeStatus.succeeded,
+        text: 'other image result',
+      );
+      final task = BackgroundTask(
+        id: 'ocr-duplicates',
+        type: BackgroundTaskType.ocr,
+        title: 'OCR with duplicate outcomes',
+        createdAt: DateTime.utc(2025),
+        ocrPageOutcomes: const [intended, otherImage],
+      );
+      final persisted = task.toMap()
+        ..['ocrPageOutcomes'] = [
+          intended.toMap(),
+          otherImage.toMap(),
+          duplicate.toMap(),
+        ];
+
+      final restored = BackgroundTask.fromMap(persisted);
+
+      expect(restored.ocrPageOutcomes, hasLength(2));
+      expect(restored.ocrPageOutcomes[0].imageIndex, 0);
+      expect(restored.ocrPageOutcomes[0].text, 'intended result');
+      expect(restored.ocrPageOutcomes[1].imageIndex, 1);
+      expect(restored.ocrPageOutcomes[1].text, 'other image result');
+    });
 
     test('toMap/fromMap with failed task preserves error', () {
       final notifier = BackgroundTaskNotifier();
