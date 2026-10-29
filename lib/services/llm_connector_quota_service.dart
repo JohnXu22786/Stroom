@@ -20,15 +20,14 @@ class LlmConnectorQuotaService {
     required this.accountService,
     Dio? dio,
     DateTime Function()? clock,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: const Duration(seconds: 10),
-               receiveTimeout: const Duration(seconds: 30),
-             ),
-           ),
-       _clock = clock ?? DateTime.now;
+  })  : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            ),
+        _clock = clock ?? DateTime.now;
 
   Future<LlmConnectorObservation> observeAccountQuota(
     LlmAccount account,
@@ -71,8 +70,8 @@ class LlmConnectorQuotaService {
     final configuredAgent = account.endpointConfig['userAgent'];
     final userAgent =
         configuredAgent is String && configuredAgent.trim().isNotEmpty
-        ? configuredAgent.trim()
-        : kLlmAntigravityRequestUserAgent;
+            ? configuredAgent.trim()
+            : kLlmAntigravityRequestUserAgent;
     Object? body;
     try {
       body = await _post(
@@ -255,11 +254,11 @@ class LlmConnectorQuotaService {
       final acceptedKeys = switch (account.authType) {
         'oauth' => const {'access_token', 'accessToken'},
         'session_token' => const {
-          'session_token',
-          'sessionToken',
-          'access_token',
-          'accessToken',
-        },
+            'session_token',
+            'sessionToken',
+            'access_token',
+            'accessToken',
+          },
         _ => const <String>{},
       };
       for (final key in bundleKeys) {
@@ -330,13 +329,13 @@ Uint8List _buildDevinUserStatusRequest(String sessionToken, String seed) {
 }
 
 String _goosName(TargetPlatform platform) => switch (platform) {
-  TargetPlatform.android => 'android',
-  TargetPlatform.iOS => 'ios',
-  TargetPlatform.linux => 'linux',
-  TargetPlatform.macOS => 'darwin',
-  TargetPlatform.windows => 'windows',
-  TargetPlatform.fuchsia => 'fuchsia',
-};
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.linux => 'linux',
+      TargetPlatform.macOS => 'darwin',
+      TargetPlatform.windows => 'windows',
+      TargetPlatform.fuchsia => 'fuchsia',
+    };
 
 String _devinFingerprint(String seed) {
   final value = StringBuffer();
@@ -383,12 +382,10 @@ _DevinQuotaStatus _parseDevinQuotaResponse(Uint8List response) {
   final dailyReset = _protoScalar(fields, 17);
   final weeklyReset = _protoScalar(fields, 18);
   return _DevinQuotaStatus(
-    dailyRemainingPercent: daily != null && daily >= 0 && daily <= 100
-        ? daily
-        : null,
-    weeklyRemainingPercent: weekly != null && weekly >= 0 && weekly <= 100
-        ? weekly
-        : null,
+    dailyRemainingPercent:
+        daily != null && daily >= 0 && daily <= 100 ? daily : null,
+    weeklyRemainingPercent:
+        weekly != null && weekly >= 0 && weekly <= 100 ? weekly : null,
     dailyResetAt: _dateFromEpoch(dailyReset),
     weeklyResetAt: _dateFromEpoch(weeklyReset),
   );

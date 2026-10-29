@@ -14,14 +14,13 @@ class LlmOAuthTokenClient {
   final Dio _dio;
 
   LlmOAuthTokenClient({Dio? dio})
-    : _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-            ),
-          );
+      : _dio = dio ??
+            Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 10),
+                receiveTimeout: const Duration(seconds: 30),
+              ),
+            );
 
   Future<Map<String, dynamic>> exchangeOpenAiChatGpt({
     required LlmOAuthAuthorizationAttempt attempt,
@@ -186,8 +185,8 @@ class LlmOAuthTokenClient {
     final seconds = expiresIn is num
         ? expiresIn.toInt()
         : expiresIn is String
-        ? int.tryParse(expiresIn)
-        : null;
+            ? int.tryParse(expiresIn)
+            : null;
     return <String, dynamic>{
       'access_token': _nonEmptyString(token['access_token'])!,
       'refresh_token': _nonEmptyString(token['refresh_token'])!,

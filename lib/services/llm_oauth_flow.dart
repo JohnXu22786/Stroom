@@ -100,8 +100,7 @@ class LlmOAuthAuthorizationAttempt {
   static const openAiTokenEndpoint =
       'https://auth.openai.com/api/accounts/oauth/token';
   static const geminiTokenEndpoint = 'https://oauth2.googleapis.com/token';
-  static const geminiScope =
-      'https://www.googleapis.com/auth/cloud-platform '
+  static const geminiScope = 'https://www.googleapis.com/auth/cloud-platform '
       'https://www.googleapis.com/auth/generative-language.retriever';
 
   final Uri redirectUri;

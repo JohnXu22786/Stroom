@@ -100,13 +100,9 @@ void main() {
         );
 
         expect(await service.readCredential(account.id), 'old-secret');
-        final saved =
-            (jsonDecode(
-                      preferences.values[LlmAccountMigrationService
-                          .accountsPreferenceKey]!,
-                    )
-                    as Map)['items']
-                as List;
+        final saved = (jsonDecode(
+          preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+        ) as Map)['items'] as List;
         expect(saved.single['credentialRef'], savedAccount.credentialRef);
       },
     );
@@ -296,26 +292,26 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-              'version': 1,
-              'items': [
-                {
-                  'id': 'legacy-anthropic',
-                  'connectorType': 'anthropic',
-                  'authType': 'api_key',
-                  'displayName': 'Legacy Anthropic',
-                  'credentialRef': sharedRef,
-                  'endpointConfig': {'host': 'https://claude.example.test'},
-                },
-                {
-                  'id': 'legacy-openai',
-                  'connectorType': 'openai',
-                  'authType': 'api_key',
-                  'displayName': 'Legacy OpenAI',
-                  'credentialRef': 'legacy-openai-credential',
-                  'endpointConfig': {'host': 'https://openai.example.test/v1'},
-                },
-              ],
-            });
+          'version': 1,
+          'items': [
+            {
+              'id': 'legacy-anthropic',
+              'connectorType': 'anthropic',
+              'authType': 'api_key',
+              'displayName': 'Legacy Anthropic',
+              'credentialRef': sharedRef,
+              'endpointConfig': {'host': 'https://claude.example.test'},
+            },
+            {
+              'id': 'legacy-openai',
+              'connectorType': 'openai',
+              'authType': 'api_key',
+              'displayName': 'Legacy OpenAI',
+              'credentialRef': 'legacy-openai-credential',
+              'endpointConfig': {'host': 'https://openai.example.test/v1'},
+            },
+          ],
+        });
         credentials.values[sharedRef] = 'legacy-claude-key';
         credentials.values['legacy-openai-credential'] = 'legacy-openai-key';
 
@@ -372,19 +368,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-              'version': 1,
-              'items': [
-                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-                  {
-                    'id': id,
-                    'connectorType': 'codex',
-                    'authType': 'oauth',
-                    'displayName': id,
-                    'credentialRef': sharedRef,
-                    'endpointConfig': {},
-                  },
-              ],
-            });
+          'version': 1,
+          'items': [
+            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+              {
+                'id': id,
+                'connectorType': 'codex',
+                'authType': 'oauth',
+                'displayName': id,
+                'credentialRef': sharedRef,
+                'endpointConfig': {},
+              },
+          ],
+        });
         const oldSecret = '{"access_token":"shared-old-token"}';
         credentials.values[sharedRef] = oldSecret;
         final accounts = await service.listAccounts();
@@ -425,19 +421,19 @@ void main() {
         const sharedRef = 'legacy-shared-credential';
         preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
             jsonEncode({
-              'version': 1,
-              'items': [
-                for (final id in ['legacy-owner-one', 'legacy-owner-two'])
-                  {
-                    'id': id,
-                    'connectorType': 'codex',
-                    'authType': 'oauth',
-                    'displayName': id,
-                    'credentialRef': sharedRef,
-                    'endpointConfig': {},
-                  },
-              ],
-            });
+          'version': 1,
+          'items': [
+            for (final id in ['legacy-owner-one', 'legacy-owner-two'])
+              {
+                'id': id,
+                'connectorType': 'codex',
+                'authType': 'oauth',
+                'displayName': id,
+                'credentialRef': sharedRef,
+                'endpointConfig': {},
+              },
+          ],
+        });
         credentials.values[sharedRef] = '{"access_token":"shared-token"}';
 
         await service.deleteAccount('legacy-owner-one');
@@ -1413,9 +1409,8 @@ void main() {
           'kimi.ai',
           'xai',
         ]) {
-          final endpoint = connector == 'xai'
-              ? 'https://auth.x.ai/oauth/token'
-              : null;
+          final endpoint =
+              connector == 'xai' ? 'https://auth.x.ai/oauth/token' : null;
           final tokenEndpointFields = <String, String>{};
           if (endpoint != null) {
             tokenEndpointFields['token_endpoint'] = endpoint;
@@ -2423,7 +2418,8 @@ void main() {
       expect(requestsSent, 0);
     });
 
-    test('executes each pinned HTTP connector through its native route', () async {
+    test('executes each pinned HTTP connector through its native route',
+        () async {
       final requests = <RequestOptions>[];
       final dio = Dio()
         ..httpClientAdapter = _FunctionalAdapter((options) async {
@@ -2610,13 +2606,11 @@ void main() {
         final form = _requestForm(tokenRequest!.data);
         final assertion = form['assertion']!;
         final assertionParts = assertion.split('.');
-        final claims =
-            jsonDecode(
-                  utf8.decode(
-                    base64Url.decode(base64Url.normalize(assertionParts[1])),
-                  ),
-                )
-                as Map;
+        final claims = jsonDecode(
+          utf8.decode(
+            base64Url.decode(base64Url.normalize(assertionParts[1])),
+          ),
+        ) as Map;
         expect(
           tokenRequest?.uri.toString(),
           'https://oauth2.googleapis.com/token',
@@ -2747,16 +2741,15 @@ void main() {
           _account('codex-stream', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response =
-            await LlmConnectorHttpClient(
-              accountService: accounts,
-              dio: dio,
-            ).request(
-              account: account,
-              modelId: 'gpt-5.5',
-              body: const {'model': 'gpt-5.5', 'input': []},
-              stream: true,
-            );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'gpt-5.5',
+          body: const {'model': 'gpt-5.5', 'input': []},
+          stream: true,
+        );
 
         expect(response.body, isA<Stream<List<int>>>());
         final event = utf8.encode(
@@ -2824,16 +2817,15 @@ void main() {
           _account('gemini-large-sse-frame', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response =
-            await LlmConnectorHttpClient(
-              accountService: accounts,
-              dio: dio,
-            ).request(
-              account: account,
-              modelId: 'gemini-3.1-pro',
-              body: const {'contents': []},
-              stream: true,
-            );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {'contents': []},
+          stream: true,
+        );
 
         final repeatedFields = List<String>.filled(1000, '"padding":0,').join();
         final oversizedEvent =
@@ -2843,9 +2835,8 @@ void main() {
         expect(utf8.encode(oversizedEvent).length, greaterThan(1048576));
         final bytes = Uint8List.fromList(utf8.encode(oversizedEvent));
         for (var offset = 0; offset < bytes.length; offset += 32768) {
-          final end = offset + 32768 < bytes.length
-              ? offset + 32768
-              : bytes.length;
+          final end =
+              offset + 32768 < bytes.length ? offset + 32768 : bytes.length;
           source.add(Uint8List.sublistView(bytes, offset, end));
         }
         await source.close();
@@ -2884,16 +2875,15 @@ void main() {
           _account('gemini-multiple-sse-events', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response =
-            await LlmConnectorHttpClient(
-              accountService: accounts,
-              dio: dio,
-            ).request(
-              account: account,
-              modelId: 'gemini-3.1-pro',
-              body: const {'contents': []},
-              stream: true,
-            );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {'contents': []},
+          stream: true,
+        );
 
         final padding = 'x' * 600000;
         String event(int tokens) =>
@@ -2935,16 +2925,15 @@ void main() {
           _account('gemini-native-stream-cancel', 'gemini'),
           secret: 'gemini-api-key',
         );
-        final response =
-            await LlmConnectorHttpClient(
-              accountService: accounts,
-              dio: dio,
-            ).request(
-              account: account,
-              modelId: 'gemini-3.1-pro',
-              body: const {'contents': []},
-              stream: true,
-            );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'gemini-3.1-pro',
+          body: const {'contents': []},
+          stream: true,
+        );
         final receivedError = Completer<Object>();
         (response.body as Stream<List<int>>).listen(
           (_) {},
@@ -2988,16 +2977,15 @@ void main() {
           _account('codex-stream-cancel', 'codex', authType: 'oauth'),
           secret: jsonEncode({'access_token': 'codex-stream-token'}),
         );
-        final response =
-            await LlmConnectorHttpClient(
-              accountService: accounts,
-              dio: dio,
-            ).request(
-              account: account,
-              modelId: 'gpt-5.5',
-              body: const {'model': 'gpt-5.5', 'input': []},
-              stream: true,
-            );
+        final response = await LlmConnectorHttpClient(
+          accountService: accounts,
+          dio: dio,
+        ).request(
+          account: account,
+          modelId: 'gpt-5.5',
+          body: const {'model': 'gpt-5.5', 'input': []},
+          stream: true,
+        );
         final delivered = Completer<void>();
         final subscription = (response.body as Stream<List<int>>).listen((_) {
           delivered.complete();
@@ -3238,11 +3226,11 @@ void main() {
         final cancelToken = CancelToken();
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-              account: account,
-              modelId: 'gpt-5.5',
-              body: const {'model': 'gpt-5.5', 'input': []},
-              cancelToken: cancelToken,
-            );
+          account: account,
+          modelId: 'gpt-5.5',
+          body: const {'model': 'gpt-5.5', 'input': []},
+          cancelToken: cancelToken,
+        );
 
         await refreshStarted.future;
         cancelToken.cancel('caller cancelled');
@@ -3333,11 +3321,11 @@ void main() {
         );
         final request =
             LlmConnectorHttpClient(accountService: accounts, dio: dio).request(
-              account: account,
-              modelId: 'private-model',
-              body: const {'model': 'private-model', 'messages': []},
-              stream: true,
-            );
+          account: account,
+          modelId: 'private-model',
+          body: const {'model': 'private-model', 'messages': []},
+          stream: true,
+        );
 
         try {
           await expectLater(
@@ -3362,22 +3350,22 @@ void main() {
       );
       preferences.values[LlmAccountMigrationService.accountsPreferenceKey] =
           jsonEncode({
-            'version': 1,
-            'items': [
-              {
-                'id': 'legacy-anthropic-quota',
-                'connectorType': 'anthropic',
-                'authType': 'api_key',
-                'displayName': 'Legacy Anthropic',
-              },
-              {
-                'id': 'legacy-openai-quota',
-                'connectorType': 'openai',
-                'authType': 'api_key',
-                'displayName': 'Legacy OpenAI',
-              },
-            ],
-          });
+        'version': 1,
+        'items': [
+          {
+            'id': 'legacy-anthropic-quota',
+            'connectorType': 'anthropic',
+            'authType': 'api_key',
+            'displayName': 'Legacy Anthropic',
+          },
+          {
+            'id': 'legacy-openai-quota',
+            'connectorType': 'openai',
+            'authType': 'api_key',
+            'displayName': 'Legacy OpenAI',
+          },
+        ],
+      });
       final quota = LlmConnectorQuotaService(accountService: accounts);
 
       for (final record in const [
@@ -3729,9 +3717,15 @@ void main() {
   test(
     'parses response usage but leaves unsupported account quota unknown',
     () {
-      final observation = parseLlmConnectorObservation('gemini', {
-        'usageMetadata': {'promptTokenCount': 12, 'candidatesTokenCount': 8},
-      }, observedAt: DateTime.utc(2026, 10, 17));
+      final observation = parseLlmConnectorObservation(
+          'gemini',
+          {
+            'usageMetadata': {
+              'promptTokenCount': 12,
+              'candidatesTokenCount': 8
+            },
+          },
+          observedAt: DateTime.utc(2026, 10, 17));
 
       expect(observation.requestUsage.isKnown, isTrue);
       expect(observation.requestUsage.value, 20);
@@ -3865,12 +3859,13 @@ LlmAccount _account(
   String id,
   String connector, {
   String authType = 'api_key',
-}) => LlmAccount(
-  id: id,
-  connectorType: connector,
-  authType: authType,
-  displayName: connector,
-);
+}) =>
+    LlmAccount(
+      id: id,
+      connectorType: connector,
+      authType: authType,
+      displayName: connector,
+    );
 
 const _vertexServiceAccount = {
   'type': 'service_account',
@@ -3969,7 +3964,8 @@ class _FunctionalAdapter implements HttpClientAdapter {
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
-  ) => onFetch(options);
+  ) =>
+      onFetch(options);
 
   @override
   void close({bool force = false}) {}

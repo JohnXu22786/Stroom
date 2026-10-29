@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stroom/models/llm_account.dart';
@@ -53,6 +54,62 @@ void main() {
     expect(cleanupCalled, isFalse);
     expect((await service.listAccounts()).single.id, 'delete-failure-account');
     expect(find.text('账号删除失败。'), findsOneWidget);
+  });
+
+  testWidgets('does not revoke OAuth while local account deletion fails', (
+    tester,
+  ) async {
+    final preferences = _MemoryPreferences();
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: preferences,
+      credentialStore: credentials,
+    );
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'oauth-delete-failure',
+        connectorType: 'gemini',
+        authType: 'oauth',
+        displayName: 'Gemini OAuth account',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: jsonEncode({'refresh_token': 'still-valid-refresh-token'}),
+    );
+    var revocationCalls = 0;
+    final oauthDio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            revocationCalls++;
+            handler.resolve(
+              Response(requestOptions: options, statusCode: 200),
+            );
+          },
+        ),
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service, oauthDio: oauthDio),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    preferences.failNextSet = true;
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(revocationCalls, 0);
+    expect((await service.listAccounts()).single.id, account.id);
+    expect(await service.readCredential(account.id),
+        contains('still-valid-refresh-token'));
+    expect(find.text('账号删除失败。'), findsOneWidget);
+    expect(find.textContaining('OAuth 撤销失败'), findsNothing);
   });
 
   testWidgets('deletes a local OAuth account when provider revocation fails', (
@@ -193,6 +250,73 @@ void main() {
   );
 
   testWidgets(
+    'requires reauthorization when changing a Gemini OAuth client secret',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'gemini-oauth-client-secret-change',
+          connectorType: 'gemini',
+          authType: 'oauth',
+          displayName: 'Gemini OAuth account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'clientId': 'desktop-client.apps.googleusercontent.com',
+            'googleCloudProjectId': 'my-cloud-project',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'old-gemini-access',
+          'refresh_token': 'old-gemini-refresh',
+          'client_id': 'desktop-client.apps.googleusercontent.com',
+          'client_secret': 'old-client-secret',
+        }),
+      );
+      final oauthAuthorization = _RecordingOAuthAuthorization();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(
+            gateway: _testGateway(
+              service,
+              oauthAuthorization: oauthAuthorization,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Google OAuth client secret',
+        ),
+        'new-client-secret',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(oauthAuthorization.configurations, hasLength(1));
+      expect(
+        oauthAuthorization.configurations.single['clientSecret'],
+        'new-client-secret',
+      );
+      final account = (await service.listAccounts()).single;
+      final credential =
+          jsonDecode((await service.readCredential(account.id))!) as Map;
+      expect(credential['client_secret'], 'old-client-secret');
+    },
+  );
+
+  testWidgets(
     'requires reauthorization when changing an existing Gemini OAuth client ID',
     (tester) async {
       final service = LlmAccountConnectorService(
@@ -276,12 +400,9 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope =
-        jsonDecode(
-              preferences.values[LlmAccountMigrationService
-                  .accountsPreferenceKey]!,
-            )
-            as Map;
+    final accountsEnvelope = jsonDecode(
+      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
+    ) as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -893,12 +1014,8 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata =
-        selectorConfig
-                .models
-                .single
-                .legacyFields[kLlmModelCapabilitiesConfigField]
-            as Map;
+    final capabilityMetadata = selectorConfig
+        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 
@@ -1444,11 +1561,36 @@ void main() {
   });
 }
 
-LlmChatRoutingRuntime _testGateway(LlmAccountConnectorService service) =>
+LlmChatRoutingRuntime _testGateway(
+  LlmAccountConnectorService service, {
+  Dio? oauthDio,
+  AiGatewayOAuthAuthorization? oauthAuthorization,
+}) =>
     LlmChatRoutingRuntime(
       accountService: service,
       routingService: LlmRoutingService(accountService: service),
+      oauthDio: oauthDio,
+      oauthAuthorization: oauthAuthorization,
     );
+
+class _RecordingOAuthAuthorization implements AiGatewayOAuthAuthorization {
+  final configurations = <Map<String, String>>[];
+
+  @override
+  Future<AiGatewayAccount> authorize(
+    AiGatewayAccount account, {
+    Map<String, String> configuration = const {},
+  }) async {
+    configurations.add(configuration);
+    return account;
+  }
+
+  @override
+  Future<void> revoke(AiGatewayAccount account) async {}
+
+  @override
+  Future<bool> deleteAccountAndRevoke(AiGatewayAccount account) async => false;
+}
 
 class _MemoryPreferences implements LlmAccountPreferences {
   final Map<String, String> values = {};

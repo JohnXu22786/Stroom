@@ -388,14 +388,14 @@ class _MemoryCredentialStore implements LlmCredentialStore {
 class _GatewayProviderCatalog implements AiGatewayProviderCatalog {
   @override
   Iterable<AiGatewayProviderDefinition> get providers => const [
-    AiGatewayProviderDefinition(
-      id: 'openai',
-      displayName: 'OpenAI',
-      supportedAuthTypes: {'api_key'},
-      supportsChatAdapter: true,
-      chatProtocolId: 'openai',
-    ),
-  ];
+        AiGatewayProviderDefinition(
+          id: 'openai',
+          displayName: 'OpenAI',
+          supportedAuthTypes: {'api_key'},
+          supportsChatAdapter: true,
+          chatProtocolId: 'openai',
+        ),
+      ];
 
   @override
   AiGatewayProviderDefinition? findProvider(String providerId) {
