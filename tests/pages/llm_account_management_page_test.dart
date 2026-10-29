@@ -75,7 +75,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -129,13 +130,242 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('剩余额度：250 credits'), findsOneWidget);
     expect(find.text('每日额度剩余：75 percent'), findsOneWidget);
     expect(find.text('额度未知'), findsNothing);
+  });
+
+  testWidgets(
+    'labels Bedrock static and default-chain credential sources accurately',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-static-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credentials',
+          displayName: 'Bedrock static',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+        secret: '{"AccessKeyId":"AKID","SecretAccessKey":"safe-secret"}',
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'bedrock-chain-label',
+          connectorType: 'bedrock',
+          authType: 'aws_credential_chain',
+          displayName: 'Bedrock chain',
+          endpointConfig: const {'region': 'us-east-1'},
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('授权来源：AWS Bedrock 用户提供的静态凭据'), findsOneWidget);
+      expect(find.text('授权来源：AWS 默认凭据链'), findsOneWidget);
+    },
+  );
+
+  testWidgets('clearing Vertex project ID removes the stored override', (
+    tester,
+  ) async {
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: _MemoryCredentialStore(),
+    );
+    await service.saveAccount(
+      LlmAccount(
+        id: 'vertex-cleared-project',
+        connectorType: 'vertex',
+        authType: 'api_key',
+        displayName: 'Vertex account',
+        endpointConfig: const {
+          'projectId': 'stale-project',
+          'location': 'us-central1',
+        },
+      ),
+      secret: 'vertex-api-key',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(3), '');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    final saved = (await service.listAccounts()).single;
+    expect(saved.endpointConfig, isNot(contains('projectId')));
+    expect(await service.readCredential(saved.id), 'vertex-api-key');
+  });
+
+  testWidgets(
+    'saves Bedrock region and default credential chain without a secret',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        'Production Bedrock',
+      );
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS Bedrock').last);
+      await tester.pumpAndSettle();
+      final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+      await tester.ensureVisible(authDropdown);
+      await tester.tap(authDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('AWS 默认凭据链').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'us-west-2');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'bedrock');
+      expect(account.authType, 'aws_credential_chain');
+      expect(account.endpointConfig['region'], 'us-west-2');
+      expect(account.credentialRef, isNull);
+      expect(credentials.values, isEmpty);
+    },
+  );
+
+  testWidgets(
+    'Vertex account form stores project and location outside credentials',
+    (tester) async {
+      final credentials = _MemoryCredentialStore();
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: credentials,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('添加账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'Vertex production');
+      final connectorDropdown =
+          find.byType(DropdownButtonFormField<String>).at(0);
+      await tester.ensureVisible(connectorDropdown);
+      await tester.tap(connectorDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Vertex AI').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(2), 'europe-west4');
+      await tester.enterText(find.byType(TextField).at(3), 'stroom-project');
+      await tester.enterText(
+        find.byType(TextField).at(4),
+        'vertex-key-for-test',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+
+      final account = (await service.listAccounts()).single;
+      expect(account.connectorType, 'vertex');
+      expect(account.endpointConfig['location'], 'europe-west4');
+      expect(account.endpointConfig.containsKey('region'), isFalse);
+      expect(account.endpointConfig['projectId'], 'stroom-project');
+      expect(account.credentialRef, isNotNull);
+      expect(credentials.values.values.single, 'vertex-key-for-test');
+      expect(
+        LlmNativeRequestBuilder()
+            .build(
+              account: account,
+              credential: 'vertex-key-for-test',
+              modelId: 'gemini-3.1-pro',
+              body: const {'contents': []},
+            )
+            .uri
+            .toString(),
+        'https://europe-west4-aiplatform.googleapis.com/v1/projects/stroom-project/locations/europe-west4/publishers/google/models/gemini-3.1-pro:generateContent',
+      );
+    },
+  );
+
+  testWidgets('Vertex form labels and stores OAuth access tokens',
+      (tester) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('添加账号'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Vertex OAuth');
+    final connectorDropdown =
+        find.byType(DropdownButtonFormField<String>).at(0);
+    await tester.ensureVisible(connectorDropdown);
+    await tester.tap(connectorDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Google Vertex AI').last);
+    await tester.pumpAndSettle();
+    final authDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.ensureVisible(authDropdown);
+    await tester.tap(authDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Google OAuth Access Token').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Google OAuth Access Token'), findsNWidgets(2));
+    await tester.enterText(
+      find.byType(TextField).at(4),
+      'vertex-oauth-access-token',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    final account = (await service.listAccounts()).single;
+    expect(account.connectorType, 'vertex');
+    expect(account.authType, 'oauth');
+    expect(account.credentialRef, isNotNull);
+    expect(credentials.values.values.single, 'vertex-oauth-access-token');
+    expect(find.text('认证方式：Google OAuth Access Token'), findsOneWidget);
   });
 
   testWidgets('saves an account with no authentication and no secret', (
@@ -147,7 +377,8 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -205,7 +436,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -269,7 +501,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -340,7 +573,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('模型组'));
@@ -412,7 +646,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -475,7 +710,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -531,7 +767,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -595,7 +832,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -665,7 +903,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -765,7 +1004,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -851,7 +1091,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -904,7 +1145,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -946,7 +1188,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -997,7 +1240,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1087,7 +1331,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1128,7 +1373,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无本地记录（最近 62 天）'), findsOneWidget);
@@ -1175,7 +1421,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -1234,7 +1481,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 

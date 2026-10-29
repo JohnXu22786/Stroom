@@ -8,6 +8,9 @@ import 'package:googleapis_auth/googleapis_auth.dart'
 import 'package:uuid/uuid.dart';
 
 import '../models/llm_account.dart';
+import 'aws_bedrock_converse.dart';
+import 'aws_credential_chain.dart';
+import 'aws_sigv4.dart';
 import 'llm_account_migration_service.dart';
 import 'llm_credential_store.dart';
 import 'llm_connector_model_catalog.dart';
@@ -36,6 +39,7 @@ enum LlmNativeProtocol {
   aiStudioRelay,
   vertexGenerateContent,
   openAIChatCompletions,
+  bedrockConverse,
 }
 
 enum LlmNativeTransport { http, websocketRelay }
@@ -155,6 +159,55 @@ abstract final class LlmConnectorRegistry {
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
     LlmConnectorDefinition(
+      id: 'openai-api',
+      displayName: 'OpenAI API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'moonshot',
+      displayName: 'Moonshot AI (Kimi API)',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'glm',
+      displayName: 'Zhipu GLM API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'deepseek',
+      displayName: 'DeepSeek API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'minimax',
+      displayName: 'MiniMax API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'qwen',
+      displayName: 'Qwen Cloud API',
+      protocol: LlmNativeProtocol.openAIChatCompletions,
+      authTypes: {'api_key'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
+      id: 'bedrock',
+      displayName: 'AWS Bedrock',
+      protocol: LlmNativeProtocol.bedrockConverse,
+      authTypes: {'aws_credentials', 'aws_credential_chain'},
+      quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
+    ),
+    LlmConnectorDefinition(
       id: 'gemini-interactions',
       displayName: 'Google Gemini Interactions',
       protocol: LlmNativeProtocol.geminiInteractions,
@@ -174,8 +227,8 @@ abstract final class LlmConnectorRegistry {
       id: 'vertex',
       displayName: 'Google Vertex AI',
       protocol: LlmNativeProtocol.vertexGenerateContent,
-      authTypes: {'service_account', 'api_key'},
-      modelCatalog: kPinnedVertexModels,
+      authTypes: {'service_account', 'oauth', 'api_key'},
+      modelCatalog: [],
       canRefreshCredentials: true,
       quotaAvailability: LlmQuotaAvailability.requestUsageOnly,
     ),
@@ -211,7 +264,18 @@ abstract final class LlmConnectorRegistry {
   static String? chatAdapterEndpointType(String connectorType) =>
       switch (canonicalId(connectorType)) {
         'claude' => 'anthropic',
-        'openai-compatibility' || 'kimi' || 'kimi-ai' || 'kimi.ai' => 'openai',
+        'openai-compatibility' ||
+        'openai-api' ||
+        'moonshot' ||
+        'glm' ||
+        'deepseek' ||
+        'minimax' ||
+        'qwen' ||
+        'bedrock' ||
+        'kimi' ||
+        'kimi-ai' ||
+        'kimi.ai' =>
+          'openai',
         _ => null,
       };
 }
@@ -870,8 +934,9 @@ class LlmAccountConnectorService {
           )) {
         throw const LlmAccountConnectorException();
       }
-      if (endpointType != null)
+      if (endpointType != null) {
         endpointByLocalModel[localModelId] = endpointType;
+      }
     }
   }
 
@@ -906,9 +971,21 @@ class LlmAccountConnectorService {
     if (connector == null || connector.id != account.connectorType) {
       throw const LlmAccountConnectorException();
     }
-    final hasRemoteCatalog = account.connectorType == 'openai-compatibility' ||
-        account.connectorType == 'gemini' ||
-        account.connectorType == 'gemini-interactions';
+    final hasRemoteCatalog = {
+      'openai-compatibility',
+      'openai-api',
+      if (account.connectorType == 'claude' && account.authType == 'api_key')
+        'claude',
+      'gemini',
+      'gemini-interactions',
+      'moonshot',
+      'glm',
+      'deepseek',
+      'minimax',
+      'qwen',
+      'bedrock',
+      'vertex',
+    }.contains(account.connectorType);
     if (hasRemoteCatalog && savedAccount == null) {
       throw const LlmAccountConnectorException();
     }
@@ -1411,8 +1488,23 @@ class LlmAccountConnectorService {
     _validateSafeConfig(account.endpointConfig);
     final isGemini = account.connectorType == 'gemini' ||
         account.connectorType == 'gemini-interactions';
-    final fallbackBase =
-        isGemini ? 'https://generativelanguage.googleapis.com' : null;
+    if (account.connectorType == 'bedrock') {
+      return _discoverBedrockModels(account);
+    }
+    final fallbackBase = switch (account.connectorType) {
+      'openai-api' => 'https://api.openai.com/v1',
+      'claude' => 'https://api.anthropic.com',
+      'gemini' ||
+      'gemini-interactions' =>
+        'https://generativelanguage.googleapis.com',
+      'moonshot' => 'https://api.moonshot.ai/v1',
+      'glm' => 'https://open.bigmodel.cn/api/paas/v4',
+      'deepseek' => 'https://api.deepseek.com',
+      'minimax' => 'https://api.minimax.io/v1',
+      'qwen' => 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      'vertex' => _vertexBaseUrl(account.endpointConfig),
+      _ => null,
+    };
     final base = LlmNativeRequestBuilder._configString(
           account.endpointConfig,
           'baseUrl',
@@ -1421,7 +1513,12 @@ class LlmAccountConnectorService {
     if (base == null || base.isEmpty) {
       throw const LlmAccountConnectorException();
     }
-    final uri = _modelListUri(base, isGemini: isGemini);
+    final secret = account.credentialRef == null
+        ? null
+        : await _readSecureValue(account.credentialRef!);
+    final uri = account.connectorType == 'vertex'
+        ? _vertexModelListUri(account.endpointConfig, base, secret)
+        : _modelListUri(base, isGemini: isGemini);
     LlmNativeRequestBuilder._validateProviderBaseUrl(account, uri);
     final headers = <String, String>{'Accept': 'application/json'};
     final configuredHeaders = account.endpointConfig['headers'];
@@ -1432,19 +1529,48 @@ class LlmAccountConnectorService {
         }
       }
     }
-    final secret = account.credentialRef == null
-        ? null
-        : await _readSecureValue(account.credentialRef!);
     if (account.authType == 'api_key') {
       if (secret == null || secret.isEmpty) {
         throw const LlmAccountConnectorException();
       }
       final key = LlmNativeRequestBuilder._credentialValue(account, secret);
-      if (isGemini) {
+      if (isGemini || account.connectorType == 'vertex') {
         headers['x-goog-api-key'] = key;
+      } else if (account.connectorType == 'claude') {
+        headers['x-api-key'] = key;
+        headers['anthropic-version'] = '2023-06-01';
       } else {
         headers['Authorization'] = 'Bearer $key';
       }
+    } else if (account.connectorType == 'vertex' &&
+        account.authType == 'service_account') {
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      var credentialBundle = secret;
+      if (_vertexServiceAccountTokenNeedsRefresh(secret)) {
+        await refreshCredential(account);
+        final updatedSecret = account.credentialRef == null
+            ? null
+            : await _readSecureValue(account.credentialRef!);
+        if (updatedSecret == null) {
+          throw const LlmAccountConnectorException();
+        }
+        credentialBundle = updatedSecret;
+      }
+      final accessToken = LlmNativeRequestBuilder._credentialBundleString(
+        credentialBundle,
+        const ['access_token', 'accessToken'],
+      );
+      if (accessToken == null) throw const LlmAccountConnectorException();
+      headers['Authorization'] = 'Bearer $accessToken';
+    } else if (account.connectorType == 'vertex' &&
+        account.authType == 'oauth') {
+      if (secret == null || secret.isEmpty) {
+        throw const LlmAccountConnectorException();
+      }
+      headers['Authorization'] =
+          'Bearer ${LlmNativeRequestBuilder._credentialValue(account, secret)}';
     } else if (account.authType == 'none') {
       // OpenAI-compatible public or local endpoints may omit authentication.
     } else {
@@ -1460,12 +1586,17 @@ class LlmAccountConnectorService {
         if (++pageCount > _maxModelDiscoveryPages) {
           throw const LlmAccountConnectorException();
         }
+        final cursorParameter = switch (account.connectorType) {
+          'openai-api' => 'after',
+          'claude' => 'after_id',
+          _ => 'pageToken',
+        };
         final pageUri = pageToken == null
             ? uri
             : uri.replace(
                 queryParameters: {
                   ...uri.queryParameters,
-                  'pageToken': pageToken,
+                  cursorParameter: pageToken,
                 },
               );
         final response = await _dio.getUri<Object?>(
@@ -1473,21 +1604,37 @@ class LlmAccountConnectorService {
           options: Options(headers: headers),
         );
         final data = _asJsonMap(response.data);
-        final rawModels = data?['data'] ?? data?['models'];
+        final rawModels =
+            data?['data'] ?? data?['models'] ?? data?['publisherModels'];
         if (rawModels is! List) break;
         for (final raw in rawModels) {
           if (raw is! Map) continue;
           final map = Map<String, dynamic>.from(raw);
           final rawId = map['id'] ?? map['name'];
           if (rawId is! String || rawId.trim().isEmpty) continue;
-          final modelId = rawId.trim().replaceFirst(RegExp(r'^models/'), '');
+          final modelId = rawId
+              .trim()
+              .replaceFirst(RegExp(r'^publishers/[^/]+/models/'), '')
+              .replaceFirst(RegExp(r'^models/'), '');
           final methods = map['supportedGenerationMethods'];
-          if (isGemini &&
+          final actions = map['supportedActions'];
+          if ((isGemini || account.connectorType == 'vertex') &&
               methods is List &&
               !methods.contains('generateContent') &&
               !methods.contains('streamGenerateContent')) {
             continue;
           }
+          if (account.connectorType == 'vertex' &&
+              actions is List &&
+              !actions.any(
+                (action) =>
+                    action is String &&
+                    (action.toLowerCase().contains('generatecontent') ||
+                        action.toLowerCase().contains('generate_content')),
+              )) {
+            continue;
+          }
+          if (!_isChatModel(modelId, map)) continue;
           models.add(
             LlmUpstreamModel(
               id: '${account.id}:remote:${models.length}',
@@ -1505,10 +1652,23 @@ class LlmAccountConnectorService {
             ),
           );
         }
-        final nextPageToken = data?['nextPageToken'];
-        pageToken = nextPageToken is String && nextPageToken.isNotEmpty
-            ? nextPageToken
-            : null;
+        if (account.connectorType == 'openai-api' ||
+            account.connectorType == 'claude') {
+          if (data?['has_more'] == true) {
+            final lastId = data?['last_id'];
+            if (lastId is! String || lastId.isEmpty) {
+              throw const LlmAccountConnectorException();
+            }
+            pageToken = lastId;
+          } else {
+            pageToken = null;
+          }
+        } else {
+          final nextPageToken = data?['nextPageToken'];
+          pageToken = nextPageToken is String && nextPageToken.isNotEmpty
+              ? nextPageToken
+              : null;
+        }
         if (pageToken != null && !seenPageTokens.add(pageToken)) {
           throw const LlmAccountConnectorException();
         }
@@ -1517,6 +1677,212 @@ class LlmAccountConnectorService {
     } catch (_) {
       throw const LlmAccountConnectorException();
     }
+  }
+
+  Future<List<LlmUpstreamModel>> _discoverBedrockModels(
+    LlmAccount account,
+  ) async {
+    final region = LlmNativeRequestBuilder._configString(
+      account.endpointConfig,
+      'region',
+    );
+    if (region == null || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+      throw const LlmAccountConnectorException();
+    }
+    final secret = account.credentialRef == null
+        ? null
+        : await _readSecureValue(account.credentialRef!);
+    final credentials = await _awsCredentialsFor(account, secret);
+    if (credentials == null) throw const LlmAccountConnectorException();
+    final uri = Uri.https(
+      awsRegionalEndpointHost('bedrock', region),
+      '/foundation-models',
+      {'byOutputModality': 'TEXT'},
+    );
+    try {
+      final models = <LlmUpstreamModel>[];
+      final seenPageTokens = <String>{};
+      String? pageToken;
+      var pageCount = 0;
+      do {
+        if (++pageCount > _maxModelDiscoveryPages) {
+          throw const LlmAccountConnectorException();
+        }
+        final pageUri = pageToken == null
+            ? uri
+            : uri.replace(
+                queryParameters: {
+                  ...uri.queryParameters,
+                  'nextToken': pageToken,
+                },
+              );
+        final headers = AwsSigV4.sign(
+          method: 'GET',
+          uri: pageUri,
+          region: region,
+          service: 'bedrock',
+          headers: const {'Accept': 'application/json'},
+          payload: Uint8List(0),
+          credentials: credentials,
+          now: DateTime.now().toUtc(),
+        );
+        final response = await _dio.getUri<Object?>(
+          pageUri,
+          options: Options(headers: headers),
+        );
+        final data = _asJsonMap(response.data);
+        final rawModels = data?['modelSummaries'] ?? data?['foundationModels'];
+        if (rawModels is! List) {
+          throw const LlmAccountConnectorException();
+        }
+        for (final raw in rawModels) {
+          if (raw is! Map) continue;
+          final item = Map<String, dynamic>.from(raw);
+          final modelId = item['modelId'];
+          final input = item['inputModalities'];
+          final output = item['outputModalities'];
+          if (modelId is! String ||
+              modelId.trim().isEmpty ||
+              input is! List ||
+              output is! List ||
+              !input.contains('TEXT') ||
+              !output.contains('TEXT') ||
+              !_isChatModel(modelId, item) ||
+              (item['modelLifecycle'] is Map &&
+                  (item['modelLifecycle'] as Map)['status'] != 'ACTIVE')) {
+            continue;
+          }
+          models.add(
+            LlmUpstreamModel(
+              id: '${account.id}:remote:${models.length}',
+              upstreamModelId: modelId.trim(),
+              displayName: item['modelName'] is String
+                  ? item['modelName'] as String
+                  : modelId.trim(),
+              capabilities: {
+                'inputModalities': input.whereType<String>().toList(),
+                'outputModalities': output.whereType<String>().toList(),
+              },
+              config: const {'catalogSource': 'bedrock_foundation_models'},
+            ),
+          );
+        }
+        final nextPageToken = data?['nextToken'];
+        pageToken = nextPageToken is String && nextPageToken.isNotEmpty
+            ? nextPageToken
+            : null;
+        if (pageToken != null && !seenPageTokens.add(pageToken)) {
+          throw const LlmAccountConnectorException();
+        }
+      } while (pageToken != null);
+      return List.unmodifiable(models);
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      throw const LlmAccountConnectorException();
+    } catch (_) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
+  static Future<AwsSigV4Credentials?> _awsCredentialsFor(
+    LlmAccount account,
+    String? secret,
+  ) async {
+    if (account.authType == 'aws_credential_chain') {
+      try {
+        return await AwsCredentialChain.resolve();
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+    }
+    if (secret == null) return null;
+    try {
+      final decoded = jsonDecode(secret);
+      if (decoded is! Map) throw const LlmAccountConnectorException();
+      return AwsSigV4Credentials.fromJson(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      throw const LlmAccountConnectorException();
+    }
+  }
+
+  static bool _vertexServiceAccountTokenNeedsRefresh(String credential) {
+    try {
+      final decoded = jsonDecode(credential);
+      if (decoded is! Map) return true;
+      final bundle = Map<String, dynamic>.from(decoded);
+      final token = LlmNativeRequestBuilder._credentialBundleString(
+        credential,
+        const ['access_token', 'accessToken'],
+      );
+      if (token == null) return true;
+      final rawExpiry =
+          bundle['expires_at'] ?? bundle['expiresAt'] ?? bundle['expiry_date'];
+      DateTime? expiry;
+      if (rawExpiry is String) {
+        expiry = DateTime.tryParse(rawExpiry);
+      } else if (rawExpiry is num && rawExpiry > 0) {
+        final milliseconds = rawExpiry > 100000000000
+            ? rawExpiry.toInt()
+            : rawExpiry.toInt() * 1000;
+        expiry = DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+      }
+      return expiry == null ||
+          !expiry.isAfter(
+            DateTime.now().toUtc().add(const Duration(minutes: 1)),
+          );
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Uri _vertexModelListUri(
+    Map<String, dynamic> config,
+    String base,
+    String? credential,
+  ) {
+    final project =
+        LlmNativeRequestBuilder._configString(config, 'projectId') ??
+            LlmNativeRequestBuilder._credentialBundleString(credential, const [
+              'project_id',
+              'projectId',
+            ]);
+    final location =
+        LlmNativeRequestBuilder._vertexLocation(config) ?? 'us-central1';
+    if (project == null ||
+        project.isEmpty ||
+        !RegExp(r'^(global|[a-z0-9-]+)$').hasMatch(location)) {
+      throw const LlmAccountConnectorException();
+    }
+    final parent = 'projects/${Uri.encodeComponent(project)}'
+        '/locations/${Uri.encodeComponent(location)}/publishers/google';
+    return Uri.parse(base).replace(path: '/v1/$parent/models');
+  }
+
+  static String _vertexBaseUrl(Map<String, dynamic> config) {
+    final location =
+        LlmNativeRequestBuilder._vertexLocation(config) ?? 'us-central1';
+    if (!RegExp(r'^(global|[a-z0-9-]+)$').hasMatch(location)) {
+      throw const LlmAccountConnectorException();
+    }
+    return location == 'global'
+        ? 'https://aiplatform.googleapis.com'
+        : 'https://$location-aiplatform.googleapis.com';
+  }
+
+  static bool _isChatModel(String modelId, Map<String, dynamic> metadata) {
+    final task = [
+      metadata['taskType'],
+      metadata['task_type'],
+      metadata['modelType'],
+      metadata['type'],
+    ].whereType<String>().join(' ').toLowerCase();
+    if (RegExp(r'embed|rerank|re-rank|ranking|classification').hasMatch(task)) {
+      return false;
+    }
+    return !RegExp(
+      r'(^|[._:/-])(embed(?:ding)?|rerank(?:er)?|re-rank|whisper|tts|transcrib|imagen|dall-e)([._:/-]|$)',
+      caseSensitive: false,
+    ).hasMatch(modelId);
   }
 
   Future<String?> _readSecureValue(String reference) async {
@@ -2176,7 +2542,8 @@ class LlmAccountConnectorService {
       authType == 'api_key' ||
       authType == 'oauth' ||
       authType == 'service_account' ||
-      authType == 'session_token';
+      authType == 'session_token' ||
+      authType == 'aws_credentials';
 
   static void _validateAccount(LlmAccount account) {
     final connector = LlmConnectorRegistry.find(account.connectorType);
@@ -2189,6 +2556,21 @@ class LlmAccountConnectorService {
       throw const LlmAccountConnectorException();
     }
     _validateSafeConfig(account.endpointConfig);
+    if (account.connectorType == 'bedrock') {
+      final region = account.endpointConfig['region'];
+      if (region is! String || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+        throw const LlmAccountConnectorException();
+      }
+    }
+    if (account.connectorType == 'vertex') {
+      final location = account.endpointConfig['location'] ??
+          account.endpointConfig['region'];
+      if (location != null &&
+          (location is! String ||
+              !RegExp(r'^(global|[a-z0-9-]+)$').hasMatch(location))) {
+        throw const LlmAccountConnectorException();
+      }
+    }
     for (final model in account.models) {
       _validateCredentialFreeModelData(model.capabilities);
       _validateCredentialFreeModelData(model.config);
@@ -2196,6 +2578,25 @@ class LlmAccountConnectorService {
   }
 
   static void _validateCredential(LlmAccount account, String secret) {
+    if (account.connectorType == 'vertex' && account.authType == 'oauth') {
+      try {
+        LlmNativeRequestBuilder._credentialValue(account, secret);
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+      return;
+    }
+    if (account.connectorType == 'bedrock' &&
+        account.authType == 'aws_credentials') {
+      try {
+        final decoded = jsonDecode(secret);
+        if (decoded is! Map) throw const FormatException();
+        AwsSigV4Credentials.fromJson(Map<String, dynamic>.from(decoded));
+      } catch (_) {
+        throw const LlmAccountConnectorException();
+      }
+      return;
+    }
     if (account.connectorType != 'vertex' ||
         account.authType != 'service_account') {
       return;
@@ -2383,6 +2784,7 @@ class LlmNativeRequestBuilder {
     required String? credential,
     required String modelId,
     required Object? body,
+    AwsSigV4Credentials? awsCredentials,
     bool stream = false,
     String? nativeFormat,
   }) {
@@ -2403,7 +2805,9 @@ class LlmNativeRequestBuilder {
     LlmAccountConnectorService._validateSafeConfig(account.endpointConfig);
 
     final headers = <String, String>{..._defaultJsonHeaders};
-    final secret = _credentialValue(account, credential);
+    final secret = account.connectorType == 'bedrock'
+        ? ''
+        : _credentialValue(account, credential);
     final config = account.endpointConfig;
     final configuredHeaders = config['headers'];
     if (configuredHeaders is Map) {
@@ -2462,7 +2866,8 @@ class LlmNativeRequestBuilder {
         }
         if (account.authType == 'api_key') {
           headers['x-goog-api-key'] = secret;
-        } else if (account.authType == 'service_account') {
+        } else if (account.authType == 'service_account' ||
+            account.authType == 'oauth') {
           headers['Authorization'] = 'Bearer $secret';
         }
         break;
@@ -2484,32 +2889,59 @@ class LlmNativeRequestBuilder {
         break;
       case 'aistudio':
         break;
+      case 'bedrock':
+        break;
       default:
         if (secret.isNotEmpty) headers['Authorization'] = 'Bearer $secret';
         break;
     }
-    if (stream) headers['Accept'] = 'text/event-stream';
+    if (stream && account.connectorType == 'bedrock') {
+      headers['Accept'] = 'application/vnd.amazon.eventstream';
+    } else if (stream) {
+      headers['Accept'] = 'text/event-stream';
+    }
+
+    final requestBody = account.connectorType == 'bedrock'
+        ? AwsBedrockConverseAdapter.toConverse(body)
+        : account.connectorType == 'antigravity'
+            ? _antigravityPayload(account, credential, modelId, body)
+            : _isVertexImagen(
+                account,
+                modelId,
+                config: config,
+                nativeFormat: nativeFormat,
+              )
+                ? _vertexImagenPayload(body)
+                : _applyBodyStreamOption(
+                    account: account,
+                    config: config,
+                    body: body,
+                    stream: stream,
+                    nativeFormat: nativeFormat,
+                  );
+
+    var requestHeaders = headers;
+    if (account.connectorType == 'bedrock') {
+      if (awsCredentials == null) {
+        throw const LlmAccountConnectorException();
+      }
+      requestHeaders = AwsSigV4.sign(
+        method: 'POST',
+        uri: uri,
+        region: _configString(config, 'region')!,
+        service: 'bedrock',
+        headers: headers,
+        payload: Uint8List.fromList(utf8.encode(jsonEncode(requestBody))),
+        credentials: awsCredentials,
+        now: DateTime.now().toUtc(),
+      );
+    }
 
     return LlmPreparedNativeRequest(
       uri: uri,
       method: 'POST',
-      headers: headers,
-      body: account.connectorType == 'antigravity'
-          ? _antigravityPayload(account, credential, modelId, body)
-          : _isVertexImagen(
-              account,
-              modelId,
-              config: config,
-              nativeFormat: nativeFormat,
-            )
-              ? _vertexImagenPayload(body)
-              : _applyBodyStreamOption(
-                  account: account,
-                  config: config,
-                  body: body,
-                  stream: stream,
-                  nativeFormat: nativeFormat,
-                ),
+      headers: requestHeaders,
+      body: requestBody,
       transport: account.connectorType == 'aistudio'
           ? LlmNativeTransport.websocketRelay
           : LlmNativeTransport.http,
@@ -2621,8 +3053,10 @@ class LlmNativeRequestBuilder {
     try {
       final decoded = jsonDecode(credential);
       if (decoded is! Map) return null;
+      final serviceAccount = decoded['service_account'];
       for (final key in keys) {
-        final value = decoded[key];
+        final value = decoded[key] ??
+            (serviceAccount is Map ? serviceAccount[key] : null);
         if (value is String && value.trim().isNotEmpty) return value.trim();
       }
     } catch (_) {
@@ -2782,6 +3216,36 @@ class LlmNativeRequestBuilder {
         path = '/v1beta/models/${Uri.encodeComponent(modelId)}:'
             '${stream ? 'streamGenerateContent' : 'generateContent'}';
         if (stream) query = 'alt=sse';
+      case 'openai-api':
+        baseUrl = _baseUrl(config, 'https://api.openai.com/v1');
+        path = '/chat/completions';
+      case 'moonshot':
+        baseUrl = _baseUrl(config, 'https://api.moonshot.ai/v1');
+        path = '/chat/completions';
+      case 'glm':
+        baseUrl = _baseUrl(config, 'https://open.bigmodel.cn/api/paas/v4');
+        path = '/chat/completions';
+      case 'deepseek':
+        baseUrl = _baseUrl(config, 'https://api.deepseek.com');
+        path = '/chat/completions';
+      case 'minimax':
+        baseUrl = _baseUrl(config, 'https://api.minimax.io/v1');
+        path = '/chat/completions';
+      case 'qwen':
+        baseUrl = _baseUrl(
+          config,
+          'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        );
+        path = '/chat/completions';
+      case 'bedrock':
+        final region = _configString(config, 'region');
+        if (region == null || !RegExp(r'^[a-z0-9-]+$').hasMatch(region)) {
+          throw const LlmAccountConnectorException();
+        }
+        baseUrl =
+            'https://${awsRegionalEndpointHost('bedrock-runtime', region)}';
+        path = '/model/${Uri.encodeComponent(modelId)}/'
+            '${stream ? 'converse-stream' : 'converse'}';
       case 'gemini-interactions':
         baseUrl = _baseUrl(config, 'https://generativelanguage.googleapis.com');
         path = '/v1beta/interactions';
@@ -2803,7 +3267,7 @@ class LlmNativeRequestBuilder {
           if (stream) query = 'alt=sse';
           break;
         }
-        final location = _configString(config, 'location') ?? 'us-central1';
+        final location = _vertexLocation(config) ?? 'us-central1';
         if (!RegExp(r'^[a-z0-9-]+$').hasMatch(location)) {
           throw const LlmAccountConnectorException();
         }
@@ -2987,8 +3451,11 @@ class LlmNativeRequestBuilder {
     final supportsCustomApiKeyEndpoint = account.authType == 'api_key' &&
         {'codex', 'claude', 'vertex'}.contains(account.connectorType);
     if (hasCustomBaseUrl && supportsCustomApiKeyEndpoint) return;
-    final location =
-        _configString(account.endpointConfig, 'location') ?? 'us-central1';
+    final location = _vertexLocation(account.endpointConfig) ?? 'us-central1';
+    final bedrockRegion = _configString(account.endpointConfig, 'region');
+    final bedrockHost = bedrockRegion == null
+        ? null
+        : awsRegionalEndpointHost('bedrock-runtime', bedrockRegion);
     final allowed = switch (account.connectorType) {
       'codex' => {'chatgpt.com', 'api.openai.com'}.contains(host),
       'claude' => host == 'api.anthropic.com',
@@ -3002,6 +3469,13 @@ class LlmNativeRequestBuilder {
       'gemini-interactions' ||
       'aistudio' =>
         host == 'generativelanguage.googleapis.com',
+      'openai-api' => host == 'api.openai.com',
+      'moonshot' => {'api.moonshot.ai', 'api.moonshot.cn'}.contains(host),
+      'glm' => host == 'open.bigmodel.cn',
+      'deepseek' => host == 'api.deepseek.com',
+      'minimax' => {'api.minimax.io', 'api.minimaxi.com'}.contains(host),
+      'qwen' => host == 'dashscope.aliyuncs.com',
+      'bedrock' => host == bedrockHost,
       'vertex' => host == 'aiplatform.googleapis.com' ||
           host == '$location-aiplatform.googleapis.com',
       _ => false,
@@ -3033,6 +3507,9 @@ class LlmNativeRequestBuilder {
 
   static String _baseUrl(Map<String, dynamic> config, String fallback) =>
       _configString(config, 'baseUrl') ?? fallback;
+
+  static String? _vertexLocation(Map<String, dynamic> config) =>
+      _configString(config, 'location') ?? _configString(config, 'region');
 
   static String? _configString(Map<String, dynamic> config, String key) {
     final value = config[key];
