@@ -55,6 +55,50 @@ void main() {
     expect(find.text('账号删除失败。'), findsOneWidget);
   });
 
+  testWidgets('deletes a local OAuth account when provider revocation fails', (
+    tester,
+  ) async {
+    final credentials = _MemoryCredentialStore();
+    final service = LlmAccountConnectorService(
+      preferences: _MemoryPreferences(),
+      credentialStore: credentials,
+    );
+    final account = await service.saveAccount(
+      LlmAccount(
+        id: 'oauth-revocation-failure',
+        connectorType: 'gemini',
+        authType: 'oauth',
+        displayName: 'Gemini OAuth account',
+        status: LlmAccountStatus.ready,
+      ),
+      secret: jsonEncode({'access_token': 'access-without-refresh-token'}),
+    );
+    var cleanupCalled = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LlmAccountManagementPage(
+          gateway: _testGateway(service),
+          onAccountDeleted: (_) async {
+            cleanupCalled = true;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除账号').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(await service.getAccount(account.id), isNull);
+    expect(await service.readCredential(account.id), isNull);
+    expect(cleanupCalled, isTrue);
+    expect(find.text('账号已删除，但 OAuth 撤销失败。请到提供商账户设置中撤销授权。'), findsOneWidget);
+  });
+
   testWidgets('shows unknown quota and connection readiness as unknown', (
     tester,
   ) async {
@@ -75,7 +119,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -83,6 +128,136 @@ void main() {
     expect(find.text('连接状态未知'), findsOneWidget);
     expect(find.text('额度未知'), findsOneWidget);
   });
+
+  testWidgets(
+    'requires a Gemini client secret when changing an API-key account to OAuth',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'api-key-to-gemini-oauth',
+          connectorType: 'openai-compatibility',
+          authType: 'api_key',
+          displayName: 'Existing API-key account',
+        ),
+        secret: 'existing-api-key',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google Gemini API').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('订阅 OAuth').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Google Cloud project ID',
+        ),
+        'my-cloud-project',
+      );
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Google OAuth Desktop client ID',
+        ),
+        'desktop-client.apps.googleusercontent.com',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('请提供 Google OAuth Desktop client ID 和对应的 client secret。'),
+        findsOneWidget,
+      );
+      expect((await service.listAccounts()).single.authType, 'api_key');
+    },
+  );
+
+  testWidgets(
+    'requires reauthorization when changing an existing Gemini OAuth client ID',
+    (tester) async {
+      final service = LlmAccountConnectorService(
+        preferences: _MemoryPreferences(),
+        credentialStore: _MemoryCredentialStore(),
+      );
+      await service.saveAccount(
+        LlmAccount(
+          id: 'gemini-oauth-client-id-change',
+          connectorType: 'gemini',
+          authType: 'oauth',
+          displayName: 'Gemini OAuth account',
+          status: LlmAccountStatus.ready,
+          endpointConfig: const {
+            'clientId': 'old-client.apps.googleusercontent.com',
+            'googleCloudProjectId': 'my-cloud-project',
+          },
+        ),
+        secret: jsonEncode({
+          'access_token': 'old-gemini-access',
+          'refresh_token': 'old-gemini-refresh',
+          'client_id': 'old-client.apps.googleusercontent.com',
+          'client_secret': 'old-client-secret',
+        }),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑账号'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Google OAuth Desktop client ID',
+        ),
+        'new-client.apps.googleusercontent.com',
+      );
+      await tester.ensureVisible(find.text('保存').last);
+      await tester.tap(find.text('保存').last);
+      await tester.pumpAndSettle();
+
+      final unchanged = (await service.listAccounts()).single;
+      final unchangedCredential =
+          jsonDecode((await service.readCredential(unchanged.id))!) as Map;
+      expect(
+        unchanged.endpointConfig['clientId'],
+        'old-client.apps.googleusercontent.com',
+      );
+      expect(
+        unchangedCredential['client_id'],
+        'old-client.apps.googleusercontent.com',
+      );
+      expect(
+        find.text('请提供 Google OAuth Desktop client ID 和对应的 client secret。'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('shows connector remaining quota and named quota signals', (
     tester,
@@ -101,9 +276,12 @@ void main() {
         status: LlmAccountStatus.ready,
       ),
     );
-    final accountsEnvelope = jsonDecode(
-      preferences.values[LlmAccountMigrationService.accountsPreferenceKey]!,
-    ) as Map;
+    final accountsEnvelope =
+        jsonDecode(
+              preferences.values[LlmAccountMigrationService
+                  .accountsPreferenceKey]!,
+            )
+            as Map;
     final accountRecord = Map<String, dynamic>.from(
       (accountsEnvelope['items'] as List).single as Map,
     );
@@ -129,7 +307,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -147,7 +326,8 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -205,7 +385,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -269,7 +450,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -340,7 +522,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('模型组'));
@@ -412,7 +595,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -475,7 +659,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -531,7 +716,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -595,7 +781,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -665,7 +852,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -705,8 +893,12 @@ void main() {
       accounts: await service.listAccounts(),
       groups: [saved],
     ).single;
-    final capabilityMetadata = selectorConfig
-        .models.single.legacyFields[kLlmModelCapabilitiesConfigField] as Map;
+    final capabilityMetadata =
+        selectorConfig
+                .models
+                .single
+                .legacyFields[kLlmModelCapabilitiesConfigField]
+            as Map;
     expect(capabilityMetadata['vision'], isFalse);
   });
 
@@ -765,7 +957,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -851,7 +1044,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('模型组'));
@@ -904,7 +1098,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -946,7 +1141,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -997,7 +1193,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-            home: LlmAccountManagementPage(gateway: _testGateway(service))),
+          home: LlmAccountManagementPage(gateway: _testGateway(service)),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1087,7 +1284,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     expect(
@@ -1128,7 +1326,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无本地记录（最近 62 天）'), findsOneWidget);
@@ -1175,7 +1374,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -1234,7 +1434,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-          home: LlmAccountManagementPage(gateway: _testGateway(service))),
+        home: LlmAccountManagementPage(gateway: _testGateway(service)),
+      ),
     );
     await tester.pumpAndSettle();
 

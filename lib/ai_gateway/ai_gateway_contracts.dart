@@ -9,6 +9,7 @@ class AiGatewayProviderDefinition {
   final Set<String> capabilities;
   final bool supportsChatAdapter;
   final String? chatProtocolId;
+  final Map<String, String> authTypeLimitations;
 
   const AiGatewayProviderDefinition({
     required this.id,
@@ -17,6 +18,7 @@ class AiGatewayProviderDefinition {
     this.capabilities = const {},
     this.supportsChatAdapter = false,
     this.chatProtocolId,
+    this.authTypeLimitations = const {},
   });
 }
 
@@ -36,9 +38,9 @@ class AiGatewayPreparedRequest {
     required Map<String, String> headers,
     required Object? body,
     this.transport = 'http',
-  })  : headerNames = Set.unmodifiable(headers.keys),
-        hasBody = body != null,
-        host = uri.host;
+  }) : headerNames = Set.unmodifiable(headers.keys),
+       hasBody = body != null,
+       host = uri.host;
 }
 
 /// Response data exposed at the Gateway boundary without connector-service
@@ -83,15 +85,16 @@ class AiGatewayExecutionException implements Exception {
 
   @override
   String toString() => switch (kind) {
-        AiGatewayFailureKind.cancelled => 'AI Gateway request was cancelled.',
-        AiGatewayFailureKind.authenticationRequired =>
-          'AI Gateway authentication is required.',
-        AiGatewayFailureKind.transportUnavailable =>
-          'AI Gateway transport is unavailable.',
-        AiGatewayFailureKind.request => statusCode == null
-            ? 'AI Gateway request could not be completed.'
-            : 'AI Gateway request failed with status $statusCode.',
-      };
+    AiGatewayFailureKind.cancelled => 'AI Gateway request was cancelled.',
+    AiGatewayFailureKind.authenticationRequired =>
+      'AI Gateway authentication is required.',
+    AiGatewayFailureKind.transportUnavailable =>
+      'AI Gateway transport is unavailable.',
+    AiGatewayFailureKind.request =>
+      statusCode == null
+          ? 'AI Gateway request could not be completed.'
+          : 'AI Gateway request failed with status $statusCode.',
+  };
 }
 
 class AiGatewayMetricObservation {
@@ -103,12 +106,12 @@ class AiGatewayMetricObservation {
   final DateTime? resetAt;
 
   const AiGatewayMetricObservation.unknown()
-      : unit = null,
-        value = null,
-        isKnown = false,
-        source = null,
-        observedAt = null,
-        resetAt = null;
+    : unit = null,
+      value = null,
+      isKnown = false,
+      source = null,
+      observedAt = null,
+      resetAt = null;
 
   const AiGatewayMetricObservation({
     required this.unit,
@@ -155,11 +158,11 @@ class AiGatewayLimitThreshold {
   final String? unit;
 
   const AiGatewayLimitThreshold.fixed(this.value, {this.unit})
-      : kind = AiGatewayLimitKind.fixed;
+    : kind = AiGatewayLimitKind.fixed;
 
   const AiGatewayLimitThreshold.percentage(this.value)
-      : kind = AiGatewayLimitKind.percentage,
-        unit = 'percent';
+    : kind = AiGatewayLimitKind.percentage,
+      unit = 'percent';
 }
 
 class AiGatewayWindowPolicy {
@@ -188,9 +191,9 @@ class AiGatewayRoutingPolicy {
     Map<AiGatewayUsageWindow, AiGatewayWindowPolicy>? windows,
     this.concurrencyLimit,
   }) : windows = Map.unmodifiable({
-          for (final window in AiGatewayUsageWindow.values)
-            window: windows?[window] ?? const AiGatewayWindowPolicy(),
-        });
+         for (final window in AiGatewayUsageWindow.values)
+           window: windows?[window] ?? const AiGatewayWindowPolicy(),
+       });
 }
 
 class AiGatewayUsageWindowState {
@@ -222,8 +225,8 @@ class AiGatewayUpstreamModel {
     required this.displayName,
     Map<String, dynamic> capabilities = const {},
     Map<String, dynamic> config = const {},
-  })  : capabilities = Map.unmodifiable(capabilities),
-        config = Map.unmodifiable(config);
+  }) : capabilities = Map.unmodifiable(capabilities),
+       config = Map.unmodifiable(config);
 }
 
 /// Gateway-owned account data. Credential references are opaque, non-secret
@@ -259,11 +262,11 @@ class AiGatewayAccount {
     Map<AiGatewayUsageWindow, AiGatewayUsageWindowState>? usageByWindow,
     this.remainingQuota = const AiGatewayMetricObservation.unknown(),
     Map<String, AiGatewayMetricObservation> quotaSignals = const {},
-  })  : endpointConfig = Map.unmodifiable(endpointConfig),
-        models = List.unmodifiable(models),
-        policy = policy ?? AiGatewayRoutingPolicy(),
-        usageByWindow = Map.unmodifiable(usageByWindow ?? const {}),
-        quotaSignals = Map.unmodifiable(quotaSignals);
+  }) : endpointConfig = Map.unmodifiable(endpointConfig),
+       models = List.unmodifiable(models),
+       policy = policy ?? AiGatewayRoutingPolicy(),
+       usageByWindow = Map.unmodifiable(usageByWindow ?? const {}),
+       quotaSignals = Map.unmodifiable(quotaSignals);
 }
 
 class AiGatewayModelGroupMember {
@@ -295,8 +298,8 @@ class AiGatewayModelGroup {
     AiGatewayRoutingPolicy? policy,
     this.legacyModelId,
     this.legacyProviderName,
-  })  : members = List.unmodifiable(members),
-        policy = policy ?? AiGatewayRoutingPolicy();
+  }) : members = List.unmodifiable(members),
+       policy = policy ?? AiGatewayRoutingPolicy();
 }
 
 class AiGatewayRouteCandidate {
@@ -349,15 +352,15 @@ class AiGatewayRoutingExecution<T> {
     required this.candidate,
     required List<String> attemptedAccountIds,
     required List<AiGatewayRouteDecision> decisions,
-  })  : attemptedAccountIds = List.unmodifiable(attemptedAccountIds),
-        decisions = List.unmodifiable(decisions);
+  }) : attemptedAccountIds = List.unmodifiable(attemptedAccountIds),
+       decisions = List.unmodifiable(decisions);
 }
 
 class AiGatewayRoutingException implements Exception {
   final List<AiGatewayRouteDecision> decisions;
 
   AiGatewayRoutingException(Iterable<AiGatewayRouteDecision> decisions)
-      : decisions = List.unmodifiable(decisions);
+    : decisions = List.unmodifiable(decisions);
 
   @override
   String toString() => 'No eligible account is available for this model group.';
@@ -386,7 +389,7 @@ class AiGatewayRoutingSnapshot {
   final List<AiGatewayUsageEvent> events;
 
   AiGatewayRoutingSnapshot({required List<AiGatewayUsageEvent> events})
-      : events = List.unmodifiable(events);
+    : events = List.unmodifiable(events);
 }
 
 /// Public account and model-group operations exposed to management surfaces.
@@ -449,6 +452,23 @@ abstract interface class AiGatewayAuthLifecycle {
   Future<void> revoke(AiGatewayAccount account);
 }
 
+/// Performs provider browser OAuth without exposing token material through the
+/// public Gateway. Implementations commit tokens directly to secure storage.
+abstract interface class AiGatewayOAuthAuthorization {
+  Future<AiGatewayAccount> authorize(
+    AiGatewayAccount account, {
+    Map<String, String> configuration = const {},
+  });
+  Future<void> revoke(AiGatewayAccount account);
+}
+
+class AiGatewayOAuthException implements Exception {
+  const AiGatewayOAuthException();
+
+  @override
+  String toString() => 'OAuth authorization could not be completed.';
+}
+
 /// Capability and model discovery is independent of provider registration.
 abstract interface class AiGatewayModelDiscovery {
   Future<List<AiGatewayUpstreamModel>> discoverModels(
@@ -491,7 +511,8 @@ abstract interface class AiGatewayRouting {
     required Future<T> Function(
       AiGatewayRouteCandidate candidate,
       AiGatewayRouteProgress progress,
-    ) request,
+    )
+    request,
     Set<String> requiredCapabilities = const {},
     Map<String, num> estimatedUsage = const {},
     Set<String>? supportedConnectorTypes,
@@ -502,6 +523,7 @@ abstract interface class AiGatewayRouting {
 /// Gateway-owned contracts; infrastructure implementations stay internal.
 abstract interface class AiGatewayFacade implements AiGatewayRouting {
   AiGatewayAccountManagement get accountManagement;
+  AiGatewayOAuthAuthorization get oauthAuthorization;
   AiGatewayProviderCatalog get providerCatalog;
   AiGatewayModelDiscovery get modelDiscovery;
   AiGatewayExecutor get executor;

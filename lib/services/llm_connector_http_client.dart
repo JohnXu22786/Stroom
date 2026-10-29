@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import '../models/llm_account.dart';
 import 'llm_ai_studio_webview_session_bridge.dart';
 import 'llm_connector_service.dart';
+import 'llm_oauth_flow.dart';
 
 /// A connector response contains the upstream payload and request-level usage.
 /// Account quota is populated only when a connector supplies a comparable,
@@ -41,16 +42,18 @@ class LlmConnectorHttpClient {
     Dio? dio,
     LlmNativeRequestBuilder? requestBuilder,
     LlmAiStudioWebViewSessionBridge? aiStudioWebViewSessionBridge,
-  })  : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 60),
-              ),
-            ),
-        _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder(),
-        _aiStudioWebViewSessionBridge = aiStudioWebViewSessionBridge ??
-            LlmAiStudioWebViewSessionBridge.instance;
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 10),
+               receiveTimeout: const Duration(seconds: 60),
+             ),
+           ),
+       _requestBuilder = requestBuilder ?? LlmNativeRequestBuilder(),
+       _aiStudioWebViewSessionBridge =
+           aiStudioWebViewSessionBridge ??
+           LlmAiStudioWebViewSessionBridge.instance;
 
   Future<LlmConnectorResponse> request({
     required LlmAccount account,
@@ -74,14 +77,15 @@ class LlmConnectorHttpClient {
     void markRequestSent() {
       if (requestSentMarkerStarted) return;
       requestSentMarkerStarted = true;
-      requestSentMarker = Future<void>.sync(() async {
-        await onRequestSent?.call();
-      }).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace __) {
-          requestSentMarkerFailed = true;
-        },
-      );
+      requestSentMarker =
+          Future<void>.sync(() async {
+            await onRequestSent?.call();
+          }).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {
+              requestSentMarkerFailed = true;
+            },
+          );
     }
 
     Future<void> waitForRequestSentMarker() async {
@@ -105,6 +109,12 @@ class LlmConnectorHttpClient {
         LlmConnectorRegistry.canonicalId(storedAccount.connectorType) !=
             LlmConnectorRegistry.canonicalId(account.connectorType)) {
       throw const LlmConnectorHttpException();
+    }
+    if (storedAccount.authType == 'oauth' &&
+        !LlmOAuthProviderPolicy.forProvider(
+          storedAccount.connectorType,
+        ).supported) {
+      throw const LlmConnectorAuthenticationRequired();
     }
     if (storedAccount.connectorType == 'antigravity') {
       try {
@@ -335,8 +345,8 @@ class LlmConnectorHttpClient {
           responseData is ResponseBody
               ? await _readResponseStream(responseData.stream)
               : responseData is Stream<List<int>>
-                  ? await _readResponseStream(responseData)
-                  : responseData,
+              ? await _readResponseStream(responseData)
+              : responseData,
         );
         final bodyObservation = decoded is Uint8List || decoded is List<int>
             ? mergeLlmConnectorObservations(
@@ -585,8 +595,9 @@ class LlmConnectorHttpClient {
     if (data == null) return null;
     if (data is Map) return data;
     if (data is Uint8List || data is List<int>) {
-      final bytes =
-          data is Uint8List ? data : Uint8List.fromList(data as List<int>);
+      final bytes = data is Uint8List
+          ? data
+          : Uint8List.fromList(data as List<int>);
       try {
         return jsonDecode(utf8.decode(bytes));
       } catch (_) {
@@ -647,9 +658,7 @@ class LlmConnectorHttpClient {
       if (discardBody) {
         onErrorBodyLimitReached?.call();
       } else {
-        decodedBody = await _readFailureBody(
-          body,
-        );
+        decodedBody = await _readFailureBody(body);
       }
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) {
@@ -669,13 +678,9 @@ class LlmConnectorHttpClient {
     );
   }
 
-  static Future<Object?> _readFailureBody(
-    Object? body,
-  ) async {
+  static Future<Object?> _readFailureBody(Object? body) async {
     if (body is ResponseBody) {
-      return _decodeResponseBody(
-        await _readBoundedFailureStream(body.stream),
-      );
+      return _decodeResponseBody(await _readBoundedFailureStream(body.stream));
     }
     if (body is Stream<List<int>>) {
       return _decodeResponseBody(await _readBoundedFailureStream(body));
