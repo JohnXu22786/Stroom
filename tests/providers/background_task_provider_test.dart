@@ -3538,8 +3538,11 @@ void main() {
       () {
         const naturalInstruction =
             'Veuillez vérifier l\'authenticité du document et lire le total.';
+        const decomposedNaturalInstruction =
+            'Veuillez vérifier l\'authenticite\u0301 du document et lire le total.';
         const apiKey = 'authQmXvPs87';
-        const credentialInstruction = 'Veuillez afficher le code $apiKey.';
+        const credentialInstruction =
+            'Read the receipt using $apiKey to process this image';
 
         BackgroundTask taskFor(String id, String instruction) =>
             BackgroundTask.fromMap({
@@ -3569,11 +3572,17 @@ void main() {
           'legacy-ocr-french-authenticite-prompt',
           naturalInstruction,
         );
+        final decomposedNaturalTask = taskFor(
+          'legacy-ocr-french-authenticite-decomposed-prompt',
+          decomposedNaturalInstruction,
+        );
         final credentialTask = taskFor(
           'legacy-ocr-auth-prefixed-credential-echo',
           credentialInstruction,
         );
         final naturalPersisted = jsonEncode(naturalTask.toMap());
+        final decomposedNaturalPersisted =
+            jsonEncode(decomposedNaturalTask.toMap());
         final credentialPersisted = jsonEncode(credentialTask.toMap());
 
         expect(
@@ -3582,9 +3591,18 @@ void main() {
         );
         expect(naturalPersisted, contains(naturalInstruction));
         expect(
+          OcrRetrySnapshot.fromMap(decomposedNaturalTask.retryData!)
+              .instructionContent,
+          decomposedNaturalInstruction,
+        );
+        expect(
+          decomposedNaturalPersisted,
+          contains(decomposedNaturalInstruction),
+        );
+        expect(
           OcrRetrySnapshot.fromMap(credentialTask.retryData!)
               .instructionContent,
-          'Veuillez afficher le code [redacted].',
+          'Read the receipt using [redacted] to process this image',
         );
         expect(credentialPersisted, isNot(contains(apiKey)));
       },

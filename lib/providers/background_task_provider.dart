@@ -697,10 +697,11 @@ bool _legacyOcrHasNaturalWordContinuation(String prefix, String suffix) {
   if (RegExp(r'[\p{N}_]', unicode: true).hasMatch(suffix)) return false;
 
   final unicodeWord = '$prefix$suffix'
-      .replaceAll(RegExp(r'[^\p{L}]', unicode: true), '')
+      .replaceAll(RegExp(r'[^\p{L}\p{M}]', unicode: true), '')
       .toLowerCase();
   if (const {
     'authenticité',
+    'authenticite\u0301',
     'cañón',
     'secretaría',
     'secretária',
