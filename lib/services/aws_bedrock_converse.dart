@@ -22,19 +22,28 @@ abstract final class AwsBedrockConverseAdapter {
         if (id is! String || id.isEmpty) {
           throw const FormatException('Tool response ID is required.');
         }
-        messages.add({
-          'role': 'user',
-          'content': [
-            {
-              'toolResult': {
-                'toolUseId': id,
-                'content': [
-                  {'text': _text(message['content'])},
-                ],
-              },
-            },
-          ],
-        });
+        final toolResult = {
+          'toolResult': {
+            'toolUseId': id,
+            'content': [
+              {'text': _text(message['content'])},
+            ],
+          },
+        };
+        final previous = messages.isEmpty ? null : messages.last;
+        final previousContent = previous?['content'];
+        if (previous?['role'] == 'user' &&
+            previousContent is List &&
+            previousContent.any(
+              (block) => block is Map && block.containsKey('toolResult'),
+            )) {
+          previousContent.add(toolResult);
+        } else {
+          messages.add({
+            'role': 'user',
+            'content': [toolResult],
+          });
+        }
         continue;
       }
       if (role != 'user' && role != 'assistant') {

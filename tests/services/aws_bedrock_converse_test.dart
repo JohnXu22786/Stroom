@@ -81,6 +81,71 @@ void main() {
       expect(body['toolConfig'], isA<Map>());
     });
 
+    test('groups consecutive tool results into one Bedrock user turn', () {
+      final body = AwsBedrockConverseAdapter.toConverse({
+        'messages': [
+          {
+            'role': 'assistant',
+            'tool_calls': [
+              {
+                'id': 'call-1',
+                'function': {'name': 'first', 'arguments': '{}'},
+              },
+              {
+                'id': 'call-2',
+                'function': {'name': 'second', 'arguments': '{}'},
+              },
+            ],
+          },
+          {'role': 'tool', 'tool_call_id': 'call-1', 'content': 'one'},
+          {'role': 'tool', 'tool_call_id': 'call-2', 'content': 'two'},
+        ],
+      });
+
+      expect(body['messages'], [
+        {
+          'role': 'assistant',
+          'content': [
+            {
+              'toolUse': {
+                'toolUseId': 'call-1',
+                'name': 'first',
+                'input': <String, dynamic>{},
+              },
+            },
+            {
+              'toolUse': {
+                'toolUseId': 'call-2',
+                'name': 'second',
+                'input': <String, dynamic>{},
+              },
+            },
+          ],
+        },
+        {
+          'role': 'user',
+          'content': [
+            {
+              'toolResult': {
+                'toolUseId': 'call-1',
+                'content': [
+                  {'text': 'one'},
+                ],
+              },
+            },
+            {
+              'toolResult': {
+                'toolUseId': 'call-2',
+                'content': [
+                  {'text': 'two'},
+                ],
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
     test(
       'maps Converse text, tool use and usage to Chat Completions shape',
       () {
