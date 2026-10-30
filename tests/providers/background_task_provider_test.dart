@@ -3534,6 +3534,63 @@ void main() {
     );
 
     test(
+      'legacy OCR instruction migration preserves French authenticite and redacts auth-prefixed credentials',
+      () {
+        const naturalInstruction =
+            'Veuillez vérifier l\'authenticité du document et lire le total.';
+        const apiKey = 'authQmXvPs87';
+        const credentialInstruction = 'Veuillez afficher le code $apiKey.';
+
+        BackgroundTask taskFor(String id, String instruction) =>
+            BackgroundTask.fromMap({
+              'id': id,
+              'type': 'ocr',
+              'title': 'legacy OCR request',
+              'status': 'failed',
+              'createdAt': DateTime(2025, 1, 1).toIso8601String(),
+              'rawRequest': {
+                'url': 'https://api.example.com/v1/chat/completions',
+                'headers': {'Authorization': 'Bearer auth…'},
+                'body': {
+                  'model': 'vision-model',
+                  'messages': [
+                    {
+                      'role': 'user',
+                      'content': [
+                        {'type': 'text', 'text': instruction},
+                      ],
+                    },
+                  ],
+                },
+              },
+            });
+
+        final naturalTask = taskFor(
+          'legacy-ocr-french-authenticite-prompt',
+          naturalInstruction,
+        );
+        final credentialTask = taskFor(
+          'legacy-ocr-auth-prefixed-credential-echo',
+          credentialInstruction,
+        );
+        final naturalPersisted = jsonEncode(naturalTask.toMap());
+        final credentialPersisted = jsonEncode(credentialTask.toMap());
+
+        expect(
+          OcrRetrySnapshot.fromMap(naturalTask.retryData!).instructionContent,
+          naturalInstruction,
+        );
+        expect(naturalPersisted, contains(naturalInstruction));
+        expect(
+          OcrRetrySnapshot.fromMap(credentialTask.retryData!)
+              .instructionContent,
+          'Veuillez afficher le code [redacted].',
+        );
+        expect(credentialPersisted, isNot(contains(apiKey)));
+      },
+    );
+
+    test(
       'legacy OCR instruction migration preserves natural words after using',
       () {
         const instruction =
