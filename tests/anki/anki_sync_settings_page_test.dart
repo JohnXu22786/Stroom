@@ -39,6 +39,33 @@ void main() {
     expect(find.textContaining('双向同步会合并 collection'), findsOneWidget);
   });
 
+  testWidgets('dismissing the login dialog does not use disposed controllers', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ankiSyncSecureStorageProvider.overrideWith(
+            (_) => const _FakeSecureStorage(),
+          ),
+        ],
+        child: const MaterialApp(home: AnkiSyncSettingsPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('登录AnkiWeb'));
+    await tester.pumpAndSettle();
+    expect(find.text('登录 AnkiWeb'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录 AnkiWeb'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('does not allow switching modes before settings load', (
     tester,
   ) async {

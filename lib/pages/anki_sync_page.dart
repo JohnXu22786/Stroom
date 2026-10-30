@@ -239,21 +239,33 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
   }
 
   Future<Map<String, String>?> _showLoginDialog(AnkiSyncMode mode) async {
-    final userController = TextEditingController();
-    final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    var username = '';
+    var password = '';
+
+    void submit(BuildContext dialogContext) {
+      final form = formKey.currentState!;
+      if (!form.validate()) return;
+      form.save();
+      Navigator.pop(dialogContext, {
+        'username': username.trim(),
+        'password': password,
+      });
+    }
+
     try {
       return await showDialog<Map<String, String>>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(mode == AnkiSyncMode.ankiWeb ? '登录 AnkiWeb' : '登录自建服务器'),
+          title: Text(
+            mode == AnkiSyncMode.ankiWeb ? '登录 AnkiWeb' : '登录自建服务器',
+          ),
           content: Form(
             key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextFormField(
-                  controller: userController,
                   autofocus: true,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
@@ -263,10 +275,10 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   validator: (value) => value == null || value.trim().isEmpty
                       ? '请输入邮箱或用户名'
                       : null,
+                  onSaved: (value) => username = value ?? '',
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  controller: passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(
                     labelText: '密码',
@@ -274,14 +286,8 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
                   ),
                   validator: (value) =>
                       value == null || value.isEmpty ? '请输入密码' : null,
-                  onFieldSubmitted: (_) {
-                    if (formKey.currentState!.validate()) {
-                      Navigator.pop(dialogContext, {
-                        'username': userController.text.trim(),
-                        'password': passwordController.text,
-                      });
-                    }
-                  },
+                  onSaved: (value) => password = value ?? '',
+                  onFieldSubmitted: (_) => submit(dialogContext),
                 ),
               ],
             ),
@@ -292,23 +298,14 @@ class _AnkiSyncSettingsPageState extends ConsumerState<AnkiSyncSettingsPage> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  Navigator.pop(dialogContext, {
-                    'username': userController.text.trim(),
-                    'password': passwordController.text,
-                  });
-                }
-              },
+              onPressed: () => submit(dialogContext),
               child: const Text('登录'),
             ),
           ],
         ),
       );
     } finally {
-      passwordController.clear();
-      userController.dispose();
-      passwordController.dispose();
+      password = '';
     }
   }
 
