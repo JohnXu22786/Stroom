@@ -1961,17 +1961,34 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
       RegExp(
         r'(?:data:image/|base64,)',
         caseSensitive: false,
-      ).hasMatch(instruction) ||
-      _legacyOcrTextContainsCredential(instruction, credentialValues) ||
-      // Preserve text-part boundaries separately so an echoed key split
-      // between parts can be identified without removing natural whitespace.
-      _legacyOcrTextContainsMaskedCredential(
-        safeTextParts,
-        credentialValues,
-      )) {
+      ).hasMatch(instruction)) {
     return null;
   }
-  return instruction;
+  final hasCredential =
+      _legacyOcrTextContainsCredential(instruction, credentialValues);
+  // Preserve text-part boundaries separately so an echoed key split between
+  // parts can be identified without removing natural whitespace.
+  final hasMaskedCredentialAcrossParts =
+      _legacyOcrTextContainsMaskedCredential(safeTextParts, credentialValues);
+  if (!hasCredential && !hasMaskedCredentialAcrossParts) return instruction;
+
+  // A credential-like echo in one part must not discard otherwise safe OCR
+  // instructions from other parts. A credential split across parts remains
+  // rejected by the boundary-aware check after individually unsafe parts are
+  // removed.
+  final originalSafeParts = safeTextParts.split('\u0000');
+  final safeParts = originalSafeParts.where((text) {
+    return !_legacyOcrTextContainsCredential(text, credentialValues);
+  }).toList();
+  if (safeParts.length == originalSafeParts.length) return null;
+  final safePartText = safeParts.join('\u0000');
+  final safeInstruction = safePartText.replaceAll('\u0000', '\n');
+  if (safeInstruction.isEmpty ||
+      _legacyOcrTextContainsCredential(safeInstruction, credentialValues) ||
+      _legacyOcrTextContainsMaskedCredential(safePartText, credentialValues)) {
+    return null;
+  }
+  return safeInstruction;
 }
 
 String _legacyOcrRedactMaskedCredentialEchoes(
