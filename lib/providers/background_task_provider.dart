@@ -1909,6 +1909,7 @@ bool _legacyOcrTextContainsMaskedCredential(
 bool _legacyOcrHasSafeRedactedInstruction(
   String text, {
   bool allowBareAction = false,
+  bool allowReceiptUse = false,
 }) {
   if (!text.contains('[redacted]')) return false;
   final safeActionLead = RegExp(
@@ -1917,7 +1918,12 @@ bool _legacyOcrHasSafeRedactedInstruction(
     dotAll: true,
   ).hasMatch(text);
   final safeUseLead = RegExp(
-    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b|for\s+(?:this|the)\s+receipt\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    r'^\s*(?:for page \d+,\s*)?(?:please\s+)?(?:use|pass|send|supply|authenticate\s+with)\b.*\[redacted\](?:\s+as\s+(?:(?:the|a|an|my|your|our|their|his|her|its)\s+)?(?:(?:oauth\s*[0-9]*(?:\.[0-9]+)?|oidc|openid\s+connect|secret|api|access|private|bearer)\s+)*(?:authorization|auth|api\s+key|key|credential|token|secret|password)\s+value)?\s+(?:to\s+(?:process|read|recognize|describe|summarize|analyze|extract|interpret|count|find|transcribe|translate|classify|identify)\b|for\s+(?:the\s+)?request\b)|^\s*(?:please\s+)?use\s+\[redacted\]\s*$|^\s*(?:please\s+)?supply\s+\[redacted\]\s+(?:the\s+)?(?:api\s+key|authorization)\s+header\b',
+    caseSensitive: false,
+    dotAll: true,
+  ).hasMatch(text);
+  final safeReceiptUseLead = RegExp(
+    r'^\s*(?:please\s+)?use\s+\[redacted\].*\bfor (?:this|the) receipt\b',
     caseSensitive: false,
     dotAll: true,
   ).hasMatch(text);
@@ -1943,8 +1949,28 @@ bool _legacyOcrHasSafeRedactedInstruction(
   ).hasMatch(text);
   return (safeActionLead && (!bareRedactedAction || allowBareAction)) ||
       (safeUseLead && safeRequestUseLead) ||
+      (allowReceiptUse && safeReceiptUseLead) ||
       safeScanContext ||
       safeKeepLead;
+}
+
+bool _legacyOcrHasStrongReceiptCredentialPrefix(
+  String sourceText,
+  Iterable<String> credentialValues,
+) {
+  final echoedValue = RegExp(
+    r'^\s*(?:please\s+)?use\s+([A-Za-z0-9_-]+)\s+for\s+(?:this|the)\s+receipt\b',
+    caseSensitive: false,
+  ).firstMatch(sourceText)?.group(1)?.toLowerCase();
+  if (echoedValue == null) return false;
+  for (final credentialValue in credentialValues) {
+    final prefix = RegExp(r'([A-Za-z0-9_-]{4,})(?:…|\.{3})\s*$')
+        .firstMatch(credentialValue.trim())
+        ?.group(1)
+        ?.toLowerCase();
+    if (prefix != null && echoedValue.startsWith(prefix)) return true;
+  }
+  return false;
 }
 
 bool _legacyOcrShouldPreserveBareRedactedAction(String sourceText) {
@@ -2090,6 +2116,10 @@ String? _legacyOcrInstructionContent(Map<String, dynamic>? rawRequest) {
           text,
           allowBareAction: _legacyOcrShouldPreserveBareRedactedAction(
             sourceText,
+          ),
+          allowReceiptUse: _legacyOcrHasStrongReceiptCredentialPrefix(
+            sourceText,
+            credentialValues,
           ),
         );
   }).join('\u0000');
